@@ -57,6 +57,12 @@ Contract:
   spec is a usage error too: it means a job lost its spec.
 * A shard that selects nothing is a usage error, named, rather than pytest's
   bare exit 5.
+* Once read, both variables are taken out of ``os.environ`` until the session
+  ends, then put back. They describe this session only. A test that starts
+  pytest again (a collection count, a conftest check, a child run over another
+  tree) with a copy of ``os.environ`` handed them to the child, which found
+  this session's report already created and refused, exit 4 (#1895). Taken
+  out, they reach no process the session starts.
 
 Loaded by the repository-root conftest for every session rooted there, so it
 must stay importable with only pytest installed (tests/sdk-contract runs that
@@ -272,6 +278,12 @@ def pytest_configure(config: pytest.Config) -> None:
     report_path = os.environ.get(ENV_REPORT, "")
     if not spec and not report_path:
         return
+    # Put back when the session ends, so an in-process session (pytester's
+    # inline_run) hands its caller the environment it was given.
+    withheld = pytest.MonkeyPatch()
+    withheld.delenv(ENV_SHARD, raising=False)
+    withheld.delenv(ENV_REPORT, raising=False)
+    config.add_cleanup(withheld.undo)
     if not spec:
         raise pytest.UsageError(
             f"{ENV_REPORT} is set but {ENV_SHARD} is not: a sharded job lost its spec"

@@ -504,6 +504,60 @@ def test_a_second_session_cannot_overwrite_the_first_report(
     assert report.read_text() == first
 
 
+# A test that starts pytest again with a copy of os.environ, as the unit suite's
+# collection counts and conftest checks do.
+CHILD_RUN = """
+import os
+import subprocess
+import sys
+
+def test_starts_pytest_again():
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "-p", "backend.tests.shard",
+         "-p", "no:cacheprovider", "-q", "child"],
+        env={**os.environ, "PYTHONPATH": %r},
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "4 passed" in result.stdout, result.stdout
+"""
+
+
+@pytest.mark.regression
+def test_a_process_the_session_starts_is_not_sharded(pytester, monkeypatch, tmp_path):
+    """#1895: in rc-evidence's unit shards, a test that started pytest with a
+    copy of os.environ failed: the child inherited the shard's variables,
+    found the session's report already created, and refused (exit 4)."""
+    pytester.makepyfile(test_parent=CHILD_RUN % str(REPO_ROOT))
+    child = pytester.mkdir("child")
+    (child / "test_four.py").write_text(
+        "import pytest\n\n"
+        "@pytest.mark.parametrize('n', range(4))\n"
+        "def test_n(n):\n"
+        "    pass\n"
+    )
+    report = tmp_path / "shard.json"
+    _shard(monkeypatch, "1/1", report)
+
+    reprec = pytester.inline_run(
+        "-p", PLUGIN, "-p", "no:cacheprovider", "test_parent.py"
+    )
+
+    reprec.assertoutcome(passed=1)
+    ran = json.loads(report.read_text())["ran"]
+    assert ran == [
+        {
+            "nodeid": "test_parent.py::test_starts_pytest_again",
+            "outcome": "passed",
+            "skip_reason": None,
+        }
+    ]
+    # Put back when the session ended: an in-process caller gets its own.
+    assert (os.environ[ENV_SHARD], os.environ[ENV_REPORT]) == ("1/1", str(report))
+
+
 @pytest.mark.regression
 def test_an_empty_shard_is_a_usage_error(pytester, monkeypatch, tmp_path):
     pytester.makepyfile(test_one="def test_only(): pass")

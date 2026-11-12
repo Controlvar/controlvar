@@ -78,6 +78,20 @@ def client():
     return TestClient(app)
 
 
+@pytest.fixture
+def as_superuser(superuser):
+    """Sign the request in as a superuser, and sign it out after the test.
+
+    The create-user validation tests need a caller allowed to create users,
+    or the route answers 401 before the checks they test. They used to inherit
+    one from test_delete_user_superuser, which ran before them in this file,
+    so in another order (rc-evidence's unit shards, #1895) they got 401.
+    """
+    app.dependency_overrides[get_current_active_user] = lambda: superuser
+    yield superuser
+    app.dependency_overrides.pop(get_current_active_user, None)
+
+
 def test_list_users_superuser(client, mock_db, mock_db_query, superuser):
     """Test that superusers can list all users."""
     # Setup mocks. The endpoint orders before paginating, so `order_by` has to
@@ -501,8 +515,11 @@ def test_delete_user_superuser(client, mock_db, mock_db_query, superuser, normal
     # The delete, then its audit entry (written after the delete commits).
     assert mock_db.commit.call_count == 2
 
+    # Reset overrides
+    app.dependency_overrides = {}
 
-def test_create_user_existing_username(client, mock_db):
+
+def test_create_user_existing_username(client, mock_db, as_superuser):
     response = client.post(
         "/api/v1/users/",
         json={
@@ -515,7 +532,7 @@ def test_create_user_existing_username(client, mock_db):
     assert response.status_code == 409, response.text
 
 
-def test_create_user_existing_email(client, mock_db):
+def test_create_user_existing_email(client, mock_db, as_superuser):
     response = client.post(
         "/api/v1/users/",
         json={
@@ -528,7 +545,7 @@ def test_create_user_existing_email(client, mock_db):
     assert response.status_code == 409, response.text
 
 
-def test_weak_password(client, mock_db):
+def test_weak_password(client, mock_db, as_superuser):
     response = client.post(
         "/api/v1/users/",
         json={
@@ -541,7 +558,7 @@ def test_weak_password(client, mock_db):
     assert response.status_code == 422, response.text
 
 
-def test_create_user_invalid_data(client, mock_db):
+def test_create_user_invalid_data(client, mock_db, as_superuser):
     response = client.post(
         "/api/v1/users/",
         json={
