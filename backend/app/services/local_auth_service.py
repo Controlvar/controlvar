@@ -41,6 +41,13 @@ reveal whether the address exists either.
 
 The tracker sweeps expired windows periodically and caps the number of
 tracked addresses, so unauthenticated traffic cannot grow it without bound.
+
+Demo mode
+---------
+With ``DEMO_MODE=true`` (``backend/app/core/demo_mode.py``) only an active
+non-superuser VIEWER signs in, and while a demo account is published the
+counter is neither checked nor written, for any address; see
+``LocalAuthService.authenticate``.
 """
 
 from __future__ import annotations
@@ -58,7 +65,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.config import settings
 from backend.app.core.security import get_password_hash, verify_password
-from backend.app.models.user import User
+from backend.app.models.user import User, UserRole
 
 # Upper bound on distinct addresses kept in memory.  When exceeded (after a
 # sweep) the entries with the oldest most-recent failure are evicted; an
@@ -100,6 +107,11 @@ class NoLocalPasswordError(Exception):
 
 class CurrentPasswordMissingError(Exception):
     """Raised when a password change arrives without the current password."""
+
+
+def _is_demo_viewer(user: User) -> bool:
+    """The only account demo mode signs in: a non-superuser VIEWER."""
+    return user.role == UserRole.VIEWER and not user.is_superuser
 
 
 def _normalise_email(email: str) -> str:
@@ -249,11 +261,23 @@ class LocalAuthService:
         *email* is trimmed and matched whatever its letter case, as the
         database's ``lower()`` matches (see the module docstring).
 
+        Demo mode (``DEMO_MODE=true``) compares no addresses. Only an active
+        non-superuser VIEWER signs in: any other account, with its right
+        password, gets the same refusal as a wrong password. And while a demo
+        account is published (``settings.demo_account_published``: its
+        password is public) failed attempts are neither counted nor checked,
+        for any address, so the shared account cannot be made to answer 423.
+        Demo mode without a published account counts them as usual.
+
         Raises:
-            AccountLockedError: the address is currently locked out.
+            AccountLockedError: the address is currently locked out (never
+                while a demo account is published).
             InvalidCredentialsError: unknown address, wrong password or the
-                account is inactive.  The caller must not distinguish these.
+                account is inactive, or, in demo mode, not a non-superuser
+                viewer.  The caller must not distinguish these.
         """
+        demo_mode = bool(settings.DEMO_MODE)
+        counted = not settings.demo_account_published
         typed = (email or "").strip()
         if not typed or "\x00" in typed or len(typed) > MAX_EMAIL_LENGTH:
             # No account can hold this address, so there is no budget to
@@ -264,11 +288,14 @@ class LocalAuthService:
 
         # The counter key is the database's own lower() of the typed address:
         # the same function the lookup applies, so every spelling that can
-        # match one account lands on one key.
-        email_key = _counter_key(db.scalar(select(func.lower(typed))))
-        status = self.tracker.status(email_key)
-        if status.locked:
-            raise AccountLockedError(status.retry_after_seconds)
+        # match one account lands on one key.  No counter while a demo account
+        # is published.
+        email_key: Optional[str] = None
+        if counted:
+            email_key = _counter_key(db.scalar(select(func.lower(typed))))
+            status = self.tracker.status(email_key)
+            if status.locked:
+                raise AccountLockedError(status.retry_after_seconds)
 
         rows: List[User] = (
             db.query(User)
@@ -296,14 +323,18 @@ class LocalAuthService:
             verify_password(password or "", _DUMMY_PASSWORD_HASH)
             password_ok = False
         ok = password_ok and user is not None and bool(user.is_active)
+        if ok and demo_mode:
+            ok = _is_demo_viewer(user)
         if not ok:
             # The failure that reaches the threshold is still answered with
             # 401; every attempt after it (correct password or not) gets 423
             # until the oldest failure ages out of the window.
-            self.tracker.record_failure(email_key)
+            if email_key is not None:
+                self.tracker.record_failure(email_key)
             raise InvalidCredentialsError("Invalid email or password")
 
-        self.tracker.reset(email_key)
+        if email_key is not None:
+            self.tracker.reset(email_key)
         return user
 
     def verify_current_password(

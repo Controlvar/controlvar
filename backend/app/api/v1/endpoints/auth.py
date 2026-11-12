@@ -52,6 +52,7 @@ from backend.app.schemas.auth import (
     ConfirmForgotPasswordResponse,
     ConfirmSignUpRequest,
     ConfirmSignUpResponse,
+    DemoAccount,
     ForgotPasswordRequest,
     ForgotPasswordResponse,
     LoginRequest,
@@ -649,9 +650,26 @@ def get_auth_config() -> Any:
     * ``AUTH_PROVIDER=cognito`` with any of the three unset:
       ``{"provider": "cognito", "configured": false, "missing": [...]}``,
       naming the unset settings.
+    * ``DEMO_MODE=true`` adds ``"demo_mode": true`` to any of these, and
+      ``"demo_account": {"email", "password"}`` when ``DEMO_ACCOUNT_EMAIL`` and
+      ``DEMO_ACCOUNT_PASSWORD`` are set: the shared account a demo visitor
+      signs in with, whose password is public by design.
 
     Every value comes from the configuration, none from the request.
     """
+    response = _sign_in_config()
+    if settings.DEMO_MODE:
+        response.demo_mode = True
+        if settings.demo_account_published:
+            response.demo_account = DemoAccount(
+                email=settings.DEMO_ACCOUNT_EMAIL,
+                password=settings.DEMO_ACCOUNT_PASSWORD,
+            )
+    return response
+
+
+def _sign_in_config() -> AuthConfigResponse:
+    """``GET /auth/config`` without the demo fields."""
     if settings.AUTH_PROVIDER != "cognito" or deps.dev_auth_bypass_active():
         return AuthConfigResponse(provider="local")
     missing = _hosted_ui_missing()
