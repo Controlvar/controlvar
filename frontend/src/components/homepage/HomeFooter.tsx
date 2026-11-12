@@ -4,7 +4,7 @@ import { Wordmark } from '@/components/Wordmark';
 import { LOGIN_PATH } from '@/services/api';
 import { docsUrl } from '@/services/docs';
 import { CONTACT_EMAIL, isMarketingSite } from '@/utils/site-mode';
-import { BOOKS_URL, BUILDER_URL, RELEASES_URL, REPO_URL, SECURITY_URL } from '@/content/site-links';
+import { BOOKS_URL, BUILDER_URL, RELEASES_URL, REPO_URL, ROADMAP_URL, SECURITY_URL } from '@/content/site-links';
 import { FOCUS, WIDTH } from '@/components/homepage/styles';
 
 const LINK = `text-slate-700 hover:text-slate-900 ${FOCUS}`;
@@ -35,8 +35,10 @@ function Group({ id, label, children }: { id: string; label: string; children: R
  * is the marketing build's only, and is the /walkthroughs page (site design
  * 2026-11-11, item 10); the platform build has "Sign in" instead. "The
  * Controlvar books" is the /books page on the marketing build and the books'
- * repository on a platform build, which has no /books page (#1859). "Source"
- * is the footer's only link to this repository (`index.site-mode.test.tsx`).
+ * repository on a platform build, which has no /books page (#1859). "What
+ * Controlvar does" (the capability page) and "Roadmap" (ROADMAP.md) are the
+ * docs hub's links of the same names (D380). "Source" is the footer's only
+ * link to the repository itself (`index.site-mode.test.tsx`).
  */
 export function HomeFooter() {
   const marketing = isMarketingSite();
@@ -51,6 +53,11 @@ export function HomeFooter() {
         </div>
         <nav aria-label="Footer" className="grid grid-cols-2 gap-x-14 gap-y-8 sm:grid-cols-3">
           <Group id="footer-product" label="Product">
+            <li>
+              <a href={docsUrl('capabilities')} className={LINK}>
+                What Controlvar does
+              </a>
+            </li>
             <li>
               <a href={docsUrl('getting-started/quick-start')} className={LINK}>
                 Quick start
@@ -98,6 +105,11 @@ export function HomeFooter() {
             <li>
               <a href={RELEASES_URL} className={LINK}>
                 Releases
+              </a>
+            </li>
+            <li>
+              <a href={ROADMAP_URL} className={LINK}>
+                Roadmap
               </a>
             </li>
             <li>

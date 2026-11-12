@@ -31,6 +31,8 @@ import PrivacyPage from '@/pages/privacy';
 import NotFoundPage from '@/pages/404';
 import { AppShell } from '@/components/AppShell';
 import { H1, H2 } from '@/components/homepage/styles';
+import { ROADMAP_URL } from '@/content/site-links';
+import { docsUrl } from '@/services/docs';
 
 const mode = isMarketingSite as jest.Mock;
 
@@ -101,6 +103,22 @@ describe.each(PAGES)('%s on the marketing site', (name, make) => {
     const footer = container.querySelector('footer') as HTMLElement;
     expect({ page: name, inMain: footer.closest('main') !== null }).toEqual({ page: name, inMain: false });
     expect({ page: name, last: footer.parentElement?.lastElementChild === footer }).toEqual({ page: name, last: true });
+  });
+
+  // What Controlvar does today and the roadmap (D380): the footer on every page carries both.
+  it('links what Controlvar does and the roadmap from its footer', async () => {
+    const { container } = render(<AuthProvider>{make()}</AuthProvider>);
+    await waitFor(() => expect(container.querySelector('a, h1, h2')).toBeInTheDocument());
+
+    const nav = container.querySelector('footer nav[aria-label="Footer"]') as HTMLElement;
+    const links = Array.from(nav.querySelectorAll('a')).map((a) => [a.textContent, a.getAttribute('href')]);
+    expect({ page: name, links }).toEqual({
+      page: name,
+      links: expect.arrayContaining([
+        ['What Controlvar does', docsUrl('capabilities')],
+        ['Roadmap', ROADMAP_URL],
+      ]),
+    });
   });
 
   // One type scale (site design 2026-11-11, finding 9): the h1 was 48/600 on

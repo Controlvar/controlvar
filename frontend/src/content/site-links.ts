@@ -26,6 +26,14 @@ export const SECURITY_URL = `${REPO_URL}/blob/main/SECURITY.md`;
 export const COMPOSE_GUIDE_URL = `${REPO_URL}/blob/main/deploy/compose/README.md`;
 
 /**
+ * The roadmap (D380): ROADMAP.md, at the repository's root, so not a docs
+ * page. mkdocs.yml's nav lists it by this absolute URL as "Roadmap", under
+ * Getting Started. The docs hub's "Start here" row and the footer link it;
+ * `tests/pages/home-page.test.tsx` holds it to that nav entry and to the file.
+ */
+export const ROADMAP_URL = `${REPO_URL}/blob/main/ROADMAP.md`;
+
+/**
  * The facts strip's checkable facts (site design 2026-11-11, BORROW 1): the
  * licence, the changelog, and the tests that hold the statistics to known
  * answers. Each is a file or a folder of this repository, which

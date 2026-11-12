@@ -59,6 +59,8 @@ const BOOKS = "the Controlvar books' README (amarkanday/controlvar-books, #1859)
 const SD = 'site design 2026-11-11 (design-review-v1.md)';
 /** Its competitor study's BORROW list, of which items 1 and 7 were taken (competitors-v1.md). */
 const BORROW = 'site design 2026-11-11, competitors-v1.md BORROW';
+/** D380: the capability page and the roadmap, linked from the facts strip and the footer (and the docs hub). */
+const LINKS = 'D380, what Controlvar does and the roadmap';
 
 /** The JavaScript snippet's first line: the install command of main:index.tsx:124, as a comment (UX, How it works). */
 export const SNIPPET_COMMENT = '// npm install @controlvar/js-sdk';
@@ -129,6 +131,7 @@ export const TYPED: readonly Row[] = [
     text: 'Versions are published on the Releases page, and the CHANGELOG says what changed in each.',
     source: `${BORROW} 1: Releases/CHANGELOG (release-please, release-please-config.json)`,
   },
+  { tag: 'p', text: 'See everything it does →', source: `${LINKS}: the capability page, docs/capabilities.md` },
 
   // How it works. Step 1 spans the row and holds the hero's commands and its localhost line (SD item 3).
   { tag: 'h2', text: 'How it works', source: `${UX} How it works (the issue's own words)` },
@@ -251,6 +254,7 @@ export const TYPED: readonly Row[] = [
   { tag: 'p', text: 'Open-source A/B testing and feature flags you run on your own infrastructure.', source: `${MAIN}:63` },
   { tag: 'aria-label', text: 'Footer', source: `${UX} Footer` },
   { tag: 'p', text: 'Product', source: `${UX} Footer` },
+  { tag: 'li', text: 'What Controlvar does', source: `${LINKS}: docs/capabilities.md, the docs hub's label` },
   { tag: 'li', text: 'Quick start', source: `${UX} Footer` },
   { tag: 'li', text: 'Docs', source: `${MAIN}:192` },
   { tag: 'li', text: 'The Controlvar books', source: `#1859; ${SD} item 10: /books, or the books repository on a platform build` },
@@ -260,6 +264,7 @@ export const TYPED: readonly Row[] = [
   { tag: 'p', text: 'Project', source: `${UX} Footer` },
   { tag: 'li', text: 'Source', source: `${MAIN}:200` },
   { tag: 'li', text: 'Releases', source: `${UX} Footer` },
+  { tag: 'li', text: 'Roadmap', source: `${LINKS}: ROADMAP.md, the docs hub's label` },
   { tag: 'li', text: 'Security', source: `${UX} Footer` },
   { tag: 'li', text: 'Privacy', source: `${MAIN}:224` },
   { tag: 'p', text: 'Contact', source: `${UX} Footer` },

@@ -1,7 +1,7 @@
 import React from 'react';
 import { PageTitle } from '@/components/PageTitle';
 import { DOCS_BRANCH, DOCS_REPO, docsUrl } from '@/services/docs';
-import { BOOKS_URL } from '@/content/site-links';
+import { BOOKS_URL, ROADMAP_URL } from '@/content/site-links';
 import { FOCUS, H1, H2, WIDTH } from '@/components/homepage/styles';
 
 /**
@@ -22,6 +22,8 @@ const ICONS = {
   book: ['M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z', 'M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5'],
   chart: ['M3 3v18h18', 'M7 15l4-4 3 3 5-6'],
   users: ['M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', 'M2 21v-1a6 6 0 0 1 12 0v1', 'M16 3.5a4 4 0 0 1 0 7', 'M22 21v-1a6 6 0 0 0-4-5.6'],
+  checklist: ['M3 7l2 2 4-4', 'M3 17l2 2 4-4', 'M13 6h8', 'M13 12h8', 'M13 18h8'],
+  map: ['M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z', 'M9 4v14', 'M15 6v14'],
 } as const;
 
 function GroupIcon({ paths }: { paths: readonly string[] }) {
@@ -195,14 +197,18 @@ const sections = [
 /**
  * The ways in (site design 2026-11-11, /docs item 2): the quick start, the
  * concepts, and the Controlvar books, which the hub did not link at all
- * (#1859 linked them from the homepage and the footer only). Titles only:
- * every sentence on this page is a registered claim (the descriptions above,
- * in `docs/_claims/`), and these add none.
+ * (#1859 linked them from the homepage and the footer only); then what
+ * Controlvar does today and the roadmap (D380), which the docs site's nav and
+ * home page (docs/README.md) linked and the hub did not. Titles only: every
+ * sentence on this page is a registered claim (the descriptions above, in
+ * `docs/_claims/`), and these add none.
  */
 const startHere = [
   { label: 'Quick start', href: docsUrl('getting-started/quick-start'), icon: ICONS.start },
   { label: 'Core concepts', href: docsUrl('getting-started/concepts'), icon: ICONS.box },
   { label: 'The Controlvar books', href: BOOKS_URL, icon: ICONS.book },
+  { label: 'What Controlvar does', href: docsUrl('capabilities'), icon: ICONS.checklist },
+  { label: 'Roadmap', href: ROADMAP_URL, icon: ICONS.map },
 ];
 
 /**

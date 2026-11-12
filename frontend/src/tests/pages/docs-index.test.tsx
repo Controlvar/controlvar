@@ -22,7 +22,7 @@
 import React from 'react';
 import { render, within } from '@testing-library/react';
 import DocsIndex from '@/pages/docs/index';
-import { BOOKS_URL } from '@/content/site-links';
+import { BOOKS_URL, ROADMAP_URL } from '@/content/site-links';
 import { docsUrl } from '@/services/docs';
 import { claimText, metaDescriptions } from './helpers/claimText';
 
@@ -159,14 +159,20 @@ describe('/docs hub layout', () => {
     expect(headings.filter((h) => h.startsWith('H3')).length).toBeGreaterThanOrEqual(10);
   });
 
-  it('starts with the quick start, the concepts and the Controlvar books (BOOKS_URL)', () => {
+  it('starts with the quick start, the concepts, the Controlvar books (BOOKS_URL), what Controlvar does and the roadmap (D380)', () => {
     const { container } = render(<DocsIndex />);
     const start = container.querySelector('section[aria-labelledby="start-here-heading"]') as HTMLElement;
     expect(within(start).getAllByRole('link').map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
       ['Quick start', docsUrl('getting-started/quick-start')],
       ['Core concepts', docsUrl('getting-started/concepts')],
       ['The Controlvar books', BOOKS_URL],
+      ['What Controlvar does', docsUrl('capabilities')],
+      ['Roadmap', ROADMAP_URL],
     ]);
+    expect(ROADMAP_URL).toBe('https://github.com/Controlvar/controlvar/blob/main/ROADMAP.md');
+    // Each entry is its title alone (the text above; a description would be a sentence with no registered
+    // claim) and a line icon.
+    for (const a of within(start).getAllByRole('link')) expect(a.querySelector('svg[aria-hidden="true"] path')).not.toBeNull();
   });
 
   it('offers one button to the whole documentation, and no search-styled box', () => {
