@@ -1,4 +1,5 @@
 import { ApiError, messageForDetail } from '@/services/api';
+import { demoRefusalMessage } from '@/utils/demoMode';
 import { BalanceFormState, BalanceIssue, takeBalanceIssue } from './balanceWithin';
 
 /**
@@ -128,6 +129,7 @@ function sentence(text: string): string {
  *
  * - 401: the session copy. The create is sent with `redirectOn401: false`, so
  *   the page stays and the answers with it.
+ * - 403 from a read-only demo (`demo_read_only`): the API's sentence alone.
  * - 403: the API's reason, then what the role means and who can help.
  * - 409: the key is taken; the page's own sentence and "Edit details".
  * - 422 naming `targeting_rules`: each problem, shown at the targeting rules;
@@ -144,6 +146,8 @@ export function describeCreateError(
 ): CreateError {
   if (err instanceof ApiError) {
     if (err.status === 401) return { message: SESSION_EXPIRED_CREATE };
+    const demo = demoRefusalMessage(err);
+    if (demo) return { message: demo };
     if (err.status === 403) return { message: `${sentence(err.message)} ${ROLE_CANNOT_CREATE}` };
     if (err.status === 409) return { message: duplicateKeyMessage(sentKey, view), editDetails: true };
     if (err.status === 422) {

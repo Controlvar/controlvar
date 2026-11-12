@@ -9,6 +9,9 @@ import {
 } from '@/components/feature-flags/ArchivedFlag';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
+import { useDemoMode } from '@/contexts/AuthConfigContext';
+import { DemoNote } from '@/components/DemoNote';
+import { DEMO_FLAGS_ACTION } from '@/utils/demoMode';
 import { FLAG_ROLE_NOTE, canChangeFeatureFlags, canCreateFeatureFlags } from '@/utils/experimentPermissions';
 import {
   FeatureFlagListItem,
@@ -62,6 +65,8 @@ export default function FeatureFlagsPage() {
   const canCreate = canCreateFeatureFlags(auth?.user, effective);
   const canChange = canChangeFeatureFlags(auth?.user, effective);
   const createPending = !canCreate && permissionsLoading;
+  // A read-only demo puts the demo note where "+ New Flag" or the role note would be.
+  const demo = useDemoMode();
   const [statusFilter, setStatusFilter] = useState<FeatureFlagStatus | 'all'>('all');
   const [staleFilter, setStaleFilter] = useState<'any' | 'stale'>('any');
   const [staleDays, setStaleDays] = useState<number | undefined>(undefined);
@@ -175,7 +180,9 @@ export default function FeatureFlagsPage() {
               Turn features on and off, roll them out gradually and watch their safety signals
             </p>
           </div>
-          {canCreate ? (
+          {demo ? (
+            <DemoNote action={DEMO_FLAGS_ACTION} className="text-sm text-slate-600 max-w-md" />
+          ) : canCreate ? (
             <Link
               href="/feature-flags/new"
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"

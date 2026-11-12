@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AdminUser, AdminUserPatch, UserRole, USER_ROLE_LABELS } from '@/types/admin';
 import { isApiError } from '@/services/api';
+import { demoRefusalMessage } from '@/utils/demoMode';
 import { RequiresModule } from '@/contexts/ModulesContext';
 import { MODULES } from '@/services/modules';
 import { Dialog } from '@/components/ui/Dialog';
@@ -44,6 +45,8 @@ export const NOT_FOUND_MESSAGE =
  */
 export function editErrorMessage(err: unknown): string {
   if (isApiError(err)) {
+    const demo = demoRefusalMessage(err);
+    if (demo) return demo;
     if (err.status === 403) return FORBIDDEN_MESSAGE;
     if (err.status === 404) return NOT_FOUND_MESSAGE;
     if (err.status === 422) return `Couldn't save: ${err.message}`;

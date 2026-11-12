@@ -23,6 +23,9 @@ import {
 } from '@/utils/segmentErrors';
 import { canArchiveSegments, canChangeSegments } from '@/utils/segmentPermissions';
 import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
+import { useDemoMode } from '@/contexts/AuthConfigContext';
+import { DemoNote } from '@/components/DemoNote';
+import { DEMO_SEGMENTS_ACTION } from '@/utils/demoMode';
 import { segmentRulesAreValid } from '@/utils/segmentRules';
 import { SEGMENT_RULES_OPERATOR_OPTIONS, createEmptyGroup } from '@/utils/targeting';
 
@@ -33,10 +36,13 @@ const primary = 'px-3 py-1.5 rounded-md text-sm font-medium bg-blue-600 text-whi
 function RulesSection({
   segment,
   canEdit,
+  canEstimate,
   onSaved,
 }: {
   segment: Segment;
   canEdit: boolean;
+  /** Offer "Estimate size" (not in a read-only demo). */
+  canEstimate: boolean;
   onSaved: (segment: Segment) => void;
 }) {
   const stored = segment.rules;
@@ -185,7 +191,7 @@ function RulesSection({
             {saving ? 'Saving...' : 'Save rules'}
           </button>
         )}
-        {rules !== null && (
+        {rules !== null && canEstimate && (
           <button type="button" className={button} onClick={() => void estimate()} disabled={previewing} data-testid="segment-preview">
             {previewing ? 'Estimating...' : 'Estimate size'}
           </button>
@@ -270,10 +276,13 @@ function CheckUser({ segment }: { segment: Segment }) {
 function MembersSection({
   segment,
   canEdit,
+  canCheck,
   onMemberCount,
 }: {
   segment: Segment;
   canEdit: boolean;
+  /** Offer "Check a user" (not in a read-only demo). */
+  canCheck: boolean;
   onMemberCount: (count: number) => void;
 }) {
   const count = segment.member_count ?? 0;
@@ -321,7 +330,7 @@ function MembersSection({
           />
         </div>
       )}
-      <CheckUser segment={segment} />
+      {canCheck && <CheckUser segment={segment} />}
     </section>
   );
 }
@@ -505,6 +514,9 @@ export default function SegmentDetailPage() {
   const canChange = canChangeSegments(auth?.user, effective);
   const canArchive = canArchiveSegments(auth?.user, effective);
   const changePending = !canChange && permissionsLoading;
+  // A read-only demo: the demo note for the role note, and neither "Check a
+  // user" nor "Estimate size" (reads the API takes as POSTs, which it refuses).
+  const demo = useDemoMode();
   const [segment, setSegment] = useState<Segment | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -571,10 +583,15 @@ export default function SegmentDetailPage() {
                 </span>
               </div>
               {segment.description && <p className="mt-2 text-sm text-slate-700">{segment.description}</p>}
-              {!canChange && !changePending && (
-                <p className="mt-2 text-sm text-slate-600" data-testid="segment-role-note">
-                  {ROLE_NOTE}
-                </p>
+              {demo ? (
+                <DemoNote action={DEMO_SEGMENTS_ACTION} className="mt-2 text-sm text-slate-600" />
+              ) : (
+                !canChange &&
+                !changePending && (
+                  <p className="mt-2 text-sm text-slate-600" data-testid="segment-role-note">
+                    {ROLE_NOTE}
+                  </p>
+                )
               )}
               {archived && (
                 <p className="mt-2 text-sm text-amber-900" data-testid="segment-archived-note">
@@ -594,12 +611,14 @@ export default function SegmentDetailPage() {
                 key={`rules-${version}`}
                 segment={segment}
                 canEdit={canEdit}
+                canEstimate={!demo}
                 onSaved={(updated) => setSegment({ ...segment, ...updated })}
               />
             ) : (
               <MembersSection
                 segment={segment}
                 canEdit={canEdit}
+                canCheck={!demo}
                 onMemberCount={(count) => setSegment((s) => (s ? { ...s, member_count: count } : s))}
               />
             )}

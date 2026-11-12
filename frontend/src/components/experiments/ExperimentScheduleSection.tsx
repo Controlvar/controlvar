@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { isApiError } from '@/services/api';
+import { demoRefusalMessage } from '@/utils/demoMode';
 import { ExperimentScheduleUpdate, ExperimentsService } from '@/services/experiments';
 import { Experiment } from '@/types/experiments';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
@@ -71,6 +72,8 @@ export const SCHEDULE_ERROR_COPY: Record<number, string> & { fallback: string } 
 export function scheduleErrorCopy(err: unknown): string {
   if (!isApiError(err)) return SCHEDULE_ERROR_COPY.fallback;
   if (err.timedOut) return err.message;
+  const demo = demoRefusalMessage(err);
+  if (demo) return demo;
   return SCHEDULE_ERROR_COPY[err.status] ?? SCHEDULE_ERROR_COPY.fallback;
 }
 

@@ -36,7 +36,8 @@ import { flagManageErrorCopy } from '@/components/feature-flags/FlagManageSectio
 import { rolloutErrorCopy } from '@/components/feature-flags/RolloutScheduleManager';
 import { resultsErrorMessage } from '@/components/results/ResultsDashboard/ResultsDashboard';
 import { sessionErrorMessage } from '@/contexts/AuthContext';
-import { loginErrorMessage, signInNoticeMessage } from '@/pages/login';
+import { demoEnterErrorMessage, loginErrorMessage, signInNoticeMessage } from '@/pages/login';
+import { DEMO_UNREACHABLE } from '@/utils/demoMode';
 import { signInFailureNotice } from '@/services/hostedUi';
 import { classifyPasswordError, passwordOutcomeSentence } from '@/services/password';
 import { groupErrorCopy } from '@/utils/exclusionGroups';
@@ -910,7 +911,8 @@ const STATUS_ZERO_SITES: Record<string, { count: number; kind: string }> = {
   // Returns `e.message` for every status 0, so the time-out text already shows.
   'components/results/ResultsDashboard/ResultsDashboard.tsx': { count: 1, kind: 'passes-message' },
   'contexts/AuthContext.tsx': { count: 1, kind: 'read' },
-  'pages/login.tsx': { count: 1, kind: 'sign-in' },
+  // loginErrorMessage, and demoEnterErrorMessage (the read-only demo's button).
+  'pages/login.tsx': { count: 2, kind: 'sign-in' },
   // signInFailureNotice: the Cognito Hosted UI callback's exchange (#708).
   'services/hostedUi.ts': { count: 1, kind: 'sign-in' },
   // classifyPasswordError's `case 0:`.
@@ -1104,6 +1106,8 @@ describe('each status-0 place says what a time-out means (#1040 D7)', () => {
     'pages/login.tsx': (write) => {
       expect(loginErrorMessage(write)).toBe(SIGN_IN_TEXT);
       expect(loginErrorMessage(unreachable())).toBe(unreachableMessage());
+      expect(demoEnterErrorMessage(write)).toBe(SIGN_IN_TEXT);
+      expect(demoEnterErrorMessage(unreachable())).toBe(DEMO_UNREACHABLE);
     },
     'services/hostedUi.ts': (write) => {
       expect(signInNoticeMessage(signInFailureNotice(write, '/'))).toBe(SIGN_IN_TEXT);

@@ -1,6 +1,8 @@
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAuthConfig } from '@/contexts/AuthConfigContext';
+import { LOGIN_PATH } from '@/services/api';
 import { PageTitle } from '@/components/PageTitle';
 import { SiteHeader } from '@/components/SiteHeader';
 import { isMarketingSite } from '@/utils/site-mode';
@@ -56,21 +58,30 @@ export const HOME_AFTER_LOGIN = '/experiments';
 export default function HomePage() {
   const router = useRouter();
   const { status } = useAuth();
+  const { demo } = useAuthConfig();
   // There is no hosted tier, so the public site offers no sign-in: the button
   // posted to an endpoint that 404s. See utils/site-mode.ts.
   const marketing = isMarketingSite();
 
   useEffect(() => {
-    if (status === 'authenticated') {
+    // A read-only demo has no homepage: once `/auth/config` says this is one,
+    // `/` goes to the sign-in page, which sends a visitor already signed in
+    // on to the dashboard. Until it has answered the homepage shows, as on
+    // any install: the demo box is meant to redirect `/` at its proxy, and
+    // this is the fallback.
+    if (demo) {
+      void router.replace(LOGIN_PATH);
+    } else if (status === 'authenticated') {
       void router.replace(HOME_AFTER_LOGIN);
     }
-  }, [status, router]);
+  }, [demo, status, router]);
 
-  // An authenticated visitor is on their way to the dashboard: render nothing
-  // rather than paint the whole marketing page and replace it a moment later.
-  // `loading` still renders the page, so an anonymous visitor -- who is every
-  // visitor this page exists for -- sees no spinner.
-  if (status === 'authenticated') {
+  // An authenticated visitor is on their way to the dashboard, and a demo's
+  // visitor on their way to /login: render nothing rather than paint the
+  // whole marketing page and replace it a moment later. `loading` still
+  // renders the page (and so does the static export), so an anonymous
+  // visitor -- who is every visitor this page exists for -- sees no spinner.
+  if (demo || status === 'authenticated') {
     return <PageTitle />;
   }
 
