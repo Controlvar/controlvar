@@ -73,7 +73,8 @@ _FIXTURES: Dict[str, _Fixture] = {
         },
     ),
     # The edges: a control with no conversions (relative improvement is
-    # infinite, reported as None) and a treatment with no units.
+    # infinite, reported as None) and a treatment with no units.  From engine
+    # 1.11.0 treatment B, significant against that control, is the winner.
     "edges": _Fixture(
         units={_TREATMENT_A: 0, _CONTROL: 500, _TREATMENT_B: 400},
         converted={
@@ -193,6 +194,28 @@ CHARACTERISATIONS: Dict[str, Dict[str, str]] = {
         "three_variants-0.9-benjamini_hochberg": "3fccfd274278e5811b851b2f097580678de0ad5d3d1e3ab6bea48425f86fa453",
         "edges-0.95-none": "8d91d26793e6b0e468326346a25847140f33a5202775bde06efa79137c2cdf2e",
         "edges-0.95-bonferroni": "74ba8e871adc4bfe9fac98ee425468da5bea6ced18f1a4e5f974bad37f20ee0e",
+    },
+    # 1.11.0: the edges-* cases move on purpose.  Their primary metric has a
+    # control with no conversions (0 of 500) and treatment B at 12 of 400,
+    # significant (p 5.4e-5; 1.1e-4 after Bonferroni).  Until 1.10.0 no
+    # winner was named there, because the winner read the sign of
+    # relative_improvement_pct, which is None against a rate of 0, and the
+    # summary said "No statistically significant difference".  From 1.11.0
+    # the side of the control is the sign of absolute_difference: treatment B
+    # is the metric's and the summary's winner, and the recommendation is
+    # CONTINUE_TESTING because treatment A has no users
+    # (test_zero_conversion_control_winner.py asserts those values).
+    # relative_improvement_pct stays None.  With the winner and the summary
+    # set back, each edges-* output hashes to its 1.10.0 entry, so nothing
+    # else moved.  The three_variants-* cases have no such control and are
+    # 1.10.0's.
+    "1.11.0": {
+        "three_variants-0.95-none": "ece157050f50545868f0578cfaa695d25584f87c1546aa86f7d02e0f41516b53",
+        "three_variants-0.95-bonferroni": "d3a91b82c4a94008c415af63846df6245af4719997ea6dc4b0985f3a5dfa1b8b",
+        "three_variants-0.95-benjamini_hochberg": "dd080d66753fbe4a6a0a391d59a6e193370456310bc5bd88a2fb5bc0eb061e43",
+        "three_variants-0.9-benjamini_hochberg": "3fccfd274278e5811b851b2f097580678de0ad5d3d1e3ab6bea48425f86fa453",
+        "edges-0.95-none": "ec0b2f6f4ce27a2ec9dbc540ef79d9c74ac423844d26e75a089a75a1ccb893ee",
+        "edges-0.95-bonferroni": "ebbbc649115fe1c97337c4afcbe04c6c8f80591c8b6a2654d90ee8d7eacba10d",
     },
 }
 

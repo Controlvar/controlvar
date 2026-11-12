@@ -95,6 +95,9 @@ ENGINE_FINGERPRINTS: Dict[str, str] = {
     # 1.10.0 is #448: the dataset gains the balanced-groups estimate (the
     # ``balanced_groups`` output below), which no earlier version returns.
     "1.10.0": "11f01afb88c2d4f930234b60a8c4004a733743f4dbd9af81132c4349ffb52c23",
+    # 1.11.0: a significant treatment against a control with no conversions
+    # is the winner.  This dataset has no such control: 1.10.0's.
+    "1.11.0": "11f01afb88c2d4f930234b60a8c4004a733743f4dbd9af81132c4349ffb52c23",
 }
 
 # Two ids where the control sorts AFTER the treatment, so an engine that

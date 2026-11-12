@@ -1788,7 +1788,7 @@
             "type": "string"
           },
           "engine_version": {
-            "default": "1.10.0",
+            "default": "1.11.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"
@@ -1889,7 +1889,7 @@
             "type": "array"
           },
           "engine_version": {
-            "default": "1.10.0",
+            "default": "1.11.0",
             "description": "Statistics engine version that computed the current weights",
             "title": "Engine Version",
             "type": "string"
@@ -2275,7 +2275,7 @@
             ]
           },
           "engine_version": {
-            "default": "1.10.0",
+            "default": "1.11.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"
@@ -4433,7 +4433,7 @@
             "title": "Covariate Lookback Days"
           },
           "engine_version": {
-            "default": "1.10.0",
+            "default": "1.11.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"

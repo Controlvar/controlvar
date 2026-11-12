@@ -374,9 +374,10 @@ class AnalysisService:
         The primary metric's ``lower_is_better`` decides the direction: the
         winner is the metric result's ``winning_variant_id`` (already
         direction-aware), and KEEP_CONTROL means every treatment is
-        significantly worse in that direction.  For a lower-is-better metric
-        the reason gives the improvement as a positive figure and says that
-        lower is better; the higher-is-better sentences are unchanged.
+        significantly worse in that direction, read from the absolute
+        difference where the relative change is None.  For a lower-is-better
+        metric the reason gives the improvement as a positive figure and says
+        that lower is better; the higher-is-better sentences are unchanged.
         """
         if not metrics:
             return {
@@ -434,11 +435,20 @@ class AnalysisService:
                 "recommendation_reason": reason,
             }
         treatments = [v for v in primary["variants"] if not v["is_control"]]
-        # "Worse" is the signed change against the metric's direction.
+        # "Worse" is the signed change against the metric's direction: the
+        # relative change, or where that is None (a control with no
+        # conversions, or a mean of 0) the absolute difference, which has the
+        # same sign.  Without it, a treatment significantly worse than such a
+        # control read as "no significant difference" (engine 1.11.0).
         worse_sign = 1 if lower_is_better else -1
+
+        def signed_change(v: Dict[str, Any]) -> float:
+            if v["relative_improvement_pct"] is not None:
+                return v["relative_improvement_pct"]
+            return v.get("absolute_difference") or 0
+
         if treatments and all(
-            v["is_significant"]
-            and (v["relative_improvement_pct"] or 0) * worse_sign > 0
+            v["is_significant"] and signed_change(v) * worse_sign > 0
             for v in treatments
         ):
             return {

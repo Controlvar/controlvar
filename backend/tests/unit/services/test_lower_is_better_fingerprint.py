@@ -8,7 +8,10 @@ False or the definition has no such attribute at all, the output is 1.4.0's
 plus the new field: these tests drop the field and compare with the hashes
 pinned for 1.4.0, which is frozen and never edited.  A proportion result's
 variants also carry the difference fields #1496 added later; those are dropped
-too (``test_difference_intervals.py`` holds them).
+too (``test_difference_intervals.py`` holds them).  1.11.0 names a significant
+treatment against a control with no conversions the winner, where 1.4.0 named
+none; that one decision is checked and set back before the comparison
+(``test_zero_conversion_control_winner.py`` holds the new answer).
 
 The lower-is-better outputs are pinned here per ``ENGINE_VERSION``.  The rule:
 an engine-changing PR bumps ``ENGINE_VERSION`` to the next minor and appends it
@@ -84,16 +87,79 @@ def _without_the_difference_fields(metric: Dict[str, Any]) -> None:
             del variant[field]
 
 
+def _undo_the_zero_control_winner(metric: Dict[str, Any]) -> bool:
+    """Set back the one decision engine 1.11.0 changed in a proportion
+    result: a significant treatment against a control with no conversions is
+    the winner, where 1.4.0 named none.  The winner is checked first (a
+    significant treatment with conversions and no relative change, against a
+    control at 0), so the undo is never vacuous.  True when it undid one;
+    ``test_zero_conversion_control_winner.py`` holds the new answer."""
+    control = next(v for v in metric["variants"] if v["is_control"])
+    if control["conversions"] != 0 or metric["winning_variant_id"] is None:
+        return False
+    winner = next(
+        v for v in metric["variants"] if v["variant_id"] == metric["winning_variant_id"]
+    )
+    assert winner["is_significant"] is True
+    assert winner["conversions"] > 0
+    assert winner["relative_improvement_pct"] is None
+    metric["winning_variant_id"] = None
+    return True
+
+
+#: How many of the sufficient-stats binomial outputs 1.11.0 changed: its
+#: "edges" set (t2 at 12 of 400 against 0 of 500) at both alphas under all
+#: three corrections.
+_ZERO_CONTROL_WINNERS = 6
+
+
 def _without_the_field(outputs: Dict[str, Any], function: str) -> Dict[str, Any]:
     """The estimator outputs less ``lower_is_better``, after checking that
     every one of them carried it as False (so the strip is not vacuous), and
-    less the #1496 fields for an estimator that carries them."""
+    less the #1496 fields for an estimator that carries them.  A proportion
+    result also has 1.11.0's winner against a control at 0 undone."""
     stripped = copy.deepcopy(outputs)
+    undone = 0
     for output in stripped.values():
         assert output.pop("lower_is_better") is False
         if function in _CARRY_DIFFERENCE_FIELDS:
             _without_the_difference_fields(output)
+            undone += _undo_the_zero_control_winner(output)
+    assert undone == (
+        _ZERO_CONTROL_WINNERS if function in _CARRY_DIFFERENCE_FIELDS else 0
+    )
     return stripped
+
+
+#: The summary 1.4.0 gave for the characterisation's edges cases, before
+#: 1.11.0 named treatment B the winner of the primary metric (Purchased).
+_EDGES_SUMMARY_BEFORE_1_11_0 = {
+    "has_winner": False,
+    "winning_variant_id": None,
+    "recommendation": "CONTINUE_TESTING",
+    "recommendation_reason": (
+        "No statistically significant difference on Purchased yet (900 users assigned)."
+    ),
+}
+
+
+def _undo_the_zero_control_summary(case: str, output: Dict[str, Any]) -> None:
+    """Undo 1.11.0 in a ``/results`` output: each metric's winner against a
+    control at 0, and for the edges cases the summary, after checking it
+    names treatment B."""
+    undone = sum(_undo_the_zero_control_winner(m) for m in output["metrics"])
+    if not case.startswith("edges-"):
+        assert undone == 0
+        return
+    assert undone == 1
+    summary = output["summary"]
+    assert summary["has_winner"] is True
+    assert summary["winning_variant_id"] == characterisation._TREATMENT_B
+    assert summary["recommendation"] == "CONTINUE_TESTING"
+    assert summary["recommendation_reason"].startswith(
+        "treatment-b is significantly better on Purchased."
+    )
+    summary.update(_EDGES_SUMMARY_BEFORE_1_11_0)
 
 
 def _hash(outputs: Any) -> str:
@@ -151,6 +217,7 @@ def test_results_for_higher_is_better_metrics_are_those_of_1_4_0(
     for metric in output["metrics"]:
         assert metric.pop("lower_is_better") is False
         _without_the_difference_fields(metric)
+    _undo_the_zero_control_summary(case, output)
     actual, _payload = characterisation._fingerprint(output)
     assert actual == characterisation.CHARACTERISATIONS[BEFORE_DIRECTION][case]
 
@@ -240,6 +307,12 @@ LOWER_IS_BETTER_FINGERPRINTS: Dict[str, Dict[str, str]] = {
     },
     # 1.10.0 (#448) adds the balanced-groups estimate only: 1.9.0's.
     "1.10.0": {
+        "binomial_metric_result": "f32e707b71ccdf962c066949eb2ce4524fe6a22fbd5bc60fcce216a52e27a818",
+        "mean_metric_result": "11b6c73a38a716f809bfeb2ef9735045459973fbaa457087c4409074456952df",
+    },
+    # 1.11.0 changes the winner against a control with no conversions; these
+    # fixtures have none: 1.10.0's.
+    "1.11.0": {
         "binomial_metric_result": "f32e707b71ccdf962c066949eb2ce4524fe6a22fbd5bc60fcce216a52e27a818",
         "mean_metric_result": "11b6c73a38a716f809bfeb2ef9735045459973fbaa457087c4409074456952df",
     },
