@@ -14,8 +14,9 @@ calls are ``gh api`` GETs, ``gh run download`` and the two GETs that read a
 job's log (``read_job_log``); its other calls are GETs of the two package
 registries (``http_get``). ``--plan`` prints the dispatch
 commands, in order, for a person to run. ``--suite`` is the step of
-``rc-evidence.yml`` that runs one of the suites (``SUITES``) and writes its
-JUnit reports. ``--registry`` checks one published package only (P below):
+``rc-evidence.yml`` that runs one of the suites (``SUITES``), or one shard of a
+sharded one (``LEGS``), and writes its JUnit reports and a sharded session's
+shard report. ``--registry`` checks one published package only (P below):
 the step after each publish in the release sitting.
 
 WHAT IT READS
@@ -55,7 +56,12 @@ Then:
   render tests (with the helm chart.yml pins), the CDK stack tests, the two
   published SDKs' own suites (``sdk/python``'s pytest,
   ``sdk/js``'s jest), the SDK contract self-tests, the demo apps' jest and their
-  simulators' tests, and the frontend's jest. Every target must be in a tree
+  simulators' tests, and the frontend's jest. A sharded suite (unit and
+  integration) is one job per shard, and each shard leaves its own reports:
+  one missing fails, naming the shard. Its shards' reports
+  (``backend/tests/shard.py``'s) must show, by
+  ``scripts/check_test_shards.py``'s rules, that between them they ran every
+  test they collected exactly once. Every target must be in a tree
   some suite runs (``suite_of``); one in no suite's tree fails by name. Every
   ``test:`` target of the registries (``docs/_claims``), and the test of every
   ``mechanism:`` they use, is in them, passed and was not skipped. A Python
@@ -117,10 +123,11 @@ WHAT IT WRITES
 
 ``--out DIR``: ``rc-evidence.md`` (the run table, every check and the verdict;
 also printed), ``runs.json`` (every run listed, and each counted run's jobs),
-and copies of what it judged: ``verdicts/<artifact>/verdicts.json`` and
-``junit/*.xml``. ``rc-evidence.yml`` uploads the directory for 90 days, so the
-verdicts outlive their own 14-day artifacts. The last line is ``RC EVIDENCE:
-PASS`` or ``RC EVIDENCE: FAIL``.
+and copies of what it judged: ``verdicts/<artifact>/verdicts.json``,
+``junit/*.xml`` and the shard reports, ``junit/shard-*.json``.
+``rc-evidence.yml`` uploads the directory for 90 days, so the verdicts outlive
+their own 14-day artifacts. The last line is ``RC EVIDENCE: PASS`` or ``RC
+EVIDENCE: FAIL``.
 
 Exit status: 0 PASS; 1 FAIL; 2 usage (a tag that is not ``vX.Y.Z``, a
 malformed disposition).
@@ -269,6 +276,12 @@ class Invocation:
     cwd: str = ""
     #: jest: trees outside the project its config also searches (``roots``).
     also: Tuple[str, ...] = ()
+    #: pytest: run in this many shards, each a leg of its own (``LEGS``); 0
+    #: runs the session whole. At most one session of a suite is sharded.
+    shards: int = 0
+    #: In a leg: which of the ``shards`` this session is (1..shards); 0 when
+    #: it runs whole.
+    shard: int = 0
 
     @property
     def roots(self) -> Tuple[str, ...]:
@@ -305,14 +318,24 @@ _INTEGRATION_ENV: Tuple[Tuple[str, str], ...] = (
         "postgresql://postgres:postgres@localhost:5432/experimentation_test",
     ),
 )
-#: The suites rc-evidence.yml runs at the tag, one job each, as the pull
-#: request jobs run them (pr-qa-gate.yml, integration-tests.yml, chart.yml,
-#: sdk-unit-tests.yml), without -x, a shard or --passWithNoTests: the tag's
-#: whole tree. The pytest ones are the python-suites matrix, the jest ones the
-#: jest-suites matrix. sdk/python has its own rootdir (the pyproject.toml
-#: beside its tests), so ``--rootdir=.`` names its cases from the repository
-#: root, as every other report does; the two demo simulators each import a
-#: module named ``traffic`` and are a session each.
+#: The suites rc-evidence.yml runs at the tag, as the pull request jobs run
+#: them (pr-qa-gate.yml, integration-tests.yml, chart.yml,
+#: sdk-unit-tests.yml), without -x or --passWithNoTests: the tag's whole tree.
+#: Each is one job, except a suite with a sharded session, which is one job per
+#: shard (``LEGS``). The pytest ones are the python-suites matrix, the jest
+#: ones the jest-suites matrix. sdk/python has its own rootdir (the
+#: pyproject.toml beside its tests), so ``--rootdir=.`` names its cases from
+#: the repository root, as every other report does; the two demo simulators
+#: each import a module named ``traffic`` and are a session each.
+#:
+#: Sharded (#1895): unit and integration, four shards each. Run whole, at
+#: v0.45.0 the unit session took 45.0 minutes and the integration session
+#: outgrew the job's 60 (run 42944394836, cancelled after 90% of it). A shard
+#: takes the tests whose node ids hash to it (backend/tests/shard.py, as
+#: integration-tests.yml's four shards do), and the verifier proves the shards
+#: between them ran every collected test exactly once
+#: (scripts/check_test_shards.py). The other sessions of a sharded suite run
+#: whole, in its first shard.
 SUITES: Dict[str, Tuple[Invocation, ...]] = {
     # The load-testing framework's tests (docs/performance/load-testing.md's
     # registry names them) are a session of their own: collecting
@@ -330,6 +353,7 @@ SUITES: Dict[str, Tuple[Invocation, ...]] = {
                 "backend/tests/installer_sweeps/",
                 "--ignore=backend/tests/unit/chart",
             ),
+            shards=4,
         ),
         Invocation("performance.xml", ("backend/tests/performance/",)),
     ),
@@ -349,6 +373,9 @@ SUITES: Dict[str, Tuple[Invocation, ...]] = {
         for name in ("event_processor", "feature_flag_evaluation", "shared")
     ),
     "modules": (Invocation("modules.xml", ("modules/backend/tests",)),),
+    # e2e and contract run whole in the first shard, as integration-tests.yml
+    # runs them in its shard 1: a few seconds each, and a job of their own
+    # would repeat the install, the bootstrap and the second Redis for them.
     "integration": (
         Invocation(
             "integration.xml",
@@ -359,6 +386,7 @@ SUITES: Dict[str, Tuple[Invocation, ...]] = {
                 ("EXPERIMENTLY_REQUIRE_REDIS", "1"),
                 ("EXPERIMENTLY_REQUIRE_REDIS_AUTH", "1"),
             ),
+            shards=4,
         ),
         Invocation("e2e.xml", ("backend/tests/e2e/", "-m", "e2e"), _INTEGRATION_ENV),
         Invocation(
@@ -409,6 +437,101 @@ SUITES: Dict[str, Tuple[Invocation, ...]] = {
     ),
 }
 PYTEST = ("-p", "no:cov", "-q", "--tb=short")
+#: backend/tests/shard.py's two variables: a session's slice (``i/n``), and
+#: the report it writes for scripts/check_test_shards.py.
+SHARD_SPEC = "EXPERIMENTLY_TEST_SHARD"
+SHARD_REPORT = "EXPERIMENTLY_TEST_SHARD_REPORT"
+#: The skip reasons the shard check allows in each sharded suite: in
+#: integration, integration-tests.yml's one (the benchmark, which runs only
+#: with RUN_BENCHMARKS=1); in unit, any (None), as before it was sharded: E4
+#: judges a skip target by target.
+SHARD_SKIPS: Dict[str, Optional[Tuple[str, ...]]] = {
+    "unit": None,
+    "integration": ("absolute-timing benchmark; set RUN_BENCHMARKS=1 to run it",),
+}
+#: The ``-p no:NAME`` the shard check allows: PYTEST's.
+SHARD_PLUGINS_OFF = frozenset({"cov"})
+
+
+@dataclasses.dataclass(frozen=True)
+class Leg:
+    """One job of the suites matrices: a suite run whole, or one shard of it."""
+
+    name: str  # the matrix's `suite`: the suite's name, or <suite>-<shard>
+    suite: str
+    sessions: Tuple[Invocation, ...]
+    shard: int = 0  # 1..of; 0 for a suite run whole
+    of: int = 0
+
+    @property
+    def label(self) -> str:
+        """How a problem names it: the suite, and its shard."""
+        if not self.shard:
+            return self.suite
+        return f"{self.suite} (shard {self.shard} of {self.of})"
+
+    @property
+    def shard_report(self) -> str:
+        """The report its sharded session writes beside its JUnit
+        (``shard-*.json``, the name scripts/check_test_shards.py searches for)."""
+        return f"shard-{self.name}.json"
+
+
+def _legs() -> Dict[str, Leg]:
+    legs: Dict[str, Leg] = {}
+    for suite, invocations in SUITES.items():
+        sharded = [i for i in invocations if i.shards]
+        if (
+            len(sharded) > 1
+            or any(i.shard for i in invocations)
+            or any(
+                i.runner != "pytest" or not i.report.endswith(".xml") for i in sharded
+            )
+        ):
+            raise ValueError(f"suite {suite}: at most one sharded pytest session")
+        names = (
+            [suite]
+            if not sharded
+            else [f"{suite}-{n}" for n in range(1, sharded[0].shards + 1)]
+        )
+        if any(name in legs or name in SUITES and name != suite for name in names):
+            raise ValueError(f"suite {suite}: a leg's name is taken: {names}")
+        if not sharded:
+            legs[suite] = Leg(suite, suite, invocations)
+            continue
+        total = sharded[0].shards
+        stem = sharded[0].report[: -len(".xml")]
+        for index, name in zip(range(1, total + 1), names):
+            sessions = tuple(
+                dataclasses.replace(i, report=f"{stem}-{index}.xml", shard=index)
+                if i.shards
+                else i
+                for i in invocations
+                if i.shards or index == 1
+            )
+            legs[name] = Leg(name, suite, sessions, index, total)
+    return legs
+
+
+#: Every job of the suites matrices, in SUITES' order: a suite run whole is
+#: one leg under its own name; a sharded one is ``<suite>-1`` .. ``<suite>-N``,
+#: and its other sessions run in ``<suite>-1``.
+LEGS: Dict[str, Leg] = _legs()
+
+
+def _shard_check() -> Any:
+    """scripts/check_test_shards.py, from beside this file (standard library
+    only), whose rules prove a sharded suite ran every test exactly once."""
+    path = pathlib.Path(__file__).resolve().with_name("check_test_shards.py")
+    spec = importlib.util.spec_from_file_location("check_test_shards_for_rc", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+SHARD_CHECK = _shard_check()
 
 
 def is_jest(name: str) -> bool:
@@ -417,8 +540,72 @@ def is_jest(name: str) -> bool:
 
 
 def suite_job(name: str) -> str:
-    """The rc-evidence.yml job that runs suite *name*."""
-    return (JEST_SUITE_JOB if is_jest(name) else SUITE_JOB).format(name)
+    """The rc-evidence.yml job that runs leg *name* (``LEGS``)."""
+    return (JEST_SUITE_JOB if is_jest(LEGS[name].suite) else SUITE_JOB).format(name)
+
+
+def _suite_words(text: str) -> str:
+    """A session's trees as a shard report's ``suite`` gives them: each
+    without a trailing slash, sorted, space-separated."""
+    return " ".join(sorted(part.rstrip("/") for part in text.split()))
+
+
+def shard_problems(junit: pathlib.Path) -> Tuple[List[str], List[str]]:
+    """Whether each sharded suite's shards, between them, ran every test they
+    collected exactly once: scripts/check_test_shards.py's rules, over the
+    shard report of every leg of the suite in *junit*. Returns the problems,
+    and a line for each suite proven."""
+    problems: List[str] = []
+    proven: List[str] = []
+    for suite in SUITES:
+        legs = [leg for leg in LEGS.values() if leg.suite == suite and leg.shard]
+        if not legs:
+            continue
+        (session,) = [i for i in legs[0].sessions if i.shard]
+        trees = _suite_words(" ".join(session.roots))
+        before = len(problems)
+        docs = []
+        for leg in legs:
+            path = junit / leg.shard_report
+            if not path.is_file():
+                problems.append(
+                    f"suite {leg.label}: no shard report {leg.shard_report}"
+                )
+                continue
+            try:
+                doc = SHARD_CHECK.load_report(path)
+            except SHARD_CHECK.BadReport as error:
+                said_here = str(error).replace(str(path), leg.shard_report)
+                problems.append(f"suite {leg.label}: {said_here}")
+                continue
+            if (doc["shard"], doc["of"]) != (leg.shard, leg.of):
+                problems.append(
+                    f"suite {leg.label}: {leg.shard_report} is shard"
+                    f" {doc['shard']} of {doc['of']}"
+                )
+            if _suite_words(doc["suite"]) != trees:
+                problems.append(
+                    f"suite {leg.label}: {leg.shard_report} is a report of"
+                    f" {doc['suite']!r}, not {trees!r}"
+                )
+            # The session's own --ignore (unit leaves the chart's tree to the
+            # chart suite) is its design, not a narrowing; any other is one.
+            if [i.rstrip("/") for i in doc["ignore"]] == list(session.ignored):
+                doc = dict(doc, ignore=[])
+            docs.append(doc)
+        skips = SHARD_SKIPS[suite]
+        found, count = SHARD_CHECK.check_suite(
+            trees,
+            docs,
+            None if skips is None else set(skips),
+            SHARD_PLUGINS_OFF,
+        )
+        problems += found
+        if len(problems) == before:
+            proven.append(
+                f"{trees}: {count} tests in {len(legs)} shards, each ran exactly once"
+            )
+    return problems, proven
 
 
 def session_of(target: str) -> Optional[Tuple[str, Invocation]]:
@@ -515,7 +702,8 @@ REQUIRED_JOBS: Dict[str, Tuple[str, ...]] = {
     "chart-kind.yml": ("chart-kind (core)", "chart-kind (full)"),
     "compose-production.yml": ("Compose Production", "Compose Upgrade"),
     "docs-journeys.yml": ("Docs journeys", "Demo journeys"),
-    "rc-evidence.yml": tuple(suite_job(name) for name in SUITES) + (VERIFY_JOB,),
+    # Every leg: each shard is a job, which must have run and succeeded.
+    "rc-evidence.yml": tuple(suite_job(name) for name in LEGS) + (VERIFY_JOB,),
 }
 
 #: The docs-journeys verdicts: the journeys job's (which records the published
@@ -1802,15 +1990,33 @@ class Verifier:
         )
 
     def judge_claim_tests(self, registry: Registry) -> List[Check]:
-        """E4: the targets judged test by test, and the residual held at job
-        level (the SDK trees no suite here runs)."""
+        """E4: the targets judged test by test, the sharded suites' shards
+        proven to have run every test once between them, and the residual
+        held at job level (the SDK trees no suite here runs)."""
         by_job = [(t, sdk_job_of(t)) for t, _ in registry.targets]
         tested = [t for t, job in by_job if job is None]
         held: Dict[str, int] = {}
         for _, job in by_job:
             if job is not None:
                 held[job] = held.get(job, 0) + 1
-        return [self._judge_tests(tested), self._judge_sdk_jobs(held)]
+        return [
+            self._judge_tests(tested),
+            self._judge_shards(),
+            self._judge_sdk_jobs(held),
+        ]
+
+    def _judge_shards(self) -> Check:
+        """After ``_judge_tests`` has put every leg's reports in the record:
+        scripts/check_test_shards.py's rules over every shard's report."""
+        subject = "every test ran in exactly one shard"
+        if self.junit is None and SELF not in self.counted:
+            return Check(
+                "E4",
+                subject,
+                [f"no rc-evidence.yml run at {self.tag}: the shards did not run"],
+            )
+        problems, proven = shard_problems(self.out / "junit")
+        return Check("E4", subject, problems, "; ".join(proven))
 
     def _judge_sdk_jobs(self, held: Mapping[str, int]) -> Check:
         """The residual: each SDK tree's targets held by that SDK's job in the
@@ -1862,8 +2068,10 @@ class Verifier:
         junit = self.out / "junit"
         junit.mkdir(parents=True, exist_ok=True)
         if self.junit is not None:
-            for report in sorted(self.junit.glob("*.xml")):
-                shutil.copyfile(report, junit / report.name)
+            # The JUnit reports, and the sharded sessions' shard reports.
+            for pattern in ("*.xml", SHARD_CHECK.REPORT_GLOB):
+                for report in sorted(self.junit.glob(pattern)):
+                    shutil.copyfile(report, junit / report.name)
         else:
             run = self.counted.get(SELF)
             if run is None:
@@ -1875,31 +2083,35 @@ class Verifier:
                     ]
                     + outside,
                 )
-            for suite in SUITES:
+            for leg in LEGS.values():
+                artifact = JUNIT_ARTIFACT.format(leg.name)
                 try:
-                    self.github.download(run.id, JUNIT_ARTIFACT.format(suite), junit)
+                    self.github.download(run.id, artifact, junit)
                 except GhError:
                     problems.append(
-                        f"suite {suite}: no {JUNIT_ARTIFACT.format(suite)} artifact in run {run.id}"
+                        f"suite {leg.label}: no {artifact} artifact in run {run.id}"
                     )
+        # Every leg's reports: one of a shard missing is that shard's FAIL.
         cases: List[Case] = []
-        for suite, invocations in SUITES.items():
-            for invocation in invocations:
+        for leg in LEGS.values():
+            for invocation in leg.sessions:
                 report = junit / invocation.report
                 try:
                     found = read_junit(report)
                 except (OSError, ET.ParseError):
                     problems.append(
-                        f"suite {suite}: no readable JUnit report {invocation.report}"
+                        f"suite {leg.label}: no readable JUnit report {invocation.report}"
                     )
                     continue
                 if not found:
-                    problems.append(f"suite {suite}: {invocation.report} holds no test")
+                    problems.append(
+                        f"suite {leg.label}: {invocation.report} holds no test"
+                    )
                 failed = [c for c in found if c.outcome == "failed"]
                 if failed:
                     first = failed[0]
                     problems.append(
-                        f"suite {suite}: {len(failed)} tests failed or errored in"
+                        f"suite {leg.label}: {len(failed)} tests failed or errored in"
                         f" {invocation.report} (first: {first.classname}"
                         f"::{first.name[:200]})"
                     )
@@ -2519,13 +2731,22 @@ def run_suite(
     junit_dir: pathlib.Path,
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
 ) -> int:
-    """Run every session of suite *name*; 0 only when all of them passed."""
+    """Run every session of leg *name* (a suite, or one shard of it:
+    ``LEGS``); 0 only when all of them passed. A sharded session gets its
+    slice and writes its shard report beside its JUnit; no other session is
+    sliced, whatever the environment it inherits holds."""
     junit_dir = junit_dir.resolve()  # jest runs in its project, not here
     junit_dir.mkdir(parents=True, exist_ok=True)
+    leg = LEGS[name]
     failed = []
-    for invocation in SUITES[name]:
+    for invocation in leg.sessions:
         env = dict(os.environ)
         env.update(dict(invocation.env))
+        env.pop(SHARD_SPEC, None)
+        env.pop(SHARD_REPORT, None)
+        if invocation.shard:
+            env[SHARD_SPEC] = f"{invocation.shard}/{invocation.shards}"
+            env[SHARD_REPORT] = str(junit_dir / leg.shard_report)
         report = junit_dir / invocation.report
         raw = junit_dir / (report.stem + ".jest.json")
         if invocation.runner == "jest":
@@ -2595,7 +2816,9 @@ def main(
         choices=sorted(PACKAGES),
         help="check only this published package against its registry",
     )
-    parser.add_argument("--suite", choices=sorted(SUITES), help="run one suite")
+    parser.add_argument(
+        "--suite", choices=sorted(LEGS), help="run one suite, or one shard of it"
+    )
     parser.add_argument(
         "--junit-dir", type=pathlib.Path, help="--suite: where it writes"
     )

@@ -529,7 +529,10 @@ def test_the_key_expiry_step(serve, keys, code, text):
         ("targeting_rule", True),
         ("inactive", False),
         ("error", False),
-        (SENTINEL, False),
+        # SENTINEL is random, so its id is named: a sharded run puts a test
+        # in the shard its id hashes to, and an id that differs between
+        # processes puts it in no shard, or two (#1895).
+        pytest.param(SENTINEL, False, id="SENTINEL-False"),
     ],
 )
 def test_the_flag_must_be_evaluated(serve, reason, ok):
