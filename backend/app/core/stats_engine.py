@@ -58,6 +58,14 @@ import numpy as np
 #: experiment that balances its split within groups, one size-weighted
 #: estimate per treatment over the groups
 #: (``backend/app/services/balanced_groups_estimate.py``).
+#: 1.11.0: a proportion treatment that is significant against a control with
+#: no conversions is the winner: which side of the control a treatment is on
+#: is the sign of its ``absolute_difference``, not of
+#: ``relative_improvement_pct``, which is None there.  The summary's
+#: KEEP_CONTROL reads the absolute difference where the relative change is
+#: None, so treatments all significantly worse than a control at 0 (for a
+#: proportion, only when lower is better) are no longer "no significant
+#: difference".
 #:
 #: The rule: an engine-changing PR bumps ``ENGINE_VERSION`` to the next minor
 #: and appends it to ``RELEASED_ENGINE_VERSIONS`` ("frozen on main", in
@@ -69,7 +77,7 @@ import numpy as np
 #: path stamping ``engine_version`` returns, caches or persists: results and
 #: its snapshots, Bayesian, CUPED, sequential, and the bandit's state, history
 #: and status.  A revert of an engine-changing PR bumps again.
-ENGINE_VERSION: str = "1.10.0"
+ENGINE_VERSION: str = "1.11.0"
 
 #: Mask that keeps the derived seed inside the signed 64-bit range.
 _SEED_MASK = (1 << 63) - 1

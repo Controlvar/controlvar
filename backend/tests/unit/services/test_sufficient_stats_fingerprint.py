@@ -112,6 +112,14 @@ SUFFICIENT_STATS_FINGERPRINTS: Dict[str, Dict[str, str]] = {
         "cuped_metric_result": "29e33befe849a6cc36fd462b5d4e1f2a361efcff2f695a38c612653c11363f67",
         "mean_metric_result": "dbd894429d89e81cb669f5063a4e275452432696c904a180ca3d6e64ae6cbd41",
     },
+    # 1.11.0: a significant treatment against a control with no conversions
+    # is the winner.  The binomial "edges" set has one (t2, 12 of 400 against
+    # 0 of 500), so the binomial hash moves; the other two are 1.10.0's.
+    "1.11.0": {
+        "binomial_metric_result": "b634c5af2edc11d68b03498763799e730ec25c850a049e9678b2ce62fda87b8f",
+        "cuped_metric_result": "29e33befe849a6cc36fd462b5d4e1f2a361efcff2f695a38c612653c11363f67",
+        "mean_metric_result": "dbd894429d89e81cb669f5063a4e275452432696c904a180ca3d6e64ae6cbd41",
+    },
 }
 
 #: The engine versions frozen on main, oldest first.  An engine-changing PR
@@ -132,6 +140,7 @@ RELEASED_ENGINE_VERSIONS = (
     "1.8.0",
     "1.9.0",
     "1.10.0",
+    "1.11.0",
 )
 
 _CONTROL = "ffffffff-0000-4000-8000-000000000002"

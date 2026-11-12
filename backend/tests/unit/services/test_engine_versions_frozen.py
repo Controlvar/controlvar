@@ -121,6 +121,11 @@ FROZEN_DIGESTS: Dict[str, str] = {
     # 1.10.0 (#448): 1.9.0's entries, except ENGINE_FINGERPRINTS, whose
     # dataset adds the balanced-groups estimate.
     "1.10.0": "ec55320811f62c109954076e2d76e053cab9ef00c0563a46f7f2683c8bfa1195",
+    # 1.11.0: 1.10.0's entries, except where a pinned fixture has a
+    # significant treatment against a control with no conversions, which is
+    # now the winner: the characterisation's edges-* cases and the binomial
+    # fingerprint.
+    "1.11.0": "71c2e2348fd22c1b804a09939c9a2c90636d7caf14b5f7c75e650f979902eaa2",
 }
 
 
@@ -139,6 +144,7 @@ FROZEN_VERSIONS: Tuple[str, ...] = (
     "1.8.0",
     "1.9.0",
     "1.10.0",
+    "1.11.0",
 )
 
 

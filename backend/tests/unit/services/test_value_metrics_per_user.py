@@ -477,6 +477,9 @@ VALUE_RESULTS_FINGERPRINTS: Dict[str, str] = {
     "1.9.0": "01ce8332a03c5cf0032f72277011ac993875cd40c4a6b3c8d127c74e24da2e96",
     # 1.10.0 (#448) adds the balanced-groups estimate only: 1.9.0's.
     "1.10.0": "01ce8332a03c5cf0032f72277011ac993875cd40c4a6b3c8d127c74e24da2e96",
+    # 1.11.0 changes the winner and KEEP_CONTROL against a control at 0; this
+    # experiment has no such control: 1.10.0's.
+    "1.11.0": "01ce8332a03c5cf0032f72277011ac993875cd40c4a6b3c8d127c74e24da2e96",
 }
 
 

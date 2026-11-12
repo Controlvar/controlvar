@@ -279,7 +279,7 @@ def test_the_rows_are_the_stored_groups_and_add_up_to_every_user(
     assigned = _assigned(db_session, experiment)
     assert total == assigned, f"Σ {total} != {assigned:,}"
     assert sum(c for row in rows.values() for _, c in row.values()) == 7
-    assert body["engine_version"] == ENGINE_VERSION == "1.10.0"
+    assert body["engine_version"] == ENGINE_VERSION == "1.11.0"
     assert body["groups"]["dimension"] == "tier"
     assert body["groups"]["is_exploratory"] is True
     assert body["users_outside_blocks"] == 0

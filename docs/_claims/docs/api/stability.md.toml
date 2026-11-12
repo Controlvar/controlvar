@@ -1306,3 +1306,17 @@ by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id}, GET /api/v1/experiments/{experiment_id}/results, GET /api/v1/results/{experiment_id}/bayesian, GET /api/v1/bandit/{experiment_id}, GET /api/v1/export/experiments, GET /api/v1/export/reports/overview, GET /api/v1/export/reports/experiments/{experiment_id} | engine 1.11.0 | A treatment significantly better than a control with no conversions is the metric's winning_variant_id, and on the primary metric the summary's has_winner, winning_variant_id and recommendation name it (SHIP_VARIANT, or CONTINUE_TESTING before the minimum sample). It used to be named nowhere, at any p-value, and the summary said \"No statistically significant difference\". Which side of the control a treatment is on is the sign of absolute_difference; relative_improvement_pct is still null against a control with no conversions. When every treatment is significantly worse than a control whose rate or mean is 0 (for a proportion only a lower-is-better metric can be), the recommendation is KEEP_CONTROL where it was CONTINUE_TESTING. The export's winner_variant and recommendation and the overview's experiments_with_winners follow. Every other result is unchanged. The engine version becomes 1.11.0, so /results serves no answer cached before the upgrade; the Bayesian and bandit operations change only in the OpenAPI engine_version default, the one change to the OpenAPI document."
+by = [
+    "test:backend/tests/unit/services/test_zero_conversion_control_winner.py",
+    "test:backend/tests/unit/services/test_binomial_metric_result_characterisation.py",
+    "test:backend/tests/unit/services/test_sufficient_stats_fingerprint.py",
+    "test:backend/tests/unit/services/test_engine_versions_frozen.py",
+    "test:backend/tests/unit/services/test_lower_is_better_fingerprint.py",
+    "test:backend/tests/unit/services/test_export_overview_winners.py::test_the_count_is_the_export_winner_column_for_the_same_period",
+    "test:backend/tests/unit/scripts/test_openapi_dump_and_stability.py::test_the_results_cache_key_names_the_engine_and_a_finished_answer_lasts_a_day",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
