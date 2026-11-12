@@ -6,7 +6,7 @@ feature flag evaluation and querying aggregated metrics for analysis.
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 from uuid import UUID
 
 from sqlalchemy import desc, func
@@ -111,24 +111,24 @@ class MetricsService:
         db: Session,
         feature_flag_id: UUID,
         user_id: str,
-        value: Optional[Any] = None,
         targeting_rule_id: Optional[str] = None,
         segment_id: Optional[UUID] = None,
         latency_ms: Optional[float] = None,
-        metadata: Optional[Dict[str, Any]] = None,
     ) -> RawMetric:
         """
         Record a feature flag evaluation.
+
+        The ``flag_evaluation`` row carries no metadata: neither the
+        evaluation's result nor the targeting context the client sent (the
+        user's attributes) is stored.
 
         Args:
             db: Database session
             feature_flag_id: ID of the evaluated feature flag
             user_id: ID of the user
-            value: Result of the evaluation
             targeting_rule_id: ID of the matched targeting rule if any
             segment_id: ID of the matched segment if any
             latency_ms: Time taken to evaluate the flag in milliseconds
-            metadata: Additional contextual data
 
         Returns:
             The created raw metric
@@ -140,7 +140,6 @@ class MetricsService:
             user_id=user_id,
             targeting_rule_id=targeting_rule_id,
             segment_id=segment_id,
-            meta_data={"result": value, **(metadata or {})},
         )
 
         metric = MetricsService.record_metric(db, metric_data)
