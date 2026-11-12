@@ -1,0 +1,91 @@
+# deploy/demo/Caddyfile: the demo box's three sites, for Caddy on the host.
+# /etc/caddy/Caddyfile is one line, `import <this file>` (provision.sh). No
+# global options here, so the CI boot job can import this file under its own
+# (local certificates) and serve exactly these sites.
+#
+# Certificates: automatic, from Let's Encrypt, once the three A records point
+# here (no AAAA record: README.md, "Disk"). Caddy forwards the Host header
+# unchanged and sets X-Forwarded-For to the visitor's address; the dashboard
+# container appends its own hop and the API believes both, so it sees the
+# visitor and rate-limits each address separately.
+
+# Who may reach the demo. DEMO_ALLOW_FROM comes from Caddy's environment
+# (provision.sh writes /etc/controlvar-demo/caddy.env): the operator's address
+# while the demo is rehearsed, `0.0.0.0/0` once it is open. Unset, only this
+# host passes. remote_ip is the connection's own address; a header cannot
+# change it. This host always passes: check.sh and reset.sh probe through it.
+(gate) {
+	@closed not remote_ip 127.0.0.1/8 ::1 {$DEMO_ALLOW_FROM:127.0.0.1/32}
+	respond @closed "This demo is not open yet." 403
+}
+
+# While a reset runs, web and the storefronts are stopped and Caddy cannot
+# reach them (502). Pages get the rebuild page; /api/ gets JSON, which the
+# dashboard and the SDKs can read. Other errors keep their own status.
+(rebuilding) {
+	handle_errors {
+		@unreachable expression `{err.status_code} in [502, 503, 504]`
+		@api path /api/*
+		handle @unreachable {
+			header Cache-Control no-store
+			header Retry-After 300
+			handle @api {
+				header Content-Type application/json
+				respond `{"detail":"The demo is being rebuilt (every night at 08:00 UTC). Try again in a few minutes."}` 503
+			}
+			handle {
+				header Content-Type "text/html; charset=utf-8"
+				respond `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Controlvar demo: rebuilding</title>
+<style>body{font-family:system-ui,sans-serif;max-width:36rem;margin:4rem auto;padding:0 1rem;line-height:1.5;color:#1a1a1a;background:#fff}</style>
+</head>
+<body>
+<main>
+<h1>The demo is being rebuilt</h1>
+<p>It is rebuilt from scratch every night at 08:00 UTC and is back in a few minutes. Reload this page then.</p>
+</main>
+</body>
+</html>
+` 503
+			}
+		}
+	}
+}
+
+demo.controlvar.com {
+	import gate
+	import rebuilding
+	# The demo starts at sign-in: `/` alone (a path matcher without * is
+	# exact) goes to /login, so the dashboard's home page never shows here.
+	# The dashboard builds its storefront links from this host name, so the
+	# demo is served at exactly this one.
+	redir / /login
+	# Nothing in the demo (the dashboard, the storefronts, the simulators, the
+	# React SDK) asks for a user's whole flag list; the demo host does not
+	# offer it.
+	respond /api/v1/feature-flags/user/* 404
+	# The SDK routes take writes from anyone holding a storefront key, and the
+	# keys are public. 16 KB is several times a browser's batch and caps what
+	# one request can store (README.md, "Disk").
+	@tracking path /api/v1/tracking/*
+	request_body @tracking {
+		max_size 16KB
+	}
+	reverse_proxy 127.0.0.1:8080
+}
+
+shoplab.demo.controlvar.com {
+	import gate
+	import rebuilding
+	reverse_proxy 127.0.0.1:3200
+}
+
+streampulse.demo.controlvar.com {
+	import gate
+	import rebuilding
+	reverse_proxy 127.0.0.1:3300
+}

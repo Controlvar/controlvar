@@ -1,0 +1,185 @@
+# deploy/demo/compose.demo.yml: the read-only public demo, as an overlay on
+# the production file, which it leaves unchanged:
+#
+#   docker compose --env-file deploy/demo/.env \
+#     -f deploy/compose/compose.yml -f deploy/demo/compose.demo.yml <command>
+#
+# lib.sh's `dc` is that command (README.md beside this file), with
+# --project-directory set to deploy/compose/ of the RELEASE checkout: relative
+# paths resolve from there, so `../..` below is that checkout's root.
+#
+# What it adds: demo mode on the API, with the published demo account; the
+# host and origin lists for the three demo hosts; a `seed` service that runs
+# once per reset and never serves; ShopLab and StreamPulse, built from the
+# release checkout, on loopback ports for Caddy; their traffic simulators;
+# and json-file log rotation on every container.
+
+# Not the production file's project name, so the demo's containers and
+# volumes never meet a self-hosted install's on the same machine.
+name: controlvar-demo
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  postgres:
+    logging: *logging
+
+  redis:
+    logging: *logging
+
+  api:
+    logging: *logging
+    environment:
+      # Literal, not read from .env: this file is what makes a demo, so it
+      # turns demo mode on itself. The production file never names it.
+      # ENVIRONMENT stays the production file's `production`: only the seed
+      # service below runs in development.
+      DEMO_MODE: "true"
+      # generate-env.sh writes each of these; a missing one stops compose
+      # before anything starts, naming it.
+      DEMO_ACCOUNT_EMAIL: "${DEMO_ACCOUNT_EMAIL:?required: run deploy/demo/generate-env.sh}"
+      DEMO_ACCOUNT_PASSWORD: "${DEMO_ACCOUNT_PASSWORD:?required: run deploy/demo/generate-env.sh}"
+      # The demo host, and `api`: the simulators reach the API as api:8000.
+      ALLOWED_HOSTS: "${ALLOWED_HOSTS:?required: run deploy/demo/generate-env.sh}"
+      # The two storefront origins, whose browser SDK calls the API.
+      CORS_ORIGINS: "${CORS_ORIGINS:?required: run deploy/demo/generate-env.sh}"
+      # Per client address, for every SDK route. README.md, "Disk".
+      SDK_RATE_LIMIT_PER_MINUTE: "${SDK_RATE_LIMIT_PER_MINUTE:?required: run deploy/demo/generate-env.sh}"
+
+  web:
+    logging: *logging
+
+  # One run per reset (`dc run --rm seed`, lib.sh): the entrypoint bootstraps
+  # the empty database, applies the three seeds and execs `true`. With no
+  # command it would exec uvicorn. Development, because the seeds refuse every
+  # other ENVIRONMENT; it never serves. The profile keeps `up` from starting it.
+  seed:
+    profiles: ["seed"]
+    # lib.sh sets it to the api service's image: the same release.
+    image: "${DEMO_API_IMAGE:?set by deploy/demo/lib.sh from deploy/compose/compose.yml}"
+    platform: linux/amd64
+    command: ["true"]
+    restart: "no"
+    environment:
+      ENVIRONMENT: development
+      LOG_LEVEL: INFO
+      LOG_FORMAT: json
+      AUTH_PROVIDER: local
+      SECRET_KEY: "${SECRET_KEY:?required}"
+      FIRST_SUPERUSER: "${FIRST_SUPERUSER:?required}"
+      FIRST_SUPERUSER_PASSWORD: "${FIRST_SUPERUSER_PASSWORD:?required}"
+      POSTGRES_SERVER: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: "${POSTGRES_USER:?required: run deploy/demo/generate-env.sh}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?required}"
+      POSTGRES_DB: ${POSTGRES_DB:-experimentation}
+      POSTGRES_SCHEMA: experimentation
+      RUN_MIGRATIONS: "true"
+      SEED: demo,shoplab,streampulse
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_REQUIRED: "false"
+      # Where the shoplab and streampulse seeds write the keys they create;
+      # the two storefront keys are the ones below, also baked into the builds.
+      SHOPLAB_DEMO_DIR: /data/demo/shoplab
+      STREAMPULSE_DEMO_DIR: /data/demo/streampulse
+      SHOPLAB_API_KEY: "${SHOPLAB_API_KEY:?required: run deploy/demo/generate-env.sh}"
+      STREAMPULSE_API_KEY: "${STREAMPULSE_API_KEY:?required: run deploy/demo/generate-env.sh}"
+    volumes:
+      - demo_keys:/data/demo
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging: *logging
+
+  # The storefronts: NEXT_PUBLIC_* are baked in at build time, so the URL and
+  # key here are build arguments. Built by redeploy.sh (or `dc build`).
+  shoplab:
+    build:
+      context: ../..
+      dockerfile: demo/shoplab/Dockerfile
+      args:
+        NEXT_PUBLIC_CONTROLVAR_API_URL: "${PUBLIC_BASE_URL:?required}"
+        NEXT_PUBLIC_CONTROLVAR_API_KEY: "${SHOPLAB_API_KEY:?required}"
+        NEXT_PUBLIC_CONTROLVAR_DASHBOARD_URL: "${PUBLIC_BASE_URL:?required}"
+    image: controlvar-demo-shoplab:local
+    ports:
+      - "127.0.0.1:3200:3200"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *logging
+
+  streampulse:
+    build:
+      context: ../..
+      dockerfile: demo/streampulse/Dockerfile
+      args:
+        NEXT_PUBLIC_CONTROLVAR_API_URL: "${PUBLIC_BASE_URL:?required}"
+        NEXT_PUBLIC_CONTROLVAR_API_KEY: "${STREAMPULSE_API_KEY:?required}"
+        NEXT_PUBLIC_CONTROLVAR_DASHBOARD_URL: "${PUBLIC_BASE_URL:?required}"
+    image: controlvar-demo-streampulse:local
+    ports:
+      - "127.0.0.1:3300:3300"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *logging
+
+  # traffic.py only: the release's own simulators, talking to the API inside
+  # the project network with the storefront keys. Their rates keep each one
+  # well under SDK_RATE_LIMIT_PER_MINUTE (README.md, "Disk").
+  shoplab-simulator:
+    image: python:3.11-slim
+    working_dir: /sim
+    volumes:
+      - ../../demo/shoplab/simulator:/sim/demo/shoplab/simulator:ro
+    environment:
+      SHOPLAB_API_KEY: "${SHOPLAB_API_KEY:?required}"
+      SHOPLAB_SIM_RATE: "${SHOPLAB_SIM_RATE:-0.3}"
+      PYTHONUNBUFFERED: "1"
+    command:
+      - sh
+      - -c
+      - >-
+        exec python demo/shoplab/simulator/traffic.py
+        --api-url http://api:8000
+        --api-key "$$SHOPLAB_API_KEY"
+        --rate "$$SHOPLAB_SIM_RATE"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *logging
+
+  streampulse-simulator:
+    image: python:3.11-slim
+    working_dir: /sim
+    volumes:
+      - ../../demo/streampulse/simulator:/sim/demo/streampulse/simulator:ro
+    environment:
+      STREAMPULSE_API_KEY: "${STREAMPULSE_API_KEY:?required}"
+      STREAMPULSE_SIM_RATE: "${STREAMPULSE_SIM_RATE:-0.2}"
+      PYTHONUNBUFFERED: "1"
+    command:
+      - sh
+      - -c
+      - >-
+        exec python demo/streampulse/simulator/traffic.py
+        --api-url http://api:8000
+        --api-key "$$STREAMPULSE_API_KEY"
+        --rate "$$STREAMPULSE_SIM_RATE" --no-probe
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *logging
+
+volumes:
+  demo_keys:

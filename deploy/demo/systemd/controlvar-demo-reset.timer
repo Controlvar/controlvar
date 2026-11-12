@@ -1,0 +1,11 @@
+# The reset time. It is the one source: the rebuild page (Caddyfile) and
+# README.md say the same time, and test_demo_box.py fails if they drift.
+[Unit]
+Description=Controlvar demo: nightly rebuild
+
+[Timer]
+OnCalendar=*-*-* 08:00:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

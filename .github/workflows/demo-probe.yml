@@ -1,0 +1,56 @@
+name: Demo probe
+
+# Every hour, from outside: is the public read-only demo up? It runs
+# deploy/demo/probe.py against vars.DEMO_URL with the checks a visitor can
+# make (health, / sending visitors to /login, demo mode reported, the demo account signs in as a viewer,
+# writes refused with and without credentials, the published passwords
+# refused, both storefronts answer, certificates valid for 14 days or more).
+#
+# It reports UP or DOWN and nothing else: the probe's own output is
+# discarded, because this log is public. What failed is found on the box,
+# whose hourly check (deploy/demo/check.sh) runs the same checks and closes
+# the demo when they fail. It opens no issue and writes nothing.
+#
+# DARK UNTIL ENABLED: the job runs only when the repository variable DEMO_URL
+# is set (to https://demo.controlvar.com, when the demo opens); until then
+# every run is a job-level skip, never green.
+
+on:
+  schedule:
+    # Not :00 or :30 (the box's own check runs at :30).
+    - cron: '41 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: demo-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    name: Demo probe
+    if: vars.DEMO_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: deploy/demo
+
+      # Standard library only. The output goes nowhere: UP or DOWN is all
+      # this public log says.
+      - name: UP or DOWN
+        env:
+          DEMO_URL: ${{ vars.DEMO_URL }}
+        run: |
+          if python3 deploy/demo/probe.py --demo-url "$DEMO_URL" \
+              health home config signin refusal anonymous passwords storefronts tls \
+              > /dev/null 2>&1; then
+            echo "UP"
+          else
+            echo "::error title=Demo probe::DOWN"
+            exit 1
+          fi
