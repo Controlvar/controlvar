@@ -640,6 +640,10 @@ ECS cluster experimentation-<env>
 
 ## 7. Troubleshooting
 
+### "The parameter CacheSubnetGroupName is not a valid identifier"
+
+A `prod` or `demo` deploy of a release up to v0.45.0 fails with this at `experimentation-redis-<env>`. The one-line change is in [Known issue: `prod` and `demo` deploys fail at the Redis stack until v0.46.0](../self-hosting/cdk.md#known-issue-prod-and-demo-deploys-fail-at-the-redis-stack-until-v0460).
+
 ### "Deployment stuck in Pending"
 
 ```bash
