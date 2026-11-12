@@ -127,8 +127,49 @@ describe.each<[string, boolean]>([
   it('are full width below sm and their own width from it', () => {
     const hero = page().querySelector('h1')?.closest('section') as HTMLElement;
     const buttons = Array.from(hero.querySelectorAll('a'));
-    expect(buttons.map((a) => a.textContent)).toEqual(['Get started', marketing ? 'Try the power calculator' : 'Sign in to the dashboard']);
+    expect(buttons.map((a) => a.textContent)).toEqual(['Get started', marketing ? 'Try the live demo' : 'Sign in to the dashboard']);
     for (const a of buttons) expect(a.className.split(/\s+/)).toEqual(expect.arrayContaining(['w-full', 'justify-center', 'sm:w-auto']));
+  });
+});
+
+/**
+ * The live demo (D381): on controlvar.com the hero's second button opens the
+ * public read-only demo, and the line under it, which also describes the
+ * button, says what the demo is. The power calculator that button used to
+ * open is still linked from the header (row and menu), the statistics row and
+ * the footer. A self-hoster's platform build links no demo.
+ */
+describe("the homepage's live demo link", () => {
+  const where = (a: Element) =>
+    a.closest('section')?.querySelector('h1, h2')?.textContent ?? a.closest('nav')?.getAttribute('aria-label');
+
+  it('is the marketing hero\'s second button, described by the line under it', () => {
+    mode.mockReturnValue(true);
+    expect(SITE_LINKS.DEMO_URL).toBe('https://demo.controlvar.com');
+    const container = page();
+    const demo = Array.from(container.querySelectorAll('a')).filter((a) => a.getAttribute('href') === SITE_LINKS.DEMO_URL);
+    expect(demo.map((a) => ({ in: where(a), text: a.textContent }))).toEqual([
+      { in: 'A/B testing and feature flags you run yourself.', text: 'Try the live demo' },
+    ]);
+    expect(demo[0]).toHaveAccessibleDescription('The demo is read-only, with simulated traffic, and is rebuilt every night.');
+  });
+
+  it('leaves the power calculator linked from the header, the statistics row and the footer', () => {
+    mode.mockReturnValue(true);
+    const links = Array.from(page().querySelectorAll('a')).filter((a) => a.getAttribute('href') === '/power-calculator');
+    expect(links.map((a) => ({ in: where(a), text: a.textContent }))).toEqual([
+      { in: 'Main', text: 'Power calculator' },
+      { in: 'Main', text: 'Power calculator' },
+      { in: 'Statistics beyond a p-value', text: 'Open the power calculator →' },
+      { in: 'Footer', text: 'Power calculator' },
+    ]);
+  });
+
+  it('is not on a platform build', () => {
+    mode.mockReturnValue(false);
+    const container = page();
+    expect(Array.from(container.querySelectorAll('a')).filter((a) => a.getAttribute('href') === SITE_LINKS.DEMO_URL)).toEqual([]);
+    expect(container.textContent).not.toContain('live demo');
   });
 });
 

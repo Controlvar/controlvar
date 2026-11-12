@@ -1,0 +1,165 @@
+# What verifies each unit of docs/getting-started/live-demo.md.
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/getting-started/live-demo.md"
+
+[[unit]]
+text = "Live Demo"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A read-only copy of Controlvar runs at https://demo.controlvar.com."
+by = [
+    "test:backend/tests/unit/infrastructure/test_demo_box.py::test_the_sites_are_exactly_the_demo_host_and_its_two_storefronts",
+    "test:backend/tests/unit/infrastructure/test_demo_box.py::test_the_overlay_turns_demo_mode_on_itself",
+    "test:backend/tests/smoke/test_demo_mode_routes.py::test_every_mutating_route_is_refused_for_a_signed_in_viewer",
+]
+
+[[unit]]
+text = "There is nothing to install and no account to create."
+by = [
+    "test:frontend/src/tests/pages/login.demo-mode.test.tsx::offers one \"Enter the demo\" button and no password field",
+    "test:frontend/src/tests/pages/login.demo-mode.test.tsx::signs in with the published account and opens the experiments",
+]
+
+[[unit]]
+text = "What it is"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The dashboard with the demo data, as a viewer sees it."
+by = [
+    "test:backend/tests/unit/infrastructure/test_demo_box.py::test_the_seed_service_seeds_once_and_never_serves",
+    "test:backend/tests/integration/demo/test_demo_mode_sign_in.py::test_only_a_non_superuser_viewer_signs_in",
+]
+
+[[unit]]
+text = "Two demo apps send it simulated traffic: ShopLab, a storefront, at https://shoplab.demo.controlvar.com, and StreamPulse, a phone app drawn in a web page, at https://streampulse.demo.controlvar.com."
+by = [
+    "test:backend/tests/unit/infrastructure/test_demo_box.py::test_the_sites_are_exactly_the_demo_host_and_its_two_storefronts",
+    "test:backend/tests/unit/infrastructure/test_demo_box.py::test_the_two_demo_apps_send_simulated_traffic",
+]
+
+[[unit]]
+text = "The numbers grow as the demo apps send traffic; reload a page to see the latest."
+by = [
+    "test:backend/tests/unit/infrastructure/test_demo_box.py::test_the_two_demo_apps_send_simulated_traffic",
+    "test:frontend/src/tests/components/LiveResults.demo-mode.test.tsx::has no Live tab and opens no results stream",
+]
+
+[[unit]]
+text = "What you can do"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Select Enter the demo on the sign-in page."
+by = ["test:frontend/src/tests/pages/login.demo-mode.test.tsx::offers one \"Enter the demo\" button and no password field"]
+
+[[unit]]
+text = "You enter as a viewer: open any experiment and its results, any feature flag with its targeting rules and rollouts, and any segment."
+by = [
+    "test:backend/tests/integration/demo/test_demo_mode_sign_in.py::test_the_demo_viewer_signs_in",
+    "test:backend/tests/unit/middleware/test_demo_mode_middleware.py::test_the_safe_methods_pass_on_any_path",
+    "test:frontend/src/tests/pages/demo-mode-notes.test.tsx::an experiment shows the demo note, not the role note",
+    "test:frontend/src/tests/pages/demo-mode-notes.test.tsx::a flag shows the demo note, not the role note",
+    "test:frontend/src/tests/pages/demo-mode-notes.test.tsx::the segments list shows the demo note, not the role note",
+]
+
+[[unit]]
+text = "Each demo app's Open dashboard link opens the experiments."
+by = ["test:backend/tests/unit/infrastructure/test_demo_box.py::test_the_storefronts_open_dashboard_link_is_the_demo_experiments_page"]
+
+[[unit]]
+text = "What is turned off, and why"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Creating and changing things is turned off, because everyone who opens the demo shares it."
+by = [
+    "test:backend/tests/smoke/test_demo_mode_routes.py::test_every_mutating_route_is_refused_for_a_signed_in_viewer",
+    "test:backend/tests/unit/infrastructure/test_demo_box.py::test_the_overlay_turns_demo_mode_on_itself",
+]
+
+[[unit]]
+text = "The API refuses every write except signing in, signing out and the demo apps' tracking calls, and the dashboard shows a note where a button to create or change something would be."
+by = [
+    "test:backend/tests/unit/middleware/test_demo_mode_middleware.py::test_the_allow_list_is_eight_posts_under_the_api_prefix",
+    "test:backend/tests/smoke/test_demo_mode_routes.py::test_the_allow_list_is_exact",
+    "test:backend/tests/smoke/test_demo_mode_routes.py::test_every_mutating_route_is_refused_for_a_signed_in_viewer",
+    "test:frontend/src/tests/pages/demo-mode-notes.test.tsx::the experiments list puts the demo note where \"+ New Experiment\" would be",
+]
+
+[[unit]]
+text = "The sign-in page has no password form, and the admin@demo.com account in the README does not work here."
+by = [
+    "test:frontend/src/tests/pages/login.demo-mode.test.tsx::offers one \"Enter the demo\" button and no password field",
+    "test:backend/tests/integration/demo/test_demo_mode_sign_in.py::test_only_a_non_superuser_viewer_signs_in",
+    "test:backend/tests/unit/infrastructure/test_demo_box.py::TestProbe::test_each_defect_fails_its_check",
+]
+
+[[unit]]
+text = "When it resets"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Everything is rebuilt from scratch every night at 08:00 UTC."
+by = [
+    "test:backend/tests/unit/infrastructure/test_demo_box.py::test_the_reset_time_is_the_one_the_dashboard_shows",
+    "test:backend/tests/unit/infrastructure/test_demo_box.py::TestTheBoxScripts::test_no_answer_twice_rebuilds_and_reopens",
+]
+
+[[unit]]
+text = "While it is rebuilt, every page says so."
+by = [
+    "test:backend/tests/unit/infrastructure/test_demo_box.py::test_every_site_imports_the_gate_and_the_rebuild_page",
+    "test:backend/tests/unit/infrastructure/test_demo_box.py::test_the_api_rebuild_answer_is_json_with_a_detail",
+]
+
+[[unit]]
+text = "Afterwards, enter the demo again."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The same thing on your machine"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The same dashboard, demo data and demo apps, with nothing turned off."
+by = [
+    "test:backend/tests/unit/core/test_demo_mode_settings.py::test_demo_mode_is_off_by_default",
+    "test:backend/tests/unit/infrastructure/test_demo_box.py::test_the_seed_service_seeds_once_and_never_serves",
+]
+
+[[unit]]
+text = "From the root of a clone of the repository:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Open http://localhost:3000 and sign in as the administrator, admin@demo.com / Demo1234!, to create and change experiments, flags and segments."
+by = [
+    "journey:quick-start#dashboard-address",
+    "journey:quick-start#sign-in-page",
+    "journey:quick-start#email",
+    "journey:quick-start#password",
+    "journey:quick-start#signed-in",
+]
+
+[[unit]]
+text = "ShopLab is on http://localhost:3200 and StreamPulse on http://localhost:3300."
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_each_service_has_its_image_host_port_and_profile"]
+
+[[unit]]
+text = "The Quick Start has the rest."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Reporting a problem"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Found a way to change something?"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Report it privately (SECURITY.md), not in an issue."
+by = ["exempt:instruction"]

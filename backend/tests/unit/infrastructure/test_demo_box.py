@@ -990,6 +990,23 @@ def test_the_seed_service_seeds_once_and_never_serves():
         assert name not in env, f"the seed run needs no {name}"
 
 
+def test_the_two_demo_apps_send_simulated_traffic():
+    """ShopLab's and StreamPulse's own traffic simulators run beside the
+    storefronts for as long as the stack does (README.md and
+    docs/getting-started/live-demo.md say so). traffic.py only: the rollout
+    story signs in as the administrator, whose password does not sign in on
+    the box."""
+    services = _yaml(OVERLAY)["services"]
+    for app in ("shoplab", "streampulse"):
+        simulator = services[f"{app}-simulator"]
+        assert f"exec python demo/{app}/simulator/traffic.py " in " ".join(
+            simulator["command"]
+        ), app
+        assert simulator["restart"] == "unless-stopped", app
+        assert simulator["depends_on"] == {"api": {"condition": "service_healthy"}}, app
+    assert "rollout_story" not in OVERLAY.read_text()
+
+
 def test_the_production_file_names_no_demo_setting():
     """The overlay adds them; deploy/compose/compose.yml stays as it was."""
     text = (REPO_ROOT / "deploy" / "compose" / "compose.yml").read_text()

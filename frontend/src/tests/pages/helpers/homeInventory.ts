@@ -61,6 +61,8 @@ const SD = 'site design 2026-11-11 (design-review-v1.md)';
 const BORROW = 'site design 2026-11-11, competitors-v1.md BORROW';
 /** D380: the capability page and the roadmap, linked from the facts strip and the footer (and the docs hub). */
 const LINKS = 'D380, what Controlvar does and the roadmap';
+/** The public read-only demo (D381): the hosted demo plan's UX draft (plan-hosted-demo/drafts/v1-ux-designer.md, WORDS: Site). */
+const DEMO = 'D381, the hosted demo plan (v1-ux-designer.md, WORDS: Site)';
 
 /** The JavaScript snippet's first line: the install command of main:index.tsx:124, as a comment (UX, How it works). */
 export const SNIPPET_COMMENT = '// npm install @controlvar/js-sdk';
@@ -100,7 +102,15 @@ export const TYPED: readonly Row[] = [
     source: `${MAIN}:74-76`,
   },
   { tag: 'div', text: 'Get started', source: `${MAIN}:83` },
-  { tag: 'div', text: 'Try the power calculator', source: `${MAIN}:90`, build: 'marketing' },
+  // The marketing build's second button was "Try the power calculator" (main:90); the calculator is
+  // still in the header, row 2 and the footer.
+  { tag: 'div', text: 'Try the live demo', source: `${DEMO}: the hero's second button, to DEMO_URL`, build: 'marketing' },
+  {
+    tag: 'p',
+    text: 'The demo is read-only, with simulated traffic, and is rebuilt every night.',
+    source: `${DEMO}: the line under the button`,
+    build: 'marketing',
+  },
   { tag: 'div', text: 'Sign in to the dashboard', source: `${MAIN}:97 (index.test.tsx; check-platform-export.mjs)`, build: 'platform' },
   // Hero B (SD): the "Run it locally" box, its commands and its two lines moved to step 1.
 

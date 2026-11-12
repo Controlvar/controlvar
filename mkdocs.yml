@@ -85,6 +85,7 @@ nav:
 - Home: README.md
 - Getting Started:
   - Quick Start: getting-started/quick-start.md
+  - Live Demo: getting-started/live-demo.md
   - What Controlvar Does: capabilities.md
   - Limitations: getting-started/limitations.md
   - Roadmap: https://github.com/Controlvar/controlvar/blob/main/ROADMAP.md
