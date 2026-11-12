@@ -77,9 +77,19 @@ def test_the_overview_counts_a_completed_experiment_with_a_winner(
     for i in range(USERS):
         user_id = f"{prefix}-{i}"
         arm = names[str(assign(client, key, experiment["key"], user_id)["variant_id"])]
+        # Four in five treatment users convert, and one in ten control users,
+        # counted by the user's place in its own arm, not by i: the split is
+        # different every run, as the user ids and the experiment key are.
+        # The control's first user converts, so the control always has a
+        # conversion. With none, the relative improvement is infinite, the
+        # results report it as None, and no winner is named however
+        # significant the treatment is. Keyed on i, that happened whenever
+        # the six users with i % 10 == 0 all landed in treatment (about 1 run
+        # in 64). For every split the assert below allows, the treatment wins
+        # with p below 0.001.
+        seen = arms[arm]
         arms[arm] += 1
-        # Four in five treatment users convert, one in ten control users.
-        if (arm == "treatment" and i % 5) or (arm == "control" and i % 10 == 0):
+        if (arm == "treatment" and seen % 5) or (arm == "control" and seen % 10 == 0):
             track(client, key, user_id, event, experiment_key=experiment["key"])
     assert min(arms.values()) >= 10, arms
     completed = client.post(
@@ -94,7 +104,7 @@ def test_the_overview_counts_a_completed_experiment_with_a_winner(
     )
     assert results.status_code == 200, results.text
     summary = results.json()["summary"]
-    assert summary["has_winner"] is True
+    assert summary["has_winner"] is True, (arms, results.json()["metrics"][0])
 
     # A period holding this experiment and no other.
     created = (
