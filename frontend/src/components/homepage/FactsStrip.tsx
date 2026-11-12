@@ -1,7 +1,7 @@
 import React from 'react';
 import { docsUrl } from '@/services/docs';
 import { CHANGELOG_URL, COMPOSE_GUIDE_URL, LICENSE_URL, RELEASES_URL, STATS_TESTS_URL } from '@/content/site-links';
-import { FOCUS, WIDTH } from '@/components/homepage/styles';
+import { FOCUS, MORE_LINK, WIDTH } from '@/components/homepage/styles';
 
 const LINK = `text-blue-700 underline hover:text-blue-900 ${FOCUS}`;
 
@@ -9,7 +9,8 @@ const LINK = `text-blue-700 underline hover:text-blue-900 ${FOCUS}`;
  * Four facts under the hero, as a description list, each with the link that
  * checks it (site design 2026-11-11, item 2; the competitor study's BORROW 1):
  * the licence file, the three deploy guides, the tests that hold the
- * statistics to known answers, and the releases with their changelog.
+ * statistics to known answers, and the releases with their changelog. Under
+ * them, in the same band, one link to the capability page (D380).
  *
  * The deploy fact replaced the "Deploy it yourself" cards, which said the
  * same thing three times lower down; its three guides are the cards' links.
@@ -19,7 +20,7 @@ const LINK = `text-blue-700 underline hover:text-blue-900 ${FOCUS}`;
 export function FactsStrip() {
   return (
     <section aria-label="At a glance" className="border-y border-slate-200">
-      <dl className={`${WIDTH} grid gap-6 py-10 sm:grid-cols-2 lg:grid-cols-4 lg:py-12`}>
+      <dl className={`${WIDTH} grid gap-6 pt-10 sm:grid-cols-2 lg:grid-cols-4 lg:pt-12`}>
         <div className="min-w-0">
           <dt className="font-semibold">Apache-2.0, SDKs MIT</dt>
           <dd className="mt-1 text-sm leading-relaxed text-slate-600">
@@ -72,6 +73,11 @@ export function FactsStrip() {
           </dd>
         </div>
       </dl>
+      <p className={`${WIDTH} pb-10 pt-6 lg:pb-12`}>
+        <a href={docsUrl('capabilities')} className={MORE_LINK}>
+          See everything it does <span aria-hidden="true">→</span>
+        </a>
+      </p>
     </section>
   );
 }

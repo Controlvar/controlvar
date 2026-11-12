@@ -10,7 +10,8 @@
  *   - out/404.html is the site's not-found page (pages/404.tsx), not Next's
  *     default "This page could not be found", with links to / and /docs;
  *   - each page the site ships, the not-found page among them, has exactly one
- *     <footer>, and it is the site's (its <nav aria-label="Footer">);
+ *     <footer>, and it is the site's (its <nav aria-label="Footer">), with
+ *     "What Controlvar does" on the docs site and "Roadmap" (D380);
  *   - each kept page is also at <page>/index.html, byte for byte, so /docs/
  *     is the docs hub (prune-marketing-site.mjs writes the copies);
  *   - the marketing build's own pages (site design 2026-11-11): /books links
@@ -56,12 +57,27 @@ describe('the not-found page', () => {
   });
 });
 
+/**
+ * The docs site the marketing build links, from the build:marketing script's
+ * NEXT_PUBLIC_DOCS_URL, and the roadmap's URL (D380; src/content/site-links.ts).
+ */
+const DOCS_SITE = /NEXT_PUBLIC_DOCS_URL=(\S+?)\/?\s/.exec(
+  JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).scripts['build:marketing'],
+)?.[1];
+const ROADMAP_URL = 'https://github.com/Controlvar/controlvar/blob/main/ROADMAP.md';
+
 describe("every page ends with the site's footer", () => {
   for (const name of PAGES) {
     it(`out/${name}`, () => {
       const footers = [...markup(name).matchAll(/<footer\b[\s\S]*?<\/footer>/gi)].map((m) => m[0]);
       assert.equal(footers.length, 1, `out/${name} has ${footers.length} <footer>`);
       assert.match(footers[0], /<nav\b[^>]*aria-label="Footer"/, `out/${name}: the footer is not the site's`);
+      // What Controlvar does (the capability page on the docs site) and the roadmap (D380).
+      assert.ok(DOCS_SITE, 'no NEXT_PUBLIC_DOCS_URL in package.json build:marketing');
+      const links = [...footers[0].matchAll(/<a\b[^>]*\bhref="([^"]*)"[^>]*>([^<]*)<\/a>/g)].map((m) => `${m[2]} ${m[1]}`);
+      for (const want of [`What Controlvar does ${DOCS_SITE}/capabilities/`, `Roadmap ${ROADMAP_URL}`]) {
+        assert.ok(links.includes(want), `out/${name}: the footer has no "${want}"`);
+      }
     });
   }
 });

@@ -20,7 +20,8 @@
  *        no docs page, the facts strip links files that exist, and the
  *        Controlvar books are linked from their band and the footer (#1859):
  *        the /books page on the marketing build, their repository on a
- *        platform build.
+ *        platform build; the capability page from under the facts strip and
+ *        the footer, and the roadmap from the footer (D380).
  *
  * The flag is mocked, as in `index.site-mode.test.tsx`: SITE_MODE is read at
  * module load.
@@ -36,6 +37,7 @@ import { WALKTHROUGHS, anchorFor } from '@/components/Walkthroughs';
 import { SCREENS, screenSrc } from '@/components/homepage/Screenshot';
 import { sdkChips } from '@/components/homepage/SdkChips';
 import { TEASER } from '@/components/homepage/WalkthroughsTeaser';
+import { MORE_LINK } from '@/components/homepage/styles';
 import { CORE_PATH, bookUrl } from '@/content/books';
 import { SDK_GUIDES, SDKS } from '@/content/sdks';
 import * as SITE_LINKS from '@/content/site-links';
@@ -310,6 +312,44 @@ describe("the homepage's links", () => {
     const strip = page().querySelector('section[aria-label="At a glance"]') as HTMLElement;
     const links = Array.from(strip.querySelectorAll('a')).filter((a) => a.getAttribute('href') === url);
     expect(links.map((a) => a.textContent)).toEqual([text]);
+  });
+
+  /**
+   * What Controlvar does today and the roadmap (D380): the capability page
+   * from one link under the facts strip and from the footer, and the roadmap
+   * from the footer, labelled as the docs hub labels them, in both builds.
+   */
+  it.each<[string, boolean]>([
+    ['platform build', false],
+    ['marketing build', true],
+  ])('links what Controlvar does under the facts strip and in the footer, and the roadmap in the footer, and nowhere else (D380, %s)', (_name, marketing) => {
+    mode.mockReturnValue(marketing);
+    const container = page();
+    const where = (a: Element) => a.closest('section')?.getAttribute('aria-label') ?? a.closest('nav')?.getAttribute('aria-label');
+    const linksTo = (href: string) =>
+      Array.from(container.querySelectorAll('a'))
+        .filter((a) => a.getAttribute('href') === href)
+        .map((a) => ({ in: where(a), text: a.textContent }));
+    expect(linksTo(docsUrl('capabilities'))).toEqual([
+      { in: 'At a glance', text: 'See everything it does →' },
+      { in: 'Footer', text: 'What Controlvar does' },
+    ]);
+    expect(linksTo(SITE_LINKS.ROADMAP_URL)).toEqual([{ in: 'Footer', text: 'Roadmap' }]);
+    // Under the four facts, in the strip's band, in the style of every link that leads on from a section.
+    const strip = container.querySelector('section[aria-label="At a glance"]') as HTMLElement;
+    const more = strip.querySelector('dl + p > a') as HTMLElement;
+    expect(more.getAttribute('href')).toBe(docsUrl('capabilities'));
+    expect(more).toHaveAccessibleName('See everything it does');
+    expect(more.className).toBe(MORE_LINK);
+  });
+
+  it("links the roadmap as mkdocs.yml's nav does, to ROADMAP.md, and the capability page is a page of that nav (D380)", () => {
+    const nav = fs.readFileSync(path.join(REPO_ROOT, 'mkdocs.yml'), 'utf8');
+    expect(SITE_LINKS.ROADMAP_URL).toBe(`${SITE_LINKS.REPO_URL}/blob/main/ROADMAP.md`);
+    expect(nav).toMatch(new RegExp(`^\\s+- Roadmap: ${SITE_LINKS.ROADMAP_URL.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}\\s*$`, 'm'));
+    expect(fs.existsSync(path.join(REPO_ROOT, 'ROADMAP.md'))).toBe(true);
+    expect(nav).toMatch(/^\s+- What Controlvar Does: capabilities\.md\s*$/m);
+    expect(fs.existsSync(path.join(REPO_ROOT, 'docs', 'capabilities.md'))).toBe(true);
   });
 
   it('gives every fact of the strip a link, and the deploy fact its three guides', () => {
