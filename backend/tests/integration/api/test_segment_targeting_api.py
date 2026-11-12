@@ -39,7 +39,7 @@ from backend.app.models.event import Event
 from backend.app.models.experiment import Experiment, ExperimentStatus, Variant
 from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
 from backend.app.models.global_holdout import GlobalHoldout
-from backend.app.models.metrics.metric import ErrorLog, RawMetric
+from backend.app.models.metrics.metric import ErrorLog, MetricType, RawMetric
 from backend.app.models.segment import Segment, SegmentKind, SegmentMember
 from backend.app.models.segment import SegmentStatus as ModelSegmentStatus
 from backend.app.services import segment_membership
@@ -893,31 +893,46 @@ def test_statement_counts(admin_client, world, db_session):
 # ---------------------------------------------------------------------------
 
 
-def test_membership_is_not_stored(admin_client, world, monkeypatch):
-    """The evaluation records no context at all, and the view event carries
-    the request's context exactly: the resolved membership is never written
-    into either."""
+#: Every column of a flag's ``raw_metrics`` rows, as one text per row.
+FLAG_METRIC_ROWS = text(
+    f"SELECT r::text FROM {SCHEMA}.raw_metrics r WHERE r.feature_flag_id = :id"
+)
+
+
+def test_membership_is_not_stored(admin_client, db_session, world, monkeypatch):
+    """The evaluation's stored rows hold nothing from the context or the
+    membership, and the view event carries the request's context exactly:
+    the resolved membership is never written into either."""
     from backend.app.services.event_service import EventService
-    from backend.app.services.metrics_service import MetricsService
 
     recorded: List[Any] = []
-    real_record = MetricsService.record_flag_evaluation
     real_view = EventService.track_exposure
-
-    def spy_record(*args, **kwargs):
-        recorded.append(("metric", kwargs.get("metadata")))
-        return real_record(*args, **kwargs)
 
     def spy_view(self, *args, **kwargs):
         recorded.append(("event", json.loads(json.dumps(kwargs["properties"]))))
         return real_view(self, *args, **kwargs)
 
-    monkeypatch.setattr(MetricsService, "record_flag_evaluation", spy_record)
     monkeypatch.setattr(EventService, "track_exposure", spy_view)
     segment_id = world.segment(members=[MEMBER])
     flag = world.flag(seg_rules(segment_id))
+    flag_id = flag.id
     experiment = world.experiment(seg_rules(segment_id))
     context = {"country": "US", "plan": "pro"}
     assert evaluate(admin_client, flag, MEMBER, context) == ON
     assert assign(admin_client, experiment, MEMBER, context) == ASSIGNED
-    assert recorded == [("metric", None), ("event", context)]
+    assert recorded == [("event", context)]
+
+    db_session.rollback()
+    stored = (
+        db_session.query(RawMetric.meta_data)
+        .filter(
+            RawMetric.feature_flag_id == flag_id,
+            RawMetric.metric_type == MetricType.FLAG_EVALUATION.value,
+        )
+        .all()
+    )
+    assert [row.meta_data for row in stored] == [None]
+    rows = db_session.execute(FLAG_METRIC_ROWS, {"id": flag_id}).scalars().all()
+    # The flag_evaluation, latency and rule_match rows: the probe sees them.
+    assert len(rows) == 3, rows
+    assert [row for row in rows if "pro" in row or segment_id in row] == []
