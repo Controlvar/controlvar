@@ -126,7 +126,7 @@ DEMO_ACCOUNT_PASSWORD=Demo1234!
 - It refuses every websocket, so the live results stream does not open.
 - `DEMO_MODE=true` needs `AUTH_PROVIDER=local`: the API refuses to start with any other
   provider, since no other sign-in route is on the list.
-- Only an active viewer who is not a superuser can sign in.
+- Only an active viewer who is not a superuser can sign in with a password.
 - `DEMO_ACCOUNT_EMAIL` and `DEMO_ACCOUNT_PASSWORD` name the shared account visitors sign in
   with. `GET /api/v1/auth/config` then answers with `"demo_mode": true` and the account, so
   its password is public: use a viewer account that exists only for the demo. While the

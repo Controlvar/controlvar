@@ -23,7 +23,8 @@ unseen, and this layer has to refuse them.
 
 The refusal carries ``Connection: close``, as the request-body limit's 413
 does: the body is never read, so nothing more is read from a client that may
-still be sending it. No refusal is logged.
+still be sending it. The layer writes no log line of its own; the server's
+access log still has its one line per request.
 """
 
 from __future__ import annotations

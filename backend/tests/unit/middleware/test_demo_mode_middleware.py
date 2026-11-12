@@ -180,8 +180,8 @@ async def _run(scope: Dict[str, Any]) -> _Recorder:
 
 
 @pytest.mark.asyncio
-async def test_a_refusal_writes_no_log_line(demo_on, caplog):
-    """A flood of refused requests cannot become a disk filler."""
+async def test_the_layer_writes_no_log_line_of_its_own(demo_on, caplog):
+    """No record from the layer; the server's access line is uvicorn's, not tested here."""
     caplog.set_level(logging.DEBUG)
     for _ in range(3):
         await _run(_http("POST", "/api/v1/experiments/"))

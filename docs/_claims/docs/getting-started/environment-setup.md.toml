@@ -432,7 +432,7 @@ by = [
 ]
 
 [[unit]]
-text = "Only an active viewer who is not a superuser can sign in."
+text = "Only an active viewer who is not a superuser can sign in with a password."
 by = [
     "test:backend/tests/integration/demo/test_demo_mode_sign_in.py::test_only_a_non_superuser_viewer_signs_in",
     "test:backend/tests/integration/demo/test_demo_mode_sign_in.py::test_an_inactive_viewer_cannot_sign_in",

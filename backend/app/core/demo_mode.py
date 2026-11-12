@@ -19,8 +19,9 @@ The contract
   router matches, exactly. A trailing slash, a doubled slash, another letter
   case, a mounted prefix or a method-override header is not on the list and is
   refused.
-* Everything else is answered 403 with :data:`REFUSAL_BODY`. The refusal is
-  not logged: a flood of refused requests cannot fill a disk.
+* Everything else is answered 403 with :data:`REFUSAL_BODY`. The demo layer
+  writes no log line of its own (the server's access log still has its one
+  line per request, refused or not).
 * Every websocket is refused.
 """
 
