@@ -48,6 +48,16 @@ PARAMETER_FIELDS: Mapping[str, tuple[str, ...]] = {
     "snowflake": ("account", "user", "role", "warehouse"),
     "bigquery": ("billing_project", "location", "client_email"),
     "athena": ("region", "role_arn", "workgroup", "database"),
+    # A workgroup (Serverless) or a cluster with its database user
+    # (provisioned): a connection stores one shape, never both.
+    "redshift": (
+        "region",
+        "role_arn",
+        "workgroup_name",
+        "cluster_identifier",
+        "db_user",
+        "database",
+    ),
 }
 
 #: Snowflake roles a connection may not use, compared without regard to case.

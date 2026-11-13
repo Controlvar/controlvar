@@ -172,8 +172,10 @@ text = "description;"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "scopes, a list of names (see Scopes);"
-by = ["exempt:baseline"]
+text = "scopes, a list of names, at most 255 characters in all when joined with commas; a longer list answers 422 (see Scopes);"
+by = [
+    "test:backend/tests/integration/api/test_api_key_scopes_length_api.py::test_1936_a_256_character_scope_answers_422_and_stores_no_key",
+]
 
 [[unit]]
 text = "expires_at, an ISO 8601 time after which the key stops working."

@@ -235,7 +235,15 @@ text = "The modules branch, back to a named revision:"
 by = ["exempt:label"]
 
 [[unit]]
-text = "downgrade modules_0003_lower_is_better unapplies modules_0004_rbac_activation only, which drops the column activated_at from user_custom_roles and direct_permission_grants, with any activation time stored in it."
+text = "downgrade modules_0004_rbac_activation unapplies modules_0005_redshift only, which puts back the previous release's constraints on warehouse_connections and changes no row; it refuses while any Amazon Redshift connection is stored."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_downgrade_narrows_the_constraints_and_keeps_every_row",
+    "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_downgrade_refuses_while_a_redshift_connection_is_stored",
+]
+
+[[unit]]
+text = "downgrade modules_0003_lower_is_better also unapplies modules_0004_rbac_activation, which drops the column activated_at from user_custom_roles and direct_permission_grants, with any activation time stored in it."
 by = [
     "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
     "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_an_activation_time_is_gone_after_a_downgrade_and_an_upgrade",
@@ -278,10 +286,11 @@ by = [
 ]
 
 [[unit]]
-text = "modules_0004_rbac_activation drops its two columns on every database in the same way."
+text = "modules_0004_rbac_activation drops its two columns on every database in the same way, and modules_0005_redshift puts back its three constraints on every database."
 by = [
     "test:backend/tests/integration/database/test_profile_migrations.py::test_downgrade_keeps_the_tables_the_bootstrap_created",
     "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_downgrade_drops_both_columns_and_keeps_every_row",
+    "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_downgrade_narrows_the_constraints_and_keeps_every_row",
 ]
 
 [[unit]]
@@ -296,11 +305,12 @@ by = [
 ]
 
 [[unit]]
-text = "Downgrading it cannot bring those rows back: downgrade modules_0001_rbac first unapplies modules_0004_rbac_activation, which drops the activation-time column of custom role assignments and direct grants, with any activation time stored in it, and modules_0003_lower_is_better, which drops each metric source's lower-is-better setting, then drops the three tables this revision created and puts back an empty table of the earlier shape."
+text = "Downgrading it cannot bring those rows back: downgrade modules_0001_rbac first unapplies modules_0005_redshift, which refuses while any Amazon Redshift connection is stored, modules_0004_rbac_activation, which drops the activation-time column of custom role assignments and direct grants, with any activation time stored in it, and modules_0003_lower_is_better, which drops each metric source's lower-is-better setting, then drops the three tables this revision created and puts back an empty table of the earlier shape."
 by = [
     "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
     "test:backend/tests/integration/database/test_modules_0002_transitions.py::test_modules_0002_downgrade_restores_the_earlier_shape",
     "test:backend/tests/integration/database/test_profile_migrations.py::test_downgrade_keeps_the_tables_the_bootstrap_created",
+    "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_downgrade_refuses_while_a_redshift_connection_is_stored",
 ]
 
 [[unit]]
@@ -387,6 +397,39 @@ by = [
     "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_downgrade_drops_both_columns_and_keeps_every_row",
     "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_an_activation_time_is_gone_after_a_downgrade_and_an_upgrade",
 ]
+
+[[unit]]
+text = "modules_0005_redshift lets a warehouse connection be an Amazon Redshift connection"
+by = ["test:backend/tests/integration/database/test_modules_0005_transitions.py::test_the_database_accepts_a_redshift_row_with_an_external_id_and_no_secret"]
+
+[[unit]]
+text = "This revision changes three constraints of warehouse_connections and no column or row, so that a connection may be an Amazon Redshift one (warehouse_type redshift)."
+by = [
+    "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_a_database_at_the_previous_release_upgrades_and_keeps_every_connection",
+    "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_the_migrated_table_has_the_models_constraints",
+]
+
+[[unit]]
+text = "Like an Amazon Athena connection, it stores no secret and has the external ID generated when it is saved; unlike one, it has no per-query byte cap."
+by = [
+    "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_the_database_accepts_a_redshift_row_with_an_external_id_and_no_secret",
+    "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_the_database_refuses_a_redshift_row_that_breaks_a_rule",
+]
+
+[[unit]]
+text = "Every connection already stored is kept as it is, and the previous release keeps saving BigQuery, Snowflake and Athena connections against the upgraded schema."
+by = [
+    "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_a_database_at_the_previous_release_upgrades_and_keeps_every_connection",
+    "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_the_previous_release_still_writes_each_of_its_types",
+]
+
+[[unit]]
+text = "Downgrading this revision (to modules_0004_rbac_activation) puts back the previous release's constraints and changes no row."
+by = ["test:backend/tests/integration/database/test_modules_0005_transitions.py::test_downgrade_narrows_the_constraints_and_keeps_every_row"]
+
+[[unit]]
+text = "It refuses while any Amazon Redshift connection is stored, names them, and changes nothing:"
+by = ["test:backend/tests/integration/database/test_modules_0005_transitions.py::test_downgrade_refuses_while_a_redshift_connection_is_stored"]
 
 [[unit]]
 text = "1ab99332f0ba rewrites stored event times to UTC"
@@ -1735,6 +1778,14 @@ by = [
 ]
 
 [[unit]]
+text = "modules_0005_redshift is backward-compatible for a rollback too, and undoing it changes no row; it refuses while any Amazon Redshift connection is stored."
+by = [
+    "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_the_previous_release_still_writes_each_of_its_types",
+    "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_downgrade_narrows_the_constraints_and_keeps_every_row",
+    "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_downgrade_refuses_while_a_redshift_connection_is_stored",
+]
+
+[[unit]]
 text = "modules_0004_rbac_activation is backward-compatible for a rollback too, and undoing it drops the activation-time column of custom role assignments and direct grants, with any activation time stored in it; an upgrade afterwards adds the column empty."
 by = [
     "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_the_previous_release_still_writes_and_its_rows_have_no_activation_time",
@@ -1961,7 +2012,7 @@ text = "CI runs this page's exec blocks as written against the Quick Start stack
 by = ["mechanism:migration-pages-environments"]
 
 [[unit]]
-text = "The modules branch has four revisions: modules_0001_rbac, then modules_0002_warehouse_analysis, then modules_0003_lower_is_better, then modules_0004_rbac_activation."
+text = "The modules branch has five revisions: modules_0001_rbac, then modules_0002_warehouse_analysis, then modules_0003_lower_is_better, then modules_0004_rbac_activation, then modules_0005_redshift."
 by = [
     "mechanism:alembic-plan-branch",
     "mechanism:alembic-plan-unapply",
@@ -1972,7 +2023,7 @@ text = "Name the modules revision to end at rather than counting back: a relativ
 by = ["mechanism:alembic-plan-relative-downgrade"]
 
 [[unit]]
-text = "modules@-4 unapplies all four, newest first."
+text = "modules@-5 unapplies all five, newest first."
 by = ["mechanism:alembic-plan-unapply"]
 
 [[unit]]

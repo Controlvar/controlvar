@@ -65,8 +65,9 @@ CORE_HEAD = "4955571d232c"
 #: second, ``modules_0002_warehouse_analysis``, which stopped being the head
 #: when ``modules_0003_lower_is_better`` was added (#1386), nor that third
 #: one, which stopped being the head when ``modules_0004_rbac_activation`` was
-#: added (#891).
-MODULES_HEAD = "modules_0004_rbac_activation"
+#: added (#891), nor that fourth one, which stopped being the head when
+#: ``modules_0005_redshift`` was added (#826).
+MODULES_HEAD = "modules_0005_redshift"
 CORE_HEADS = {CORE_HEAD}
 FULL_HEADS = {CORE_HEAD, MODULES_HEAD}
 

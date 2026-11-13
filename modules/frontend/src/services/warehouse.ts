@@ -20,15 +20,16 @@ import { LONG_REQUEST_TIMEOUT_MS, apiFetch } from '@/services/api';
 export const PREVIEW_REQUEST_TIMEOUT_MS = (1800 + 30 + 30) * 1000;
 
 
-export type WarehouseType = 'bigquery' | 'snowflake' | 'athena';
+export type WarehouseType = 'bigquery' | 'snowflake' | 'athena' | 'redshift';
 
-export const WAREHOUSE_TYPES: readonly WarehouseType[] = ['bigquery', 'snowflake', 'athena'];
+export const WAREHOUSE_TYPES: readonly WarehouseType[] = ['bigquery', 'snowflake', 'athena', 'redshift'];
 
 /** The names the API uses in its own copy. */
 export const WAREHOUSE_NAMES: Record<WarehouseType, string> = {
   bigquery: 'BigQuery',
   snowflake: 'Snowflake',
   athena: 'Amazon Athena',
+  redshift: 'Amazon Redshift',
 };
 
 export function warehouseName(type: string): string {
@@ -113,7 +114,34 @@ export interface AthenaBody extends LimitsBody {
   max_bytes_per_query: number;
 }
 
-export type ConnectionBody = SnowflakeBody | BigQueryBody | AthenaBody;
+interface RedshiftCommon extends LimitsBody {
+  warehouse_type: 'redshift';
+  region: string;
+  role_arn: string;
+  database: string;
+}
+
+/** Amazon Redshift Serverless: a workgroup, and no cluster or database user. */
+export interface RedshiftServerlessBody extends RedshiftCommon {
+  workgroup_name: string;
+  cluster_identifier?: never;
+  db_user?: never;
+}
+
+/** A provisioned Amazon Redshift cluster, signed in to as a database user. */
+export interface RedshiftClusterBody extends RedshiftCommon {
+  cluster_identifier: string;
+  db_user: string;
+  workgroup_name?: never;
+}
+
+/**
+ * Exactly one shape, never both (the API refuses both, and neither). Capped in
+ * time only: there is no `max_bytes_per_query`. There is no test before save.
+ */
+export type RedshiftBody = RedshiftServerlessBody | RedshiftClusterBody;
+
+export type ConnectionBody = SnowflakeBody | BigQueryBody | AthenaBody | RedshiftBody;
 
 export type SourceKind = 'assignment' | 'metric';
 export type MetricType = 'proportion' | 'mean';
