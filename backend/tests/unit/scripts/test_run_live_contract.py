@@ -493,10 +493,10 @@ def test_every_attribute_sdk_runs_in_ci_where_a_skip_is_a_failure(
     assert "FAIL react-native missing toolchain: node, npx" in out
 
 
-def test_js_is_the_sdk_whose_smoke_reports_the_flag_values(runner):
+def test_the_sdks_whose_smokes_report_the_flag_values(runner):
     """#1810: the SDKs whose smokes read the seed's three value flags with their
     typed getters, and each passes with exactly VALUES."""
-    assert runner.VALUE_SDKS == frozenset({"js"})
+    assert runner.VALUE_SDKS == frozenset({"js", "java"})
     for sdk in sorted(runner.VALUE_SDKS):
         report = good(runner, sdk)
         assert report["values"] == VALUES
@@ -556,6 +556,14 @@ def test_the_values_a_smoke_must_report_are_the_seeds_on_values(runner):
             id="json-missing",
         ),
         pytest.param("js", {**VALUES, "number": 10.0}, [], id="a-double-is-10"),
+        # The Java smoke's getNumberValue returns a double, which it writes as 10.0.
+        pytest.param("java", {**VALUES, "number": 10.0}, [], id="java-writes-10.0"),
+        pytest.param(
+            "java",
+            {**VALUES, "string": "smoke-default"},
+            ["values.string='smoke-default' (expected 'on-copy', the seed's on value)"],
+            id="java-the-default",
+        ),
         pytest.param(
             "js", None, ["values missing (js is in VALUE_SDKS)"], id="missing"
         ),
