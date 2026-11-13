@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { LOGIN_PATH } from '@/services/api';
 import { docsUrl } from '@/services/docs';
 import { isMarketingSite } from '@/utils/site-mode';
+import { DEMO_URL } from '@/content/site-links';
 import { Screenshot } from '@/components/homepage/Screenshot';
 import { FOCUS, H1, WIDTH } from '@/components/homepage/styles';
 
@@ -16,12 +17,15 @@ const BUTTON = `inline-flex min-h-11 w-full items-center justify-center rounded-
  * The commands that start it are step 1 of How it works now (they were here
  * and there both, and the dark box here took the eye before the headline).
  *
- * The second button is the only sentence that differs between the builds: the
- * power calculator on controlvar.com, which has no API, and "Sign in to the
- * dashboard" on a self-hoster's platform build (`check-platform-export.mjs`
- * looks for those words). The screenshot is the marketing build's only
- * (`Screenshot`): the power calculator, until a results page is recaptured. A
- * platform build's hero is the text column alone.
+ * The second button, and the line under it, are what differ between the
+ * builds. On controlvar.com it is "Try the live demo", the public read-only
+ * demo (`DEMO_URL`; D381: the site links it only once it works), with a line
+ * saying what the demo is. The power calculator it replaced is still linked
+ * from the header, the statistics row and the footer. On a self-hoster's
+ * platform build it is "Sign in to the dashboard" (`check-platform-export.mjs`
+ * looks for those words), with no line. The screenshot is the marketing
+ * build's only (`Screenshot`): the power calculator, until a results page is
+ * recaptured. A platform build's hero is the text column alone.
  *
  * From `lg` the columns are 5 and 7 of 12: at 1440 px the screenshot is
  * 632 px wide, under the 650 px at which its 1300 px capture would be
@@ -47,15 +51,25 @@ export function Hero() {
               Get started
             </a>
             {marketing ? (
-              <Link href="/power-calculator" className={`${BUTTON} border border-slate-300 bg-white hover:bg-slate-50`}>
-                Try the power calculator
-              </Link>
+              <a
+                href={DEMO_URL}
+                aria-describedby="hero-demo-note"
+                className={`${BUTTON} border border-slate-300 bg-white hover:bg-slate-50`}
+              >
+                Try the live demo
+              </a>
             ) : (
               <Link href={LOGIN_PATH} className={`${BUTTON} border border-slate-300 bg-white hover:bg-slate-50`}>
                 Sign in to the dashboard
               </Link>
             )}
           </div>
+          {/* It also describes the button to a screen reader (aria-describedby). */}
+          {marketing && (
+            <p id="hero-demo-note" className="mt-3 text-sm text-slate-600">
+              The demo is read-only, with simulated traffic, and is rebuilt every night.
+            </p>
+          )}
         </div>
 
         {marketing && (
