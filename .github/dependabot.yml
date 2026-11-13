@@ -33,10 +33,16 @@ version: 2
 # Schedules: the ten weekly entries are staggered two per weekday. The nine SDK
 # ecosystems we rarely touch are monthly -- which reduces their frequency but
 # NOT their clustering, because Dependabot has no day-of-month option, so those
-# nine still share one morning once a month. That is nine PRs twelve times a
+# nine still share one evening once a month. That is nine PRs twelve times a
 # year instead of nine every week, and the limits below cap each at one. The
 # API fuzzer's entry (`/tests/fuzz`) is monthly as well: each of its pull
 # requests is judged by hand with a fuzz run (see the entry).
+#
+# Every entry runs at 19:00 America/Los_Angeles (founder decision D297: no
+# git activity Monday to Friday 09:00-17:00 Pacific), so version updates open
+# after the window and after the stack merged at 17:00, not during either.
+# Security updates follow their advisory, not this schedule.
+# backend/tests/unit/scripts/test_dependabot_merge_window.py pins it.
 #
 # github-actions is the exception to the major rule; see the entry itself. The `lint` job's lock check
 # (scripts/check_requirements_lock.py) turns red on a pip bump in either
@@ -55,6 +61,8 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
+      time: "19:00"
+      timezone: "America/Los_Angeles"
     open-pull-requests-limit: 2
     # NO major ignore here, deliberately. For every other ecosystem a major is
     # a migration we choose when to do. For Actions it is how GitHub forces
@@ -73,6 +81,8 @@ updates:
     schedule:
       interval: "weekly"
       day: "tuesday"
+      time: "19:00"
+      timezone: "America/Los_Angeles"
     open-pull-requests-limit: 2
     ignore:
       # Majors are migrations, not bumps -- see the header.
@@ -118,6 +128,8 @@ updates:
     schedule:
       interval: "weekly"
       day: "wednesday"
+      time: "19:00"
+      timezone: "America/Los_Angeles"
     open-pull-requests-limit: 3
     ignore:
       # Majors are migrations, not bumps -- see the header.
@@ -167,6 +179,8 @@ updates:
     schedule:
       interval: "weekly"
       day: "thursday"
+      time: "19:00"
+      timezone: "America/Los_Angeles"
     open-pull-requests-limit: 3
     ignore:
       # Majors are migrations, not bumps -- see the header.
@@ -200,6 +214,8 @@ updates:
       prefix: "chore(deps)"
     schedule:
       interval: "monthly"
+      time: "19:00"
+      timezone: "America/Los_Angeles"
     open-pull-requests-limit: 1
     ignore:
       # Majors are migrations, not bumps -- see the header.
@@ -228,6 +244,8 @@ updates:
     schedule:
       interval: "weekly"
       day: "friday"
+      time: "19:00"
+      timezone: "America/Los_Angeles"
     open-pull-requests-limit: 3
     ignore:
       # Majors are migrations, not bumps -- see the header.
@@ -246,6 +264,8 @@ updates:
     schedule:
       interval: "weekly"
       day: "tuesday"
+      time: "19:00"
+      timezone: "America/Los_Angeles"
     open-pull-requests-limit: 3
     ignore:
       # Majors are migrations, not bumps -- see the header.
@@ -265,6 +285,8 @@ updates:
     schedule:
       interval: "weekly"
       day: "wednesday"
+      time: "19:00"
+      timezone: "America/Los_Angeles"
     open-pull-requests-limit: 3
     ignore:
       # Majors are migrations, not bumps -- see the header.
@@ -297,6 +319,8 @@ updates:
     schedule:
       interval: "weekly"
       day: "thursday"
+      time: "19:00"
+      timezone: "America/Los_Angeles"
     open-pull-requests-limit: 3
     ignore:
       # Majors are migrations, not bumps -- see the header.
@@ -359,6 +383,8 @@ updates:
     schedule:
       interval: "weekly"
       day: "thursday"
+      time: "19:00"
+      timezone: "America/Los_Angeles"
     open-pull-requests-limit: 3
     cooldown:
       default-days: 14
@@ -378,6 +404,8 @@ updates:
     schedule:
       interval: "weekly"
       day: "friday"
+      time: "19:00"
+      timezone: "America/Los_Angeles"
     open-pull-requests-limit: 3
     ignore:
       # Majors are migrations, not bumps -- see the header.
@@ -406,6 +434,8 @@ updates:
       prefix: "chore(deps)"
     schedule:
       interval: "monthly"
+      time: "19:00"
+      timezone: "America/Los_Angeles"
     open-pull-requests-limit: 1
     ignore:
       # Majors are migrations, not bumps -- see the header.
@@ -420,6 +450,8 @@ updates:
       prefix: "chore(deps)"
     schedule:
       interval: "monthly"
+      time: "19:00"
+      timezone: "America/Los_Angeles"
     open-pull-requests-limit: 1
     ignore:
       # Majors are migrations, not bumps -- see the header.
@@ -436,6 +468,8 @@ updates:
       prefix: "chore(deps)"
     schedule:
       interval: "monthly"
+      time: "19:00"
+      timezone: "America/Los_Angeles"
     open-pull-requests-limit: 1
     ignore:
       # Majors are migrations, not bumps -- see the header.
@@ -469,6 +503,8 @@ updates:
       prefix: "chore(deps)"
     schedule:
       interval: "monthly"
+      time: "19:00"
+      timezone: "America/Los_Angeles"
     open-pull-requests-limit: 1
     ignore:
       # Majors are migrations, not bumps -- see the header.
@@ -482,6 +518,8 @@ updates:
       prefix: "chore(deps)"
     schedule:
       interval: "monthly"
+      time: "19:00"
+      timezone: "America/Los_Angeles"
     open-pull-requests-limit: 1
     ignore:
       # Majors are migrations, not bumps -- see the header.
@@ -495,6 +533,8 @@ updates:
       prefix: "chore(deps)"
     schedule:
       interval: "monthly"
+      time: "19:00"
+      timezone: "America/Los_Angeles"
     open-pull-requests-limit: 1
     ignore:
       # Majors are migrations, not bumps -- see the header.
@@ -511,6 +551,8 @@ updates:
       prefix: "chore(deps)"
     schedule:
       interval: "monthly"
+      time: "19:00"
+      timezone: "America/Los_Angeles"
     open-pull-requests-limit: 1
     ignore:
       # Majors are migrations, not bumps -- see the header.
@@ -524,6 +566,8 @@ updates:
       prefix: "chore(deps)"
     schedule:
       interval: "monthly"
+      time: "19:00"
+      timezone: "America/Los_Angeles"
     open-pull-requests-limit: 1
     ignore:
       # Majors are migrations, not bumps -- see the header.
@@ -537,6 +581,8 @@ updates:
       prefix: "chore(deps)"
     schedule:
       interval: "monthly"
+      time: "19:00"
+      timezone: "America/Los_Angeles"
     open-pull-requests-limit: 1
     ignore:
       # Majors are migrations, not bumps -- see the header.

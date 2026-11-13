@@ -14,9 +14,43 @@ name: Dependabot auto-merge
 # between clean-ups by construction.
 #
 # So this closes the loop: a bump that passes the whole gate merges itself.
-# `--auto` does not bypass anything. Branch protection still requires all 20
-# checks and the merge happens only once they are green; a failing bump stays
-# open with a red tick, which is the state you actually want to see.
+# The merge does not bypass anything: there is no `--admin`, branch protection
+# still requires all 20 checks, and the sweep below asks only for a merge
+# GitHub already reports mergeable; a failing bump stays open with a red tick,
+# which is the state you actually want to see.
+#
+# WHEN: NEVER MONDAY TO FRIDAY, 09:00-17:00 AMERICA/LOS_ANGELES (D297)
+#
+# Nothing merges into the repository in that window. An armed `--auto` cannot
+# keep to it: GitHub fires it the moment the last check goes green, at any
+# hour, and a schedule that disarmed it at 09:00 would run late (GitHub delays
+# scheduled runs, most at the top of the hour) while the armed merge went
+# through. So nothing here arms `--auto`, and the work is split:
+#
+#   automerge  on the pull request: decides as below and labels an eligible
+#              bump `dependabot-automerge`; a bump it decides "no" on loses
+#              the label. The label is the record the sweep reads. This job
+#              merges nothing.
+#   sweep      hourly: outside the window, merges each open Dependabot pull
+#              request that carries the label, last added by this workflow
+#              (github-actions[bot]), and that GitHub reports mergeable, at
+#              the commit it read. It reads the clock in
+#              America/Los_Angeles, so the window moves with daylight saving
+#              (never a fixed UTC offset), before it lists anything and again
+#              before every merge, and it merges nothing if that zone does not
+#              read as PST or PDT (a runner without the zone data would read
+#              UTC, silently).
+#
+# So a merge happens only at a moment the sweep has just read as outside the
+# window. The cost is latency: a green bump waits for the next hourly run
+# after it went green or after 17:00, whichever is later. GitHub computes a
+# pull request's mergeability only when something asks for it, so after main
+# moves most rows of the sweep's listing read UNKNOWN (15 of 17 open
+# Dependabot pull requests, measured 2026-11-07); a listing with an UNKNOWN
+# row is read again 30 seconds later, and a row still UNKNOWN then waits for
+# the next run.
+# backend/tests/unit/scripts/test_dependabot_merge_window.py pins the window
+# at its edges, on both sides of both daylight-saving changes.
 #
 # WHAT MERGES ITSELF
 #
@@ -58,26 +92,38 @@ name: Dependabot auto-merge
 # `pull_request_target` runs the workflow definition from the default branch
 # with a write token. That is a privilege-escalation shape ONLY when combined
 # with a checkout of the pull request's code, because then branch content runs
-# with that token. This job never checks the branch out and runs nothing from
-# it -- it reads metadata and calls the GitHub API. See
+# with that token. Neither job checks the branch out or runs anything from
+# it -- they read metadata and call the GitHub API. See
 # `dependabot-lock.yml`, which needs branch content and therefore deliberately
 # does not use this trigger.
 #
-# The actor check is belt and braces: `pull_request_target` already gives
-# Dependabot a read-only token on its own runs, and the API rejects a merge
-# that branch protection would not allow.
+# The token is NOT read-only on Dependabot's own runs: a `pull_request_target`
+# run gets the permissions this file asks for (run 38654362474, Dependabot,
+# 2026-10-14, logged `Contents: write` and `PullRequests: write`). The API
+# still rejects a merge that branch protection would not allow.
 
 on:
   pull_request_target:
     types: [opened, reopened, synchronize, ready_for_review]
+  schedule:
+    # Hourly, at a fixed minute off :00 and :30, the minutes GitHub starts
+    # schedules latest. The sweep decides the window itself.
+    - cron: '7 * * * *'
 
+# The sweep merges with these; the automerge job labels with pull-requests.
 permissions:
   contents: write
   pull-requests: write
 
+env:
+  # The record the automerge job writes and the sweep reads.
+  LABEL: dependabot-automerge
+
 jobs:
   automerge:
-    if: github.actor == 'dependabot[bot]' && github.event.pull_request.draft == false
+    # The event is named: on a schedule `github.event.pull_request.draft` is
+    # null, and GitHub's `null == false` is true (both compare as 0).
+    if: github.event_name == 'pull_request_target' && github.actor == 'dependabot[bot]' && github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     steps:
       - name: Read the update metadata
@@ -109,18 +155,134 @@ jobs:
           echo "ok=$ok" >> "$GITHUB_OUTPUT"
           echo "$ECOSYSTEM / $UPDATE_TYPE -> auto-merge: $ok"
 
-      - name: Enable auto-merge
+      # No merge here, and no --auto: see WHEN in the header.
+      - name: Label it for the merge sweep
+        id: mark
         if: steps.decide.outputs.ok == 'yes'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR: ${{ github.event.pull_request.html_url }}
-        run: gh pr merge --auto --squash "$PR"
+          GH_REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          # The first eligible bump creates the label.
+          if ! gh api "repos/$GH_REPO/labels/$LABEL" --silent; then
+            gh label create "$LABEL" --color 0E8A16 \
+              --description "Merged by the hourly sweep once green; never Mon-Fri 09:00-17:00 Pacific"
+          fi
+          # The labels endpoint adds the label and nothing else: no text is posted.
+          gh api --method POST "repos/$GH_REPO/issues/$NUMBER/labels" -f "labels[]=$LABEL" --silent
+          echo "Labelled $LABEL: the sweep merges it once it is green, outside Monday to Friday 09:00-17:00 America/Los_Angeles."
 
       - name: Explain why not
+        id: refuse
         if: steps.decide.outputs.ok != 'yes'
         env:
           UPDATE_TYPE: ${{ steps.meta.outputs.update-type }}
           ECOSYSTEM: ${{ steps.meta.outputs.package-ecosystem }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          LABELLED: ${{ contains(github.event.pull_request.labels.*.name, env.LABEL) }}
         run: |
+          set -euo pipefail
           echo "Left for a human: $ECOSYSTEM $UPDATE_TYPE."
           echo "Majors outside github-actions are migrations, not bumps; a /tests/fuzz bump needs a dispatched fuzz.yml run."
+          # A bump decided "no" keeps no label from an earlier "yes".
+          if [ "$LABELLED" = true ]; then
+            gh api --method DELETE "repos/$GH_REPO/issues/$NUMBER/labels/$LABEL" --silent
+            echo "Took $LABEL off: the sweep will not merge it."
+          fi
+
+  sweep:
+    name: Merge the labelled bumps outside the window
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Merge, never Monday to Friday 09:00-17:00 Pacific
+        id: sweep
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # True from Monday to Friday, 09:00 to 16:59, America/Los_Angeles.
+          # One read of the clock gives the zone, the day and the time together.
+          in_window() {
+            local zone day hour minute now
+            read -r zone day hour minute <<< "$(TZ=America/Los_Angeles date '+%Z %u %H %M')"
+            case "$zone" in
+              PST|PDT) ;;
+              *)
+                echo "::error::America/Los_Angeles read as zone '$zone', not PST or PDT: merging nothing"
+                exit 1
+                ;;
+            esac
+            now=$((10#$hour * 60 + 10#$minute))
+            [ "$day" -le 5 ] && [ "$now" -ge $((9 * 60)) ] && [ "$now" -lt $((17 * 60)) ]
+          }
+
+          if in_window; then
+            echo "Inside Monday to Friday 09:00-17:00 Pacific: nothing merges before 17:00."
+            exit 0
+          fi
+
+          marked="$RUNNER_TEMP/marked.tsv"
+          list_marked() {
+            gh pr list --state open --author app/dependabot --label "$LABEL" --limit 100 \
+              --json number,url,isDraft,mergeStateStatus,headRefOid \
+              --jq '.[] | [.number, .url, .isDraft, .mergeStateStatus, .headRefOid] | @tsv' \
+              > "$marked"
+          }
+          list_marked
+          # GitHub computes mergeability when something asks for it, and this
+          # listing is the ask: after main moves, most rows read UNKNOWN until
+          # it is done. So wait once and read the answer.
+          if awk -F '\t' '$4 == "UNKNOWN" { found = 1 } END { exit (found ? 0 : 1) }' "$marked"; then
+            echo "GitHub is still computing mergeability: listing again in 30 seconds."
+            sleep 30
+            list_marked
+          fi
+
+          failed=0
+          while IFS=$'\t' read -r number url draft state sha; do
+            if [ "$draft" = true ]; then
+              echo "#$number: a draft; left alone"
+              continue
+            fi
+            # The states GitHub merges in. BLOCKED (a required check is not
+            # green), DIRTY, UNKNOWN and the rest wait for a later run.
+            case "$state" in
+              CLEAN|HAS_HOOKS|UNSTABLE) ;;
+              *)
+                echo "#$number: $state; waits"
+                continue
+                ;;
+            esac
+            # The label is this workflow's record only if this workflow put it
+            # there: the last time it went on, github-actions[bot] added it.
+            # An event with no actor reads as "nobody", never as the workflow:
+            # gh prints a null as an empty line, which $(...) would drop.
+            labeller=$(gh api --paginate "repos/$GH_REPO/issues/$number/events" \
+              --jq ".[] | select(.event == \"labeled\" and .label.name == \"$LABEL\") | .actor.login // \"nobody\"")
+            labeller=${labeller##*$'\n'}
+            if [ "$labeller" != "github-actions[bot]" ]; then
+              echo "::error::#$number: $LABEL was last added by '${labeller:-nobody}', not by this workflow; not merged"
+              failed=1
+              continue
+            fi
+            # The clock again, at each merge: a slow run does not reach into the window.
+            if in_window; then
+              echo "The window opened during this run: the rest wait for 17:00."
+              break
+            fi
+            # </dev/null: the rows arrive on this read's stdin, which gh must not take.
+            if gh pr merge --squash --match-head-commit "$sha" "$url" </dev/null; then
+              echo "#$number: merged"
+            else
+              echo "::error::#$number: GitHub refused the merge (see above); the next run tries again"
+              failed=1
+            fi
+          done < "$marked"
+          exit "$failed"
