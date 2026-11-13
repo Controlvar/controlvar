@@ -121,6 +121,7 @@ routes = [
   "/api/v1/llm-experiments/{experiment_id}/pause",
   "/api/v1/llm-experiments/{experiment_id}/results",
   "/api/v1/llm-experiments/{experiment_id}/start",
+  "/api/v1/llm-experiments/{experiment_id}/variants/{variant_id}",
   "/api/v1/mcp/manifest",
   "/api/v1/metrics/aggregated",
   "/api/v1/metrics/errors",

@@ -384,9 +384,11 @@ Give a baseline rate (`baseline_rate`) and a minimum detectable effect
 (`mde`); a confidence level (`confidence`) and power (`power`) are optional,
 0.95 and 0.80 by default. `mde` is an absolute change in the rate: 0.004 on a
 baseline of 0.08 plans for 8% against 8.4%, a 5% relative lift. Inputs it
-cannot calculate with answer `422` with a fixed message: a `baseline_rate`,
+cannot calculate with answer `422` with a fixed message: a finite `baseline_rate`,
 `confidence` or `power` outside 0 to 1, an `mde` of 0, and a treatment rate
-(`baseline_rate + mde`) above 1 or below 0.
+(`baseline_rate + mde`) above 1 or below 0. NaN, Infinity, -Infinity and a
+number too large for a double such as `1e400`, in any of the four, answer `422`
+with `"type": "finite_number"` at that parameter instead.
 
 The estimate is for a control and one treatment. Add `daily_traffic`, the
 users a day who enter the experiment (1 to 10^12), and `days_to_significance`

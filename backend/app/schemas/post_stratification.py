@@ -10,6 +10,8 @@ from typing import Dict, List, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from backend.app.schemas.finite_number import FiniteFloat
+
 # ---------------------------------------------------------------------------
 # Post-Stratification schemas
 # ---------------------------------------------------------------------------
@@ -41,7 +43,7 @@ class PostStratificationRequest(BaseModel):
         default="metric_value",
         description="Name of the numeric outcome column in the experiment data.",
     )
-    alpha: float = Field(
+    alpha: FiniteFloat = Field(
         default=0.05,
         gt=0.0,
         lt=1.0,
@@ -116,7 +118,7 @@ class FDRCorrectionRequest(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    p_values: Dict[str, float] = Field(
+    p_values: Dict[str, FiniteFloat] = Field(
         ...,
         min_length=1,
         description=(
@@ -124,7 +126,7 @@ class FDRCorrectionRequest(BaseModel):
             "All values must be in [0, 1]. Must be non-empty."
         ),
     )
-    fdr_threshold: float = Field(
+    fdr_threshold: FiniteFloat = Field(
         default=0.05,
         ge=0.0,
         le=1.0,
