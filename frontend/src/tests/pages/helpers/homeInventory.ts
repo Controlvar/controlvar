@@ -120,7 +120,7 @@ export const TYPED: readonly Row[] = [
   { tag: 'dt', text: 'Apache-2.0, SDKs MIT', source: `${UX} Facts 1; ${MAIN}:175` },
   {
     tag: 'dd',
-    text: 'Both build profiles are the same licence and the same price: none. Read the LICENSE.',
+    text: 'The core and full builds are both free and have the same licence. Read the LICENSE.',
     source: `${MAIN}:102; ${BORROW} 1: LICENSE`,
   },
   { tag: 'dt', text: 'Compose, Helm or AWS CDK', source: `${UX} Facts 3; ${MAIN}:128` },
@@ -129,13 +129,13 @@ export const TYPED: readonly Row[] = [
     text: 'One machine, Kubernetes, or your own AWS account. There is no hosted tier.',
     source: `${UX} Facts 3 and 4; ${MAIN}:128; ${SD} item 2: the three deploy guides`,
   },
-  { tag: 'dt', text: 'Statistics you can check', source: `${BORROW} 1: the statistics code` },
+  { tag: 'dt', text: 'Tested statistics', source: `${BORROW} 1: the statistics code` },
   {
     tag: 'dd',
-    text: 'Tests hold the analysis to known answers: the false-positive rate of A/A tests, interval coverage and a planted lift.',
+    text: 'Tests check the analysis against known answers: the false-positive rate of A/A tests, interval coverage and a planted lift.',
     source: 'backend/tests/unit/stats_validation: test_golden_aa_significance_rate, test_golden_interval_coverage, test_golden_planted_lift',
   },
-  { tag: 'dt', text: 'Released in the open', source: `${BORROW} 1: Releases/CHANGELOG` },
+  { tag: 'dt', text: 'Public releases', source: `${BORROW} 1: Releases/CHANGELOG` },
   {
     tag: 'dd',
     text: 'Versions are published on the Releases page, and the CHANGELOG says what changed in each.',
@@ -149,7 +149,7 @@ export const TYPED: readonly Row[] = [
   { tag: 'h3', text: 'Run it', source: `${UX} How it works` },
   {
     tag: 'p',
-    text: 'Clone the repository and start everything from its root: four containers — Postgres, Redis, the API and the dashboard. The first start builds the images, creates the database and applies the demo seed.',
+    text: 'Clone the repository and start it from the root. It runs four containers: Postgres, Redis, the API and the dashboard. The first start builds the images, creates the database and applies the demo seed.',
     source: `${UX}; ${MAIN}:154-155 (the hero's "Four containers" line, folded in: SD finding 7); docs/getting-started/quick-start.md:20-35`,
   },
   {
@@ -190,13 +190,13 @@ export const TYPED: readonly Row[] = [
   { tag: 'h2', text: 'The Controlvar books', source: `${BOOKS}: its title` },
   {
     tag: 'p',
-    text: 'Learn engineering, programming and the craft of shipping software through one real, open-source codebase: Controlvar itself. The books are for newcomers to a language or framework, engineers who already code, and contributors. They are licensed CC BY 4.0.',
+    text: "Engineering and programming books that use Controlvar's own code for their examples. They are for newcomers to a language or framework, engineers who already code, and contributors. The licence is CC BY 4.0.",
     source: `${BOOKS}: its subtitle, "Who these books are for" and "Licence"`,
   },
   { tag: 'p', text: 'All the books →', source: `${SD} item 4: the link to /books (the books repository on a platform build)` },
 
   // Row 1: rollouts and safety.
-  { tag: 'h2', text: 'Roll features out gradually, and watch their safety signals', source: `${UX} Row 1; feature-flags/index.tsx:134` },
+  { tag: 'h2', text: 'Roll features out gradually, with automatic rollback', source: `${UX} Row 1; feature-flags/index.tsx:134` },
   {
     tag: 'p',
     text: 'Sticky assignment, gradual rollouts with configurable stages, and automated safety rollback on error-rate and latency thresholds.',
@@ -218,7 +218,7 @@ export const TYPED: readonly Row[] = [
   { tag: 'p', text: 'Gradual Rollouts in the docs →', source: `${UX} Row 1; docs/feature-flags/rollouts.md title` },
 
   // Row 2: statistics.
-  { tag: 'h2', text: 'Statistics beyond a p-value', source: `${MAIN}:119 (#1415 finds it by name)` },
+  { tag: 'h2', text: 'Plan tests and analyse results', source: `${MAIN}:119 (#1415 finds it by name)` },
   { tag: 'p', text: "Work out a test's sample size in the power calculator, which needs no account.", source: `${UX} Row 2; videos.json 05` },
   { tag: 'li', text: 'Frequentist and Bayesian analysis', source: `${MAIN}:120` },
   { tag: 'li', text: 'Sequential testing with mSPRT for early stopping', source: `${MAIN}:120` },
@@ -239,7 +239,7 @@ export const TYPED: readonly Row[] = [
   { tag: 'p', text: 'Role-based access control in the docs →', source: `${UX} Row 3; docs/rbac/README.md title` },
 
   // SDKs (the chips are read from content/sdks.ts).
-  { tag: 'h2', text: 'SDKs for the stack you have', source: `${MAIN}:123` },
+  { tag: 'h2', text: 'SDKs for web, mobile and server', source: `${MAIN}:123` },
   { tag: 'p', text: 'All MIT-licensed. By default, flag evaluation and experiment assignment happen on the server.', source: `${MAIN}:124` },
   // The closing paragraph on which SDKs have a release went (SD item 6): the beta badges say it.
 
@@ -250,7 +250,7 @@ export const TYPED: readonly Row[] = [
   // The "Deploy it yourself" cards are folded into the facts strip (SD item 8).
 
   // Closing band.
-  { tag: 'h2', text: 'Open, and checkable', source: `${MAIN}:131` },
+  { tag: 'h2', text: 'Open source', source: `${MAIN}:131` },
   {
     tag: 'p',
     text: 'The whole platform is Apache-2.0 and the SDKs are MIT. The test suites, the automated checks and the release pipeline are all in the repository.',

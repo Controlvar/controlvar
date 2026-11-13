@@ -15,7 +15,7 @@ export function ClosingBand() {
       <div className="flex flex-wrap items-center justify-between gap-8 rounded-2xl bg-slate-900 px-6 py-10 text-white sm:px-12 sm:py-12">
         <div className="min-w-0 max-w-2xl">
           <h2 id="closing-heading" className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            Open, and checkable
+            Open source
           </h2>
           <p className="mt-3 leading-relaxed text-slate-300">
             The whole platform is Apache-2.0 and the SDKs are MIT. The test suites, the automated checks and the release

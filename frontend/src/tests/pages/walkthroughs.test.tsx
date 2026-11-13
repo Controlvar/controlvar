@@ -414,8 +414,8 @@ describe('marketing homepage: the teaser', () => {
     const { container } = renderHome();
     const section = teaser(container);
     expect(section).toBeInTheDocument();
-    expect(section.previousElementSibling?.querySelector('h2')).toHaveTextContent(/^SDKs for the stack you have$/);
-    expect(section.nextElementSibling?.querySelector('h2')).toHaveTextContent(/^Open, and checkable$/);
+    expect(section.previousElementSibling?.querySelector('h2')).toHaveTextContent(/^SDKs for web, mobile and server$/);
+    expect(section.nextElementSibling?.querySelector('h2')).toHaveTextContent(/^Open source$/);
     expect(within(section).getByRole('heading', { level: 2 })).toHaveTextContent(/^Walkthroughs$/);
     expect(container.querySelectorAll('video, track, iframe')).toHaveLength(0);
     expect(container.querySelector('#walkthroughs')).toBeNull();
