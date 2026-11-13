@@ -19,7 +19,7 @@ export function ClosingBand() {
           </h2>
           <p className="mt-3 leading-relaxed text-slate-300">
             The whole platform is Apache-2.0 and the SDKs are MIT. The test suites, the automated checks and the release
-            pipeline are all in the repository, so you can read them rather than take our word for it.
+            pipeline are all in the repository.
           </p>
         </div>
         <div className="flex w-full flex-wrap gap-3 sm:w-auto">

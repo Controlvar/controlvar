@@ -253,7 +253,7 @@ export const TYPED: readonly Row[] = [
   { tag: 'h2', text: 'Open, and checkable', source: `${MAIN}:131` },
   {
     tag: 'p',
-    text: 'The whole platform is Apache-2.0 and the SDKs are MIT. The test suites, the automated checks and the release pipeline are all in the repository, so you can read them rather than take our word for it.',
+    text: 'The whole platform is Apache-2.0 and the SDKs are MIT. The test suites, the automated checks and the release pipeline are all in the repository.',
     source: `${MAIN}:132`,
   },
   { tag: 'div', text: 'Get started', source: `${MAIN}:83; ${UX} Closing band` },
