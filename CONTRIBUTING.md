@@ -13,6 +13,10 @@ need: how to sign your work, how to run the stack, and where code lives.
   disclosure.
 - **Conduct**: by participating you agree to the
   [Code of Conduct](CODE_OF_CONDUCT.md).
+- **Reading first**: [Before You Change Controlvar](https://github.com/amarkanday/controlvar-books/blob/main/before-you-change-controlvar/README.md)
+  is a short guide to read before a first pull request: the codebase map, running
+  the stack, the tests and the gates. It is one of
+  [the Controlvar books](https://github.com/amarkanday/controlvar-books) (CC BY 4.0).
 
 ## Developer Certificate of Origin (DCO)
 
