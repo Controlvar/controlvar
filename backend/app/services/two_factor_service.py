@@ -410,9 +410,10 @@ class TwoFactorService:
         taken only for ``SIGN_IN`` and ``SIGNED_IN`` routes that offer it;
         ``CONFIRM`` takes a code only.
 
-        A refusal is committed (the count must outlive the request) and
-        raised. An acceptance is not committed: the caller commits it with
-        whatever it does next.
+        A counted refusal first rolls back whatever ``db`` holds uncommitted,
+        then commits the count (it must outlive the request), then raises:
+        call this before changing anything else in the session. An acceptance
+        is not committed: the caller commits it with whatever it does next.
         """
         if purpose not in _PURPOSES:
             raise ValueError(f"unknown purpose {purpose!r}")
