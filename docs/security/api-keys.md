@@ -80,7 +80,8 @@ repository). If you lose it, create a new key.
 The request takes:
 - `name` (required, up to 100 characters);
 - `description`;
-- `scopes`, a list of names (see [Scopes](#scopes));
+- `scopes`, a list of names, at most 255 characters in all when joined with commas; a longer
+  list answers `422` (see [Scopes](#scopes));
 - `expires_at`, an ISO 8601 time after which the key stops working. Leave it out for a
   key that doesn't expire.
 
