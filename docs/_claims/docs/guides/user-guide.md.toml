@@ -372,17 +372,17 @@ by = [
 [[unit]]
 text = "Under it, Advanced Bayesian settings opens to the prior alpha, prior beta, loss threshold and credible level, each at its default (1.0, 1.0, 0.001 and 0.95); they are sent only when one of them is changed."
 by = [
-    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::shown only while the box is ticked, closed by default, and opens to four fields at their defaults with their helps",
-    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::untouched, the POST has no bayesian_config",
-    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::changed alone, sends the five-field object with prior_family \"beta\"",
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::%s: shown only while the box is ticked, closed by default, and opens to four fields at their defaults with their helps",
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::%s: untouched, the POST has no bayesian_config",
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::%s: %s set to %s, changed alone, sends the five-field object with prior_family \"beta\"",
     "test:backend/tests/integration/api/test_experiment_bayesian_config_api.py::TestTurningBayesianOn::test_create_enabled_without_config_stores_defaults",
 ]
 
 [[unit]]
 text = "A value the API would refuse is named under its field, and nothing is created until it is fixed."
 by = [
-    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::alpha 0 reads \"Must be greater than 0.\" and sends nothing",
-    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::is refused beside the field and at Next",
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::%s: alpha 0 reads \"Must be greater than 0.\" and sends nothing",
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::%s (%s) set to \"%s\" is refused beside the field and at Next",
 ]
 
 [[unit]]
