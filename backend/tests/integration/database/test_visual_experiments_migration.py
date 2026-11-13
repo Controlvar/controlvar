@@ -19,7 +19,8 @@ run the documented ``alembic upgrade heads``. Then:
    store an experiment and its variants against this schema (pure expand);
 4. the downgrade removes exactly the table and the two columns, keeps every
    experiment and variant, and an upgrade afterwards adds them back empty;
-5. ``alembic heads`` names exactly this revision and the modules head.
+5. ``alembic heads`` names exactly the core head, ``t1812_user_totp``
+   (#1812) since it landed, and the modules head.
 
 The previous release refusing this database and starting after the
 downgrade is ``test_newer_database_rollback.py``'s, which holds every later
@@ -42,8 +43,12 @@ pytestmark = [pytest.mark.integration]
 #: This revision, and the core revision it extends.
 REVISION = "4955571d232c"
 PREVIOUS_CORE_HEAD = "c448_balance_within"
-#: The core head of this tree.
-CORE_HEAD = "4955571d232c"
+#: The core head of this tree: ``t1812_user_totp`` (#1812), the revision after
+#: this one, whose downgrade drops ``user_totp``.
+CORE_HEAD = "t1812_user_totp"
+#: Tables a later core revision's downgrade drops: a downgrade from the head to
+#: this test's target unapplies ``t1812_user_totp`` too.
+LATER_DOWNGRADE_TABLES = {"user_totp"}
 MODULES_HEAD = "modules_0005_redshift"
 
 PREVIOUS_ROWS = {
@@ -362,7 +367,7 @@ def test_the_downgrade_drops_the_table_and_both_columns_only(
     _report(profile, "after downgrade", test_db, scratch_schema)
 
     assert _rows(test_db, scratch_schema) == PREVIOUS_ROWS[profile]
-    assert _tables(test_db, scratch_schema) == tables - {TABLE}
+    assert _tables(test_db, scratch_schema) == tables - {TABLE} - LATER_DOWNGRADE_TABLES
     assert all(_column(test_db, scratch_schema, t, c) is None for t, c in COLUMNS)
     assert _experiments(test_db, scratch_schema) == stored
 
@@ -396,6 +401,8 @@ HEADS = {CORE: {CORE_HEAD}, FULL: {CORE_HEAD, MODULES_HEAD}}
 @pytest.mark.regression
 @pytest.mark.parametrize("profile", BOTH_PROFILES)
 def test_alembic_heads_are_this_revision_and_the_modules_head(profile, tmp_path):
+    """Still two heads in a full tree: this revision extended the core chain,
+    and ``t1812_user_totp`` (#1812), the core head now, extends it."""
     tree = tree_profiles.tree_for(profile, tmp_path)
     heads = tree_profiles.alembic(tree, "public", "heads")
     assert heads.returncode == 0, heads.stderr[-3000:]

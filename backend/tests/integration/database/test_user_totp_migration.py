@@ -37,7 +37,7 @@ REVISION = "t1812_user_totp"
 PREVIOUS_CORE_HEAD = "4955571d232c"
 #: The core head of this tree.
 CORE_HEAD = "t1812_user_totp"
-MODULES_HEAD = "modules_0004_rbac_activation"
+MODULES_HEAD = "modules_0005_redshift"
 
 PREVIOUS_ROWS = {
     CORE: {PREVIOUS_CORE_HEAD},

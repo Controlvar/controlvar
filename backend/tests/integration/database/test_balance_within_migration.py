@@ -23,8 +23,8 @@ each profile, and run the documented ``alembic upgrade heads``. Then:
    balance setting, group and counter with them, and does not refuse; an
    upgrade afterwards gives every experiment no setting again;
 5. the upgrade refuses offline (``--sql``) mode: it reads the catalog;
-6. ``alembic heads`` names exactly the core head, ``4955571d232c`` (#1545)
-   since it landed, and the modules head.
+6. ``alembic heads`` names exactly the core head, ``t1812_user_totp``
+   (#1812) since it landed, and the modules head.
 """
 
 from __future__ import annotations
@@ -43,13 +43,14 @@ pytestmark = [pytest.mark.integration]
 #: This revision, and the core revision it extends: ``7b6b4b4fe246`` (#1528).
 REVISION = "c448_balance_within"
 PREVIOUS_CORE_HEAD = "7b6b4b4fe246"
-#: The core head of this tree: ``4955571d232c`` (#1545), the revision after
-#: this one, whose downgrade drops ``visual_tokens``,
-#: ``experiments.visual_config`` and ``variants.visual_changes``.
-CORE_HEAD = "4955571d232c"
+#: The core head of this tree: ``t1812_user_totp`` (#1812), whose downgrade
+#: drops ``user_totp``, after ``4955571d232c`` (#1545), the revision after this
+#: one, whose downgrade drops ``visual_tokens``, ``experiments.visual_config``
+#: and ``variants.visual_changes``.
+CORE_HEAD = "t1812_user_totp"
 #: What a later core revision's downgrade drops: a downgrade from the head to
-#: this test's target unapplies ``4955571d232c`` too.
-LATER_DOWNGRADE_TABLES = {"visual_tokens"}
+#: this test's target unapplies ``4955571d232c`` and ``t1812_user_totp`` too.
+LATER_DOWNGRADE_TABLES = {"visual_tokens", "user_totp"}
 LATER_DOWNGRADE_EXPERIMENT_COLUMNS = {"visual_config"}
 #: The modules branch's head in this tree, recorded on both sides of every
 #: step here: this file is about the core chain.
@@ -478,7 +479,8 @@ def test_the_upgrade_refuses_offline_mode(tmp_path):
 @pytest.mark.parametrize("profile", BOTH_PROFILES)
 def test_alembic_heads_are_this_revision_and_the_modules_head(profile, tmp_path):
     """Still two heads in a full tree: this revision extended the core chain,
-    and ``4955571d232c`` (#1545), the core head now, extends it."""
+    and ``4955571d232c`` (#1545) and ``t1812_user_totp`` (#1812), the core head
+    now, extend it."""
     tree = tree_profiles.tree_for(profile, tmp_path)
     heads = tree_profiles.alembic(tree, "public", "heads")
     assert heads.returncode == 0, heads.stderr[-3000:]

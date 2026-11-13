@@ -228,9 +228,10 @@ def test_a_revision_cited_for_another_reason_is_not_an_announcement():
 #: ``ep034``, and ``c448_balance_within`` (#448) is one.
 _NAMED = "ep057_workspaces"
 #: The column-dropping revisions ``downgrade ep057_workspaces`` unapplies
-#: today: eleven on the core chain, and two on the modules branch, which a
+#: today: twelve on the core chain, and two on the modules branch, which a
 #: core-only tree does not have. A later revision adds to what it crosses.
 _ABOVE_NAMED = {
+    "t1812_user_totp",
     "4955571d232c",
     "c448_balance_within",
     "7b6b4b4fe246",
@@ -256,7 +257,7 @@ def test_a_named_core_id_below_column_drops_is_refused():
     script = _script()
     known = {r.revision for r in script.walk_revisions()}
     expected = {r for r in _ABOVE_NAMED if r in known}
-    assert len(expected) == (13 if "modules_0004_rbac_activation" in known else 11)
+    assert len(expected) == (14 if "modules_0004_rbac_activation" in known else 12)
     crossed = set(unannounced_crossings(found, script)[f"migrations.md: {_NAMED}"])
     assert expected <= crossed, sorted(expected - crossed)
 

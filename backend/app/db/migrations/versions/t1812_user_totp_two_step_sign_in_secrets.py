@@ -40,7 +40,7 @@ such a target.
 
 Core chain, extending the core head ``4955571d232c`` (#1545). Nothing here
 touches a module table, so a full checkout still has exactly two heads: this
-revision and ``modules_0004_rbac_activation``.
+revision and the modules branch's head (``modules_0005_redshift``, #826).
 
 Revision ID: t1812_user_totp
 Revises: 4955571d232c
