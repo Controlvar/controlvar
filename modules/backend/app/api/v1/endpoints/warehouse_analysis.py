@@ -571,7 +571,10 @@ def _parameters(body: Any) -> Dict[str, str]:
             field="role",
         )
     fields = [f for f in clients.PARAMETER_FIELDS[kind] if f != "client_email"]
-    return {name: getattr(body, name) for name in fields}
+    # A field the body leaves out is not stored: an Amazon Redshift connection
+    # names a workgroup or a cluster (with its database user), never both.
+    values = {name: getattr(body, name, None) for name in fields}
+    return {name: value for name, value in values.items() if value is not None}
 
 
 def _service_account(text: str) -> Any:
@@ -610,6 +613,7 @@ def list_connectors(
         "bigquery": "BigQuery",
         "snowflake": "Snowflake",
         "athena": "Amazon Athena",
+        "redshift": "Amazon Redshift",
     }
     return {
         "connectors": [

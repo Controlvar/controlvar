@@ -811,7 +811,7 @@
           },
           "role_arn": {
             "maxLength": 600,
-            "pattern": "^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]{1,512}$",
+            "pattern": "^arn:aws:iam::[0-9]{12}:role/controlvar-warehouse/[A-Za-z0-9+=,.@_-]{1,64}$",
             "title": "Role Arn",
             "type": "string"
           },
@@ -884,7 +884,7 @@
           },
           "role_arn": {
             "maxLength": 600,
-            "pattern": "^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]{1,512}$",
+            "pattern": "^arn:aws:iam::[0-9]{12}:role/controlvar-warehouse/[A-Za-z0-9+=,.@_-]{1,64}$",
             "title": "Role Arn",
             "type": "string"
           },
@@ -957,7 +957,7 @@
           },
           "role_arn": {
             "maxLength": 600,
-            "pattern": "^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]{1,512}$",
+            "pattern": "^arn:aws:iam::[0-9]{12}:role/controlvar-warehouse/[A-Za-z0-9+=,.@_-]{1,64}$",
             "title": "Role Arn",
             "type": "string"
           },
@@ -3909,7 +3909,8 @@
             "enum": [
               "bigquery",
               "snowflake",
-              "athena"
+              "athena",
+              "redshift"
             ],
             "title": "Warehouse Type",
             "type": "string"
@@ -13047,6 +13048,202 @@
         ],
         "title": "RecommendationAction",
         "type": "string"
+      },
+      "RedshiftConnectionCreate": {
+        "additionalProperties": false,
+        "description": "An Amazon Redshift connection.  It stores no secret.",
+        "properties": {
+          "cluster_identifier": {
+            "anyOf": [
+              {
+                "maxLength": 63,
+                "pattern": "^[a-z][a-z0-9-]{0,62}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cluster Identifier"
+          },
+          "database": {
+            "maxLength": 127,
+            "pattern": "^[a-z_][a-z0-9_$]{0,126}$",
+            "title": "Database",
+            "type": "string"
+          },
+          "db_user": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9_+.@-]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Db User"
+          },
+          "max_runs_per_day": {
+            "default": 20,
+            "maximum": 10000,
+            "minimum": 1,
+            "title": "Max Runs Per Day",
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x1f\\x7f\\u2028\\u2029]+$",
+            "title": "Name",
+            "type": "string"
+          },
+          "query_timeout_seconds": {
+            "default": 300,
+            "maximum": 86400,
+            "minimum": 10,
+            "title": "Query Timeout Seconds",
+            "type": "integer"
+          },
+          "region": {
+            "maxLength": 32,
+            "pattern": "^[a-z]{2}(-[a-z]+)+-[0-9]{1,2}$",
+            "title": "Region",
+            "type": "string"
+          },
+          "role_arn": {
+            "maxLength": 600,
+            "pattern": "^arn:aws:iam::[0-9]{12}:role/controlvar-warehouse/[A-Za-z0-9+=,.@_-]{1,64}$",
+            "title": "Role Arn",
+            "type": "string"
+          },
+          "warehouse_type": {
+            "const": "redshift",
+            "title": "Warehouse Type",
+            "type": "string"
+          },
+          "workgroup_name": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "pattern": "^[a-z0-9-]{3,64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workgroup Name"
+          }
+        },
+        "required": [
+          "name",
+          "warehouse_type",
+          "region",
+          "role_arn",
+          "database"
+        ],
+        "title": "RedshiftConnectionCreate",
+        "type": "object"
+      },
+      "RedshiftConnectionUpdate": {
+        "additionalProperties": false,
+        "description": "``PUT /connections/{id}`` for an Amazon Redshift connection.",
+        "properties": {
+          "cluster_identifier": {
+            "anyOf": [
+              {
+                "maxLength": 63,
+                "pattern": "^[a-z][a-z0-9-]{0,62}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cluster Identifier"
+          },
+          "database": {
+            "maxLength": 127,
+            "pattern": "^[a-z_][a-z0-9_$]{0,126}$",
+            "title": "Database",
+            "type": "string"
+          },
+          "db_user": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9_+.@-]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Db User"
+          },
+          "max_runs_per_day": {
+            "default": 20,
+            "maximum": 10000,
+            "minimum": 1,
+            "title": "Max Runs Per Day",
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x1f\\x7f\\u2028\\u2029]+$",
+            "title": "Name",
+            "type": "string"
+          },
+          "query_timeout_seconds": {
+            "default": 300,
+            "maximum": 86400,
+            "minimum": 10,
+            "title": "Query Timeout Seconds",
+            "type": "integer"
+          },
+          "region": {
+            "maxLength": 32,
+            "pattern": "^[a-z]{2}(-[a-z]+)+-[0-9]{1,2}$",
+            "title": "Region",
+            "type": "string"
+          },
+          "role_arn": {
+            "maxLength": 600,
+            "pattern": "^arn:aws:iam::[0-9]{12}:role/controlvar-warehouse/[A-Za-z0-9+=,.@_-]{1,64}$",
+            "title": "Role Arn",
+            "type": "string"
+          },
+          "warehouse_type": {
+            "const": "redshift",
+            "title": "Warehouse Type",
+            "type": "string"
+          },
+          "workgroup_name": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "pattern": "^[a-z0-9-]{3,64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workgroup Name"
+          }
+        },
+        "required": [
+          "name",
+          "warehouse_type",
+          "region",
+          "role_arn",
+          "database"
+        ],
+        "title": "RedshiftConnectionUpdate",
+        "type": "object"
       },
       "RefreshTokenRequest": {
         "description": "Schema for refresh token request.",
@@ -35954,6 +36151,9 @@
                   },
                   {
                     "$ref": "#/components/schemas/AthenaConnectionCreate"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RedshiftConnectionCreate"
                   }
                 ],
                 "title": "Body"
@@ -36168,6 +36368,9 @@
                   },
                   {
                     "$ref": "#/components/schemas/AthenaConnectionUpdate"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RedshiftConnectionUpdate"
                   }
                 ],
                 "title": "Body"

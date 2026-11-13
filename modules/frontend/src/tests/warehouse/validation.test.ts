@@ -7,6 +7,11 @@ import {
   KEY_INVALID,
   KEY_NOT_SERVICE_ACCOUNT,
   KEY_TOO_LARGE,
+  REDSHIFT_CLUSTER,
+  REDSHIFT_DATABASE,
+  REDSHIFT_DB_USER,
+  REDSHIFT_WORKGROUP,
+  ROLE_ARN,
   SNOWFLAKE_ACCOUNT_HELP,
   SNOWFLAKE_ROLE_REFUSED,
   checkBytesPerQuery,
@@ -80,8 +85,16 @@ describe('table references and columns', () => {
     ['snowflake', 'ANALYTICS.EXPERIMENTS.EXPOSURES'],
     ['bigquery', 'my-analytics-project.experiments.exposures'],
     ['athena', 'analytics.exposures'],
+    ['redshift', 'analytics.exposures'],
   ] as const)('accepts a %s reference', (type, ref) => {
     expect(checkTable(ref, type)).toBeNull();
+  });
+
+  it('reads a Redshift reference as schema.table', () => {
+    expect(checkTable('dev.analytics.exposures', 'redshift')).toMatch(/^Use schema\.table \(2 parts/);
+    expect(checkTable('analytics."exposures"', 'redshift')).not.toBeNull();
+    expect(checkColumn('user$id', 'redshift', 'User ID column')).toBeNull();
+    expect(checkColumn('user-id', 'redshift', 'User ID column')).not.toBeNull();
   });
 
   // The identifier tampers the API refuses (plan SPEC 3): each is refused here too.
@@ -128,5 +141,32 @@ describe('names and limits', () => {
     expect(gigabytesToBytes('1e3')).toBeNull();
     expect(checkBytesPerQuery('0.001')).toMatch(/at least 0\.01 GB/);
     expect(checkBytesPerQuery('0.01')).toBeNull();
+  });
+});
+
+describe('role-based connections (Amazon Athena, Amazon Redshift)', () => {
+  it('takes a role under /controlvar-warehouse/ only', () => {
+    expect(ROLE_ARN.test('arn:aws:iam::123456789012:role/controlvar-warehouse/controlvar-reader')).toBe(true);
+    expect(ROLE_ARN.test('arn:aws:iam::123456789012:role/controlvar-warehouse/R+=,.@_-1')).toBe(true);
+    for (const refused of [
+      'arn:aws:iam::123456789012:role/controlvar-reader',
+      'arn:aws:iam::123456789012:role/other/controlvar-reader',
+      'arn:aws:iam::123456789012:role/controlvar-warehouse/sub/reader',
+      `arn:aws:iam::123456789012:role/controlvar-warehouse/${'r'.repeat(65)}`,
+      'arn:aws:iam::12345678901:role/controlvar-warehouse/reader',
+    ]) {
+      expect(ROLE_ARN.test(refused)).toBe(false);
+    }
+  });
+
+  // The API's patterns (warehouse_connections.py), case by case.
+  it.each([
+    [REDSHIFT_WORKGROUP, ['abc', 'a'.repeat(64), '0-analytics-1'], ['ab', 'Analytics', 'an_alytics', 'a'.repeat(65)]],
+    [REDSHIFT_CLUSTER, ['a', `a${'b'.repeat(62)}`, 'prod-cluster-1'], ['1prod', 'Prod', 'a'.repeat(64), 'a_b']],
+    [REDSHIFT_DATABASE, ['dev', '_dev$1', 'd'.repeat(127)], ['Dev', '1dev', 'dev-1', '', 'd'.repeat(128)]],
+    [REDSHIFT_DB_USER, ['reader.one+two@acme_co-x', 'r'.repeat(64)], ['Reader', '1reader', 'a:b', 'a/b', 'r'.repeat(65)]],
+  ])('the Redshift pattern %s accepts and refuses as the API does', (pattern, accepted, refused) => {
+    for (const value of accepted) expect(pattern.test(value)).toBe(true);
+    for (const value of refused) expect(pattern.test(value)).toBe(false);
   });
 });

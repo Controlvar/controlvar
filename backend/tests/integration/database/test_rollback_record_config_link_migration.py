@@ -53,7 +53,7 @@ PREVIOUS_CORE_HEAD = "37dcb2969766"
 #: ``c448_balance_within`` (#448), ``7b6b4b4fe246`` (#1528), ``85dd4796bb8b``
 #: (#1543) and ``607c51a59bf5`` (#1497), the revision after this one.
 CORE_HEAD = "4955571d232c"
-MODULES_HEAD = "modules_0004_rbac_activation"
+MODULES_HEAD = "modules_0005_redshift"
 #: The rows of a database at this revision, before the next one is applied.
 AT_REVISION_ROWS = {
     CORE: {REVISION},
