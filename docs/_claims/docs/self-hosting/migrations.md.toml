@@ -680,10 +680,17 @@ by = [
 ]
 
 [[unit]]
-text = "Past c448_balance_within it first runs that revision's downgrade, which drops every experiment's balance setting, every user's group and every counter (see c448_balance_within)."
+text = "Past c448_balance_within it also runs that revision's downgrade, which drops every experiment's balance setting, every user's group and every counter (see c448_balance_within)."
 by = [
     "test:backend/tests/unit/db/test_alembic_commands.py::test_past_1ab99332f0ba_its_rerun_downgrade_also_undoes_the_later_revisions",
     "test:backend/tests/integration/database/test_balance_within_migration.py::test_the_downgrade_drops_exactly_the_columns_and_the_table",
+]
+
+[[unit]]
+text = "Past 4955571d232c it first runs that revision's downgrade, which drops the table visual_tokens and the columns experiments.visual_config and variants.visual_changes: every visual experiment's pages, goals and page changes (see 4955571d232c)."
+by = [
+    "test:backend/tests/unit/db/test_alembic_commands.py::test_past_1ab99332f0ba_its_rerun_downgrade_also_undoes_the_later_revisions",
+    "test:backend/tests/integration/database/test_visual_experiments_migration.py::test_the_downgrade_drops_the_table_and_both_columns_only",
 ]
 
 [[unit]]
@@ -809,9 +816,17 @@ by = [
 
 [[unit]]
 text = "From a release that carries c448_balance_within, it also runs that revision's downgrade, which drops every experiment's balance setting, every user's group and every counter (see c448_balance_within)."
+count = 2
 by = [
     "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
     "test:backend/tests/integration/database/test_balance_within_migration.py::test_the_downgrade_drops_exactly_the_columns_and_the_table",
+]
+
+[[unit]]
+text = "From a release that carries 4955571d232c, it also runs that revision's downgrade, which drops the table visual_tokens and the columns experiments.visual_config and variants.visual_changes (see 4955571d232c)."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_visual_experiments_migration.py::test_the_downgrade_drops_the_table_and_both_columns_only",
 ]
 
 [[unit]]
@@ -931,10 +946,11 @@ by = [
 ]
 
 [[unit]]
-text = "From a release that carries c448_balance_within, it first runs that revision's downgrade, which drops every experiment's balance setting, every user's group and every counter (see c448_balance_within)."
+text = "From a release that carries 4955571d232c, it first runs that revision's downgrade, which drops the table visual_tokens and the columns experiments.visual_config and variants.visual_changes (see 4955571d232c)."
+count = 3
 by = [
     "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
-    "test:backend/tests/integration/database/test_balance_within_migration.py::test_the_downgrade_drops_exactly_the_columns_and_the_table",
+    "test:backend/tests/integration/database/test_visual_experiments_migration.py::test_the_downgrade_drops_the_table_and_both_columns_only",
 ]
 
 [[unit]]
@@ -1039,7 +1055,7 @@ by = [
 ]
 
 [[unit]]
-text = "This revision's own down_revision is 85dd4796bb8b; from a release that carries c448_balance_within, this first runs that revision's downgrade, which drops every experiment's balance setting, every user's group and every counter (see c448_balance_within):"
+text = "This revision's own down_revision is 85dd4796bb8b; from a release that carries c448_balance_within, this also runs that revision's downgrade, which drops every experiment's balance setting, every user's group and every counter (see c448_balance_within):"
 by = [
     "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
     "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_downgrade_drops_the_column_only_and_an_upgrade_sets_it_from_updated_at",
@@ -1048,7 +1064,7 @@ by = [
 
 [[unit]]
 text = "On Helm, run the same command in an API pod with kubectl exec."
-count = 2
+count = 3
 by = ["test:backend/tests/unit/infrastructure/test_upgrade_on_start.py::test_an_api_pod_runs_the_commands_the_compose_api_container_runs"]
 
 [[unit]]
@@ -1120,10 +1136,51 @@ text = "To go back to it, first downgrade to the previous release's heads, with 
 by = ["test:backend/tests/integration/database/test_newer_database_rollback.py::test_after_the_newer_release_downgrades_the_database_the_older_one_starts"]
 
 [[unit]]
-text = "This revision's own down_revision is 7b6b4b4fe246; this undoes this revision alone:"
+text = "This revision's own down_revision is 7b6b4b4fe246; from a release that carries no later revision, this undoes this revision alone:"
 by = [
     "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
     "test:backend/tests/integration/database/test_balance_within_migration.py::test_the_downgrade_drops_exactly_the_columns_and_the_table",
+]
+
+[[unit]]
+text = "4955571d232c stores visual experiments"
+by = ["test:backend/tests/integration/database/test_visual_experiments_migration.py::test_a_database_at_the_previous_release_gains_the_columns_and_the_table"]
+
+[[unit]]
+text = "This revision adds what a visual experiment stores: experiments.visual_config, its pages, the page its editor opens and its goals; variants.visual_changes, a variant's page changes; and the table visual_tokens, for the visual editor's sign-in and its preview links."
+by = [
+    "test:backend/tests/integration/database/test_visual_experiments_migration.py::test_a_database_at_the_previous_release_gains_the_columns_and_the_table",
+    "test:backend/tests/integration/database/test_visual_experiments_migration.py::test_an_upgraded_database_and_a_bootstrapped_one_are_the_same",
+]
+
+[[unit]]
+text = "Both columns are empty on every experiment and variant already stored."
+by = ["test:backend/tests/integration/database/test_visual_experiments_migration.py::test_the_previous_release_still_stores_experiments_on_this_schema"]
+
+[[unit]]
+text = "The previous release runs against this schema unchanged: it never reads or writes the two columns or the table, and stores experiments and variants as before."
+by = ["test:backend/tests/integration/database/test_visual_experiments_migration.py::test_the_previous_release_still_stores_experiments_on_this_schema"]
+
+[[unit]]
+text = "The downgrade drops every visual experiment's design."
+by = ["test:backend/tests/integration/database/test_visual_experiments_migration.py::test_the_downgrade_drops_the_table_and_both_columns_only"]
+
+[[unit]]
+text = "4955571d232c's downgrade drops the table visual_tokens and the columns experiments.visual_config and variants.visual_changes; it does not refuse, and nothing can restore them."
+by = [
+    "test:backend/tests/integration/database/test_visual_experiments_migration.py::test_the_downgrade_drops_the_table_and_both_columns_only",
+    "test:backend/tests/unit/db/test_visual_experiments_revision.py::test_the_downgrade_drops_columns_as_the_downgrade_docs_test_reads_it",
+]
+
+[[unit]]
+text = "The experiments stay, as ordinary experiments with no page changes."
+by = ["test:backend/tests/integration/database/test_visual_experiments_migration.py::test_the_downgrade_drops_the_table_and_both_columns_only"]
+
+[[unit]]
+text = "This revision's own down_revision is c448_balance_within; this undoes this revision alone:"
+by = [
+    "test:backend/tests/unit/db/test_visual_experiments_revision.py::test_it_extends_the_core_head_it_sits_on_and_fits_the_version_table",
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
 ]
 
 [[unit]]
@@ -1488,6 +1545,13 @@ by = [
 ]
 
 [[unit]]
+text = "From a release that carries 4955571d232c, whose own down_revision is c448_balance_within, it includes that downgrade too, which drops every visual experiment's pages, goals and page changes (see 4955571d232c)."
+by = [
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_after_the_newer_release_downgrades_the_database_the_older_one_starts",
+    "test:backend/tests/integration/database/test_visual_experiments_migration.py::test_the_downgrade_drops_the_table_and_both_columns_only",
+]
+
+[[unit]]
 text = "Do not edit alembic_version to make the older image start."
 by = ["test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_release_refuses_a_database_a_newer_release_migrated"]
 
@@ -1655,6 +1719,13 @@ by = ["test:backend/tests/integration/database/test_balance_within_migration.py:
 [[unit]]
 text = "Undoing it drops every experiment's balance setting, every user's group and every counter."
 by = ["test:backend/tests/integration/database/test_balance_within_migration.py::test_the_downgrade_drops_exactly_the_columns_and_the_table"]
+
+[[unit]]
+text = "4955571d232c is backward-compatible for a rollback too, and undoing it drops every visual experiment's pages, goals and page changes, and every visual editor sign-in and preview link."
+by = [
+    "test:backend/tests/integration/database/test_visual_experiments_migration.py::test_the_previous_release_still_stores_experiments_on_this_schema",
+    "test:backend/tests/integration/database/test_visual_experiments_migration.py::test_the_downgrade_drops_the_table_and_both_columns_only",
+]
 
 [[unit]]
 text = "modules_0003_lower_is_better is backward-compatible for a rollback, and undoing it drops every warehouse metric source's lower-is-better setting; an upgrade afterwards sets each back to false, not to the choice."
@@ -1851,7 +1922,7 @@ text = "Do not delete the account instead of retiring it."
 by = ["test:backend/tests/unit/models/test_user_account_rules.py::test_deleting_a_user_deletes_its_own_rows_and_detaches_everything_else"]
 
 [[unit]]
-text = "Deleting a user deletes or detaches what refers to it: its API keys, reports, notification preferences, role assignments and workspace memberships are deleted with it, and the experiments, flags, audit records and everything else that names it lose that reference."
+text = "Deleting a user deletes or detaches what refers to it: its API keys, reports, notification preferences, role assignments, workspace memberships and visual editor sign-ins and preview links are deleted with it, and the experiments, flags, audit records and everything else that names it lose that reference."
 by = ["test:backend/tests/unit/models/test_user_account_rules.py::test_deleting_a_user_deletes_its_own_rows_and_detaches_everything_else"]
 
 [[unit]]

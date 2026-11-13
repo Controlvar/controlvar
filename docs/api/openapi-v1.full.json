@@ -2910,6 +2910,37 @@
         "title": "BulkToggleResult",
         "type": "object"
       },
+      "ClickGoal": {
+        "additionalProperties": false,
+        "description": "A click on the one element *selector* matches, on page *page*.",
+        "properties": {
+          "event_name": {
+            "description": "A goal's event_name is 1 to 100 lower-case letters, digits and underscores, and cannot be exposure or experiment_exposure.",
+            "title": "Event Name",
+            "type": "string"
+          },
+          "kind": {
+            "const": "click",
+            "title": "Kind",
+            "type": "string"
+          },
+          "page": {
+            "$ref": "#/components/schemas/VisualPage"
+          },
+          "selector": {
+            "title": "Selector",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_name",
+          "page",
+          "kind",
+          "selector"
+        ],
+        "title": "ClickGoal",
+        "type": "object"
+      },
       "ClientErrorBatchRequest": {
         "description": "Batch of error reports.",
         "properties": {
@@ -6085,11 +6116,10 @@
             "title": "Key"
           },
           "metrics": {
-            "description": "Metrics to track, at least one. Each name may appear once: names are compared exactly, so case and spaces count (`Revenue` and `revenue` are two metrics), and a repeated name is refused with 422.",
+            "description": "Metrics to track: at least one, except on an experiment created with visual_config, which may have none until it starts (start still refuses an experiment without a metric). Each name may appear once: names are compared exactly, so case and spaces count (`Revenue` and `revenue` are two metrics), and a repeated name is refused with 422.",
             "items": {
               "$ref": "#/components/schemas/MetricBase"
             },
-            "minItems": 1,
             "title": "Metrics",
             "type": "array"
           },
@@ -6185,6 +6215,17 @@
             "minItems": 1,
             "title": "Variants",
             "type": "array"
+          },
+          "visual_config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VisualConfig"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Makes this a visual experiment (#1545): {\"version\": 1, \"editor_url\": ..., \"pages\": [{\"match\": \"exact\"|\"prefix\", \"url\": ...}], \"goals\": [...]}, with 1 to 10 pages and 0 to 10 goals; each goal's event_name is the event_name of one of the metrics. Not on a split URL experiment. Cannot change once the experiment leaves draft. A visual draft keeps it (null is refused with 422), cannot be given a scheduled start, and starts only with POST /api/v1/experiments/{id}/start carrying its design_etag. Stored and returned; nothing applies it to a page yet."
           }
         },
         "required": [
@@ -6327,6 +6368,18 @@
               }
             ],
             "title": "Description"
+          },
+          "design_etag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A visual experiment's design version (#1545): the SHA-256 hex of its targeting rules, exclusion group, balance_within (when set), visual_config and every field of every variant and metric. Any change to one of them changes it. Starting a visual draft sends it in the body of POST /api/v1/experiments/{id}/start, and a different value answers 409. Null for an experiment that is not visual.",
+            "title": "Design Etag"
           },
           "end_date": {
             "anyOf": [
@@ -6552,6 +6605,19 @@
             },
             "title": "Variants",
             "type": "array"
+          },
+          "visual_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The experiment's visual settings, as stored (#1545); null for an experiment that is not visual.",
+            "title": "Visual Config"
           }
         },
         "required": [
@@ -6685,6 +6751,18 @@
               }
             ],
             "title": "Description"
+          },
+          "design_etag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A visual experiment's design version (#1545): the SHA-256 hex of its targeting rules, exclusion group, balance_within (when set), visual_config and every field of every variant and metric. Any change to one of them changes it. Starting a visual draft sends it in the body of POST /api/v1/experiments/{id}/start, and a different value answers 409. Null for an experiment that is not visual.",
+            "title": "Design Etag"
           },
           "end_date": {
             "anyOf": [
@@ -6898,6 +6976,19 @@
             },
             "title": "Variants",
             "type": "array"
+          },
+          "visual_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The experiment's visual settings, as stored (#1545); null for an experiment that is not visual.",
+            "title": "Visual Config"
           }
         },
         "required": [
@@ -7049,6 +7140,26 @@
           "metrics"
         ],
         "title": "ExperimentResultsResponse",
+        "type": "object"
+      },
+      "ExperimentStartRequest": {
+        "description": "The optional body of ``POST /api/v1/experiments/{id}/start`` (#1545).\n\nNo body, ``null`` and ``{}`` all start as before. An unknown key is\nignored, as on ``PUT /experiments/{id}`` (#595).",
+        "properties": {
+          "design_etag": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Required to start a visual draft: the design_etag of the version being started, as GET /api/v1/experiments/{id} returned it. Missing answers 400; different from the experiment's current one answers 409 and nothing is started. Ignored for any other experiment and on a resume.",
+            "title": "Design Etag"
+          }
+        },
+        "title": "ExperimentStartRequest",
         "type": "object"
       },
       "ExperimentStatus": {
@@ -7359,6 +7470,17 @@
             ],
             "description": "Experiment variants",
             "title": "Variants"
+          },
+          "visual_config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VisualConfig"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Makes this a visual experiment (#1545): {\"version\": 1, \"editor_url\": ..., \"pages\": [{\"match\": \"exact\"|\"prefix\", \"url\": ...}], \"goals\": [...]}, with 1 to 10 pages and 0 to 10 goals; each goal's event_name is the event_name of one of the metrics. Not on a split URL experiment. Cannot change once the experiment leaves draft. A visual draft keeps it (null is refused with 422), cannot be given a scheduled start, and starts only with POST /api/v1/experiments/{id}/start carrying its design_etag. Stored and returned; nothing applies it to a page yet. Refused with 422 on a draft that has a scheduled start."
           }
         },
         "title": "ExperimentUpdate",
@@ -8850,6 +8972,28 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "Hide": {
+        "additionalProperties": false,
+        "description": "Hide the element, from assistive technology too.",
+        "properties": {
+          "op": {
+            "const": "hide",
+            "title": "Op",
+            "type": "string"
+          },
+          "selector": {
+            "description": "A CSS selector for exactly one element: 1 to 512 characters, without { } ; \\ @ <, the comment marks /* and */, or a control character. A change whose selector matches no element, or more than one, is not applied.",
+            "title": "Selector",
+            "type": "string"
+          }
+        },
+        "required": [
+          "selector",
+          "op"
+        ],
+        "title": "Hide",
         "type": "object"
       },
       "HoldoutCheckResponse": {
@@ -12266,6 +12410,32 @@
           "ciphertext"
         ],
         "title": "PHIEncryptResponse",
+        "type": "object"
+      },
+      "PageViewGoal": {
+        "additionalProperties": false,
+        "description": "A view of page *page*.",
+        "properties": {
+          "event_name": {
+            "description": "A goal's event_name is 1 to 100 lower-case letters, digits and underscores, and cannot be exposure or experiment_exposure.",
+            "title": "Event Name",
+            "type": "string"
+          },
+          "kind": {
+            "const": "page_view",
+            "title": "Kind",
+            "type": "string"
+          },
+          "page": {
+            "$ref": "#/components/schemas/VisualPage"
+          }
+        },
+        "required": [
+          "event_name",
+          "page",
+          "kind"
+        ],
+        "title": "PageViewGoal",
         "type": "object"
       },
       "PartitionInfo": {
@@ -16324,6 +16494,144 @@
         "title": "SequentialTestingResponse",
         "type": "object"
       },
+      "SetAttribute": {
+        "additionalProperties": false,
+        "description": "Set one of five attributes. ``href`` takes a link (see ``link_problem``).",
+        "properties": {
+          "name": {
+            "enum": [
+              "alt",
+              "title",
+              "aria-label",
+              "placeholder",
+              "href"
+            ],
+            "title": "Name",
+            "type": "string"
+          },
+          "op": {
+            "const": "set_attribute",
+            "title": "Op",
+            "type": "string"
+          },
+          "selector": {
+            "description": "A CSS selector for exactly one element: 1 to 512 characters, without { } ; \\ @ <, the comment marks /* and */, or a control character. A change whose selector matches no element, or more than one, is not applied.",
+            "title": "Selector",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 2048,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "selector",
+          "op",
+          "name",
+          "value"
+        ],
+        "title": "SetAttribute",
+        "type": "object"
+      },
+      "SetImage": {
+        "additionalProperties": false,
+        "description": "Show another image: an ``http(s)`` URL or a path on this site.",
+        "properties": {
+          "alt": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alt"
+          },
+          "op": {
+            "const": "set_image",
+            "title": "Op",
+            "type": "string"
+          },
+          "selector": {
+            "description": "A CSS selector for exactly one element: 1 to 512 characters, without { } ; \\ @ <, the comment marks /* and */, or a control character. A change whose selector matches no element, or more than one, is not applied.",
+            "title": "Selector",
+            "type": "string"
+          },
+          "src": {
+            "maxLength": 2048,
+            "title": "Src",
+            "type": "string"
+          }
+        },
+        "required": [
+          "selector",
+          "op",
+          "src"
+        ],
+        "title": "SetImage",
+        "type": "object"
+      },
+      "SetStyle": {
+        "additionalProperties": false,
+        "description": "Set 1 to 20 properties from a fixed list, through the CSSOM.",
+        "properties": {
+          "op": {
+            "const": "set_style",
+            "title": "Op",
+            "type": "string"
+          },
+          "selector": {
+            "description": "A CSS selector for exactly one element: 1 to 512 characters, without { } ; \\ @ <, the comment marks /* and */, or a control character. A change whose selector matches no element, or more than one, is not applied.",
+            "title": "Selector",
+            "type": "string"
+          },
+          "styles": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Styles",
+            "type": "object"
+          }
+        },
+        "required": [
+          "selector",
+          "op",
+          "styles"
+        ],
+        "title": "SetStyle",
+        "type": "object"
+      },
+      "SetText": {
+        "additionalProperties": false,
+        "description": "Replace the element's text. Written as text, never as HTML.",
+        "properties": {
+          "op": {
+            "const": "set_text",
+            "title": "Op",
+            "type": "string"
+          },
+          "selector": {
+            "description": "A CSS selector for exactly one element: 1 to 512 characters, without { } ; \\ @ <, the comment marks /* and */, or a control character. A change whose selector matches no element, or more than one, is not applied.",
+            "title": "Selector",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 2000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "selector",
+          "op",
+          "text"
+        ],
+        "title": "SetText",
+        "type": "object"
+      },
       "SignUpRequest": {
         "description": "Schema for user registration request.",
         "properties": {
@@ -18030,6 +18338,17 @@
             "minimum": 0,
             "title": "Traffic Allocation",
             "type": "integer"
+          },
+          "visual_changes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VisualChanges"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A visual experiment's page changes for this variant (#1545): {\"version\": 1, \"changes\": [...]}, at most 100 changes and 64 KiB. Only on a non-control variant of an experiment with visual_config. On an update, a variant sent without this field keeps the changes stored for the variant of the same name; null removes them. Stored and returned; nothing applies them to a page yet."
           }
         },
         "required": [
@@ -18139,6 +18458,19 @@
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
+          },
+          "visual_changes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The variant's page changes, as stored (#1545); null when none.",
+            "title": "Visual Changes"
           }
         },
         "required": [
@@ -18672,6 +19004,138 @@
           "cumulative"
         ],
         "title": "VariantTimeSeries",
+        "type": "object"
+      },
+      "VisualChanges": {
+        "additionalProperties": false,
+        "description": "A variant's page changes: ``{\"version\": 1, \"changes\": [...]}``.",
+        "properties": {
+          "changes": {
+            "description": "At most 100 changes, and at most 64 KiB in all. Each is one of set_text, set_attribute, set_image, hide and set_style.",
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "hide": "#/components/schemas/Hide",
+                  "set_attribute": "#/components/schemas/SetAttribute",
+                  "set_image": "#/components/schemas/SetImage",
+                  "set_style": "#/components/schemas/SetStyle",
+                  "set_text": "#/components/schemas/SetText"
+                },
+                "propertyName": "op"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/SetText"
+                },
+                {
+                  "$ref": "#/components/schemas/SetAttribute"
+                },
+                {
+                  "$ref": "#/components/schemas/SetImage"
+                },
+                {
+                  "$ref": "#/components/schemas/Hide"
+                },
+                {
+                  "$ref": "#/components/schemas/SetStyle"
+                }
+              ]
+            },
+            "maxItems": 100,
+            "title": "Changes",
+            "type": "array"
+          },
+          "version": {
+            "description": "The format version: 1.",
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "changes"
+        ],
+        "title": "VisualChanges",
+        "type": "object"
+      },
+      "VisualConfig": {
+        "additionalProperties": false,
+        "description": "``experiments.visual_config``: the pages, the editor's page and the goals.",
+        "properties": {
+          "editor_url": {
+            "description": "The page the visual editor opens: on one of the pages, and like them except that it may carry a query.",
+            "title": "Editor Url",
+            "type": "string"
+          },
+          "goals": {
+            "description": "0 to 10 goals. Each event_name must be the event_name of one of the experiment's metrics.",
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "click": "#/components/schemas/ClickGoal",
+                  "page_view": "#/components/schemas/PageViewGoal"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/ClickGoal"
+                },
+                {
+                  "$ref": "#/components/schemas/PageViewGoal"
+                }
+              ]
+            },
+            "maxItems": 10,
+            "title": "Goals",
+            "type": "array"
+          },
+          "pages": {
+            "items": {
+              "$ref": "#/components/schemas/VisualPage"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Pages",
+            "type": "array"
+          },
+          "version": {
+            "description": "The format version: 1.",
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "editor_url",
+          "pages"
+        ],
+        "title": "VisualConfig",
+        "type": "object"
+      },
+      "VisualPage": {
+        "additionalProperties": false,
+        "description": "A page rule: ``exact`` matches one path, ``prefix`` the path and every\npath below it. Matching ignores the scheme, the port, the query, the\nfragment and one trailing ``/``; the host is compared in lower case and\nthe path exactly. No regular expressions.",
+        "properties": {
+          "match": {
+            "enum": [
+              "exact",
+              "prefix"
+            ],
+            "title": "Match",
+            "type": "string"
+          },
+          "url": {
+            "description": "A page is a full http:// or https:// URL with an ASCII host, without a user name, password, query, # fragment, backslash or space.",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "match",
+          "url"
+        ],
+        "title": "VisualPage",
         "type": "object"
       },
       "WizardDraftCreate": {
@@ -24353,7 +24817,7 @@
         ]
       },
       "put": {
-        "description": "Update experiment.\n\nThis endpoint allows users to update an existing experiment.\nThe caller's role must hold UPDATE on experiments; who created the\nexperiment is not considered.\n\nFields that can be updated:\n- Basic properties: name, description, hypothesis\n- Variants: if experiment is in DRAFT status\n- Metrics: if experiment is in DRAFT status\n- `balance_within`: if experiment is in DRAFT status, for every role\n  including superusers\n- Analysis settings (`correction_method`, `confidence_level`,\n  `variance_reduction_config`, `sequential_testing_enabled`,\n  `sequential_testing_config`, `bayesian_enabled`, `bayesian_config`):\n  if experiment is in DRAFT status, for every role including superusers.\n  Outside DRAFT a request that includes one is refused, even when the\n  value equals the stored one or is null. To change one on a running\n  experiment, clone it (`POST /api/v1/experiments/{id}/clone`, a draft\n  copy) and set it on the copy.\n- Targeting (`targeting_rules`): while the experiment is DRAFT or PAUSED,\n  for every role including superusers. On a PAUSED experiment it must be\n  the only field in the request. On an ACTIVE, COMPLETED or ARCHIVED\n  experiment a request that includes `targeting_rules` is refused, even\n  when the value equals the stored one; pause the experiment first.\n  People already assigned keep their variant; the new rules apply to\n  people not yet in the experiment once it is resumed.\n\n`status` is not changed by an update, for any role including superusers.\nA `status` equal to the current one is accepted and changes nothing, so an\nexperiment fetched with GET can be sent back. Any other value is refused\nwith 422; status changes through `POST /api/v1/experiments/{id}/start`,\n`/pause`, `/complete` or `/archive`. `status` still counts as a field\nsent, so on a PAUSED experiment `targeting_rules` must be sent without it.\n\n`schedule` is not applied here: a request that contains it, with any\nvalue including null, is refused with 422. Schedule an experiment with\n`PUT /api/v1/experiments/{experiment_id}/schedule`.\n\nReturns:\n    ExperimentResponse: The updated experiment\n\nRaises:\n    HTTPException 403: If the caller's role does not hold UPDATE on\n        experiments. This is checked before the experiment's state.\n    HTTPException 400: If the experiment's state does not allow the change\n        (the detail names the state): any change to a non-DRAFT experiment\n        by a non-superuser, other than targeting alone on a PAUSED one;\n        targeting outside DRAFT or PAUSED; targeting with other fields on\n        a PAUSED experiment; variants, metrics, `balance_within` or an\n        analysis setting outside DRAFT\n    HTTPException 404: If the experiment doesn't exist\n    HTTPException 422: If `targeting_rules` is not a valid rule set,\n        `status` differs from the experiment's current status, the\n        request contains `schedule`, `metrics` is an empty list or repeats\n        a metric name, or a request sending `variants`,\n        `split_url_config` or `experiment_type` would leave a split URL\n        experiment whose `split_url_config` does not match its variants.\n        An empty or repeating `metrics` is refused before the caller's\n        role, the experiment's existence or its state is checked.",
+        "description": "Update experiment.\n\nThis endpoint allows users to update an existing experiment.\nThe caller's role must hold UPDATE on experiments; who created the\nexperiment is not considered.\n\nFields that can be updated:\n- Basic properties: name, description, hypothesis\n- Variants: if experiment is in DRAFT status\n- Metrics: if experiment is in DRAFT status\n- `balance_within`: if experiment is in DRAFT status, for every role\n  including superusers\n- Analysis settings (`correction_method`, `confidence_level`,\n  `variance_reduction_config`, `sequential_testing_enabled`,\n  `sequential_testing_config`, `bayesian_enabled`, `bayesian_config`):\n  if experiment is in DRAFT status, for every role including superusers.\n  Outside DRAFT a request that includes one is refused, even when the\n  value equals the stored one or is null. To change one on a running\n  experiment, clone it (`POST /api/v1/experiments/{id}/clone`, a draft\n  copy) and set it on the copy.\n- Targeting (`targeting_rules`): while the experiment is DRAFT or PAUSED,\n  for every role including superusers. On a PAUSED experiment it must be\n  the only field in the request. On an ACTIVE, COMPLETED or ARCHIVED\n  experiment a request that includes `targeting_rules` is refused, even\n  when the value equals the stored one; pause the experiment first.\n  People already assigned keep their variant; the new rules apply to\n  people not yet in the experiment once it is resumed.\n\n`status` is not changed by an update, for any role including superusers.\nA `status` equal to the current one is accepted and changes nothing, so an\nexperiment fetched with GET can be sent back. Any other value is refused\nwith 422; status changes through `POST /api/v1/experiments/{id}/start`,\n`/pause`, `/complete` or `/archive`. `status` still counts as a field\nsent, so on a PAUSED experiment `targeting_rules` must be sent without it.\n\n`schedule` is not applied here: a request that contains it, with any\nvalue including null, is refused with 422. Schedule an experiment with\n`PUT /api/v1/experiments/{experiment_id}/schedule`.\n\nReturns:\n    ExperimentResponse: The updated experiment\n\nRaises:\n    HTTPException 403: If the caller's role does not hold UPDATE on\n        experiments. This is checked before the experiment's state.\n    HTTPException 400: If the experiment's state does not allow the change\n        (the detail names the state): any change to a non-DRAFT experiment\n        by a non-superuser, other than targeting alone on a PAUSED one;\n        targeting outside DRAFT or PAUSED; targeting with other fields on\n        a PAUSED experiment; variants, metrics, `balance_within` or an\n        analysis setting outside DRAFT\n    HTTPException 404: If the experiment doesn't exist\n    HTTPException 422: If `targeting_rules` is not a valid rule set,\n        `status` differs from the experiment's current status, the\n        request contains `schedule`, `metrics` is an empty list or repeats\n        a metric name, or a request sending `variants`,\n        `split_url_config` or `experiment_type` would leave a split URL\n        experiment whose `split_url_config` does not match its variants.\n        An empty or repeating `metrics` is refused before the caller's\n        role, the experiment's existence or its state is checked.\n        Also (#1545): `visual_config: null` on a visual draft, and\n        `visual_config` on a draft with a scheduled start, at\n        `[\"body\", \"visual_config\"]`; and, at the field the rule is about,\n        a result in which page changes sit on the control or on an\n        experiment without `visual_config`, a goal's event_name is no\n        metric's, or a split URL experiment has `visual_config`.\n\nA variant sent without `visual_changes` keeps the page changes stored\nfor the variant of the same name; `visual_changes: null` removes them.",
         "operationId": "update_experiment_api_v1_experiments__experiment_id__put",
         "parameters": [
           {
@@ -24569,7 +25033,7 @@
     },
     "/api/v1/experiments/{experiment_id}/clone": {
       "post": {
-        "description": "Clone an experiment.\n\nThis endpoint creates a new experiment that is a copy of an existing experiment.\nThe cloned experiment will:\n- Have a name prefixed with \"Copy of\", shortened to fit the 100-character\n  name limit when the source's name is long\n- Be in DRAFT status\n- Have the same variants, metrics, and configuration as the original\n- Have the current user as the owner\n\nThis is useful for creating variations of existing experiments or repeating\nsuccessful experiments with minor modifications.\n\nReturns:\n    ExperimentResponse: The newly created cloned experiment\n\nRaises:\n    HTTPException 403: If the caller's role does not hold READ and CREATE on experiments\n    HTTPException 404: If the source experiment doesn't exist",
+        "description": "Clone an experiment.\n\nThis endpoint creates a new experiment that is a copy of an existing experiment.\nThe cloned experiment will:\n- Have a name prefixed with \"Copy of\", shortened to fit the 100-character\n  name limit when the source's name is long\n- Be in DRAFT status\n- Have the same variants, metrics, and configuration as the original\n- Have the current user as the owner\n\nThis is useful for creating variations of existing experiments or repeating\nsuccessful experiments with minor modifications.\n\nReturns:\n    ExperimentResponse: The newly created cloned experiment\n\nRaises:\n    HTTPException 403: If the caller's role does not hold READ and CREATE on experiments\n    HTTPException 404: If the source experiment doesn't exist\n    HTTPException 422: If the source's stored visual settings or page\n        changes (#1545), which the clone copies, are not valid",
         "operationId": "clone_experiment_api_v1_experiments__experiment_id__clone_post",
         "parameters": [
           {
@@ -25207,7 +25671,7 @@
     },
     "/api/v1/experiments/{experiment_id}/schedule": {
       "put": {
-        "description": "Update experiment scheduling configuration.\n\nOn a **DRAFT** experiment this schedules its activation and completion:\n\n- **start_date**: When the experiment should automatically activate\n- **end_date**: When the experiment should automatically complete\n- **time_zone**: IANA time zone name (default: UTC) for a date given\n  without a UTC offset; a date with an offset keeps it. Dates are stored\n  in UTC. A name that is not an IANA zone answers 422.\n\nOn either status, a field the request omits is left unchanged and an\nexplicit null clears it. On a draft, end_date must be at least an hour\nafter start_date (the stored one when the request omits it).\n\nOn a **PAUSED** experiment, start_date is the time to resume it at. It is\nstored as ``resume_at``; the experiment's own start_date is never moved. A\nnull start_date cancels a scheduled resume. end_date must be later than\nthe experiment's start date and, with a resume scheduled, at least an hour\nafter the resume time. A paused experiment is resumed automatically only\nby a resume scheduled after it was paused; any change of status cancels a\nscheduled resume.\n\nstart_date may not be more than ten minutes in the past.\n\nReturns:\n    ExperimentResponse: The updated experiment with scheduling information\n\nRaises:\n    HTTPException 400: If scheduling parameters are invalid\n    HTTPException 403: If the caller's role does not hold READ and UPDATE\n        on experiments\n    HTTPException 404: If experiment not found\n    HTTPException 422: If a date is malformed or time_zone is not an IANA\n        time zone name",
+        "description": "Update experiment scheduling configuration.\n\nOn a **DRAFT** experiment this schedules its activation and completion:\n\n- **start_date**: When the experiment should automatically activate\n- **end_date**: When the experiment should automatically complete\n- **time_zone**: IANA time zone name (default: UTC) for a date given\n  without a UTC offset; a date with an offset keeps it. Dates are stored\n  in UTC. A name that is not an IANA zone answers 422.\n\nOn either status, a field the request omits is left unchanged and an\nexplicit null clears it. On a draft, end_date must be at least an hour\nafter start_date (the stored one when the request omits it).\n\nOn a **PAUSED** experiment, start_date is the time to resume it at. It is\nstored as ``resume_at``; the experiment's own start_date is never moved. A\nnull start_date cancels a scheduled resume. end_date must be later than\nthe experiment's start date and, with a resume scheduled, at least an hour\nafter the resume time. A paused experiment is resumed automatically only\nby a resume scheduled after it was paused; any change of status cancels a\nscheduled resume.\n\nstart_date may not be more than ten minutes in the past.\n\nA visual draft (one with `visual_config`, #1545) takes no start date: it\nstarts only with POST /{experiment_id}/start. A request with a start date\nother than null answers 400; `{\"start_date\": null}` clears one, and an end\ndate is accepted.\n\nReturns:\n    ExperimentResponse: The updated experiment with scheduling information\n\nRaises:\n    HTTPException 400: If scheduling parameters are invalid\n    HTTPException 403: If the caller's role does not hold READ and UPDATE\n        on experiments\n    HTTPException 404: If experiment not found\n    HTTPException 422: If a date is malformed or time_zone is not an IANA\n        time zone name",
         "operationId": "update_experiment_schedule_api_v1_experiments__experiment_id__schedule_put",
         "parameters": [
           {
@@ -25559,7 +26023,7 @@
     },
     "/api/v1/experiments/{experiment_id}/start": {
       "post": {
-        "description": "Start an experiment.\n\nThis endpoint activates an experiment, changing its status to ACTIVE\nand setting the start date to now if not already set. A draft started\nbefore its scheduled start date starts now, and its start date is set to\nnow; a scheduled end date is kept.\n\nStarting an experiment makes it eligible for:\n- User traffic assignment\n- Event tracking and analysis\n- Results calculation\n\nPrerequisites for starting an experiment:\n- The experiment must be in DRAFT or PAUSED status\n- The experiment must have at least one control and one non-control variant\n- The experiment must have at least one metric defined\n- An experiment with no start date must not have an end date that has\n  passed: set a later one, or clear it, with\n  PUT /{experiment_id}/schedule first\n- A split URL experiment must have a `split_url_config` whose URL\n  variants match its variants. Its control URL's host and path must not\n  be those of an active split URL experiment's control URL or of one of\n  that experiment's variant URLs, and none of its variant URLs may have\n  the host and path of an active split URL experiment's control URL\n\nReturns:\n    ExperimentResponse: The updated experiment with ACTIVE status\n\nRaises:\n    HTTPException 400: If the experiment cannot be started\n    HTTPException 403: If the caller's role does not hold UPDATE on experiments",
+        "description": "Start an experiment.\n\nThis endpoint activates an experiment, changing its status to ACTIVE\nand setting the start date to now if not already set. A draft started\nbefore its scheduled start date starts now, and its start date is set to\nnow; a scheduled end date is kept.\n\nStarting an experiment makes it eligible for:\n- User traffic assignment\n- Event tracking and analysis\n- Results calculation\n\nPrerequisites for starting an experiment:\n- The experiment must be in DRAFT or PAUSED status\n- The experiment must have at least one control and one non-control variant\n- The experiment must have at least one metric defined\n- An experiment with no start date must not have an end date that has\n  passed: set a later one, or clear it, with\n  PUT /{experiment_id}/schedule first\n- A split URL experiment must have a `split_url_config` whose URL\n  variants match its variants. Its control URL's host and path must not\n  be those of an active split URL experiment's control URL or of one of\n  that experiment's variant URLs, and none of its variant URLs may have\n  the host and path of an active split URL experiment's control URL\n- A visual draft (one with `visual_config`, #1545) is started with the\n  body `{\"design_etag\": ...}`, the `design_etag` of the version being\n  started as `GET /api/v1/experiments/{id}` returned it: without one it\n  answers 400, and with one that is not its current design's it answers\n  409 and nothing is started. It needs a page change in a non-control\n  variant, stored visual settings and page changes that are valid, and a\n  metric for every goal. Every other start takes no body (an empty body,\n  `null` and `{}` are the same), and ignores a `design_etag` sent.\n\nStarting an experiment ends every visual editor sign-in of it.\n\nReturns:\n    ExperimentResponse: The updated experiment with ACTIVE status\n\nRaises:\n    HTTPException 400: If the experiment cannot be started\n    HTTPException 403: If the caller's role does not hold UPDATE on experiments\n    HTTPException 409: If a visual draft's design_etag is not its\n        current design's",
         "operationId": "start_experiment_api_v1_experiments__experiment_id__start_post",
         "parameters": [
           {
@@ -25585,6 +26049,24 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ExperimentStartRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Optional. A visual draft needs its design_etag here; every other start takes no body, null or {}.",
+                "title": "Start"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {

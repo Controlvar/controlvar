@@ -225,12 +225,13 @@ def test_a_revision_cited_for_another_reason_is_not_an_announcement():
 
 
 #: A core id that is not twelve hex digits; the chain has had them since
-#: ``ep034``, and its head is one.
+#: ``ep034``, and ``c448_balance_within`` (#448) is one.
 _NAMED = "ep057_workspaces"
 #: The column-dropping revisions ``downgrade ep057_workspaces`` unapplies
-#: today: ten on the core chain, and two on the modules branch, which a
+#: today: eleven on the core chain, and two on the modules branch, which a
 #: core-only tree does not have. A later revision adds to what it crosses.
 _ABOVE_NAMED = {
+    "4955571d232c",
     "c448_balance_within",
     "7b6b4b4fe246",
     "607c51a59bf5",
@@ -255,7 +256,7 @@ def test_a_named_core_id_below_column_drops_is_refused():
     script = _script()
     known = {r.revision for r in script.walk_revisions()}
     expected = {r for r in _ABOVE_NAMED if r in known}
-    assert len(expected) == (12 if "modules_0004_rbac_activation" in known else 10)
+    assert len(expected) == (13 if "modules_0004_rbac_activation" in known else 11)
     crossed = set(unannounced_crossings(found, script)[f"migrations.md: {_NAMED}"])
     assert expected <= crossed, sorted(expected - crossed)
 
@@ -269,7 +270,7 @@ def test_a_named_core_id_below_column_drops_is_refused():
     ],
     ids=["command", "workflow", "example"],
 )
-def test_the_core_head_id_is_read_as_a_target(text):
+def test_a_named_core_id_is_read_as_a_target(text):
     page = f"## Undo\n\n{text}\n"
     found = [m for m in mentions(page=page) if m.source == "migrations.md"]
     assert [m.target for m in found] == ["c448_balance_within"]

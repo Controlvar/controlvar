@@ -40,29 +40,38 @@ pytestmark = pytest.mark.skipif(
 )
 
 #: The examples the help text and the runbook give, and the revisions each
-#: unapplies from both heads, newest first.  The core example is the down
-#: revision of the newest core migration: ``7b6b4b4fe246``, which undoes
-#: ``c448_balance_within`` (#448), since that revision landed;
-#: ``85dd4796bb8b`` (#1528), ``607c51a59bf5`` (#1543), ``4c2c09a2b3e8``
-#: (#1497), ``37dcb2969766`` (#1206), ``d29a479daafe`` (#440) and
-#: ``a89544fb1075`` before it.  A core revision added later moves the example
-#: to its own down revision or joins this list, and the documents that name the
-#: example must say what the downgrades it runs drop
-#: (``test_documented_downgrade_targets.py``).
+#: unapplies from both heads, newest first.  The help text's core example is
+#: still ``7b6b4b4fe246``, the down revision of ``c448_balance_within`` (#448),
+#: and from a release that carries ``4955571d232c`` (#1545) it undoes that too,
+#: as the documents now say; ``c448_balance_within`` (#1545, the self-hosting
+#: page's command for undoing ``4955571d232c`` alone), ``85dd4796bb8b``
+#: (#1528), ``607c51a59bf5`` (#1543), ``4c2c09a2b3e8`` (#1497),
+#: ``37dcb2969766`` (#1206), ``d29a479daafe`` (#440) and ``a89544fb1075`` are
+#: the others.  A core revision added later moves the example to its own down
+#: revision or joins every list, and the documents that name a target must say
+#: what the downgrades it runs drop (``test_documented_downgrade_targets.py``).
 NAMED_DOWNGRADES = {
-    "7b6b4b4fe246": ["c448_balance_within"],
+    "c448_balance_within": ["4955571d232c"],
+    "7b6b4b4fe246": ["4955571d232c", "c448_balance_within"],
     # docs/deployment/rollback-runbook.md, Step 2: "A downgrade to", "Going
     # on", "Going one further", "Going further", "Going further still",
     # "Further again" and "Further still".
-    "85dd4796bb8b": ["c448_balance_within", "7b6b4b4fe246"],
-    "607c51a59bf5": ["c448_balance_within", "7b6b4b4fe246", "85dd4796bb8b"],
+    "85dd4796bb8b": ["4955571d232c", "c448_balance_within", "7b6b4b4fe246"],
+    "607c51a59bf5": [
+        "4955571d232c",
+        "c448_balance_within",
+        "7b6b4b4fe246",
+        "85dd4796bb8b",
+    ],
     "4c2c09a2b3e8": [
+        "4955571d232c",
         "c448_balance_within",
         "7b6b4b4fe246",
         "85dd4796bb8b",
         "607c51a59bf5",
     ],
     "37dcb2969766": [
+        "4955571d232c",
         "c448_balance_within",
         "7b6b4b4fe246",
         "85dd4796bb8b",
@@ -70,6 +79,7 @@ NAMED_DOWNGRADES = {
         "4c2c09a2b3e8",
     ],
     "d29a479daafe": [
+        "4955571d232c",
         "c448_balance_within",
         "7b6b4b4fe246",
         "85dd4796bb8b",
@@ -78,6 +88,7 @@ NAMED_DOWNGRADES = {
         "37dcb2969766",
     ],
     "806901fb7735": [
+        "4955571d232c",
         "c448_balance_within",
         "7b6b4b4fe246",
         "85dd4796bb8b",
@@ -87,6 +98,7 @@ NAMED_DOWNGRADES = {
         "d29a479daafe",
     ],
     "1ab99332f0ba": [
+        "4955571d232c",
         "c448_balance_within",
         "7b6b4b4fe246",
         "85dd4796bb8b",
@@ -201,9 +213,9 @@ def test_the_branch_point_also_unapplies_the_modules_branch():
     """Backs the help text: "a core id at or below a7b8c9d0e1f2 also unapplies
     the modules branch"."""
     plan = _downgrade_plan(_script(), BRANCH_POINT)
-    # The fourteen core revisions above it (through c448_balance_within, #448)
-    # and the modules branch's four (through modules_0004_rbac_activation, #891).
-    assert len(plan) == 18, plan
+    # The fifteen core revisions above it (through 4955571d232c, #1545) and the
+    # modules branch's four (through modules_0004_rbac_activation, #891).
+    assert len(plan) == 19, plan
     assert [r for r in plan if r.startswith(MODULES_PREFIX)] == [
         "modules_0004_rbac_activation",
         "modules_0003_lower_is_better",

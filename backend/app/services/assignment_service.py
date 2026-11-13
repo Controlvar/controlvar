@@ -10,7 +10,7 @@ from uuid import UUID
 from sqlalchemy import and_, desc, func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, defaultload, defer, joinedload
 
 from backend.app.core import balanced_blocks
 from backend.app.core.consistent_hash import bucket_of
@@ -39,6 +39,23 @@ from backend.app.services.segment_membership import (
 )
 
 logger = logging.getLogger(__name__)
+
+#: A visual experiment's settings and each variant's page changes (#1545),
+#: which no assignment reads: left out of the experiment and variant rows the
+#: assignment and tracking paths load, so they run the statements they ran
+#: before the columns existed and never read up to 64 KiB of page changes per
+#: variant (``test_preview_leaves_hot_paths_alone.py`` pins /tracking/assign's).
+#: Query options, not ``deferred()`` on the model: the experiment routes read
+#: both columns. ``LAZY_VARIANTS_WITHOUT_VISUAL_CHANGES`` is carried to the
+#: later lazy load of the experiment's variants.
+WITHOUT_VISUAL_CONFIG = defer(Experiment.visual_config)
+WITHOUT_VISUAL_CHANGES = defer(Variant.visual_changes)
+VARIANTS_WITHOUT_VISUAL_CHANGES = joinedload(Experiment.variants).defer(
+    Variant.visual_changes
+)
+LAZY_VARIANTS_WITHOUT_VISUAL_CHANGES = defaultload(Experiment.variants).defer(
+    Variant.visual_changes
+)
 
 # Eligibility reasons returned by ``assign_user`` / ``check_eligibility``.
 REASON_ASSIGNED = "assigned"
@@ -135,7 +152,10 @@ class AssignmentService:
 
         # Get variant details
         variant = (
-            self.db.query(Variant).filter(Variant.id == assignment.variant_id).first()
+            self.db.query(Variant)
+            .options(WITHOUT_VISUAL_CHANGES)
+            .filter(Variant.id == assignment.variant_id)
+            .first()
         )
 
         return {
@@ -194,7 +214,7 @@ class AssignmentService:
         # Get experiment with variants
         experiment = (
             self.db.query(Experiment)
-            .options(joinedload(Experiment.variants))
+            .options(VARIANTS_WITHOUT_VISUAL_CHANGES, WITHOUT_VISUAL_CONFIG)
             .filter(Experiment.id == experiment_id)
             .first()
         )

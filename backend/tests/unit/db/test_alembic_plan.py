@@ -45,9 +45,12 @@ CORE_VERSIONS = REPO_ROOT / "backend" / "app" / "db" / "migrations" / "versions"
 
 pytestmark = pytest.mark.unit
 
-#: The core chain's head: an experiment balances its split within groups (#448).
-CORE_HEAD = "c448_balance_within"
-#: Each rollout stage records when it started (#1528), the revision before it.
+#: The core chain's head: a visual experiment's page changes, pages and goals,
+#: and the editor's tokens (#1545).
+CORE_HEAD = "4955571d232c"
+#: An experiment balances its split within groups (#448), the revision before it.
+BALANCE_WITHIN = "c448_balance_within"
+#: Each rollout stage records when it started (#1528), the revision before that.
 STAGE_STARTS = "7b6b4b4fe246"
 #: The table that stores an event sent again with its event_id once (#1543),
 #: the revision before that.
@@ -147,6 +150,7 @@ CORE_PLAN = [
     FLAG_VALUES,
     EVENT_DEDUP,
     STAGE_STARTS,
+    BALANCE_WITHIN,
     CORE_HEAD,
 ]
 
@@ -155,7 +159,7 @@ CORE_PLAN = [
 #: whole reason the edge exists, and before the core marker and everything the
 #: core chain adds after it.
 FULL_PLAN = [
-    *CORE_PLAN[:-14],
+    *CORE_PLAN[:-15],
     *MODULES_BRANCH_PLAN,
     CORE_MARKER,
     SDK_COUNTERS,
@@ -170,6 +174,7 @@ FULL_PLAN = [
     FLAG_VALUES,
     EVENT_DEDUP,
     STAGE_STARTS,
+    BALANCE_WITHIN,
     CORE_HEAD,
 ]
 
@@ -290,9 +295,8 @@ def test_unapplying_the_branch_is_one_revision_and_modules_at_base_is_all_of_the
     assert _downgrade_plan(script, UNAPPLY_WHOLE_MODULES_BRANCH) == list(
         reversed(MODULES_BRANCH_PLAN)
     )
-    # 42: the 38 core revisions (through c448_balance_within, #448) and the
-    # branch's 4.
-    assert len(_downgrade_plan(script, "modules@base")) == len(FULL_PLAN) == 42
+    # 43: the 39 core revisions (through 4955571d232c, #1545) and the branch's 4.
+    assert len(_downgrade_plan(script, "modules@base")) == len(FULL_PLAN) == 43
 
 
 #: A command line, not a mention of one: the three documents all warn about

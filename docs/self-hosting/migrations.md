@@ -91,8 +91,8 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini history
 Output, for example:
 
 ```text
-7b6b4b4fe246 -> c448_balance_within (head), Experiments: balance the split within groups as users arrive
-85dd4796bb8b -> 7b6b4b4fe246, Rollout stages: record when each stage started
+c448_balance_within -> 4955571d232c (head), Visual experiments: page changes, pages and goals, and the editor's tokens
+7b6b4b4fe246 -> c448_balance_within, Experiments: balance the split within groups as users arrive
 607c51a59bf5 -> 85dd4796bb8b, Events: an event_id is stored once per user, experiment, flag and event name
 4c2c09a2b3e8 -> 607c51a59bf5, Feature flags: a value type and two values, held by one check
 ...
@@ -118,7 +118,7 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini current
 Output, for a full install (a core install prints the first line only):
 
 ```text
-c448_balance_within (head)
+4955571d232c (head)
 modules_0004_rbac_activation (head)
 ```
 
@@ -418,9 +418,14 @@ Past `7b6b4b4fe246` it also runs that revision's downgrade, which drops
 `rollout_stages.started_at`, the recorded start of every rollout stage (see
 [`7b6b4b4fe246`](#7b6b4b4fe246-records-when-each-rollout-stage-started)).
 
-Past `c448_balance_within` it first runs that revision's downgrade, which drops
+Past `c448_balance_within` it also runs that revision's downgrade, which drops
 every experiment's balance setting, every user's group and every counter (see
 [`c448_balance_within`](#c448_balance_within-balances-the-split-within-groups)).
+
+Past `4955571d232c` it first runs that revision's downgrade, which drops the
+table `visual_tokens` and the columns `experiments.visual_config` and
+`variants.visual_changes`: every visual experiment's pages, goals and page
+changes (see [`4955571d232c`](#4955571d232c-stores-visual-experiments)).
 
 ### `d29a479daafe` records who each global holdout covers
 
@@ -502,6 +507,10 @@ From a release that carries `c448_balance_within`, it also runs that
 revision's downgrade, which drops every experiment's balance setting, every
 user's group and every counter (see
 [`c448_balance_within`](#c448_balance_within-balances-the-split-within-groups)).
+From a release that carries `4955571d232c`, it also runs that revision's
+downgrade, which drops the table `visual_tokens` and the columns
+`experiments.visual_config` and `variants.visual_changes` (see
+[`4955571d232c`](#4955571d232c-stores-visual-experiments)).
 
 ### `4c2c09a2b3e8` keeps rollback records without a safety configuration
 
@@ -563,10 +572,14 @@ From a release that carries `7b6b4b4fe246`, a downgrade to `4c2c09a2b3e8` also
 runs that revision's downgrade, which drops `rollout_stages.started_at`, the
 recorded start of every rollout stage (see
 [`7b6b4b4fe246`](#7b6b4b4fe246-records-when-each-rollout-stage-started)).
-From a release that carries `c448_balance_within`, it first runs that
+From a release that carries `c448_balance_within`, it also runs that
 revision's downgrade, which drops every experiment's balance setting, every
 user's group and every counter (see
 [`c448_balance_within`](#c448_balance_within-balances-the-split-within-groups)).
+From a release that carries `4955571d232c`, it first runs that revision's
+downgrade, which drops the table `visual_tokens` and the columns
+`experiments.visual_config` and `variants.visual_changes` (see
+[`4955571d232c`](#4955571d232c-stores-visual-experiments)).
 
 ### `85dd4796bb8b` stores an event sent again with its event_id once
 
@@ -620,7 +633,7 @@ release's heads, with this release still running
 ([An Older Image Against a Newer Database](#an-older-image-against-a-newer-database)),
 and with the Engineering Lead's approval at the moment it runs when any stage
 is `IN_PROGRESS`. This revision's own `down_revision` is `85dd4796bb8b`; from a
-release that carries `c448_balance_within`, this first runs that revision's
+release that carries `c448_balance_within`, this also runs that revision's
 downgrade, which drops every experiment's balance setting, every user's group
 and every counter (see
 [`c448_balance_within`](#c448_balance_within-balances-the-split-within-groups)):
@@ -628,6 +641,11 @@ and every counter (see
 ```{.bash skip reason="destructive: drops rollout_stages.started_at"}
 docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade 85dd4796bb8b
 ```
+
+From a release that carries `4955571d232c`, it first runs that revision's
+downgrade, which drops the table `visual_tokens` and the columns
+`experiments.visual_config` and `variants.visual_changes` (see
+[`4955571d232c`](#4955571d232c-stores-visual-experiments)).
 
 On Helm, run the same command in an API pod with `kubectl exec`. Once the
 database is at the previous release's heads, start the previous release. The
@@ -669,15 +687,45 @@ chart's init container), the previous release refuses to start against this
 revision. To go back to it, first downgrade to the previous release's heads,
 with this release still running
 ([An Older Image Against a Newer Database](#an-older-image-against-a-newer-database)).
-This revision's own `down_revision` is `7b6b4b4fe246`; this undoes this
-revision alone:
+This revision's own `down_revision` is `7b6b4b4fe246`; from a release that
+carries no later revision, this undoes this revision alone:
 
 ```{.bash skip reason="destructive: drops every experiment's balance setting and every user's group"}
 docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade 7b6b4b4fe246
 ```
 
+From a release that carries `4955571d232c`, it first runs that revision's
+downgrade, which drops the table `visual_tokens` and the columns
+`experiments.visual_config` and `variants.visual_changes` (see
+[`4955571d232c`](#4955571d232c-stores-visual-experiments)).
+
 On Helm, run the same command in an API pod with `kubectl exec`. The upgrade
 cannot be emitted as SQL (`--sql`).
+
+### `4955571d232c` stores visual experiments
+
+This revision adds what a visual experiment stores: `experiments.visual_config`,
+its pages, the page its editor opens and its goals; `variants.visual_changes`, a
+variant's page changes; and the table `visual_tokens`, for the visual editor's
+sign-in and its preview links. Both columns are empty on every experiment and
+variant already stored.
+
+The previous release runs against this schema unchanged: it never reads or
+writes the two columns or the table, and stores experiments and variants as
+before.
+
+**The downgrade drops every visual experiment's design.** `4955571d232c`'s
+downgrade drops the table `visual_tokens` and the columns
+`experiments.visual_config` and `variants.visual_changes`; it does not refuse,
+and nothing can restore them. The experiments stay, as ordinary experiments
+with no page changes. This revision's own `down_revision` is
+`c448_balance_within`; this undoes this revision alone:
+
+```{.bash skip reason="destructive: drops visual_tokens, experiments.visual_config and variants.visual_changes"}
+docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade c448_balance_within
+```
+
+On Helm, run the same command in an API pod with `kubectl exec`.
 
 Roll back to a specific revision:
 
@@ -913,6 +961,10 @@ a release that carries `c448_balance_within`, whose own `down_revision` is
 `7b6b4b4fe246`, that includes its downgrade, which drops every experiment's
 balance setting, every user's group and every counter (see
 [`c448_balance_within`](#c448_balance_within-balances-the-split-within-groups)).
+From a release that carries `4955571d232c`, whose own `down_revision` is
+`c448_balance_within`, it includes that downgrade too, which drops every visual
+experiment's pages, goals and page changes (see
+[`4955571d232c`](#4955571d232c-stores-visual-experiments)).
 
 Do not edit `alembic_version` to make the older image start.
 
@@ -995,6 +1047,10 @@ What this means for you:
   balanced experiment's new users by the hash, with no group, for as long as
   it serves. Undoing it drops every experiment's balance setting, every user's
   group and every counter.
+  [`4955571d232c`](#4955571d232c-stores-visual-experiments)
+  is backward-compatible for a rollback too, and undoing it drops every visual
+  experiment's pages, goals and page changes, and every visual editor sign-in
+  and preview link.
   [`modules_0003_lower_is_better`](#modules_0003_lower_is_better-gives-each-warehouse-metric-source-a-direction)
   is backward-compatible for a rollback, and undoing it drops every warehouse
   metric source's lower-is-better setting; an upgrade afterwards sets each back
@@ -1154,9 +1210,9 @@ The statements below use the schema `experimentation`. If your
 
 **Do not delete the account instead of retiring it.** Deleting a user deletes
 or detaches what refers to it: its API keys, reports, notification
-preferences, role assignments and workspace memberships are deleted with it,
-and the experiments, flags, audit records and everything else that names it
-lose that reference. Retiring keeps all of that.
+preferences, role assignments, workspace memberships and visual editor
+sign-ins and preview links are deleted with it, and the experiments, flags,
+audit records and everything else that names it lose that reference. Retiring keeps all of that.
 
 **Do not build the index by hand.** Run the upgrade, which locks the table,
 checks for groups and builds the index in one transaction. An index built

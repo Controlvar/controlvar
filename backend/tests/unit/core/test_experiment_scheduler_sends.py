@@ -43,6 +43,9 @@ def _experiment(experiment_id, status):
     experiment.status = status
     experiment.variants = [MagicMock(is_control=True), MagicMock(is_control=False)]
     experiment.metric_definitions = [MagicMock()]
+    # Not a visual experiment. Only None reads as absent, so a mock's own
+    # attribute would count as visual settings and fail the start check (#1545).
+    experiment.visual_config = None
     return experiment
 
 

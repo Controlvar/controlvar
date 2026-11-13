@@ -13,6 +13,7 @@ from typing import Annotated, Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 from pydantic import ValidationError
+from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -48,7 +49,11 @@ from backend.app.schemas.tracking import (
     UntaggedEventCreate,
     VariantAssignmentResponse,
 )
-from backend.app.services.assignment_service import AssignmentService
+from backend.app.services.assignment_service import (
+    LAZY_VARIANTS_WITHOUT_VISUAL_CHANGES,
+    WITHOUT_VISUAL_CONFIG,
+    AssignmentService,
+)
 from backend.app.services.bandit_routing import bandit_chooser
 from backend.app.services.event_service import EventService
 
@@ -206,6 +211,27 @@ def _store_once(
     ), stored_id
 
 
+def _reread_without_visual_settings(db: Session, experiment: Experiment) -> None:
+    """Read back an *experiment* a commit expired, as touching it would, but
+    without ``visual_config``, and so that its variants then load without
+    their ``visual_changes`` (#1545).
+
+    A commit expires every column, and touching the expired object reloads
+    each one, whatever the query that loaded it deferred. ``Session.get``
+    with ``populate_existing`` reads the row with the statement that reload
+    uses, and takes options. Nothing is read for an object no commit expired.
+    """
+    state = inspect(experiment)
+    if not state.expired:
+        return
+    db.get(
+        Experiment,
+        state.identity,
+        options=[WITHOUT_VISUAL_CONFIG, LAZY_VARIANTS_WITHOUT_VISUAL_CHANGES],
+        populate_existing=True,
+    )
+
+
 def _not_running_answer(
     request: AssignmentRequest, experiment: Experiment
 ) -> VariantAssignmentResponse:
@@ -325,9 +351,13 @@ async def assign_user_to_experiment(
     # or written.
     check_context(request.context)
 
-    # Get experiment by key, whatever its status (the key is unique).
+    # Get experiment by key, whatever its status (the key is unique), without
+    # the visual columns (#1545), which no assignment reads.
     experiment = (
-        db.query(Experiment).filter(Experiment.key == request.experiment_key).first()
+        db.query(Experiment)
+        .options(WITHOUT_VISUAL_CONFIG, LAZY_VARIANTS_WITHOUT_VISUAL_CHANGES)
+        .filter(Experiment.key == request.experiment_key)
+        .first()
     )
 
     if not experiment:
@@ -350,6 +380,8 @@ async def assign_user_to_experiment(
     )
 
     def assign_and_answer() -> VariantAssignmentResponse:
+        # A balanced experiment's release (below) expired it.
+        _reread_without_visual_settings(db, experiment)
         # Attempt to assign the user
         assignment_data = assignment_service.assign_user(
             user_id=request.user_id,
@@ -357,6 +389,10 @@ async def assign_user_to_experiment(
             context=request.context,
             override_variant_id=override_variant_id,
         )
+
+        # assign_user's commit expired the experiment (#1545: re-read it, as
+        # touching it would, without the visual columns).
+        _reread_without_visual_settings(db, experiment)
 
         # Get the variant
         variant_id = assignment_data.get("variant_id")
@@ -514,6 +550,7 @@ def _assign_users_in_batch(
 
         experiment = (
             db.query(Experiment)
+            .options(WITHOUT_VISUAL_CONFIG, LAZY_VARIANTS_WITHOUT_VISUAL_CHANGES)
             .filter(
                 Experiment.key == request.experiment_key,
                 Experiment.status == ExperimentStatus.ACTIVE,
@@ -682,6 +719,7 @@ async def track_event(
     if request.experiment_key:
         experiment = (
             db.query(Experiment)
+            .options(WITHOUT_VISUAL_CONFIG)
             .filter(Experiment.key == request.experiment_key)
             .first()
         )
@@ -908,6 +946,7 @@ async def track_events_batch(
             if event_request.experiment_key:
                 experiment = (
                     db.query(Experiment)
+                    .options(WITHOUT_VISUAL_CONFIG)
                     .filter(Experiment.key == event_request.experiment_key)
                     .first()
                 )

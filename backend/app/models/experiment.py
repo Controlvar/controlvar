@@ -187,6 +187,12 @@ class Experiment(Base, BaseModel):
     # clone.
     balance_seed = Column(String(64), nullable=True)
 
+    # #1545: a visual experiment's pages, the page its editor opens and its
+    # goals (backend/app/schemas/visual.py, VisualConfig). Null on every other
+    # experiment. Locked once the experiment leaves draft, and never removed
+    # from a visual draft.
+    visual_config = Column(JSONB, nullable=True)
+
     # EP-057: Multi-Tenant Workspace isolation (nullable for backwards-compatibility).
     # The seam: a bare indexed UUID, not a ForeignKey. `workspaces` is the
     # workspaces module's table, and a ForeignKey here is the only thing in
@@ -371,6 +377,9 @@ class Variant(Base, BaseModel):
     is_control = Column(Boolean, default=False)
     traffic_allocation = Column(Integer, default=50)  # Percentage of traffic
     configuration = Column(JSONB)  # Settings specific to this variant
+    # #1545: a visual experiment's page changes for this variant
+    # (backend/app/schemas/visual.py, VisualChanges). Never on the control.
+    visual_changes = Column(JSONB, nullable=True)
 
     # Relationships
     experiment = relationship("Experiment", back_populates="variants")

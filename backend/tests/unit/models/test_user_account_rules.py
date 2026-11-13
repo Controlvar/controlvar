@@ -91,6 +91,9 @@ DELETED_WITH_THE_USER = {
     ("direct_permission_grants", "user_id"),
     ("workspace_members", "user_id"),
     ("user_custom_roles", "user_id"),
+    # The visual editor's sign-ins and preview links (#1545): a credential
+    # does not outlive the user it signs in.
+    ("visual_tokens", "user_id"),
 }
 
 _REFERENCES_PROBE = """

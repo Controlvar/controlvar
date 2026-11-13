@@ -25,6 +25,7 @@ from fastapi import (
 )
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
+from sqlalchemy import text
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -69,6 +70,7 @@ from backend.app.schemas.experiment import (
     ExperimentDetailResponse,
     ExperimentListResponse,
     ExperimentResponse,
+    ExperimentStartRequest,
     ExperimentUpdate,
     ScheduleConfig,
 )
@@ -85,6 +87,7 @@ from backend.app.schemas.split_url_config import (
     split_url_entries,
 )
 from backend.app.schemas.storable_text import storable_text_param
+from backend.app.schemas.visual import VISUAL_CONFIG_ERROR, visual_write_problem
 from backend.app.services.analysis_service import AnalysisService
 from backend.app.services.audit_log_service import AuditLogService
 from backend.app.services.audit_service import (
@@ -109,6 +112,19 @@ from backend.app.services.power_calculator_service import (
     sample_size_two_proportions,
 )
 from backend.app.services.segment_breakdown import NUL_IN_DIMENSION
+from backend.app.services.visual import (
+    DATED_DRAFT_REFUSED,
+    DESIGN_ETAG_MISSING,
+    DESIGN_ETAG_STALE,
+    SCHEDULED_START_REFUSED,
+    VISUAL_CONFIG_REMOVAL_REFUSED,
+    carry_over_visual_changes,
+    clone_visual_problem,
+    design_etag,
+    is_visual,
+    visual_config_of,
+    visual_start_problem,
+)
 
 #: ``sort_by`` on the list (#786): the columns, in exact case. The message is
 #: the 422's for any other non-empty value; it never repeats the value sent.
@@ -132,9 +148,10 @@ TARGETING_EDITABLE_STATUSES = frozenset(
 #: variants and metrics, how the results are judged (#580), which users share
 #: a group's blocks (#448: decided before the first one is assigned), and how
 #: the results are analysed: CUPED, sequential testing and Bayesian analysis,
-#: each switch with its config (#848). ``balance_within`` precedes #848's five,
-#: so a request this check refused before #848 keeps the field its detail
-#: names. ``start_date`` and ``end_date`` are not fields of ``ExperimentUpdate``,
+#: each switch with its config (#848), and a visual experiment's pages and
+#: goals (#1545). ``balance_within`` precedes #848's five, and ``visual_config``
+#: comes last, so a request this check refused before keeps the field its
+#: detail names. ``start_date`` and ``end_date`` are not fields of ``ExperimentUpdate``,
 #: so the schema drops them and they never match here; a body naming them
 #: changes nothing. Every request field is classified against this list by
 #: ``backend/tests/unit/api/test_experiment_update_fields_classified.py``.
@@ -151,6 +168,7 @@ FIXED_AFTER_DRAFT = (
     "sequential_testing_config",
     "bayesian_enabled",
     "bayesian_config",
+    "visual_config",
 )
 
 #: An experiment's status changes only through the lifecycle endpoints, which
@@ -472,6 +490,145 @@ def _refuse_unbalanceable_update(
             {"loc": ["body", "balance_within"], "msg": problem, "type": "value_error"}
         ],
     )
+
+
+def _end_transaction_on_refusal(db: Session) -> None:
+    """Roll *db* back as a 4xx is raised, so a row read for update is freed at
+    once (#1545). Defence in depth: with production's async ``get_db``,
+    FastAPI (0.141.1) unwinds the request's dependencies, closing the
+    session, before it writes the error response, so the row is already free
+    when the response starts even without this. A rollback that fails is
+    logged, never raised over the refusal."""
+    try:
+        db.rollback()
+    except Exception as error:  # the refusal is the answer, not this
+        logger.warning(
+            "Rollback after a refused request failed (%s)", type(error).__name__
+        )
+
+
+#: How long PUT /{experiment_id} with visual_config, and PUT
+#: /{experiment_id}/schedule with a start date, wait for another transaction's
+#: hold on the experiment's row (``_read_row_for_update``) before they give up
+#: with a database error (a 500). The bound and the pattern are users.py's
+#: (``SUPERUSER_LOCK_TIMEOUT``): these handlers run on the API's event loop, so
+#: a wait holds every other request for as long as it lasts.
+EXPERIMENT_ROW_LOCK_TIMEOUT = "5s"
+
+
+def _read_row_for_update(db: Session, experiment_id: UUID) -> Optional[Experiment]:
+    """Read the experiment's row again, for update, and refresh the object the
+    session already holds with it (#1545). None if the row is gone.
+
+    FOR NO KEY UPDATE (``key_share=True``): it excludes the other route's read
+    and every write of the row, and not the FOR KEY SHARE that an insert of a
+    row referencing the experiment (an assignment, an event) holds. Called
+    after the route's role and state checks, so a caller they refuse never
+    waits on the row, and with no ``await`` between this call and the commit.
+    A wait longer than ``EXPERIMENT_ROW_LOCK_TIMEOUT`` ends the request with a
+    database error (a 500), as on users.py's superuser rows.
+    """
+    # The value is the module constant above, never request data.
+    db.execute(text(f"SET LOCAL lock_timeout = '{EXPERIMENT_ROW_LOCK_TIMEOUT}'"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text  # fmt: skip
+    return (
+        db.query(Experiment)
+        .filter(Experiment.id == experiment_id)
+        .with_for_update(key_share=True)
+        .populate_existing()
+        .first()
+    )
+
+
+def _refuse_fields_fixed_after_draft(
+    experiment: Experiment, update_data: Dict[str, Any]
+) -> None:
+    """400 when *experiment* is not a draft and *update_data* carries one of
+    ``FIXED_AFTER_DRAFT``. Presence, not difference: re-sending the stored
+    value is refused too."""
+    if experiment.status == ExperimentStatus.DRAFT:
+        return
+    for field in FIXED_AFTER_DRAFT:
+        if field in update_data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot update {field} for experiments in {experiment.status.value} status",
+            )
+
+
+def _visual_refusal(loc: List[Any], message: str, error_type: str) -> HTTPException:
+    """A 422 in the shape of a request-validation error, at *loc*."""
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail=[{"loc": ["body", *loc], "msg": message, "type": error_type}],
+    )
+
+
+#: The fields of an update whose result a visual design rule reads, in the
+#: order a refusal names the one it is placed at when the rule's own field
+#: was not sent.
+_VISUAL_RULE_FIELDS = ("visual_config", "variants", "metrics", "experiment_type")
+
+
+def _refuse_visual_update(
+    experiment: Experiment, update_data: Dict[str, Any], fields_sent: set
+) -> None:
+    """A visual experiment's rules on the result of an update (#1545).
+
+    Refused with 422 at ``["body", "visual_config"]`` (C1): ``visual_config:
+    null`` on a visual draft, and ``visual_config`` on a draft that has a
+    scheduled start. Then a variants list is completed with the stored page
+    changes of each variant it left them out of (S1's carry-over, in place),
+    and the result -- what the request sent, and what is stored for every
+    field it left out -- is held to ``visual_write_problem``.
+    """
+    stored_config = visual_config_of(experiment)
+    if "visual_config" in fields_sent:
+        sent = update_data.get("visual_config")
+        if sent is None and stored_config is not None:
+            raise _visual_refusal(
+                ["visual_config"], VISUAL_CONFIG_REMOVAL_REFUSED, VISUAL_CONFIG_ERROR
+            )
+        if sent is not None and experiment.start_date is not None:
+            raise _visual_refusal(
+                ["visual_config"],
+                DATED_DRAFT_REFUSED.format(id=experiment.id),
+                VISUAL_CONFIG_ERROR,
+            )
+    if update_data.get("variants") is not None:
+        update_data["variants"] = carry_over_visual_changes(
+            experiment.variants, update_data["variants"]
+        )
+    if not fields_sent & set(_VISUAL_RULE_FIELDS):
+        return
+
+    def merged(field: str, stored: Any) -> Any:
+        value = update_data.get(field)
+        return stored if value is None else value
+
+    visual_config = (
+        update_data.get("visual_config")
+        if "visual_config" in update_data
+        else stored_config
+    )
+    stored_variants = [
+        {
+            "is_control": getattr(v, "is_control", False),
+            "visual_changes": getattr(v, "visual_changes", None),
+        }
+        for v in experiment.variants
+    ]
+    problem = visual_write_problem(
+        merged("experiment_type", experiment.experiment_type),
+        visual_config,
+        merged("variants", stored_variants),
+        merged("metrics", experiment.metric_definitions),
+    )
+    if problem is None:
+        return
+    loc, message, error_type = problem
+    if loc[0] not in fields_sent:
+        loc = (next(f for f in _VISUAL_RULE_FIELDS if f in fields_sent),)
+    raise _visual_refusal(list(loc), message, error_type)
 
 
 def _split_url_start_refusal(db: Session, experiment: Experiment) -> Optional[str]:
@@ -995,9 +1152,19 @@ async def update_experiment(
             experiment whose `split_url_config` does not match its variants.
             An empty or repeating `metrics` is refused before the caller's
             role, the experiment's existence or its state is checked.
+            Also (#1545): `visual_config: null` on a visual draft, and
+            `visual_config` on a draft with a scheduled start, at
+            `["body", "visual_config"]`; and, at the field the rule is about,
+            a result in which page changes sit on the control or on an
+            experiment without `visual_config`, a goal's event_name is no
+            metric's, or a split URL experiment has `visual_config`.
+
+    A variant sent without `visual_changes` keeps the page changes stored
+    for the variant of the same name; `visual_changes: null` removes them.
     """
     try:
-        # Get experiment
+        # Get experiment. A request that sends visual_config reads the row
+        # again, for update, once the role and state checks below have passed.
         experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
         if not experiment:
             raise HTTPException(
@@ -1092,13 +1259,29 @@ async def update_experiment(
         # an experiment leaves draft, nobody changes how its results are
         # judged or analysed (#580, #848). It works on presence, so re-sending
         # the stored value, or null, is refused too.
-        if experiment.status != ExperimentStatus.DRAFT:
-            for field in FIXED_AFTER_DRAFT:
-                if field in update_data:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"Cannot update {field} for experiments in {experiment.status.value} status",
-                    )
+        _refuse_fields_fixed_after_draft(experiment, update_data)
+
+        # A request that sends visual_config reads the row again, for update,
+        # now that the role and state checks above have passed: the start date
+        # checked below must be the committed one, and PUT /schedule reads the
+        # row the same way before it checks visual_config (#1545). The row
+        # read here is a draft or the request is refused: visual_config is
+        # fixed outside draft. No await may come between this read and the
+        # commit; a refusal rolls back at once (the except below).
+        if "visual_config" in fields_sent:
+            experiment = _read_row_for_update(db, experiment_id)
+            if not experiment:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Experiment not found",
+                )
+            _refuse_fields_fixed_after_draft(experiment, update_data)
+
+        # A visual draft keeps its visual settings, a dated draft cannot
+        # become visual, and the design that results follows the visual rules
+        # (#1545). The stored page changes of a variant sent without them are
+        # carried over into update_data here.
+        _refuse_visual_update(experiment, update_data, fields_sent)
 
         # A split URL experiment's URL variants match its variants (#393), on
         # the result of this update.
@@ -1225,7 +1408,9 @@ async def update_experiment(
             else:
                 raise
     except HTTPException:
-        # Let deliberate 4xx responses through instead of wrapping them in a 500.
+        # Let deliberate 4xx responses through instead of wrapping them in a
+        # 500, ending the transaction first (a row read for update is freed).
+        _end_transaction_on_refusal(db)
         raise
     except Exception as e:
         raise unexpected_failure(
@@ -1400,6 +1585,13 @@ async def delete_experiment(
 )
 async def start_experiment(
     experiment_id: UUID = Path(..., description="The ID of the experiment to start"),
+    start: Optional[ExperimentStartRequest] = Body(
+        None,
+        description=(
+            "Optional. A visual draft needs its design_etag here; every other "
+            "start takes no body, null or {}."
+        ),
+    ),
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_active_user),
     cache_control: Dict[str, Any] = Depends(deps.get_cache_control),
@@ -1429,6 +1621,16 @@ async def start_experiment(
       be those of an active split URL experiment's control URL or of one of
       that experiment's variant URLs, and none of its variant URLs may have
       the host and path of an active split URL experiment's control URL
+    - A visual draft (one with `visual_config`, #1545) is started with the
+      body `{"design_etag": ...}`, the `design_etag` of the version being
+      started as `GET /api/v1/experiments/{id}` returned it: without one it
+      answers 400, and with one that is not its current design's it answers
+      409 and nothing is started. It needs a page change in a non-control
+      variant, stored visual settings and page changes that are valid, and a
+      metric for every goal. Every other start takes no body (an empty body,
+      `null` and `{}` are the same), and ignores a `design_etag` sent.
+
+    Starting an experiment ends every visual editor sign-in of it.
 
     Returns:
         ExperimentResponse: The updated experiment with ACTIVE status
@@ -1436,6 +1638,8 @@ async def start_experiment(
     Raises:
         HTTPException 400: If the experiment cannot be started
         HTTPException 403: If the caller's role does not hold UPDATE on experiments
+        HTTPException 409: If a visual draft's design_etag is not its
+            current design's
     """
     try:
         # Get experiment
@@ -1460,6 +1664,20 @@ async def start_experiment(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Cannot start experiment with status: {experiment.status.value}",
             )
+
+        # A visual draft starts only as the version the caller reviewed (#1545,
+        # C2): the etag is computed from the row read above, never a cache.
+        if experiment.status == ExperimentStatus.DRAFT and is_visual(experiment):
+            sent = start.design_etag if start is not None else None
+            if not sent:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=DESIGN_ETAG_MISSING.format(id=experiment.id),
+                )
+            if sent != design_etag(experiment):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT, detail=DESIGN_ETAG_STALE
+                )
 
         # Check for required components
         if not experiment.variants or len(experiment.variants) < 2:
@@ -1496,6 +1714,14 @@ async def start_experiment(
         if balance_refusal is not None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail=balance_refusal
+            )
+
+        # The one visual start check (#1545, C1), with its text; the
+        # scheduler makes the same one.
+        visual_refusal = visual_start_problem(experiment)
+        if visual_refusal is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=visual_refusal
             )
 
         before_audit = audit_snapshot(EntityType.EXPERIMENT, experiment)
@@ -1648,6 +1874,11 @@ async def update_experiment_schedule(
 
     start_date may not be more than ten minutes in the past.
 
+    A visual draft (one with `visual_config`, #1545) takes no start date: it
+    starts only with POST /{experiment_id}/start. A request with a start date
+    other than null answers 400; `{"start_date": null}` clears one, and an end
+    date is accepted.
+
     Returns:
         ExperimentResponse: The updated experiment with scheduling information
 
@@ -1660,7 +1891,9 @@ async def update_experiment_schedule(
             time zone name
     """
     try:
-        # Get experiment by ID
+        # Get experiment by ID. A request that sends a start date reads the
+        # row again, for update, once the role and state checks below have
+        # passed.
         experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
         if not experiment:
             raise HTTPException(
@@ -1679,6 +1912,35 @@ async def update_experiment_schedule(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Cannot schedule experiment with status {experiment.status.value}. "
                 f"Experiment must be in DRAFT or PAUSED status.",
+            )
+
+        # A request that sends a start date reads the row again, for update,
+        # now that the role and state checks above have passed, as a PUT that
+        # sends visual_config does, so each checks the other's committed value
+        # (#1545). The service checks the state again on the row read here. No
+        # await may come between this read and the commit; a refusal rolls
+        # back at once (the except below).
+        if schedule.start_date is not None:
+            experiment = _read_row_for_update(db, experiment_id)
+            if not experiment:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Experiment not found",
+                )
+
+        # A visual draft starts only with Start, which checks the design shown
+        # (#1545, C1): it is never given a start date. A null start date
+        # clears one written outside the API; an end date is accepted, and a
+        # paused visual experiment's resume is unchanged.
+        if (
+            experiment.status == ExperimentStatus.DRAFT
+            and is_visual(experiment)
+            and "start_date" in schedule.model_fields_set
+            and schedule.start_date is not None
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=SCHEDULED_START_REFUSED,
             )
 
         # Update experiment schedule
@@ -1715,7 +1977,9 @@ async def update_experiment_schedule(
 
         return ExperimentResponse.model_validate(updated_experiment)
     except HTTPException:
-        # Let deliberate 4xx responses through instead of wrapping them in a 500.
+        # Let deliberate 4xx responses through instead of wrapping them in a
+        # 500, ending the transaction first (a row read for update is freed).
+        _end_transaction_on_refusal(db)
         raise
     except Exception as e:
         raise unexpected_failure(
@@ -2027,6 +2291,8 @@ async def clone_experiment(
     Raises:
         HTTPException 403: If the caller's role does not hold READ and CREATE on experiments
         HTTPException 404: If the source experiment doesn't exist
+        HTTPException 422: If the source's stored visual settings or page
+            changes (#1545), which the clone copies, are not valid
     """
     try:
         # Get source experiment
@@ -2057,6 +2323,15 @@ async def clone_experiment(
         # balance within (#448).
         refuse_clone_with_unusable_segments(db, experiment.targeting_rules)
         refuse_clone_with_unusable_balance_segments(db, balance_setting(experiment))
+
+        # The clone copies the source's visual settings and page changes, so
+        # they are checked as a create checks them (#1545).
+        visual_refusal = clone_visual_problem(experiment)
+        if visual_refusal is not None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=visual_refusal,
+            )
 
         # Create experiment service
         experiment_service = ExperimentService(db)

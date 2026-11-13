@@ -31,6 +31,7 @@ from backend.app.services.experiment_service import (
     stamp_rollout_rule_id,
 )
 from backend.app.services.notification_service import NotificationService
+from backend.app.services.visual import STARTED, revoke_editor_tokens
 
 logger = get_logger(__name__)
 
@@ -269,6 +270,9 @@ class ExperimentScheduler:
                     experiment.updated_at = current_time
                     db.add(experiment)
                     db.flush()
+                    # As POST /start does (#1545): a started experiment's
+                    # editor tickets and sessions end, in this savepoint.
+                    revoke_editor_tokens(db, experiment_id, STARTED)
                     self._record_transition(
                         db,
                         experiment,

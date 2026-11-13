@@ -364,6 +364,13 @@ by = [
 ]
 
 [[unit]]
+text = "From a release that carries 4955571d232c (its own down_revision is c448_balance_within), it also includes 4955571d232c's, which drops every visual experiment's pages, goals and page changes."
+by = [
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_after_the_newer_release_downgrades_the_database_the_older_one_starts",
+    "test:backend/tests/integration/database/test_visual_experiments_migration.py::test_the_downgrade_drops_the_table_and_both_columns_only",
+]
+
+[[unit]]
 text = "Rolling back past segment targeting"
 by = ["exempt:label"]
 
@@ -1365,6 +1372,13 @@ by = ["exempt:instruction"]
 [[unit]]
 text = "It does not refuse and removes no assignment."
 by = ["test:backend/tests/integration/database/test_balance_within_migration.py::test_the_downgrade_drops_exactly_the_columns_and_the_table"]
+
+[[unit]]
+text = "From a release that carries 4955571d232c, whose down_revision is c448_balance_within, every core target in this list also undoes 4955571d232c first, which drops the table visual_tokens and the columns experiments.visual_config and variants.visual_changes, every visual experiment's pages, goals and page changes (nothing restores them), and does not refuse; a downgrade to c448_balance_within undoes it alone."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_visual_experiments_migration.py::test_the_downgrade_drops_the_table_and_both_columns_only",
+]
 
 [[unit]]
 text = "A downgrade to 85dd4796bb8b also undoes 7b6b4b4fe246, which drops rollout_stages.started_at, the time each rollout stage started (nothing restores the exact values: an upgrade afterwards sets each stage in progress from its updated_at, which an edit may have moved, so a stage edited in the meantime restarts its clock from the edit), and it does not refuse, so it needs the Engineering Lead's approval at the moment it runs when any stage is IN_PROGRESS."

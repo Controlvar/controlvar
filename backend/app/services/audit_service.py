@@ -110,6 +110,8 @@ AUDIT_NAME_ONLY_FIELDS: Dict[EntityType, Tuple[str, ...]] = {
         "on_value",
         "off_value",
     ),
+    # visual_config (#1545): a visual experiment's pages and goals, named
+    # only; its contents (URLs, selectors) are never stored in an entry.
     EntityType.EXPERIMENT: (
         "description",
         "hypothesis",
@@ -117,6 +119,7 @@ AUDIT_NAME_ONLY_FIELDS: Dict[EntityType, Tuple[str, ...]] = {
         "variance_reduction_config",
         "sequential_testing_config",
         "bayesian_config",
+        "visual_config",
     ),
     EntityType.USER: ("email",),
     EntityType.API_KEY: (),
@@ -130,7 +133,9 @@ AUDIT_NAME_ONLY_FIELDS: Dict[EntityType, Tuple[str, ...]] = {
 #: experiment's variants and metrics are rows of their own (the JSONB
 #: ``experiments.metrics`` column is never written), and every design save
 #: deletes and re-creates them, so they are compared by these columns only,
-#: never by id or timestamp, and in no particular order (#1782).
+#: never by id or timestamp, and in no particular order (#1782). A variant's
+#: page changes are named apart, as ``visual_changes`` (#1545): renaming a
+#: variant that has page changes names both.
 #: ``test_audit_values.py`` classifies every column of the two tables.
 AUDIT_NAME_ONLY_ROWS: Dict[EntityType, Dict[str, Tuple[str, Tuple[str, ...]]]] = {
     EntityType.EXPERIMENT: {
@@ -144,6 +149,10 @@ AUDIT_NAME_ONLY_ROWS: Dict[EntityType, Dict[str, Tuple[str, Tuple[str, ...]]]] =
                 "configuration",
             ),
         ),
+        # Only the variants that have page changes: renaming one without them,
+        # or any variant of an experiment that is not visual, names only
+        # ``variants`` (AUDIT_ROWS_WITH_LAST_COLUMN_SET).
+        "visual_changes": ("variants", ("name", "visual_changes")),
         "metrics": (
             "metric_definitions",
             (
@@ -161,6 +170,11 @@ AUDIT_NAME_ONLY_ROWS: Dict[EntityType, Dict[str, Tuple[str, Tuple[str, ...]]]] =
         ),
     },
 }
+
+#: Members of ``AUDIT_NAME_ONLY_ROWS`` that compare only the rows whose last
+#: listed column is set (#1545): a variant without page changes is not part of
+#: ``visual_changes``.
+AUDIT_ROWS_WITH_LAST_COLUMN_SET = frozenset({"visual_changes"})
 
 #: Every ``action_type`` something in this profile writes. The inventories in
 #: ``backend/tests/smoke/test_audit_inventory.py`` (routes and non-route
@@ -331,7 +345,10 @@ def audit_snapshot(entity_type: EntityType, source: Any) -> Dict[str, Any]:
     for field, (relationship, columns) in AUDIT_NAME_ONLY_ROWS.get(
         entity_type, {}
     ).items():
-        snap["#" + field] = _rows_fingerprint(_read(source, relationship), columns)
+        rows = _read(source, relationship)
+        if field in AUDIT_ROWS_WITH_LAST_COLUMN_SET and rows is not None:
+            rows = [row for row in rows if _read(row, columns[-1]) is not None]
+        snap["#" + field] = _rows_fingerprint(rows, columns)
     return snap
 
 

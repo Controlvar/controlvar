@@ -204,6 +204,9 @@ COPIED_ELSEWHERE = {
     "targeting_rules",  # rules_for_clone (#533)
     "split_url_config",  # deep-copied, so a split URL clone can start (#1781)
     "tags",
+    # A clone of a visual experiment is a visual draft with the same pages
+    # and goals (#1545); the route checks them first (clone_visual_problem).
+    "visual_config",
 }
 
 # Not copied, each for a reason.
