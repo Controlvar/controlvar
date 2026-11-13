@@ -10,6 +10,44 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.46.0](https://github.com/Controlvar/controlvar/compare/v0.45.0...v0.46.0) (2026-11-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* **tracking:** Event `metadata` (`properties` on `/events`) larger than 16,384 bytes as compact JSON in UTF-8 is refused, where it was stored up to the 5 MiB body limit: `/track` answers 422 (`Invalid event: properties not valid`), `/events` answers 422 at `["body", "properties"]` (or `"metadata"`), and `/batch` reports the entry in `errors` and stores the others.
+
+### Features
+
+* **api:** demo mode, a read-only switch for public demo installs ([79998fe](https://github.com/Controlvar/controlvar/commit/79998fe0a2aee0aabc47841de322d9514e45133b))
+* **dashboard:** archive and unarchive a feature flag ([#442](https://github.com/Controlvar/controlvar/issues/442)) ([1a3fb1b](https://github.com/Controlvar/controlvar/commit/1a3fb1b0e4816378ca530887ce3438db0ee482db))
+* **dashboard:** demo mode banner, one-click entry and read-only notes ([#1918](https://github.com/Controlvar/controlvar/issues/1918)) ([ab17771](https://github.com/Controlvar/controlvar/commit/ab17771eab203558b51a66ebaaeb8621d6d14188))
+* **dashboard:** download an experiment's results as CSV ([#442](https://github.com/Controlvar/controlvar/issues/442)) ([#1908](https://github.com/Controlvar/controlvar/issues/1908)) ([bb6231c](https://github.com/Controlvar/controlvar/commit/bb6231c04c9a55c3ad53aaa8adcc535f5907eb3a))
+* **dashboard:** edit a rollout schedule's dates, maximum and minimum stage duration ([#442](https://github.com/Controlvar/controlvar/issues/442)) ([#1905](https://github.com/Controlvar/controlvar/issues/1905)) ([8d20f30](https://github.com/Controlvar/controlvar/commit/8d20f303f90f8e82b40c55bf5a1481bc1f964814))
+* **dashboard:** effect size and each variant's interval in the results table ([#442](https://github.com/Controlvar/controlvar/issues/442)) ([#1904](https://github.com/Controlvar/controlvar/issues/1904)) ([1353d4f](https://github.com/Controlvar/controlvar/commit/1353d4f6a9a350a7ee4e8d9e6b006ea629af06fd))
+* **dashboard:** set Bayesian priors when creating an experiment ([#442](https://github.com/Controlvar/controlvar/issues/442)) ([#1912](https://github.com/Controlvar/controlvar/issues/1912)) ([5c41838](https://github.com/Controlvar/controlvar/commit/5c4183811370922baaa9b034ddd978ba730e7c89))
+* **deploy:** a recipe for a read-only public demo box ([#1921](https://github.com/Controlvar/controlvar/issues/1921)) ([915b569](https://github.com/Controlvar/controlvar/commit/915b5692ac3fa0b9178647dd26f9bd9e6a3c82c3))
+* **site:** books and walkthroughs pages, hero B, and a shorter homepage and docs hub ([e634136](https://github.com/Controlvar/controlvar/commit/e63413682ca56fbb1e906b65ae253e11ed503135))
+* **site:** link what Controlvar does and the roadmap from the docs hub, footer and homepage ([#1916](https://github.com/Controlvar/controlvar/issues/1916)) ([2a8c990](https://github.com/Controlvar/controlvar/commit/2a8c990011e683bb3d06684b024b10b6929bc81d))
+* **tracking:** an event's metadata is refused over 16,384 bytes ([#1085](https://github.com/Controlvar/controlvar/issues/1085)) ([b2b0106](https://github.com/Controlvar/controlvar/commit/b2b01065ea09433b54ee8750bc83265b30de75a4))
+
+
+### Bug Fixes
+
+* **api:** the API does not start without its request-ID and metrics middleware ([#1898](https://github.com/Controlvar/controlvar/issues/1898)) ([f9afda2](https://github.com/Controlvar/controlvar/commit/f9afda21891d17c9f31c372def2cffeae216b802))
+* **auth:** POST /auth/confirm takes five attempts a minute, as sign-up does ([#1900](https://github.com/Controlvar/controlvar/issues/1900)) ([46147ab](https://github.com/Controlvar/controlvar/commit/46147abb68389f00637f0f6798c6e9adf6145153))
+* **cdk:** the Redis subnet group name is valid for the prod and demo environments ([#1914](https://github.com/Controlvar/controlvar/issues/1914)) ([b748cb7](https://github.com/Controlvar/controlvar/commit/b748cb7d94f950fb09e43e5720b5c878296adaec))
+* **ci:** unit tests pass in rc-evidence's shards (child test runs no longer inherit the shard) ([#1922](https://github.com/Controlvar/controlvar/issues/1922)) ([25b1496](https://github.com/Controlvar/controlvar/commit/25b14968e24fdbdc70641c504808cabad79a433f))
+* **export:** experiments_with_winners counts experiments with a winner ([#1907](https://github.com/Controlvar/controlvar/issues/1907)) ([32149d5](https://github.com/Controlvar/controlvar/commit/32149d5463460d01a1213e0c76686d5de4322812))
+* **results:** a significant win over a control with no conversions names the winner (engine 1.11.0) ([#1924](https://github.com/Controlvar/controlvar/issues/1924)) ([73cb943](https://github.com/Controlvar/controlvar/commit/73cb943c527cb6dd74e22aa6a8eeb071794a8401))
+* **site:** a not-found page, one footer, wrapping code, and the power calculator as hero ([a1f89cb](https://github.com/Controlvar/controlvar/commit/a1f89cb19780a7a4b1bc78b9ab75b83ffb239634))
+* **targeting:** an unreadable stored rule set affects only its own flag or segment ([#1674](https://github.com/Controlvar/controlvar/issues/1674)) ([#1899](https://github.com/Controlvar/controlvar/issues/1899)) ([fbbf02f](https://github.com/Controlvar/controlvar/commit/fbbf02f0643fd63ede85c8aba7998ffd0dcc6600))
+
+
+### Documentation
+
+* **cdk:** known issue: prod and demo deploys fail at the Redis stack until 0.46.0 ([#1915](https://github.com/Controlvar/controlvar/issues/1915)) ([764d792](https://github.com/Controlvar/controlvar/commit/764d7928feb944e2c848872c3b573b7246d5797b))
+
 ## [0.45.0](https://github.com/Controlvar/controlvar/compare/v0.44.1...v0.45.0) (2026-11-10)
 
 
