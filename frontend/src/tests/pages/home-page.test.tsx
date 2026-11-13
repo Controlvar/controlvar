@@ -160,7 +160,7 @@ describe("the homepage's live demo link", () => {
     expect(links.map((a) => ({ in: where(a), text: a.textContent }))).toEqual([
       { in: 'Main', text: 'Power calculator' },
       { in: 'Main', text: 'Power calculator' },
-      { in: 'Statistics beyond a p-value', text: 'Open the power calculator →' },
+      { in: 'Plan tests and analyse results', text: 'Open the power calculator →' },
       { in: 'Footer', text: 'Power calculator' },
     ]);
   });
@@ -321,7 +321,7 @@ describe("the homepage's links", () => {
 
   it('puts the books near the top: right after How it works, before the product rows (site design 2026-11-11, item 4)', () => {
     const h2s = Array.from(page().querySelectorAll('h2')).map((h) => h.textContent);
-    expect(h2s.slice(0, 3)).toEqual(['How it works', 'The Controlvar books', 'Roll features out gradually, and watch their safety signals']);
+    expect(h2s.slice(0, 3)).toEqual(['How it works', 'The Controlvar books', 'Roll features out gradually, with automatic rollback']);
   });
 
   /**

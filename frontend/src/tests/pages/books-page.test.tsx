@@ -131,7 +131,7 @@ describe('/books', () => {
     const { container } = render(<BooksPage />);
     expect(container.querySelector('h1')?.textContent).toBe('The Controlvar books');
     const text = container.textContent ?? '';
-    expect(text).toContain('through one real, open-source codebase: Controlvar itself');
+    expect(text).toContain("use Controlvar's own code for their examples");
     expect(text).toContain('Who they are for');
     expect(text).toContain('licensed CC BY 4.0');
   });
