@@ -22,7 +22,7 @@
         <dependency>
             <groupId>com.squareup.okhttp3</groupId>
             <artifactId>okhttp</artifactId>
-            <version>4.12.0</version>
+            <version>4.12.1</version>
         </dependency>
 
         <!-- JSON -->
@@ -48,7 +48,7 @@
         <dependency>
             <groupId>com.squareup.okhttp3</groupId>
             <artifactId>mockwebserver</artifactId>
-            <version>4.12.0</version>
+            <version>4.12.1</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -58,7 +58,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.6.0</version>
+                <version>3.6.1</version>
             </plugin>
             <!-- The contract smoke runner (com.controlvar.sdk.examples) is not API,
                  so the jar leaves it out. examples/contract_smoke.sh runs it from
