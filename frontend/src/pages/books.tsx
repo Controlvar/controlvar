@@ -29,8 +29,9 @@ export default function BooksPage() {
         <div className={`${WIDTH} py-14 lg:py-16`}>
           <h1 className={H1}>The Controlvar books</h1>
           <p className="mt-5 max-w-3xl text-lg leading-relaxed text-slate-600">
-            Engineering and programming books that use Controlvar&apos;s own code for their examples. Every concept is taught twice: once in general terms, and once in Controlvar&apos;s own
-            source, which you can clone, run and break on your own machine.
+            Engineering and programming books that use Controlvar&apos;s own code for their examples. Every concept is
+            taught twice: once in general terms, and once in Controlvar&apos;s own source, which you can clone, run and
+            break on your own machine.
           </p>
 
           {/* Labels, not headings: the page's h2s are its groups of books, on the site's one scale. */}
