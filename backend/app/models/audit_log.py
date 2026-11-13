@@ -74,6 +74,13 @@ class ActionType(str, Enum):
     USER_LOGOUT = "user_logout"
     USER_ACTIVATE = "user_activate"
     USER_DEACTIVATE = "user_deactivate"
+    # Two-step sign-in (#1812): turned on, turned off, reset by someone else,
+    # a recovery code used, and a new set of recovery codes.
+    USER_2FA_ENABLE = "user_2fa_enable"
+    USER_2FA_DISABLE = "user_2fa_disable"
+    USER_2FA_RESET = "user_2fa_reset"
+    USER_2FA_RECOVERY_USED = "user_2fa_recovery_used"
+    USER_2FA_RECOVERY_REGENERATE = "user_2fa_recovery_regenerate"
 
     # Permission Actions
     PERMISSION_GRANT = "permission_grant"
@@ -225,6 +232,11 @@ class AuditLog(Base, BaseModel):
             ActionType.USER_LOGOUT: "logged out",
             ActionType.USER_ACTIVATE: "activated",
             ActionType.USER_DEACTIVATE: "deactivated",
+            ActionType.USER_2FA_ENABLE: "turned on two-step sign-in",
+            ActionType.USER_2FA_DISABLE: "turned off two-step sign-in",
+            ActionType.USER_2FA_RESET: "reset two-step sign-in",
+            ActionType.USER_2FA_RECOVERY_USED: "used a recovery code",
+            ActionType.USER_2FA_RECOVERY_REGENERATE: "made new recovery codes",
             ActionType.PERMISSION_GRANT: "granted permission",
             ActionType.PERMISSION_REVOKE: "revoked permission",
             ActionType.ROLE_ASSIGN: "assigned role",

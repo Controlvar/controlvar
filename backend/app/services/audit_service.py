@@ -201,6 +201,11 @@ WRITTEN_ACTION_TYPES: frozenset = frozenset(
         ActionType.USER_LOGIN,
         ActionType.USER_ACTIVATE,
         ActionType.USER_DEACTIVATE,
+        ActionType.USER_2FA_ENABLE,
+        ActionType.USER_2FA_DISABLE,
+        ActionType.USER_2FA_RESET,
+        ActionType.USER_2FA_RECOVERY_USED,
+        ActionType.USER_2FA_RECOVERY_REGENERATE,
         ActionType.ROLE_ASSIGN,
         ActionType.API_KEY_CREATE,
         ActionType.API_KEY_REVOKE,
@@ -267,6 +272,9 @@ SYSTEM_COGNITO_SYNC = AuditActor(id=None, email="system:cognito-sync")
 #: Written by the modules; reserved here so that every profile reads it the
 #: same way.
 SYSTEM_SSO_SYNC = AuditActor(id=None, email="system:sso-sync")
+#: An operator's command run where the database is reachable, such as
+#: ``python -m backend.app.db.two_factor_reset`` (#1812): nobody is signed in.
+SYSTEM_OPERATOR_CLI = AuditActor(id=None, email="system:operator-cli")
 
 #: The reserved ``user_email`` values of the system actors.
 SYSTEM_ACTOR_EMAILS: frozenset = frozenset(
@@ -277,6 +285,7 @@ SYSTEM_ACTOR_EMAILS: frozenset = frozenset(
         SYSTEM_SAFETY_MONITOR,
         SYSTEM_COGNITO_SYNC,
         SYSTEM_SSO_SYNC,
+        SYSTEM_OPERATOR_CLI,
     )
 )
 

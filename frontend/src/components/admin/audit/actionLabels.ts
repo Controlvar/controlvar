@@ -46,6 +46,11 @@ export const ACTIONS: Readonly<Record<string, { label: string; group: ActionGrou
   user_delete: { label: 'User deleted', group: 'Users and access' },
   user_activate: { label: 'User reactivated', group: 'Users and access' },
   user_deactivate: { label: 'User deactivated', group: 'Users and access' },
+  user_2fa_enable: { label: 'Two-step sign-in turned on', group: 'Users and access' },
+  user_2fa_disable: { label: 'Two-step sign-in turned off', group: 'Users and access' },
+  user_2fa_reset: { label: 'Two-step sign-in reset', group: 'Users and access' },
+  user_2fa_recovery_used: { label: 'Recovery code used', group: 'Users and access' },
+  user_2fa_recovery_regenerate: { label: 'New recovery codes', group: 'Users and access' },
   role_assign: { label: 'Role changed', group: 'Users and access' },
   role_unassign: { label: 'Custom role removed', group: 'Users and access' },
   role_create: { label: 'Custom role created', group: 'Users and access' },
@@ -120,6 +125,7 @@ export const SYSTEM_ACTORS: Readonly<Record<string, string>> = {
   'system:safety-monitor': 'Safety monitor',
   'system:cognito-sync': 'Cognito sync',
   'system:sso-sync': 'SSO sync',
+  'system:operator-cli': 'Operator command',
 };
 
 /**
