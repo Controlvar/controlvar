@@ -66,8 +66,10 @@ steps:
       status: 200
       aria: |
         - banner:
-          - navigation:
-            - link "Sign in"
+          - navigation "Main":
+            - link "Docs"
+            - link "Power calculator"
+          - link "Sign in"
         - main:
           - heading "A/B testing and feature flags you run yourself." [level=1]
           - link "Sign in to the dashboard"

@@ -579,7 +579,8 @@ steps:
             name: fisher_exact_p
             args: {control_users: 25000, control_converted: 1836, treatment_users: 25000, treatment_converted: 2111}
       # The treatment's row reads the +15.0% lift the guide quotes with its direction word. Matched as part of the
-      # row, not as the whole cell's name: since #1538 the change cell also carries its interval lines.
+      # row, not as the whole cell's name: since #1538 the change cell also carries its interval lines, and since
+      # #1904 the effect size and the variant's own interval sit between the rate and the change.
       aria: |
         - main:
           - heading "Homepage Hero Copy Test" [level=2]
@@ -587,7 +588,7 @@ steps:
             - region "Metric comparison":
               - table:
                 - rowgroup:
-                  - row /8\.44% \+15\.0% · better/
+                  - row /new_copy 25,000 8\.44% 0\.04 \(negligible\) 8\.10% to 8\.79% \+15\.0% · better/
     fail: the results page does not show the seed's rates and lift that Scene 3 quotes, or a p-value below 0.001
   - id: sequential-tab
     doc: scene-3-statistical-results-5-min
