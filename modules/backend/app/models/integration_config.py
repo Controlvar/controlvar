@@ -33,6 +33,11 @@ class IntegrationType(str, enum.Enum):
     GITHUB = "github"
 
 
+#: The length of the ``last_error`` column.  The update schema refuses a longer
+#: value with 422, so the two cannot drift apart.
+LAST_ERROR_MAX_LENGTH = 1024
+
+
 class IntegrationConfig(Base):
     __tablename__ = "integration_configs"
     __table_args__ = (
@@ -47,7 +52,7 @@ class IntegrationConfig(Base):
     # Stored as given, not encrypted (the name is historical).
     encrypted_config = Column(JSONB, nullable=True)
     last_sync_at = Column(DateTime(timezone=True), nullable=True)
-    last_error = Column(String(1024), nullable=True)
+    last_error = Column(String(LAST_ERROR_MAX_LENGTH), nullable=True)
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
