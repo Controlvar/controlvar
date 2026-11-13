@@ -9,6 +9,9 @@
  * Only enabled connectors can be chosen. A connector the deployment has not
  * enabled is listed, marked "Not yet available", and its option is disabled;
  * if the chosen type is somehow not enabled, nothing is sent.
+ *
+ * check() and buildBody() (the field rules and the request body) end in
+ * `assertNever`; the form's other per-type branches do not.
  */
 import React, { useMemo, useRef, useState } from 'react';
 import {
@@ -18,6 +21,7 @@ import {
   ConnectionBody,
   ConnectionCreated,
   Connector,
+  RedshiftBody,
   SnowflakeBody,
   WarehouseType,
   warehouseName,
@@ -41,6 +45,16 @@ import {
   BIGQUERY_PROJECT,
   BIGQUERY_PROJECT_HELP,
   FieldErrors,
+  REDSHIFT_CLUSTER,
+  REDSHIFT_CLUSTER_HELP,
+  REDSHIFT_DATABASE,
+  REDSHIFT_DATABASE_HELP,
+  REDSHIFT_DB_USER,
+  REDSHIFT_DB_USER_HELP,
+  REDSHIFT_WORKGROUP,
+  REDSHIFT_WORKGROUP_HELP,
+  ROLE_ARN,
+  ROLE_ARN_HELP,
   checkBytesPerQuery,
   checkInteger,
   checkName,
@@ -51,10 +65,30 @@ import {
   checkSnowflakeRole,
   formatBytes,
   gigabytesToBytes,
-  ROLE_ARN,
 } from '@modules/components/warehouse/validation';
 
 type Values = Record<string, string>;
+
+/** Serverless (a workgroup) or provisioned (a cluster and a database user). */
+export type RedshiftShape = 'serverless' | 'provisioned';
+
+/** The types whose queries are capped in bytes; the others are capped in time. */
+export const BYTE_CAPPED: ReadonlySet<WarehouseType> = new Set<WarehouseType>(['bigquery', 'athena']);
+
+const REDSHIFT_SHAPES: { value: RedshiftShape; label: string; help: string }[] = [
+  { value: 'serverless', label: 'Serverless workgroup', help: 'Amazon Redshift Serverless.' },
+  { value: 'provisioned', label: 'Provisioned cluster', help: 'Signed in to as a database user.' },
+];
+
+/** The fields each shape sends; choosing a shape clears the other one's. */
+const SHAPE_FIELDS: Record<RedshiftShape, string[]> = {
+  serverless: ['workgroup_name'],
+  provisioned: ['cluster_identifier', 'db_user'],
+};
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled warehouse type: ${String(value)}`);
+}
 
 const DEFAULTS: Values = {
   name: '',
@@ -70,6 +104,9 @@ const DEFAULTS: Values = {
   region: '',
   role_arn: '',
   workgroup: '',
+  workgroup_name: '',
+  cluster_identifier: '',
+  db_user: '',
   database: '',
 };
 
@@ -85,6 +122,9 @@ const FIELD_ORDER = [
   'region',
   'role_arn',
   'workgroup',
+  'workgroup_name',
+  'cluster_identifier',
+  'db_user',
   'database',
   'service_account_json',
   'max_bytes_per_query',
@@ -103,7 +143,11 @@ function initialValues(connection?: Connection | null): Values {
   return values;
 }
 
-function check(type: WarehouseType, v: Values, key: string, keyRequired: boolean): FieldErrors {
+function initialShape(connection?: Connection | null): RedshiftShape {
+  return connection?.parameters?.cluster_identifier ? 'provisioned' : 'serverless';
+}
+
+function check(type: WarehouseType, v: Values, key: string, keyRequired: boolean, shape: RedshiftShape): FieldErrors {
   const e: FieldErrors = {};
   const put = (field: string, message: string | null) => {
     if (message) e[field] = message;
@@ -111,69 +155,119 @@ function check(type: WarehouseType, v: Values, key: string, keyRequired: boolean
   put('name', checkName(v.name));
   put('query_timeout_seconds', checkInteger(v.query_timeout_seconds, 'Query time limit', 10, 86400));
   put('max_runs_per_day', checkInteger(v.max_runs_per_day, 'Analyses per day', 1, 10000));
-  if (type === 'snowflake') {
-    put('account', checkSnowflakeAccount(v.account));
-    put('user', checkSnowflakeObject(v.user, 'User'));
-    put('role', checkSnowflakeRole(v.role));
-    put('warehouse', checkSnowflakeObject(v.warehouse, 'Warehouse'));
-  } else if (type === 'bigquery') {
-    put('billing_project', checkPattern(v.billing_project, BIGQUERY_PROJECT, 'Billing project', BIGQUERY_PROJECT_HELP));
-    put('location', checkPattern(v.location, BIGQUERY_LOCATION, 'Location', BIGQUERY_LOCATION_HELP));
-    put('max_bytes_per_query', checkBytesPerQuery(v.max_bytes_per_query));
-    if (keyRequired || key.trim()) put('service_account_json', checkServiceAccountJson(key));
-  } else {
+  const role = () => {
     put('region', checkPattern(v.region, AWS_REGION, 'Region', 'Use an AWS region code such as eu-west-1.'));
-    put(
-      'role_arn',
-      checkPattern(v.role_arn, ROLE_ARN, 'Role ARN', 'Use a role ARN such as arn:aws:iam::123456789012:role/ControlvarAthena.'),
-    );
-    put('workgroup', checkPattern(v.workgroup, ATHENA_WORKGROUP, 'Workgroup', 'Use letters, digits, . _ and - (up to 128).'));
-    put('database', checkPattern(v.database, ATHENA_DATABASE, 'Database', 'Use lower-case letters, digits and _.'));
-    put('max_bytes_per_query', checkBytesPerQuery(v.max_bytes_per_query));
+    put('role_arn', checkPattern(v.role_arn, ROLE_ARN, 'Role ARN', ROLE_ARN_HELP));
+  };
+  switch (type) {
+    case 'snowflake':
+      put('account', checkSnowflakeAccount(v.account));
+      put('user', checkSnowflakeObject(v.user, 'User'));
+      put('role', checkSnowflakeRole(v.role));
+      put('warehouse', checkSnowflakeObject(v.warehouse, 'Warehouse'));
+      return e;
+    case 'bigquery':
+      put('billing_project', checkPattern(v.billing_project, BIGQUERY_PROJECT, 'Billing project', BIGQUERY_PROJECT_HELP));
+      put('location', checkPattern(v.location, BIGQUERY_LOCATION, 'Location', BIGQUERY_LOCATION_HELP));
+      put('max_bytes_per_query', checkBytesPerQuery(v.max_bytes_per_query));
+      if (keyRequired || key.trim()) put('service_account_json', checkServiceAccountJson(key));
+      return e;
+    case 'athena':
+      role();
+      put('workgroup', checkPattern(v.workgroup, ATHENA_WORKGROUP, 'Workgroup', 'Use letters, digits, . _ and - (up to 128).'));
+      put('database', checkPattern(v.database, ATHENA_DATABASE, 'Database', 'Use lower-case letters, digits and _.'));
+      put('max_bytes_per_query', checkBytesPerQuery(v.max_bytes_per_query));
+      return e;
+    case 'redshift':
+      role();
+      if (shape === 'serverless') {
+        put('workgroup_name', checkPattern(v.workgroup_name, REDSHIFT_WORKGROUP, 'Workgroup', REDSHIFT_WORKGROUP_HELP));
+      } else {
+        put(
+          'cluster_identifier',
+          checkPattern(v.cluster_identifier, REDSHIFT_CLUSTER, 'Cluster identifier', REDSHIFT_CLUSTER_HELP),
+        );
+        put('db_user', checkPattern(v.db_user, REDSHIFT_DB_USER, 'Database user', REDSHIFT_DB_USER_HELP));
+      }
+      put('database', checkPattern(v.database, REDSHIFT_DATABASE, 'Database', REDSHIFT_DATABASE_HELP));
+      return e;
+    default:
+      return assertNever(type);
   }
-  return e;
 }
 
-function buildBody(type: WarehouseType, v: Values, key: string): ConnectionBody {
+function buildBody(type: WarehouseType, v: Values, key: string, shape: RedshiftShape): ConnectionBody {
   const limits = {
     name: v.name,
     query_timeout_seconds: Number(v.query_timeout_seconds),
     max_runs_per_day: Number(v.max_runs_per_day),
   };
-  if (type === 'snowflake') {
-    const body: SnowflakeBody = {
-      ...limits,
-      warehouse_type: 'snowflake',
-      account: v.account,
-      user: v.user,
-      role: v.role,
-      warehouse: v.warehouse,
-    };
-    return body;
+  const bytes = () => gigabytesToBytes(v.max_bytes_per_query) ?? 0;
+  switch (type) {
+    case 'snowflake': {
+      const body: SnowflakeBody = {
+        ...limits,
+        warehouse_type: 'snowflake',
+        account: v.account,
+        user: v.user,
+        role: v.role,
+        warehouse: v.warehouse,
+      };
+      return body;
+    }
+    case 'bigquery': {
+      const body: BigQueryBody = {
+        ...limits,
+        warehouse_type: 'bigquery',
+        billing_project: v.billing_project,
+        location: v.location,
+        max_bytes_per_query: bytes(),
+      };
+      if (key) body.service_account_json = key;
+      return body;
+    }
+    case 'athena': {
+      const body: AthenaBody = {
+        ...limits,
+        warehouse_type: 'athena',
+        region: v.region,
+        role_arn: v.role_arn,
+        workgroup: v.workgroup,
+        database: v.database,
+        max_bytes_per_query: bytes(),
+      };
+      return body;
+    }
+    case 'redshift': {
+      const common = {
+        ...limits,
+        warehouse_type: 'redshift' as const,
+        region: v.region,
+        role_arn: v.role_arn,
+        database: v.database,
+      };
+      // One shape's fields, never both, and no byte cap.
+      const body: RedshiftBody =
+        shape === 'serverless'
+          ? { ...common, workgroup_name: v.workgroup_name }
+          : { ...common, cluster_identifier: v.cluster_identifier, db_user: v.db_user };
+      return body;
+    }
+    default:
+      return assertNever(type);
   }
-  const bytes = gigabytesToBytes(v.max_bytes_per_query) ?? 0;
-  if (type === 'bigquery') {
-    const body: BigQueryBody = {
-      ...limits,
-      warehouse_type: 'bigquery',
-      billing_project: v.billing_project,
-      location: v.location,
-      max_bytes_per_query: bytes,
-    };
-    if (key) body.service_account_json = key;
-    return body;
-  }
-  const body: AthenaBody = {
-    ...limits,
-    warehouse_type: 'athena',
-    region: v.region,
-    role_arn: v.role_arn,
-    workgroup: v.workgroup,
-    database: v.database,
-    max_bytes_per_query: bytes,
-  };
-  return body;
 }
+
+/** The help under the Region field, per role-based type. */
+function regionHelp(type: WarehouseType): string {
+  return type === 'redshift'
+    ? 'The AWS region of your Redshift workgroup or cluster, e.g. eu-west-1.'
+    : 'The AWS region of your Athena workgroup, e.g. eu-west-1.';
+}
+
+/** What a role-based connection's role must be: what the API and every test enforce. */
+const ROLE_ARN_FIELD_HELP =
+  'The role Controlvar assumes in your account, under the IAM path /controlvar-warehouse/. Its trust policy must require the external ID generated when you save.';
 
 interface TestState {
   status: 'running' | 'passed' | 'failed';
@@ -196,6 +290,7 @@ export function ConnectionForm({ mode, connectors, connection, onSaved, onCancel
     mode === 'edit' && connection ? connection.warehouse_type : enabledTypes[0] ?? null,
   );
   const [values, setValues] = useState<Values>(() => initialValues(connection));
+  const [shape, setShape] = useState<RedshiftShape>(() => initialShape(connection));
   // The service-account key: this state, the textarea, the request body. Nothing else.
   const [serviceAccountJson, setServiceAccountJson] = useState('');
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -208,13 +303,14 @@ export function ConnectionForm({ mode, connectors, connection, onSaved, onCancel
 
   const typeEnabled = type !== null && enabledTypes.includes(type);
   const keyRequired = mode === 'create';
-  // BigQuery only: an Athena role's trust policy needs the external ID generated on save, and a
-  // Snowflake key pair is generated on save, so both are tested after saving.
+  // BigQuery only: a role's trust policy (Athena, Redshift) needs the external ID generated on
+  // save, and a Snowflake key pair is generated on save, so all three are tested after saving.
   const testable = mode === 'create' && type === 'bigquery';
   // The UX rule: a BigQuery key is saved only once a test has passed with exactly these values.
   const testRequired = mode === 'create' && type === 'bigquery';
   const testCurrent = test !== null && test.version === version;
   const testPassed = testCurrent && test?.status === 'passed';
+  const byteCapped = type !== null && BYTE_CAPPED.has(type);
 
   const edited = () => setVersion((n) => n + 1);
   const set = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -224,6 +320,23 @@ export function ConnectionForm({ mode, connectors, connection, onSaved, onCancel
       if (!prev[field]) return prev;
       const next = { ...prev };
       delete next[field];
+      return next;
+    });
+    edited();
+  };
+
+  const chooseShape = (next: RedshiftShape) => {
+    const other: RedshiftShape = next === 'serverless' ? 'provisioned' : 'serverless';
+    setShape(next);
+    // The other shape's values are cleared, so a body can never carry both.
+    setValues((v) => {
+      const cleared = { ...v };
+      for (const field of SHAPE_FIELDS[other]) cleared[field] = '';
+      return cleared;
+    });
+    setErrors((prev) => {
+      const next = { ...prev };
+      for (const field of SHAPE_FIELDS[other]) delete next[field];
       return next;
     });
     edited();
@@ -239,14 +352,14 @@ export function ConnectionForm({ mode, connectors, connection, onSaved, onCancel
       setSubmitError(type ? `${warehouseName(type)} isn't available on this deployment yet.` : 'Choose a warehouse.');
       return null;
     }
-    const found = check(type, values, serviceAccountJson, keyRequired);
+    const found = check(type, values, serviceAccountJson, keyRequired, shape);
     setErrors(found);
     if (Object.keys(found).length > 0) {
       setSubmitError(null);
       focusFirstError(found);
       return null;
     }
-    return buildBody(type, values, serviceAccountJson);
+    return buildBody(type, values, serviceAccountJson, shape);
   };
 
   const applyServerError = (err: unknown, fallback: string) => {
@@ -328,7 +441,7 @@ export function ConnectionForm({ mode, connectors, connection, onSaved, onCancel
   };
 
   const worstCase = useMemo(() => {
-    if (type === 'snowflake' || !type) return null;
+    if (!type || !BYTE_CAPPED.has(type)) return null;
     const bytes = gigabytesToBytes(values.max_bytes_per_query);
     const runs = Number(values.max_runs_per_day);
     if (bytes === null || !Number.isInteger(runs) || runs < 1) return null;
@@ -458,18 +571,62 @@ export function ConnectionForm({ mode, connectors, connection, onSaved, onCancel
             </>
           )}
 
+          {(type === 'athena' || type === 'redshift') && (
+            <>
+              {input('region', 'Region', regionHelp(type))}
+              {input('role_arn', 'Role ARN', ROLE_ARN_FIELD_HELP)}
+            </>
+          )}
+
           {type === 'athena' && (
             <>
-              {input('region', 'Region', 'The AWS region of your Athena workgroup, e.g. eu-west-1.')}
-              {input('role_arn', 'Role ARN', 'The role Controlvar assumes in your account. It must not be in this deployment’s own AWS account.')}
               {input('workgroup', 'Workgroup', 'A workgroup that enforces its settings, with a per-query data limit and a results location.')}
               {input('database', 'Database', 'The Glue database your tables are in.')}
             </>
           )}
 
+          {type === 'redshift' && (
+            <>
+              <fieldset className="space-y-2" data-testid="wh-conn-redshift-shape">
+                <legend className="text-sm font-medium text-slate-800">Redshift deployment</legend>
+                {REDSHIFT_SHAPES.map((s) => {
+                  const id = `wh-conn-shape-${s.value}`;
+                  return (
+                    <div key={s.value} className="flex items-center gap-2">
+                      <input
+                        id={id}
+                        type="radio"
+                        name="redshift_shape"
+                        value={s.value}
+                        checked={shape === s.value}
+                        aria-describedby={`${id}-help`}
+                        onChange={() => chooseShape(s.value)}
+                      />
+                      <label htmlFor={id} className="text-sm text-slate-900">
+                        {s.label}
+                      </label>
+                      <span id={`${id}-help`} className="text-xs text-slate-600">
+                        {s.help}
+                      </span>
+                    </div>
+                  );
+                })}
+              </fieldset>
+              {shape === 'serverless'
+                ? input('workgroup_name', 'Workgroup', 'The Redshift Serverless workgroup queries run on.')
+                : (
+                  <>
+                    {input('cluster_identifier', 'Cluster identifier', 'The provisioned cluster queries run on.')}
+                    {input('db_user', 'Database user', 'The database user Controlvar signs in to the cluster as, with read-only grants.')}
+                  </>
+                )}
+              {input('database', 'Database', 'The database your tables are in.')}
+            </>
+          )}
+
           <fieldset className="space-y-4 rounded-md border border-slate-200 p-4">
             <legend className="px-1 text-sm font-medium text-slate-800">Limits</legend>
-            {type !== 'snowflake' &&
+            {byteCapped &&
               input(
                 'max_bytes_per_query',
                 'Most data a query may read (GB)',
@@ -498,9 +655,9 @@ export function ConnectionForm({ mode, connectors, connection, onSaved, onCancel
               connection. There is no password.
             </p>
           )}
-          {mode === 'create' && type === 'athena' && (
+          {mode === 'create' && (type === 'athena' || type === 'redshift') && (
             <p className="text-sm text-slate-700">
-              Saving generates the external ID your role&apos;s trust policy must name; test the connection after
+              Saving generates the external ID your role&apos;s trust policy must require; test the connection after
               saving.
             </p>
           )}

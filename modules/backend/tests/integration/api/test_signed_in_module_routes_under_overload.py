@@ -176,7 +176,7 @@ ATHENA_BODY: Dict[str, Any] = {
     "warehouse_type": "athena",
     "name": "Lake",
     "region": "us-east-1",
-    "role_arn": "arn:aws:iam::123456789012:role/controlvar-reader",
+    "role_arn": "arn:aws:iam::123456789012:role/controlvar-warehouse/controlvar-reader",
     "workgroup": "primary",
     "database": "main",
     "max_bytes_per_query": 10_000_000_000,
@@ -281,7 +281,7 @@ def make_connection(world: World, warehouse_type: str = "athena", **values):
     parameters = {
         "athena": {
             "region": "us-east-1",
-            "role_arn": "arn:aws:iam::123456789012:role/controlvar-reader",
+            "role_arn": "arn:aws:iam::123456789012:role/controlvar-warehouse/controlvar-reader",
             "workgroup": "primary",
             "database": "main",
         },

@@ -119,7 +119,7 @@ Output, for a full install (a core install prints the first line only):
 
 ```text
 4955571d232c (head)
-modules_0004_rbac_activation (head)
+modules_0005_redshift (head)
 ```
 
 One line per head: the revision ID of the last migration applied on each
@@ -157,9 +157,9 @@ Roll back the most recent migration **of one branch**. With two heads a bare
 `-1` is ambiguous — alembic warns and picks one, which may not be the branch you
 meant — so name the branch:
 
-The modules branch has four revisions: `modules_0001_rbac`, then
+The modules branch has five revisions: `modules_0001_rbac`, then
 `modules_0002_warehouse_analysis`, then `modules_0003_lower_is_better`, then
-`modules_0004_rbac_activation`. Name
+`modules_0004_rbac_activation`, then `modules_0005_redshift`. Name
 the modules revision to end at rather than counting back: a relative step such
 as `modules@-2` counts from the newest revision the image has, so it unapplies
 a different revision once a release adds one.
@@ -167,20 +167,24 @@ a different revision once a release adds one.
 The modules branch, back to a named revision:
 
 ```{.bash skip reason="destructive: unapplies modules revisions; see what each drops"}
+docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade modules_0004_rbac_activation
 docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade modules_0003_lower_is_better
 docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade modules_0002_warehouse_analysis
 docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade modules_0001_rbac
 ```
 
-`downgrade modules_0003_lower_is_better` unapplies
-`modules_0004_rbac_activation` only, which drops the column `activated_at` from
-`user_custom_roles` and `direct_permission_grants`, with any activation time
-stored in it. `downgrade modules_0002_warehouse_analysis` also unapplies
-`modules_0003_lower_is_better`, which drops the column
+`downgrade modules_0004_rbac_activation` unapplies `modules_0005_redshift`
+only, which puts back the previous release's constraints on
+`warehouse_connections` and changes no row; it refuses while any Amazon
+Redshift connection is stored. `downgrade modules_0003_lower_is_better` also
+unapplies `modules_0004_rbac_activation`, which drops the column
+`activated_at` from `user_custom_roles` and `direct_permission_grants`, with
+any activation time stored in it. `downgrade modules_0002_warehouse_analysis`
+also unapplies `modules_0003_lower_is_better`, which drops the column
 `warehouse_sources.lower_is_better`, every metric source's lower-is-better
 setting. `downgrade modules_0001_rbac` also unapplies
 `modules_0002_warehouse_analysis`, which drops the three warehouse tables it
-created, with their rows. `modules@-4` unapplies all four, newest first.
+created, with their rows. `modules@-5` unapplies all five, newest first.
 
 One step back on the core chain:
 
@@ -200,7 +204,8 @@ than from those migrations, their downgrade is a no-op — it will not drop
 populated tables it never made. `modules_0003_lower_is_better` drops its column
 on every database, however the column was made.
 `modules_0004_rbac_activation` drops its two columns on every database in the
-same way.
+same way, and `modules_0005_redshift` puts back its three constraints on every
+database.
 
 ### `modules_0002_warehouse_analysis` removes saved warehouse connections
 
@@ -210,7 +215,8 @@ earlier `warehouse_connections` is deleted** — connections saved through the
 earlier warehouse endpoints — and nothing is copied into the new table.
 
 Downgrading it cannot bring those rows back: `downgrade modules_0001_rbac`
-first unapplies `modules_0004_rbac_activation`, which drops the
+first unapplies `modules_0005_redshift`, which refuses while any Amazon
+Redshift connection is stored, `modules_0004_rbac_activation`, which drops the
 activation-time column of custom role assignments and direct grants, with any
 activation time stored in it, and `modules_0003_lower_is_better`, which drops
 each metric source's
@@ -270,6 +276,24 @@ one take effect (see [RBAC](../api/rbac.md)). Downgrading below this revision
 after that release drops every activation time: every assignment and grant is
 inactive again, and stays inactive after upgrading; assign the roles and make
 the grants again.
+
+### `modules_0005_redshift` lets a warehouse connection be an Amazon Redshift connection
+
+This revision changes three constraints of `warehouse_connections` and no
+column or row, so that a connection may be an Amazon Redshift one
+(`warehouse_type` `redshift`). Like an Amazon Athena connection, it stores no
+secret and has the external ID generated when it is saved; unlike one, it has
+no per-query byte cap. Every connection already stored is kept as it is, and
+the previous release keeps saving BigQuery, Snowflake and Athena connections
+against the upgraded schema.
+
+Downgrading this revision (to `modules_0004_rbac_activation`) puts back the
+previous release's constraints and changes no row. It refuses while any
+Amazon Redshift connection is stored, names them, and changes nothing:
+
+```text
+modules_0005_redshift: refusing to downgrade: 1 warehouse connection(s) are Amazon Redshift connections (<id>). The previous release's warehouse_connections constraints refuse that type. Delete those connections, or restore the backup taken before the upgrade to this release. Nothing was changed.
+```
 
 ### `1ab99332f0ba` rewrites stored event times to UTC
 
@@ -1059,6 +1083,9 @@ What this means for you:
   is backward-compatible for a rollback too, and undoing it drops the
   activation-time column of custom role assignments and direct grants, with
   any activation time stored in it; an upgrade afterwards adds the column empty.
+  [`modules_0005_redshift`](#modules_0005_redshift-lets-a-warehouse-connection-be-an-amazon-redshift-connection)
+  is backward-compatible for a rollback too, and undoing it changes no row; it
+  refuses while any Amazon Redshift connection is stored.
 - Compose runs one API container, which is the only writer and keeps `RUN_MIGRATIONS=true`.
   The chart already keeps the bootstrap out of the serving container: it runs
   it in an init container.

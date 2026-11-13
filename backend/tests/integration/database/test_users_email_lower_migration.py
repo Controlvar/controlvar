@@ -75,7 +75,7 @@ EARLIER_CORE_HEAD = "8fd44fb483a2"
 CORE_HEAD = "4955571d232c"
 #: The modules branch's head in this tree, recorded on both sides of every
 #: step here: this file is about the core chain.
-MODULES_HEAD = "modules_0004_rbac_activation"
+MODULES_HEAD = "modules_0005_redshift"
 
 PREVIOUS_ROWS = {
     CORE: {PREVIOUS_CORE_HEAD},

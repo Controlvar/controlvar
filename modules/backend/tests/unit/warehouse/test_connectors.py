@@ -33,7 +33,7 @@ VENDOR_DOC_ROOTS = {
 #: BigQuery: wl-bigquery-20261005T150837Z-7782e712).
 SHIPPED_ENABLED = frozenset({"snowflake", "bigquery"})
 #: Every other connector ships disabled.
-SHIPPED_DISABLED = ("athena",)
+SHIPPED_DISABLED = ("athena", "redshift")
 
 
 def test_enabled_connectors_exact():
@@ -67,6 +67,9 @@ def test_disabled_copy_names_the_warehouse():
     )
     assert ConnectorDisabled("athena").message == (
         "Amazon Athena isn't available on this deployment yet."
+    )
+    assert ConnectorDisabled("redshift").message == (
+        "Amazon Redshift isn't available on this deployment yet."
     )
 
 

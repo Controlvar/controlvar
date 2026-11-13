@@ -64,11 +64,12 @@ LATER_DOWNGRADE_TABLES = {
 #: The modules revision the previous full release (0.10.0) recorded, and the
 #: branch's head in this tree.  This tree also carries
 #: ``modules_0002_warehouse_analysis`` (#312),
-#: ``modules_0003_lower_is_better`` (#1386) and
-#: ``modules_0004_rbac_activation`` (#891), so a full database at the
+#: ``modules_0003_lower_is_better`` (#1386),
+#: ``modules_0004_rbac_activation`` (#891) and
+#: ``modules_0005_redshift`` (#826), so a full database at the
 #: previous release has revisions to apply on each line.
 PREVIOUS_MODULES_REVISION = "modules_0001_rbac"
-MODULES_HEAD = "modules_0004_rbac_activation"
+MODULES_HEAD = "modules_0005_redshift"
 #: Tables ``modules_0002_warehouse_analysis`` creates; the previous release has
 #: neither.
 WAREHOUSE_TABLES = {"warehouse_sources", "warehouse_analysis_runs"}

@@ -37,9 +37,10 @@ pytestmark = [pytest.mark.unit]
 
 #: Request body models reachable from the routes, per profile. #1545 added 11
 #: to both: /start's body, VisualConfig with its page and two goal kinds, and
-#: VisualChanges with its five change operations.
+#: VisualChanges with its five change operations. #826 added 2 to the full
+#: profile: the Redshift create and update bodies.
 CORE_MODEL_COUNT = 90
-FULL_MODEL_COUNT = 132
+FULL_MODEL_COUNT = 134
 
 #: ``(model, field)`` pairs that a ``mode="before"`` field validator covers.
 CORE_BEFORE_COUNT = 46

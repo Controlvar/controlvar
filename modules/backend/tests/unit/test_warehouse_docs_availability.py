@@ -28,7 +28,12 @@ pytestmark = pytest.mark.unit
 PAGE = Path(__file__).resolve().parents[4] / "docs" / "api" / "warehouse-analytics.md"
 
 
-NAMES = {"bigquery": "BigQuery", "snowflake": "Snowflake", "athena": "Amazon Athena"}
+NAMES = {
+    "bigquery": "BigQuery",
+    "snowflake": "Snowflake",
+    "athena": "Amazon Athena",
+    "redshift": "Amazon Redshift",
+}
 
 
 def _text() -> str:

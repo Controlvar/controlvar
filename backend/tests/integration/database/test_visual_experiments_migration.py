@@ -44,7 +44,7 @@ REVISION = "4955571d232c"
 PREVIOUS_CORE_HEAD = "c448_balance_within"
 #: The core head of this tree.
 CORE_HEAD = "4955571d232c"
-MODULES_HEAD = "modules_0004_rbac_activation"
+MODULES_HEAD = "modules_0005_redshift"
 
 PREVIOUS_ROWS = {
     CORE: {PREVIOUS_CORE_HEAD},
