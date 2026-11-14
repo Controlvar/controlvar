@@ -208,6 +208,7 @@ export const WAREHOUSE_NAMES: Record<string, string> = {
   bigquery: 'BigQuery',
   snowflake: 'Snowflake',
   athena: 'Amazon Athena',
+  redshift: 'Amazon Redshift',
 };
 
 export function warehouseName(type: string | null | undefined): string {

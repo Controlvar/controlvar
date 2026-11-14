@@ -136,6 +136,9 @@ export function evaluationFromResponse(
     loading: false,
     error: null,
     ...(typeof data.reason === 'string' ? { reason: data.reason } : {}),
+    // Only when the server sent them: a server without flag values sends neither.
+    ...(data.value !== undefined && data.value !== null ? { value: data.value } : {}),
+    ...(typeof data.value_type === 'string' ? { valueType: data.value_type } : {}),
   };
 }
 

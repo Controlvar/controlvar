@@ -53,6 +53,9 @@ KEY_ROUTES = {
     ("POST", "/api/v1/tracking/evaluations"),
     ("POST", "/api/v1/tracking/events"),
     ("POST", "/api/v1/tracking/track"),
+    # #1545: the visual editor's browser script (backend/app/api/page_key.py).
+    ("POST", "/api/v1/tracking/visual"),
+    ("POST", "/api/v1/tracking/visual/preview"),
 }
 
 #: Added by the full profile.
@@ -184,7 +187,7 @@ def test_each_api_key_route_has_one_synchronous_step():
 
 
 def test_the_counts_match_the_tables():
-    assert len(KEY_ROUTES) == 13
+    assert len(KEY_ROUTES) == 15
     assert len(MODULE_KEY_ROUTES) == 2
     assert len(READER_ROUTES) == 5
     assert not KEY_ROUTES & MODULE_KEY_ROUTES

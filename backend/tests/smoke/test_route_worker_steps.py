@@ -80,16 +80,18 @@ MODULE_ASYNC_FIRST: set = set()
 CORE_ASYNC_FIRST: set = set()
 
 #: Routes whose ``async`` handler takes a worker trip itself while a ``get_db``
-#: is in its dependency tree. Six of the core seven close their session first
-#: (the SDK routes and the experiment results routes); ``/tracking/assign``
-#: releases the request's sessions first, and takes its trip only for an
-#: experiment that balances within groups (#448); the module three release the
-#: request's sessions first (the warehouse routes that wait on the warehouse).
+#: is in its dependency tree. Seven of the core eight close their session first
+#: (the SDK routes, the visual page route (#1545) and the experiment results
+#: routes); ``/tracking/assign`` releases the request's sessions first, and
+#: takes its trip only for an experiment that balances within groups (#448);
+#: the module three release the request's sessions first (the warehouse routes
+#: that wait on the warehouse).
 CORE_HANDLER_TRIPS = {
     ("GET", "/api/v1/sdk/ruleset"),
     ("POST", "/api/v1/tracking/evaluations"),
     ("POST", "/api/v1/tracking/assign"),
     ("POST", "/api/v1/tracking/assign/batch"),
+    ("POST", "/api/v1/tracking/visual"),
     ("GET", "/api/v1/experiments/{experiment_id}/results"),
     ("GET", "/api/v1/experiments/{experiment_id}/daily-results"),
     ("GET", "/api/v1/experiments/{experiment_id}/segmented-results/{segment_by}"),

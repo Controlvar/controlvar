@@ -65,7 +65,7 @@ CORE_HEAD = "4955571d232c"
 #: (#448) drops ``balance_group_counters``; ``4955571d232c`` (#1545) drops
 #: ``visual_tokens``.
 LATER_DOWNGRADE_TABLES = {"balance_group_counters", "visual_tokens"}
-MODULES_HEAD = "modules_0004_rbac_activation"
+MODULES_HEAD = "modules_0005_redshift"
 
 PREVIOUS_ROWS = {
     CORE: {PREVIOUS_CORE_HEAD},

@@ -47,10 +47,10 @@ CORE_HEAD = tree_profiles.CORE_HEAD
 #: The modules head of the previous full release, and this revision's parent.
 PREVIOUS_MODULES_HEAD = "modules_0002_warehouse_analysis"
 #: The modules branch's head: not this revision since
-#: ``modules_0004_rbac_activation`` (#891) was added on top of it.  ``upgrade
-#: heads`` runs on to that one, and a downgrade to
-#: :data:`PREVIOUS_MODULES_HEAD` unapplies both.
-MODULES_HEAD = "modules_0004_rbac_activation"
+#: ``modules_0004_rbac_activation`` (#891) and then ``modules_0005_redshift``
+#: (#826) were added on top of it.  ``upgrade heads`` runs on to the head, and
+#: a downgrade to :data:`PREVIOUS_MODULES_HEAD` unapplies all three.
+MODULES_HEAD = "modules_0005_redshift"
 PREVIOUS_FULL_HEADS = {CORE_HEAD, PREVIOUS_MODULES_HEAD}
 FULL_HEADS = {CORE_HEAD, MODULES_HEAD}
 

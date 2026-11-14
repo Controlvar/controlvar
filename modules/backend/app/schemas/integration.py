@@ -7,7 +7,9 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from modules.backend.app.models.integration_config import LAST_ERROR_MAX_LENGTH
 
 
 class IntegrationType(str, enum.Enum):
@@ -35,6 +37,21 @@ class IntegrationConfigUpdate(BaseModel):
     is_active: Optional[bool] = None
     encrypted_config: Optional[Dict[str, Any]] = None
     last_error: Optional[str] = None
+
+    @field_validator("last_error")
+    @classmethod
+    def _last_error_fits_the_column(cls, value: Optional[str]) -> Optional[str]:
+        """Refuse a ``last_error`` the column cannot hold.
+
+        A validator, not ``Field(max_length=...)``, so the OpenAPI document
+        does not change.  Without it the database refuses the value and the
+        route answers 500.
+        """
+        if value is not None and len(value) > LAST_ERROR_MAX_LENGTH:
+            raise ValueError(
+                f"last_error must be at most {LAST_ERROR_MAX_LENGTH} characters"
+            )
+        return value
 
 
 #: The keys of ``encrypted_config`` a response shows, with their values: the

@@ -418,8 +418,9 @@ tracking event's `value` keeps its own refusals ([Track Event](#track-event)).
 ### Targeting Context Limits
 The routes that take a targeting `context` hold it to two limits before it is matched against
 any rule: `GET` and `POST /api/v1/feature-flags/evaluate/{flag_key}`,
-`GET /api/v1/feature-flags/user/{user_id}`, `POST /api/v1/tracking/assign`, and each user's
-`context` in `POST /api/v1/tracking/assign/batch`. `POST /api/v1/segments/{segment_id}/evaluate`
+`GET /api/v1/feature-flags/user/{user_id}`, `POST /api/v1/tracking/assign`, each user's
+`context` in `POST /api/v1/tracking/assign/batch`, and `POST /api/v1/tracking/visual` (beta).
+`POST /api/v1/segments/{segment_id}/evaluate`
 and `POST /api/v1/segments/bulk-evaluate` hold their `user_context` to the same limits.
 
 | Limit | At most | `detail` of the 422 |

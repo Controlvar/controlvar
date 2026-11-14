@@ -13,6 +13,7 @@ fixed ``detail``, before it is matched against any rule:
 * ``POST /api/v1/tracking/assign``
 * ``POST /api/v1/tracking/assign/batch``, for every user's context before the
   first user is assigned
+* ``POST /api/v1/tracking/visual``, before its website details are cleaned
 
 The checks, in order:
 

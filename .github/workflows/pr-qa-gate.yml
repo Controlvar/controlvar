@@ -459,6 +459,15 @@ jobs:
       - name: The public site in a browser (phone width, axe, Tab focus)
         run: cd frontend && npx playwright test --project=site
 
+      # #1545, V112: the `launch` project runs Chromium with
+      # tests/e2e/launch.ts's override, which keeps third-party storage
+      # partitioning and paint holding on (Playwright's default launch turns
+      # both off). Its fixture fails when the running browser's command line
+      # disables either; its canary pair frames the export above from port
+      # 4100 under the same site and under another. No other step runs it.
+      - name: "Browser launch: storage partitioning and paint holding on"
+        run: cd frontend && npx playwright test --project=launch
+
   # Each SDK's OWN exported hash function against golden-vectors.json: the
   # Python SDK's source, the JS and edge packages as built, the React Native
   # source (which is what that package ships), the Go module. One step per SDK,

@@ -46,16 +46,17 @@ CORE_HEAD = "4955571d232c"
 #: The modules branch's revisions, first to head.  A full database records
 #: whichever one the full release that migrated it had -- 0.9.x and earlier
 #: record the first, later releases the second, releases from #1386 on the
-#: third, and releases from #891 on the head -- and a core build must read
-#: any of them as "the other profile".
+#: third, releases from #891 on the fourth, and releases from #826 on the
+#: head -- and a core build must read any of them as "the other profile".
 MODULES_FIRST = "modules_0001_rbac"
 MODULES_SECOND = "modules_0002_warehouse_analysis"
 MODULES_THIRD = "modules_0003_lower_is_better"
-MODULES_HEAD = "modules_0004_rbac_activation"
+MODULES_FOURTH = "modules_0004_rbac_activation"
+MODULES_HEAD = "modules_0005_redshift"
 MODULES_REVISIONS = pytest.mark.parametrize(
     "modules_revision",
-    [MODULES_FIRST, MODULES_SECOND, MODULES_THIRD, MODULES_HEAD],
-    ids=["first", "second", "third", "head"],
+    [MODULES_FIRST, MODULES_SECOND, MODULES_THIRD, MODULES_FOURTH, MODULES_HEAD],
+    ids=["first", "second", "third", "fourth", "head"],
 )
 #: A core-chain id no build of this tree has: what a newer release records.
 NEWER_CORE_REVISION = "zz_newer_release_0001"

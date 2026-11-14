@@ -12,7 +12,9 @@
  * installed tarball: a Node ES module `import` of `/ssr` and of the root; a
  * CommonJS `require` of both, and that `/ssr` never loads the provider; and
  * TypeScript's own resolver finding `/ssr`'s types under node10, node16
- * (CommonJS and ES module), nodenext (ES module) and bundler resolution. The
+ * (CommonJS and ES module), nodenext (ES module) and bundler resolution. It
+ * also calls `useFlagValue` from the installed tarball, in a server render
+ * given a bootstrap, so a build that drops the hook's export fails here. The
  * Next App Router is not built here: a `next build` on the earlier shape found
  * `/ssr` (the plan's P18), and is to be repeated on this shape before the
  * 0.1.0 publish.
@@ -76,6 +78,11 @@ describe('packed package shape', () => {
     fs.symlinkSync(
       path.join(PKG_DIR, 'node_modules', 'react'),
       path.join(consumer, 'node_modules', 'react'),
+    );
+    // react-dom, for the server render that calls useFlagValue from the tarball (f).
+    fs.symlinkSync(
+      path.join(PKG_DIR, 'node_modules', 'react-dom'),
+      path.join(consumer, 'node_modules', 'react-dom'),
     );
     run('tar', ['-xzf', tgz, '-C', installed, '--strip-components=1'], scratch);
   }, 180000);
@@ -194,6 +201,59 @@ describe('packed package shape', () => {
     expect(Object.keys(shipped.exports ?? {}).sort()).toEqual(['.', './package.json', './ssr']);
     expect(strip(shipped.main)).toBe(strip(shipped.exports?.['.']?.default));
     expect(strip(shipped.types)).toBe(strip(shipped.exports?.['.']?.types));
+  });
+
+  test('(f) useFlagValue from the tarball reads a bootstrapped value in a server render, with no request', () => {
+    // The hook called, not only found: a server render under the package's own Provider, given
+    // a bootstrap of evaluate-route bodies, so no effect runs and no request is made.
+    const result = probe(
+      'probe-value.cjs',
+      `
+      let requests = 0;
+      globalThis.fetch = () => { requests += 1; return new Promise(() => {}); };
+      const React = require('react');
+      const { renderToString } = require('react-dom/server');
+      const { ExperimentationProvider, useFlagValue, FlagValueError } = require('@controlvar/react-sdk');
+      const body = (key, value, type) => ({ key, enabled: true, value, value_type: type, config: null, reason: 'rollout' });
+      const bootstrap = {
+        userId: 'u-1',
+        flags: {
+          copy: body('copy', 'on-copy', 'string'),
+          limit: body('limit', 10, 'number'),
+          theme: body('theme', { color: 'blue' }, 'json'),
+        },
+      };
+      const seen = {};
+      function Page() {
+        seen.string = useFlagValue('copy', 'string', 'fb').value;
+        seen.number = useFlagValue('limit', 'number', -1).value;
+        seen.json = useFlagValue('theme', 'json', null).value;
+        const wrong = useFlagValue('copy', 'number', -1);
+        seen.wrong = [wrong.value, wrong.error && wrong.error.code, wrong.error instanceof FlagValueError];
+        const missing = useFlagValue('missing', 'string', 'fb');
+        seen.missing = [missing.value, missing.loading];
+        return null;
+      }
+      renderToString(
+        React.createElement(
+          ExperimentationProvider,
+          { config: { apiKey: 'k', baseUrl: 'https://api.example.com' }, user: { userId: 'u-1' }, bootstrap },
+          React.createElement(Page),
+        ),
+      );
+      setTimeout(() => console.log(JSON.stringify({ seen, requests })), 20);
+    `,
+    );
+    expect(result).toEqual({
+      seen: {
+        string: 'on-copy',
+        number: 10,
+        json: { color: 'blue' },
+        wrong: [-1, 'TYPE_MISMATCH', true],
+        missing: ['fb', true],
+      },
+      requests: 0,
+    });
   });
 
   // (e) TypeScript's own resolver, against the installed tarball: an ES module

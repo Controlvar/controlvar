@@ -43,7 +43,9 @@ from backend.app.api.v1.endpoints import (
     sdk,
     segments,
     tracking,
+    tracking_visual,
     users,
+    visual_preview_links,
     websocket_results,
 )
 
@@ -70,7 +72,16 @@ def register_core_routers(router: APIRouter) -> APIRouter:
     router.include_router(
         experiments.router, prefix="/experiments", tags=["Experiments"]
     )
+    # #1545: a visual experiment's preview links, made and revoked on the
+    # dashboard (needs experiment update).
+    router.include_router(
+        visual_preview_links.router, prefix="/experiments", tags=["Experiments"]
+    )
     router.include_router(tracking.router, prefix="/tracking", tags=["Tracking"])
+    # #1545: the visual editor's browser script asks which changes and goals a
+    # visitor gets (POST /tracking/visual) and opens a preview link
+    # (POST /tracking/visual/preview); an API key with no scopes.
+    router.include_router(tracking_visual.router, prefix="/tracking", tags=["Tracking"])
     # Error reports (POST /tracking/errors, /tracking/errors/batch) feed feature flag
     # safety monitoring; same prefix and API-key auth as event tracking. Only reports
     # sent with an sdk:ruleset key count toward automatic rollback.

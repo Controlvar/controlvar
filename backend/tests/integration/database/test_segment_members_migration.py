@@ -54,7 +54,7 @@ CORE_HEAD = "4955571d232c"
 #: (#1528) drops a column and no table; ``c448_balance_within`` (#448) drops
 #: ``balance_group_counters``; ``4955571d232c`` (#1545) drops ``visual_tokens``.
 LATER_DOWNGRADE_TABLES = {"event_dedup_keys", "balance_group_counters", "visual_tokens"}
-MODULES_HEAD = "modules_0004_rbac_activation"
+MODULES_HEAD = "modules_0005_redshift"
 
 PREVIOUS_ROWS = {
     CORE: {PREVIOUS_CORE_HEAD},
