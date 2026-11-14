@@ -209,7 +209,7 @@ The platform uses a layered role-based access control system with four built-in 
 | **VIEWER** | Reads every experiment, flag and result and changes none; can create an API key, which writes tracking data |
 | **ANALYST** | View all experiments, results, audit logs, and reports |
 | **DEVELOPER** | Create and manage experiments and feature flags; read integration settings, but not change them |
-| **ADMIN** | Full access: user management, compliance exports, global settings, integrations |
+| **ADMIN** | Manage experiments, flags, integrations and compliance exports; user management needs a superuser account, which the Admin role alone is not |
 
 Beyond the four base roles, admins can create **custom roles** with specific per-resource and per-action permissions. They can also grant **direct permission** to a user for a specific resource, with an optional expiry timestamp for temporary access. Both add to what the user's base role allows, from their next request; they never remove a permission and never give administration.
 
