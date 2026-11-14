@@ -63,7 +63,7 @@ LATER_DOWNGRADE_TABLES = {
     "balance_group_counters",
     "visual_tokens",
 }
-MODULES_HEAD = "modules_0004_rbac_activation"
+MODULES_HEAD = "modules_0005_redshift"
 
 PREVIOUS_ROWS = {
     CORE: {PREVIOUS_CORE_HEAD},

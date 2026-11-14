@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import re
 import traceback
 import uuid
 
@@ -21,6 +22,7 @@ from modules.backend.app.models.warehouse_source import WarehouseSource
 from modules.backend.app.warehouse import bigquery as bq
 from modules.backend.tests.integration.warehouse.conftest import (
     ATHENA_BODY,
+    REDSHIFT_BODY,
     WA,
     bigquery_client_factory,
     ts,
@@ -97,6 +99,7 @@ def test_the_connector_list_follows_the_enabled_set(wh):
         "bigquery": True,
         "snowflake": False,
         "athena": True,
+        "redshift": False,
     }
     # Without the test's override: what this code ships with.
     app.dependency_overrides.pop(wa.get_enabled_connectors)
@@ -105,7 +108,11 @@ def test_the_connector_list_follows_the_enabled_set(wh):
         "bigquery": True,
         "snowflake": True,
         "athena": False,
+        "redshift": False,
     }
+    assert {c["warehouse_type"]: c["name"] for c in shipped}["redshift"] == (
+        "Amazon Redshift"
+    )
 
 
 def test_as_shipped_snowflake_and_bigquery_are_created_and_athena_is_422(
@@ -304,6 +311,158 @@ def test_a_connection_keeps_its_type(wh):
     regenerate = admin.post(f"{WA}/connections/{created['id']}/regenerate-key")
     assert regenerate.status_code == 422
     assert regenerate.json()["detail"]["code"] == "not_applicable"
+
+
+# -- Amazon Redshift (#826): a known type, shipped disabled ------------------------
+
+REDSHIFT_DISABLED = {
+    "code": "connector_disabled",
+    "message": "Amazon Redshift isn't available on this deployment yet.",
+}
+
+#: A provisioned cluster in place of the Serverless workgroup.
+REDSHIFT_CLUSTER = {
+    **{k: v for k, v in REDSHIFT_BODY.items() if k != "workgroup_name"},
+    "cluster_identifier": "prod-cluster-1",
+    "db_user": "controlvar_reader",
+}
+
+
+def _connection_count(wh) -> int:
+    return wh.db.query(WarehouseConnection).count()
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "body", [REDSHIFT_BODY, REDSHIFT_CLUSTER], ids=["serverless", "provisioned"]
+)
+def test_as_shipped_a_redshift_connection_is_422_and_nothing_is_stored(wh, body):
+    """With no override, a valid Redshift body is refused by the connector
+    rule, not by the schema, and no row is written."""
+    admin = wh.as_("ADMIN")
+    app.dependency_overrides.pop(wa.get_enabled_connectors)
+    before = _connection_count(wh)
+
+    refused = admin.post(f"{WA}/connections", json=body)
+
+    assert refused.status_code == 422, refused.text
+    assert refused.json()["detail"] == REDSHIFT_DISABLED
+    assert _connection_count(wh) == before
+    assert (
+        wh.db.query(WarehouseConnection).filter_by(warehouse_type="redshift").count()
+        == 0
+    )
+
+
+@pytest.mark.regression
+def test_the_harness_deployment_also_refuses_redshift(wh):
+    """The integration harness enables Athena and BigQuery only; Redshift is
+    refused there too, with its own name."""
+    response = wh.as_("ADMIN").post(f"{WA}/connections", json=REDSHIFT_BODY)
+    assert response.status_code == 422
+    assert response.json()["detail"] == REDSHIFT_DISABLED
+
+
+def test_a_redshift_connection_cannot_be_tested_before_it_is_saved(wh):
+    wh.enabled = frozenset({"redshift"})
+    response = wh.as_("ADMIN").post(f"{WA}/connections/test", json=REDSHIFT_BODY)
+    assert response.status_code == 422
+    locs = [tuple(map(str, e["loc"])) for e in response.json()["detail"]]
+    # Refused because no test body is a Redshift one: each member it has
+    # refuses the type.
+    assert ("body", "AthenaConnectionTest", "warehouse_type") in locs, locs
+    assert ("body", "BigQueryConnectionTest", "warehouse_type") in locs, locs
+    assert not any("Redshift" in part for loc in locs for part in loc), locs
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "field",
+    ["password", "secret_arn", "external_id", "endpoint", "max_bytes_per_query"],
+)
+def test_redshift_fields_outside_the_contract_are_refused(wh, field):
+    wh.enabled = frozenset({"redshift"})
+    before = _connection_count(wh)
+    response = wh.as_("ADMIN").post(
+        f"{WA}/connections", json={**REDSHIFT_BODY, field: "x"}
+    )
+    assert response.status_code == 422
+    # The Redshift member's own refusal: the field is not in its contract.
+    refusals = [
+        e
+        for e in response.json()["detail"]
+        if "RedshiftConnectionCreate" in str(e["loc"][1]) and e["loc"][-1] == field
+    ]
+    assert [e["type"] for e in refusals] == ["extra_forbidden"], response.json()
+    assert _connection_count(wh) == before
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    ("body", "stored_parameters"),
+    [
+        (
+            REDSHIFT_BODY,
+            {
+                "region": "eu-west-1",
+                "role_arn": REDSHIFT_BODY["role_arn"],
+                "workgroup_name": "analytics",
+                "database": "dev",
+            },
+        ),
+        (
+            REDSHIFT_CLUSTER,
+            {
+                "region": "eu-west-1",
+                "role_arn": REDSHIFT_BODY["role_arn"],
+                "cluster_identifier": "prod-cluster-1",
+                "db_user": "controlvar_reader",
+                "database": "dev",
+            },
+        ),
+    ],
+    ids=["serverless", "provisioned"],
+)
+def test_once_enabled_a_redshift_connection_is_saved_with_an_external_id(
+    wh, body, stored_parameters
+):
+    """What enabling the connector will expose, held now: the row stores one
+    shape's parameters and no secret, the platform generates the external ID,
+    and the connection is capped in time, not bytes."""
+    wh.enabled = frozenset({"redshift"})
+    created = wh.as_("ADMIN").post(f"{WA}/connections", json=body)
+
+    assert created.status_code == 201, created.text
+    shown = created.json()
+    assert shown["warehouse_type"] == "redshift"
+    assert shown["parameters"] == stored_parameters
+    assert shown["credentials_status"] == "ok"
+    assert re.fullmatch(r"exp-[0-9a-f]{32}", shown["external_id"])
+    assert shown["max_bytes_per_query"] is None
+    assert shown["worst_case_bytes_per_day"] is None
+    assert shown["worst_case_seconds_per_day"] == 20 * 11 * 300
+    assert shown["public_key"] is None
+    row = wh.db.get(WarehouseConnection, uuid.UUID(shown["id"]))
+    wh.db.refresh(row)
+    assert row.parameters == stored_parameters
+    assert row.credentials_ciphertext is None
+    assert row.pending_credentials_ciphertext is None
+
+
+@pytest.mark.regression
+def test_once_enabled_a_redshift_connection_changes_shape_and_keeps_its_external_id(
+    wh,
+):
+    wh.enabled = frozenset({"redshift"})
+    admin = wh.as_("ADMIN")
+    created = admin.post(f"{WA}/connections", json=REDSHIFT_BODY).json()
+
+    updated = admin.put(f"{WA}/connections/{created['id']}", json=REDSHIFT_CLUSTER)
+
+    assert updated.status_code == 200, updated.text
+    assert "workgroup_name" not in updated.json()["parameters"]
+    assert updated.json()["parameters"]["cluster_identifier"] == "prod-cluster-1"
+    assert updated.json()["external_id"] == created["external_id"]
 
 
 # -- credentials never come back ---------------------------------------------------

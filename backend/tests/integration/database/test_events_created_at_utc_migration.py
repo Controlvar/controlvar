@@ -92,7 +92,7 @@ CORE_HEAD = "4955571d232c"
 #: The core head of the previous release (0.16.2), with ``d12cbd384bbe`` and
 #: ``a89544fb1075`` pending in front of this revision.
 RELEASED = "271f03a31742"
-MODULES_HEAD = "modules_0004_rbac_activation"
+MODULES_HEAD = "modules_0005_redshift"
 WAREHOUSE_TABLES = {
     "warehouse_connections",
     "warehouse_sources",

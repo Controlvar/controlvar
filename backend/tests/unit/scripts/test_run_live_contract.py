@@ -495,8 +495,9 @@ def test_every_attribute_sdk_runs_in_ci_where_a_skip_is_a_failure(
 
 def test_the_sdks_whose_smokes_report_the_flag_values(runner):
     """#1810: the SDKs whose smokes read the seed's three value flags with their
-    typed getters, and each passes with exactly VALUES."""
-    assert runner.VALUE_SDKS == frozenset({"js", "java"})
+    typed getters (React: what useFlagValue reads), and each passes with
+    exactly VALUES."""
+    assert runner.VALUE_SDKS == frozenset({"js", "react", "java"})
     for sdk in sorted(runner.VALUE_SDKS):
         report = good(runner, sdk)
         assert report["values"] == VALUES

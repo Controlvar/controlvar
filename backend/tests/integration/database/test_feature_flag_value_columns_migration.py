@@ -73,7 +73,7 @@ CORE_HEAD = "4955571d232c"
 LATER_DOWNGRADE_TABLES = {"event_dedup_keys", "balance_group_counters", "visual_tokens"}
 #: The modules branch's head in this tree, recorded on both sides of every
 #: step here: this file is about the core chain.
-MODULES_HEAD = "modules_0004_rbac_activation"
+MODULES_HEAD = "modules_0005_redshift"
 
 PREVIOUS_ROWS = {
     CORE: {PREVIOUS_CORE_HEAD},
