@@ -196,6 +196,8 @@ WRITTEN_ACTION_TYPES: frozenset = frozenset(
         ActionType.EXPERIMENT_START,
         ActionType.EXPERIMENT_PAUSE,
         ActionType.EXPERIMENT_COMPLETE,
+        ActionType.EXPERIMENT_PREVIEW_LINK_CREATE,
+        ActionType.EXPERIMENT_PREVIEW_LINKS_REVOKE,
         ActionType.USER_CREATE,
         ActionType.USER_DELETE,
         ActionType.USER_LOGIN,

@@ -10085,6 +10085,52 @@
         "title": "PowerCurveResponse",
         "type": "object"
       },
+      "PreviewLinkCreate": {
+        "additionalProperties": false,
+        "description": "The variant to preview, and for how long.",
+        "properties": {
+          "expires_in_hours": {
+            "default": 24,
+            "description": "How long the link works: 1 to 168 hours. 24 if not given.",
+            "maximum": 168,
+            "minimum": 1,
+            "title": "Expires In Hours",
+            "type": "integer"
+          },
+          "variant_id": {
+            "description": "One of the experiment's variants, the control included.",
+            "format": "uuid",
+            "title": "Variant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "variant_id"
+        ],
+        "title": "PreviewLinkCreate",
+        "type": "object"
+      },
+      "PreviewLinkCreated": {
+        "description": "The link, shown once.",
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "url": {
+            "description": "The experiment's editor page with `#controlvar-preview=<token>`. Anyone who opens it on a page with the Controlvar script sees the variant, until it expires or is revoked; opening it records nothing.",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "expires_at"
+        ],
+        "title": "PreviewLinkCreated",
+        "type": "object"
+      },
       "PriorFamily": {
         "description": "Supported conjugate prior families.",
         "enum": [
@@ -14716,6 +14762,84 @@
         "title": "VisualConfig",
         "type": "object"
       },
+      "VisualExperimentAnswer": {
+        "description": "One running visual experiment whose pages include this page.",
+        "properties": {
+          "assigned": {
+            "description": "False when the visitor is not in the experiment; `changes` and `goals` are then null.",
+            "title": "Assigned",
+            "type": "boolean"
+          },
+          "changes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The variant's page changes, `{version, changes}`, or null (the control, a variant with none, or a visitor not in the experiment).",
+            "title": "Changes"
+          },
+          "experiment_key": {
+            "title": "Experiment Key",
+            "type": "string"
+          },
+          "goals": {
+            "anyOf": [
+              {
+                "items": {
+                  "discriminator": {
+                    "mapping": {
+                      "click": "#/components/schemas/ClickGoal",
+                      "page_view": "#/components/schemas/PageViewGoal"
+                    },
+                    "propertyName": "kind"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ClickGoal"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PageViewGoal"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The experiment's goals, to record for every assigned visitor, the control's included; null when the visitor is not in the experiment.",
+            "title": "Goals"
+          },
+          "reason": {
+            "description": "As POST /api/v1/tracking/assign answers it: assigned, holdout, mutual_exclusion or targeting.",
+            "title": "Reason",
+            "type": "string"
+          },
+          "variant_id": {
+            "title": "Variant Id",
+            "type": "string"
+          },
+          "variant_name": {
+            "title": "Variant Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "experiment_key",
+          "variant_id",
+          "variant_name",
+          "assigned",
+          "reason"
+        ],
+        "title": "VisualExperimentAnswer",
+        "type": "object"
+      },
       "VisualPage": {
         "additionalProperties": false,
         "description": "A page rule: ``exact`` matches one path, ``prefix`` the path and every\npath below it. Matching ignores the scheme, the port, the query, the\nfragment and one trailing ``/``; the host is compared in lower case and\nthe path exactly. No regular expressions.",
@@ -14739,6 +14863,203 @@
           "url"
         ],
         "title": "VisualPage",
+        "type": "object"
+      },
+      "VisualPageRule": {
+        "description": "A page rule on the page's host: ``exact`` matches one path, ``prefix``\nthe path and every path below it.",
+        "properties": {
+          "match": {
+            "enum": [
+              "exact",
+              "prefix"
+            ],
+            "title": "Match",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "match",
+          "path"
+        ],
+        "title": "VisualPageRule",
+        "type": "object"
+      },
+      "VisualPages": {
+        "description": "The page rules of every running visual experiment on this host, which\nthe script may keep for ``max_age`` seconds and use to skip a page none\nof them matches.",
+        "properties": {
+          "host": {
+            "description": "The host, lower case, without a port.",
+            "title": "Host",
+            "type": "string"
+          },
+          "max_age": {
+            "default": 60,
+            "description": "Seconds the rules may be kept.",
+            "title": "Max Age",
+            "type": "integer"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/VisualPageRule"
+            },
+            "title": "Rules",
+            "type": "array"
+          }
+        },
+        "required": [
+          "host",
+          "rules"
+        ],
+        "title": "VisualPages",
+        "type": "object"
+      },
+      "VisualPreviewRequest": {
+        "additionalProperties": false,
+        "description": "``POST /api/v1/tracking/visual/preview``: one variant, by preview link.",
+        "properties": {
+          "host": {
+            "description": "The page's host, as `location.host` gives it: 1 to 261 characters, a port allowed. Not stored.",
+            "title": "Host",
+            "type": "string"
+          },
+          "path": {
+            "description": "The page's path, as `location.pathname` gives it: 1 to 2048 characters, with no query. Not stored.",
+            "title": "Path",
+            "type": "string"
+          },
+          "token": {
+            "description": "The token from the preview link's `#controlvar-preview=` fragment.",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "host",
+          "path",
+          "token"
+        ],
+        "title": "VisualPreviewRequest",
+        "type": "object"
+      },
+      "VisualPreviewResponse": {
+        "description": "``POST /api/v1/tracking/visual/preview``'s answer: one variant's page\nchanges. A preview records nothing. Sent with ``Cache-Control: no-store``.",
+        "properties": {
+          "changes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The variant's page changes, or null for the control or a variant with none.",
+            "title": "Changes"
+          },
+          "experiment_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The experiment's key; null only for an experiment that has none.",
+            "title": "Experiment Key"
+          },
+          "pages": {
+            "$ref": "#/components/schemas/VisualPages"
+          },
+          "variant_name": {
+            "title": "Variant Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "variant_name",
+          "pages"
+        ],
+        "title": "VisualPreviewResponse",
+        "type": "object"
+      },
+      "VisualTrackingRequest": {
+        "additionalProperties": false,
+        "description": "``POST /api/v1/tracking/visual``: which visual changes and goals this\nvisitor gets on this page.",
+        "properties": {
+          "context": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Attributes for targeting, as in POST /api/v1/tracking/assign: the site's own and the script's `web_*` website details. A `web_*` key not in its documented form is dropped, never refused. Stored on each exposure.",
+            "title": "Context"
+          },
+          "format_version": {
+            "description": "The newest page-change format the script applies. An experiment stored in a newer format is left out, and nobody is assigned to it.",
+            "minimum": 1,
+            "title": "Format Version",
+            "type": "integer"
+          },
+          "host": {
+            "description": "The page's host, as `location.host` gives it: 1 to 261 characters, a port allowed. Not stored.",
+            "title": "Host",
+            "type": "string"
+          },
+          "path": {
+            "description": "The page's path, as `location.pathname` gives it: 1 to 2048 characters, with no query. Not stored.",
+            "title": "Path",
+            "type": "string"
+          },
+          "user_id": {
+            "description": "The visitor's id: the script's random cookie id, or the site's own `data-user-id`.",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "host",
+          "path",
+          "user_id",
+          "format_version"
+        ],
+        "title": "VisualTrackingRequest",
+        "type": "object"
+      },
+      "VisualTrackingResponse": {
+        "description": "``POST /api/v1/tracking/visual``'s answer. Sent with\n``Cache-Control: no-store``.",
+        "properties": {
+          "experiments": {
+            "description": "At most 10 running experiments whose pages include this page, the one that started first first.",
+            "items": {
+              "$ref": "#/components/schemas/VisualExperimentAnswer"
+            },
+            "title": "Experiments",
+            "type": "array"
+          },
+          "pages": {
+            "$ref": "#/components/schemas/VisualPages"
+          }
+        },
+        "required": [
+          "experiments",
+          "pages"
+        ],
+        "title": "VisualTrackingResponse",
         "type": "object"
       },
       "WizardDraftCreate": {
@@ -20333,6 +20654,119 @@
           "Experiments",
           "Experiments"
         ]
+      }
+    },
+    "/api/v1/experiments/{experiment_id}/visual/preview-links": {
+      "delete": {
+        "description": "End every live preview link of the experiment at once: each answers 404\nfrom then on. Needs a caller who may change experiments (READ and\nUPDATE). The audit entry records how many links were ended.",
+        "operationId": "revoke_preview_links_api_v1_experiments__experiment_id__visual_preview_links_delete",
+        "parameters": [
+          {
+            "description": "The experiment",
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "description": "The experiment",
+              "format": "uuid",
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "The caller may not change experiments"
+          },
+          "404": {
+            "description": "No such experiment"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "End every preview link of an experiment (beta)",
+        "tags": [
+          "Experiments"
+        ],
+        "x-stability": "beta"
+      },
+      "post": {
+        "description": "Make a link that shows one variant of a visual experiment on its page.\n\nAnyone who opens the link on a page with the Controlvar script sees the\nvariant there, whatever the experiment's audience and status, until the\nlink expires (1 to 168 hours, 24 by default) or the experiment's links are\nrevoked. Opening it records nothing. The link is answered once; only a\nhash of its token is stored.\n\nNeeds a caller who may change experiments (READ and UPDATE). Refused with\n422 when one of the experiment's pages, or its editor page, is on a site\nthis server does not accept requests from (CORS_ORIGINS), or on the\ndashboard's own address, when CORS_ORIGINS is `*`, or when the server does\nnot know the dashboard's address (DASHBOARD_ORIGINS or PUBLIC_BASE_URL).\nSent with `Cache-Control: no-store`.",
+        "operationId": "create_preview_link_api_v1_experiments__experiment_id__visual_preview_links_post",
+        "parameters": [
+          {
+            "description": "The visual experiment",
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "description": "The visual experiment",
+              "format": "uuid",
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewLinkCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewLinkCreated"
+                }
+              }
+            },
+            "description": "The link, shown once"
+          },
+          "400": {
+            "description": "The experiment has no visual settings"
+          },
+          "403": {
+            "description": "The caller may not change experiments"
+          },
+          "404": {
+            "description": "No such experiment, or no such variant of it"
+          },
+          "422": {
+            "description": "The request is not in the documented form, or a page of the experiment is on a site this server does not accept"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Make a preview link for a visual experiment's variant (beta)",
+        "tags": [
+          "Experiments"
+        ],
+        "x-stability": "beta"
       }
     },
     "/api/v1/export/experiments": {
@@ -28193,6 +28627,114 @@
         "tags": [
           "Tracking"
         ]
+      }
+    },
+    "/api/v1/tracking/visual": {
+      "post": {
+        "description": "Which visual changes and goals this visitor gets on this page.\n\nCalled by the visual editor's browser script on each page view, with the\npage's host and path (never its query) and the visitor's id. Answers the\nrunning visual experiments whose pages include the page, at most 10, the\none that started first first. Each is assigned exactly as\n`POST /api/v1/tracking/assign` assigns, and records what it records: an\nassignment for a new visitor, and an exposure event with the context on\nevery matched page view. A visitor who is not in an experiment gets\n`assigned: false` with the reason, and no changes or goals.\n\nThe context's `web_*` website details are kept only in their documented\nform; any other `web_*` key, and `web_country`, is dropped, never refused.\nThe host and the path are not stored.\n\n`pages` holds the page rules of every running visual experiment on this\nhost; the script may keep them for `max_age` seconds and make no call on a\npage none of them matches. Sent with `Cache-Control: no-store`.\n\n**Authentication**: an API key with no scopes, in `X-API-Key`. A key with\nany scope is refused with 403: it belongs on a server.",
+        "operationId": "visual_changes_for_page_api_v1_tracking_visual_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VisualTrackingRequest",
+                "description": "The page and the visitor"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisualTrackingResponse"
+                }
+              }
+            },
+            "description": "Each running visual experiment on the page, and the host's page rules"
+          },
+          "401": {
+            "description": "No API key, or an unknown, expired or revoked one"
+          },
+          "403": {
+            "description": "The API key has scopes: a key in a web page must have none"
+          },
+          "422": {
+            "description": "The request is not in the documented form"
+          },
+          "429": {
+            "description": "More requests from this address than the SDK limit allows"
+          },
+          "503": {
+            "description": "The database is not available; send the request again later"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "The visual changes and goals a visitor gets on a page (beta)",
+        "tags": [
+          "Tracking"
+        ],
+        "x-stability": "beta"
+      }
+    },
+    "/api/v1/tracking/visual/preview": {
+      "post": {
+        "description": "The page changes of the variant a preview link shows.\n\nThe token is the one in the link's `#controlvar-preview=` fragment, made\non the experiment's page in Controlvar (`POST /api/v1/experiments/{id}/\nvisual/preview-links`). A preview ignores the experiment's audience and\nstatus and records nothing: no assignment, no exposure, no event. A link\nthat is unknown, expired or revoked answers 404 with one text for all\nthree. `pages` holds the experiment's page rules on this host. Sent with\n`Cache-Control: no-store`.\n\n**Authentication**: an API key with no scopes, in `X-API-Key`; a key with\nany scope is refused with 403.",
+        "operationId": "visual_preview_api_v1_tracking_visual_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VisualPreviewRequest",
+                "description": "The preview link's token and the page"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisualPreviewResponse"
+                }
+              }
+            },
+            "description": "The variant's page changes and the host's page rules"
+          },
+          "401": {
+            "description": "No API key, or an unknown, expired or revoked one"
+          },
+          "403": {
+            "description": "The API key has scopes: a key in a web page must have none"
+          },
+          "404": {
+            "description": "The preview link is unknown, expired or revoked"
+          },
+          "422": {
+            "description": "The request is not in the documented form"
+          },
+          "429": {
+            "description": "More requests from this address than the SDK limit allows"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "One variant's visual changes, for a preview link (beta)",
+        "tags": [
+          "Tracking"
+        ],
+        "x-stability": "beta"
       }
     },
     "/api/v1/users/": {

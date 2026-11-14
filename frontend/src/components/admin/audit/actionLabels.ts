@@ -42,6 +42,8 @@ export const ACTIONS: Readonly<Record<string, { label: string; group: ActionGrou
   experiment_start: { label: 'Experiment started', group: 'Experiments' },
   experiment_pause: { label: 'Experiment paused', group: 'Experiments' },
   experiment_complete: { label: 'Experiment completed', group: 'Experiments' },
+  experiment_preview_link_create: { label: 'Preview link created', group: 'Experiments' },
+  experiment_preview_links_revoke: { label: 'Preview links revoked', group: 'Experiments' },
   user_create: { label: 'User created', group: 'Users and access' },
   user_delete: { label: 'User deleted', group: 'Users and access' },
   user_activate: { label: 'User reactivated', group: 'Users and access' },

@@ -65,6 +65,10 @@ class ActionType(str, Enum):
     EXPERIMENT_START = "experiment_start"
     EXPERIMENT_PAUSE = "experiment_pause"
     EXPERIMENT_COMPLETE = "experiment_complete"
+    # A visual experiment's preview links (#1545): one made, or every live one
+    # of the experiment ended.
+    EXPERIMENT_PREVIEW_LINK_CREATE = "experiment_preview_link_create"
+    EXPERIMENT_PREVIEW_LINKS_REVOKE = "experiment_preview_links_revoke"
 
     # User Actions
     USER_CREATE = "user_create"
@@ -218,6 +222,8 @@ class AuditLog(Base, BaseModel):
             ActionType.EXPERIMENT_START: "started",
             ActionType.EXPERIMENT_PAUSE: "paused",
             ActionType.EXPERIMENT_COMPLETE: "completed",
+            ActionType.EXPERIMENT_PREVIEW_LINK_CREATE: "created a preview link",
+            ActionType.EXPERIMENT_PREVIEW_LINKS_REVOKE: "revoked the preview links",
             ActionType.USER_CREATE: "created",
             ActionType.USER_UPDATE: "updated",
             ActionType.USER_DELETE: "deleted",
