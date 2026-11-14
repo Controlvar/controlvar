@@ -1629,6 +1629,13 @@ text = "See the Dimensional Analysis Guide."
 by = ["exempt:baseline"]
 
 [[unit]]
+text = "For an experiment that balances its split within groups, the Breakdowns tab opens on its balanced groups, from GET /api/v1/results/{experiment_id}/balanced-groups (beta); see Balance the split within groups."
+by = [
+    "test:frontend/src/tests/pages/results-balanced-groups.test.tsx::lists Platform (balanced) first and chooses it, from the balanced-groups route",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_the_rows_are_the_stored_groups_and_add_up_to_every_user",
+]
+
+[[unit]]
 text = "Multi-Armed Bandit — Maximize Conversions During the Experiment"
 by = ["exempt:baseline"]
 

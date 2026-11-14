@@ -27,6 +27,9 @@ export const BALANCE_SEGMENTS_HELP =
   'A user is balanced in the first segment in this list they belong to, so the order matters. ' +
   'Users in none of them are balanced together as other.';
 
+/** The experiment page's link, once it has started, to its balanced groups on Results › Breakdowns. */
+export const BALANCE_RESULTS_LINK = "See each group's split";
+
 /** What an experiment that cannot balance says in place of the switch. */
 export const BALANCE_BANDIT_LINE =
   'A bandit experiment cannot balance its split within groups, because it moves traffic between variants as results come in.';

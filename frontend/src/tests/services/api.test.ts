@@ -774,7 +774,7 @@ describe("the caller's own signal (#1040 D4)", () => {
 const EXPECTED_OVERRIDES: Record<string, string[]> = {
   // GET /api/v1/auth/config, which /login and the session check wait for (#708).
   'services/authConfig.ts': ['AUTH_CONFIG_TIMEOUT_MS'],
-  'services/results.ts': Array(5).fill('LONG_REQUEST_TIMEOUT_MS'),
+  'services/results.ts': Array(6).fill('LONG_REQUEST_TIMEOUT_MS'),
   ...(fs.existsSync(MODULES_SRC_ROOT)
     ? {
         'modules/frontend/src/services/warehouse.ts': [
@@ -824,6 +824,12 @@ describe('long routes wait longer (#1040 D5)', () => {
       'ResultsService.getSequentialResults',
       () => ResultsService.getSequentialResults('e1'),
       '/api/v1/results/e1/sequential',
+      TWO_MINUTES,
+    ],
+    [
+      'ResultsService.getBalancedGroups',
+      () => ResultsService.getBalancedGroups('e1'),
+      '/api/v1/results/e1/balanced-groups',
       TWO_MINUTES,
     ],
     [

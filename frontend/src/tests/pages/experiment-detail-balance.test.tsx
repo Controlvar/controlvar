@@ -303,6 +303,24 @@ describe('the row on the page', () => {
     await renderPage(experiment({ balance_within: BALANCED }));
     expect(mockedApiFetch.mock.calls.map(([p]) => p)).not.toContain('/api/v1/segments');
   });
+
+  it("a started experiment's row links to each group's split on the results' Breakdowns tab", async () => {
+    await renderPage(experiment({ balance_within: BALANCED, status: 'active' }));
+    const link = screen.getByRole('link', { name: "See each group's split" });
+    expect(link).toHaveAttribute('href', '/results/exp-1?tab=breakdowns');
+    expect(link.closest('div')).toHaveTextContent('Balance');
+    expect(screen.getByTestId('experiment-balance').textContent).toBe('within Platform (ios, android, web)');
+  });
+
+  it('a draft has no results yet, so its row has no link to them', async () => {
+    await renderPage(experiment({ balance_within: BALANCED }));
+    expect(screen.queryByRole('link', { name: "See each group's split" })).toBeNull();
+  });
+
+  it('a started experiment that does not balance has no such link', async () => {
+    await renderPage(experiment({ balance_within: null, status: 'active' }));
+    expect(screen.queryByRole('link', { name: "See each group's split" })).toBeNull();
+  });
 });
 
 describe('refusals at their fields', () => {
@@ -497,6 +515,12 @@ describe('the same words, and axe', () => {
 
   it('the page rows', async () => {
     const { container } = await renderPage(experiment({ balance_within: BALANCED }));
+    expect(await violations(container)).toEqual([]);
+  });
+
+  it("the page rows of a started experiment, with See each group's split", async () => {
+    const { container } = await renderPage(experiment({ balance_within: BALANCED, status: 'active' }));
+    expect(screen.getByRole('link', { name: "See each group's split" })).toBeInTheDocument();
     expect(await violations(container)).toEqual([]);
   });
 
