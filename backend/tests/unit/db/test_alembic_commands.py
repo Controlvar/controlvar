@@ -27,8 +27,8 @@ ALEMBIC_INI = REPO_ROOT / "backend" / "app" / "db" / "alembic.ini"
 CORE_VERSIONS = REPO_ROOT / "backend" / "app" / "db" / "migrations" / "versions"
 ENV_PY = REPO_ROOT / "backend" / "app" / "db" / "migrations" / "env.py"
 
-#: The core chain's head (#1545).
-CORE_HEAD = "4955571d232c"
+#: The core chain's head (#1812).
+CORE_HEAD = "t1812_user_totp"
 #: The modules branch's head (#826).
 MODULES_HEAD = "modules_0005_redshift"
 #: The revision 1ab99332f0ba's re-run recipe downgrades to, and what lies past it.
@@ -195,6 +195,8 @@ def test_past_1ab99332f0ba_its_rerun_downgrade_also_undoes_the_later_revisions()
     # And the visual experiments' (#1545), which drops visual_tokens and two
     # columns.
     assert "4955571d232c" in from_head
+    # And two-step sign-in's (#1812), which drops user_totp.
+    assert "t1812_user_totp" in from_head
 
 
 def _bootstrap_url(env: dict[str, str]) -> str:

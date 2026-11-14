@@ -2,8 +2,9 @@
 
 :func:`make_client` is the one way a connector gets a boto3 client:
 
-* only ``sts``, ``athena`` and ``glue``, only in a region from
-  :data:`AWS_REGIONS` (committed data: botocore's regions for those services);
+* only ``sts``, ``athena``, ``glue`` and ``redshift-data`` (the Amazon
+  Redshift Data API), only in a region from :data:`AWS_REGIONS` (committed
+  data: botocore's regions for the first three);
 * boto3's own regional endpoint -- ``endpoint_url`` is never set, and a client
   whose resolved endpoint is anything but ``https://<service>.<region>.amazonaws.com``
   (an ``AWS_ENDPOINT_URL`` variable, a FIPS or dual-stack setting) is refused;
@@ -60,8 +61,10 @@ from modules.backend.app.warehouse.errors import (
     sanitised,
 )
 
-#: The services a connector may call.
-AWS_SERVICES = frozenset({"sts", "athena", "glue"})
+#: The services a connector may call.  ``redshift-data`` is the Amazon
+#: Redshift Data API: a statement goes to its regional endpoint, never to the
+#: cluster's or workgroup's own address.
+AWS_SERVICES = frozenset({"sts", "athena", "glue", "redshift-data"})
 
 #: The warehouses that reach AWS through this module.
 AWS_WAREHOUSES = frozenset({"athena", "redshift"})
@@ -75,7 +78,10 @@ def _aws_warehouse(warehouse: str) -> str:
 
 
 #: botocore's regions for athena, sts and glue in the ``aws`` partition
-#: (identical lists; 34 regions as of botocore 1.43).
+#: (identical lists; 34 regions as of botocore 1.43).  botocore lists no
+#: regions for redshift-data, so it is held to the same 34; in one of them
+#: where AWS does not offer the Data API the endpoint's name is not expected to
+#: resolve, which the guard reports as ``unreachable``.
 AWS_REGIONS = frozenset(
     {
         "af-south-1",
@@ -307,8 +313,12 @@ STS_CODES: Mapping[str, WarehouseErrorCode] = {
 
 #: The session name of every assumed role (the customer's CloudTrail shows it).
 ROLE_SESSION_NAME = "controlvar-warehouse"
-#: The shortest session STS issues.
+#: The shortest session STS issues, and the default.
 ROLE_SESSION_SECONDS = 900
+#: The longest session asked for: STS gives no more than an hour to a role
+#: assumed with another role's credentials (as a deployment whose own identity
+#: is a role does), and no role's maximum session is set below an hour.
+ROLE_SESSION_MAX_SECONDS = 3600
 
 _EXTERNAL_ID = re.compile(r"exp-[0-9a-f]{32}")
 
@@ -322,12 +332,15 @@ def assume_role_session(
     warehouse: str,
     deadline: Deadline,
     resolver: Optional[Resolver] = None,
+    duration_seconds: int = ROLE_SESSION_SECONDS,
 ) -> Any:
     """A boto3 session holding the customer's role, for one operation.
 
     ``platform_session`` holds this deployment's own AWS identity.  Refused
     before any call, as ``internal``: a ``role_arn`` that is not a role ARN,
-    and an ``external_id`` that is not ``exp-`` and 32 hex characters.
+    an ``external_id`` that is not ``exp-`` and 32 hex characters, and a
+    ``duration_seconds`` (how long the role's credentials last) outside
+    :data:`ROLE_SESSION_SECONDS` to :data:`ROLE_SESSION_MAX_SECONDS`.
 
     Then two AssumeRole calls, each through :func:`call` (so under the guard
     and the deadline), with :data:`STS_CODES`:
@@ -347,10 +360,16 @@ def assume_role_session(
         raise WarehouseError(WarehouseErrorCode.INTERNAL, warehouse=warehouse)
     if not isinstance(external_id, str) or not _EXTERNAL_ID.fullmatch(external_id):
         raise WarehouseError(WarehouseErrorCode.INTERNAL, warehouse=warehouse)
+    if (
+        isinstance(duration_seconds, bool)
+        or not isinstance(duration_seconds, int)
+        or not ROLE_SESSION_SECONDS <= duration_seconds <= ROLE_SESSION_MAX_SECONDS
+    ):
+        raise WarehouseError(WarehouseErrorCode.INTERNAL, warehouse=warehouse)
     request = {
         "RoleArn": role_arn,
         "RoleSessionName": ROLE_SESSION_NAME,
-        "DurationSeconds": ROLE_SESSION_SECONDS,
+        "DurationSeconds": duration_seconds,
     }
     sts = {
         "warehouse": warehouse,
@@ -391,6 +410,8 @@ __all__ = [
     "AWS_REGIONS",
     "AWS_SERVICES",
     "AWS_WAREHOUSES",
+    "ROLE_SESSION_MAX_SECONDS",
+    "ROLE_SESSION_SECONDS",
     "STS_CODES",
     "BeforeSendGuard",
     "assume_role_session",

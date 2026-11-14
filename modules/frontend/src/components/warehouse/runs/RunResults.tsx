@@ -240,7 +240,13 @@ function changeClass(verdict: 'better' | 'worse' | null): string {
 }
 
 function changeText(result: MetricResult, v: VariantResult): string {
-  if (v.is_control || v.relative_improvement_pct === null) return '—';
+  if (v.is_control) return '—';
+  if (v.relative_improvement_pct === null) {
+    // A control at 0 has no percentage; the verdict (from the sign of
+    // `absolute_difference`) still gets its word beside the colour.
+    const word = warehouseVerdict(result, v);
+    return word ? `— · ${word}` : '—';
+  }
   const pct = `${v.relative_improvement_pct > 0 ? '+' : ''}${v.relative_improvement_pct.toFixed(2)}%`;
   const verdict = warehouseVerdict(result, v);
   return verdict ? `${pct} · ${verdict}` : pct;

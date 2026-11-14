@@ -90,6 +90,23 @@ TABLES = {
             "is_test",
         ),
     },
+    # schema.table in the connection's database; Redshift reports names in
+    # lower case.
+    "redshift": {
+        "exposures": ("analytics", "exposures"),
+        "orders": ("analytics", "orders"),
+        "columns": (
+            "user_id",
+            "experiment_key",
+            "variant",
+            "exposed_at",
+            "platform",
+            "event_at",
+            "amount",
+            "status",
+            "is_test",
+        ),
+    },
 }
 
 KINDS = (
@@ -191,7 +208,12 @@ def test_golden_parses_as_one_select_with_no_unknown_function(
 
 
 _TIMESTAMP_TEXT = re.compile(r"'(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d(?:\.\d{6})?)([^']*)'")
-_OFFSET_SUFFIX = {"snowflake": " +00:00", "bigquery": "+00:00", "athena": " UTC"}
+_OFFSET_SUFFIX = {
+    "snowflake": " +00:00",
+    "bigquery": "+00:00",
+    "athena": " UTC",
+    "redshift": "+00:00",
+}
 
 
 def _golden_and_built(dialect: str, kind: str) -> list[str]:
@@ -219,7 +241,12 @@ _SERIALISED = {
     ),
     "bigquery": re.compile(r"^  FORMAT\('%\.(\d+)g', .+\) AS (k|sum_d|sum_d2),$"),
     "athena": re.compile(r"^  format\('%\.(\d+)g', .+\) AS (k|sum_d|sum_d2),$"),
+    # The digits are the session's (extra_float_digits, set and probed by the
+    # connector in the same batch: test_redshift.py), not the statement's.
+    "redshift": re.compile(r"^  CAST\(.+ AS VARCHAR\) AS (k|sum_d|sum_d2),$"),
 }
+#: Dialects whose statement names its own digit count (``%.17g``).
+_DIGITS_IN_THE_STATEMENT = frozenset({"bigquery", "athena"})
 
 
 @pytest.mark.parametrize("dialect", sorted(SQL_DIALECTS))
@@ -233,8 +260,27 @@ def test_every_float_is_serialised_with_17_digits(dialect: str, kind: str) -> No
         for line in projected:
             match = _SERIALISED[dialect].match(line)
             assert match, line
-            if dialect != "snowflake":
+            if dialect in _DIGITS_IN_THE_STATEMENT:
                 assert int(match.group(1)) >= 17, line
+
+
+@pytest.mark.parametrize("kind", ["metric_mean", "metric_proportion"])
+def test_redshift_averages_a_double_precision_value(kind: str) -> None:
+    """AVG of an integer is an integer in Redshift: the y it averages is cast first."""
+    for sql in _golden_and_built("redshift", kind):
+        root = sqlglot.parse_one(sql, read="redshift")
+        y_cte = next(c for c in root.find_all(exp.CTE) if c.alias == "y")
+        y_value = next(e for e in y_cte.this.expressions if e.alias_or_name == "y")
+        inner = y_value.this
+        # mean: LEAST(CAST(.. AS DOUBLE PRECISION), CAST(cap AS DOUBLE PRECISION));
+        # proportion: CAST(CASE .. END AS DOUBLE PRECISION).
+        casts = (
+            [inner] if isinstance(inner, exp.Cast) else list(inner.find_all(exp.Cast))
+        )
+        assert casts, y_value.sql()
+        for cast in casts:
+            assert cast.to.sql(dialect="redshift") == "DOUBLE PRECISION", y_value.sql()
+        assert "AVG(y.y) AS k" in sql
 
 
 def test_snowflake_statements_report_the_session_offset() -> None:
@@ -244,7 +290,12 @@ def test_snowflake_statements_report_the_session_offset() -> None:
             assert "AS session_offset" in sql
 
 
-_STRING_TYPE = {"snowflake": "VARCHAR", "bigquery": "STRING", "athena": "VARCHAR"}
+_STRING_TYPE = {
+    "snowflake": "VARCHAR",
+    "bigquery": "STRING",
+    "athena": "VARCHAR",
+    "redshift": "VARCHAR(65535)",
+}
 
 
 @pytest.mark.parametrize(("dialect", "kind"), CASES)
@@ -260,6 +311,7 @@ _EPOCH = {
     "snowflake": "DATE_PART(EPOCH_SECOND, ",
     "bigquery": "UNIX_SECONDS(",
     "athena": "CAST(floor(to_unixtime(",
+    "redshift": "CAST(FLOOR(EXTRACT(EPOCH FROM ",
 }
 
 

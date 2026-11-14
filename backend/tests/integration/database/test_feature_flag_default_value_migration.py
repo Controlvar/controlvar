@@ -54,21 +54,24 @@ PREVIOUS_CORE_HEAD = "d12cbd384bbe"
 #: (rollback records keep without a safety configuration), ``607c51a59bf5``
 #: (a flag's value type and two values), ``85dd4796bb8b`` (the event_id keys),
 #: ``7b6b4b4fe246`` (when each rollout stage started), ``c448_balance_within``
-#: (balance the split within groups) and ``4955571d232c`` (visual experiments)
-#: find their objects already built by ``create_all`` and add none.
-CORE_HEAD = "4955571d232c"
+#: (balance the split within groups), ``4955571d232c`` (visual experiments)
+#: and ``t1812_user_totp`` (two-step sign-in) find their objects already built
+#: by ``create_all`` and add none.
+CORE_HEAD = "t1812_user_totp"
 #: Tables that a later core revision's downgrade drops: a downgrade from the
 #: head to this test's target unapplies those revisions too.  ``d29a479daafe``
 #: (#445) drops ``holdout_population``; ``37dcb2969766`` (#440) drops
 #: ``segment_members``; ``85dd4796bb8b`` (#1543) drops ``event_dedup_keys``;
 #: ``c448_balance_within`` (#448) drops ``balance_group_counters``;
-#: ``4955571d232c`` (#1545) drops ``visual_tokens``.
+#: ``4955571d232c`` (#1545) drops ``visual_tokens``; ``t1812_user_totp``
+#: (#1812) drops ``user_totp``.
 LATER_DOWNGRADE_TABLES = {
     "holdout_population",
     "segment_members",
     "event_dedup_keys",
     "balance_group_counters",
     "visual_tokens",
+    "user_totp",
 }
 #: ``feature_flags`` columns a later core revision's downgrade drops:
 #: ``607c51a59bf5`` (#1497) drops a flag's value type and its two values.

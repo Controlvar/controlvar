@@ -37,8 +37,9 @@ pytestmark = [pytest.mark.integration]
 REVISION = "8fd44fb483a2"
 PREVIOUS_CORE_HEAD = "b8c9d0e1f2a3"
 #: The core head of this tree: ``upgrade heads`` runs on past this revision to
-#: ``4955571d232c`` (visual experiments), through
-#: ``271f03a31742``, ``d12cbd384bbe``, ``a89544fb1075``, ``1ab99332f0ba``,
+#: ``t1812_user_totp`` (two-step sign-in), through ``4955571d232c`` (visual
+#: experiments), ``271f03a31742``, ``d12cbd384bbe``, ``a89544fb1075``,
+#: ``1ab99332f0ba``,
 #: ``806901fb7735`` (the experiments' correction settings), ``d29a479daafe``
 #: (holdout population), ``37dcb2969766`` (segment kind and members),
 #: ``4c2c09a2b3e8`` (rollback records keep without a safety configuration),
@@ -47,19 +48,21 @@ PREVIOUS_CORE_HEAD = "b8c9d0e1f2a3"
 #: stage started) and ``c448_balance_within`` (balance the split within
 #: groups); a database built by ``create_all`` already carries what they
 #: build, so they add nothing here.
-CORE_HEAD = "4955571d232c"
+CORE_HEAD = "t1812_user_totp"
 #: Tables that a later core revision's downgrade drops: a downgrade from the
 #: head to this test's target unapplies those revisions too.  ``d29a479daafe``
 #: (#445) drops ``holdout_population``; ``37dcb2969766`` (#440) drops
 #: ``segment_members``; ``85dd4796bb8b`` (#1543) drops ``event_dedup_keys``;
 #: ``c448_balance_within`` (#448) drops ``balance_group_counters``;
-#: ``4955571d232c`` (#1545) drops ``visual_tokens``.
+#: ``4955571d232c`` (#1545) drops ``visual_tokens``; ``t1812_user_totp``
+#: (#1812) drops ``user_totp``.
 LATER_DOWNGRADE_TABLES = {
     "holdout_population",
     "segment_members",
     "event_dedup_keys",
     "balance_group_counters",
     "visual_tokens",
+    "user_totp",
 }
 #: The modules revision the previous full release (0.10.0) recorded, and the
 #: branch's head in this tree.  This tree also carries

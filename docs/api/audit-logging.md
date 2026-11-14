@@ -312,6 +312,8 @@ No entry holds a password, a token, any part of an API key, or a request body.
 | `user_create`, `user_delete` | `user` | `POST /users/`; `DELETE /users/{id}` and `DELETE /admin/users/{id}`. Deleting your own account is recorded with no `user_id` |
 | `role_assign` | `user` | A superuser changes a user's role or superuser flag (`PATCH /admin/users/{id}`, `PUT /admin/users/{id}`, `PUT /users/{id}`); `old_value` and `new_value` are `{"role", "is_superuser"}` |
 | `user_activate`, `user_deactivate` | `user` | The same routes change a user's active status |
+| `user_2fa_enable`, `user_2fa_disable`, `user_2fa_recovery_used`, `user_2fa_recovery_regenerate` | `user` | An account's two-step sign-in is turned on (`new_value` is `{"recovery_codes": 10}`), turned off (`new_value` is `{"second_step"}`, `totp` or `recovery`), signs in or turns off with a recovery code (`new_value` is `{"recovery_codes_remaining"}`), or gets a new set of recovery codes. The actor is the account itself. This release has no route that turns two-step sign-in on, so nothing in it writes these four yet |
+| `user_2fa_reset` | `user` | `python -m backend.app.db.two_factor_reset` deletes an account's two-step sign-in (`--email`, or every account's with `--all --yes-reset-every-account`). The actor is `system:operator-cli`; `old_value` is `{"enabled"}`, `false` for an account that had started setting it up but not finished |
 | `user_login` | `user` | Signing in with a password (`POST /auth/login`, or `POST /auth/token` with `AUTH_PROVIDER=local`); `new_value` is `{"provider": "local"}` |
 | `user_login` | `user` | Signing in through Cognito (`POST /auth/token` with the Cognito provider) as a user who already has an account; `new_value` is `{"provider": "cognito"}`. A user's first Cognito sign-in writes no `user_login`: their account is created by the first request they make with the token, which writes `user_create`. A sign-in through the Cognito Hosted UI does not pass through this API and writes nothing |
 | `safety_rollback` | `feature_flag` | A safety rollback, manual (`POST /safety/feature-flags/{id}/rollback`, by the calling user) or by the safety monitor. `new_value` is `{"trigger_type", "previous_percentage", "new_percentage", "deactivated", "paused_schedules"}`; `reason` is the rollback's reason. It appears in the flag's history |
@@ -365,6 +367,7 @@ these reserved values:
 | `system:safety-monitor` | The safety monitor: each automatic rollback |
 | `system:cognito-sync` | Cognito group sync: each role or superuser flag change |
 | `system:sso-sync` | SSO sign-in (full profile): each role change from a mapped group |
+| `system:operator-cli` | An operator's command, `python -m backend.app.db.two_factor_reset`: each account whose two-step sign-in it resets |
 
 An entry is automatic only when `user_id` is empty **and** `user_email` is one of these
 values. Deleting a user also empties `user_id` on their entries, but keeps their own
@@ -379,6 +382,9 @@ entry. No entry ever holds:
 - reading anything: lists, reports, the audit log itself, or exporting it;
 - failed sign-ins (there is no account to attach them to) or sign-outs;
 - passwords or their hashes, tokens, or any part of an API key or its hash;
+- two-step sign-in secrets, codes or recovery codes, or a wrong code (a wrong
+  code writes a `two_factor_refused` log line with the account's id and the
+  reason, never the code);
 - request bodies, IP addresses or user agents;
 - the contents of descriptions, hypotheses, targeting rules, segment rules, variants,
   metrics, an experiment's CUPED, sequential testing and Bayesian configurations, and a
@@ -395,6 +401,7 @@ Whether a change is kept when its entry cannot be written depends on where it is
 |-------|--------------------------------|
 | A route (all the route actions above) | The change is kept and the response is `2xx`; there is no entry |
 | A superuser's change to a user's role, superuser flag or active status | Nothing is saved and the response is `500`; resend it once the problem is fixed |
+| Two-step sign-in turned on or off, a recovery code used or renewed, or a reset by `python -m backend.app.db.two_factor_reset` | Nothing is saved: the change and its entry are kept or lost together. The reset command says `Nothing was changed.` and exits with status 2 |
 | A custom role defined, changed, deleted, assigned or revoked, or a direct permission granted or revoked (full profile) | The change is kept and the response is `2xx`; there is no entry. Unlike a change to a user's built-in role, it is not refused |
 | A safety rollback, manual or by the safety monitor | The rollback is kept; there is no entry |
 | The experiment scheduler | The start or end is kept; there is no entry, and **it is not written later** |

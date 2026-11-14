@@ -35,7 +35,18 @@ VALID = {
     "snowflake": (("ANALYTICS", "PUBLIC", "ORDERS"), "USER_ID"),
     "bigquery": (("acme-prod", "analytics", "orders"), "user_id"),
     "athena": (("analytics", "orders"), "user_id"),
+    "redshift": (("analytics", "orders"), "user_id"),
 }
+
+
+def test_every_dialect_has_identifier_rules_and_the_reverse():
+    """A dialect the builder can render has a gate, and a gate has a dialect:
+    the parametrisations here and in the builder's tests cover the same set."""
+    assert set(IDENTIFIER_RULES) == set(SQL_DIALECTS)
+    assert set(VALID) == set(IDENTIFIER_RULES)
+    for name, dialect in SQL_DIALECTS.items():
+        assert dialect.identifiers is IDENTIFIER_RULES[name]
+
 
 #: (name, text appended to a valid identifier) -- each must be refused.
 IDENTIFIER_TAMPERS = [
@@ -155,6 +166,57 @@ def test_identifiers_are_quoted_by_us():
         == '"DB"."SCH"."T"'
     )
     assert gate.render_table(IDENTIFIER_RULES["athena"], ("db", "t")) == '"db"."t"'
+    assert (
+        gate.render_table(IDENTIFIER_RULES["redshift"], ("analytics", "orders"))
+        == '"analytics"."orders"'
+    )
+    assert (
+        gate.render_column(IDENTIFIER_RULES["redshift"], "User_Id", "c") == '"User_Id"'
+    )
+
+
+def test_redshift_names_are_schema_and_table_in_the_connections_database():
+    """Two parts, named schema and table; a database part is refused (422)."""
+    rules = IDENTIFIER_RULES["redshift"]
+    assert gate.parse_table_reference(rules, "analytics.orders") == (
+        "analytics",
+        "orders",
+    )
+    with pytest.raises(WarehouseQueryRefused) as refused:
+        gate.parse_table_reference(rules, "dev.analytics.orders")
+    assert (refused.value.code, refused.value.field) == ("invalid_identifier", "table")
+    assert str(refused.value) == (
+        "table must have exactly 2 dot-separated parts: schema.table"
+    )
+
+
+def test_redshift_identifier_rules():
+    """A letter or _, then letters, digits, _ and $; at most 127 characters."""
+    rules = IDENTIFIER_RULES["redshift"]
+    for good in ("a", "_x", "Orders_2026", "a$b", "A" * 127):
+        assert gate.validate_column(rules, good, "c") == good
+    for bad in ("1abc", "a-b", "a b", "$a", "A" * 128, "é", "a.b"):
+        with pytest.raises(WarehouseQueryRefused):
+            gate.validate_column(rules, bad, "c")
+        with pytest.raises(WarehouseQueryRefused):
+            gate.validate_table_parts(rules, (bad, "t"))
+
+
+def test_a_source_on_a_redshift_connection_is_checked_by_redshifts_rules():
+    """The source service looks a connection's rules up by its type: a
+    Redshift connection's are found (a KeyError there was a 500)."""
+    from modules.backend.app.services import warehouse_source_service as sources
+
+    rules = sources.rules_for("redshift")
+    assert rules is IDENTIFIER_RULES["redshift"]
+    columns = {"unit_id": "user_id", "event_at": "event_at", "value": None}
+    assert sources.check_definition(rules, "analytics.events", columns, []) == (
+        "analytics",
+        "events",
+    )
+    with pytest.raises(WarehouseQueryRefused) as refused:
+        sources.check_definition(rules, "dev.analytics.events", columns, [])
+    assert "schema.table" in str(refused.value)
 
 
 LITERAL_TAMPERS = [

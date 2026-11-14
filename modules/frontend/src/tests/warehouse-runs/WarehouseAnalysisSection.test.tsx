@@ -770,6 +770,15 @@ describe('the direction each metric was analysed in (#1386)', () => {
     },
   );
 
+  it('a significant winner over a control at 0 shows the word with its colour, never a bare coloured dash', async () => {
+    const metric = directed(false, 0);
+    const treatment = metric.result!.variants[1];
+    metric.result!.variants[1] = { ...treatment, relative_improvement_pct: null, absolute_difference: 0.05 };
+    const { change } = await shown(metric);
+    expect(change.textContent).toBe('— · better');
+    expect(change).toHaveClass('text-green-700');
+  });
+
   it('says nothing about direction for a result stored before the field', async () => {
     const { heading, change } = await shown(directed(undefined, 20));
     expect(heading).toHaveTextContent('Purchased (primary)');
