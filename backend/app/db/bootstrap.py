@@ -715,6 +715,11 @@ def _bootstrap_schema(engine: Engine, schema: str) -> str:
     return result
 
 
+def make_engine() -> Engine:
+    """The engine of a process outside the API (bootstrap, operator commands)."""
+    return create_engine(database_url())
+
+
 def bootstrap(engine: Engine | None = None, schema: str | None = None) -> str:
     """
     Bring the database up to date. Returns "upgraded" or "created".
@@ -723,7 +728,7 @@ def bootstrap(engine: Engine | None = None, schema: str | None = None) -> str:
     on a PostgreSQL advisory lock and run one after another.
     """
     schema = schema or schema_name()
-    engine = engine or create_engine(database_url())
+    engine = engine or make_engine()
     lock_key = f"{BOOTSTRAP_LOCK_NAMESPACE}{schema}"
 
     # Dedicated autocommit connection: a session-level advisory lock is held

@@ -645,6 +645,25 @@ by = [
 ]
 
 [[unit]]
+text = "user_2fa_enable, user_2fa_disable, user_2fa_recovery_used, user_2fa_recovery_regenerate | user | An account's two-step sign-in is turned on (new_value is {\"recovery_codes\": 10}), turned off (new_value is {\"second_step\"}, totp or recovery), signs in or turns off with a recovery code (new_value is {\"recovery_codes_remaining\"}), or gets a new set of recovery codes. The actor is the account itself. This release has no route that turns two-step sign-in on, so nothing in it writes these four yet"
+by = [
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_confirm_gives_ten_recovery_codes_and_stores_only_their_hashes",
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_turning_it_off_with_a_recovery_code",
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_a_recovery_code_signs_in_once",
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_new_recovery_codes_void_the_old_set",
+    "test:backend/tests/smoke/test_audit_non_route_inventory.py::test_each_audited_site_names_its_actions",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_local_sign_in_takes_an_email_and_a_password_alone",
+]
+
+[[unit]]
+text = "user_2fa_reset | user | python -m backend.app.db.two_factor_reset deletes an account's two-step sign-in (--email, or every account's with --all --yes-reset-every-account). The actor is system:operator-cli; old_value is {\"enabled\"}, false for an account that had started setting it up but not finished"
+by = [
+    "test:backend/tests/integration/services/test_two_factor_reset_cli.py::test_one_account_by_its_address_in_any_case",
+    "test:backend/tests/integration/services/test_two_factor_reset_cli.py::test_every_account_with_the_confirmation_flag",
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_a_reset_records_one_entry_per_account_and_never_commits",
+]
+
+[[unit]]
 text = "user_login | user | Signing in with a password (POST /auth/login, or POST /auth/token with AUTH_PROVIDER=local); new_value is {\"provider\": \"local\"}"
 by = [
     "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
@@ -832,36 +851,43 @@ by = ["exempt:baseline"]
 [[unit]]
 text = "system:experiment-scheduler | The experiment scheduler: scheduled starts, resumes and ends"
 by = [
-    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_five",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_six",
     "test:backend/tests/integration/services/test_audit_service_sites.py::test_scheduled_start_is_recorded_by_the_experiment_scheduler",
 ]
 
 [[unit]]
 text = "system:rollout-scheduler | The rollout scheduler: each rollout stage it starts"
 by = [
-    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_five",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_six",
     "test:backend/tests/integration/services/test_audit_service_sites.py::test_stage_start_is_recorded_by_the_rollout_scheduler",
 ]
 
 [[unit]]
 text = "system:safety-monitor | The safety monitor: each automatic rollback"
 by = [
-    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_five",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_six",
     "test:backend/tests/integration/services/test_audit_service_sites.py::test_monitor_rollback_is_recorded_by_the_safety_monitor",
 ]
 
 [[unit]]
 text = "system:cognito-sync | Cognito group sync: each role or superuser flag change"
 by = [
-    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_five",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_six",
     "test:backend/tests/integration/services/test_audit_service_sites.py::test_group_role_change_is_recorded_by_cognito_sync",
 ]
 
 [[unit]]
 text = "system:sso-sync | SSO sign-in (full profile): each role change from a mapped group"
 by = [
-    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_five",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_six",
     "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_an_sso_role_change_writes_one_role_assign_by_sso_sync",
+]
+
+[[unit]]
+text = "system:operator-cli | An operator's command, python -m backend.app.db.two_factor_reset: each account whose two-step sign-in it resets"
+by = [
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_six",
+    "test:backend/tests/integration/services/test_two_factor_reset_cli.py::test_one_account_by_its_address_in_any_case",
 ]
 
 [[unit]]
@@ -911,6 +937,10 @@ text = "passwords or their hashes, tokens, or any part of an API key or its hash
 by = ["test:backend/tests/integration/api/test_audit_route_events.py::test_api_key_create_and_revoke_hold_no_part_of_the_key"]
 
 [[unit]]
+text = "two-step sign-in secrets, codes or recovery codes, or a wrong code (a wrong code writes a two_factor_refused log line with the account's id and the reason, never the code);"
+by = ["test:backend/tests/integration/services/test_two_factor_service.py::test_no_entry_or_log_line_holds_a_secret_or_a_code"]
+
+[[unit]]
 text = "request bodies, IP addresses or user agents;"
 by = ["test:backend/tests/unit/models/test_audit_log_text_normalised.py"]
 
@@ -955,6 +985,13 @@ by = [
 [[unit]]
 text = "A superuser's change to a user's role, superuser flag or active status | Nothing is saved and the response is 500; resend it once the problem is fixed"
 by = ["test:backend/tests/integration/api/test_audit_route_events.py::test_patch_under_a_failed_audit_write_keeps_neither"]
+
+[[unit]]
+text = "Two-step sign-in turned on or off, a recovery code used or renewed, or a reset by python -m backend.app.db.two_factor_reset | Nothing is saved: the change and its entry are kept or lost together. The reset command says Nothing was changed. and exits with status 2"
+by = [
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_an_entry_that_cannot_be_written_takes_its_change_with_it",
+    "test:backend/tests/integration/services/test_two_factor_reset_cli.py::test_when_the_entry_cannot_be_written_nothing_is_reset",
+]
 
 [[unit]]
 text = "A custom role defined, changed, deleted, assigned or revoked, or a direct permission granted or revoked (full profile) | The change is kept and the response is 2xx; there is no entry. Unlike a change to a user's built-in role, it is not refused"

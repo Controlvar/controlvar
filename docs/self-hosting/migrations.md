@@ -91,7 +91,8 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini history
 Output, for example:
 
 ```text
-c448_balance_within -> 4955571d232c (head), Visual experiments: page changes, pages and goals, and the editor's tokens
+4955571d232c -> t1812_user_totp (head), Two-step sign-in: each local account's authenticator secret and recovery codes
+c448_balance_within -> 4955571d232c, Visual experiments: page changes, pages and goals, and the editor's tokens
 7b6b4b4fe246 -> c448_balance_within, Experiments: balance the split within groups as users arrive
 607c51a59bf5 -> 85dd4796bb8b, Events: an event_id is stored once per user, experiment, flag and event name
 4c2c09a2b3e8 -> 607c51a59bf5, Feature flags: a value type and two values, held by one check
@@ -118,7 +119,7 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini current
 Output, for a full install (a core install prints the first line only):
 
 ```text
-4955571d232c (head)
+t1812_user_totp (head)
 modules_0005_redshift (head)
 ```
 
@@ -446,10 +447,15 @@ Past `c448_balance_within` it also runs that revision's downgrade, which drops
 every experiment's balance setting, every user's group and every counter (see
 [`c448_balance_within`](#c448_balance_within-balances-the-split-within-groups)).
 
-Past `4955571d232c` it first runs that revision's downgrade, which drops the
+Past `4955571d232c` it also runs that revision's downgrade, which drops the
 table `visual_tokens` and the columns `experiments.visual_config` and
 `variants.visual_changes`: every visual experiment's pages, goals and page
 changes (see [`4955571d232c`](#4955571d232c-stores-visual-experiments)).
+
+Past `t1812_user_totp` it first runs that revision's downgrade, which drops the
+table `user_totp`: every account's two-step sign-in secret, recovery codes and
+wrong-code count (see
+[`t1812_user_totp`](#t1812_user_totp-stores-two-step-sign-in-secrets)).
 
 ### `d29a479daafe` records who each global holdout covers
 
@@ -535,6 +541,10 @@ From a release that carries `4955571d232c`, it also runs that revision's
 downgrade, which drops the table `visual_tokens` and the columns
 `experiments.visual_config` and `variants.visual_changes` (see
 [`4955571d232c`](#4955571d232c-stores-visual-experiments)).
+From a release that carries `t1812_user_totp`, it also runs that revision's
+downgrade, which drops the table `user_totp`, every account's two-step sign-in
+secret, recovery codes and wrong-code count (see
+[`t1812_user_totp`](#t1812_user_totp-stores-two-step-sign-in-secrets)).
 
 ### `4c2c09a2b3e8` keeps rollback records without a safety configuration
 
@@ -600,10 +610,14 @@ From a release that carries `c448_balance_within`, it also runs that
 revision's downgrade, which drops every experiment's balance setting, every
 user's group and every counter (see
 [`c448_balance_within`](#c448_balance_within-balances-the-split-within-groups)).
-From a release that carries `4955571d232c`, it first runs that revision's
+From a release that carries `4955571d232c`, it also runs that revision's
 downgrade, which drops the table `visual_tokens` and the columns
 `experiments.visual_config` and `variants.visual_changes` (see
 [`4955571d232c`](#4955571d232c-stores-visual-experiments)).
+From a release that carries `t1812_user_totp`, it first runs that revision's
+downgrade, which drops the table `user_totp`, every account's two-step sign-in
+secret, recovery codes and wrong-code count (see
+[`t1812_user_totp`](#t1812_user_totp-stores-two-step-sign-in-secrets)).
 
 ### `85dd4796bb8b` stores an event sent again with its event_id once
 
@@ -666,10 +680,14 @@ and every counter (see
 docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade 85dd4796bb8b
 ```
 
-From a release that carries `4955571d232c`, it first runs that revision's
+From a release that carries `4955571d232c`, it also runs that revision's
 downgrade, which drops the table `visual_tokens` and the columns
 `experiments.visual_config` and `variants.visual_changes` (see
 [`4955571d232c`](#4955571d232c-stores-visual-experiments)).
+From a release that carries `t1812_user_totp`, it first runs that revision's
+downgrade, which drops the table `user_totp`, every account's two-step sign-in
+secret, recovery codes and wrong-code count (see
+[`t1812_user_totp`](#t1812_user_totp-stores-two-step-sign-in-secrets)).
 
 On Helm, run the same command in an API pod with `kubectl exec`. Once the
 database is at the previous release's heads, start the previous release. The
@@ -718,10 +736,14 @@ carries no later revision, this undoes this revision alone:
 docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade 7b6b4b4fe246
 ```
 
-From a release that carries `4955571d232c`, it first runs that revision's
+From a release that carries `4955571d232c`, it also runs that revision's
 downgrade, which drops the table `visual_tokens` and the columns
 `experiments.visual_config` and `variants.visual_changes` (see
 [`4955571d232c`](#4955571d232c-stores-visual-experiments)).
+From a release that carries `t1812_user_totp`, it first runs that revision's
+downgrade, which drops the table `user_totp`, every account's two-step sign-in
+secret, recovery codes and wrong-code count (see
+[`t1812_user_totp`](#t1812_user_totp-stores-two-step-sign-in-secrets)).
 
 On Helm, run the same command in an API pod with `kubectl exec`. The upgrade
 cannot be emitted as SQL (`--sql`).
@@ -743,10 +765,40 @@ downgrade drops the table `visual_tokens` and the columns
 `experiments.visual_config` and `variants.visual_changes`; it does not refuse,
 and nothing can restore them. The experiments stay, as ordinary experiments
 with no page changes. This revision's own `down_revision` is
-`c448_balance_within`; this undoes this revision alone:
+`c448_balance_within`; from a release that carries no later revision, this
+undoes this revision alone:
 
 ```{.bash skip reason="destructive: drops visual_tokens, experiments.visual_config and variants.visual_changes"}
 docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade c448_balance_within
+```
+
+From a release that carries `t1812_user_totp`, it first runs that revision's
+downgrade, which drops the table `user_totp`, every account's two-step sign-in
+secret, recovery codes and wrong-code count (see
+[`t1812_user_totp`](#t1812_user_totp-stores-two-step-sign-in-secrets)).
+
+On Helm, run the same command in an API pod with `kubectl exec`.
+
+### `t1812_user_totp` stores two-step sign-in secrets
+
+This revision adds the table `user_totp`, one row per local account that has
+set two-step sign-in up or started to: the account's authenticator secret,
+sealed with a key derived from `SECRET_KEY`; its recovery codes, as bcrypt
+hashes; the last code step it used; and its count of wrong codes. The `users`
+table is not changed, and the new table is empty after the upgrade.
+
+The previous release runs against this schema unchanged: it never reads or
+writes the table.
+
+**The downgrade drops every account's two-step sign-in.** `t1812_user_totp`'s
+downgrade drops the table `user_totp`: every account's two-step sign-in
+secret, recovery codes and wrong-code count. It does not refuse, and nothing
+can restore them: those accounts then sign in with the password alone and must
+set two-step sign-in up again. This revision's own `down_revision` is
+`4955571d232c`; this undoes this revision alone:
+
+```{.bash skip reason="destructive: drops user_totp, every account's two-step sign-in"}
+docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade 4955571d232c
 ```
 
 On Helm, run the same command in an API pod with `kubectl exec`.
@@ -989,6 +1041,10 @@ From a release that carries `4955571d232c`, whose own `down_revision` is
 `c448_balance_within`, it includes that downgrade too, which drops every visual
 experiment's pages, goals and page changes (see
 [`4955571d232c`](#4955571d232c-stores-visual-experiments)).
+From a release that carries `t1812_user_totp`, whose own `down_revision` is
+`4955571d232c`, it includes that downgrade too, which drops every account's
+two-step sign-in secret, recovery codes and wrong-code count (see
+[`t1812_user_totp`](#t1812_user_totp-stores-two-step-sign-in-secrets)).
 
 Do not edit `alembic_version` to make the older image start.
 
@@ -1075,6 +1131,10 @@ What this means for you:
   is backward-compatible for a rollback too, and undoing it drops every visual
   experiment's pages, goals and page changes, and every visual editor sign-in
   and preview link.
+  [`t1812_user_totp`](#t1812_user_totp-stores-two-step-sign-in-secrets)
+  is backward-compatible for a rollback too, and undoing it drops every
+  account's two-step sign-in secret, recovery codes and wrong-code count:
+  those accounts then sign in with the password alone.
   [`modules_0003_lower_is_better`](#modules_0003_lower_is_better-gives-each-warehouse-metric-source-a-direction)
   is backward-compatible for a rollback, and undoing it drops every warehouse
   metric source's lower-is-better setting; an upgrade afterwards sets each back

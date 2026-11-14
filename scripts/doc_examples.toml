@@ -627,7 +627,7 @@ expects = 33
 path = "docs/self-hosting/migrations.md"
 environment = "stack"
 exec = 7
-skip = 14
+skip = 15
 expects = 6
 
 # The beta AWS installer's page. One block runs: the installer's --help, which

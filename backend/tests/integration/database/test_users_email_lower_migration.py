@@ -72,7 +72,7 @@ REVISION = "d12cbd384bbe"
 PREVIOUS_CORE_HEAD = "271f03a31742"
 EARLIER_CORE_HEAD = "8fd44fb483a2"
 #: The core head of this tree, which ``upgrade heads`` runs on to.
-CORE_HEAD = "4955571d232c"
+CORE_HEAD = "t1812_user_totp"
 #: The modules branch's head in this tree, recorded on both sides of every
 #: step here: this file is about the core chain.
 MODULES_HEAD = "modules_0005_redshift"

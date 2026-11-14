@@ -121,6 +121,7 @@ CORE_MODEL_MODULES = (
     "seed_marker",
     "segment",
     "user",
+    "user_totp",
     "visual_token",
 )
 

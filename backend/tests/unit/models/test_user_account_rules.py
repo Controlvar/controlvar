@@ -94,6 +94,8 @@ DELETED_WITH_THE_USER = {
     # The visual editor's sign-ins and preview links (#1545): a credential
     # does not outlive the user it signs in.
     ("visual_tokens", "user_id"),
+    # An account's two-step sign-in secret and recovery codes (#1812).
+    ("user_totp", "user_id"),
 }
 
 _REFERENCES_PROBE = """

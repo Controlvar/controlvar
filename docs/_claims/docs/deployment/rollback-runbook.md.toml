@@ -371,6 +371,13 @@ by = [
 ]
 
 [[unit]]
+text = "From a release that carries t1812_user_totp (its own down_revision is 4955571d232c), it also includes t1812_user_totp's, which drops every account's two-step sign-in secret, recovery codes and wrong-code count; those accounts then sign in with the password alone."
+by = [
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_after_the_newer_release_downgrades_the_database_the_older_one_starts",
+    "test:backend/tests/integration/database/test_user_totp_migration.py::test_the_downgrade_drops_the_table_only",
+]
+
+[[unit]]
 text = "Rolling back past segment targeting"
 by = ["exempt:label"]
 
@@ -1378,6 +1385,13 @@ text = "From a release that carries 4955571d232c, whose down_revision is c448_ba
 by = [
     "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
     "test:backend/tests/integration/database/test_visual_experiments_migration.py::test_the_downgrade_drops_the_table_and_both_columns_only",
+]
+
+[[unit]]
+text = "From a release that carries t1812_user_totp, whose down_revision is 4955571d232c, every core target in this list undoes t1812_user_totp before that, which drops the table user_totp, every account's two-step sign-in secret, recovery codes and wrong-code count (nothing restores them: those accounts then sign in with the password alone and must set two-step sign-in up again), and does not refuse; a downgrade to 4955571d232c undoes it alone."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_user_totp_migration.py::test_the_downgrade_drops_the_table_only",
 ]
 
 [[unit]]
