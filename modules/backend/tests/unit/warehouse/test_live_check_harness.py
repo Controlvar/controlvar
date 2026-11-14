@@ -56,6 +56,7 @@ from modules.backend.app.warehouse.bigquery import (
 )
 from modules.backend.app.warehouse.deadlines import Deadline
 from modules.backend.app.warehouse.egress import OutboundResponse
+from modules.backend.app.warehouse.redshift import RedshiftAdapter
 from modules.backend.app.warehouse.snowflake import SnowflakeAdapter
 from modules.backend.tests.live_warehouse import harness, selection
 from modules.backend.tests.unit.warehouse import numeric_fixtures as nf
@@ -147,9 +148,11 @@ def test_the_marker_collects_every_check():
     run = _pytest("--collect-only", "-q", "-m", selection.MARKER, LIVE)
     assert run.returncode == 0, run.stdout[-3000:] + run.stderr[-3000:]
     names = [i.rsplit("::", 1)[-1] for i in _node_ids(run.stdout)]
+    # The files in name order: test_bigquery_live, test_redshift_live,
+    # test_snowflake_live.
     expected = [
         "test_" + c
-        for target in ("bigquery", "snowflake")
+        for target in ("bigquery", "redshift", "snowflake")
         for c in harness.EXPECTED_CHECKS[target]
     ]
     assert names == expected
@@ -271,6 +274,83 @@ def test_load_config_refusals(tmp_path):
     for name in harness.SF_REQUIRED:
         assert name in str(missing.value)
     assert harness.ENV_SF_KEY_PASSPHRASE not in str(missing.value)  # optional
+    with pytest.raises(harness.LiveConfigError) as missing:
+        harness.load_config({harness.ENV_TARGET: "redshift"})
+    for name in harness.RS_REQUIRED:
+        assert name in str(missing.value)
+    assert harness.ENV_RS_SESSION_TOKEN not in str(missing.value)  # optional
+    assert harness.ENV_RS_TIMEOUT not in str(missing.value)  # has a default
+
+
+#: A complete (fake) Redshift configuration; the identity is a dummy.
+def _rs_env(**extra: str) -> dict:
+    env = {
+        harness.ENV_TARGET: "redshift",
+        harness.ENV_RS_REGION: "eu-west-1",
+        harness.ENV_RS_ROLE_ARN: (
+            "arn:aws:iam::123456789012:role/controlvar-warehouse/live-check"
+        ),
+        harness.ENV_RS_EXTERNAL_ID: "exp-" + "0" * 32,
+        harness.ENV_RS_DATABASE: "dev",
+        harness.ENV_RS_SCHEMA: "live_check",
+        harness.ENV_RS_WORKGROUP: "live-check",
+        harness.ENV_RS_CLUSTER: "live-check-cluster",
+        harness.ENV_RS_DB_USER: "live_reader",
+        harness.ENV_RS_USAGE_LIMIT: "wg-limit-1, lmt-cluster-1",
+        harness.ENV_RS_ACCESS_KEY_ID: "AKIDUMMYDUMMYDUMMY00",
+        harness.ENV_RS_SECRET_ACCESS_KEY: "dummy-secret-" + secrets.token_hex(8),
+    }
+    env.update(extra)
+    return env
+
+
+def test_the_redshift_check_requires_a_usage_limit_and_caps_its_time():
+    config = harness.load_config(_rs_env())
+    assert config.usage_limits == ("wg-limit-1", "lmt-cluster-1")
+    assert config.query_timeout_seconds == harness.RS_DEFAULT_TIMEOUT_SECONDS
+    assert harness.ENV_RS_USAGE_LIMIT in harness.RS_REQUIRED
+    env = _rs_env()
+    del env[harness.ENV_RS_USAGE_LIMIT]
+    with pytest.raises(harness.LiveConfigError) as missing:
+        harness.load_config(env)
+    assert harness.ENV_RS_USAGE_LIMIT in str(missing.value)
+    for bad in (",", " , ", "limit one", "lmt;1"):
+        with pytest.raises(harness.LiveConfigError, match=harness.ENV_RS_USAGE_LIMIT):
+            harness.load_config(_rs_env(**{harness.ENV_RS_USAGE_LIMIT: bad}))
+    with pytest.raises(harness.LiveConfigError, match="hard cap"):
+        harness.load_config(
+            _rs_env(
+                **{harness.ENV_RS_TIMEOUT: str(harness.RS_HARD_MAX_TIMEOUT_SECONDS + 1)}
+            )
+        )
+    # The identity's keys are searched for in the evidence; none is in public().
+    assert config.secret_access_key in harness.config_secrets(config)
+    assert config.access_key_id in harness.config_secrets(config)
+    assert config.secret_access_key not in json.dumps(config.public())
+    assert config.secret_access_key not in repr(config)
+
+
+def test_a_redshift_session_without_a_usage_limit_stops_before_any_test(tmp_path):
+    """With every other variable set, as mid-check: no usage limit, no session.
+
+    Every AWS client the session could build is pointed at a closed local
+    port, so if the refusal ever broke, the session would fail here without
+    a request leaving the machine (the connector's own clients refuse an
+    endpoint override outright).
+    """
+    env = _rs_env(
+        **{
+            harness.ENV_EVIDENCE_DIR: str(tmp_path / "evidence"),
+            "AWS_ENDPOINT_URL": "https://127.0.0.1:1",
+        }
+    )
+    del env[harness.ENV_RS_USAGE_LIMIT]
+    run = _pytest("-q", "-m", selection.MARKER, LIVE, env=env)
+    out = run.stdout + run.stderr
+    assert run.returncode == 4, out[-3000:]
+    assert "refused to start" in out and harness.ENV_RS_USAGE_LIMIT in out, out[-3000:]
+    assert not re.search(r"\d+ (passed|failed|skipped|error)", out), out[-3000:]
+    assert not (tmp_path / "evidence").exists()
 
 
 def _sa_json(key: rsa.RSAPrivateKey | None = None) -> str:
@@ -721,11 +801,20 @@ def test_runner_parity_passes_on_the_oracle_and_fails_on_a_wrong_count():
 # -- what the live files rely on -------------------------------------------------------
 
 
+LIVE_FILES = {
+    "bigquery": "test_bigquery_live.py",
+    "redshift": "test_redshift_live.py",
+    "snowflake": "test_snowflake_live.py",
+}
+
+
 def test_every_expected_check_is_a_live_test_in_order():
-    for target, filename in (
-        ("bigquery", "test_bigquery_live.py"),
-        ("snowflake", "test_snowflake_live.py"),
-    ):
+    assert set(LIVE_FILES) == set(harness.TARGETS) == set(harness.EXPECTED_CHECKS)
+    assert sorted(p.name for p in selection.LIVE_DIRECTORY.glob("test_*.py")) == sorted(
+        LIVE_FILES.values()
+    )
+    rows = {c for row in harness.NOT_VERIFIED_ROWS.values() for c in row["checks"]}
+    for target, filename in LIVE_FILES.items():
         tree = ast.parse(
             (selection.LIVE_DIRECTORY / filename).read_text(encoding="utf-8")
         )
@@ -735,9 +824,27 @@ def test_every_expected_check_is_a_live_test_in_order():
             if isinstance(node, ast.FunctionDef) and node.name.startswith("test_")
         ]
         assert tuple(tests) == harness.EXPECTED_CHECKS[target]
-        rows = {c for row in harness.NOT_VERIFIED_ROWS.values() for c in row["checks"]}
-        prefix = "bq_" if target == "bigquery" else "sf_"
+        prefix = harness.CHECK_PREFIXES[target]
+        assert all(t.startswith(prefix) for t in tests), tests
         assert {c for c in rows if c.startswith(prefix)} <= set(tests)
+    assert all(
+        any(c.startswith(p) for p in harness.CHECK_PREFIXES.values()) for c in rows
+    )
+
+
+def test_one_prefix_table_decides_which_checks_a_target_runs():
+    """The session's deselection (conftest) and the evidence's settled rows
+    (EvidenceRecorder.document) both read CHECK_PREFIXES; neither spells a
+    prefix of its own."""
+    prefixes = harness.CHECK_PREFIXES
+    assert set(prefixes) == set(harness.TARGETS)
+    assert len(set(prefixes.values())) == len(prefixes)
+    conftest = (selection.LIVE_DIRECTORY / "conftest.py").read_text(encoding="utf-8")
+    source = Path(harness.__file__).read_text(encoding="utf-8")
+    for prefix in prefixes.values():
+        assert f'"{prefix}"' not in conftest
+        assert source.count(f'"{prefix}"') == 1, prefix  # the table's own entry
+    assert "harness.CHECK_PREFIXES[" in conftest
 
 
 def test_the_private_calls_the_live_check_makes_still_exist():
@@ -758,6 +865,19 @@ def test_the_private_calls_the_live_check_makes_still_exist():
         (
             SnowflakeAdapter,
             ("_execute", "run_query", "table_columns", "check_connection"),
+        ),
+        (
+            RedshiftAdapter,
+            (
+                "_execute",
+                "_role_session",
+                "_submit",
+                "_wait",
+                "_result",
+                "run_query",
+                "table_columns",
+                "check_connection",
+            ),
         ),
         (warehouse_runner, ("_execute", "RunPlan", "MetricPlan", "VariantInfo")),
     ):
@@ -795,6 +915,154 @@ def test_a_warehouse_without_a_visible_monitor_names_the_monitor_grant():
     assert "GRANT MONITOR ON RESOURCE MONITOR MON_A TO ROLE ROLE_A;" in message
     assert "Nothing else has run." in message
     assert seen == ["SHOW WAREHOUSES LIKE 'WH_A'"]
+
+
+class _StubbedPlatform:
+    """A boto3 session whose clients answer from a Stubber (nothing is sent)."""
+
+    def __init__(self, answers):
+        self.answers = answers
+        self.stubbers = []
+
+    def client(self, service, region_name=None):
+        import boto3
+        from botocore.stub import Stubber
+
+        client = boto3.session.Session(
+            aws_access_key_id="AKIDUMMYDUMMYDUMMY00",
+            aws_secret_access_key="dummy-secret",
+        ).client(service, region_name=region_name)
+        stubber = Stubber(client)
+        for operation, expected, answer in self.answers[service]:
+            stubber.add_response(operation, answer, expected)
+        stubber.activate()
+        self.stubbers.append(stubber)
+        return client
+
+
+def _usage_limit_answers(on_workgroup, on_cluster):
+    arn = "arn:aws:redshift-serverless:eu-west-1:123456789012:workgroup/abc"
+    return {
+        "redshift-serverless": [
+            (
+                "get_workgroup",
+                {"workgroupName": "live-check"},
+                {"workgroup": {"workgroupArn": arn, "workgroupName": "live-check"}},
+            ),
+            (
+                "list_usage_limits",
+                {"resourceArn": arn},
+                # The model's list has at least one entry: none is no key.
+                (
+                    {"usageLimits": [{"usageLimitId": i} for i in on_workgroup]}
+                    if on_workgroup
+                    else {}
+                ),
+            ),
+        ],
+        "redshift": [
+            (
+                "describe_usage_limits",
+                {"ClusterIdentifier": "live-check-cluster"},
+                {"UsageLimits": [{"UsageLimitId": i} for i in on_cluster]},
+            )
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    ("on_workgroup", "on_cluster", "refused"),
+    [
+        (["wg-limit-1"], ["lmt-cluster-1"], None),
+        ([], ["lmt-cluster-1"], "workgroup"),
+        (["wg-limit-1"], ["someone-elses"], "cluster"),
+    ],
+    ids=["both-set", "no-workgroup-limit", "cluster-limit-not-named"],
+)
+def test_the_redshift_check_reads_the_usage_limits_back_before_anything_runs(
+    on_workgroup, on_cluster, refused
+):
+    from modules.backend.tests.live_warehouse.test_redshift_live import (
+        _verify_usage_limits,
+    )
+
+    config = harness.load_config(_rs_env())
+    platform = _StubbedPlatform(_usage_limit_answers(on_workgroup, on_cluster))
+    recorded = {}
+
+    class Recorder:
+        def record(self, check, **data):
+            recorded[check] = data
+
+    if refused is None:
+        _verify_usage_limits(platform, config, Recorder())
+    else:
+        with pytest.raises(AssertionError) as stopped:
+            _verify_usage_limits(platform, config, Recorder())
+        message = str(stopped.value)
+        assert f"on the {refused}" in message and "Nothing else has run." in message
+        assert harness.ENV_RS_USAGE_LIMIT in message
+    for stubber in platform.stubbers:
+        stubber.assert_no_pending_responses()
+    assert recorded["rs_spend_cap"] == {
+        "declared": ["wg-limit-1", "lmt-cluster-1"],
+        "workgroup": on_workgroup,
+        "cluster": on_cluster,
+    }
+
+
+def test_aws_calls_are_recorded_and_sts_credentials_are_kept_out(tmp_path):
+    """Through a real client: a Data API answer is recorded with its body; an
+    STS answer only by its keys, its credentials registered for the search."""
+    import boto3
+    from botocore.stub import Stubber
+
+    from modules.backend.app.warehouse import aws
+
+    sentinel = "LIVETEMPCRED" + secrets.token_hex(8).upper()
+    recorder = harness.EvidenceRecorder(
+        target="redshift", run_id="wl-redshift-test", root=tmp_path
+    )
+    recording = harness.AwsRecording(recorder, lambda: "rs_sign_in")
+    session = boto3.session.Session(
+        aws_access_key_id="AKIDUMMYDUMMYDUMMY00", aws_secret_access_key="dummy-secret"
+    )
+    recording.install()
+    try:
+        sts = aws.make_client(session, "sts", "eu-west-1", warehouse="redshift")
+        data = aws.make_client(
+            session, "redshift-data", "eu-west-1", warehouse="redshift"
+        )
+    finally:
+        recording.uninstall()
+    assert aws.make_client.__name__ == "make_client"  # put back
+    with Stubber(sts) as sts_stub, Stubber(data) as data_stub:
+        sts_stub.add_response(
+            "assume_role",
+            {
+                "Credentials": {
+                    "AccessKeyId": "ASIA" + sentinel,
+                    "SecretAccessKey": "secret-" + sentinel,
+                    "SessionToken": "token-" + sentinel,
+                    "Expiration": "2026-11-13T19:00:00Z",
+                }
+            },
+        )
+        data_stub.add_response("batch_execute_statement", {"Id": "abc"})
+        sts.assume_role(
+            RoleArn="arn:aws:iam::123456789012:role/x", RoleSessionName="s1"
+        )
+        data.batch_execute_statement(Sqls=["SELECT 1"], Database="dev")
+    by_operation = {x["request"]["operation"]: x for x in recorder.exchanges}
+    assert "body" not in by_operation["AssumeRole"]
+    assert by_operation["AssumeRole"]["body_keys"] == ["Credentials"]
+    assert by_operation["BatchExecuteStatement"]["body"] == {"Id": "abc"}
+    assert by_operation["BatchExecuteStatement"]["check"] == "rs_sign_in"
+    assert "secret-" + sentinel in recorder.secrets
+    recorder.record("rs_sign_in", note="token-" + sentinel)
+    with pytest.raises(harness.EvidenceRefused):
+        recorder.write()
+    assert _written(tmp_path) == []
 
 
 def test_new_run_ids_are_distinct_and_name_the_target():

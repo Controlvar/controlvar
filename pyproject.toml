@@ -197,7 +197,7 @@ markers = [
     "requires_db: tests requiring a database connection",
     "requires_aws: tests requiring AWS services (LocalStack)",
     "cognito_integration: Cognito authentication tests (require moto)",
-    "warehouse_live: founder-run check against a real BigQuery or Snowflake account; modules/backend/tests/live_warehouse is not collected without -m warehouse_live",
+    "warehouse_live: founder-run check against a real BigQuery, Snowflake or Amazon Redshift account; modules/backend/tests/live_warehouse is not collected without -m warehouse_live",
 ]
 log_cli = true
 log_cli_level = "INFO"
