@@ -33419,7 +33419,8 @@
     },
     "/api/v1/results/{experiment_id}/post-stratification": {
       "post": {
-        "description": "Not available yet: this route answers 501 for every existing experiment. Post-stratification needs one metric value and the stratum attributes per assigned user, and nothing builds those rows from an experiment's recorded assignments and events yet. The route reports no numbers until it can compute them from that data.",
+        "deprecated": true,
+        "description": "**Deprecated**, because it is not available: this route answers 501 for every existing experiment, and it may be removed in a later release. Post-stratification needs one metric value and the stratum attributes per assigned user, and nothing builds those rows from an experiment's recorded assignments and events yet.",
         "operationId": "compute_post_stratification_api_v1_results__experiment_id__post_stratification_post",
         "parameters": [
           {
@@ -33476,7 +33477,7 @@
             "OAuth2PasswordBearer": []
           }
         ],
-        "summary": "Post-stratification variance reduction (not available yet)",
+        "summary": "Post-stratification variance reduction, not available yet (deprecated)",
         "tags": [
           "Results",
           "Results"
