@@ -100,6 +100,14 @@ by = [
 ]
 
 [[unit]]
+text = "The two routes a web page calls for the visual editor, POST /api/v1/tracking/visual and POST /api/v1/tracking/visual/preview, refuse a key that carries any scope with 403: a key in a page can be read by anyone who opens it."
+by = [
+    "test:backend/tests/smoke/test_page_key_routes.py::test_the_page_key_routes_are_exactly_these",
+    "test:backend/tests/integration/api/test_visual_tracking_api.py::test_a_key_with_any_scope_is_refused",
+    "test:backend/tests/integration/api/test_visual_preview_links_api.py::test_a_key_with_any_scope_cannot_read_a_preview",
+]
+
+[[unit]]
 text = "The key reads there as the user who created it, under that user's role; a key without the scope is refused with 403."
 by = [
     "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_each_role_reads_the_four_operations_with_an_mcp_read_key",

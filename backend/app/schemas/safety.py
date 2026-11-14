@@ -10,6 +10,8 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 from pydantic_core import PydanticCustomError
 
+from backend.app.schemas.finite_number import FiniteFloat
+
 
 class HealthStatus(str, Enum):
     """Health status of a safety check."""
@@ -23,8 +25,10 @@ class HealthStatus(str, Enum):
 class MetricThreshold(BaseModel):
     """Threshold configuration for a safety metric."""
 
-    warning_threshold: Optional[float] = None
-    critical_threshold: Optional[float] = None
+    # Also the thresholds the /safety responses carry: one class, not a request
+    # and a response class, so that the OpenAPI component stays one (#1742).
+    warning_threshold: Optional[FiniteFloat] = None
+    critical_threshold: Optional[FiniteFloat] = None
     comparison_type: str = "greater_than"  # "greater_than", "less_than", "equal_to"
 
 

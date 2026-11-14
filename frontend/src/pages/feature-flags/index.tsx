@@ -7,6 +7,7 @@ import {
   ArchivedFlagRowNote,
   isFlagArchived,
 } from '@/components/feature-flags/ArchivedFlag';
+import { hasDeletedFlagNotice, takeDeletedFlagNotice } from '@/components/feature-flags/FlagManageSection';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
 import { useDemoMode } from '@/contexts/AuthConfigContext';
@@ -78,6 +79,16 @@ export default function FeatureFlagsPage() {
   const [toggling, setToggling] = useState<Record<string, boolean>>({});
   // Keyed by flag id: two toggles can fail at once and both messages matter.
   const [toggleErrors, setToggleErrors] = useState<Record<string, string>>({});
+  // "Deleted {name}." when the flag's page has just deleted one (#442). Its
+  // status region is on the page from the first render, only then, and the
+  // text is set after it, so a screen reader announces it.
+  const [announcesDelete] = useState(hasDeletedFlagNotice);
+  const [deletedStatus, setDeletedStatus] = useState('');
+
+  useEffect(() => {
+    const notice = takeDeletedFlagNotice();
+    if (notice) setDeletedStatus(notice);
+  }, []);
 
   /**
    * Sequence number of the most recent list request. Switching filters quickly
@@ -196,6 +207,20 @@ export default function FeatureFlagsPage() {
             </p>
           )}
         </div>
+
+        {announcesDelete && (
+          <p
+            role="status"
+            className={
+              deletedStatus
+                ? 'mb-4 rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-700'
+                : undefined
+            }
+            data-testid="flags-deleted-status"
+          >
+            {deletedStatus}
+          </p>
+        )}
 
         {/* Filters */}
         {totalFlags > flags.length && flags.length > 0 && (

@@ -453,6 +453,16 @@
         "summary": "Start experiment"
       }
     },
+    "/api/v1/experiments/{experiment_id}/visual/preview-links": {
+      "delete": {
+        "operationId": "revoke_preview_links_api_v1_experiments__experiment_id__visual_preview_links_delete",
+        "summary": "End every preview link of an experiment (beta)"
+      },
+      "post": {
+        "operationId": "create_preview_link_api_v1_experiments__experiment_id__visual_preview_links_post",
+        "summary": "Make a preview link for a visual experiment's variant (beta)"
+      }
+    },
     "/api/v1/export/experiments": {
       "get": {
         "operationId": "export_experiments_api_v1_export_experiments_get",
@@ -1287,6 +1297,18 @@
       "post": {
         "operationId": "track_event_api_v1_tracking_track_post",
         "summary": "Track event"
+      }
+    },
+    "/api/v1/tracking/visual": {
+      "post": {
+        "operationId": "visual_changes_for_page_api_v1_tracking_visual_post",
+        "summary": "The visual changes and goals a visitor gets on a page (beta)"
+      }
+    },
+    "/api/v1/tracking/visual/preview": {
+      "post": {
+        "operationId": "visual_preview_api_v1_tracking_visual_preview_post",
+        "summary": "One variant's visual changes, for a preview link (beta)"
       }
     },
     "/api/v1/users/": {

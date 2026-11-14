@@ -14,6 +14,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from backend.app.schemas.finite_number import FiniteFloat
+
 # ---------------------------------------------------------------------------
 # Request schemas
 # ---------------------------------------------------------------------------
@@ -39,8 +41,10 @@ class InterpretRequest(BaseModel):
 
     experiment_id: str = Field(..., description="Experiment identifier.")
     variant_name: str = Field(..., description="Name of the variant being interpreted.")
-    p_value: float = Field(..., description="Statistical p-value from the experiment.")
-    relative_improvement_pct: float = Field(
+    p_value: FiniteFloat = Field(
+        ..., description="Statistical p-value from the experiment."
+    )
+    relative_improvement_pct: FiniteFloat = Field(
         ..., description="Relative improvement percentage (positive = better)."
     )
 

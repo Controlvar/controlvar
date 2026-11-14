@@ -2703,20 +2703,30 @@ async def update_experiment_metadata(
 )
 async def calculate_experiment_sample_size(
     baseline_rate: float = Query(
-        ..., gt=0, lt=1, description="Baseline conversion rate (0-1)"
+        ...,
+        gt=0,
+        lt=1,
+        allow_inf_nan=False,
+        description="Baseline conversion rate (0-1)",
     ),
     minimum_detectable_effect: float = Query(
         ...,
         gt=0,
+        allow_inf_nan=False,
         description="Minimum detectable effect (relative change, e.g. 0.1 for 10%)",
     ),
     statistical_power: float = Query(
-        0.8, ge=0.5, le=0.99, description="Statistical power (0.5-0.99)"
+        0.8,
+        ge=0.5,
+        le=0.99,
+        allow_inf_nan=False,
+        description="Statistical power (0.5-0.99)",
     ),
     significance_level: float = Query(
         0.05,
         ge=0.01,
         le=0.1,
+        allow_inf_nan=False,
         description=(
             "Significance level (0.01-0.1): 1 minus the experiment's confidence "
             "level. A correction divides it between the comparisons; the answer's "
@@ -2736,6 +2746,7 @@ async def calculate_experiment_sample_size(
         None,
         gt=0,
         le=1,
+        allow_inf_nan=False,
         description="Fraction of traffic allocated to the experiment (0-1)",
     ),
     variant_count: int = Query(

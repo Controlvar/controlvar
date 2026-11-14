@@ -515,14 +515,47 @@ by = [
 ]
 
 [[unit]]
+text = "Number Fields"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A number field (\"type\": \"number\" in the OpenAPI document) in the body or the query that is given NaN, Infinity, -Infinity or a number too large for a double such as 1e400, quoted or not, answers 422 with \"type\": \"finite_number\" at its place: {\"type\": \"finite_number\", \"loc\": [\"query\", \"mde\"], \"msg\": \"Input should be a finite number\"}."
+by = [
+    "test:backend/tests/unit/schemas/test_typed_number_fields_finite.py::test_typed_number_fields_refuse_non_finite_strings",
+    "test:backend/tests/unit/schemas/test_typed_number_fields_finite.py::test_the_power_curve_refuses_a_nan_effect_at_the_parameter",
+    "test:backend/tests/smoke/test_every_json_body_route_refuses_non_finite.py::test_every_json_body_operation_refuses_a_non_finite_number",
+]
+
+[[unit]]
+text = "That holds on every route, including the power calculator's, which need no sign-in."
+by = [
+    "test:backend/tests/unit/schemas/test_typed_number_fields_finite.py::test_the_number_fields_are_counted_per_profile",
+    "test:backend/tests/unit/schemas/test_typed_number_fields_finite.py::test_typed_number_fields_refuse_non_finite_strings",
+    "test:backend/tests/unit/schemas/test_typed_number_fields_finite.py::test_the_planner_refuses_an_infinite_runtime_at_the_field",
+    "test:backend/tests/unit/schemas/test_typed_number_fields_finite.py::test_the_power_curve_refuses_a_nan_effect_at_the_parameter",
+]
+
+[[unit]]
+text = "A field that takes only a JSON number answers \"type\": \"float_type\" to any string, these four included."
+by = ["test:backend/tests/unit/schemas/test_typed_number_fields_finite.py::test_typed_number_fields_refuse_non_finite_strings"]
+
+[[unit]]
+text = "A tracking event's value keeps its own refusals (Track Event)."
+by = [
+    "test:backend/tests/unit/schemas/test_typed_number_fields_finite.py::test_the_exemptions_are_exactly_fields_the_walk_finds",
+    "test:backend/tests/unit/schemas/test_typed_number_fields_finite.py::test_an_exempt_field_refuses_the_strings_its_own_way",
+]
+
+[[unit]]
 text = "Targeting Context Limits"
 by = ["exempt:label"]
 
 [[unit]]
-text = "The routes that take a targeting context hold it to two limits before it is matched against any rule: GET and POST /api/v1/feature-flags/evaluate/{flag_key}, GET /api/v1/feature-flags/user/{user_id}, POST /api/v1/tracking/assign, and each user's context in POST /api/v1/tracking/assign/batch."
+text = "The routes that take a targeting context hold it to two limits before it is matched against any rule: GET and POST /api/v1/feature-flags/evaluate/{flag_key}, GET /api/v1/feature-flags/user/{user_id}, POST /api/v1/tracking/assign, each user's context in POST /api/v1/tracking/assign/batch, and POST /api/v1/tracking/visual (beta)."
 by = [
     "test:backend/tests/integration/api/test_targeting_context_limits.py::test_a_context_over_the_limits_answers_422_and_nothing_is_recorded",
     "test:backend/tests/integration/api/test_targeting_context_limits.py::test_the_batch_is_refused_whole_before_the_first_user_is_assigned",
+    "test:backend/tests/integration/api/test_visual_tracking_api.py::test_a_context_over_the_limits_is_refused",
 ]
 
 [[unit]]

@@ -185,10 +185,13 @@ by = [
 ]
 
 [[unit]]
-text = "Once the experiment has started the row is all there is: the setting cannot be changed."
+text = "Once the experiment has started the setting cannot be changed, and See each group's split beside the row opens its balanced groups on the results page (On the results page)."
 by = [
     "test:frontend/src/tests/pages/experiment-detail-balance.test.tsx::a %s experiment has no switch anywhere: the setting is read-only",
     "test:backend/tests/integration/api/test_balance_within_api.py::test_the_setting_is_locked_after_draft_for_every_role",
+    "test:frontend/src/tests/pages/experiment-detail-balance.test.tsx::a started experiment's row links to each group's split on the results' Breakdowns tab",
+    "test:frontend/src/tests/pages/experiment-detail-balance.test.tsx::a draft has no results yet, so its row has no link to them",
+    "test:frontend/src/tests/pages/results-balanced-groups.test.tsx::a link to ?tab=breakdowns opens the tab on the balanced groups",
 ]
 
 [[unit]]
@@ -443,6 +446,67 @@ by = [
 [[unit]]
 text = "An experiment that does not balance within groups answers 409."
 by = ["test:backend/tests/integration/api/test_balanced_groups_results.py::test_an_experiment_that_balances_nothing_answers_409"]
+
+[[unit]]
+text = "On the results page"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The Breakdowns tab of the experiment's results lists its balanced groups first, such as Platform (balanced), and opens on them."
+by = [
+    "test:frontend/src/tests/pages/results-balanced-groups.test.tsx::lists Platform (balanced) first and chooses it, from the balanced-groups route",
+    "test:frontend/src/tests/pages/results-balanced-groups.test.tsx::asks for the balanced groups only once Breakdowns is opened",
+]
+
+[[unit]]
+text = "They are this route's rows, and saved segments are shown by name."
+by = [
+    "test:frontend/src/tests/pages/results-balanced-groups.test.tsx::the rows are the stored groups, then other and unknown, and per variant they add up to the headline",
+    "test:frontend/src/tests/pages/results-balanced-groups.test.tsx::a list assigned in one batch shows its tiers, not unknown",
+    "test:frontend/src/tests/pages/results-balanced-groups.test.tsx::saved segments are named, never shown by their ids",
+]
+
+[[unit]]
+text = "A note says that each user is counted in the group they were balanced in when they were assigned, so a breakdown by the same attribute can differ for users assigned from a list or without it."
+by = [
+    "test:frontend/src/tests/pages/results-balanced-groups.test.tsx::always says how a user is counted",
+    "test:frontend/src/tests/pages/results-balanced-groups.test.tsx::a list assigned in one batch shows its tiers, not unknown",
+]
+
+[[unit]]
+text = "From 100 users whose group was stored, when more than half of them are in unknown, a note says so, out of those users, and links to Assign users."
+by = [
+    "test:frontend/src/tests/pages/results-balanced-groups.test.tsx::with %d users and %s of them unknown, the majority note is %s",
+    "test:frontend/src/tests/pages/results-balanced-groups.test.tsx::with users outside the blocks the majority note is about the stored users: %s",
+    "test:frontend/src/tests/pages/results-balanced-groups.test.tsx::users with no stored group count in the split-without-balancing number, not in the unknown share",
+]
+
+[[unit]]
+text = "When users_outside_blocks is not 0, a note gives it out of all the users and links to Users assigned without balancing."
+by = [
+    "test:frontend/src/tests/pages/results-balanced-groups.test.tsx::users outside the blocks: %d, so the count note is %s",
+    "test:frontend/src/tests/pages/results-balanced-groups.test.tsx::users with no stored group count in the split-without-balancing number, not in the unknown share",
+]
+
+[[unit]]
+text = "All groups, weighted by size gives overall: each variant's users and each treatment's difference from the control in percentage points, with its interval and p-value."
+by = [
+    "test:frontend/src/tests/pages/results-balanced-groups.test.tsx::has its interval and no winner or verdict badge",
+    "test:frontend/src/tests/pages/results-balanced-groups.test.tsx::the rows are the stored groups, then other and unknown, and per variant they add up to the headline",
+    "test:frontend/src/tests/pages/results-balanced-groups.test.tsx::with 2 treatments under a correction shows the adjusted p-value and marks the interval unadjusted; with a standard error of 0, no interval and no p-value",
+]
+
+[[unit]]
+text = "It names no winner: the experiment's results keep their decision."
+by = ["test:frontend/src/tests/pages/results-balanced-groups.test.tsx::has its interval and no winner or verdict badge"]
+
+[[unit]]
+text = "When overall is null, it says why."
+by = ["test:frontend/src/tests/pages/results-balanced-groups.test.tsx::without an estimate (%s) it says why"]
+
+[[unit]]
+text = "A group in merged_groups is named under it, with the group it was counted with."
+by = ["test:frontend/src/tests/pages/results-balanced-groups.test.tsx::names a group counted with a larger one"]
 
 [[unit]]
 text = "How they differ from ?breakdown="

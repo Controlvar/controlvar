@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ResultsService } from '@/services/results';
 import { ExperimentsService } from '@/services/experiments';
 import {
+  BalancedGroupsResponse,
   CorrectionMethod,
   ExperimentResultsResponse,
   DailyResultsResponse,
@@ -11,6 +12,7 @@ import {
   MetricAnalysis,
   MetricResult,
 } from '@/types/results';
+import { BalanceWithin } from '@/types/experiments';
 import {
   analysedAsMean,
   meanDescription,
@@ -25,8 +27,13 @@ import { ConversionChart } from '@/components/results/Visualizations/ConversionC
 import { TrendChart } from '@/components/results/Visualizations/TrendChart';
 import { MetricComparisonTable } from '@/components/results/MetricComparison/MetricComparisonTable';
 import { SequentialMonitor } from '@/components/results/Sequential/SequentialMonitor';
-import { BreakdownSelector } from '@/components/results/Breakdowns/BreakdownSelector';
+import {
+  BALANCED_BREAKDOWN,
+  BreakdownSelector,
+} from '@/components/results/Breakdowns/BreakdownSelector';
 import { SegmentComparisonTable } from '@/components/results/Breakdowns/SegmentComparisonTable';
+import { BalancedGroupsView } from '@/components/results/Breakdowns/BalancedGroupsView';
+import { balancedOptionLabel, balances } from '@/components/results/Breakdowns/balancedGroups';
 // EP-058: Real-time WebSocket Streaming Results
 import { LiveResultsPanel } from '@/components/experiments/LiveResultsPanel';
 import { ApiError } from '@/services/api';
@@ -34,6 +41,8 @@ import { useAuthConfig } from '@/contexts/AuthConfigContext';
 
 interface ResultsDashboardProps {
   experimentId: string;
+  /** The tab shown first (`/results/{id}?tab=breakdowns`); Overview when absent. */
+  initialTab?: ResultsTab;
 }
 
 /** The experiment's stored settings, as `GET /results/{id}` takes them. */
@@ -62,6 +71,12 @@ interface ExperimentReading {
    * could not be read.
    */
   eventNames: Record<string, string>;
+  /**
+   * What the experiment balances its split within (#448), or null when it
+   * balances nothing, or could not be read: its Breakdowns tab then is as it
+   * always was.
+   */
+  balanceWithin: BalanceWithin | null;
 }
 
 /** Each metric's event name by its id; metrics without one are left out. */
@@ -106,6 +121,8 @@ async function readExperiment(experimentId: string): Promise<ExperimentReading> 
         ? (sequentialMetric.lower_is_better ?? false)
         : undefined;
     const eventNames = eventNamesOf(metrics);
+    const balance = experiment?.balance_within;
+    const balanceWithin = balances(balance) ? balance : null;
     if (experiment?.correction_method && typeof experiment.confidence_level === 'number') {
       return {
         settings: {
@@ -116,9 +133,10 @@ async function readExperiment(experimentId: string): Promise<ExperimentReading> 
         sequentialEnabled,
         lowerIsBetter,
         eventNames,
+        balanceWithin,
       };
     }
-    return { settings: null, bayesianEnabled, sequentialEnabled, lowerIsBetter, eventNames };
+    return { settings: null, bayesianEnabled, sequentialEnabled, lowerIsBetter, eventNames, balanceWithin };
   } catch {
     // Fall through: the results request goes without settings.
   }
@@ -128,6 +146,7 @@ async function readExperiment(experimentId: string): Promise<ExperimentReading> 
     sequentialEnabled: undefined,
     lowerIsBetter: undefined,
     eventNames: {},
+    balanceWithin: null,
   };
 }
 
@@ -156,6 +175,7 @@ export function resultsErrorMessage(e: unknown): string {
 }
 
 type Tab = 'overview' | 'trends' | 'sample-size' | 'sequential' | 'breakdowns' | 'live';
+export type ResultsTab = Tab;
 
 /**
  * The chart heading says what the bars are. A metric analysed as a mean is
@@ -210,7 +230,7 @@ function LoadingSkeleton() {
   );
 }
 
-export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
+export function ResultsDashboard({ experimentId, initialTab }: ResultsDashboardProps) {
   const [results, setResults] = useState<ExperimentResultsResponse | null>(null);
   const [daily, setDaily] = useState<DailyResultsResponse | null>(null);
   // The sample size loads on its own, outside the page's Promise.all (#666):
@@ -233,7 +253,7 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
   const [lowerIsBetter, setLowerIsBetter] = useState<boolean | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? 'overview');
   // A read-only demo opens no live results stream (its API refuses the
   // socket), so the Live tab waits until `/auth/config` says this is not one.
   const { loading: configLoading, demo } = useAuthConfig();
@@ -243,6 +263,15 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
   const [breakdown, setBreakdown] = useState<DimensionalBreakdownResponse | null>(null);
   const [breakdownLoading, setBreakdownLoading] = useState(false);
   const [breakdownFailed, setBreakdownFailed] = useState(false);
+  // #448: an experiment that balances its split within groups lists its
+  // balanced groups first on Breakdowns, and the tab opens on them until the
+  // user chooses something else.
+  const [balanceWithin, setBalanceWithin] = useState<BalanceWithin | null>(null);
+  const [balancedGroups, setBalancedGroups] = useState<BalancedGroupsResponse | null>(null);
+  const breakdownChosen = useRef(false);
+  // Only the latest breakdown request may write state, so a slow answer for
+  // an earlier choice never lands on the one shown.
+  const breakdownRequest = useRef(0);
   // The settings every results request sends (D49), once the experiment is read.
   const [stored, setStored] = useState<StoredAnalysisSettings | null>(null);
   const [bayesianEnabled, setBayesianEnabled] = useState<boolean | undefined>(undefined);
@@ -293,6 +322,7 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
         setStored(settings);
         setBayesianEnabled(reading.bayesianEnabled);
         setEventNames(reading.eventNames);
+        setBalanceWithin(reading.balanceWithin);
         return settings
           ? ResultsService.getResults(experimentId, settings)
           : ResultsService.getResults(experimentId);
@@ -332,26 +362,41 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
 
   // Issue #28: Fetch breakdown when dimension changes
   const fetchBreakdown = useCallback(async (dim: string | null) => {
+    const request = ++breakdownRequest.current;
     if (!dim) {
       setBreakdown(null);
+      setBalancedGroups(null);
       setBreakdownFailed(false);
+      setBreakdownLoading(false);
       return;
     }
     setBreakdownLoading(true);
     setBreakdownFailed(false);
     try {
-      const r = await ResultsService.getResults(
-        experimentId,
-        stored ? { breakdown: dim, ...stored } : { breakdown: dim }
-      );
-      setBreakdown(r.breakdown ?? null);
+      if (dim === BALANCED_BREAKDOWN) {
+        // The balanced groups use the experiment's stored settings themselves.
+        const b = await ResultsService.getBalancedGroups(experimentId);
+        if (request !== breakdownRequest.current) return;
+        setBalancedGroups(b);
+        setBreakdown(null);
+      } else {
+        const r = await ResultsService.getResults(
+          experimentId,
+          stored ? { breakdown: dim, ...stored } : { breakdown: dim }
+        );
+        if (request !== breakdownRequest.current) return;
+        setBreakdown(r.breakdown ?? null);
+        setBalancedGroups(null);
+      }
     } catch {
       // The server answers a breakdown it cannot compute with an error. It is
       // shown as one, in fixed words: the server's text is never put on the page.
+      if (request !== breakdownRequest.current) return;
       setBreakdown(null);
+      setBalancedGroups(null);
       setBreakdownFailed(true);
     } finally {
-      setBreakdownLoading(false);
+      if (request === breakdownRequest.current) setBreakdownLoading(false);
     }
   }, [experimentId, stored]);
 
@@ -363,6 +408,20 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
   useEffect(() => {
     fetchBreakdown(selectedBreakdown);
   }, [selectedBreakdown, fetchBreakdown]);
+
+  // #448: the first time Breakdowns is open for a balanced experiment, it
+  // shows the balanced groups, so they are asked for only once it is opened.
+  const balanced = balanceWithin !== null;
+  useEffect(() => {
+    if (activeTab !== 'breakdowns' || !balanced || breakdownChosen.current) return;
+    breakdownChosen.current = true;
+    setSelectedBreakdown(BALANCED_BREAKDOWN);
+  }, [activeTab, balanced]);
+
+  const chooseBreakdown = useCallback((dim: string | null) => {
+    breakdownChosen.current = true;
+    setSelectedBreakdown(dim);
+  }, []);
 
   if (loading) return <LoadingSkeleton />;
 
@@ -388,6 +447,10 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
 
   const primaryMetric = results.metrics.find((m) => m.is_primary) ?? results.metrics[0];
   const primaryAsMean = primaryMetric ? analysedAsMean(primaryMetric) : false;
+  // What the Breakdowns tab shows for the choice: a balanced experiment's
+  // balanced groups, or a breakdown by a key.
+  const showsBalanced = selectedBreakdown === BALANCED_BREAKDOWN;
+  const shownBreakdown = showsBalanced ? balancedGroups : breakdown;
 
   const TABS: { id: Tab; label: string }[] = [
     { id: 'overview', label: 'Overview' },
@@ -569,7 +632,8 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
                 </h3>
                 <BreakdownSelector
                   value={selectedBreakdown}
-                  onChange={setSelectedBreakdown}
+                  onChange={chooseBreakdown}
+                  balancedLabel={balanceWithin ? balancedOptionLabel(balanceWithin) : undefined}
                 />
               </div>
 
@@ -580,8 +644,12 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
                 </div>
               )}
 
-              {!breakdownLoading && breakdown && (
+              {!breakdownLoading && !showsBalanced && breakdown && (
                 <SegmentComparisonTable breakdown={breakdown} />
+              )}
+
+              {!breakdownLoading && showsBalanced && balancedGroups && balanceWithin && (
+                <BalancedGroupsView setting={balanceWithin} data={balancedGroups} />
               )}
 
               {!breakdownLoading && breakdownFailed && selectedBreakdown && (
@@ -607,7 +675,7 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
                 </div>
               )}
 
-              {!breakdownLoading && !breakdownFailed && !breakdown && selectedBreakdown && (
+              {!breakdownLoading && !breakdownFailed && !shownBreakdown && selectedBreakdown && (
                 <p className="text-sm text-slate-500">
                   No breakdown data available for the selected dimension.
                 </p>

@@ -302,6 +302,8 @@ No entry holds a password, a token, any part of an API key, or a request body.
 | `experiment_update` | `experiment` | `PUT /experiments/{id}`, `/schedule`, `/metadata`, `/archive`, `PUT /bandit/{id}/weights` (`reason` names the change, except for `PUT`) |
 | `experiment_delete` | `experiment` | `DELETE /experiments/{id}` |
 | `experiment_start`, `experiment_pause`, `experiment_complete` | `experiment` | `/start` (also a resume), `/pause`, `/complete` |
+| `experiment_preview_link_create` | `experiment` | `POST /experiments/{id}/visual/preview-links` makes a visual experiment's preview link; `new_value` is `{"variant_id", "expires_at"}`, never the link or its token |
+| `experiment_preview_links_revoke` | `experiment` | `DELETE /experiments/{id}/visual/preview-links` ends the experiment's live preview links; `new_value` is `{"revoked"}`, how many were ended |
 | `api_key_create`, `api_key_revoke` | `api_key` | `POST /api-keys`, `DELETE /api-keys/{id}` |
 | `holdout_create` | `holdout` | `POST /holdout`. With `is_active: true` it turns the active holdout off, and that holdout gets its own `holdout_deactivate` |
 | `holdout_update`, `holdout_activate`, `holdout_deactivate` | `holdout` | `PUT /holdout/{id}`, one entry per kind of change. Activating a holdout turns any other active one off, and that holdout gets its own `holdout_deactivate`. An activate or deactivate entry also carries the `activated_at` or `deactivated_at` it set |
