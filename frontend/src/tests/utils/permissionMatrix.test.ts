@@ -116,6 +116,12 @@ const HELPERS: HelperRow[] = [
     answer: (u, e) => experimentPermissions.canChangeFeatureFlags(u, e),
   },
   {
+    name: 'canDeleteFeatureFlags',
+    pair: ['feature_flag', 'delete'],
+    roles: rolesFor('feature_flag', 'delete'),
+    answer: (u, e) => experimentPermissions.canDeleteFeatureFlags(u, e),
+  },
+  {
     name: 'canCreateSegments',
     pair: ['experiment', 'create'],
     roles: rolesFor('experiment', 'create'),
@@ -205,17 +211,17 @@ describe('the table the matrix reads', () => {
       .filter((name) => name.startsWith('can'))
       .sort();
     const covered = HELPERS.map((row) => row.name).filter((name) => exported.includes(name));
-    expect(exported).toHaveLength(10);
+    expect(exported).toHaveLength(11);
     expect(exported).toEqual(Array.from(new Set(covered)).sort());
   });
 });
 
 describe('every helper x user x effective map (#891, check #41)', () => {
-  it('evaluates exactly 12 helpers x 6 users x 13 maps = 936 cases', () => {
-    expect(HELPERS).toHaveLength(12);
+  it('evaluates exactly 13 helpers x 6 users x 13 maps = 1014 cases', () => {
+    expect(HELPERS).toHaveLength(13);
     expect(USERS).toHaveLength(6);
     expect(STATES).toHaveLength(13);
-    expect(CASES).toHaveLength(936);
+    expect(CASES).toHaveLength(1014);
   });
 
   it('answers as the server decides, in every case', () => {

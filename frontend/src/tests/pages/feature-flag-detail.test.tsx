@@ -1,10 +1,17 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import axe from 'axe-core';
+import { RbacService } from '@modules/rbac';
 import FeatureFlagDetailPage, { pickSchedule, stageSummary } from '@/pages/feature-flags/[id]';
+import FeatureFlagsPage from '@/pages/feature-flags/index';
+import { takeDeletedFlagNotice } from '@/components/feature-flags/FlagManageSection';
+import { EffectivePermissionsProvider } from '@/contexts/EffectivePermissionsContext';
+import { ModulesProvider, __resetModulesCache } from '@/contexts/ModulesContext';
 import { apiFetch } from '@/services/api';
 import { FeatureFlag, RolloutSchedule, RolloutStageStatus } from '@/services/featureFlags';
+import { ModulesInfo } from '@/services/modules';
 import { SafetyCheckResponse } from '@/types/safety';
+import { renderInAppRoot } from '@/tests/helpers/renderInAppRoot';
 import { apiError, makeRouter, routedApi, Route } from './helpers/apiMock';
 
 jest.mock('@/services/api', () => ({
@@ -509,9 +516,11 @@ describe('who may change a flag (#917)', () => {
       expect(screen.getByTestId('rollout-percentage')).toBeDisabled();
       expect(screen.queryByTestId('save-flag')).toBeNull();
 
-      // #442: no "Manage this flag" group, so no Archive.
+      // #442: no "Manage this flag" group, so no Archive and no Delete.
       expect(screen.queryByTestId('flag-archive')).toBeNull();
       expect(screen.queryByRole('button', { name: 'Archive' })).toBeNull();
+      expect(screen.queryByTestId('flag-delete')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
 
       // Reading stays: the schedule and the safety check load, and Re-check is offered.
       expect(await screen.findByTestId('rollout-schedule-name')).toHaveTextContent('Gradual checkout rollout');
@@ -548,8 +557,9 @@ describe('who may change a flag (#917)', () => {
     expect(screen.getByTestId('rollout-percentage')).toBeEnabled();
     expect(screen.getByTestId('save-flag')).toBeInTheDocument();
     expect(screen.queryByTestId('flag-role-note')).toBeNull();
-    // #442: the "Manage this flag" group, with Archive for an inactive flag.
+    // #442: the "Manage this flag" group, with Archive for an inactive flag, and Delete.
     expect(within(screen.getByTestId('flag-archive')).getByRole('button', { name: 'Archive' })).toBeEnabled();
+    expect(within(screen.getByTestId('flag-delete')).getByRole('button', { name: 'Delete' })).toBeEnabled();
   });
 
   it('an ADMIN still gets "Replace rules" over rules the builder cannot show', async () => {
@@ -566,5 +576,276 @@ describe('who may change a flag (#917)', () => {
     await screen.findByTestId('safety-status');
     const result = await axe.run(container, { rules: { 'color-contrast': { enabled: false } } });
     expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(', ')}`)).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #442: deleting a flag. Delete cannot be undone, so the Dialog asks for the
+// flag's key: no DELETE until the typed text equals it exactly and Delete is
+// pressed; Escape and Cancel send nothing. It is offered by FEATURE_FLAG
+// DELETE, which a custom role or grant can give apart from UPDATE. Every role
+// here signs in as itself, never as a superuser (which passes every check).
+// ---------------------------------------------------------------------------
+
+describe('deleting a flag (#442)', () => {
+  /** The delete Dialog's sentences (PLAN-v1.1 DESIGN E2) for checkout_v2, word for word. */
+  const DESCRIPTION =
+    "This cannot be undone. Code that still asks for checkout_v2 gets a 404 and its SDK's fallback, " +
+    'so archive it instead while any code may still ask for it. ' +
+    'Its rollout schedules and safety settings are deleted with it; its events are kept.';
+  const FIELD = 'Type checkout_v2 to delete it';
+  const ROLE_NOTE =
+    'Feature flags are created and changed with the feature flag permissions, which the ADMIN and DEVELOPER roles have.';
+  const FULL: ModulesInfo = { profile: 'full', modules: ['rbac'], version: 'test' };
+
+  /** The element's whole text, which must be the sentence and nothing else. */
+  const textOf = (el: HTMLElement) => (el.textContent ?? '').trim();
+
+  /** Every DELETE the pages sent. */
+  const deletes = () => mockedApiFetch.mock.calls.filter(([, options]) => options?.method === 'DELETE');
+
+  /** The flag page's reads, the list's, and the delete, answered by `answer` (a 204 by default). */
+  function installDelete(answer: () => unknown = () => undefined) {
+    install([
+      ...happyRoutes(),
+      { path: '/api/v1/feature-flags', handler: () => ({ items: [], total: 0, skip: 0, limit: 100 }) },
+      { method: 'DELETE', path: '/api/v1/feature-flags/flag-1', handler: answer },
+    ]);
+  }
+
+  async function openDeleteDialog() {
+    fireEvent.click(within(await screen.findByTestId('flag-delete')).getByRole('button', { name: 'Delete' }));
+    return screen.getByRole('dialog', { name: 'Delete Checkout v2?' });
+  }
+
+  let getUserPermissions: jest.SpyInstance;
+
+  beforeEach(() => {
+    __resetModulesCache();
+    mockRouter.push.mockClear();
+    getUserPermissions = jest.spyOn(RbacService, 'getUserPermissions');
+    // A notice an earlier test left for the list.
+    takeDeletedFlagNotice();
+  });
+
+  afterEach(() => {
+    getUserPermissions.mockRestore();
+  });
+
+  /** A VIEWER (who changes no flag by role) whose custom role holds `actions` on feature_flag. */
+  async function renderWithGrant(actions: string[]) {
+    signIn('VIEWER');
+    getUserPermissions.mockResolvedValue({
+      user_id: 'u1',
+      username: 'u',
+      base_role: 'viewer',
+      custom_roles: ['flag-role'],
+      permissions: { feature_flag: ['read', 'list', ...actions] },
+      is_superuser: false,
+    });
+    installDelete();
+    const view = render(
+      <ModulesProvider initial={FULL}>
+        <EffectivePermissionsProvider>
+          <FeatureFlagDetailPage />
+        </EffectivePermissionsProvider>
+      </ModulesProvider>,
+    );
+    // The group appears once the map has answered.
+    await screen.findByTestId('flag-manage');
+    expect(getUserPermissions).toHaveBeenCalledWith('u1');
+    return view;
+  }
+
+  it('ADMIN and DEVELOPER see Delete; ANALYST and VIEWER see none and the role note', async () => {
+    for (const role of ['ADMIN', 'DEVELOPER']) {
+      signIn(role);
+      installDelete();
+      const { unmount } = render(<FeatureFlagDetailPage />);
+      const control = await screen.findByTestId('flag-delete');
+      expect(screen.getByRole('group', { name: 'Manage this flag' })).toContainElement(control);
+      expect(within(control).getByRole('button', { name: 'Delete' })).toBeEnabled();
+      unmount();
+    }
+    for (const role of ['ANALYST', 'VIEWER']) {
+      signIn(role);
+      installDelete();
+      const { unmount } = render(<FeatureFlagDetailPage />);
+      expect(textOf(await screen.findByTestId('flag-role-note'))).toBe(ROLE_NOTE);
+      expect(screen.queryByTestId('flag-delete')).toBeNull();
+      expect(screen.queryAllByRole('button', { name: /delete/i })).toEqual([]);
+      unmount();
+    }
+    // Offering is not doing: no page load sent a DELETE.
+    expect(deletes()).toEqual([]);
+  });
+
+  it('a grant with feature_flag update but not delete sees no Delete; one with delete but not update sees only Delete', async () => {
+    // Update alone: Archive, and no Delete.
+    const updateOnly = await renderWithGrant(['update']);
+    expect(within(screen.getByTestId('flag-archive')).getByRole('button', { name: 'Archive' })).toBeEnabled();
+    expect(screen.queryByTestId('flag-delete')).toBeNull();
+    expect(screen.queryAllByRole('button', { name: /delete/i })).toEqual([]);
+    updateOnly.unmount();
+
+    // Delete alone: Delete, and nothing that needs update.
+    await renderWithGrant(['delete']);
+    expect(within(screen.getByTestId('flag-delete')).getByRole('button', { name: 'Delete' })).toBeEnabled();
+    expect(screen.queryByTestId('flag-archive')).toBeNull();
+    expect(screen.queryByRole('switch')).toBeNull();
+    expect(deletes()).toEqual([]);
+  });
+
+  it('no DELETE before the typed key equals flag.key and Delete is pressed; Escape and Cancel send nothing', async () => {
+    signIn('DEVELOPER');
+    installDelete();
+    renderInAppRoot(<FeatureFlagDetailPage />);
+    const opener = within(await screen.findByTestId('flag-delete')).getByRole('button', { name: 'Delete' });
+
+    // Opening the dialog sends nothing; Cancel has focus, and Escape is Cancel.
+    let dialog = await openDeleteDialog();
+    await act(async () => undefined);
+    expect(deletes()).toEqual([]);
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(opener).toHaveFocus();
+    expect(deletes()).toEqual([]);
+
+    // Cancel sends nothing either, even with the key typed.
+    dialog = await openDeleteDialog();
+    fireEvent.change(within(dialog).getByLabelText(FIELD), { target: { value: 'checkout_v2' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(opener).toHaveFocus();
+    expect(deletes()).toEqual([]);
+
+    // Opened again, the field is empty, and Delete stays disabled for
+    // anything but the key exactly: no trimming, no change of case, not the name.
+    dialog = await openDeleteDialog();
+    const field = within(dialog).getByLabelText(FIELD);
+    expect(field).toHaveValue('');
+    const confirm = within(dialog).getByRole('button', { name: 'Delete' });
+    expect(confirm).toBeDisabled();
+    for (const typed of ['checkout', 'checkout_v2 ', ' checkout_v2', 'Checkout_v2', 'CHECKOUT_V2', 'Checkout v2', 'checkout_v23']) {
+      fireEvent.change(field, { target: { value: typed } });
+      expect(confirm).toBeDisabled();
+      fireEvent.click(confirm);
+    }
+    await act(async () => undefined);
+    expect(deletes()).toEqual([]);
+
+    // The key itself enables Delete, and still nothing is sent until it is pressed.
+    fireEvent.change(field, { target: { value: 'checkout_v2' } });
+    expect(confirm).toBeEnabled();
+    await act(async () => undefined);
+    expect(deletes()).toEqual([]);
+
+    fireEvent.click(confirm);
+    await waitFor(() => expect(deletes()).toHaveLength(1));
+    const [[path, options]] = deletes();
+    expect(path).toBe('/api/v1/feature-flags/flag-1');
+    expect(options?.json).toBeUndefined();
+    await waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith('/feature-flags'));
+    expect(deletes()).toHaveLength(1);
+  });
+
+  it('while the DELETE is in flight, Delete again, Enter, Escape and Cancel send nothing more', async () => {
+    signIn('ADMIN');
+    let finish!: () => void;
+    const held = new Promise<undefined>((resolve) => {
+      finish = () => resolve(undefined);
+    });
+    installDelete(() => held);
+    renderInAppRoot(<FeatureFlagDetailPage />);
+    const dialog = await openDeleteDialog();
+    const field = within(dialog).getByLabelText(FIELD);
+    fireEvent.change(field, { target: { value: 'checkout_v2' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(deletes()).toHaveLength(1));
+
+    // The answer has not come: every way of asking again is tried.
+    const confirm = within(dialog).getByTestId('flag-delete-confirm');
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+    fireEvent.keyDown(field, { key: 'Enter' });
+    fireEvent.keyDown(confirm, { key: 'Enter' });
+    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.click(within(dialog).getByTestId('flag-delete-cancel'));
+    await act(async () => undefined);
+    expect(deletes()).toHaveLength(1);
+    expect(screen.getByRole('dialog', { name: 'Delete Checkout v2?' })).toBe(dialog);
+
+    await act(async () => {
+      finish();
+      await held;
+    });
+    await waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith('/feature-flags'));
+    expect(mockRouter.push).toHaveBeenCalledTimes(1);
+    expect(deletes()).toHaveLength(1);
+  });
+
+  it('the dialog asks "Delete {name}?" in these words, Cancel first, and axe finds nothing in it', async () => {
+    signIn('ADMIN');
+    installDelete();
+    renderInAppRoot(<FeatureFlagDetailPage />);
+    const dialog = await openDeleteDialog();
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(dialog).toHaveAccessibleName('Delete Checkout v2?');
+    expect(dialog).toHaveAccessibleDescription(DESCRIPTION);
+    expect(within(dialog).getByRole('textbox', { name: FIELD })).toHaveValue('');
+    expect(within(dialog).getAllByRole('button').map(textOf)).toEqual(['Cancel', 'Delete']);
+    const result = await axe.run(dialog, { rules: { 'color-contrast': { enabled: false } } });
+    expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(', ')}`)).toEqual([]);
+  });
+
+  it('after the 204 the list shows "Deleted {name}." in a status region, once', async () => {
+    signIn('ADMIN');
+    installDelete();
+    const detail = renderInAppRoot(<FeatureFlagDetailPage />);
+    const dialog = await openDeleteDialog();
+    fireEvent.change(within(dialog).getByLabelText(FIELD), { target: { value: 'checkout_v2' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith('/feature-flags'));
+    expect(mockRouter.push).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    detail.unmount();
+
+    // The router has moved to the list.
+    const list = render(<FeatureFlagsPage />);
+    await screen.findByTestId('flags-empty');
+    const status = screen.getByTestId('flags-deleted-status');
+    expect(status).toHaveAttribute('role', 'status');
+    expect(textOf(status)).toBe('Deleted Checkout v2.');
+    list.unmount();
+
+    // Said once: the list opened again says nothing.
+    render(<FeatureFlagsPage />);
+    await screen.findByTestId('flags-empty');
+    expect(screen.queryByTestId('flags-deleted-status')).toBeNull();
+    expect(screen.queryByText('Deleted Checkout v2.')).toBeNull();
+  });
+
+  it.each([
+    [403, 'Deleting a flag needs permission to delete feature flags, which the ADMIN and DEVELOPER roles have.'],
+    [404, 'This flag no longer exists.'],
+    [500, 'Could not delete this flag.'],
+  ])("a %s from the delete reads fixed copy, never the server's words, and the page stays", async (status, copy) => {
+    signIn('ADMIN');
+    installDelete(() => {
+      throw apiError(status, 'server words that must not be shown');
+    });
+    renderInAppRoot(<FeatureFlagDetailPage />);
+    const dialog = await openDeleteDialog();
+    fireEvent.change(within(dialog).getByLabelText(FIELD), { target: { value: 'checkout_v2' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+
+    expect(textOf(await within(dialog).findByRole('alert'))).toBe(copy);
+    expect(screen.queryByText(/server words/)).toBeNull();
+    expect(deletes()).toHaveLength(1);
+    expect(mockRouter.push).not.toHaveBeenCalled();
+    expect(takeDeletedFlagNotice()).toBeNull();
+    // The way to try again stays.
+    expect(within(dialog).getByRole('button', { name: 'Delete' })).toBeEnabled();
   });
 });

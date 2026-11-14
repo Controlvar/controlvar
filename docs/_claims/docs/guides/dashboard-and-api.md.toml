@@ -160,7 +160,7 @@ text = "Set a rollout schedule's own start and end dates, maximum percentage and
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Delete a feature flag | API only | Deleting a flag"
+text = "Delete a feature flag | Dashboard | Deleting a flag"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
