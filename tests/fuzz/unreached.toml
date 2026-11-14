@@ -159,16 +159,16 @@
 # DELETE is not listed: it answers 204 for any stored experiment, and this
 # pass sends stored experiment ids to the operations that take one (its
 # DELETE /api/v1/experiments/{experiment_id} answers 400, which only a stored
-# experiment gets). The superuser's POST was listed from reasoning too, and
-# the pull request's first fuzz run at this seed reported one listed operation
-# of this pass reached; of this pass's three new entries it is the only one the
-# viewer pass does not share (the viewer's two tracking entries held). Likely
-# why, not measured: since #1940 the pass's own create can store an experiment
-# with visual settings, and the POST answers 201 for one. So it is not listed,
-# and the next run at this seed is the check. The lists are
-# 110 for superuser, 185 for viewer and 9 for sdk. As #1607 found, new
-# operations can also change the ids reused by the operations after them;
-# only a run shows that.
+# experiment gets). The superuser's POST is listed: every stored id this pass
+# sends it names an experiment without visual settings (400), an id that
+# names no stored row answers 404, and the other requests fail validation
+# (422). And, as #1607 found, new operations change the ids reused by the
+# operations after them: with these four, the superuser pass sends a
+# GET /api/v1/bandit/{experiment_id} that names a stored bandit experiment
+# (200), so it reaches it, and that entry is gone. Those two were read from
+# fuzz_check's evaluation of a local run of the superuser pass at this seed
+# on the pull request's head merged with main, whose counts equal that head's
+# fuzz.yml run. The lists are 110 for superuser, 185 for viewer and 9 for sdk.
 
 # --- superuser: the seeded demo administrator's bearer token ----------------
 
@@ -236,6 +236,11 @@ reason = "Every generated request fails the operation's own validation (422)."
 pass = "superuser"
 operation = "GET /api/v1/experiments/{experiment_id}/split-url/preview"
 reason = "The handler refuses the generated values (400); ids that name no stored row answer 404 and invalid requests answer 422."
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/experiments/{experiment_id}/visual/preview-links"
+reason = "No request names a stored experiment with visual settings: every stored id sent answers 400 (the experiment has no visual settings, so no preview links), an id that names no stored row 404, and the other requests fail validation (422)."
 
 [[unreached]]
 pass = "superuser"
@@ -416,11 +421,6 @@ reason = "The handler refuses the generated values (400); invalid requests answe
 pass = "superuser"
 operation = "GET /api/v1/holdout/{holdout_id}/results"
 reason = "Generated ids never name a stored row (404); the other requests fail validation (422)."
-
-[[unreached]]
-pass = "superuser"
-operation = "GET /api/v1/bandit/{experiment_id}"
-reason = "No request names a stored bandit experiment: every id sent names a fixed-allocation experiment (404), and the other requests fail validation (422)."
 
 [[unreached]]
 pass = "superuser"
