@@ -172,3 +172,10 @@ def test_the_link_label_is_percent_encoded():
     parts = urlsplit(uri)
     assert parts.netloc == "totp"
     assert parts.path == "/Controlvar:a%20b%26c%3F@example.com"
+
+
+def test_the_literal_code_shapes_follow_the_length_constants():
+    from backend.app.services import two_factor_service as svc
+
+    assert svc._CODE_SHAPE.pattern == "[0-9]{%d}" % totp.DIGITS
+    assert svc._RECOVERY_SHAPE.pattern == "[A-Z2-7]{%d}" % svc.RECOVERY_CODE_LENGTH

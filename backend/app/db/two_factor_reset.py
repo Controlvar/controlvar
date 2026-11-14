@@ -100,8 +100,6 @@ def run(
         print(f"Refused: {CONFIRM_ALL_FLAG} goes with --all only.", file=out)
         return EXIT_REFUSED
 
-    from sqlalchemy import create_engine
-
     from backend.app.db import bootstrap
     from backend.app.models.user import User
     from backend.app.models.user_totp import UserTOTP
@@ -112,7 +110,7 @@ def run(
     # The ORM path, as the bootstrap's first administrator takes it: the
     # mapped classes name ``schema`` whatever they were imported under.
     bootstrap._point_models_at_schema(schema)
-    engine = engine or create_engine(bootstrap.database_url())
+    engine = engine or bootstrap.make_engine()
     session = sessionmaker(bind=engine)()
     try:
         _search_path(session, engine, schema)

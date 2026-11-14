@@ -97,8 +97,10 @@ UNAVAILABLE_TEXT = (
 
 #: Spaces, tabs and hyphens people type or paste inside a code.
 _SEPARATORS = re.compile(r"[\s\-]")
-_CODE_SHAPE = re.compile(r"[0-9]{%d}" % totp.DIGITS)
-_RECOVERY_SHAPE = re.compile(r"[A-Z2-7]{%d}" % RECOVERY_CODE_LENGTH)
+#: Literal patterns (the regex gate takes fixed text only); a unit test pins
+#: the counts to ``totp.DIGITS`` and ``RECOVERY_CODE_LENGTH``.
+_CODE_SHAPE = re.compile(r"[0-9]{6}")
+_RECOVERY_SHAPE = re.compile(r"[A-Z2-7]{10}")
 
 #: What a check is for: the row it needs, and whether a recovery code may
 #: stand in for a code.
