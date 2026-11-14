@@ -10,6 +10,49 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.47.0](https://github.com/Controlvar/controlvar/compare/v0.46.0...v0.47.0) (2026-11-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** A number field in a request body given "NaN", "Infinity", "-Infinity" or a number too large for a double such as "1e400" as a string, or a number query parameter given one of them, now answers 422 with `"type": "finite_number"` at that field, on signed-in routes and on the anonymous power calculator alike. These accepted one or more of them before: `POST /api/v1/power/plan` (`runtime_days`) and `GET /api/v1/power/curve` (`mde`), which answered 200; `PUT /api/v1/bandit/{experiment_id}/weights` (`weights`); `POST /api/v1/experiments/` and `PUT /api/v1/experiments/{experiment_id}` (`metrics[].expected_effect`); `POST /api/v1/llm-experiments/{experiment_id}/evaluate` (`business_metric_value`); `PUT /api/v1/llm-experiments/{experiment_id}/variants/{variant_id}` (`temperature`, `traffic_split`); `POST /api/v1/results/{experiment_id}/fdr-correction` (`p_values`); `POST /api/v1/safety/settings` (`default_metrics`) and `POST /api/v1/safety/feature-flags/{feature_flag_id}/config` (`metrics`), in `warning_threshold` and `critical_threshold`; and `POST /api/v1/ai/interpret/{experiment_id}` (`p_value`, `relative_improvement_pct`). Where a field already refused such a value with a 422 (a range check, or the fixed text of `GET /api/v1/ai/sample-size`, `GET /api/v1/experiments/analysis/sample-size`, `POST /api/v1/utils/utils/sample-size` and the `baseline_std` of `POST /api/v1/power/sample-size`), the status is unchanged and the 422 now carries `finite_number` at the field. A field that takes only a JSON number, a warehouse run's `confidence_level` or a metric source's `cap_value`, keeps answering `float_type` to any string, these included. A tracking event's `value` keeps its own refusals, and a bare NaN or Infinity in a JSON body was already refused ([#1630](https://github.com/Controlvar/controlvar/issues/1630)). The OpenAPI document does not change.
+
+### Features
+
+* **api:** a page asks which visual changes and goals its visitor gets, and preview links ([#1545](https://github.com/Controlvar/controlvar/issues/1545)) ([#1945](https://github.com/Controlvar/controlvar/issues/1945)) ([32184c5](https://github.com/Controlvar/controlvar/commit/32184c514cfb1a261bdb00a0bd38038687f65e80))
+* **api:** a visual experiment stores its page changes, pages and goals ([#1545](https://github.com/Controlvar/controlvar/issues/1545)) ([#1940](https://github.com/Controlvar/controlvar/issues/1940)) ([b8109e5](https://github.com/Controlvar/controlvar/commit/b8109e586e7ebeb30cea6b4582574e618b77f3e8))
+* **auth:** store two-step sign-in secrets for local accounts ([#1948](https://github.com/Controlvar/controlvar/issues/1948)) ([119f37f](https://github.com/Controlvar/controlvar/commit/119f37f5a287a3f71138976723336d736a26a039))
+* **dashboard:** delete a feature flag ([#442](https://github.com/Controlvar/controlvar/issues/442)) ([#1951](https://github.com/Controlvar/controlvar/issues/1951)) ([27a13cd](https://github.com/Controlvar/controlvar/commit/27a13cdc219901f940244fce694359f648f48167))
+* **dashboard:** show each balanced group's results ([#448](https://github.com/Controlvar/controlvar/issues/448)) ([#1952](https://github.com/Controlvar/controlvar/issues/1952)) ([2567fcb](https://github.com/Controlvar/controlvar/commit/2567fcb49747c5165423635ad80398f7e71ba9bc))
+* **dotnet-sdk:** typed value getters and OnError, from the next published version ([#1966](https://github.com/Controlvar/controlvar/issues/1966)) ([7c3ba6e](https://github.com/Controlvar/controlvar/commit/7c3ba6e1fd5fab60c4dbf54f6e2fabb7ff22a3d4))
+* **infra:** the API task role may assume customer warehouse roles ([#1955](https://github.com/Controlvar/controlvar/issues/1955)) ([edd0f56](https://github.com/Controlvar/controlvar/commit/edd0f5625d1593fc155cec58a67cb8b11e9558da))
+* **java-sdk:** typed value getters and an error listener, from the next published version ([#1947](https://github.com/Controlvar/controlvar/issues/1947)) ([24d63f5](https://github.com/Controlvar/controlvar/commit/24d63f5210f1a7e1070c56e4daad011c25e028bc))
+* **react-native-sdk:** useFlagValue and typed getters, from the next published version ([#1949](https://github.com/Controlvar/controlvar/issues/1949)) ([4861ab7](https://github.com/Controlvar/controlvar/commit/4861ab7b31b3e054207e3676bd4f6e6124a8ae77))
+* **react-sdk:** useFlagValue reads a string, number or JSON flag, from the next published version ([#1946](https://github.com/Controlvar/controlvar/issues/1946)) ([c7520f9](https://github.com/Controlvar/controlvar/commit/c7520f934be4e67c07bbb546bc944b4fd1ef730a))
+* **site:** link the live read-only demo from the homepage, README and docs ([#1925](https://github.com/Controlvar/controlvar/issues/1925)) ([ed53aa1](https://github.com/Controlvar/controlvar/commit/ed53aa14ad40ea8f53316c915b7d4b9a303ea8e6))
+* **warehouse:** Amazon Redshift client (ships disabled) ([#1954](https://github.com/Controlvar/controlvar/issues/1954)) ([0f38abb](https://github.com/Controlvar/controlvar/commit/0f38abbe5ab49efc5a564cf045d562e107d3fd09))
+* **warehouse:** Amazon Redshift connector type (ships disabled, no client) ([#1943](https://github.com/Controlvar/controlvar/issues/1943)) ([f333d51](https://github.com/Controlvar/controlvar/commit/f333d5139846ad5bc83d284f2abbe88f82fe727f))
+
+
+### Bug Fixes
+
+* **api-keys:** scopes over 255 characters answer 422, not 500 ([#1944](https://github.com/Controlvar/controlvar/issues/1944)) ([7f4539b](https://github.com/Controlvar/controlvar/commit/7f4539b07b98704c220912ed03bb0fd3d171f576))
+* **api:** a number field given NaN, Infinity or 1e400 answers 422 ([#1742](https://github.com/Controlvar/controlvar/issues/1742)) ([455c74c](https://github.com/Controlvar/controlvar/commit/455c74ce69e2e6fa79a1ae6bc1e321f4c54b04f5))
+* **dashboard:** a winner over a control with no conversions says better ([#1962](https://github.com/Controlvar/controlvar/issues/1962)) ([9096bb2](https://github.com/Controlvar/controlvar/commit/9096bb2b23524a9c9aadba444240402378f50ccc))
+* **integrations:** refuse a last_error over 1,024 characters with 422 ([#1938](https://github.com/Controlvar/controlvar/issues/1938)) ([2e40c3b](https://github.com/Controlvar/controlvar/commit/2e40c3bbb80740ee968c66ff673f85f6711c52b1))
+* **site:** end the homepage's closing line at "in the repository" ([#1929](https://github.com/Controlvar/controlvar/issues/1929)) ([c36a3cb](https://github.com/Controlvar/controlvar/commit/c36a3cb0d92d094636b9412bba494d154d6ba28f))
+* **site:** plainer wording for nine homepage lines and the books sentence ([#1931](https://github.com/Controlvar/controlvar/issues/1931)) ([2e79b96](https://github.com/Controlvar/controlvar/commit/2e79b966647bfd6c69cf96f07d7630a86dd98796))
+
+
+### Dependencies
+
+* dnspython 2.9.2 and opentelemetry 1.45.2 ([#1953](https://github.com/Controlvar/controlvar/issues/1953)) ([fbb033a](https://github.com/Controlvar/controlvar/commit/fbb033a38a79e2a5fca1619801a5ff170b74edb4))
+
+
+### Documentation
+
+* link the Controlvar books from the contributing guide ([#1941](https://github.com/Controlvar/controlvar/issues/1941)) ([290bd92](https://github.com/Controlvar/controlvar/commit/290bd9297cfb01850a7b6b06bbaa312fecf6a68c))
+
 ## [0.46.0](https://github.com/Controlvar/controlvar/compare/v0.45.0...v0.46.0) (2026-11-13)
 
 
