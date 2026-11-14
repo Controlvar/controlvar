@@ -92,6 +92,52 @@ def test_the_python_suites_run_on_python_3_11():
     assert "python -m pytest sdk/openfeature-python/tests" in run
 
 
+def test_the_python_packages_are_built_checked_and_installed_on_their_oldest_python():
+    """#358 item 4: a change to [build-system] or the extras is exercised."""
+    steps = {s.get("name"): s for s in workflow()["jobs"]["linux"]["steps"]}
+    build = steps["Build and twine-check the package"]
+    assert build["if"] == "matrix.lang == 'python'"
+    assert "python -m build" in build["run"]
+    assert "twine check --strict" in build["run"]
+    # the sibling wheel openfeature-python depends on is built too
+    assert "sdk/python" in build["run"]
+
+    oldest = steps["Set up the oldest supported Python"]
+    assert oldest["if"] == "matrix.lang == 'python'"
+    assert oldest["uses"].startswith("actions/setup-python@")
+    # the oldest each package declares: 3.9 for python, 3.10 for openfeature-python
+    assert oldest["with"]["python-version"] == (
+        "${{ matrix.sdk == 'python' && '3.9' || '3.10' }}"
+    )
+    for sdk, floor in (("python", "3.9"), ("openfeature-python", "3.10")):
+        pyproject = REPO_ROOT / "sdk" / sdk / "pyproject.toml"
+        assert f'requires-python = ">={floor}"' in pyproject.read_text(
+            encoding="utf-8"
+        ), f"sdk/{sdk} no longer declares >={floor}: update the matrix expression"
+
+    install = steps["Install the wheel on the oldest Python"]
+    assert install["if"] == "matrix.lang == 'python'"
+    assert "OLDEST_PYTHON" in install["env"]
+    assert "steps.oldest.outputs.python-path" in install["env"]["OLDEST_PYTHON"]
+    assert '"$OLDEST_PYTHON" -m venv' in install["run"]
+    assert "mod=controlvar_openfeature" in install["run"]
+    assert "mod=controlvar\n" in install["run"]
+    run = install["run"]
+    # the local sibling wheel goes in BEFORE the openfeature wheel (PyPI has the
+    # same 0.3.0 and would otherwise satisfy the pin), and the step proves it
+    local = 'pip install "$out"/python/*.whl'
+    final = '"$wheel"'
+    assert local in run, "the local controlvar wheel is no longer installed first"
+    assert run.index(local) < run.index(final), "the sibling wheel must come first"
+    assert "direct_url.json" in run and 'startswith("file://")' in run, (
+        "nothing proves controlvar came from the local wheel"
+    )
+    assert run.index("direct_url.json") < run.index(final)
+    # the import must come from the venv
+    assert 'case "$f" in' in run and '"$venv"/*)' in run
+    assert "import $mod" in run
+
+
 def test_the_js_sdk_runs_jest():
     run = {s.get("name"): s for s in workflow()["jobs"]["linux"]["steps"]}[
         "Run unit tests"

@@ -358,6 +358,79 @@ jobs:
           fi
           python3 scripts/check_packaged_readme.py --sdk "$SDK" "$out"/*
 
+      # [build-system] and [project.optional-dependencies] are only exercised
+      # by a build, so build the package the way sdk-release.yml does, hold it
+      # to `twine check --strict` (what PyPI would refuse), and install the
+      # wheel into a fresh venv on the OLDEST Python its requires-python
+      # admits. The unit tests above run on 3.11 from the source tree and
+      # prove none of this. openfeature-python needs the sibling controlvar
+      # wheel (its pinned range may not be on PyPI yet), built here too.
+      - name: Build and twine-check the package
+        if: matrix.lang == 'python'
+        env:
+          SDK: ${{ matrix.sdk }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/pkg-dist"
+          rm -rf "$out"
+          mkdir -p "$out/$SDK"
+          python -m pip install build twine
+          python -m build --outdir "$out/$SDK" "sdk/$SDK"
+          if [ "$SDK" = "openfeature-python" ]; then
+            mkdir -p "$out/python"
+            python -m build --outdir "$out/python" sdk/python
+          fi
+          python -m twine check --strict "$out/$SDK"/*
+
+      - name: Set up the oldest supported Python
+        id: oldest
+        if: matrix.lang == 'python'
+        uses: actions/setup-python@v7
+        with:
+          # requires-python: >=3.9 in sdk/python, >=3.10 in sdk/openfeature-python.
+          python-version: ${{ matrix.sdk == 'python' && '3.9' || '3.10' }}
+
+      - name: Install the wheel on the oldest Python
+        if: matrix.lang == 'python'
+        env:
+          SDK: ${{ matrix.sdk }}
+          OLDEST_PYTHON: ${{ steps.oldest.outputs.python-path }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/pkg-dist"
+          venv="$RUNNER_TEMP/oldest-venv"
+          rm -rf "$venv"
+          "$OLDEST_PYTHON" -m venv "$venv"
+          wheel="$(ls "$out/$SDK"/*.whl)"
+          if [ "$SDK" = "openfeature-python" ]; then
+            # The sibling first, from the file: its pin (controlvar>=0.3.0,<0.4)
+            # is also met by the PUBLISHED 0.3.0, which pip would otherwise
+            # fetch from PyPI and leave the local build unexercised.
+            "$venv/bin/python" -m pip install "$out"/python/*.whl
+            "$venv/bin/python" - <<'PY'
+          import importlib.metadata as m, json, sys
+          # pip writes direct_url.json only for an install from a URL or file;
+          # an install from the index has none.
+          raw = m.distribution("controlvar").read_text("direct_url.json")
+          if not raw or not json.loads(raw)["url"].startswith("file://"):
+              sys.exit("controlvar was not installed from the local wheel: " + repr(raw))
+          print("controlvar installed from", json.loads(raw)["url"])
+          PY
+          fi
+          "$venv/bin/python" -m pip install --find-links "$out/python" "$wheel"
+          if [ "$SDK" = "python" ]; then
+            mod=controlvar
+          else
+            mod=controlvar_openfeature
+          fi
+          f="$("$venv/bin/python" -c "import $mod; print($mod.__file__)")"
+          echo "$f"
+          case "$f" in
+            "$venv"/*) ;;
+            *) echo "::error::$mod imported from $f, not from the venv"; exit 1 ;;
+          esac
+          "$venv/bin/python" -m pip check
+
       # React Native's `types` is its TypeScript source, so an app's own tsc
       # checks the SDK's code against the app's AsyncStorage, which the SDK
       # takes as a peer at >=1.21.0 <4. This packs the SDK the way
