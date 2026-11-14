@@ -1,3 +1,4 @@
+using Controlvar.Exceptions;
 using Controlvar.Models;
 
 namespace Controlvar;
@@ -8,6 +9,7 @@ namespace Controlvar;
 public class SdkConfig
 {
     private readonly Action<Exposure>? _onExposure;
+    private readonly Action<ExperimentationException, string>? _onError;
 
     /// <summary>The origin of the Controlvar API (e.g. "https://api.example.com"); the SDK appends "/api/v1/...".</summary>
     public string BaseUrl { get; init; }
@@ -58,6 +60,48 @@ public class SdkConfig
             if (value != null)
                 ExposureHook.RefuseAsync(value, nameof(OnExposure));
             _onExposure = value;
+        }
+    }
+
+    /// <summary>
+    /// A function the client calls each time a typed getter
+    /// (<see cref="ExperimentationClient.GetStringValueAsync"/>,
+    /// <see cref="ExperimentationClient.GetNumberValueAsync"/>,
+    /// <see cref="ExperimentationClient.GetJsonValueAsync"/>) returns the caller's default instead
+    /// of the flag's value, with the reason and the operation <c>"value"</c>. Use it to log or count
+    /// those fallbacks: the getters themselves never throw. Default: <c>null</c>, none.
+    /// </summary>
+    /// <remarks>
+    /// <para>The reason is a <see cref="Exceptions.FlagValueException"/> with its
+    /// <see cref="Exceptions.FlagValueException.Code"/> when the server's answer had no value of the
+    /// getter's type (or the user id or flag key was <c>null</c> or empty, and nothing was sent);
+    /// otherwise the <see cref="Exceptions.ExperimentationException"/> the request failed with: an
+    /// <see cref="Exceptions.ApiException"/> whose <see cref="Exceptions.ApiException.StatusCode"/>
+    /// is the HTTP status (404 for an unknown flag), a <see cref="Exceptions.NetworkException"/>, an
+    /// <see cref="Exceptions.AuthException"/>, or, for anything else that failed, an
+    /// <see cref="Exceptions.ExperimentationException"/> whose <c>InnerException</c> is what was
+    /// thrown.</para>
+    /// <para>It hears the typed getters' fallbacks only: <see cref="ExperimentationClient.EvaluateFlagAsync"/>,
+    /// <see cref="ExperimentationClient.GetAssignmentAsync"/> and the track calls do not call it,
+    /// and neither does a function given to <see cref="OnExposure"/> that throws.</para>
+    /// <para>It runs inside the getter call, before its task completes, on the thread the call's
+    /// continuation runs on (do not assume a UI thread), so its running time is added to that
+    /// call. It can run on several threads at once.</para>
+    /// <para>If it throws, the client catches the exception and the getter still returns the
+    /// default. Each function combined into the delegate is called in turn, and one that throws
+    /// does not stop the next.</para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">Thrown when it is set to an async lambda or
+    /// <c>async</c> method, alone or combined with others: it would run as <c>async void</c>, and
+    /// an exception after its first <c>await</c> would end the process.</exception>
+    public Action<ExperimentationException, string>? OnError
+    {
+        get => _onError;
+        init
+        {
+            if (value != null)
+                ExposureHook.RefuseAsync(value, nameof(OnError), ExposureHook.AsyncOnErrorRefused);
+            _onError = value;
         }
     }
 
