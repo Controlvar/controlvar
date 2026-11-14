@@ -221,6 +221,7 @@ VALUE_SDKS: frozenset[str] = frozenset(
         "js",
         "react",
         "react-native",
+        "java",
     ]
 )
 #: The seed's on values (backend/scripts/seed_sdk_contract.py VALUE_FLAGS).
