@@ -115,6 +115,12 @@ def test_the_python_packages_are_built_checked_and_installed_on_their_oldest_pyt
             encoding="utf-8"
         ), f"sdk/{sdk} no longer declares >={floor}: update the matrix expression"
 
+    # CPython 3.9 is not in actions/python-versions for Ubuntu 26.04
+    # (ubuntu-latest): the python leg, whose floor is 3.9, must run on 24.04.
+    assert workflow()["jobs"]["linux"]["runs-on"] == (
+        "${{ matrix.sdk == 'python' && 'ubuntu-24.04' || 'ubuntu-latest' }}"
+    )
+
     install = steps["Install the wheel on the oldest Python"]
     assert install["if"] == "matrix.lang == 'python'"
     assert "OLDEST_PYTHON" in install["env"]

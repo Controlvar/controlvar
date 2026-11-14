@@ -194,7 +194,10 @@ jobs:
     name: ${{ matrix.sdk }}
     needs: changes
     if: needs.changes.outputs.any_linux == 'true'
-    runs-on: ubuntu-latest
+    # actions/python-versions has CPython 3.9 (EOL) for Ubuntu 22.04 and 24.04
+    # but not 26.04, which ubuntu-latest now is; sdk/python's floor is 3.9, so
+    # its leg stays on 24.04. Every other leg keeps ubuntu-latest.
+    runs-on: ${{ matrix.sdk == 'python' && 'ubuntu-24.04' || 'ubuntu-latest' }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
