@@ -35,6 +35,7 @@ from modules.backend.app.models.warehouse_connection import (
 )
 from modules.backend.app.services.warehouse_query_builder import (
     BIGQUERY_SQL,
+    REDSHIFT_SQL,
     SNOWFLAKE_SQL,
     SqlDialect,
 )
@@ -71,6 +72,16 @@ TIME_TYPES: Mapping[str, FrozenSet[str]] = {
     "snowflake": frozenset({"TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP_TZ"}),
     "bigquery": frozenset({"TIMESTAMP"}),
     "athena": frozenset({"TIMESTAMP", "TIMESTAMP WITH TIME ZONE"}),
+    # DescribeTable's names and the SQL ones: a TIMESTAMP is read in the
+    # session's time zone, which the connector sets to UTC.
+    "redshift": frozenset(
+        {
+            "TIMESTAMP",
+            "TIMESTAMPTZ",
+            "TIMESTAMP WITHOUT TIME ZONE",
+            "TIMESTAMP WITH TIME ZONE",
+        }
+    ),
 }
 NUMERIC_TYPES: Mapping[str, FrozenSet[str]] = {
     "snowflake": frozenset(
@@ -94,6 +105,26 @@ NUMERIC_TYPES: Mapping[str, FrozenSet[str]] = {
     ),
     "athena": frozenset(
         {"TINYINT", "SMALLINT", "INT", "INTEGER", "BIGINT", "REAL", "DOUBLE", "FLOAT"}
+    ),
+    # The SQL names and the internal ones (int2, int4, int8, float4, float8)
+    # DescribeTable may report.
+    "redshift": frozenset(
+        {
+            "SMALLINT",
+            "INTEGER",
+            "INT",
+            "BIGINT",
+            "INT2",
+            "INT4",
+            "INT8",
+            "REAL",
+            "FLOAT4",
+            "FLOAT",
+            "FLOAT8",
+            "DOUBLE PRECISION",
+            "NUMERIC",
+            "DECIMAL",
+        }
     ),
 }
 
@@ -202,11 +233,45 @@ def _snowflake_client(spec: ConnectionSpec) -> WarehouseClient:
     )
 
 
+def _redshift_client(spec: ConnectionSpec) -> WarehouseClient:
+    from modules.backend.app.warehouse.redshift import (
+        RedshiftAdapter,
+        RedshiftConnection,
+    )
+
+    # A role-based connection: no stored credential, the external ID instead.
+    if spec.credential is not None or spec.external_id is None:
+        raise WarehouseError(WarehouseErrorCode.INTERNAL, warehouse="redshift")
+    parameters = spec.parameters
+    adapter = RedshiftAdapter(
+        RedshiftConnection(
+            region=parameters["region"],
+            role_arn=parameters["role_arn"],
+            external_id=spec.external_id,
+            database=parameters["database"],
+            query_timeout_seconds=spec.query_timeout_seconds,
+            workgroup_name=parameters.get("workgroup_name"),
+            cluster_identifier=parameters.get("cluster_identifier"),
+            db_user=parameters.get("db_user"),
+        )
+    )
+    return WarehouseClient(
+        "redshift",
+        adapter,
+        REDSHIFT_SQL,
+        TIME_TYPES["redshift"],
+        NUMERIC_TYPES["redshift"],
+    )
+
+
 #: The connectors this code can build.  Athena's adapter is not built yet; a
 #: type with no builder answers ``connector_disabled`` before it gets here.
+#: Redshift's is built, and ships disabled
+#: (:mod:`modules.backend.app.warehouse.connectors`).
 _BUILDERS: Mapping[str, ClientFactory] = {
     "bigquery": _bigquery_client,
     "snowflake": _snowflake_client,
+    "redshift": _redshift_client,
 }
 
 
