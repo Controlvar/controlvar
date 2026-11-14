@@ -156,10 +156,11 @@ by = [
 ]
 
 [[unit]]
-text = "POST /api/v1/results/{id}/post-stratification is beta as well (#443): it answers 501 until it computes its estimate from an experiment's own assignments and events, rather than report numbers that do not."
+text = "POST /api/v1/results/{id}/post-stratification is beta as well (#443), and deprecated (#963): it answers 501 rather than report numbers that do not come from an experiment's own assignments and events, and it may be removed in a later release."
 by = [
     "test:backend/tests/integration/api/test_post_strat_api.py",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_the_post_stratification_route_is_deprecated_in_the_published_documents",
 ]
 
 [[unit]]
