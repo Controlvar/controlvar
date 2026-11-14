@@ -360,7 +360,7 @@ describe('F9: a response without the fields', () => {
   it('keeps an older mean row as it was: the difference per user, no "Not a percentage", no note', () => {
     renderCase(oldServer(serverCase('d_mean_control_zero')));
     expect(visibleText(cell('treatment', 'Change'))).toBe(
-      'Not enough data to estimate +0.10 per user (95% CI +0.04 to +0.16)',
+      'Not enough data to estimate · better +0.10 per user (95% CI +0.04 to +0.16)',
     );
     expect(screen.queryByTestId('interval-footnote')).toBeNull();
   });
