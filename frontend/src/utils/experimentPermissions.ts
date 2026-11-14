@@ -113,9 +113,9 @@ export function canDeleteExperiment(user: PermissionUser, effective?: EffectiveP
 
 /**
  * Whether the API would accept a change to a feature flag from this user
- * (#917): create (`canCreateFeatureFlags`), and turn on or off and update,
+ * (#917): create (`canCreateFeatureFlags`), turn on or off and update,
  * including its targeting rules, values, rollout percentage and rollout
- * schedules (`canChangeFeatureFlags`).
+ * schedules (`canChangeFeatureFlags`), and delete (`canDeleteFeatureFlags`).
  *
  * Mirrors `can_act_on_feature_flag` and `deps.can_create_feature_flag`: a
  * superuser is accepted before the role table is read; otherwise the role
@@ -157,4 +157,14 @@ export function canCreateFeatureFlags(user: PermissionUser, effective?: Effectiv
 /** FEATURE_FLAG UPDATE: the switches, the flag form and the rollout schedule. */
 export function canChangeFeatureFlags(user: PermissionUser, effective?: EffectivePermissions): boolean {
   return flagAllows(user, 'update', effective);
+}
+
+/**
+ * FEATURE_FLAG DELETE: "Delete" on the flag's page (#442). The same roles
+ * hold it as UPDATE, but a custom role or direct grant can give either one
+ * alone, so it is answered separately (`DELETE /feature-flags/{id}` checks
+ * exactly this pair).
+ */
+export function canDeleteFeatureFlags(user: PermissionUser, effective?: EffectivePermissions): boolean {
+  return flagAllows(user, 'delete', effective);
 }

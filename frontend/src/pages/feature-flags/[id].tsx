@@ -47,7 +47,7 @@ import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext'
 import { useDemoMode } from '@/contexts/AuthConfigContext';
 import { DemoNote } from '@/components/DemoNote';
 import { DEMO_FLAGS_ACTION } from '@/utils/demoMode';
-import { FLAG_ROLE_NOTE, canChangeFeatureFlags } from '@/utils/experimentPermissions';
+import { FLAG_ROLE_NOTE, canChangeFeatureFlags, canDeleteFeatureFlags } from '@/utils/experimentPermissions';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
 import {
   ROLLOUT_VALUE_HINT,
@@ -163,8 +163,11 @@ export default function FeatureFlagDetailPage() {
   // reads a flag and changes none of it (#917, #891): no switch, the rule
   // builder read-only, the slider disabled, no Save, no Archive or Unarchive
   // (#442), and a note why -- the note only once the effective map has
-  // answered.
+  // answered. Delete asks its own question (FEATURE_FLAG DELETE), below.
   const canChange = canChangeFeatureFlags(auth?.user, effective);
+  // Delete is FEATURE_FLAG DELETE, which a custom role or grant can give
+  // without UPDATE, or withhold from a holder of it (#442).
+  const canDelete = canDeleteFeatureFlags(auth?.user, effective);
   const changePending = !canChange && permissionsLoading;
   // A read-only demo shows the demo note in place of the role note.
   const demo = useDemoMode();
@@ -552,8 +555,14 @@ export default function FeatureFlagDetailPage() {
               </p>
             )
           )}
-          {/* Archive and Unarchive (#442), for a user who may change flags; the role note above otherwise. */}
-          <FlagManageSection flag={flag} canChange={canChange} onChanged={handleStatusChange} />
+          {/* Archive and Unarchive for a user who may change flags, Delete for one who may
+              delete them (#442); the role note above otherwise. */}
+          <FlagManageSection
+            flag={flag}
+            canChange={canChange}
+            canDelete={canDelete}
+            onChanged={handleStatusChange}
+          />
           {toggleError && (
             <div
               role="alert"
