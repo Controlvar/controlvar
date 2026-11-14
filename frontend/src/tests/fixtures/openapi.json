@@ -1026,7 +1026,7 @@
     "/api/v1/results/{experiment_id}/post-stratification": {
       "post": {
         "operationId": "compute_post_stratification_api_v1_results__experiment_id__post_stratification_post",
-        "summary": "Post-stratification variance reduction (not available yet)"
+        "summary": "Post-stratification variance reduction, not available yet (deprecated)"
       }
     },
     "/api/v1/results/{experiment_id}/sample-size": {

@@ -80,9 +80,10 @@ interaction, novelty and SUTVA sub-results `null`: the scan reports overlap only
 and novelty and SUTVA are not offered.
 `GET /api/v1/holdout/{holdout_id}/results` is beta in both senses (#445): its
 numbers carry `analysis_status: "beta"` and the route is `x-stability: beta`.
-`POST /api/v1/results/{id}/post-stratification` is beta as well (#443): it
-answers 501 until it computes its estimate from an experiment's own
-assignments and events, rather than report numbers that do not.
+`POST /api/v1/results/{id}/post-stratification` is beta as well (#443), and
+deprecated (#963): it answers 501 rather than report numbers that do not come
+from an experiment's own assignments and events, and it may be removed in a
+later release.
 `GET /api/v1/results/{id}/balanced-groups` is beta too (#448): it answers for
 an experiment that balances its split within groups, and its response may
 still change.
