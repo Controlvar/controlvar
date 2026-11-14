@@ -193,7 +193,7 @@ Every user has one of four roles, each with progressively broader permissions:
 | **VIEWER** | Reads every experiment, flag and result and changes none; can create an API key, which writes tracking data |
 | **ANALYST** | View all experiments, results, audit logs, and reports |
 | **DEVELOPER** | Create and manage experiments and feature flags |
-| **ADMIN** | Full access: user management, global settings, compliance exports |
+| **ADMIN** | Manage experiments, flags and compliance exports; user management needs a superuser account, which the Admin role alone is not |
 
 In the full profile, custom roles and direct permission grants add permissions to the base role in every permission check.
 
