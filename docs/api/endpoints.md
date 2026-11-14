@@ -406,6 +406,15 @@ the API answers `429` with a
 - An event's `metadata` on `/tracking/track`, `/tracking/batch` and `/tracking/events` has limits
   of its own: 16,384 bytes and 64 levels ([Track Event](#track-event))
 
+### Number Fields
+A number field (`"type": "number"` in the OpenAPI document) in the body or the query that is
+given NaN, Infinity, -Infinity or a number too large for a double such as `1e400`, quoted or
+not, answers 422 with `"type": "finite_number"` at its place:
+`{"type": "finite_number", "loc": ["query", "mde"], "msg": "Input should be a finite number"}`.
+That holds on every route, including the power calculator's, which need no sign-in. A field that
+takes only a JSON number answers `"type": "float_type"` to any string, these four included. A
+tracking event's `value` keeps its own refusals ([Track Event](#track-event)).
+
 ### Targeting Context Limits
 The routes that take a targeting `context` hold it to two limits before it is matched against
 any rule: `GET` and `POST /api/v1/feature-flags/evaluate/{flag_key}`,

@@ -31,6 +31,7 @@ from backend.app.core.targeting_adapter import (
 from backend.app.schemas.balance_within import BalanceWithin
 from backend.app.schemas.bandit import OptimizationType
 from backend.app.schemas.bayesian import BayesianConfig
+from backend.app.schemas.finite_number import FiniteFloat
 from backend.app.schemas.results import CorrectionMethod
 from backend.app.schemas.split_url_config import (
     SPLIT_URL_CONFIG_ERROR,
@@ -265,7 +266,7 @@ class MetricBase(BaseModel):
         le=INT32_MAX,
         description="Minimum sample size for statistical significance",
     )
-    expected_effect: Optional[float] = Field(
+    expected_effect: Optional[FiniteFloat] = Field(
         None,
         description=(
             "The minimum detectable effect the results page plans the sample "
@@ -462,7 +463,7 @@ class SequentialTestingConfigInput(BaseModel):
             "an alias of it; the analysis reports 'msprt'."
         ),
     )
-    alpha: float = Field(
+    alpha: FiniteFloat = Field(
         default=0.05,
         gt=0.0,
         le=0.2,
@@ -471,7 +472,7 @@ class SequentialTestingConfigInput(BaseModel):
             "stopping boundary is 1/alpha."
         ),
     )
-    tau_squared: float = Field(
+    tau_squared: FiniteFloat = Field(
         default=0.001,
         gt=0.0,
         le=1.0,
@@ -602,7 +603,7 @@ class ExperimentCreate(ExperimentBase):
         default=CorrectionMethod.BENJAMINI_HOCHBERG,
         description=CORRECTION_METHOD_DESCRIPTION,
     )
-    confidence_level: float = Field(
+    confidence_level: FiniteFloat = Field(
         default=0.95,
         ge=0.80,
         le=0.99,
@@ -944,7 +945,7 @@ class ExperimentUpdate(BaseModel):
         description=CORRECTION_METHOD_DESCRIPTION
         + " Changeable only while the experiment is a draft; cannot be null.",
     )
-    confidence_level: float = Field(
+    confidence_level: FiniteFloat = Field(
         default=None,
         ge=0.80,
         le=0.99,

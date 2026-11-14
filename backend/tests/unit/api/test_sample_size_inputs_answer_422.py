@@ -24,6 +24,14 @@ answered 500. It now answers 422 with ``OUT_OF_RANGE_MESSAGE``, as its twin
 
 Inputs that were answered with a size keep their size. No refusal repeats a
 value sent.
+
+Since #1742 a number parameter of either operation (``baseline_rate``,
+``mde``, ``confidence``, ``power``; the body's four rates and
+``traffic_allocation``) that is NaN, an infinity or too large for a double is
+refused before the handler sees it: 422 with ``finite_number`` at that
+parameter, where one of the fixed texts answered it before. The integer
+parameters keep their own answers. The rows that sent one moved to
+``test_the_ai_sample_size_refuses_a_non_finite_parameter_at_it``.
 """
 
 import math
@@ -34,6 +42,7 @@ from fastapi.testclient import TestClient
 
 from backend.app.api import deps
 from backend.app.api.v1.endpoints.power_calculator import OUT_OF_RANGE_MESSAGE
+from backend.app.core.finite_json import FINITE_NUMBER_MESSAGE, FINITE_NUMBER_TYPE
 from backend.app.main import app
 from backend.app.models.user import User, UserRole
 from backend.app.services.power_calculator_service import (
@@ -98,14 +107,8 @@ AI_REFUSED = [
     pytest.param(0.1, 0.05, {"power": 0}, OUT_OF_RANGE_MESSAGE, id="power-0"),
     pytest.param(0.1, 1e-300, {}, OUT_OF_RANGE_MESSAGE, id="mde-1e-300"),
     pytest.param(0.5, 1e-160, {}, OUT_OF_RANGE_MESSAGE, id="mde-1e-160"),
-    pytest.param("nan", 0.05, {}, _range("baseline_rate"), id="baseline-nan"),
-    pytest.param(0.1, "nan", {}, OUT_OF_RANGE_MESSAGE, id="mde-nan"),
-    pytest.param(0.1, 0.05, {"confidence": "nan"}, _range("confidence"), id="conf-nan"),
-    pytest.param(0.1, 0.05, {"power": "nan"}, _range("power"), id="power-nan"),
     pytest.param(0.1, 0.05, {"confidence": 1.5}, _range("confidence"), id="conf-1.5"),
     pytest.param(0.1, 0.05, {"power": -0.5}, _range("power"), id="power-minus"),
-    pytest.param(0.1, "inf", {}, TREATMENT_RATE_CEILING_MESSAGE, id="mde-inf"),
-    pytest.param(0.1, "-inf", {}, OUT_OF_RANGE_MESSAGE, id="mde-minus-inf"),
     pytest.param(1e-300, 1e-300, {"daily_traffic": 1}, OUT_OF_RANGE_MESSAGE, id="tiny"),
     pytest.param(
         0.5, 1.8e-154, {"daily_traffic": 1}, OUT_OF_RANGE_MESSAGE, id="days-overflow"
@@ -134,6 +137,42 @@ def test_the_ai_sample_size_refuses_with_fixed_text(client, baseline, mde, extra
     response = _ai(client, baseline, mde, **extra)
     assert response.status_code == 422, response.text
     assert response.json() == {"detail": text}
+
+
+def _not_finite_at(*names: str) -> dict:
+    return {
+        "detail": [
+            {
+                "type": FINITE_NUMBER_TYPE,
+                "loc": ["query", name],
+                "msg": FINITE_NUMBER_MESSAGE,
+            }
+            for name in names
+        ]
+    }
+
+
+# (baseline_rate, mde, other query parameters, the parameter refused). These
+# were AI_REFUSED rows answered with a fixed text; since #1742 the parameter
+# itself is refused, before the handler.
+AI_NOT_FINITE = [
+    pytest.param("nan", 0.05, {}, "baseline_rate", id="baseline-nan"),
+    pytest.param(0.1, "nan", {}, "mde", id="mde-nan"),
+    pytest.param(0.1, 0.05, {"confidence": "nan"}, "confidence", id="conf-nan"),
+    pytest.param(0.1, 0.05, {"power": "nan"}, "power", id="power-nan"),
+    pytest.param(0.1, "inf", {}, "mde", id="mde-inf"),
+    pytest.param(0.1, "-inf", {}, "mde", id="mde-minus-inf"),
+]
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(("baseline", "mde", "extra", "name"), AI_NOT_FINITE)
+def test_the_ai_sample_size_refuses_a_non_finite_parameter_at_it(
+    client, baseline, mde, extra, name
+):
+    response = _ai(client, baseline, mde, **extra)
+    assert response.status_code == 422, response.text
+    assert response.json() == _not_finite_at(name)
 
 
 # Answers 695e51c7 gave, unchanged: a baseline of 0 or 1, a confidence of 0, a
@@ -195,11 +234,18 @@ GRID = [
 ]
 
 
+#: The grid's values that are not finite, and the order the route declares its
+#: parameters in, which is the order their 422 errors come in.
+NOT_FINITE = {"nan", "inf", "-inf"}
+AI_PARAMETERS = ("baseline_rate", "mde", "confidence", "power")
+
+
 @pytest.mark.regression
 def test_no_input_on_the_grid_answers_5xx_or_a_size_below_1(client):
     """baseline_rate x mde, then confidence and power, over the grid: every
     answer is a 200 with a size of at least 1, or a 422 with one of the fixed
-    texts."""
+    texts. Since #1742 a request with a value that is not finite answers 422
+    with ``finite_number`` at each such parameter instead."""
     requests = [{"baseline_rate": b, "mde": m} for b in GRID for m in GRID]
     requests += [
         {"baseline_rate": 0.1, "mde": 0.05, "confidence": c, "power": p}
@@ -210,7 +256,11 @@ def test_no_input_on_the_grid_answers_5xx_or_a_size_below_1(client):
         response = client.get(AI_URL, params=params)
         assert response.status_code in (200, 422), (params, response.status_code)
         body = response.json()
-        if response.status_code == 422:
+        not_finite = [name for name in AI_PARAMETERS if params.get(name) in NOT_FINITE]
+        if not_finite:
+            assert response.status_code == 422, (params, body)
+            assert body == _not_finite_at(*not_finite), (params, body)
+        elif response.status_code == 422:
             assert body["detail"] in FIXED_TEXTS, (params, body)
         else:
             assert body["required_per_variant"] >= 1, (params, body)

@@ -16,6 +16,7 @@ from backend.app.api import deps
 from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.v1.endpoints.power_calculator import OUT_OF_RANGE_MESSAGE
 from backend.app.models.user import User
+from backend.app.schemas.finite_number import FiniteFloat
 from backend.app.services.power_calculator_service import (
     SAMPLE_SIZE_NOT_FINITE_MESSAGE,
     TREATMENT_RATE_CEILING_MESSAGE,
@@ -30,18 +31,18 @@ router = APIRouter(prefix="/utils", route_class=OffLoopRoute)
 class SampleSizeRequest(BaseModel):
     """Schema for sample size calculation request."""
 
-    baseline_rate: float = Field(
+    baseline_rate: FiniteFloat = Field(
         ..., ge=0, le=1, description="Baseline conversion rate (0-1)"
     )
-    minimum_detectable_effect: float = Field(
+    minimum_detectable_effect: FiniteFloat = Field(
         ...,
         gt=0,
         description="Minimum detectable effect (relative change, e.g. 0.1 for 10%)",
     )
-    statistical_power: float = Field(
+    statistical_power: FiniteFloat = Field(
         0.8, ge=0.5, le=0.99, description="Statistical power (0.5-0.99)"
     )
-    significance_level: float = Field(
+    significance_level: FiniteFloat = Field(
         0.05, ge=0.01, le=0.1, description="Significance level (0.01-0.1)"
     )
     is_one_sided: bool = Field(
@@ -108,6 +109,7 @@ async def calculate_sample_size(
         None,
         gt=0,
         le=1,
+        allow_inf_nan=False,
         description="Fraction of traffic allocated to the experiment (0-1)",
     ),
     variant_count: int = Query(

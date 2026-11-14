@@ -13,6 +13,7 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from backend.app.core.stats_engine import ENGINE_VERSION
+from backend.app.schemas.finite_number import FiniteFloat
 
 # ---------------------------------------------------------------------------
 # Enum
@@ -171,7 +172,7 @@ class BanditUpdateRequest(BaseModel):
       floating-point rounding across many variants)
     """
 
-    weights: Dict[str, float] = Field(
+    weights: Dict[str, FiniteFloat] = Field(
         ...,
         description="Mapping of variant_id → allocation weight; must sum to ~1.0",
     )
