@@ -26,9 +26,9 @@ are checked by :func:`~.aws.assume_role_session` before any call.
 Statements
 ----------
 Each statement is one ``BatchExecuteStatement`` of five SQL statements, run as
-one transaction (``ExecutionMode="TRANSACTION"``), with JSON results and a
-fixed ``StatementName`` (:data:`STATEMENT_NAME`) the customer can find in their
-query history:
+one transaction (``ExecutionMode="TRANSACTION"``), with JSON results; a fixed
+``StatementName`` (:data:`STATEMENT_NAME`) labels every batch (ListStatements
+filters on it; the connector never calls ListStatements):
 
 1. ``SET timezone TO 'UTC'``;
 2. ``SET extra_float_digits TO 2``, so a DOUBLE PRECISION cast to text has 17
@@ -39,9 +39,17 @@ query history:
 4. the probe (:data:`PROBE_SQL`): ``0.1 + 0.2`` in DOUBLE PRECISION, cast to
    text, and the session's time zone.  It must read back as exactly
    ``0.30000000000000004`` (else ``result_invalid``) and ``UTC`` (else
-   ``timezone_not_utc``), so a session whose settings did not hold is refused
-   on every run and every connection test;
+   ``timezone_not_utc``), so a session not in UTC, or a grossly wrong
+   reading, is refused on every run and every connection test.  The probe
+   references no table (a statement AWS documents Redshift runs on the leader
+   node only), so it is not the check that the digits SET holds for a table
+   read: on a real workgroup it read the same without that SET;
 5. the statement itself.
+
+What the connector relies on for the SETs is the transaction: a SET Redshift
+refuses fails the whole batch, and a batch is read only when every one of its
+five sub-statements ended ``FINISHED``.  The live check's ``rs_load_fidelity``
+measures the digits on a table read.
 
 The batch must report exactly five sub-statements; the probe is read from
 ``<id>:4`` and the result from ``<id>:5``.  No session is kept between batches
@@ -77,11 +85,14 @@ Outcomes
 --------
 ``FINISHED`` is read.  ``ABORTED`` is ``cancelled``.  ``FAILED`` is
 ``unrecognised_warehouse_error`` with ``vendor_code`` ``FAILED`` and, as the
-request id (logged, not returned), the ``RedshiftQueryId`` of the
-sub-statement that failed, for an operator to look the query up in Redshift's
-query history.  The ``Error`` text Redshift returns
-with a failed statement is never read: :func:`described` copies the fields it
-uses and nothing else.
+request id (logged, not returned), the Data API ``Id`` of the first
+sub-statement whose status is ``FAILED`` (``<statement id>:<n>``, the form
+botocore's model documents as a DescribeStatement ``Id``), or none if no
+sub-statement is ``FAILED``.  Not the sub-statement's ``RedshiftQueryId``: on
+a real account that was 0 or -1 on every sub-statement that did not end
+``FINISHED``, whether or not it ran, so it names no statement.  The ``Error``
+text Redshift returns with a failed statement is never read:
+:func:`described` copies the fields it uses and nothing else.
 
 Results
 -------
@@ -143,7 +154,8 @@ WAREHOUSE: Final = "redshift"
 #: The one AWS service this connector calls besides STS.
 SERVICE: Final = "redshift-data"
 
-#: Every batch's name, which the customer's query history shows.
+#: Every batch's StatementName: a fixed label (ListStatements filters on it;
+#: the connector never calls ListStatements).
 STATEMENT_NAME: Final = "controlvar-analysis"
 #: The session settings every batch starts with.
 SESSION_SETUP: Final = ("SET timezone TO 'UTC'", "SET extra_float_digits TO 2")
@@ -589,11 +601,15 @@ class RedshiftAdapter:
             raise WarehouseError(_C.CANCELLED, warehouse=WAREHOUSE)
         if seen["Status"] == "FAILED":
             failed = [s for s in subs if s.get("Status") == "FAILED"]
+            # The failed sub-statement's Data API Id (see Outcomes).  It is not
+            # checked against the id list below (this branch raises first); it
+            # is kept as the request id only if it passes errors._TOKEN, which
+            # a 38-character ``<uuid>:<n>`` does.
             raise WarehouseError(
                 _C.UNRECOGNISED_WAREHOUSE_ERROR,
                 warehouse=WAREHOUSE,
                 vendor_code="FAILED",
-                request_id=failed[0].get("RedshiftQueryId") if failed else None,
+                request_id=failed[0].get("Id") if failed else None,
             )
         expected = [f"{statement_id}:{n}" for n in range(1, SUB_STATEMENTS + 1)]
         if [s.get("Id") for s in subs] != expected:

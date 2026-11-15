@@ -15,15 +15,22 @@ The identity the customer's role is assumed from is read from
 ``WAREHOUSE_LIVE_RS_AWS_*``: the test session replaces every other AWS
 credential with a dummy.  Every AWS call the connector makes is recorded
 (:class:`~.harness.AwsRecording`); STS answers without their body.
+
+Each ``assert`` in a check says which kind of fact it holds the warehouse to:
+(i) a product property (the numbers, the refusal code), (ii) what the
+connector computed, against an independent reading of the same AWS answer,
+or (iii) a contract AWS documents that an earlier run already exercised.
+Any other engine fact is recorded, never asserted.
 """
 
 from __future__ import annotations
 
 import calendar
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Iterator, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Tuple
 
 import pytest
 
@@ -32,6 +39,7 @@ from modules.backend.app.core.warehouse_identifiers import (
     render_column,
     render_table,
 )
+from modules.backend.app.services import warehouse_runner
 from modules.backend.app.services.warehouse_clients import (
     NUMERIC_TYPES,
     TIME_TYPES,
@@ -43,6 +51,8 @@ from modules.backend.app.services.warehouse_query_builder import (
     AssignmentMapping,
     BuiltQuery,
     MetricMapping,
+    build_assignment_preview_query,
+    build_metric_preview_query,
     build_metric_query,
 )
 from modules.backend.app.services.warehouse_sufficient_stats import (
@@ -220,6 +230,51 @@ def _refusal(exc: WarehouseError) -> Dict[str, Any]:
     }
 
 
+def _record_only(read: Callable[[], Dict[str, Any]]) -> Dict[str, Any]:
+    """An engine fact for the evidence: whatever happens, it fails no check."""
+    try:
+        return read()
+    except WarehouseError as exc:
+        return _refusal(exc)
+    except Exception as exc:  # recorded by its type, never its text
+        return {"error": type(exc).__name__}
+
+
+def _read_batch(adapter: RedshiftAdapter, sqls) -> Dict[str, Any]:
+    """A batch of our choosing, waited for; its last statement's rows if it finished."""
+    session, statement_id, seen = _batch(adapter, sqls)
+    read: Dict[str, Any] = {"status": seen["Status"], "statement_id": statement_id}
+    if seen["Status"] == "FINISHED":
+        _, rows = adapter._result(session, f"{statement_id}:{len(sqls)}", Deadline(60))
+        read["rows"] = rows
+    return read
+
+
+def _batch_ids(recorder, before: int) -> List[str]:
+    """The ids of the batches sent since exchange ``before``, as AWS answered them."""
+    return [
+        x["body"]["Id"]
+        for x in recorder.exchanges[before:]
+        if x["request"].get("operation") == "BatchExecuteStatement"
+        and isinstance(x.get("body"), dict)
+        and isinstance(x["body"].get("Id"), str)
+    ]
+
+
+def _describe(rs, session: Any, statement_id: str) -> Any:
+    """DescribeStatement, signed with the connection's role session."""
+    return aws.call(
+        session,
+        "redshift-data",
+        rs.config.region,
+        "describe_statement",
+        warehouse="redshift",
+        deadline=Deadline(30),
+        codes=redshift.REDSHIFT_CODES,
+        Id=statement_id,
+    )
+
+
 # -- the checks, in order -------------------------------------------------------------
 
 
@@ -282,26 +337,36 @@ def test_rs_sign_in_cluster(rs, recorder):
 
 
 def test_rs_wire_probe(rs, recorder):
-    """With extra_float_digits 2 the probe reads back exactly; without it, it
-    does not -- so the probe can fail, and catches a SET that did not hold."""
-    with_set = rs.serverless.check_connection(Deadline(30)).probe
-    session, statement_id, seen = _batch(
-        rs.serverless, ["SET timezone TO 'UTC'", redshift.PROBE_SQL]
-    )
-    without: Any = None
-    if seen["Status"] == "FINISHED":
-        _, rows = rs.serverless._result(session, f"{statement_id}:2", Deadline(60))
-        without = rows[0].get("probe") if rows else None
+    """The connector's own probe reads back exactly binary64's 0.1 + 0.2, in UTC.
+
+    Recorded, never asserted (engine facts): the probe in a batch without the
+    float SET, on the workgroup and on the cluster, and after
+    ``SET extra_float_digits TO 0``.  The probe references no table, so no
+    reading of it says what a table read's digits are: rs_load_fidelity
+    measures those.
+    """
+    check = rs.serverless.check_connection(Deadline(30))
+    problems = harness.wire_probe_verdict(check.probe, check.time_zone)
+    utc = "SET timezone TO 'UTC'"
     recorder.record(
         "rs_wire_probe",
-        with_set=with_set,
-        without_set=without,
-        without_status=seen["Status"],
-        statement_id=statement_id,
+        with_set=check.probe,
+        time_zone=check.time_zone,
+        problems=problems,
+        without_set=_record_only(
+            lambda: _read_batch(rs.serverless, [utc, redshift.PROBE_SQL])
+        ),
+        without_set_cluster=_record_only(
+            lambda: _read_batch(rs.cluster, [utc, redshift.PROBE_SQL])
+        ),
+        digits_0=_record_only(
+            lambda: _read_batch(
+                rs.serverless,
+                [utc, "SET extra_float_digits TO 0", redshift.PROBE_SQL],
+            )
+        ),
     )
-    assert parse_float(with_set, "probe")[0] == harness.WIRE_PROBE_VALUE
-    assert without is not None, seen
-    assert parse_float(without, "probe")[0] != harness.WIRE_PROBE_VALUE, without
+    assert not problems, problems  # (i) what the connector refuses otherwise
 
 
 def test_rs_timezone(rs, recorder):
@@ -375,7 +440,12 @@ def test_rs_upper_case_column(rs, columns, recorder):
 
 
 def test_rs_load_fidelity(rs, columns, fixture_arrays, recorder):
-    """The loaded amounts are exactly the fixture's binary64 values (a few spot rows)."""
+    """The loaded amounts are exactly the fixture's binary64 values (a few spot
+    rows), read through the connector: a table read's digits, with the SET.
+
+    Recorded, never asserted: the same rows read in a batch without the
+    float SET (an engine fact).
+    """
     control, treatment = fixture_arrays
     wanted = {
         "control-0": float(control[0]),
@@ -394,10 +464,112 @@ def test_rs_load_fidelity(rs, columns, fixture_arrays, recorder):
     )
     result = rs.serverless.run_query(_built(sql, frozenset({rs.events})), rs.deadline())
     seen = {row["unit_id"]: row["amount"] for row in result.rows}
-    recorder.record("rs_load_fidelity", rows=seen, statement_id=result.statement_handle)
-    assert set(seen) == set(wanted)
+    without_float_set = _record_only(
+        lambda: _read_batch(
+            rs.serverless,
+            ["SET timezone TO 'UTC'", redshift.statement_timeout_sql(60), sql],
+        )
+    )
+    recorder.record(
+        "rs_load_fidelity",
+        rows=seen,
+        statement_id=result.statement_handle,
+        without_float_set=without_float_set,
+    )
+    assert set(seen) == set(wanted)  # (i) the rows asked for
     for unit_id, expected in wanted.items():
+        # (i) exact binary64 equality, which 15 significant digits fail
         assert parse_float(seen[unit_id], "amount")[0] == expected, unit_id
+
+
+def _preview_queries(
+    dialect: Any,
+    exposures: Tuple[str, ...],
+    events: Tuple[str, ...],
+    columns: Dict[str, Dict[str, str]],
+) -> Dict[str, Tuple[BuiltQuery, bool]]:
+    """Both source previews' statements, from the endpoint's own builders:
+    ``{kind: (statement, is_mean)}``."""
+    a, e = columns["exposures"], columns["events"]
+    window = AnalysisWindow(harness.WINDOW_START, harness.WINDOW_END)
+    return {
+        "assignment": (
+            build_assignment_preview_query(
+                dialect,
+                AssignmentMapping(
+                    exposures,
+                    a["user_id"],
+                    a["experiment_key"],
+                    a["variant"],
+                    a["exposed_at"],
+                ),
+                window,
+                harness.EXPERIMENT_KEY,
+            ),
+            False,
+        ),
+        "metric": (
+            build_metric_preview_query(
+                dialect,
+                MetricMapping(events, e["user_id"], e["event_at"], "mean", e["amount"]),
+                window,
+            ),
+            True,
+        ),
+    }
+
+
+def _previews(
+    client: WarehouseClient,
+    exposures: Tuple[str, ...],
+    events: Tuple[str, ...],
+    columns: Dict[str, Dict[str, str]],
+    deadline: Callable[[], Deadline],
+) -> Dict[str, Dict[str, Any]]:
+    """Both source previews, as ``POST .../preview`` runs them: built by the
+    endpoint's builders and run by the runner's own step, ``execute_preview``.
+    A preview the connector refuses is kept as its refusal."""
+    queries = _preview_queries(client.dialect, exposures, events, columns)
+    summaries: Dict[str, Dict[str, Any]] = {}
+    for kind, (built, is_mean) in queries.items():
+        try:
+            summaries[kind] = warehouse_runner.execute_preview(
+                client,
+                built,
+                kind,
+                is_mean,
+                harness.NullSession,
+                warehouse_runner.utc_now,
+                deadline(),
+                uuid.UUID(int=0),
+            )
+        except WarehouseError as exc:
+            summaries[kind] = _refusal(exc)
+    return summaries
+
+
+def _iso(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {k: _iso(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_iso(v) for v in value]
+    return value.isoformat() if isinstance(value, datetime) else value
+
+
+def test_rs_preview(rs, columns, fixture_arrays, recorder):
+    """Both source previews through the connector on the workgroup: their
+    counts, labels and earliest and latest times are what the fixture holds,
+    worked out from it in Python (``harness.expected_previews``)."""
+    summaries = _previews(rs.client, rs.exposures, rs.events, columns, rs.deadline)
+    expected = harness.expected_previews(*fixture_arrays)
+    problems = harness.preview_verdict(summaries, expected)
+    recorder.record(
+        "rs_preview",
+        previews=_iso(summaries),
+        expected=_iso(expected),
+        differences=problems,
+    )
+    assert not problems, problems  # (i) the numbers a preview shows
 
 
 def test_rs_mean_parity(rs, columns, reference, recorder):
@@ -479,45 +651,6 @@ def test_rs_runner_parity_cluster(rs, columns, fixture_arrays, recorder):
     )
 
 
-def test_rs_statement_name_in_history(rs, recorder):
-    """Our batches carry StatementName; the customer can find them by it in
-    SYS_QUERY_HISTORY.  ListStatements by the name is recorded too (it needs
-    redshift-data:ListStatements, which the connector itself does not)."""
-    by_api: Dict[str, Any] = {}
-    try:
-        listed = aws.call(
-            rs.serverless._role_session(120, Deadline(60))[0],
-            "redshift-data",
-            rs.config.region,
-            "list_statements",
-            warehouse="redshift",
-            deadline=Deadline(60),
-            codes=redshift.REDSHIFT_CODES,
-            StatementName=redshift.STATEMENT_NAME,
-            Status="ALL",
-        )
-        by_api = {"found": len(listed.get("Statements", []))}
-    except WarehouseError as exc:
-        by_api = _refusal(exc)
-    sql = (
-        "SELECT COUNT(*) AS n FROM sys_query_history "
-        f"WHERE query_label = '{redshift.STATEMENT_NAME}'"
-    )
-    history: Dict[str, Any] = {}
-    try:
-        result = rs.serverless.run_query(_built(sql), rs.deadline())
-        history = {"label_rows": result.rows[0].get("n") if result.rows else None}
-    except WarehouseError as exc:
-        history = _refusal(exc)
-    recorder.record(
-        "rs_statement_name_in_history",
-        list_statements=by_api,
-        sys_query_history=history,
-        sql=sql,
-    )
-    assert (history.get("label_rows") or 0) > 0, history
-
-
 def test_rs_missing_table(rs, recorder):
     """DescribeTable on a table that does not exist: the source check's
     object_not_found (the API's 422 identifier_not_found)."""
@@ -536,8 +669,15 @@ def test_rs_missing_table(rs, recorder):
 
 
 def test_rs_missing_grant(rs, recorder):
-    """A relation the role may not read: the batch FAILS, reported as FAILED
-    with the failed statement's query id (the Code is recorded)."""
+    """A relation the role may not read: the batch FAILS, refused as
+    unrecognised with vendor code FAILED, and the request id the connector
+    logs is the Data API Id of the sub-statement that failed, as an
+    independent DescribeStatement of the same batch shows it.
+
+    Recorded, never asserted: that sub-statement's RedshiftQueryId, and what
+    DescribeStatement answers when asked for the request id itself.
+    """
+    before = len(recorder.exchanges)
     refused = None
     try:
         rs.serverless.run_query(
@@ -545,28 +685,35 @@ def test_rs_missing_grant(rs, recorder):
         )
     except WarehouseError as exc:
         refused = exc
-    history: Dict[str, Any] = {}
-    if refused is not None and (refused.request_id or "").isdigit():
-        # The id the connector logs for a FAILED statement, looked up where
-        # the Troubleshooting docs will send an operator.
-        sql = (
-            "SELECT COUNT(*) AS n FROM sys_query_history "
-            f"WHERE query_id = {int(refused.request_id)}"
-        )
-        try:
-            found = rs.serverless.run_query(_built(sql), rs.deadline())
-            history = {"rows": found.rows[0].get("n") if found.rows else None}
-        except WarehouseError as exc:
-            history = _refusal(exc)
+    refusal = _refusal(refused) if refused else {"read": True}
+    ids = _batch_ids(recorder, before)
+    seen: Dict[str, Any] = {}
+    asked: Dict[str, Any] = {}
+    if ids:
+        session, _ = rs.serverless._role_session(120, Deadline(60))
+        seen = redshift.described(_describe(rs, session, ids[0]), ids[0])
+        request_id = refusal.get("request_id")
+        if request_id:
+            asked = _record_only(
+                lambda: {"status": _describe(rs, session, request_id).get("Status")}
+            )
+    subs = seen.get("SubStatements", [])
+    failed = [s for s in subs if s.get("Status") == "FAILED"]
+    problems = harness.failed_statement_verdict(refusal, seen)
     recorder.record(
         "rs_missing_grant",
-        sys_query_history=history,
-        **(_refusal(refused) if refused else {"read": True}),
+        **refusal,
+        statement_id=ids[0] if ids else None,
+        sub_statuses=[s.get("Status") for s in subs],
+        failed_redshift_query_id=failed[0].get("RedshiftQueryId") if failed else None,
+        describe_request_id=asked,
+        problems=problems,
     )
-    assert refused is not None, "the role read pg_user_info"
-    assert refused.code is WarehouseErrorCode.UNRECOGNISED_WAREHOUSE_ERROR
-    assert refused.vendor_code == "FAILED" and refused.request_id
-    assert (history.get("rows") or 0) > 0, history
+    assert refused is not None, "the role read pg_user_info"  # (i) the refusal
+    assert ids, "no statement id was recorded"  # the harness's own reading
+    # (i) the code and vendor code; (ii) the request id against the
+    # independent DescribeStatement of the batch
+    assert not problems, problems
 
 
 def _missing_target(rs, recorder, check: str, **shape: Any) -> None:
