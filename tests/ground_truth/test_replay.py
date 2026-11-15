@@ -116,7 +116,8 @@ PROPORTION_MEAN_REL = 1e-12
 SHOWN = 25
 #: S5's share of its users who come back for a second assign, which G0b (2)
 #: reads: about one in ten. Every one took the pull-request Replay job past
-#: 12 minutes (12.1, its first run), the limit #1897 set for S5.
+#: 12 minutes (12.1, its first run), the 12-minute limit set for S5's
+#: pull-request Replay.
 S5_RETURNING = 0.1
 
 
