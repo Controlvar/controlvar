@@ -131,6 +131,7 @@ by = ["docex:docs/api/multi-armed-bandit.md#\"algorithm\": \"thompson_sampling\"
 
 [[unit]]
 text = "Anyone who may view the experiment can read it."
+count = 2
 by = [
     "test:backend/tests/unit/api/test_bandit_endpoints.py::TestBanditStatusForTheDashboard::test_every_role_reads_the_weights",
     "test:backend/tests/integration/api/test_experiment_data_read_rule.py::test_every_shipped_role_keeps_its_answer_on_each_route",
@@ -267,6 +268,58 @@ text = "It prints the new weights:"
 by = ["docex:docs/api/multi-armed-bandit.md#{\"variant_name\":\"red_button\",\"current_weight\":0.8}"]
 
 [[unit]]
+text = "GET /api/v1/bandit/{experiment_id}/history"
+by = ["test:backend/tests/integration/api/test_bandit_history_api.py::test_the_route_is_beta_in_the_document_the_application_builds"]
+
+[[unit]]
+text = "Returns the bandit's past weight updates, newest first: each update's time (tick_at) and each variant's weight, keyed by variant id."
+by = [
+    "test:backend/tests/integration/api/test_bandit_history_api.py::test_each_update_is_one_entry_newest_first_with_its_stored_weights",
+    "test:backend/tests/unit/api/test_bandit_endpoints.py::TestBanditHistoryTicks::test_tick_at_is_utc_whatever_the_database_time_zone",
+]
+
+[[unit]]
+text = "A weight override is not an update and is not listed."
+by = ["test:backend/tests/integration/api/test_bandit_history_api.py::test_a_manual_override_is_not_an_update"]
+
+[[unit]]
+text = "limit (default 200, 1 to 1000, otherwise 422) is the number of updates."
+by = [
+    "test:backend/tests/integration/api/test_bandit_history_api.py::test_limit_counts_updates_and_keeps_the_newest",
+    "test:backend/tests/integration/api/test_bandit_history_api.py::test_a_limit_outside_1_to_1000_is_refused",
+    "test:backend/tests/integration/api/test_bandit_history_api.py::test_the_limits_own_bounds_are_accepted",
+    "test:backend/tests/integration/api/test_bandit_history_api.py::test_the_route_is_beta_in_the_document_the_application_builds",
+    "test:backend/tests/unit/api/test_paging_params_declared.py::test_1001_every_paging_param_has_a_minimum_and_a_maximum",
+]
+
+[[unit]]
+text = "It answers [] before the first update, and 404 for an unknown experiment or one whose optimization_type is fixed."
+by = [
+    "test:backend/tests/integration/api/test_bandit_history_api.py::test_no_update_yet_is_an_empty_list",
+    "test:backend/tests/integration/api/test_bandit_history_api.py::test_an_unknown_experiment_is_not_found",
+    "test:backend/tests/integration/api/test_bandit_history_api.py::test_a_fixed_experiment_is_not_found_even_with_rows",
+]
+
+[[unit]]
+text = "Updates older than ANALYSIS_HISTORY_RETENTION_DAYS (default 90) are deleted."
+by = [
+    "test:backend/tests/integration/api/test_bandit_history_api.py::test_updates_older_than_the_retention_window_are_deleted",
+    "test:backend/tests/unit/core/test_documented_defaults.py::test_analysis_history_is_kept_90_days",
+    "test:backend/tests/unit/core/test_documented_defaults.py::test_the_metrics_tick_purges_the_analysis_history",
+]
+
+[[unit]]
+text = "It is beta (x-stability: beta); the shape may still change."
+by = ["test:backend/tests/integration/api/test_bandit_history_api.py::test_the_route_is_beta_in_the_document_the_application_builds"]
+
+[[unit]]
+text = "It prints one update, the one triggered above; the override is not listed."
+by = [
+    "docex:docs/api/multi-armed-bandit.md#{\"updates\":1,\"variants\":3}",
+    "test:backend/tests/integration/api/test_bandit_history_api.py::test_a_manual_override_is_not_an_update",
+]
+
+[[unit]]
 text = "Scheduler"
 by = ["exempt:baseline"]
 
@@ -382,6 +435,13 @@ by = ["exempt:baseline"]
 [[unit]]
 text = "View bandit status | VIEWER"
 by = ["test:backend/tests/unit/api/test_bandit_endpoints.py::TestBanditStatusForTheDashboard::test_every_role_reads_the_weights"]
+
+[[unit]]
+text = "View weight history | VIEWER"
+by = [
+    "test:backend/tests/integration/api/test_experiment_data_read_rule.py::test_every_shipped_role_keeps_its_answer_on_each_route",
+    "test:backend/tests/integration/api/test_experiment_data_read_rule.py::test_no_base_role_is_refused_on_the_route_level_reads",
+]
 
 [[unit]]
 text = "Trigger weight update | DEVELOPER"

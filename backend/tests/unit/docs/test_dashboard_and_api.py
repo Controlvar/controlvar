@@ -132,6 +132,9 @@ WITNESSES: Dict[str, str] = {
     "Archive and unarchive a feature flag": "flag-archive",
     "Create a bandit experiment": "bandit-create",
     "Set a bandit's weights by hand": "bandit-weights-override",
+    # #1958: the API half (beta) ships first; the dashboard half flips the row
+    # when its Weight history section carries this id.
+    "A bandit's weight history (beta)": "bandit-weight-history",
     # #1446: only reading a holdout's results is beta. #1455's second half:
     # the page's loaded state (every holdout for an ADMIN, the active one for
     # a DEVELOPER), never loading, refused or error.
