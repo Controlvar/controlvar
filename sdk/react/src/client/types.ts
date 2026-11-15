@@ -123,6 +123,14 @@ export interface TrackEventOptions {
   eventType?: string;
   /** Client-side timestamp; sent as an ISO-8601 string. */
   timestamp?: Date;
+  /**
+   * Your id for this event (sent as `event_id`). The server stores an event sent again with the
+   * same `event_id`, user, experiment, flag and event name only once. The SDK makes an id for
+   * each call when you give none (the same one on every entry the call fans out to), so give
+   * your own when your code may call `trackEvent` again for the same event. `undefined`, `null`
+   * and `''` mean none. The server refuses an id longer than 255 characters.
+   */
+  eventId?: string | null;
 }
 
 // ─── Raw backend response shapes (see backend/app/schemas/tracking.py) ──────
