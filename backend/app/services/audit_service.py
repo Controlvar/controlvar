@@ -222,6 +222,7 @@ WRITTEN_ACTION_TYPES: frozenset = frozenset(
         ActionType.SEGMENT_UPDATE,
         ActionType.SEGMENT_ARCHIVE,
         ActionType.SAFETY_ROLLBACK,
+        ActionType.SAFETY_CONFIG_UPDATE,
     }
 )
 
