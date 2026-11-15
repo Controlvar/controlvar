@@ -329,7 +329,7 @@ test.describe("Journey: RBAC", () => {
   // here: before the first update (`last_updated` null) the panel says so
   // instead of showing the even split the server fills in.
   const banditControls = {
-    admin: ["Refresh", "Set weights by hand"],
+    admin: ["Refresh"],
     developer: ["Refresh"],
     analyst: ["Refresh"],
     viewer: ["Refresh"],
