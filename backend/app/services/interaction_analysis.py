@@ -70,8 +70,11 @@ UNAVAILABLE_REASONS = (
 class InteractionFitError(Exception):
     """The fit did not reach the maximum-likelihood estimate.
 
-    Never caught: it reaches the route's ``unexpected_failure`` (a 500).  The
-    fit below cannot produce it on a table that passes the floor; it is an
+    Never caught: it reaches the calling route's ``unexpected_failure`` (a
+    500).  The fit below cannot produce it on a table that passes its caller's
+    floor: ``floor_reason`` for #219's pair analysis, or
+    ``dimensional_analysis_service.hte_tested_segments`` for the segment
+    breakdown's heterogeneity flag (#1969; see the module docstring).  It is an
     assertion, kept so that a defect is a 500 and never a wrong answer.
     """
 
@@ -236,7 +239,17 @@ def pearson_statistic_batch(
 def interaction_test(n: Sequence, x: Sequence) -> InteractionTest:
     """Pearson's X^2 test of the additive model on one 2 x J table.
 
-    Call it only on a table ``floor_reason`` accepts.
+    Call it only on a table that passes its caller's floor.  #219's pair
+    analysis passes tables ``floor_reason`` accepts (``MIN_USERS_PER_CELL``
+    users and ``MIN_EXPECTED_PER_CELL`` expected converters and
+    non-converters in every cell).  The segment breakdown's heterogeneity flag
+    (#1969, ``dimensional_analysis_service.detect_hte``) passes the segments
+    ``dimensional_analysis_service.hte_tested_segments`` keeps
+    (``HTE_MIN_EXPECTED_PER_CELL`` expected converters and non-converters in
+    each arm of a segment, and at least one user per arm).  The module
+    docstring says why the breakdown's floor is lower, and the seeded
+    simulations behind it are in ``backend/tests/unit/stats_validation/
+    test_golden_hte_false_positive_rate.py``.
 
     Raises:
         InteractionFitError: the fit failed (a defect; never caught).
