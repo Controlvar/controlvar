@@ -101,6 +101,7 @@ CORE_ROUTES = {
     ("GET", f"{R}/sequential"): READ,
     ("GET", f"{R}/cuped"): READ,
     ("GET", f"{R}/balanced-groups"): READ,
+    ("GET", f"{R}/segments/{{segment_id}}"): READ,
     ("POST", f"{R}/post-stratification"): READ,
     ("POST", f"{R}/fdr-correction"): READ,
     ("POST", f"{R}/invalidate-cache"): SUPERUSER,
@@ -164,8 +165,8 @@ EXPORT_AND_INTERACTION_ROUTES = {
 }
 EXPORT_AND_INTERACTION_PREFIXES = ("/api/v1/export/", "/api/v1/interactions/")
 
-CORE_COUNT = 51  # 49 HTTP + 1 WebSocket selected, and the explicit entry
-FULL_COUNT = 56
+CORE_COUNT = 52  # 50 HTTP + 1 WebSocket selected, and the explicit entry
+FULL_COUNT = 57
 
 
 def _full_profile() -> bool:
