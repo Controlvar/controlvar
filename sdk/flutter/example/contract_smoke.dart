@@ -79,7 +79,7 @@ Future<void> _run() async {
     // 1. Assign twice → identical (sticky on the server).
     final first = await client.getAssignment(experimentKey, userId, attributes: attributes);
     if (first == null) {
-      _fail('assignment failed for $experimentKey (not ACTIVE, bad key, or API unreachable)');
+      _fail('assignment failed for $experimentKey (unknown experiment key, bad API key, or API unreachable)');
     }
     final second = await fresh.getAssignment(experimentKey, userId, attributes: attributes);
     if (second == null) _fail('second assignment failed for $experimentKey');

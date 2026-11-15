@@ -1,0 +1,56 @@
+{
+  "slug": "09-design-in-depth",
+  "mp4": "09-design-in-depth-545d69341c2e.mp4",
+  "items": [
+    {
+      "on_screen": ["Controlvar", "Design an experiment in depth", "A/B testing and feature flags you run yourself."]
+    },
+    { "on_screen": ["Signed in off camera. Past the basics of guided setup."] },
+    { "said": ["Choose New Experiment."] },
+    { "on_screen": ["Name it, and the key fills itself in."] },
+    { "said": ["Name it, and the key your code uses fills itself in."] },
+    { "on_screen": ["The primary metric: the one you decide on."] },
+    { "said": ["Make purchases the primary metric: the one you decide on."] },
+    { "on_screen": ["Add a metric to track alongside it."] },
+    { "said": ["Add a second metric to track alongside it: add to cart."] },
+    { "on_screen": ["Add a third version, and split the traffic."] },
+    { "said": ["Add a third version, and split the traffic so it reaches 100%."] },
+    { "on_screen": ["Choose who can join, from what your app sends."] },
+    { "said": ["Choose who can join from what your app sends: US or Canada.", "Everyone else gets the control, and isn't enrolled."] },
+    { "on_screen": ["Confidence and correction lock once it starts."] },
+    { "said": ["Next, a confidence level and a correction, which lock once it starts."] },
+    { "on_screen": ["Several versions? Correct for lucky winners."] },
+    { "said": ["With several versions, one can look like a winner by luck.", "Benjamini-Hochberg, the default, keeps false winners to about 5% of all winners."] },
+    { "on_screen": ["Optional: a Bayesian view of the primary metric."] },
+    { "said": ["Turn on Bayesian to also see each version's chance of being best."] },
+    { "on_screen": ["Optional: sequential testing (beta)."] },
+    { "said": ["Turn on sequential testing, in beta.", "Check results whenever you like, and stop once the evidence is strong."] },
+    { "on_screen": ["Review your choices, then create it."] },
+    { "said": ["Review your choices, then create it."] },
+    { "on_screen": ["Saved as a draft, with its versions, metrics and analysis."] },
+    { "said": ["It's saved as a draft, with its versions, metrics and analysis."] },
+    { "on_screen": ["Schedule its start: it starts on its own."] },
+    { "said": ["Give it a start date, and it starts on its own.", "Until then, it stays a draft."] },
+    { "on_screen": ["Global holdouts: one page, for every experiment."] },
+    { "said": ["A holdout covers all your experiments, so it has its own page."] },
+    { "on_screen": ["Create one, and activate it now."] },
+    { "said": ["A global holdout keeps 5% of new users out of every experiment.", "That includes this one."] },
+    { "on_screen": ["Active: its size is now fixed."] },
+    { "said": ["It's active now, and its size is fixed."] },
+    { "on_screen": ["Checkout tests, made off camera with Checkout Button Color."] },
+    { "said": ["Experiments in the same exclusion group never share a user."] },
+    { "on_screen": ["Add this draft to the group."] },
+    { "said": ["Add this draft to the group with Checkout Button Color."] },
+    { "on_screen": ["Still a draft: sequential on, a start, a group, a holdout."] },
+    { "said": ["Read it back: it's still a draft, in its group.", "It has its start date, and sequential testing is on.", "And the holdout is active."] },
+    {
+      "on_screen": [
+        "Controlvar",
+        "Open source, Apache-2.0, runs on your own infrastructure",
+        "controlvar.com",
+        "github.com/Controlvar/controlvar",
+        "Recorded on Controlvar v0.39.0, a local stack with demo data"
+      ]
+    }
+  ]
+}

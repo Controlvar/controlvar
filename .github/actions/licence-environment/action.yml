@@ -73,7 +73,7 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        for pkg in frontend sdk/js sdk/react sdk/react-native sdk/openfeature sdk/edge; do
+        for pkg in frontend sdk/js sdk/react sdk/react-native sdk/openfeature sdk/edge sdk/mcp; do
           echo "::group::npm ci in $pkg"
           (cd "$pkg" && npm ci)
           echo "::endgroup::"

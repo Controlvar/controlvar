@@ -21,6 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.bandit_scheduler import BanditScheduler
 from backend.app.core.permissions import Action, ResourceType, check_permission
 from backend.app.core.stats_engine import ENGINE_VERSION
@@ -41,7 +42,15 @@ from backend.app.services.audit_service import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
+
+#: The 403 of ``POST /bandit/{experiment_id}/update`` (#891): it names the
+#: permission, then the built-in roles that have it, so it stays true when a
+#: custom role or direct grant gives the permission instead.
+TRIGGER_UPDATE_FORBIDDEN = (
+    "Triggering a bandit update needs permission to change experiments, which "
+    "the DEVELOPER and ADMIN roles have."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -167,7 +176,11 @@ def _build_status_response(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/{experiment_id}", response_model=BanditStatusResponse)
+@router.get(
+    "/{experiment_id}",
+    response_model=BanditStatusResponse,
+    dependencies=[Depends(deps.require_experiment_read)],
+)
 def get_bandit_status(
     experiment_id: UUID,
     db: Session = Depends(deps.get_db),
@@ -176,7 +189,8 @@ def get_bandit_status(
     """
     Return the current bandit allocation weights for a MAB experiment.
 
-    Requires any authenticated user (VIEWER+).
+    Requires permission to view the experiment, as GET /api/v1/experiments/{id}
+    does; every role has it.
     Returns equal weights if no bandit state has been computed yet.
     """
     experiment = _get_mab_experiment(experiment_id, db)
@@ -198,13 +212,13 @@ def trigger_bandit_update(
     """
     Trigger an immediate weight recalculation for a MAB experiment.
 
-    Requires DEVELOPER or ADMIN role.
+    Requires permission to change experiments: DEVELOPER or ADMIN, or in the
+    full profile a custom role or direct grant giving experiment (update).
     """
-    # Require at least DEVELOPER role
     if not check_permission(current_user, ResourceType.EXPERIMENT, Action.UPDATE):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="DEVELOPER or ADMIN role required to trigger bandit updates",
+            detail=TRIGGER_UPDATE_FORBIDDEN,
         )
 
     experiment = _get_mab_experiment(experiment_id, db)

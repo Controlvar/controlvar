@@ -295,6 +295,22 @@ class TestTheSetting:
         )
         assert built.WAREHOUSE_CREDENTIALS_KEYS == value
 
+    @pytest.mark.parametrize("env", HARDENED + RELAXED)
+    def test_an_empty_value_from_the_environment_reads_as_not_set(
+        self, env, monkeypatch
+    ):
+        """Both compose files pass the setting empty by default (#1253, #256).
+        Empty boots everywhere, and using it raises the error an absent
+        setting raises, which says to set it."""
+        monkeypatch.delenv("TESTING", raising=False)
+        monkeypatch.setenv("WAREHOUSE_CREDENTIALS_KEYS", "")
+        built = ModulesSettings(_env_file=None, ENVIRONMENT=env, **_STRONG)
+        assert built.WAREHOUSE_CREDENTIALS_KEYS == ""
+        with pytest.raises(
+            CredentialKeysUnavailable, match="^WAREHOUSE_CREDENTIALS_KEYS is not set,"
+        ):
+            credential_crypto._cipher(built.WAREHOUSE_CREDENTIALS_KEYS)
+
     @pytest.mark.parametrize("env", HARDENED)
     def test_the_class_default_is_absent_and_boots(self, env, monkeypatch):
         monkeypatch.delenv("TESTING", raising=False)

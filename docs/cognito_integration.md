@@ -76,6 +76,7 @@ The new account is not created, and the sign-in is refused, when:
   example one an earlier version of the platform created at a first Cognito sign-in). It
   is used only once an administrator links it;
 - the user has no email address in the pool;
+- the user's email address is not verified (`email_verified` is not `true`);
 - another account already has the user's email address, in any letter case. An account is
   never linked by email address.
 
@@ -225,6 +226,7 @@ logger. Its `reason` field is one of these:
 | `linked_elsewhere` | an account linked to another identity has the user's username |
 | `legacy_unlinked` | an account with no password and no link has the user's username |
 | `no_email` | the user has no email address in the pool |
+| `email_unverified` | the user's email address is not verified |
 | `email_taken` | another account has the user's email address, in any letter case |
 | `field_too_long` | the user's username, email address, given or family name, or Cognito user ID is longer than the platform stores; the record's `field` names which |
 | `commit_failed` | the new account could not be saved |

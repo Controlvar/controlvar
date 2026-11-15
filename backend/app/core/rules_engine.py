@@ -9,7 +9,7 @@ import logging
 import math
 from datetime import datetime
 from datetime import time as datetime_time
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 import semver
 
@@ -344,69 +344,315 @@ def _substring_of(item: Any, text: str) -> bool:
 #: The keys of a ``time_window`` value that say when it is open; ``timezone``
 #: only changes how they are read. A window with none of them cannot be read
 #: (#1145). It used to match at every moment, so a ``{"start": ..., "end": ...}``
-#: window, the two keys the ``Condition`` schema asks for and which the engine
-#: does not read, was always open.
+#: window, two keys the engine does not read (the ``Condition`` schema required
+#: them until #1527), was always open.
 TIME_WINDOW_KEYS = ("days", "start_time", "end_time", "start_date", "end_date")
 
 
-def check_time_window(operator: Any, window: Any) -> None:
+def check_time_window(
+    operator: Any,
+    window: Any,
+    *,
+    note: Optional[Callable[[Any, str], None]] = None,
+) -> None:
     """Raise :class:`TimeWindowUnreadable` when ``window`` cannot be read.
 
     Called before the user's value is looked at, so that neither that value nor
     an earlier key that does not match can hide a key that cannot be read.
+
+    ``note`` reports the reason before the exception is raised; by default
+    (the evaluation path) it is ``_note_rule_problem``, which logs it once.
+    The write path (``targeting_adapter._check_supported_vocabulary``, #1204)
+    passes one that logs nothing: a request it refuses is not an evaluation,
+    and must not use up the once-only warning a stored window would get.
     """
+    if note is None:
+        note = _note_rule_problem
     if not isinstance(window, dict):
-        _note_rule_problem(operator, "the value is not an object")
+        note(operator, "the value is not an object")
         raise TimeWindowUnreadable()
     if not any(key in window for key in TIME_WINDOW_KEYS):
-        _note_rule_problem(
-            operator, "no days, start_time/end_time or start_date/end_date"
-        )
+        note(operator, "no days, start_time/end_time or start_date/end_date")
         raise TimeWindowUnreadable()
 
     timezone_name = window.get("timezone")
     if timezone_name:
         if not HAS_PYTZ:
-            _note_rule_problem(operator, "a timezone needs pytz, not installed")
+            note(operator, "a timezone needs pytz, not installed")
             raise TimeWindowUnreadable()
         try:
             pytz.timezone(timezone_name)
         except Exception:
-            _note_rule_problem(operator, "the timezone is not known")
+            note(operator, "the timezone is not known")
             raise TimeWindowUnreadable() from None
 
     if "days" in window:
         days = window["days"]
         if not isinstance(days, list):
-            _note_rule_problem(operator, "days is not a list")
+            note(operator, "days is not a list")
             raise TimeWindowUnreadable()
         if not all(isinstance(d, int) and 0 <= d <= 6 for d in days):
-            _note_rule_problem(operator, "days must be 0-6")
+            note(operator, "days must be 0-6")
             raise TimeWindowUnreadable()
 
     if "start_time" in window or "end_time" in window:
         if "start_time" not in window or "end_time" not in window:
-            _note_rule_problem(operator, "start_time without end_time")
+            note(operator, "start_time without end_time")
             raise TimeWindowUnreadable()
         if (
             _parse_time(window["start_time"]) is None
             or _parse_time(window["end_time"]) is None
         ):
-            _note_rule_problem(operator, "start_time or end_time is not HH:MM")
+            note(operator, "start_time or end_time is not HH:MM")
             raise TimeWindowUnreadable()
 
     if "start_date" in window or "end_date" in window:
         if "start_date" not in window or "end_date" not in window:
-            _note_rule_problem(operator, "start_date without end_date")
+            note(operator, "start_date without end_date")
             raise TimeWindowUnreadable()
         start_date = _parse_date(window["start_date"])
         end_date = _parse_date(window["end_date"])
         if start_date is None or end_date is None:
-            _note_rule_problem(operator, "start_date or end_date is not YYYY-MM-DD")
+            note(operator, "start_date or end_date is not YYYY-MM-DD")
             raise TimeWindowUnreadable()
         if start_date > end_date:
-            _note_rule_problem(operator, "start_date is after end_date")
+            note(operator, "start_date is after end_date")
             raise TimeWindowUnreadable()
+
+
+# ---------------------------------------------------------------------------
+# The words apply_operator reads (#1204)
+# ---------------------------------------------------------------------------
+#
+# Each set below is every value of one word the branches of apply_operator (and
+# _haversine_distance, for units) compare with; any other value never matches.
+# They are named here, beside the code that reads them, so that the write path
+# (targeting_adapter._check_supported_vocabulary) refuses exactly the words the
+# engine does not know. The if-chains below are not built from them: adding a
+# word to a chain without adding it here makes a save refuse a word the engine
+# matches, which backend/tests/unit/core/test_targeting_vocabulary.py names.
+
+#: Operators flag evaluation does not implement: the branch at the end of
+#: apply_operator answers ``False`` for them. Experiment targeting
+#: (``RulesEvaluationService``) implements both.
+OPERATORS_NOT_ON_FLAGS = frozenset(
+    {OperatorType.JSON_PATH, OperatorType.PERCENTAGE_BUCKET}
+)
+
+#: ``semantic_version``'s ``additional_value``. A false-y one (absent,
+#: ``null``, ``""``, ``0``) is read as ``eq``.
+SEMVER_COMPARISONS = frozenset({"eq", "gt", "gte", "lt", "lte"})
+
+#: ``array_length``'s ``additional_value``; a false-y one is read as ``eq``.
+ARRAY_LENGTH_COMPARISONS = SEMVER_COMPARISONS | {"between"}
+
+#: ``geo_distance``'s ``comparison``; an absent or ``null`` one is ``lte``.
+GEO_COMPARISONS = frozenset({"lte", "lt", "gt", "gte", "eq"})
+
+#: ``geo_distance``'s ``unit``, lowercased when it is text; an absent one is
+#: ``km``.
+GEO_UNITS = frozenset(
+    {
+        "km",
+        "kilometers",
+        "kilometre",
+        "kilometres",
+        "miles",
+        "mi",
+        "meters",
+        "metres",
+        "m",
+    }
+)
+
+
+# ---------------------------------------------------------------------------
+# The values apply_operator reads (#1525)
+# ---------------------------------------------------------------------------
+#
+# Each predicate below says whether one branch of apply_operator can read a
+# rule's own value. It reads the value the way that branch does, and answers
+# False where the branch fails on the value alone, before a user's value can
+# make any difference: an exception, a _note_rule_problem, or NaN, which no
+# comparison holds for. A readable value whose range is empty (an
+# array_length below 0, a percentage_bucket of 0) is readable. The write path
+# (targeting_adapter._unreadable_value) refuses what these refuse.
+#
+# They do not log and do not call _note_rule_problem: a refused save is not an
+# evaluation, and must not use up the once-only warning a stored rule gets.
+# They mirror the branches; the branches are not built from them.
+# backend/tests/unit/core/test_targeting_values.py fails when a branch stops
+# reading a value its corpus says a predicate accepts. A branch that starts
+# reading a value a predicate refuses is not caught there; a save of that value
+# answers 422, which is loud, not silent.
+
+
+def _date_or_none(value: Any) -> Optional[datetime]:
+    """``value`` read as a date the way ``before``, ``after`` and ``between``'s
+    date path read a rule's value, or ``None`` where that fails.
+
+    Text is read with ``datetime.fromisoformat`` once every ``Z`` is
+    ``+00:00``, and a number (a boolean is one) with
+    ``datetime.fromtimestamp``. Anything else is not a date. A timestamp no
+    date can hold raises, and the exception depends on its size; all of them
+    are caught here.
+    """
+    try:
+        if isinstance(value, str):
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if isinstance(value, (int, float)):
+            return datetime.fromtimestamp(value)
+    except (ValueError, TypeError, OverflowError, OSError):
+        return None
+    return value if isinstance(value, datetime) else None
+
+
+def date_value_readable(value: Any) -> bool:
+    """Whether ``before`` and ``after`` read ``value`` as a date.
+
+    The branch reads text with ``datetime.fromisoformat`` once every ``Z`` is
+    ``+00:00``, and a number (a boolean is one) with
+    ``datetime.fromtimestamp`` (``_date_or_none``). Anything else is not a
+    date. If the branch came to read more (another format), this would still
+    refuse it, and the value tests would not say so.
+    """
+    return _date_or_none(value) is not None
+
+
+def length_value_readable(value: Any) -> bool:
+    """Whether ``array_length`` compared with ``eq``, ``gt``, ``gte``, ``lt``
+    or ``lte`` (or a false-y comparison, read as ``eq``) reads ``value``.
+
+    The branch reads it with ``int()``: ``3``, ``3.7`` (as 3), ``true``,
+    ``"3"``, ``" 3 "`` and ``"1_0"`` are read; ``"3.0"``, ``"abc"``, NaN,
+    infinity, a list and an object are not. A branch that came to read more
+    is not caught by the value tests (see above).
+    """
+    try:
+        int(value)
+    except (ValueError, TypeError, OverflowError):
+        return False
+    return True
+
+
+def length_bounds_readable(value: Any) -> bool:
+    """Whether ``array_length`` compared with ``between`` reads ``value``: an
+    object with ``min`` and ``max``, each read by ``int()``. Other keys are
+    ignored, and ``min`` above ``max`` is readable (it matches no list). A
+    branch that came to read more is not caught by the value tests."""
+    return (
+        isinstance(value, dict)
+        and "min" in value
+        and "max" in value
+        and length_value_readable(value["min"])
+        and length_value_readable(value["max"])
+    )
+
+
+def radius_readable(radius: Any) -> bool:
+    """Whether ``geo_distance`` reads ``radius``: ``float()`` reads it, and it
+    is neither NaN nor below 0. Infinity is read (every point is within it).
+    A branch that came to read more is not caught by the value tests."""
+    try:
+        number = float(radius)
+    except (ValueError, TypeError, OverflowError):
+        return False
+    return not math.isnan(number) and number >= 0
+
+
+def number_value_readable(value: Any) -> bool:
+    """Whether ``gt``, ``gte``, ``lt`` and ``lte`` read ``value`` as a number:
+    ``float()`` reads it and it is not NaN. Infinity is read. A branch that
+    came to read more is not caught by the value tests."""
+    try:
+        number = float(value)
+    except (ValueError, TypeError, OverflowError):
+        return False
+    return not math.isnan(number)
+
+
+def percentage_value_readable(value: Any) -> bool:
+    """Whether experiment targeting's ``percentage_bucket`` reads ``value``.
+
+    That branch is ``RulesEvaluationService._evaluate_percentage_bucket``,
+    which compares the user's bucket (0 to 99) with ``float(value)``.
+    Importing that service loads the adapter, so the adapter cannot import a
+    predicate placed beside it; this one is here instead. Read: what
+    ``float()`` reads, except NaN. A value of 0 or below is read, and
+    matches no user. Like the others, it catches the branch reading less,
+    not more (see above).
+    """
+    try:
+        number = float(value)
+    except (ValueError, TypeError, OverflowError):
+        return False
+    return not math.isnan(number)
+
+
+def _between_numeric(value: Any) -> bool:
+    """Whether ``between``'s numeric path takes ``value``: a number (a boolean
+    is one), or text of digits with at most one dot."""
+    return isinstance(value, (int, float)) or (
+        isinstance(value, str) and value.replace(".", "", 1).isdigit()
+    )
+
+
+def _float_unreadable(value: Any) -> bool:
+    """Whether ``float()`` cannot read ``value`` or reads it as NaN."""
+    try:
+        return math.isnan(float(value))
+    except (ValueError, TypeError, OverflowError):
+        return True
+
+
+def _has_time_zone(moment: datetime) -> bool:
+    return moment.tzinfo is not None and moment.utcoffset() is not None
+
+
+def between_bounds_problem(lower: Any, upper: Any) -> Optional[str]:
+    """Why ``between`` cannot read the bounds ``lower`` (``value``) and
+    ``upper`` (``additional_value``) whatever the user's value is, or
+    ``None`` when it can (#1666).
+
+    The branch takes its numeric path when the user's value and both bounds
+    are numbers (a boolean is one) or text of digits with at most one dot,
+    and its date path otherwise. The user's value decides, so the bounds are
+    readable when either path reads both of them:
+
+    * the numeric path, when each bound is so spelt, ``float()`` reads it and
+      it is not NaN, which no comparison holds for. Infinity is read, so
+      ``-inf`` to ``65`` is a range open at one end;
+    * the date path, which reads each bound as ``before`` and ``after`` read
+      a value (``_date_or_none``), and compares the user's date with both:
+      a date with a time zone and one without cannot be compared, so when
+      exactly one bound has a zone no date is ever between them.
+
+    When both bounds are numeric-spelt and neither path reads the pair, the
+    bound named is the one ``float()`` cannot read (``"18"`` to ``10**400``
+    names ``"additional_value"``).
+
+    Answers ``"value"`` when neither path reads ``lower``, then
+    ``"additional_value"`` for ``upper``, then ``"time zone"``. A lower bound
+    above the upper one is readable: the range is empty, like a 0% rollout.
+    A ``None`` ``additional_value`` never gets here (the ``Condition`` model
+    refuses it). Like the predicates above, this catches the branch reading
+    less, not more.
+    """
+    both_numeric = _between_numeric(lower) and _between_numeric(upper)
+    if both_numeric and not (_float_unreadable(lower) or _float_unreadable(upper)):
+        return None
+    lower_date = _date_or_none(lower)
+    if lower_date is None:
+        # Both bounds numeric-spelt: name the one ``float()`` cannot read.
+        if both_numeric and not _float_unreadable(lower):
+            return "additional_value"
+        return "value"
+    upper_date = _date_or_none(upper)
+    if upper_date is None:
+        return "additional_value"
+    if _has_time_zone(lower_date) != _has_time_zone(upper_date):
+        return "time zone"
+    return None
 
 
 def apply_operator(
@@ -1070,10 +1316,10 @@ def apply_operator(
             logger.debug("%s: evaluation failed (%s)", operator, type(e).__name__)
             return False
 
-    # Enhanced operators - delegate to evaluation service if available
-    elif operator in ["percentage_bucket", "json_path"]:
-        # For backward compatibility, these will be handled by the evaluation service
-        # Fall back to False for now if not handled by evaluation service
+    # Operators only experiment targeting implements (RulesEvaluationService
+    # answers them before calling this function). A flag save refuses them
+    # (#1204); a rule stored before that does not match here.
+    elif operator in OPERATORS_NOT_ON_FLAGS:
         _note_rule_problem(operator, "not implemented for feature flags")
         return False
 

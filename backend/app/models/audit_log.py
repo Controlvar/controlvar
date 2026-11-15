@@ -65,6 +65,10 @@ class ActionType(str, Enum):
     EXPERIMENT_START = "experiment_start"
     EXPERIMENT_PAUSE = "experiment_pause"
     EXPERIMENT_COMPLETE = "experiment_complete"
+    # A visual experiment's preview links (#1545): one made, or every live one
+    # of the experiment ended.
+    EXPERIMENT_PREVIEW_LINK_CREATE = "experiment_preview_link_create"
+    EXPERIMENT_PREVIEW_LINKS_REVOKE = "experiment_preview_links_revoke"
 
     # User Actions
     USER_CREATE = "user_create"
@@ -74,12 +78,23 @@ class ActionType(str, Enum):
     USER_LOGOUT = "user_logout"
     USER_ACTIVATE = "user_activate"
     USER_DEACTIVATE = "user_deactivate"
+    # Two-step sign-in (#1812): turned on, turned off, reset by someone else,
+    # a recovery code used, and a new set of recovery codes.
+    USER_2FA_ENABLE = "user_2fa_enable"
+    USER_2FA_DISABLE = "user_2fa_disable"
+    USER_2FA_RESET = "user_2fa_reset"
+    USER_2FA_RECOVERY_USED = "user_2fa_recovery_used"
+    USER_2FA_RECOVERY_REGENERATE = "user_2fa_recovery_regenerate"
 
     # Permission Actions
     PERMISSION_GRANT = "permission_grant"
     PERMISSION_REVOKE = "permission_revoke"
     ROLE_ASSIGN = "role_assign"
     ROLE_UNASSIGN = "role_unassign"
+    # Custom role definitions (the rbac module).
+    ROLE_CREATE = "role_create"
+    ROLE_UPDATE = "role_update"
+    ROLE_DELETE = "role_delete"
 
     # Safety Actions
     SAFETY_ROLLBACK = "safety_rollback"
@@ -214,6 +229,8 @@ class AuditLog(Base, BaseModel):
             ActionType.EXPERIMENT_START: "started",
             ActionType.EXPERIMENT_PAUSE: "paused",
             ActionType.EXPERIMENT_COMPLETE: "completed",
+            ActionType.EXPERIMENT_PREVIEW_LINK_CREATE: "created a preview link",
+            ActionType.EXPERIMENT_PREVIEW_LINKS_REVOKE: "revoked the preview links",
             ActionType.USER_CREATE: "created",
             ActionType.USER_UPDATE: "updated",
             ActionType.USER_DELETE: "deleted",
@@ -221,10 +238,18 @@ class AuditLog(Base, BaseModel):
             ActionType.USER_LOGOUT: "logged out",
             ActionType.USER_ACTIVATE: "activated",
             ActionType.USER_DEACTIVATE: "deactivated",
+            ActionType.USER_2FA_ENABLE: "turned on two-step sign-in",
+            ActionType.USER_2FA_DISABLE: "turned off two-step sign-in",
+            ActionType.USER_2FA_RESET: "reset two-step sign-in",
+            ActionType.USER_2FA_RECOVERY_USED: "used a recovery code",
+            ActionType.USER_2FA_RECOVERY_REGENERATE: "made new recovery codes",
             ActionType.PERMISSION_GRANT: "granted permission",
             ActionType.PERMISSION_REVOKE: "revoked permission",
             ActionType.ROLE_ASSIGN: "assigned role",
             ActionType.ROLE_UNASSIGN: "unassigned role",
+            ActionType.ROLE_CREATE: "created role",
+            ActionType.ROLE_UPDATE: "updated role",
+            ActionType.ROLE_DELETE: "deleted role",
             ActionType.SAFETY_ROLLBACK: "rolled back",
             ActionType.SAFETY_CONFIG_UPDATE: "updated safety config",
             ActionType.API_KEY_CREATE: "created",

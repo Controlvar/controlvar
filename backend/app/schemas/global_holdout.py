@@ -47,9 +47,12 @@ class GlobalHoldoutCreate(BaseModel):
         ),
     )
 
-    @field_validator("holdout_percentage", mode="before")
+    @field_validator("holdout_percentage", mode="after")
     @classmethod
     def validate_holdout_percentage(cls, v: int) -> int:
+        """Runs after pydantic's type check and the field's ge/le, so a value
+        of the wrong type answers pydantic's own 422; as a ``before`` validator
+        it compared the raw value and raised ``TypeError``, a 500 (#957)."""
         if not (1 <= v <= 20):
             raise ValueError("holdout_percentage must be between 1 and 20")
         return v
@@ -87,9 +90,10 @@ class GlobalHoldoutUpdate(BaseModel):
         ),
     )
 
-    @field_validator("holdout_percentage", mode="before")
+    @field_validator("holdout_percentage", mode="after")
     @classmethod
     def validate_holdout_percentage(cls, v: Optional[int]) -> Optional[int]:
+        """``after``, as on create (#957)."""
         if v is not None and not (1 <= v <= 20):
             raise ValueError("holdout_percentage must be between 1 and 20")
         return v

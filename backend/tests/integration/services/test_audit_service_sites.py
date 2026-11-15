@@ -42,7 +42,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-from moto import mock_cognitoidp
+from moto import mock_aws
 from sqlalchemy import text, update
 from sqlalchemy.orm import sessionmaker
 
@@ -281,6 +281,28 @@ def _one(fresh, entity_id, action, *, email, user_id=None):
     rows = _rows(fresh, entity_id, action)
     assert len(rows) == 1, f"expected 1, found {len(rows)}"
     row = rows[0]
+    assert row.user_email == email
+    assert row.user_id == user_id
+    return row
+
+
+def _mark(fresh, entity_id):
+    """The ids of the entity's audit rows now: take it just before the change."""
+    return {row.id for row in _rows(fresh, entity_id)}
+
+
+def _only_row_since(fresh, entity_id, mark, action, *, email, user_id=None):
+    """The ONE row the entity gained since *mark*, whatever its action.
+
+    ``_one`` counts rows of a single action, so a rollback that also wrote an
+    entry of another action would pass it. For a rollback every new row counts:
+    exactly one, and it is *action*, by this actor."""
+    new = [row for row in _rows(fresh, entity_id) if row.id not in mark]
+    assert [row.action_type for row in new] == [action], (
+        f"expected exactly one new {action} row, found "
+        f"{[row.action_type for row in new]}"
+    )
+    row = new[0]
     assert row.user_email == email
     assert row.user_id == user_id
     return row
@@ -617,6 +639,7 @@ def test_manual_rollback_is_recorded_by_the_calling_user(
     flag_id = _flag(fresh, percentage=60)
     schedule_id, _ = _schedule(fresh, flag_id, target=80)
     v2 = _v2_count(fresh)
+    mark = _mark(fresh, flag_id)
     response = client.post(
         f"{V1}/safety/feature-flags/{flag_id}/rollback",
         params={"percentage": 10, "reason": "Manual rollback"},
@@ -624,8 +647,13 @@ def test_manual_rollback_is_recorded_by_the_calling_user(
     )
     assert response.status_code == 200, response.text
     assert response.json()["success"] is True
-    row = _one(
-        fresh, flag_id, "safety_rollback", email=superuser.email, user_id=superuser.id
+    row = _only_row_since(
+        fresh,
+        flag_id,
+        mark,
+        "safety_rollback",
+        email=superuser.email,
+        user_id=superuser.id,
     )
     assert row.entity_type == "feature_flag"
     assert row.reason == "Manual rollback"
@@ -646,6 +674,7 @@ def test_manual_rollback_is_recorded_by_the_calling_user(
 def test_monitor_rollback_is_recorded_by_the_safety_monitor(fresh, db_session):
     """The safety monitor calls the service with no user, as here."""
     flag_id = _flag(fresh, percentage=60)
+    mark = _mark(fresh, flag_id)
     s = fresh()
     try:
         result = asyncio.run(
@@ -659,7 +688,7 @@ def test_monitor_rollback_is_recorded_by_the_safety_monitor(fresh, db_session):
     finally:
         s.close()
     assert result.success is True
-    row = _one(fresh, flag_id, "safety_rollback", email=SAFETY_MONITOR)
+    row = _only_row_since(fresh, flag_id, mark, "safety_rollback", email=SAFETY_MONITOR)
     _, new = _values(row)
     assert new["trigger_type"] == "automatic"
     assert new["deactivated"] is True
@@ -767,7 +796,7 @@ def cognito(monkeypatch, db_session):
     app.dependency_overrides[deps.get_db] = override_get_db
     app.dependency_overrides[session_get_db] = override_get_db
     try:
-        with mock_cognitoidp():
+        with mock_aws():
             monkeypatch.setattr(
                 deps.auth_service, "get_user_with_groups", lambda token: answer["value"]
             )
@@ -920,14 +949,17 @@ def test_a_refused_entry_still_applies_the_role_change(
 # --- system actors --------------------------------------------------------------
 
 
-def test_the_reserved_actors_are_exactly_five():
-    # The fifth, system:sso-sync, is written by the modules' SSO sign-in.
+def test_the_reserved_actors_are_exactly_six():
+    # The fifth, system:sso-sync, is written by the modules' SSO sign-in; the
+    # sixth, system:operator-cli, by `python -m backend.app.db.two_factor_reset`
+    # (#1812).
     assert SYSTEM_ACTOR_EMAILS == {
         EXPERIMENT_SCHEDULER,
         ROLLOUT_SCHEDULER,
         SAFETY_MONITOR,
         COGNITO_SYNC,
         "system:sso-sync",
+        "system:operator-cli",
     }
 
 

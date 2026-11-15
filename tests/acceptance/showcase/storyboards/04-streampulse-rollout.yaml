@@ -1,0 +1,329 @@
+# Video 4, Roll out to devices, roll back by itself: in StreamPulse (the demo
+# streaming app) a flag's targeting rule and a kill switch, then Player v2's
+# staged rollout reaching an Android 12 phone, simulated crashes, the safety
+# monitor rolling the flag back by itself, and the audit log's record of it.
+# The UX draft's V4 journey (apps/drafts/v1-ux-designer.md), as plan v2, plan
+# v2.2 and T178 amend it, on the `demo` seed.
+#
+# * StreamPulse is seeded off camera before its first scene (history off) and
+#   built from the recorded release (E0). The app keeps no device across a
+#   reload, so every StreamPulse scene opens on its default iPhone and picks
+#   its device on camera; picking a device is what fetches the app's flags
+#   again (its panel says so, A5).
+# * Off camera, the demo's own rollout script moves Player v2 to its 25% stage
+#   (`story: 2`, its step 2 only); the stage scene says so.
+# * The crashes are the tool's fixed sender (`crashes`): right after a safety
+#   run completes (B9's anchor), Android 12 devices ask for Player v2 200
+#   times and report 40 crashes through the API. The card says the counts and
+#   that they are simulated. Then B9: the flag's page reads Unhealthy, filmed
+#   before the safety monitor's next run (the B9 gate refuses otherwise; the
+#   preflight refuses a B9 that cannot end 15 s before that run).
+# * Off camera, the tool waits for the safety monitor to roll the flag back by
+#   itself (`wait_for_rollback`; nothing asks for a rollback). The card after
+#   the cut says how long it hid, measured on the wall clock
+#   ({rollback_minutes}), and that the monitor runs every minute in this demo,
+#   five by default: the one setting this video changes (overrides.yaml,
+#   D84(c)), read back from the API's own log (C6).
+# * Then the flag's page after the rollback (schedule paused, back to 5%),
+#   the phone after Refresh now (panel, phone and the API agree: gate 10/4),
+#   and the audit log's top row, the safety monitor's rollback, with its
+#   reason.
+# * D84: every departure is stated in the scene where it happens: StreamPulse
+#   seeded off camera, the sign-in off camera, the stage moved by the demo's
+#   script, the simulated crashes with their counts, the cut and its measured
+#   length, the one-minute interval, and the demo apps' own build.
+# * `say` is the narration (D102), in videos 1-3's voice; every number it says
+#   is on the page as it is said (G2), and the measured minutes are never said
+#   (A9). Projected with clip lengths fitted on the 74 real Ruth clips: 79.1 s,
+#   or 84.8 s with each new clip at the 90th-percentile under-prediction (cap
+#   87.3 s); 97.0 s with each at the worst. If the voice step projects it over
+#   the cap, cut in the UX draft's order: (1) beat `kill` 1's ", with no app
+#   release"; (2) beat `rule` 1 to "In the dashboard, the rule is iOS 17 or
+#   later."; (3) beat `devices` 1's "the StreamPulse demo" to "StreamPulse".
+#   Each cut is a new, shorter clip. Past those, T165 (d)'s order, B9 first.
+slug: 04-streampulse-rollout
+title: Roll out to devices, roll back by itself
+seed: demo
+seed_counts: {experiments: 3, feature_flags: 2, users: 4}
+never_show:
+  - every 5 s
+  - Within 5 s
+  - rollout_story.py
+  # The app's missing-key alert names its build setting: never a good take's.
+  - NEXT_PUBLIC_
+  - API error
+  - evaluating…
+  - assigning…
+  - loading…
+  - Error rate unknown
+  - stored, but do
+end_state:
+  signed_in_as: admin@demo.com
+  rollback:
+    name: "StreamPulse: Player v2"
+    key: streampulse_player_v2
+    percentage: 5
+    status: active
+    schedule: paused
+    audit: [feature_flag_update, feature_flag_update, safety_rollback]
+    shown: audit
+    reason: reason
+    unhealthy: unhealthy
+    paused: paused
+    rolled_back: rolled_back
+    agree:
+      scene: classic
+      beat: 2
+      device: sp-galaxy-s10-us-premium
+      panel: panel
+      phone: phone
+      enabled: false
+    kill_switch:
+      name: "StreamPulse: Recommendations v2"
+      key: streampulse_recs_v2
+      audit: [toggle_disable]
+
+scenes:
+  - id: devices
+    app: streampulse
+    off_camera:
+      - seed: streampulse
+    departures:
+      - kind: off-camera setup
+        says: Seeded off camera
+    open: /
+    beats:
+      - cue: "Seeded off camera: this iPhone on iOS 17.4 gets AI search."
+        focus: {text: "iPhone 15 · iOS 17.4 · US · premium", exact: true}
+        say:
+          - In the StreamPulse demo, this iPhone on iOS 17.4 gets AI search.
+        steps:
+          - look: {text: "iPhone 15 · iOS 17.4 · US · premium", exact: true}
+            ms: 1000
+          - click: {role: tab, name: Search, exact: true}
+          - wait_for: {css: "[data-testid=search][data-engine=ai]"}
+          - look: {css: "[data-testid=search] > header"}
+            ms: 1200
+          - look: {testid: panel-flag-streampulse_ai_search}
+            ms: 1500
+
+      - cue: A Pixel 7 on Android 14 gets keyword search.
+        focus: {text: "Pixel 7 · Android 14 · DE · free", exact: true}
+        say:
+          - A Pixel 7 on Android 14 gets keyword search.
+        steps:
+          - click: {text: "Pixel 7 · Android 14 · DE · free", exact: true}
+          - wait_for: {css: "[data-testid=search][data-engine=keyword]"}
+          - look: {css: "[data-testid=search] > header"}
+            ms: 1200
+          - look: {testid: panel-flag-streampulse_ai_search}
+            ms: 1500
+
+  - id: rule
+    flag_of: "StreamPulse: AI search"
+    signed_in: true
+    departures:
+      - kind: off-camera setup
+        says: Signed in off camera
+    beats:
+      - before:
+          - scroll_to: {testid: flag-targeting-section}
+        cue: "Signed in off camera: the rule lives in the dashboard."
+        focus: {testid: flag-targeting-section}
+        say:
+          - In the dashboard, the rule is iOS 17 or later, US, premium.
+        steps:
+          - look: {testid: flag-targeting-section}
+            ms: 2500
+
+  - id: kill
+    flag_of: "StreamPulse: Recommendations v2"
+    beats:
+      - cue: "Kill switch: Recommendations v2 off, no app release."
+        focus: {testid: flag-toggle}
+        say:
+          - "A kill switch: turn Recommendations v2 off, with no app release."
+        steps:
+          - move: {testid: flag-toggle}
+          - click: {testid: flag-toggle}
+          - wait_for: {css: "[data-testid=flag-status][data-status=inactive]"}
+          - look: {testid: flag-status}
+            ms: 1200
+
+  - id: feed
+    app: streampulse
+    open: /
+    beats:
+      - cue: In the app, the feed is back to Classic.
+        focus: {css: "[data-testid=home-feed] > header"}
+        say:
+          - In the app, the home feed is back to Classic.
+        steps:
+          - look: {css: "[data-testid=home-feed] > header"}
+            ms: 1500
+          - look: {testid: panel-flag-streampulse_recs_v2}
+            ms: 1500
+
+  - id: stages
+    flag_of: "StreamPulse: Player v2"
+    off_camera:
+      - story: 2
+    departures:
+      - kind: off-camera setup
+        says: the demo's script moved it
+    beats:
+      - cue: Off camera, the demo's script moved it to 25%.
+        focus: {testid: rollout-stages}
+        say:
+          - In the dashboard, Player v2 is now at its 25% stage.
+        steps:
+          - look: {testid: rollout-stages}
+            ms: 2000
+          - look: {testid: safety-status}
+            ms: 1200
+
+  - id: player
+    app: streampulse
+    open: /
+    beats:
+      - cue: In the app, this Galaxy S10 on Android 12 gets Player v2.
+        focus: {text: "Galaxy S10 · Android 12 · US · premium · app 3.1.0", exact: true}
+        say:
+          - In the app, this Galaxy S10 on Android 12 gets Player v2.
+        steps:
+          - click: {text: "Galaxy S10 · Android 12 · US · premium · app 3.1.0", exact: true}
+          - click: {role: tab, name: Player, exact: true}
+          - wait_for: {css: "[data-testid=player][data-player=v2]"}
+          - look: {css: "[data-testid=player] > header"}
+            ms: 1200
+          - look: {testid: panel-flag-streampulse_player_v2}
+            ms: 1500
+
+  - id: crashes
+    off_camera:
+      - crashes: {evaluations: 200, reports: 40}
+    departures:
+      - kind: simulated traffic
+        says: Simulated by the tool
+    card:
+      label: Off camera
+      headline: Player v2 crashes on Android 12
+      note: >-
+        Simulated by the tool: Android 12 devices ask for Player v2 200 times
+        and report 40 crashes. The demo apps run from their own build in this
+        recording.
+    beats:
+      - cue: "Simulated: Player v2 crashes on Android 12."
+        focus: {css: "#headline"}
+        say:
+          - "Simulated: Android 12 devices crash in Player v2."
+
+  - id: unhealthy
+    flag_of: "StreamPulse: Player v2"
+    beats:
+      - cue: "In the dashboard, the error rate passes its limit."
+        focus: {testid: safety-section}
+        say:
+          - "In the dashboard, the error rate passes its limit: Unhealthy."
+        record:
+          unhealthy: {testid: safety-status}
+        steps:
+          - look: {testid: safety-status}
+            ms: 1500
+          - look: {testid: safety-metric}
+            ms: 1500
+
+  - id: later
+    off_camera:
+      - wait_for_rollback: {flag: streampulse_player_v2, percentage: 5, within_s: 180}
+    departures:
+      - kind: time skip
+        says: Waited off camera
+      - kind: shortened interval
+        says: "The safety monitor checks every minute in this demo (default: every 5 minutes)."
+    card:
+      label: Off camera
+      headline: "{rollback_minutes} later"
+      note: >-
+        Waited off camera; the time above is measured. The safety monitor
+        checks every minute in this demo (default: every 5 minutes).
+    beats:
+      - cue: The safety monitor checks every minute here.
+        focus: {css: "#headline"}
+        say:
+          - The safety monitor checks every minute here.
+
+  - id: paused
+    flag_of: "StreamPulse: Player v2"
+    beats:
+      - cue: By itself, the monitor paused the rollout schedule.
+        focus: {testid: rollout-schedule-section}
+        say:
+          - By itself, the monitor paused the schedule.
+        record:
+          paused: {testid: rollout-schedule-status}
+        steps:
+          - look: {testid: rollout-schedule-status}
+            ms: 1500
+
+      - before:
+          - scroll_to: {testid: rollout-value}
+        cue: And it rolled Player v2 back to 5%.
+        focus: {testid: rollout-value}
+        say:
+          - And rolled Player v2 back to 5%.
+        record:
+          rolled_back: {testid: rollout-value}
+        steps:
+          - look: {css: "section:has(#rollout-percentage)"}
+            ms: 1500
+
+  - id: classic
+    app: streampulse
+    open: /
+    beats:
+      - cue: In the app, pick the Galaxy S10 again and refresh.
+        focus: {text: "Galaxy S10 · Android 12 · US · premium · app 3.1.0", exact: true}
+        say:
+          - "Back in the app: the Galaxy S10, then Refresh now."
+        steps:
+          - click: {text: "Galaxy S10 · Android 12 · US · premium · app 3.1.0", exact: true}
+          - click: {role: tab, name: Player, exact: true}
+          - click: {role: button, name: Refresh now, exact: true}
+          - wait_for: {css: "[data-testid=player][data-player]"}
+
+      - cue: Now it gets the classic player.
+        focus: {css: "[data-testid=player] > header"}
+        say:
+          - Now this Android 12 phone gets the classic player.
+        record:
+          panel: {testid: panel-flag-reason-streampulse_player_v2}
+          phone: {testid: player}
+        steps:
+          - look: {css: "[data-testid=player] > header"}
+            ms: 1200
+          - look: {testid: panel-flag-streampulse_player_v2}
+            ms: 1500
+
+  - id: audit
+    open: /admin/audit
+    beats:
+      # The newest row's details are opened in the cut (a click, as video 2
+      # opens its Live tab), so the row and its reason are filmed together.
+      - before:
+          - wait_for: {css: "[data-testid=audit-log-table] tbody tr"}
+          - click: {css: "[data-testid=audit-log-table] tbody tr button"}
+          - wait_for: {testid: audit-log-detail-panel}
+        cue: "The audit log: the safety monitor did it, and why."
+        focus: {css: "[data-testid=audit-log-table] tbody tr"}
+        say:
+          - The dashboard's audit log shows the safety monitor did it, and why.
+        record:
+          audit: {css: "[data-testid=audit-log-table] tbody"}
+          reason: {testid: audit-log-detail-panel}
+        payoff: true
+        steps:
+          - look: {css: "[data-testid=audit-log-table] tbody tr"}
+            ms: 1200
+          - look: {testid: audit-log-detail-panel}
+            ms: 1800

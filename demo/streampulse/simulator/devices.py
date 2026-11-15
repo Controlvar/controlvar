@@ -20,9 +20,10 @@ Stdlib only.
 from __future__ import annotations
 
 import hashlib
+import itertools
 import random
 from dataclasses import asdict, dataclass
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Iterator, Sequence
 
 DEFAULT_POPULATION = 5000
 DEFAULT_SEED = 2026
@@ -124,10 +125,17 @@ def random_device(rng: random.Random, device_id: str) -> Device:
     )
 
 
-def generate_devices(count: int = DEFAULT_POPULATION, seed: int = DEFAULT_SEED) -> list[Device]:
-    """Deterministic population: the same ``(count, seed)`` always yields the same devices."""
+def device_stream(seed: int = DEFAULT_SEED) -> Iterator[Device]:
+    """Every device of a seed, in order, without end: ``spd-<seed>-00000``, ``-00001``, …"""
     rng = random.Random(f"streampulse-devices:{seed}")
-    return [random_device(rng, f"spd-{seed}-{i:05d}") for i in range(count)]
+    for i in itertools.count():
+        yield random_device(rng, f"spd-{seed}-{i:05d}")
+
+
+def generate_devices(count: int = DEFAULT_POPULATION, seed: int = DEFAULT_SEED) -> list[Device]:
+    """Deterministic population: the same ``(count, seed)`` always yields the same devices,
+    the first ``count`` of ``device_stream(seed)``."""
+    return list(itertools.islice(device_stream(seed), count))
 
 
 def stable_bucket(key: str, salt: str = "") -> int:
@@ -137,16 +145,18 @@ def stable_bucket(key: str, salt: str = "") -> int:
 
 
 # --------------------------------------------------------------------------------------
-# Presets — the same five devices the StreamPulse app's device panel offers, so the
-# simulator can include them and the story can point at them.
+# Presets — the five devices the StreamPulse app's device panel offers
+# (demo/streampulse/src/lib/devices.ts), id for id and attribute for attribute: flags
+# and experiments are bucketed by the device id and targeted on the attributes, so the
+# simulator's start-up probe shows exactly what the panel shows for each.
 # --------------------------------------------------------------------------------------
 
 PRESET_DEVICES: tuple[Device, ...] = (
-    Device("preset-iphone15-us-premium", "iOS", "17.4.0", "3.2.0", "US", "premium", False, "iPhone 15"),
-    Device("preset-pixel7-de-free", "Android", "14.0.0", "3.2.0", "DE", "free", False, "Pixel 7"),
-    Device("preset-galaxy-s10-android12", "Android", "12.0.0", "3.1.0", "US", "premium", False, "Galaxy S10"),
-    Device("preset-iphone14-gb-free", "iOS", "16.7.0", "3.2.0", "GB", "free", False, "iPhone 14"),
-    Device("preset-internal-tester", "iOS", "17.4.0", "3.2.1", "US", "premium", True, "iPhone 15"),
+    Device("sp-iphone-15-us-premium", "iOS", "17.4.0", "3.2.1", "US", "premium", False, "iPhone 15"),
+    Device("sp-pixel-7-de-free", "Android", "14.0.0", "3.2.0", "DE", "free", False, "Pixel 7"),
+    Device("sp-galaxy-s10-us-premium", "Android", "12.0.0", "3.1.0", "US", "premium", False, "Galaxy S10"),
+    Device("sp-iphone-14-gb-free", "iOS", "16.7.0", "3.2.0", "GB", "free", False, "iPhone 14"),
+    Device("sp-internal-tester", "iOS", "17.4.0", "3.2.1", "US", "premium", True, "iPhone 15"),
 )
 
 

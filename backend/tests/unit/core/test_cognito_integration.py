@@ -142,6 +142,7 @@ class TestCognitoIntegration:
             "attributes": {
                 "sub": "sub-newuser",
                 "email": "newuser@example.com",
+                "email_verified": "true",
                 "given_name": "New",
                 "family_name": "User",
             },

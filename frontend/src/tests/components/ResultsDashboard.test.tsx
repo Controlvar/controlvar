@@ -897,4 +897,81 @@ describe('the sequential block (#919)', () => {
       expect(screen.getByTestId('action-label')).not.toHaveTextContent(/ready to stop/i);
     });
   });
+
+  // #1737: the sequential analysis runs on the same split as the rest of the
+  // results, so the banner follows the results' own sample-ratio check
+  // (`srm.warning`, set by the server) and applies no threshold of its own.
+  describe('the early-stopping banner carries the sample-ratio caution (#1737)', () => {
+    const CAUTION = 'The traffic split does not match the allocation, so treat this with caution.';
+    const readyToStop: SequentialTestingResponse = {
+      ...SEQUENTIAL,
+      msprt_result: {
+        lambda_ratio: 40,
+        always_valid_p_value: 0.025,
+        can_stop: true,
+        evidence_strength: 'strong_for_effect',
+        boundary: 20,
+      },
+      confidence_sequence: { lower: 0.0157, upper: 0.0443, width: 0.0286, sample_size: 20000 },
+      recommended_action: 'stop_for_effect',
+    };
+    const srm = (warning: boolean, p_value: number) => ({
+      chi2: warning ? 40 : 0.4,
+      p_value,
+      warning,
+      expected: { ctrl: 1000, treat: 1000 },
+      observed: warning ? { ctrl: 1200, treat: 800 } : { ctrl: 1010, treat: 990 },
+    });
+
+    async function bannerWith(
+      check: ReturnType<typeof srm> | null | undefined,
+      block: SequentialTestingResponse = readyToStop,
+      label: RegExp = /^Ready to stop/
+    ) {
+      mockGetExperiment.mockResolvedValue({
+        ...stored,
+        sequential_testing_enabled: true,
+        metrics: [{ id: 'm1', name: 'Conversion Rate', event_name: 'e', metric_type: 'conversion', is_primary: true }],
+      });
+      loads({ ...mockResults, srm: check, sequential_testing: block });
+      render(<ResultsDashboard experimentId="exp-1" />);
+      await userEvent.click(await screen.findByRole('tab', { name: /sequential/i }));
+      const banner = screen.getByTestId('early-stopping-banner');
+      expect(screen.getByTestId('action-label')).toHaveTextContent(label);
+      return banner;
+    }
+
+    it('says "Ready to stop" with the caution when the results carry srm.warning', async () => {
+      const banner = await bannerWith(srm(true, 2.5e-10));
+      expect(banner).toHaveTextContent(CAUTION);
+    });
+
+    // The caution is about the split, not the answer: every recommendation
+    // the banner can give carries it under a mismatch, not only a stop.
+    it.each<[string, SequentialTestingResponse, RegExp]>([
+      [
+        'a stop for futility',
+        { ...readyToStop, recommended_action: 'stop_for_futility' },
+        /^Consider stopping — unlikely to reach significance/,
+      ],
+      [
+        'continue',
+        { ...SEQUENTIAL, recommended_action: 'continue' },
+        /^Continue testing — more data needed/,
+      ],
+    ])('gives %s with the caution too when the results carry srm.warning', async (_name, block, label) => {
+      const banner = await bannerWith(srm(true, 2.5e-10), block, label);
+      expect(banner).toHaveTextContent(CAUTION);
+    });
+
+    it.each<[string, ReturnType<typeof srm> | null | undefined]>([
+      ['the check passed', srm(false, 0.5)],
+      ['the check passed at p = 0.01, which only the server judges', srm(false, 0.01)],
+      ['the check is null', null],
+      ['the results carry no check', undefined],
+    ])('says "Ready to stop" without it when %s', async (_name, check) => {
+      const banner = await bannerWith(check);
+      expect(banner).not.toHaveTextContent(/traffic split/i);
+    });
+  });
 });

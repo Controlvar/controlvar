@@ -85,21 +85,29 @@ nav:
 - Home: README.md
 - Getting Started:
   - Quick Start: getting-started/quick-start.md
+  - Live Demo: getting-started/live-demo.md
+  - What Controlvar Does: capabilities.md
   - Limitations: getting-started/limitations.md
+  - Roadmap: https://github.com/Controlvar/controlvar/blob/main/ROADMAP.md
   - Core Concepts: getting-started/concepts.md
   - Architecture Overview: getting-started/architecture.md
   - FAQ: getting-started/faq.md
   - Modules & Profiles: getting-started/modules.md
   - Local Development with Docker: getting-started/docker-guide.md
   - The Development Compose File: getting-started/docker-compose-file.md
+  - The Controlvar Books: https://github.com/amarkanday/controlvar-books
 - Feature Flags:
   - Creating Feature Flags: feature-flags/create.md
   - Targeting & Rules: Enhanced_Rules_Engine_Reference.md
   - Segments: guides/segments.md
   - Gradual Rollouts: feature-flags/rollouts.md
   - Safety Monitoring: feature-flags/safety.md
+  - Turning a Flag Off: feature-flags/kill-switch.md
+  - Stale Flags: feature-flags/stale-flags.md
 - A/B Testing & Experiments:
   - Running Experiments: guides/user-guide.md
+  - How Events Count: guides/how-events-count.md
+  - Guided Examples: guides/guided-examples.md
   - Dashboard and API: guides/dashboard-and-api.md
   - Statistical Methods: api/sequential-testing.md
   - CUPED Variance Reduction: api/cuped.md
@@ -107,6 +115,7 @@ nav:
   - Split URL Testing: api/split-url.md
   - Mutual Exclusion Groups: api/mutual-exclusion-groups.md
   - Assign a Customer List (beta): guides/assign-customer-list.md
+  - Balance the Split Within Groups (beta): guides/balance-within-groups.md
   - Live Results Streaming: websocket-streaming.md
 - LLM / AI Model Evaluation:
   - Overview: llm-evaluation/overview.md
@@ -121,7 +130,7 @@ nav:
   - Android Kotlin SDK: sdk/android.md
   - Flutter SDK: sdk/flutter.md
   - React Native SDK: sdk/react-native.md
-  - AI Endpoints and MCP Manifest: mcp-server.md
+  - The MCP Server and the AI Endpoints: mcp-server.md
   - OpenFeature Provider: sdk/openfeature.md
   - Edge SDK: sdk/edge.md
   - Ruby SDK: sdk/ruby.md
@@ -130,6 +139,7 @@ nav:
   - Elixir SDK: sdk/elixir.md
   - SDK contract & status: sdk-guide.md
   - Local evaluation (server-side, beta): sdk/local-evaluation.md
+  - Exposures to analytics tools: sdk/exposure-hook.md
 - API Reference:
   - Authentication: api/auth.md
   - Experiments: api/endpoints.md
@@ -149,9 +159,11 @@ nav:
   - HIPAA Compliance: hipaa/overview.md
 - Self-Hosting:
   - AWS CDK Deployment: self-hosting/cdk.md
+  - AWS installer (beta): self-hosting/aws-install.md
   - Kubernetes (Helm): self-hosting/kubernetes.md
   - Docker Compose (self-hosting stack): https://github.com/Controlvar/controlvar/blob/main/deploy/compose/README.md
   - Environment Variables: getting-started/environment-setup.md
+  - Users' Addresses Behind a Proxy: self-hosting/proxies.md
   - Database Migrations: self-hosting/migrations.md
   - Releases & Image Verification: self-hosting/releases.md
   - Upgrading to Controlvar: self-hosting/upgrading-to-controlvar.md

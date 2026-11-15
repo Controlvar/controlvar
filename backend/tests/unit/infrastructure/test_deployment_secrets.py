@@ -61,6 +61,12 @@ _REALISTIC = {
     # Not a secret and not a random string: the settings validator requires an
     # absolute http(s) origin with no path, and ALLOWED_HOSTS derives its host.
     "PUBLIC_BASE_URL": "https://controlvar.example.com",
+    # Set on the API task only with `-c cognito_hosted_ui=true` (#708), inside
+    # a nested dict whose values the AST does not read: the one provider that
+    # sets them, and the Hosted UI's domain name as the stack builds it (a
+    # CloudFormation Fn::Join), which the settings refuse unless it has a dot.
+    "AUTH_PROVIDER": "cognito",
+    "COGNITO_DOMAIN": "controlvar-prod.auth.us-west-2.amazoncognito.com",
 }
 
 pytestmark = pytest.mark.skipif(

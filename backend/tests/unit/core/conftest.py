@@ -70,6 +70,7 @@ def mock_pending_stage():
     stage.start_date = None  # Eligible for immediate activation
     stage.target_percentage = 25
     stage.updated_at = None
+    stage.started_at = None  # Not started (#1528)
     stage.completed_date = None
     stage.trigger_configuration = None
     return stage
@@ -88,6 +89,8 @@ def mock_active_stage():
     stage.start_date = None
     stage.target_percentage = 25
     stage.updated_at = datetime.now(timezone.utc) - timedelta(hours=25)
+    # When it started (#1528): the scheduler measures from this.
+    stage.started_at = stage.updated_at
     stage.completed_date = None
     stage.trigger_configuration = None
     return stage

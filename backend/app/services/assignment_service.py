@@ -10,8 +10,9 @@ from uuid import UUID
 from sqlalchemy import and_, desc, func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, defaultload, defer, joinedload
 
+from backend.app.core import balanced_blocks
 from backend.app.core.consistent_hash import bucket_of
 from backend.app.core.log_once import EVALUATION_NOTES
 from backend.app.core.rules_engine import SegmentMembershipUnavailable
@@ -26,6 +27,7 @@ from backend.app.models.experiment import Experiment, ExperimentStatus, Variant
 from backend.app.models.global_holdout import GlobalHoldout
 from backend.app.models.holdout_population import HoldoutPopulation
 from backend.app.schemas.targeting_rule import TargetingRules
+from backend.app.services import balanced_allocation
 from backend.app.services.event_service import EventService
 from backend.app.services.global_holdout_service import GlobalHoldoutService
 from backend.app.services.mutual_exclusion_service import MutualExclusionService
@@ -37,6 +39,23 @@ from backend.app.services.segment_membership import (
 )
 
 logger = logging.getLogger(__name__)
+
+#: A visual experiment's settings and each variant's page changes (#1545),
+#: which no assignment reads: left out of the experiment and variant rows the
+#: assignment and tracking paths load, so they run the statements they ran
+#: before the columns existed and never read up to 64 KiB of page changes per
+#: variant (``test_preview_leaves_hot_paths_alone.py`` pins /tracking/assign's).
+#: Query options, not ``deferred()`` on the model: the experiment routes read
+#: both columns. ``LAZY_VARIANTS_WITHOUT_VISUAL_CHANGES`` is carried to the
+#: later lazy load of the experiment's variants.
+WITHOUT_VISUAL_CONFIG = defer(Experiment.visual_config)
+WITHOUT_VISUAL_CHANGES = defer(Variant.visual_changes)
+VARIANTS_WITHOUT_VISUAL_CHANGES = joinedload(Experiment.variants).defer(
+    Variant.visual_changes
+)
+LAZY_VARIANTS_WITHOUT_VISUAL_CHANGES = defaultload(Experiment.variants).defer(
+    Variant.visual_changes
+)
 
 # Eligibility reasons returned by ``assign_user`` / ``check_eligibility``.
 REASON_ASSIGNED = "assigned"
@@ -133,7 +152,10 @@ class AssignmentService:
 
         # Get variant details
         variant = (
-            self.db.query(Variant).filter(Variant.id == assignment.variant_id).first()
+            self.db.query(Variant)
+            .options(WITHOUT_VISUAL_CHANGES)
+            .filter(Variant.id == assignment.variant_id)
+            .first()
         )
 
         return {
@@ -192,7 +214,7 @@ class AssignmentService:
         # Get experiment with variants
         experiment = (
             self.db.query(Experiment)
-            .options(joinedload(Experiment.variants))
+            .options(VARIANTS_WITHOUT_VISUAL_CHANGES, WITHOUT_VISUAL_CONFIG)
             .filter(Experiment.id == experiment_id)
             .first()
         )
@@ -241,6 +263,8 @@ class AssignmentService:
             return result
 
         # Determine variant assignment
+        balance_group: Optional[str] = None
+        balance_seq: Optional[int] = None
         if override_variant_id:
             # Use override if provided (useful for forcing assignment or testing)
             variant_id = override_variant_id
@@ -253,6 +277,12 @@ class AssignmentService:
                 raise ValueError(
                     f"Override variant {override_variant_id} not valid for experiment {experiment_id}"
                 )
+        elif balanced_blocks.balance_setting(experiment) is not None:
+            # The next place in the user's group's blocks (#448); its counter
+            # step runs in this transaction, so the commit below covers it.
+            variant_id, balance_group, balance_seq = self._balanced_variant(
+                user_id, experiment, context
+            )
         else:
             # Use deterministic hashing to assign variant
             variant_id = self._hash_user_to_variant(user_id, experiment)
@@ -263,6 +293,11 @@ class AssignmentService:
             experiment_id=experiment_id,
             variant_id=variant_id,
         )
+        if balance_group is not None:
+            # Only a balanced experiment's row names the columns, so every
+            # other experiment's insert is the statement it always was.
+            assignment.balance_group = balance_group
+            assignment.balance_seq = balance_seq
 
         self.db.add(assignment)
         try:
@@ -1003,6 +1038,79 @@ class AssignmentService:
 
         # Get full assignment details
         return self.get_assignment(user_id, experiment_id)
+
+    def _balanced_variant(
+        self,
+        user_id: str,
+        experiment: Experiment,
+        context: Optional[Dict[str, Any]],
+    ) -> Tuple[Union[str, UUID], str, Optional[int]]:
+        """``(variant id, group, seq)`` for a new user of a balanced experiment.
+
+        The group comes from the assign ``context`` (top-level key only,
+        :func:`balanced_blocks.group_of`), or for an experiment balanced
+        within saved segments from the user's membership
+        (:meth:`_segment_balance_group`); the variant is the group's
+        next block place, keyed on the experiment's ``balance_seed``. When no
+        place can be had (the counter step timed out, this process already
+        has its limit of steps in progress, or the experiment has no key), the
+        user is assigned by the hash, as an experiment that balances nothing
+        assigns them, and keeps the group with no seq.
+        """
+        if not experiment.variants:
+            raise ValueError(f"Experiment {experiment.id} has no variants")
+        setting = balanced_blocks.balance_setting(experiment)
+        if balanced_blocks.balances_within_segments(setting):
+            group = self._segment_balance_group(
+                user_id, experiment, balanced_blocks.balance_segments(setting), context
+            )
+        else:
+            group = balanced_blocks.group_of(setting, context)
+        seed = experiment.balance_seed
+        if not seed:
+            seq, reason = None, balanced_allocation.REASON_NO_SEED
+        else:
+            seq, reason = balanced_allocation.take_seq(self.db, experiment.id, group)
+        if seq is None:
+            balanced_allocation.note_fallback(experiment.id, reason or "")
+            return self._hash_user_to_variant(user_id, experiment), group, None
+        shares = balanced_blocks.effective_shares(
+            [variant.traffic_allocation for variant in experiment.variants]
+        )
+        index = balanced_blocks.slot_variant(seed, group, seq, shares)
+        return experiment.variants[index].id, group, seq
+
+    def _segment_balance_group(
+        self,
+        user_id: str,
+        experiment: Experiment,
+        segment_ids: Tuple[str, ...],
+        context: Optional[Dict[str, Any]],
+    ) -> str:
+        """The group of a new user of an experiment balanced within segments.
+
+        Membership is resolved as targeting resolves it (#440): an id list by
+        the request's ``user_id``, a rules segment on the expanded context.
+        The first listed segment the user belongs to, else ``other``; when a
+        segment listed before it cannot be decided, ``unknown``, and the
+        process logs it once for the experiment
+        (:func:`balanced_blocks.segment_group`).
+        """
+        if not segment_ids:
+            return balanced_blocks.OTHER
+        memberships = resolve_segment_memberships(
+            self.db,
+            user_id,
+            self._build_targeting_context(user_id, context),
+            segment_ids,
+        )
+        undecided = memberships.undecided(segment_ids)
+        group = balanced_blocks.segment_group(
+            segment_ids, memberships.members, undecided
+        )
+        if group == balanced_blocks.UNKNOWN:
+            balanced_allocation.note_undecided_segments(experiment.id, undecided)
+        return group
 
     def _hash_user_to_variant(
         self, user_id: str, experiment: Experiment

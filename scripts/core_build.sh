@@ -33,7 +33,10 @@
 #                with a warning when the reuse tool is not installed (CI
 #                installs it)
 #   secrets      gitleaks over the stripped tree — what a core release would
-#                ship — before any build output lands in it
+#                ship — before any build output lands in it; then over
+#                tests/sdk-contract with no .gitleaksignore at all, because
+#                its vectors are generated and a line pin would hide the next
+#                regeneration's finding
 #   import       `import backend.app.main` succeeds, logs "Running the core
 #                profile", resolves `backend` inside the copy, and `modules`
 #                is not importable at all (not present, not merely broken)
@@ -42,7 +45,8 @@
 #                exactly Base.metadata's core set and none of the tables
 #                modules-manifest.txt lists exist
 #   unit / integration / smoke
-#                three separate pytest sessions, -p no:cov; tests marked
+#                three separate pytest sessions, -p no:cov -rs (each skip is
+#                listed with its reason); tests marked
 #                @pytest.mark.modules are skipped by backend/tests/conftest.py
 #   lambda       one pytest session per backend/lambda/<function>/ (they all
 #                define `tests.conftest`, so they cannot share a session)
@@ -499,6 +503,50 @@ step_secrets() {
         --redact --exit-code 1 --report-format json --report-path "$report") \
         || die "gitleaks found secrets in the $PROFILE tree (report: $report)"
     rm -f "$report"
+
+    # tests/sdk-contract again, raw: no .gitleaksignore applies (#1497).  Its
+    # ruleset vectors are generated, so a path:rule:line pin for them masks
+    # whatever the next regeneration puts on that line; a false positive there
+    # is fixed in backend/scripts/generate_ruleset_vectors.py instead.
+    # gitleaks loads a .gitleaksignore from the -i path (the cwd by default)
+    # and, whatever -i says, from the scanned directory.  So the scan runs from
+    # an empty directory that is also the -i path, and the scanned directory
+    # may not carry one.  --exit-code 3 keeps "found something" apart from
+    # gitleaks itself failing, which exits 1.  A --source that does not exist
+    # is only a warning and exits 0, hence the -f first.
+    local vectors="$COPY/tests/sdk-contract" noignore raw_report raw_status=0 raw_findings
+    [ -f "$vectors/ruleset-vectors.json" ] \
+        || die "the $PROFILE tree has no tests/sdk-contract/ruleset-vectors.json to scan"
+    [ ! -e "$vectors/.gitleaksignore" ] \
+        || die "tests/sdk-contract/.gitleaksignore exists: nothing may exempt the SDK contract vectors from the raw gitleaks scan"
+    noignore="$(mktemp -d "${TMPDIR:-/tmp}/controlvar-noignore.XXXXXX")"
+    raw_report="$COPY/../$(basename "$COPY").sdk-contract.gitleaks.json"
+    (cd "$noignore" && gitleaks detect --no-git --source "$vectors" \
+        --config "$COPY/.gitleaks.toml" --gitleaks-ignore-path "$noignore" \
+        --redact --exit-code 3 --report-format json --report-path "$raw_report") \
+        || raw_status=$?
+    rm -rf "$noignore"
+    case "$raw_status" in
+        0|3) ;;
+        *) die "gitleaks could not scan tests/sdk-contract (exit $raw_status)" ;;
+    esac
+    raw_findings="$(REPORT="$raw_report" PREFIX="$vectors/" "$PYTHON" - <<'PY'
+import json
+import os
+
+with open(os.environ["REPORT"], encoding="utf-8") as handle:
+    findings = json.load(handle)
+if not isinstance(findings, list):
+    raise SystemExit(f"not a list of findings: {type(findings).__name__}")
+prefix = os.environ["PREFIX"]
+where = [f"{f['File'].removeprefix(prefix)}:{f['StartLine']} {f['RuleID']}" for f in findings]
+print(f"{len(findings)} raw gitleaks findings: " + ", ".join(where))
+PY
+    )" || die "could not read the raw gitleaks report of tests/sdk-contract ($raw_report)"
+    if [ "$raw_status" != 0 ] || [ "${raw_findings%% *}" != 0 ]; then
+        die "tests/sdk-contract has $raw_findings (gitleaks exit $raw_status; report: $raw_report). The vectors are generated: rename the key in backend/scripts/generate_ruleset_vectors.py, never pin the line in .gitleaksignore"
+    fi
+    rm -f "$raw_report"
 }
 
 # -------------------------------------------------------------------------
@@ -641,7 +689,10 @@ PY
 pytest_session() {
     # Each suite is its own session, from the copy's root, with the copy's
     # pyproject.toml as the configuration and its conftest as the harness.
-    (cd "$COPY" && "$PYTHON" -m pytest "$@" -p no:cov -q --tb=short)
+    # -rs lists every skipped test with its reason at the end of the log: a
+    # skip counts as a pass in the exit status, so the log is where a test
+    # that did not run shows.
+    (cd "$COPY" && "$PYTHON" -m pytest "$@" -p no:cov -q --tb=short -rs)
 }
 
 step_unit() {

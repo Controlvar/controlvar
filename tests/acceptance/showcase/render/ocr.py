@@ -22,15 +22,32 @@ built here, and tesseract. A frame is refused when its text holds:
   written (cut off by the edge of the page or a column, or wrapped onto two
   lines), or one of its 12-character pieces with up to 3 misread. Fewer than
   12 characters of a needle longer than that are not looked for: a stretch
-  that short cannot be told apart from ordinary page text;
+  that short cannot be told apart from ordinary page text.
+
+  Three needles are public: the values every Quick Start stack carries in
+  docker-compose.yml, its two demo app keys and its SECRET_KEY default
+  (``contract.PUBLIC_VALUES``). Each is a readable part, the product's own
+  words, then a random part of 28 or 32 hex characters. Such a needle keeps
+  only the pieces that start inside its random part (``needle_pieces``), so
+  the apps' names and words on screen are not taken for their keys. Still
+  found are the whole value, any 12 or more of its random characters in a
+  row, one of its kept 12-character pieces with up to 3 misread, and, for the
+  app keys, the key shape below. Not found is the readable part, alone or
+  followed by fewer than 9, 8 or 10 of the random characters (the two app
+  keys in ``PUBLIC_VALUES``' order, then the SECRET_KEY default). A needle
+  is public only when it is exactly one of those values, as a raw string;
+  every other needle is matched in all of its pieces, as above. The scan's
+  numbers count the public ones (``public_needles``);
 * key-shaped text: a word starting ``eptk`` (the API key prefix) with 5 or
   more key characters after it, or ``eyJ`` (a JSON web token) with 20 or more;
 * (U4) a phrase that must never be on screen: a local address, an error, a
   disconnected live view, a test leftover.
 
 Before any of that, a canary frame with made-up values is put through the
-same encode: a value at 16 px and a key at 14 px, both #0F172A, which every
-engine must read, and a value in the faint small style
+same encode: a value at 16 px, and a key and 32 hex characters at 14 px, all
+#0F172A, which every engine must read (every API key's random part is hex,
+and of the three public values gate 7 looks for that part's pieces alone),
+and a value in the faint small style
 ``templates.FAINT_CANARY_PX`` px ``templates.FAINT_CANARY_COLOUR`` (13 px
 #94A3B8), which at least one engine must read. Otherwise the scan is not run
 and the render refuses ("OCR self-test ... scan not run"). The faint style is
@@ -180,6 +197,54 @@ def chunks(normalised_needle: str) -> List[str]:
     return list(dict.fromkeys(pieces))
 
 
+def _placed(normalised_needle: str) -> List[Tuple[int, str]]:
+    """``chunks``' pieces in order, duplicates kept, each with where it starts."""
+    n = normalised_needle
+    sizes = [(len(n), 1)] if len(n) <= CHUNK else [(CHUNK, CHUNK_STEP)]
+    if len(n) > SHORT_CHUNK:
+        sizes.append((SHORT_CHUNK, SHORT_CHUNK_STEP))
+    placed: List[Tuple[int, str]] = []
+    for size, step in sizes:
+        starts = list(range(0, len(n) - size + 1, step))
+        if starts[-1] != len(n) - size:
+            starts.append(len(n) - size)
+        placed += [(start, n[start : start + size]) for start in starts]
+    return placed
+
+
+def _public_start(needle: str) -> Optional[int]:
+    """The normalised start of a public value's random part; None for any other needle.
+
+    A needle is public only when it is exactly, as a raw string, the readable
+    part and the random part of an entry of ``contract.PUBLIC_VALUES``, read
+    at each call. No other form of the value counts: not in another case, not
+    with a space or a newline added, not with another separator.
+    """
+    for readable, random_part in contract.PUBLIC_VALUES:
+        if needle == readable + random_part:
+            return len(normalise(readable))
+    return None
+
+
+def needle_pieces(needle: str) -> List[str]:
+    """The pieces ``findings`` looks for a needle in (see the module's docstring).
+
+    For every needle these are ``chunks(normalise(needle))``, except a public
+    value's: only those of its pieces that start inside its random part, so
+    its readable part, the apps' own words, is never looked for. They are a
+    subset of ``chunks``, so a public value is refused in fewer frames than
+    before and never in more. If none would remain, the needle keeps all of
+    ``chunks``: the rule only ever drops pieces, never a needle.
+    """
+    normalised = normalise(needle)
+    pieces = chunks(normalised)
+    start = _public_start(needle)
+    if start is None:
+        return pieces
+    kept = [piece for at, piece in _placed(normalised) if at >= start]
+    return list(dict.fromkeys(kept)) or pieces
+
+
 def allowed_edits(length: int) -> int:
     """The most edits a piece of this length may have and still match."""
     edits = 0
@@ -209,20 +274,28 @@ def needle_similarity(normalised_needle: str, normalised_text: str) -> float:
     return best
 
 
-def needle_match(normalised_needle: str, normalised_text: str) -> Optional[float]:
-    """``needle_similarity`` when it reaches ``NEEDLE_THRESHOLD``, else None.
+def _pieces_match(pieces: Sequence[str], normalised_text: str) -> Optional[float]:
+    """The best similarity of any of ``pieces`` to the text, or None under the threshold.
 
-    The same answer, faster: a piece that cannot match is skipped before the
-    edit distance is computed.
+    A piece that cannot match is skipped before the edit distance is computed.
     """
     best: Optional[float] = None
-    for piece in chunks(normalised_needle):
+    for piece in pieces:
         if not _could_match(piece, normalised_text):
             continue
         similarity = 1 - best_distance(piece, normalised_text) / len(piece)
         if similarity >= NEEDLE_THRESHOLD and (best is None or similarity > best):
             best = similarity
     return best
+
+
+def needle_match(normalised_needle: str, normalised_text: str) -> Optional[float]:
+    """``needle_similarity`` when it reaches ``NEEDLE_THRESHOLD``, else None.
+
+    The same answer, faster: a piece that cannot match is skipped before the
+    edit distance is computed.
+    """
+    return _pieces_match(chunks(normalised_needle), normalised_text)
 
 
 def levenshtein(a: str, b: str) -> int:
@@ -250,7 +323,7 @@ def findings(text: str, needles: Sequence[str]) -> List[Tuple[str, str]]:
     found: List[Tuple[str, str]] = []
     folded = normalise(text)
     for number, needle in enumerate(needles, start=1):
-        similarity = needle_match(normalise(needle), folded)
+        similarity = _pieces_match(needle_pieces(needle), folded)
         if similarity is not None:
             found.append(
                 ("7", f"needle {number} of {len(needles)} at {similarity:.2f}")
@@ -384,14 +457,14 @@ def _read(engine: Engine, paths: Sequence[Path], gate: str) -> Dict[Path, str]:
 
 def self_test(
     found: Sequence[Engine],
-    draw_canary: Callable[[str, str, str, Path], None],
+    draw_canary: Callable[[str, str, str, str, Path], None],
     work: WorkDir,
 ) -> Dict[str, Dict[str, float]]:
     """Read made-up values through the video's encode; refuse if the scan could not see them.
 
-    Every engine must read the value and the key drawn in dark text; at least
-    one must read the value drawn in the faint small style
-    (``templates.FAINT_CANARY_PX`` px ``templates.FAINT_CANARY_COLOUR``).
+    Every engine must read the value, the key and the 32 hex characters drawn
+    in dark text; at least one must read the value drawn in the faint small
+    style (``templates.FAINT_CANARY_PX`` px ``templates.FAINT_CANARY_COLOUR``).
     """
     if not found:
         raise Refused(
@@ -404,12 +477,13 @@ def self_test(
     key_like = "eptk_" + "".join(
         secrets.choice("abcdefghjkmnpqrstuvwxyz23456789") for _ in range(24)
     )
+    hex_value = secrets.token_hex(16)
     canary_dir = work.path / "canary"
     canary_dir.mkdir()
     png = canary_dir / "canary.png"
-    draw_canary(needle, key_like, faint, png)
+    draw_canary(needle, key_like, faint, hex_value, png)
     decoded = encode.png_to_h264_and_back(png, canary_dir)
-    numbers: Dict[str, Dict[str, float]] = {"canary": {}, "faint": {}}
+    numbers: Dict[str, Dict[str, float]] = {"canary": {}, "faint": {}, "hex": {}}
     problems = []
     for engine in found:
         try:
@@ -432,6 +506,13 @@ def self_test(
         if not shaped(text, "eptk", 5):
             problems.append(
                 f"OCR self-test: {engine.name} did not see the key-shaped canary; scan not run"
+            )
+        hex_similarity = needle_similarity(normalise(hex_value), normalise(text))
+        numbers["hex"][engine.name] = round(hex_similarity, 3)
+        if hex_similarity < NEEDLE_THRESHOLD:
+            problems.append(
+                f"OCR self-test: {engine.name} read the hex canary at {hex_similarity:.2f} "
+                f"(needs {NEEDLE_THRESHOLD:.2f}); scan not run"
             )
     if not problems and max(numbers["faint"].values()) < NEEDLE_THRESHOLD:
         readings = ", ".join(
@@ -541,6 +622,9 @@ def scan(
         "distinct_frames": len(unique),
         "ocr_reads": counts,
         "needles": len(needles),
+        "public_needles": sum(
+            1 for needle in needles if _public_start(needle) is not None
+        ),
         "hits": len(hits["7"]),
     }
     if hits["7"]:
@@ -639,8 +723,10 @@ def check_captions(
     return numbers
 
 
-def canary_drawer(browser) -> Callable[[str, str, str, Path], None]:
-    def draw(needle: str, key_like: str, faint: str, path: Path) -> None:
-        browser.card(templates.canary_html(needle, key_like, faint), path)
+def canary_drawer(browser) -> Callable[[str, str, str, str, Path], None]:
+    def draw(
+        needle: str, key_like: str, faint: str, hex_value: str, path: Path
+    ) -> None:
+        browser.card(templates.canary_html(needle, key_like, faint, hex_value), path)
 
     return draw

@@ -139,10 +139,11 @@ def test_each_event_carries_a_snapshot_of_a_few_fields():
         }
         assert {"actor_id", "resource_id"} <= set(keywords)
     assert snapshots == {
-        ("feature_flag", "CREATE"): {"new_value": {"key", "name"}},
+        # value_type since #1497 (Plan F ruling 3); never the two values.
+        ("feature_flag", "CREATE"): {"new_value": {"key", "name", "value_type"}},
         ("feature_flag", "UPDATE"): {
-            "old_value": {"key", "name", "status", "rollout_percentage"},
-            "new_value": {"key", "name", "status", "rollout_percentage"},
+            "old_value": {"key", "name", "status", "rollout_percentage", "value_type"},
+            "new_value": {"key", "name", "status", "rollout_percentage", "value_type"},
         },
         ("feature_flag", "DELETE"): {"old_value": {"key", "name", "status"}},
         ("experiment", "CREATE"): {"new_value": {"name"}},

@@ -11,10 +11,11 @@ Provides:
 from datetime import datetime, timezone
 from typing import Any, List
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from backend.app.api.deps import get_current_active_user, get_current_superuser, get_db
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.models.user import User
 from backend.app.schemas.scheduler import (
     NotificationEvent,
@@ -25,7 +26,7 @@ from backend.app.schemas.scheduler import (
 from backend.app.services.notification_service import NotificationService
 from backend.app.services.scheduler_health_service import SchedulerHealthService
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 
 # ---------------------------------------------------------------------------
@@ -76,14 +77,14 @@ def get_health_by_name(
 @router.get("/{name}/history", response_model=List[SchedulerRunRecord])
 def get_run_history(
     name: SchedulerName,
-    limit: int = 20,
+    limit: int = Query(20, ge=1, le=1000),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
     """
     Return the most recent run records for a named scheduler.
 
-    Default limit is 20; pass ``?limit=N`` to override.
+    Default limit is 20; pass ``?limit=N`` (1 to 1000) to override.
     """
     service = SchedulerHealthService()
     return service.get_run_history(db, name.value, limit=limit)

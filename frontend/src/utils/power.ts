@@ -12,10 +12,18 @@
  * and for a reader evaluating the project before they clone anything.
  *
  * THE SERVER IS THE SPECIFICATION. Every formula below is transcribed from
- * `backend/app/services/power_calculator_service.py`, and
- * `power.parity.test.ts` pins the two together against the vectors in that
- * module's docstring. If the server changes, that test fails -- it is not a
- * copy that may quietly drift.
+ * `backend/app/services/power_calculator_service.py`. `src/tests/utils/power.test.ts`
+ * checks this file against vectors that service produced once and that are
+ * committed in the test. The test never runs the server, so it catches a server
+ * change only when someone regenerates the vectors. No generator script is
+ * committed: to regenerate a row, call the service in the backend's Python
+ * environment from the repository root, as the test file's header shows. For
+ * the test's second row:
+ *
+ *   from backend.app.services.power_calculator_service import PowerCalculatorService
+ *   r = PowerCalculatorService().compute_sample_size(
+ *       baseline_rate=0.05, minimum_detectable_effect=0.10, n_variants=4)
+ *   r.per_variant, r.total  # (41661, 166644)
  */
 
 /** Inverse standard normal CDF (`scipy.stats.norm.ppf`). */
@@ -141,7 +149,13 @@ export function computeSampleSize(params: {
           twoTailed = true, metricType = 'proportion', baselineStd,
           dailyTraffic = null, trafficAllocation = 1.0 } = params;
 
-  if (!(baselineRate > 0 && baselineRate < 1)) throw new RangeError('baseline rate must be between 0 and 1');
+  // A proportion is a rate in (0, 1); a mean or ratio is in the metric's own
+  // units, so any finite value above 0 (#1034).
+  if (metricType === 'proportion') {
+    if (!(baselineRate > 0 && baselineRate < 1)) throw new RangeError('baseline rate must be between 0 and 1');
+  } else if (!(baselineRate > 0 && Number.isFinite(baselineRate))) {
+    throw new RangeError('baseline mean must be a finite number above 0');
+  }
   if (!(mde > 0 && mde < 1)) throw new RangeError('minimum detectable effect must be between 0 and 1');
   if (!(alpha > 0 && alpha < 0.5)) throw new RangeError('alpha must be between 0 and 0.5');
   if (!(power > 0 && power < 1)) throw new RangeError('power must be between 0 and 1');

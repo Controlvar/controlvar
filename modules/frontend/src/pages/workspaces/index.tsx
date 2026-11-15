@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { withModule } from '@/components/ModuleNotice';
 import { MODULES } from '@/services/modules';
 import { PageTitle } from '@/components/PageTitle';
+import { Dialog } from '@/components/ui/Dialog';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { Workspace, workspaceService } from '@modules/services/workspaces';
@@ -61,20 +62,25 @@ function CreateWorkspaceModal({ onClose, onCreated }: CreateModalProps) {
     }
   }
 
+  // The shared Dialog closes on Escape and not on a click outside; closing is
+  // never refused while the request is in flight (Cancel works then too).
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-slate-900">Create Workspace</h2>
-          <button
-            onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 text-xl leading-none"
-            aria-label="Close"
-          >
-            &times;
-          </button>
-        </div>
-
+    <Dialog
+      open
+      onClose={onClose}
+      title="Create Workspace"
+      headerAction={
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-slate-400 hover:text-slate-600 text-xl leading-none"
+          aria-label="Close"
+        >
+          &times;
+        </button>
+      }
+    >
+      <div>
         {error && (
           <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
             {error}
@@ -83,10 +89,12 @@ function CreateWorkspaceModal({ onClose, onCreated }: CreateModalProps) {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="create-workspace-name" className="block text-sm font-medium text-slate-700 mb-1">
               Name <span className="text-red-500">*</span>
             </label>
             <input
+              id="create-workspace-name"
+              data-autofocus=""
               type="text"
               value={name}
               onChange={handleNameChange}
@@ -97,10 +105,11 @@ function CreateWorkspaceModal({ onClose, onCreated }: CreateModalProps) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="create-workspace-slug" className="block text-sm font-medium text-slate-700 mb-1">
               Slug <span className="text-red-500">*</span>
             </label>
             <input
+              id="create-workspace-slug"
               type="text"
               value={slug}
               onChange={handleSlugChange}
@@ -119,10 +128,11 @@ function CreateWorkspaceModal({ onClose, onCreated }: CreateModalProps) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="create-workspace-description" className="block text-sm font-medium text-slate-700 mb-1">
               Description
             </label>
             <textarea
+              id="create-workspace-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
@@ -149,7 +159,7 @@ function CreateWorkspaceModal({ onClose, onCreated }: CreateModalProps) {
           </div>
         </form>
       </div>
-    </div>
+    </Dialog>
   );
 }
 

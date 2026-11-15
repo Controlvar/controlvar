@@ -7,11 +7,18 @@ import com.controlvar.sdk.model.FlagEvaluation;
 import com.controlvar.sdk.model.TrackEvent;
 import com.controlvar.sdk.model.User;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import okhttp3.Call;
+import okhttp3.Callback;
 import okhttp3.OkHttpClient;
+import okhttp3.Protocol;
+import okhttp3.Request;
+import okhttp3.Response;
 import okhttp3.mockwebserver.Dispatcher;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
+import okhttp3.mockwebserver.SocketPolicy;
+import okio.Timeout;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -19,14 +26,25 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -266,7 +284,7 @@ class ExperimentationClientTest {
         }
 
         @Test
-        @DisplayName("throws ExperimentationException(404) when the flag is unknown or not ACTIVE")
+        @DisplayName("throws ExperimentationException(404) when the flag key is unknown")
         void notFound() {
             mockServer.enqueue(json(404, "{\"detail\":\"Feature flag not found\"}"));
 
@@ -320,6 +338,408 @@ class ExperimentationClientTest {
                     () -> client.evaluateFeatureFlag(User.builder("u").build(), ""));
             assertThrows(IllegalArgumentException.class,
                     () -> client.evaluateFeatureFlag(User.builder("u").build(), null));
+        }
+
+        @Test
+        @DisplayName("sends the attributes as context=<compact JSON>, percent-encoded: + & = # a space and a non-ASCII character arrive intact")
+        void sendsAttributesAsContext() throws Exception {
+            mockServer.enqueue(flagResponse("f", true, "null"));
+
+            client.evaluateFeatureFlag(User.builder("user-1").attribute("q", "a+b&c=d#e fé").build(), "f");
+
+            RecordedRequest request = takeRequest();
+            assertEquals("/api/v1/feature-flags/evaluate/f?user_id=user-1"
+                    + "&context=%7B%22q%22%3A%22a%2Bb%26c%3Dd%23e%20f%C3%A9%22%7D", request.getPath());
+            assertEquals("{\"q\":\"a+b&c=d#e fé\"}", request.getRequestUrl().queryParameter("context"));
+            assertEquals("user-1", request.getRequestUrl().queryParameter("user_id"));
+
+            // The example docs/sdk/java.md gives.
+            mockServer.enqueue(flagResponse("new_search", true, "null"));
+            client.evaluateFeatureFlag(User.builder("user-123").attribute("plan", "pro").build(), "new_search");
+            assertEquals("/api/v1/feature-flags/evaluate/new_search?user_id=user-123"
+                    + "&context=%7B%22plan%22%3A%22pro%22%7D", takeRequest().getPath());
+        }
+
+        @Test
+        @DisplayName("isFeatureEnabled sends context too, and several and nested attributes arrive as one JSON object")
+        void contextRoundTrips() throws Exception {
+            routeByPath();
+            Map<String, Object> app = new HashMap<>();
+            app.put("version", "3.2.1");
+            User user = User.builder("user-1")
+                    .attribute("country", "US")
+                    .attribute("employee", false)
+                    .attribute("n", 3)
+                    .attribute("app", app)
+                    .attribute("tags", Arrays.asList("beta", "vip"))
+                    .build();
+
+            assertTrue(client.isFeatureEnabled(user, "f"));
+
+            RecordedRequest request = takeRequest();
+            String context = request.getRequestUrl().queryParameter("context");
+            assertNotNull(context, request.getPath());
+            assertEquals(user.getAttributes(), objectMapper.readValue(context, Map.class));
+            assertFalse(context.contains(" "), "not compact JSON: " + context);
+        }
+
+        @Test
+        @DisplayName("a user without attributes sends no context: the URL is the one sent before attributes were")
+        void noAttributesNoContext() throws Exception {
+            routeByPath();
+
+            client.evaluateFeatureFlag(User.builder("user-1").build(), "f");
+            client.evaluateFeatureFlag(User.builder("user-2").attributes(new HashMap<>()).build(), "f");
+
+            assertEquals("/api/v1/feature-flags/evaluate/f?user_id=user-1", takeRequest().getPath());
+            assertEquals("/api/v1/feature-flags/evaluate/f?user_id=user-2", takeRequest().getPath());
+        }
+    }
+
+    // =========================================================================
+    // Attribute values: java.time as ISO-8601 strings
+    // =========================================================================
+
+    @Nested
+    @DisplayName("java.time attribute values are sent as ISO-8601 strings")
+    class DateTimeAttributes {
+
+        private static final String SENT = "/api/v1/feature-flags/evaluate/f?user_id=user-1&context=";
+
+        /** The path of the evaluation sent for a user whose one attribute, {@code at}, is {@code value}. */
+        private String pathSentFor(Object value) throws Exception {
+            mockServer.enqueue(flagResponse("f", true, "null"));
+            client.evaluateFeatureFlag(User.builder("user-1").attribute("at", value).build(), "f");
+            return takeRequest().getPath();
+        }
+
+        @Test
+        @DisplayName("an Instant is sent in UTC: context={at: 2026-11-03T12:00:00Z}")
+        void instant() throws Exception {
+            assertEquals(SENT + "%7B%22at%22%3A%222026-11-03T12%3A00%3A00Z%22%7D",
+                    pathSentFor(Instant.parse("2026-11-03T12:00:00Z")));
+        }
+
+        @Test
+        @DisplayName("a LocalDate is sent as a date: context={at: 2026-11-03}")
+        void localDate() throws Exception {
+            assertEquals(SENT + "%7B%22at%22%3A%222026-11-03%22%7D",
+                    pathSentFor(LocalDate.of(2026, 11, 3)));
+        }
+
+        @Test
+        @DisplayName("a LocalDateTime is sent with seconds and no offset: context={at: 2026-11-03T12:00:00}")
+        void localDateTime() throws Exception {
+            assertEquals(SENT + "%7B%22at%22%3A%222026-11-03T12%3A00%3A00%22%7D",
+                    pathSentFor(LocalDateTime.of(2026, 11, 3, 12, 0)));
+        }
+
+        @Test
+        @DisplayName("an OffsetDateTime is sent with its offset: context={at: 2026-11-03T12:00:00+01:00}")
+        void offsetDateTime() throws Exception {
+            assertEquals(SENT + "%7B%22at%22%3A%222026-11-03T12%3A00%3A00%2B01%3A00%22%7D",
+                    pathSentFor(OffsetDateTime.of(2026, 11, 3, 12, 0, 0, 0, ZoneOffset.ofHours(1))));
+        }
+
+        @Test
+        @DisplayName("a ZonedDateTime is sent with its offset and without its zone ID: context={at: 2026-11-03T12:00:00+01:00}")
+        void zonedDateTime() throws Exception {
+            assertEquals(SENT + "%7B%22at%22%3A%222026-11-03T12%3A00%3A00%2B01%3A00%22%7D",
+                    pathSentFor(ZonedDateTime.of(2026, 11, 3, 12, 0, 0, 0, ZoneId.of("Europe/Paris"))));
+        }
+
+        @Test
+        @DisplayName("a java.util.Date is sent as an ISO-8601 UTC instant, not epoch milliseconds: context={at: 2026-11-03T12:00:00Z}")
+        void utilDate() throws Exception {
+            assertEquals(SENT + "%7B%22at%22%3A%222026-11-03T12%3A00%3A00Z%22%7D",
+                    pathSentFor(Date.from(Instant.parse("2026-11-03T12:00:00Z"))));
+        }
+
+        @Test
+        @DisplayName("a java.util.Date in the assignment context is sent as the same ISO-8601 string")
+        void utilDateAssignment() throws Exception {
+            mockServer.enqueue(json(200, ASSIGN_JSON));
+            User user = User.builder("user-1")
+                    .attribute("at", Date.from(Instant.parse("2026-11-03T12:00:00.250Z")))
+                    .build();
+
+            client.getExperimentAssignment(user, "checkout_flow");
+
+            assertEquals(Map.of("at", "2026-11-03T12:00:00.250Z"), bodyOf(takeRequest()).get("context"));
+        }
+
+        @Test
+        @DisplayName("getExperimentAssignment sends them in its context as the same strings")
+        void assignmentContext() throws Exception {
+            mockServer.enqueue(json(200, ASSIGN_JSON));
+            User user = User.builder("user-1")
+                    .attribute("at", Instant.parse("2026-11-03T12:00:00Z"))
+                    .attribute("on", LocalDate.of(2026, 11, 3))
+                    .build();
+
+            client.getExperimentAssignment(user, "checkout_flow");
+
+            Map<String, Object> expected = new HashMap<>();
+            expected.put("at", "2026-11-03T12:00:00Z");
+            expected.put("on", "2026-11-03");
+            assertEquals(expected, bodyOf(takeRequest()).get("context"));
+        }
+
+        @Test
+        @DisplayName("trackEventSync sends a java.time property in metadata as the same string")
+        void trackMetadata() throws Exception {
+            mockServer.enqueue(trackOk());
+
+            client.trackEventSync(TrackEvent.builder("user-1", "purchase").experimentKey("checkout_flow")
+                    .property("on", LocalDate.of(2026, 11, 3)).build());
+
+            assertEquals(Map.of("on", "2026-11-03"), bodyOf(takeRequest()).get("metadata"));
+        }
+
+        @Test
+        @DisplayName("a java.time value of another class (a Duration) is still refused: evaluateFeatureFlag throws, isFeatureEnabled is false, nothing is sent")
+        void otherClassesAreStillRefused() {
+            User user = User.builder("user-1").attribute("wait", Duration.ofMinutes(5)).build();
+
+            ExperimentationException ex = assertThrows(ExperimentationException.class,
+                    () -> client.evaluateFeatureFlag(user, "f"));
+
+            assertTrue(ex.getMessage().startsWith("Failed to serialize the user's attributes for flag 'f': "),
+                    ex.getMessage());
+            assertEquals(0, ex.getStatusCode());
+            assertFalse(client.isFeatureEnabled(user, "f"));
+            assertEquals(0, mockServer.getRequestCount());
+            assertEquals(0, client.getCacheSize());
+        }
+    }
+
+    // =========================================================================
+    // evaluateFeatureFlag: error messages (#1551)
+    // =========================================================================
+
+    /** An attribute value: the request's query carries it, and no error message may. */
+    private static final String CANARY = "c4nary-attr";
+
+    /** The fixed message for a 2xx body that is not the expected JSON, for flag {@code f}. */
+    private static final String UNREADABLE_FLAG = "Invalid JSON in the response evaluating flag 'f'";
+
+    private static void assertNamesNoQuery(String text) {
+        assertFalse(text.contains("user_id="), text);
+        assertFalse(text.contains("context="), text);
+        assertFalse(text.contains(CANARY), text);
+    }
+
+    /** The exception's message and each of its causes' messages. */
+    private static void assertChainNamesNoQuery(Throwable error) {
+        for (Throwable t = error; t != null; t = t.getCause()) {
+            assertNamesNoQuery(String.valueOf(t.getMessage()));
+        }
+    }
+
+    /** What a stubbed call does when it is executed. */
+    private interface StubAnswer {
+        Response execute(Request request) throws IOException;
+    }
+
+    /** A client whose every call is answered by {@code answer}: nothing is sent. */
+    private ExperimentationClient stubbedClient(StubAnswer answer) {
+        SdkConfig config = SdkConfig.builder("test-api-key", mockServer.url("/").toString()).build();
+        return new ExperimentationClient(config, new OkHttpClient() {
+            @Override
+            public Call newCall(Request request) {
+                return new StubCall(request, answer);
+            }
+        });
+    }
+
+    private static final class StubCall implements Call {
+        private final Request request;
+        private final StubAnswer answer;
+
+        StubCall(Request request, StubAnswer answer) {
+            this.request = request;
+            this.answer = answer;
+        }
+
+        @Override public Request request() { return request; }
+        @Override public Response execute() throws IOException { return answer.execute(request); }
+        @Override public void enqueue(Callback callback) { throw new UnsupportedOperationException(); }
+        @Override public void cancel() { }
+        @Override public boolean isExecuted() { return false; }
+        @Override public boolean isCanceled() { return false; }
+        @Override public Timeout timeout() { return Timeout.NONE; }
+        @Override public Call clone() { return new StubCall(request, answer); }
+    }
+
+    @Nested
+    @DisplayName("evaluateFeatureFlag error messages name no query (#1551)")
+    class EvaluateErrorMessages {
+
+        private final User user = User.builder("user-1").attribute("plan", CANARY).build();
+
+        @Test
+        @DisplayName("an HTTP error names the flag and the status")
+        void httpError() throws Exception {
+            mockServer.enqueue(json(422, "{\"detail\":\"refused context=" + CANARY + "\"}"));
+
+            ExperimentationException ex = assertThrows(ExperimentationException.class,
+                    () -> client.evaluateFeatureFlag(user, "f"));
+
+            assertTrue(takeRequest().getPath().contains(CANARY), "the request's query carries the attribute");
+            assertEquals("API error evaluating flag 'f': HTTP 422", ex.getMessage());
+            assertChainNamesNoQuery(ex);
+        }
+
+        @Test
+        @DisplayName("an empty response body names the flag")
+        void emptyBody() {
+            try (ExperimentationClient stubbed = stubbedClient(request -> new Response.Builder()
+                    .request(request).protocol(Protocol.HTTP_1_1).code(200).message("OK").build())) {
+                ExperimentationException ex = assertThrows(ExperimentationException.class,
+                        () -> stubbed.evaluateFeatureFlag(user, "f"));
+
+                assertEquals("Empty response body from API for flag: f", ex.getMessage());
+                assertChainNamesNoQuery(ex);
+            }
+        }
+
+        @Test
+        @DisplayName("a network error whose own text names the URL names it without its query")
+        void networkErrorNamingTheUrl() {
+            try (ExperimentationClient stubbed = stubbedClient(request -> {
+                throw new IOException("cannot reach " + request.url());
+            })) {
+                ExperimentationException ex = assertThrows(ExperimentationException.class,
+                        () -> stubbed.evaluateFeatureFlag(user, "f"));
+
+                assertEquals("Network error evaluating flag 'f': cannot reach "
+                        + mockServer.url("/api/v1/feature-flags/evaluate/f"), ex.getMessage());
+                assertNamesNoQuery(ex.getMessage());
+            }
+        }
+
+        @Test
+        @DisplayName("a refused connection names no query, in the message or its causes")
+        void refusedConnection() {
+            SdkConfig config = SdkConfig.builder("k", "http://127.0.0.1:1").timeoutMs(500).build();
+            try (ExperimentationClient unreachable = new ExperimentationClient(config)) {
+                ExperimentationException ex = assertThrows(ExperimentationException.class,
+                        () -> unreachable.evaluateFeatureFlag(user, "f"));
+
+                assertTrue(ex.getMessage().startsWith("Network error evaluating flag 'f': "), ex.getMessage());
+                assertChainNamesNoQuery(ex);
+            }
+        }
+
+        @Test
+        @DisplayName("a dropped connection names no query, in the message or its causes")
+        void droppedConnection() {
+            for (int i = 0; i < 3; i++) {
+                mockServer.enqueue(new MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST));
+            }
+
+            ExperimentationException ex = assertThrows(ExperimentationException.class,
+                    () -> client.evaluateFeatureFlag(user, "f"));
+
+            assertTrue(ex.getMessage().startsWith("Network error evaluating flag 'f': "), ex.getMessage());
+            assertChainNamesNoQuery(ex);
+        }
+
+        @Test
+        @DisplayName("a 2xx body that is not JSON, and repeats the request, names no query")
+        void unreadableBody() {
+            mockServer.setDispatcher(new Dispatcher() {
+                @Override
+                public MockResponse dispatch(RecordedRequest request) {
+                    return new MockResponse().setResponseCode(200).setBody(request.getPath() + " is not JSON");
+                }
+            });
+
+            ExperimentationException ex = assertThrows(ExperimentationException.class,
+                    () -> client.evaluateFeatureFlag(user, "f"));
+
+            assertEquals(UNREADABLE_FLAG, ex.getMessage());
+            assertChainNamesNoQuery(ex);
+        }
+
+        @Test
+        @DisplayName("a 2xx JSON body with a field of the wrong type gets the fixed message: nothing from the body in it or a cause, not a network error")
+        void wrongTypeField() throws Exception {
+            mockServer.setDispatcher(new Dispatcher() {
+                @Override
+                public MockResponse dispatch(RecordedRequest request) {
+                    // "enabled" is the context it was sent, as a JSON string
+                    String context = request.getRequestUrl().queryParameter("context");
+                    return json(200, "{\"key\":\"f\",\"enabled\":\"" + context.replace("\"", "\\\"") + "\"}");
+                }
+            });
+
+            ExperimentationException ex = assertThrows(ExperimentationException.class,
+                    () -> client.evaluateFeatureFlag(user, "f"));
+
+            assertTrue(takeRequest().getPath().contains(CANARY), "the request's query carries the attribute");
+            assertEquals(UNREADABLE_FLAG, ex.getMessage());
+            assertChainNamesNoQuery(ex);
+            assertNull(ex.getCause());
+            assertEquals(0, ex.getStatusCode());
+            assertFalse(client.isFeatureEnabled(user, "f"));
+            assertEquals(0, client.getCacheSize());
+        }
+
+        @Test
+        @DisplayName("a 2xx body of JSON null gets the fixed message, and isFeatureEnabled is false")
+        void nullBody() {
+            mockServer.setDispatcher(new Dispatcher() {
+                @Override
+                public MockResponse dispatch(RecordedRequest request) {
+                    return json(200, "null");
+                }
+            });
+
+            ExperimentationException ex = assertThrows(ExperimentationException.class,
+                    () -> client.evaluateFeatureFlag(user, "f"));
+
+            assertEquals(UNREADABLE_FLAG, ex.getMessage());
+            assertFalse(client.isFeatureEnabled(user, "f"));
+        }
+
+        @Test
+        @DisplayName("getExperimentAssignment: a 2xx JSON body with a field of the wrong type gets the fixed message, with nothing from the body in it or a cause")
+        void assignmentWrongTypeField() {
+            mockServer.setDispatcher(new Dispatcher() {
+                @Override
+                public MockResponse dispatch(RecordedRequest request) {
+                    // "is_control" is the body it was sent, as a JSON string
+                    String sent = request.getBody().readUtf8();
+                    return json(200, "{\"experiment_key\":\"checkout_flow\",\"is_control\":\""
+                            + sent.replace("\"", "\\\"") + "\"}");
+                }
+            });
+
+            ExperimentationException ex = assertThrows(ExperimentationException.class,
+                    () -> client.getExperimentAssignment(user, "checkout_flow"));
+
+            assertEquals("Invalid JSON in the response assigning experiment 'checkout_flow'", ex.getMessage());
+            assertChainNamesNoQuery(ex);
+            assertNull(ex.getCause());
+            assertEquals(0, client.getCacheSize());
+        }
+
+        @Test
+        @DisplayName("attributes that cannot be written as JSON: nothing is sent or cached, and isFeatureEnabled is false")
+        void unserializableAttributes() {
+            User odd = User.builder("user-1").attribute("thing", new Object()).build();
+
+            ExperimentationException ex = assertThrows(ExperimentationException.class,
+                    () -> client.evaluateFeatureFlag(odd, "f"));
+
+            assertTrue(ex.getMessage().startsWith("Failed to serialize the user's attributes for flag 'f': "),
+                    ex.getMessage());
+            assertNamesNoQuery(ex.getMessage());
+            assertEquals(0, ex.getStatusCode());
+            assertFalse(client.isFeatureEnabled(odd, "f"));
+            assertEquals(0, mockServer.getRequestCount());
+            assertEquals(0, client.getCacheSize());
         }
     }
 
@@ -434,10 +854,10 @@ class ExperimentationClientTest {
         }
 
         @Test
-        @DisplayName("throws ExperimentationException(404) when the experiment is not ACTIVE, and does not cache it")
+        @DisplayName("throws ExperimentationException(404) when no experiment has the key, and does not cache it")
         void notFoundNotCached() {
-            mockServer.enqueue(json(404, "{\"detail\":\"Active experiment with key 'nope' not found\"}"));
-            mockServer.enqueue(json(404, "{\"detail\":\"Active experiment with key 'nope' not found\"}"));
+            mockServer.enqueue(json(404, "{\"detail\":\"No experiment has the key 'nope'.\"}"));
+            mockServer.enqueue(json(404, "{\"detail\":\"No experiment has the key 'nope'.\"}"));
             User user = User.builder("u1").build();
 
             ExperimentationException ex = assertThrows(ExperimentationException.class,
@@ -662,6 +1082,212 @@ class ExperimentationClientTest {
     }
 
     // =========================================================================
+    // event_id (#1543)
+    // =========================================================================
+
+    /** A lowercase random (version 4) UUID, as {@code UUID.randomUUID().toString()} writes it. */
+    private static final Pattern UUID_V4 =
+            Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}");
+
+    private static String eventIdOf(Map<String, Object> body) {
+        Object id = body.get("event_id");
+        assertNotNull(id, "event_id missing from " + body);
+        return (String) id;
+    }
+
+    /** Caches one assignment and two flags for {@code user-1}: three fan-out targets. */
+    private void cacheThreeTargets() throws InterruptedException {
+        routeByPath();
+        User user = User.builder("user-1").build();
+        client.getExperimentAssignment(user, "checkout_flow");
+        client.evaluateFeatureFlag(user, "new_search");
+        client.evaluateFeatureFlag(user, "dark_mode");
+        for (int i = 0; i < 3; i++) takeRequest();
+    }
+
+    @Nested
+    @DisplayName("event_id")
+    class EventIds {
+
+        @Test
+        @DisplayName("a tracked event carries a generated lowercase UUID v4 as event_id")
+        void trackSendsAGeneratedEventId() throws Exception {
+            mockServer.enqueue(trackOk());
+
+            client.trackEventSync(TrackEvent.builder("u1", "purchase").experimentKey("e").build());
+
+            RecordedRequest request = takeRequest();
+            assertEquals("/api/v1/tracking/track", request.getPath());
+            String id = eventIdOf(bodyOf(request));
+            assertTrue(UUID_V4.matcher(id).matches(), "not a lowercase UUID v4: " + id);
+        }
+
+        @Test
+        @DisplayName("two track calls carry different ids, even for the same TrackEvent")
+        void twoTrackCallsCarryDifferentEventIds() throws Exception {
+            routeByPath();
+            TrackEvent event = TrackEvent.builder("u1", "purchase").experimentKey("e").build();
+
+            client.trackEventSync(event);
+            client.trackEventSync(event);
+            client.trackEvent("u1", "purchase", null, "e", null, null);
+
+            Set<String> ids = new HashSet<>();
+            for (int i = 0; i < 3; i++) ids.add(eventIdOf(bodyOf(takeRequest())));
+            assertEquals(3, ids.size(), "one new id per call: " + ids);
+        }
+
+        @Test
+        @DisplayName("every fan-out entry carries event_id, and all of one event's entries share it")
+        void fanOutEntriesShareOneEventId() throws Exception {
+            cacheThreeTargets();
+
+            client.trackEventSync(TrackEvent.builder("user-1", "page_view").build());
+
+            List<Map<String, Object>> entries = events(bodyOf(takeRequest()));
+            assertEquals(3, entries.size(), "one assignment + two flags");
+            Set<String> ids = new HashSet<>();
+            for (Map<String, Object> entry : entries) ids.add(eventIdOf(entry));
+            assertEquals(1, ids.size(), "one id per event, shared by its fan-out entries: " + ids);
+            assertTrue(UUID_V4.matcher(ids.iterator().next()).matches(), ids.toString());
+        }
+
+        @Test
+        @DisplayName("in trackBatch each TrackEvent has its own id, shared by its own fan-out entries")
+        void eachEventInABatchHasItsOwnEventId() throws Exception {
+            cacheThreeTargets();
+
+            client.trackBatchSync(Arrays.asList(
+                    TrackEvent.builder("user-1", "page_view").build(),                // 3 entries
+                    TrackEvent.builder("user-1", "purchase").experimentKey("e").build(), // 1 entry
+                    TrackEvent.builder("user-1", "page_view").build()));              // 3 entries
+
+            List<Map<String, Object>> entries = events(bodyOf(takeRequest()));
+            assertEquals(7, entries.size());
+            List<String> ids = new ArrayList<>();
+            for (Map<String, Object> entry : entries) ids.add(eventIdOf(entry));
+            assertEquals(1, new HashSet<>(ids.subList(0, 3)).size(), "first event: " + ids);
+            assertEquals(1, new HashSet<>(ids.subList(4, 7)).size(), "third event: " + ids);
+            assertEquals(3, new HashSet<>(Arrays.asList(ids.get(0), ids.get(3), ids.get(4))).size(),
+                    "three events, three ids: " + ids);
+        }
+
+        @Test
+        @DisplayName("the caller's eventId wins: on /track, on every fan-out entry, and on every call")
+        void callersEventIdWins() throws Exception {
+            cacheThreeTargets();
+            TrackEvent keyed = TrackEvent.builder("user-1", "purchase").experimentKey("e")
+                    .eventId("order-42").build();
+            TrackEvent unkeyed = TrackEvent.builder("user-1", "page_view").eventId("view-7").build();
+
+            client.trackEventSync(keyed);
+            client.trackEventSync(keyed);
+            client.trackEventSync(unkeyed);
+
+            assertEquals("order-42", eventIdOf(bodyOf(takeRequest())));
+            assertEquals("order-42", eventIdOf(bodyOf(takeRequest())), "the same id on a second call");
+            List<Map<String, Object>> entries = events(bodyOf(takeRequest()));
+            assertEquals(3, entries.size());
+            for (Map<String, Object> entry : entries) assertEquals("view-7", eventIdOf(entry));
+        }
+
+        /**
+         * The connection drops after the server has read the whole request; OkHttp, configured
+         * as the public constructor configures it, sends the request again on a new connection
+         * by itself, and both requests carry the same {@code event_id}. The first request seeds
+         * the connection pool: OkHttp sends a request again when it failed on a pooled
+         * connection, the way a kept-alive connection a server or a proxy has closed fails.
+         */
+        @Test
+        @DisplayName("OkHttp's re-send of a written POST carries the same event_id, on /track and /batch")
+        void okHttpResendCarriesTheSameEventId() throws Exception {
+            SdkConfig config = SdkConfig.builder("test-api-key", mockServer.url("/").toString())
+                    .timeoutMs(5000)
+                    .build();
+            try (ExperimentationClient production = new ExperimentationClient(config)) {
+                // /track
+                mockServer.enqueue(trackOk());
+                mockServer.enqueue(new MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST));
+                mockServer.enqueue(trackOk());
+
+                production.trackEventSync(TrackEvent.builder("u1", "seed").experimentKey("e").build());
+                production.trackEventSync(TrackEvent.builder("u1", "purchase").experimentKey("e").build());
+
+                takeRequest(); // the seed
+                RecordedRequest dropped = takeRequest();
+                RecordedRequest resent = takeRequest();
+                assertEquals("/api/v1/tracking/track", dropped.getPath());
+                assertEquals("/api/v1/tracking/track", resent.getPath());
+                assertEquals(1, dropped.getSequenceNumber(), "the dropped request reused the pooled connection");
+                assertEquals(0, resent.getSequenceNumber(), "the re-send came on a new connection");
+                String droppedBody = dropped.getBody().readUtf8();
+                String resentBody = resent.getBody().readUtf8();
+                @SuppressWarnings("unchecked")
+                Map<String, Object> first = objectMapper.readValue(droppedBody, Map.class);
+                @SuppressWarnings("unchecked")
+                Map<String, Object> second = objectMapper.readValue(resentBody, Map.class);
+                assertEquals(eventIdOf(first), eventIdOf(second), "the re-send must carry the same event_id");
+                assertEquals(droppedBody, resentBody);
+                assertEquals(3, mockServer.getRequestCount());
+
+                // /batch: an unkeyed event fanned out to a cached assignment and a flag
+                mockServer.setDispatcher(new Dispatcher() {
+                    private int batches;
+
+                    @Override
+                    public MockResponse dispatch(RecordedRequest request) {
+                        String path = request.getPath() == null ? "" : request.getPath();
+                        if (path.equals("/api/v1/tracking/assign")) return json(200, ASSIGN_JSON);
+                        if (path.startsWith("/api/v1/feature-flags/evaluate/")) return flagResponse("f", true, "null");
+                        if (path.equals("/api/v1/tracking/batch") && ++batches == 1) {
+                            return new MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST);
+                        }
+                        return batchOk();
+                    }
+                });
+                User user = User.builder("user-1").build();
+                production.getExperimentAssignment(user, "checkout_flow");
+                production.evaluateFeatureFlag(user, "f");
+                takeRequest();
+                takeRequest();
+
+                production.trackEventSync(TrackEvent.builder("user-1", "page_view").build());
+
+                List<Map<String, Object>> droppedEntries = events(bodyOf(takeRequest()));
+                List<Map<String, Object>> resentEntries = events(bodyOf(takeRequest()));
+                assertEquals(2, droppedEntries.size());
+                assertEquals(2, resentEntries.size());
+                String id = eventIdOf(droppedEntries.get(0));
+                for (Map<String, Object> entry : droppedEntries) assertEquals(id, eventIdOf(entry));
+                for (Map<String, Object> entry : resentEntries) {
+                    assertEquals(id, eventIdOf(entry), "the re-sent batch must carry the same event_id");
+                }
+                assertEquals(7, mockServer.getRequestCount());
+            }
+        }
+
+        @Test
+        @DisplayName("a request that times out is not sent again, and trackEventSync throws")
+        void timedOutRequestIsNotSentAgain() throws Exception {
+            SdkConfig config = SdkConfig.builder("test-api-key", mockServer.url("/").toString())
+                    .timeoutMs(300)
+                    .build();
+            try (ExperimentationClient production = new ExperimentationClient(config)) {
+                mockServer.enqueue(new MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE));
+                mockServer.enqueue(trackOk());
+
+                ExperimentationException e = assertThrows(ExperimentationException.class,
+                        () -> production.trackEventSync(TrackEvent.builder("u1", "purchase").experimentKey("e").build()));
+
+                assertEquals(0, e.getStatusCode());
+                takeRequest();
+                assertNull(mockServer.takeRequest(500, TimeUnit.MILLISECONDS), "a timed-out request was sent again");
+                assertEquals(1, mockServer.getRequestCount());
+            }
+        }
+    }
+
+    // =========================================================================
     // Cache access
     // =========================================================================
 
@@ -717,6 +1343,31 @@ class ExperimentationClientTest {
             assertEquals(0, client.getCacheSize());
             client.evaluateFeatureFlag(user, "f");
             client.getExperimentAssignment(user, "checkout_flow");
+            assertEquals(4, mockServer.getRequestCount());
+        }
+
+        @Test
+        @DisplayName("is keyed by user + key, not attributes: changed attributes get the cached answer until invalidateCache or clearCache")
+        void attributesAreNotPartOfTheKey() throws Exception {
+            routeByPath();
+            User us = User.builder("user-1").attribute("country", "US").build();
+            User de = User.builder("user-1").attribute("country", "DE").build();
+
+            FlagEvaluation evaluation = client.evaluateFeatureFlag(us, "f");
+            ExperimentAssignment assignment = client.getExperimentAssignment(us, "checkout_flow");
+            assertSame(evaluation, client.evaluateFeatureFlag(de, "f"));
+            assertSame(assignment, client.getExperimentAssignment(de, "checkout_flow"));
+            assertEquals(2, mockServer.getRequestCount(), "changed attributes within the TTL made a request");
+            takeRequest();
+            takeRequest();
+
+            client.invalidateCache("user-1", "f");
+            client.evaluateFeatureFlag(de, "f");
+            assertEquals("{\"country\":\"DE\"}", takeRequest().getRequestUrl().queryParameter("context"));
+
+            client.clearCache();
+            client.getExperimentAssignment(de, "checkout_flow");
+            assertEquals(Map.of("country", "DE"), bodyOf(takeRequest()).get("context"));
             assertEquals(4, mockServer.getRequestCount());
         }
     }

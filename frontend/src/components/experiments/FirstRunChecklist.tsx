@@ -118,7 +118,7 @@ export function FirstRunChecklist() {
             <p className="text-sm text-slate-500 mt-0.5" data-testid="checklist-start">
               On the experiment&apos;s page, press Start: only an active experiment assigns users.
               Then call the tracking API (or any{' '}
-              <Link href="/docs" className="text-blue-600 hover:underline">
+              <Link href="/docs" className="text-blue-600 underline hover:text-blue-700">
                 SDK
               </Link>
               ) with the experiment&apos;s key in place of{' '}

@@ -1,9 +1,11 @@
 import {
   Experiment,
+  ExperimentDesignUpdate,
   ExperimentListResponse,
   CreateExperimentRequest,
   ExperimentStatus,
 } from '@/types/experiments';
+import { CorrectionMethod } from '@/types/results';
 import { apiFetch } from '@/services/api';
 
 /**
@@ -30,6 +32,12 @@ export interface SampleSizeQuery {
   statistical_power: number;
   significance_level: number;
   variant_count: number;
+  /**
+   * The experiment's correction, always sent (`none` included). With
+   * `bonferroni` or `benjamini_hochberg` the endpoint plans each comparison
+   * with the control at `significance_level / (variant_count - 1)`.
+   */
+  correction_method: CorrectionMethod;
   /** Users per day; the duration is estimated only when this and `traffic_allocation` are both sent. */
   daily_traffic?: number;
   /** Fraction (0, 1] of `daily_traffic` that enters the experiment. */
@@ -40,8 +48,17 @@ export interface SampleSizeEstimate {
   baseline_rate: number;
   minimum_detectable_effect: number;
   statistical_power: number;
+  /** The significance level sent (1 - the confidence level), before any correction. */
   significance_level: number;
   is_one_sided: boolean;
+  /**
+   * The correction as sent, the number of comparisons with the control, and
+   * the significance each comparison is planned at (#820). Optional: an older
+   * API ignores `correction_method` and answers without them.
+   */
+  correction_method?: CorrectionMethod;
+  comparisons?: number;
+  alpha?: number;
   samples_per_variant: number;
   total_samples: number;
   estimated_duration_days: { days: number; weeks: number; months: number } | null;
@@ -63,6 +80,18 @@ export interface ExperimentDetailsUpdate {
 export interface CreateOptions {
   /** Default true: a 401 sends the browser to the login page. */
   redirectOn401?: boolean;
+}
+
+/**
+ * The body of a draft's schedule change (#1454): only the dates that changed.
+ * Each is an instant with a `Z` (`Date.toISOString()`), or null to clear it.
+ * A date the body leaves out is kept as stored. `time_zone` is never sent:
+ * an instant with an offset does not need it, and the API refuses a zone
+ * name it does not know.
+ */
+export interface ExperimentScheduleUpdate {
+  start_date?: string | null;
+  end_date?: string | null;
 }
 
 const BASE = '/api/v1/experiments';
@@ -107,6 +136,7 @@ export const ExperimentsService = {
         statistical_power: query.statistical_power,
         significance_level: query.significance_level,
         variant_count: query.variant_count,
+        correction_method: query.correction_method,
         daily_traffic: query.daily_traffic,
         traffic_allocation: query.traffic_allocation,
       },
@@ -128,9 +158,20 @@ export const ExperimentsService = {
   },
 
   /**
+   * `PUT /api/v1/experiments/{id}` with exactly `{variants, metrics}`, both
+   * complete. The API replaces both lists in one commit, on a DRAFT
+   * experiment only (400 otherwise, for every role); `buildDesignPayload`
+   * builds the body.
+   */
+  async updateDesign(id: string, body: ExperimentDesignUpdate): Promise<Experiment> {
+    return apiFetch<Experiment>(`${BASE}/${id}`, { method: 'PUT', json: body });
+  },
+
+  /**
    * `POST /api/v1/experiments/{id}/clone`, with no body. The answer is the new
    * experiment: a DRAFT named "Copy of …", with a key of its own, owned by the
-   * caller. It needs READ on the source and CREATE (ADMIN or DEVELOPER).
+   * caller. It needs READ on the source and CREATE on experiments (ADMIN or
+   * DEVELOPER, or a custom role or grant).
    */
   async clone(id: string): Promise<Experiment> {
     return apiFetch<Experiment>(`${BASE}/${id}/clone`, { method: 'POST' });
@@ -163,5 +204,16 @@ export const ExperimentsService = {
 
   async archive(id: string): Promise<Experiment> {
     return apiFetch<Experiment>(`${BASE}/${id}/archive`, { method: 'POST' });
+  },
+
+  /**
+   * `PUT /api/v1/experiments/{id}/schedule`. On a DRAFT, `start_date` and
+   * `end_date` are when the scheduler starts and completes it; a date the
+   * body leaves out is kept, and null clears it. The answer is the
+   * experiment. On a PAUSED experiment the API reads `start_date` as a
+   * resume time instead; the dashboard offers this on a draft only.
+   */
+  async schedule(id: string, body: ExperimentScheduleUpdate): Promise<Experiment> {
+    return apiFetch<Experiment>(`${BASE}/${id}/schedule`, { method: 'PUT', json: body });
   },
 };

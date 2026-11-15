@@ -267,6 +267,8 @@ OTHER_MEMBERS = {
     "forgot_password",
     "get_user",
     "get_user_with_groups",
+    # Sign-out (POST /auth/logout under Cognito), after the token check.
+    "global_sign_out",
     "refresh_token",
     "sign_in",
 }

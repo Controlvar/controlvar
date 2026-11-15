@@ -7,7 +7,7 @@ This module provides a service for handling authentication operations using AWS 
 import logging
 import os
 import re
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 import boto3
 import jwt
@@ -125,13 +125,31 @@ def groups_from_claims(claims: Mapping[str, Any]) -> list:
     return [name for name in value if isinstance(name, str)]
 
 
+def configured_pool_and_client() -> Tuple[Optional[str], Optional[str]]:
+    """``COGNITO_USER_POOL_ID`` and ``COGNITO_CLIENT_ID``, from the process
+    environment, where :class:`CognitoAuthService` reads them."""
+    return os.environ.get("COGNITO_USER_POOL_ID"), os.environ.get("COGNITO_CLIENT_ID")
+
+
+def unset_hosted_ui_settings(cognito_domain: Optional[str]) -> List[str]:
+    """The settings sign-in through the Hosted UI needs that are unset, by
+    name, in a fixed order: ``COGNITO_DOMAIN`` (given, from the settings),
+    ``COGNITO_CLIENT_ID``, ``COGNITO_USER_POOL_ID``. Names only, never a value."""
+    user_pool_id, client_id = configured_pool_and_client()
+    values = (
+        ("COGNITO_DOMAIN", cognito_domain),
+        ("COGNITO_CLIENT_ID", client_id),
+        ("COGNITO_USER_POOL_ID", user_pool_id),
+    )
+    return [name for name, value in values if not value]
+
+
 class CognitoAuthService:
     """Service for AWS Cognito authentication operations."""
 
     def __init__(self):
         # Load configuration from environment variables
-        self.user_pool_id = os.environ.get("COGNITO_USER_POOL_ID")
-        self.client_id = os.environ.get("COGNITO_CLIENT_ID")
+        self.user_pool_id, self.client_id = configured_pool_and_client()
         self.region = os.environ.get("AWS_REGION", "us-east-1")
 
         if not self.user_pool_id or not self.client_id:
@@ -387,6 +405,18 @@ class CognitoAuthService:
         except Exception as e:
             logger.error(f"Unexpected error getting user details: {e!s}")
             raise ValueError("An unexpected error occurred retrieving user details")
+
+    def global_sign_out(self, access_token: str) -> None:
+        """Sign the token's user out of Cognito everywhere (GlobalSignOut).
+
+        Cognito then refuses that user's access tokens on every token-authorised
+        call, GetUser included, so each request with one is refused, and their
+        refresh tokens stop working. Every other session of the user ends too.
+        The call is authorised by the access token itself and needs no AWS
+        credentials. Raises whatever the client raises; the caller decides
+        what a failure means.
+        """
+        self.client.global_sign_out(AccessToken=access_token)
 
     def get_user_with_groups(self, access_token: str) -> Dict[str, Any]:
         """

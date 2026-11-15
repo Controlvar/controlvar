@@ -1,0 +1,11 @@
+# The hourly check (deploy/demo/check.sh): fails closed. provision.sh installs it.
+[Unit]
+Description=Controlvar demo: hourly check, closes the demo on a failure
+Wants=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/controlvar-demo/box.env
+ExecStart=/opt/controlvar-demo/recipe/deploy/demo/check.sh
+TimeoutStartSec=2400

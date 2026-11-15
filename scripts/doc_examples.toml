@@ -12,8 +12,8 @@
 # scripts/doc_examples.py), and each page's residual counts can only fall.
 
 [meta]
-documents = 53
-exec = 304
+documents = 60
+exec = 334
 universe = [
     ".github/pull_request_template.md",
     ".github/qa-templates/README.md",
@@ -21,6 +21,7 @@ universe = [
     "CODE_OF_CONDUCT.md",
     "CONTRIBUTING.md",
     "README.md",
+    "ROADMAP.md",
     "SECURITY.md",
     "THIRD_PARTY_LICENSES.md",
     "backend/app/api/v1/endpoints/README_SAFETY.md",
@@ -33,6 +34,7 @@ universe = [
     "demo/streampulse/README.md",
     "demo/streampulse/simulator/README.md",
     "deploy/compose/README.md",
+    "deploy/demo/README.md",
     "docs/Enhanced_Rules_Engine_Reference.md",
     "docs/README.md",
     "docs/api/README.md",
@@ -64,6 +66,7 @@ universe = [
     "docs/auth/cognito-auth-testing.md",
     "docs/auth/flow.md",
     "docs/auth/sso.md",
+    "docs/capabilities.md",
     "docs/cognito_integration.md",
     "docs/deployment/README.md",
     "docs/deployment/deployment-guide.md",
@@ -81,8 +84,10 @@ universe = [
     "docs/development/testing-guide.md",
     "docs/development/workflow-explanation.md",
     "docs/feature-flags/create.md",
+    "docs/feature-flags/kill-switch.md",
     "docs/feature-flags/rollouts.md",
     "docs/feature-flags/safety.md",
+    "docs/feature-flags/stale-flags.md",
     "docs/getting-started/README.md",
     "docs/getting-started/architecture.md",
     "docs/getting-started/concepts.md",
@@ -91,14 +96,18 @@ universe = [
     "docs/getting-started/environment-setup.md",
     "docs/getting-started/faq.md",
     "docs/getting-started/limitations.md",
+    "docs/getting-started/live-demo.md",
     "docs/getting-started/modules.md",
     "docs/getting-started/pre-commit-hooks.md",
     "docs/getting-started/python-virtual-env-setup.md",
     "docs/getting-started/quick-start.md",
     "docs/getting-started/vscode-settings.md",
     "docs/guides/assign-customer-list.md",
+    "docs/guides/balance-within-groups.md",
     "docs/guides/dashboard-and-api.md",
     "docs/guides/experiment-wizard.md",
+    "docs/guides/guided-examples.md",
+    "docs/guides/how-events-count.md",
     "docs/guides/segments.md",
     "docs/guides/user-guide.md",
     "docs/hipaa/overview.md",
@@ -116,6 +125,7 @@ universe = [
     "docs/sdk/dotnet.md",
     "docs/sdk/edge.md",
     "docs/sdk/elixir.md",
+    "docs/sdk/exposure-hook.md",
     "docs/sdk/flutter.md",
     "docs/sdk/go.md",
     "docs/sdk/ios.md",
@@ -133,10 +143,12 @@ universe = [
     "docs/security/hardening-changes.md",
     "docs/security/incident-response.md",
     "docs/security/model.md",
+    "docs/self-hosting/aws-install.md",
     "docs/self-hosting/cdk.md",
     "docs/self-hosting/kubernetes.md",
     "docs/self-hosting/migrations.md",
     "docs/self-hosting/monitoring.md",
+    "docs/self-hosting/proxies.md",
     "docs/self-hosting/releases.md",
     "docs/self-hosting/upgrading-to-controlvar.md",
     "docs/statistics/fdr-correction.md",
@@ -157,14 +169,24 @@ universe = [
     "sdk/ios/README.md",
     "sdk/java/README.md",
     "sdk/js/README.md",
+    "sdk/mcp/README.md",
     "sdk/openfeature-python/README.md",
     "sdk/openfeature/README.md",
     "sdk/php/README.md",
     "sdk/python/README.md",
+    "sdk/react-native/README.md",
     "sdk/react/README.md",
     "sdk/ruby/README.md",
     "tests/sdk-contract/README.md",
 ]
+
+# The live demo's page: its one block is the quick start's demo command.
+[[document]]
+path = "docs/getting-started/live-demo.md"
+environment = "bare"
+exec = 0
+skip = 1
+expects = 0
 
 [[document]]
 path = "docs/getting-started/quick-start.md"
@@ -191,15 +213,15 @@ expects = 0
 path = "docs/development/testing-guide.md"
 environment = "bare"
 exec = 0
-skip = 3
+skip = 4
 expects = 0
 
 [[document]]
 path = "docs/feature-flags/create.md"
 environment = "stack"
-exec = 10
+exec = 14
 skip = 1
-expects = 15
+expects = 22
 
 [[document]]
 path = "docs/sdk/local-evaluation.md"
@@ -212,7 +234,7 @@ expects = 10
 path = "README.md"
 environment = "bare"
 exec = 2
-skip = 1
+skip = 2
 expects = 1
 
 [[document]]
@@ -272,6 +294,13 @@ skip = 0
 expects = 20
 
 [[document]]
+path = "docs/feature-flags/stale-flags.md"
+environment = "stack"
+exec = 3
+skip = 0
+expects = 3
+
+[[document]]
 path = "docs/api/multi-armed-bandit.md"
 environment = "stack"
 exec = 5
@@ -288,9 +317,9 @@ expects = 15
 [[document]]
 path = "docs/guides/experiment-wizard.md"
 environment = "stack"
-exec = 11
+exec = 12
 skip = 0
-expects = 19
+expects = 22
 
 [[document]]
 path = "docs/llm-evaluation/quickstart.md"
@@ -339,7 +368,7 @@ path = "docs/api/cuped.md"
 environment = "stack"
 exec = 5
 skip = 0
-expects = 7
+expects = 8
 
 [[document]]
 path = "docs/api/data-export.md"
@@ -351,9 +380,9 @@ expects = 18
 [[document]]
 path = "docs/api/dimensional-analysis.md"
 environment = "stack"
-exec = 7
+exec = 8
 skip = 0
-expects = 12
+expects = 15
 
 [[document]]
 path = "docs/api/interaction-detection.md"
@@ -367,7 +396,7 @@ path = "docs/api/sequential-testing.md"
 environment = "stack"
 exec = 4
 skip = 0
-expects = 12
+expects = 14
 
 [[document]]
 path = "docs/statistics/fdr-correction.md"
@@ -396,7 +425,7 @@ expects = 0
 path = "demo/shoplab/README.md"
 environment = "bare"
 exec = 0
-skip = 6
+skip = 7
 expects = 0
 
 [[document]]
@@ -413,8 +442,23 @@ exec = 0
 skip = 6
 expects = 0
 
+# The demo box's runbook: every block runs on the box itself.
+[[document]]
+path = "deploy/demo/README.md"
+environment = "bare"
+exec = 0
+skip = 3
+expects = 0
+
 [[document]]
 path = "docs/guides/user-guide.md"
+environment = "bare"
+exec = 0
+skip = 1
+expects = 0
+
+[[document]]
+path = "docs/guides/guided-examples.md"
 environment = "bare"
 exec = 0
 skip = 1
@@ -449,17 +493,17 @@ expects = 0
 path = "docs/self-hosting/kubernetes.md"
 reason = "run on a kind cluster by the chart-kind workflow (scripts/chart_kind.sh), which extracts its marked blocks"
 
-# Read on GitHub, beside compose.yml: its blocks start the production stack,
-# which the compose-production workflow boots with generate-env.sh and
-# docker compose up --wait.
+# Read on GitHub, beside compose.yml: its blocks start, back up and upgrade
+# the production stack. The compose-production workflow's compose-upgrade job
+# extracts and runs them (scripts/guide_blocks.py --marker compose-upgrade),
+# so they carry that job's markers, not tags.
 [[exempt]]
 path = "deploy/compose/README.md"
-reason = "starts the production stack on a Docker host: the compose-production workflow runs generate-env.sh and docker compose up --wait on this directory's files"
+reason = "starts and upgrades the production stack on a Docker host: compose-production boots this directory's files, and its compose-upgrade job (scripts/compose_upgrade.sh) runs the marked blocks"
 
 [pending]
 "backend/lambda/README.md" = { comments = 0, unlabelled = 1, syntax = 0 }
 "backend/lambda/event_processor/README.md" = { comments = 0, unlabelled = 1, syntax = 0 }
-"docs/api/split-url.md" = { comments = 0, unlabelled = 2, syntax = 0 }
 "docs/deployment/README.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/deployment/deployment-guide.md" = { comments = 0, unlabelled = 1, syntax = 2 }
 "docs/deployment/disaster-recovery.md" = { comments = 0, unlabelled = 0, syntax = 0 }
@@ -510,7 +554,7 @@ reason = "starts the production stack on a Docker host: the compose-production w
 path = "docs/guides/assign-customer-list.md"
 environment = "stack"
 exec = 9
-skip = 0
+skip = 1
 expects = 11
 
 [[document]]
@@ -533,18 +577,18 @@ expects = 5
 [[document]]
 path = "docs/mcp-server.md"
 environment = "stack"
-exec = 12
-skip = 0
-expects = 34
+exec = 13
+skip = 1
+expects = 36
 
 # #1075: the API reference, compliance, RBAC and technical guide pages, each
 # signing in first and running as written.
 [[document]]
 path = "docs/api/endpoints.md"
 environment = "stack"
-exec = 21
+exec = 24
 skip = 3
-expects = 40
+expects = 43
 
 [[document]]
 path = "docs/architecture/technical-guide.md"
@@ -552,6 +596,16 @@ environment = "stack"
 exec = 4
 skip = 0
 expects = 4
+
+# #393: a split URL experiment created, started and routed through the API,
+# the reference integration written to a file and run from the command line,
+# and one conversion sent with the per-site pattern counted in the results.
+[[document]]
+path = "docs/api/split-url.md"
+environment = "stack-full"
+exec = 11
+skip = 0
+expects = 12
 
 [[document]]
 path = "docs/api/compliance.md"
@@ -563,9 +617,9 @@ expects = 12
 [[document]]
 path = "docs/api/rbac.md"
 environment = "stack-full"
-exec = 14
+exec = 19
 skip = 0
-expects = 25
+expects = 33
 
 # The operator's migration commands, run in the API container of the Quick
 # Start's stack (docker compose exec api ...), as a self-hoster runs them.
@@ -573,8 +627,30 @@ expects = 25
 path = "docs/self-hosting/migrations.md"
 environment = "stack"
 exec = 7
-skip = 11
+skip = 15
 expects = 6
+
+# The beta AWS installer's page. One block runs: the installer's --help, which
+# needs no AWS account and no network. Every block that installs, uninstalls or
+# reads the account is a skip. The runner's rule against calling aws (in
+# scripts/doc_examples.py) does not see the installer's launcher, so
+# backend/tests/unit/docs/test_aws_install_page.py pins those blocks as skips.
+[[document]]
+path = "docs/self-hosting/aws-install.md"
+environment = "bare"
+exec = 1
+skip = 13
+expects = 8
+
+# Users' addresses behind a proxy: its two blocks read the logs of a running
+# API, so both are skips. backend/tests/unit/docs/test_proxies_docs.py runs
+# their pipelines on access lines rendered by the API's own log configuration.
+[[document]]
+path = "docs/self-hosting/proxies.md"
+environment = "bare"
+exec = 0
+skip = 2
+expects = 0
 
 # The contributor pages: the Quick Start's stack and a development virtual
 # environment at the repository root (stack-dev; CI's dev shards build it).

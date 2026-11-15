@@ -49,9 +49,17 @@ pytestmark = [pytest.mark.integration]
 #: This revision, and the core revision it extends.
 REVISION = "4c2c09a2b3e8"
 PREVIOUS_CORE_HEAD = "37dcb2969766"
-#: The core head of this tree.
-CORE_HEAD = "4c2c09a2b3e8"
-MODULES_HEAD = "modules_0002_warehouse_analysis"
+#: The core head of this tree: ``t1812_user_totp`` (#1812), after
+#: ``4955571d232c`` (#1545), ``c448_balance_within`` (#448), ``7b6b4b4fe246``
+#: (#1528), ``85dd4796bb8b`` (#1543) and ``607c51a59bf5`` (#1497), the
+#: revision after this one.
+CORE_HEAD = "t1812_user_totp"
+MODULES_HEAD = "modules_0005_redshift"
+#: The rows of a database at this revision, before the next one is applied.
+AT_REVISION_ROWS = {
+    CORE: {REVISION},
+    FULL: {REVISION, MODULES_HEAD},
+}
 
 PREVIOUS_ROWS = {
     CORE: {PREVIOUS_CORE_HEAD},
@@ -479,9 +487,17 @@ def test_the_downgrade_changes_nothing_and_a_rollback_still_succeeds(
     """The runbook undoes a migration while the release that contains it still
     serves. That release rolls back a flag on the defaults with a NULL
     ``safety_config_id``; a downgrade back to NOT NULL would make every such
-    rollback fail."""
+    rollback fail.
+
+    The database stops at this revision, the release that added it, rather
+    than at the head: a downgrade from the head would also run the later
+    revisions' downgrades, and this release's models would then meet a schema
+    older than they are.
+    """
     tree = _bootstrapped_at_previous_release(test_db, profile, scratch_schema, tmp_path)
-    _upgrade(tree, scratch_schema)
+    upgrade = tree_profiles.alembic(tree, scratch_schema, "upgrade", REVISION)
+    assert upgrade.returncode == 0, upgrade.stderr[-3000:]
+    assert _rows(test_db, scratch_schema) == AT_REVISION_ROWS[profile]
     _write_as_the_previous_release(test_db, scratch_schema)
     upgraded = _stored(test_db, scratch_schema)
 

@@ -34,6 +34,7 @@ type recordedRequest struct {
 	Method      string
 	Path        string // decoded path
 	EscapedPath string // as sent on the wire
+	RawQuery    string // as sent on the wire
 	Query       map[string]string
 	Header      http.Header
 	Body        map[string]interface{}
@@ -58,6 +59,7 @@ func newFakeBackend(t *testing.T) *fakeBackend {
 			Method:      r.Method,
 			Path:        r.URL.Path,
 			EscapedPath: r.URL.EscapedPath(),
+			RawQuery:    r.URL.RawQuery,
 			Query:       map[string]string{},
 			Header:      r.Header.Clone(),
 			RawBody:     raw,

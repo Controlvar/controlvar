@@ -11,9 +11,12 @@ must not end up in a log:
   ``state``, and whatever else it appends;
 * on any route, the value of a parameter whose name is in
   :data:`REDACTED_QUERY_NAMES` (the OAuth parameters ``code``, ``state``,
-  ``token`` and the like, and common spellings such as ``api_key``,
-  ``password`` and ``jwt``). The name is compared without regard to case,
-  after percent-decoding, so ``CODE`` and ``%63ode`` are matched too.
+  ``token`` and the like, common spellings such as ``api_key``,
+  ``password`` and ``jwt``, and ``context``, the end user's attributes that
+  the SDKs send to ``GET /api/v1/feature-flags/evaluate/{key}`` and
+  ``GET /api/v1/feature-flags/user/{user_id}``). The name is compared without
+  regard to case, after percent-decoding, so ``CODE`` and ``%63ode`` are
+  matched too.
 
 Each such value is replaced with :data:`REDACTED`; the parameter names are
 kept, so a log line still shows which parameters a request carried. Only the
@@ -50,6 +53,8 @@ REDACTED_QUERY_NAMES = frozenset(
         "password",
         "secret",
         "jwt",
+        # The end user's attributes on the flag-evaluation routes.
+        "context",
     }
 )
 

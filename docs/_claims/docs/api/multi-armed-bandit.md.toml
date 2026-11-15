@@ -84,8 +84,11 @@ text = "Each uses the shell variables set by the ones before it."
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Log in first; creating an experiment takes the DEVELOPER or ADMIN role:"
-by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py"]
+text = "Log in first; creating an experiment takes permission to create experiments, such as the DEVELOPER or ADMIN role:"
+by = [
+    "test:backend/tests/integration/api/test_experiment_access_by_role.py",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+]
 
 [[unit]]
 text = "It prints \"ADMIN\"."
@@ -127,8 +130,12 @@ text = "Returns the current bandit state: the algorithm, and each variant's weig
 by = ["docex:docs/api/multi-armed-bandit.md#\"algorithm\": \"thompson_sampling\""]
 
 [[unit]]
-text = "Any logged-in user can read it."
-by = ["test:backend/tests/unit/api/test_bandit_endpoints.py::TestBanditStatusForTheDashboard::test_every_role_reads_the_weights"]
+text = "Anyone who may view the experiment can read it."
+by = [
+    "test:backend/tests/unit/api/test_bandit_endpoints.py::TestBanditStatusForTheDashboard::test_every_role_reads_the_weights",
+    "test:backend/tests/integration/api/test_experiment_data_read_rule.py::test_every_shipped_role_keeps_its_answer_on_each_route",
+    "test:backend/tests/integration/api/test_experiment_data_read_rule.py::test_no_base_role_is_refused_on_the_route_level_reads",
+]
 
 [[unit]]
 text = "This also saves each variant's id, for the weight override further down:"
@@ -211,10 +218,11 @@ by = [
 ]
 
 [[unit]]
-text = "Requires the DEVELOPER or ADMIN role:"
+text = "Requires permission to change experiments, such as the DEVELOPER or ADMIN role:"
 by = [
     "test:backend/tests/unit/api/test_bandit_endpoints.py::TestTriggerBanditUpdate::test_trigger_update_returns_200_for_developer",
     "test:backend/tests/unit/api/test_bandit_endpoints.py::TestTriggerBanditUpdate::test_viewer_gets_403_on_post_update",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
 ]
 
 [[unit]]
@@ -301,6 +309,25 @@ by = ["exempt:baseline"]
 [[unit]]
 text = "PostgreSQL: pulls = assignments rows per variant; successes = converting users, counted exactly as /results counts them: users assigned to the variant with at least one event, tagged with that variant, whose event_name matches the experiment's primary metric (see the event-matching rule in the tracking API docs)."
 by = ["test:backend/tests/integration/services/test_bandit_scheduler_db.py::test_postgres_fallback_counts_converting_users_as_results_does"]
+
+[[unit]]
+text = "When the experiment's primary metric has lower_is_better set (uninstalls, errors), the bandit counts a user who did not convert as the success, so the variant with fewer converting users earns the traffic."
+by = ["test:backend/tests/unit/services/test_lower_is_better_direction.py::TestTheBanditReadsTheDirection::test_traffic_moves_to_fewer_converting_users_when_lower_is_better"]
+
+[[unit]]
+text = "Every algorithm and both live sources (DynamoDB and PostgreSQL) apply this, and so does the persisted BanditState fallback."
+by = [
+    "test:backend/tests/unit/services/test_lower_is_better_direction.py::TestTheBanditReadsTheDirection::test_traffic_moves_to_fewer_converting_users_when_lower_is_better",
+    "test:backend/tests/unit/services/test_lower_is_better_direction.py::TestTheBanditReadsTheDirection::test_editing_the_direction_changes_the_next_ticks_weights",
+]
+
+[[unit]]
+text = "The stored and reported successes and conversion_rate stay the converting users and their share, whatever the direction; only the algorithms see the flipped counts."
+by = ["test:backend/tests/unit/services/test_lower_is_better_direction.py::TestTheBanditReadsTheDirection::test_stored_and_reported_counts_stay_raw_for_a_lower_is_better_metric"]
+
+[[unit]]
+text = "Because a user who has not yet converted counts as a success, the most recent assignments look best until their exposure window has passed, so such a bandit needs a settled exposure window (an event that happens days after assignment gives a misleading early signal)."
+by = ["exempt:advice"]
 
 [[unit]]
 text = "A user who converts three times counts once."

@@ -9,13 +9,33 @@
  */
 import { TargetingRules } from '@/types/targeting';
 import { createEmptyRules, validateRules } from '@/utils/targeting';
-import { ExperimentType, MetricType, CreateExperimentRequest } from '@/types/experiments';
+import {
+  BalanceWithin,
+  BayesianConfigInput,
+  DesignMetric,
+  DesignVariant,
+  Experiment,
+  ExperimentDesignUpdate,
+  ExperimentMetric,
+  ExperimentType,
+  ExperimentVariant,
+  MetricType,
+  CreateExperimentRequest,
+} from '@/types/experiments';
 import { CorrectionMethod } from '@/types/results';
 import {
   DEFAULT_CONFIDENCE_LEVEL,
   DEFAULT_CORRECTION_METHOD,
 } from '@/components/results/shared/analysisSettings';
 import { plannedEffectFraction, plannedEffectProblem } from './estimate';
+import {
+  balanceStateFromStored,
+  BalanceFormState,
+  buildBalancePayload,
+  initialBalanceState,
+  sameBalance,
+  splitProblem,
+} from './balanceWithin';
 
 export function generateKey(name: string): string {
   return name
@@ -43,6 +63,38 @@ export interface MetricFormData {
   event_name: string;
   metric_type: MetricType;
   is_primary: boolean;
+  /**
+   * A decrease is the good direction (errors, uninstalls): the winner and the
+   * recommendation then read a significant fall as the improvement. Absent
+   * means false, the API's default.
+   */
+  lower_is_better?: boolean;
+  /**
+   * The stored fields this form does not show, kept as they were read so the
+   * design edit sends them back unchanged (`buildDesignPayload`). Set only by
+   * `formStateFromExperiment`; a metric added in the form has none. The
+   * reducer's `changeMetric` and `setPrimary` spread the row, so it survives
+   * every edit of the row.
+   */
+  carried?: MetricCarried;
+}
+
+/**
+ * A stored metric's fields that no editor shows. Null means the experiment
+ * answered with no value.
+ */
+export interface MetricCarried {
+  description: string | null;
+  aggregation_method: string | null;
+  minimum_sample_size: number | null;
+  /**
+   * The metric's own `expected_effect`. On the metric that was primary when
+   * the form was seeded it is null: that value is the experiment's planned
+   * effect, held in `designPlannedEffect`, and goes to whichever metric is
+   * primary on save.
+   */
+  expected_effect: number | null;
+  event_value_path: string | null;
 }
 
 export interface ExperimentFormState {
@@ -62,6 +114,18 @@ export interface ExperimentFormState {
   /** Also analyse the primary metric with Bayesian statistics (#216); saved with the experiment. */
   bayesianEnabled: boolean;
   /**
+   * Advanced Bayesian settings (#442), as typed. Read only while
+   * `bayesianEnabled` is on, and sent as `bayesian_config` only when a field
+   * has left its default (`buildBayesianConfig`).
+   */
+  bayesianConfig: BayesianConfigFormState;
+  /**
+   * Also test the primary metric sequentially (beta, #1454); saved with the
+   * experiment. Only the switch: no `sequential_testing_config` is sent, so the
+   * API's defaults apply.
+   */
+  sequentialEnabled: boolean;
+  /**
    * The minimum detectable effect typed on guided setup's Estimate step, in
    * percent and RELATIVE (10 means 5% -> 5.5%), as typed. When usable it is
    * saved as the primary metric's `expected_effect` (10 -> 0.1), and the
@@ -69,6 +133,127 @@ export interface ExperimentFormState {
    * here, not in the estimate panel, so switching views keeps it.
    */
   plannedEffectPct: string;
+  /**
+   * The design edit's planned effect: the stored primary metric's
+   * `expected_effect`, exactly as stored (null when it has none). Set only by
+   * `formStateFromExperiment`, and absent when no stored metric is primary.
+   * `buildDesignPayload` puts it on whichever metric is primary on save, so
+   * the planned sample does not change when the primary does, as
+   * `buildCreatePayload` does with `plannedEffectPct`.
+   */
+  designPlannedEffect?: number | null;
+  /** Balance the split within groups of users (beta, #448); see `balanceWithin.ts`. */
+  balance: BalanceFormState;
+  /**
+   * The design edit's stored setting, as read (null: off). Set only by
+   * `formStateFromExperiment`; `buildDesignPayload` sends `balance_within`
+   * only when the form's differs from it.
+   */
+  balanceStored?: BalanceWithin | null;
+}
+
+// --- Advanced Bayesian settings (#442) ---------------------------------------
+//
+// The four numbers of the API's `BayesianConfig` that the create form offers
+// (`backend/app/schemas/bayesian.py`). `prior_family` is not offered: the
+// analysis reads only alpha and beta, so every family gives the same results
+// (T337), and the form always sends "beta". `rope` is never sent. They are set
+// only when an experiment is created: the design edit does not send them, and
+// the API refuses a change once the experiment has left draft.
+
+/**
+ * The fields as typed. The numbers are kept as text, so a value that is half
+ * typed shows as it is; `bayesianConfigProblems` reads them as the API's
+ * `BayesianConfig` does.
+ */
+export interface BayesianConfigFormState {
+  alpha: string;
+  beta: string;
+  lossThreshold: string;
+  credibleLevel: string;
+}
+
+export type BayesianNumberField = keyof BayesianConfigFormState;
+export const BAYESIAN_NUMBER_FIELDS: BayesianNumberField[] = ['alpha', 'beta', 'lossThreshold', 'credibleLevel'];
+
+/** The fields as they start: the API's defaults. */
+export const DEFAULT_BAYESIAN_CONFIG: BayesianConfigFormState = {
+  alpha: '1.0',
+  beta: '1.0',
+  lossThreshold: '0.001',
+  credibleLevel: '0.95',
+};
+
+export const BAYESIAN_FIELD_LABELS: Record<BayesianNumberField, string> = {
+  alpha: 'Prior alpha',
+  beta: 'Prior beta',
+  lossThreshold: 'Loss threshold',
+  credibleLevel: 'Credible level',
+};
+
+/** The API's own bounds: alpha, beta and the loss threshold > 0; 0 < credible level < 1. */
+export const MUST_BE_POSITIVE = 'Must be greater than 0.';
+export const MUST_BE_BETWEEN_0_AND_1 = 'Must be more than 0 and less than 1.';
+
+/** The number `text` holds, or null when it holds none (blank, not a number, or infinite). */
+function typedNumber(text: string): number | null {
+  if (text.trim() === '') return null;
+  const value = Number(text);
+  return Number.isFinite(value) ? value : null;
+}
+
+/** Each number field's problem, or null where there is none. */
+export function bayesianConfigProblems(
+  config: BayesianConfigFormState,
+): Record<BayesianNumberField, string | null> {
+  const positive = (text: string) => {
+    const value = typedNumber(text);
+    return value !== null && value > 0 ? null : MUST_BE_POSITIVE;
+  };
+  const level = typedNumber(config.credibleLevel);
+  return {
+    alpha: positive(config.alpha),
+    beta: positive(config.beta),
+    lossThreshold: positive(config.lossThreshold),
+    credibleLevel: level !== null && level > 0 && level < 1 ? null : MUST_BE_BETWEEN_0_AND_1,
+  };
+}
+
+/**
+ * The first problem with Advanced Bayesian settings, in the words shown where
+ * Next or Create is refused, or null. Nothing while Bayesian analysis is off:
+ * the fields are hidden then, and not sent.
+ */
+export function bayesianConfigProblem(
+  state: Pick<ExperimentFormState, 'bayesianEnabled' | 'bayesianConfig'>,
+): string | null {
+  if (!state.bayesianEnabled) return null;
+  const problems = bayesianConfigProblems(state.bayesianConfig);
+  const first = BAYESIAN_NUMBER_FIELDS.find((field) => problems[field] !== null);
+  return first ? `Advanced Bayesian settings, ${BAYESIAN_FIELD_LABELS[first]}: ${problems[first]}` : null;
+}
+
+/**
+ * The `bayesian_config` to send, or undefined when all four numbers hold the
+ * API's defaults: the API then stores the defaults itself. Otherwise the five
+ * fields, `prior_family` always "beta", so the stored config is complete.
+ * Compared by value, so "1" is alpha's default as much as "1.0" is.
+ * Validation refuses a field with a problem before this is called.
+ */
+export function buildBayesianConfig(config: BayesianConfigFormState): BayesianConfigInput | undefined {
+  const sent: BayesianConfigInput = {
+    prior_family: 'beta',
+    alpha: Number(config.alpha),
+    beta: Number(config.beta),
+    loss_threshold: Number(config.lossThreshold),
+    credible_level: Number(config.credibleLevel),
+  };
+  const atDefaults =
+    sent.alpha === Number(DEFAULT_BAYESIAN_CONFIG.alpha) &&
+    sent.beta === Number(DEFAULT_BAYESIAN_CONFIG.beta) &&
+    sent.loss_threshold === Number(DEFAULT_BAYESIAN_CONFIG.lossThreshold) &&
+    sent.credible_level === Number(DEFAULT_BAYESIAN_CONFIG.credibleLevel);
+  return atDefaults ? undefined : sent;
 }
 
 const DEFAULT_VARIANTS: VariantFormData[] = [
@@ -95,7 +280,10 @@ export function createInitialFormState(): ExperimentFormState {
     confidenceLevel: DEFAULT_CONFIDENCE_LEVEL,
     correctionMethod: DEFAULT_CORRECTION_METHOD,
     bayesianEnabled: false,
+    bayesianConfig: { ...DEFAULT_BAYESIAN_CONFIG },
+    sequentialEnabled: false,
     plannedEffectPct: '',
+    balance: initialBalanceState(),
   };
 }
 
@@ -211,12 +399,22 @@ export function checkName(name: string): string | null {
   return null;
 }
 
+/** Shown on a version left at 0%: the API accepts it, but no user is ever assigned to it. */
+export const ZERO_SHARE = 'This version gets 0% of traffic. Give it a share, or remove it.';
+
+/** True when a variant's allocation is 0 (a blank or invalid entry counts as 0). */
+export function hasNoShare(variant: VariantFormData): boolean {
+  return !(Number(variant.traffic_allocation) > 0);
+}
+
 export function checkVariants(variants: VariantFormData[]): string | null {
   if (variants.length === 0) return 'Add at least one variant.';
   if (variants.some((v) => !v.name.trim())) return 'Every variant needs a name.';
   if (!variants.some((v) => v.is_control)) return 'One variant must be marked as control.';
   const total = allocationTotalOf(variants);
   if (total !== 100) return `Variant allocations must add up to 100% (currently ${total}%).`;
+  const empty = variants.findIndex(hasNoShare);
+  if (empty >= 0) return `“${variants[empty].name.trim()}”: ${ZERO_SHARE}`;
   const problems = configurationProblems(variants);
   const first = problems.findIndex((p) => p !== null);
   if (first >= 0) {
@@ -247,6 +445,16 @@ export function validateForm(
 }
 
 /**
+ * The API's refusal of the split for a balanced experiment (every share must
+ * be a multiple of 5), or null: nothing while the switch is off, and nothing
+ * until the shares add up to 100.
+ */
+export function balanceSplitProblem(state: Pick<ExperimentFormState, 'balance' | 'variants'>): string | null {
+  if (!state.balance.on) return null;
+  return splitProblem(state.variants.map((v) => Number(v.traffic_allocation) || 0));
+}
+
+/**
  * Every problem with the targeting rules, in the builder's words, or [] when
  * they can be sent. No groups means no targeting and is always fine.
  *
@@ -271,11 +479,12 @@ export type FormStep = (typeof FORM_STEPS)[number];
 /**
  * The first problem with the part of the form one step asks for, or null.
  *
- * `type` always has a valid value and cannot fail. `estimate` fails only on a
- * minimum detectable effect that is typed but cannot be saved (blank is fine;
- * the rest of that step is not sent). `review` is the whole-form check, and
- * every other message is one `validateForm` can return. The single-page form
- * does not ask for the effect, so `validateForm` does not check it, and
+ * `type` always has a valid value and cannot fail. `estimate` fails on an
+ * Advanced Bayesian setting the API would refuse (#442), and on a minimum
+ * detectable effect that is typed but cannot be saved (blank is fine; the rest
+ * of the estimate is not sent). `review` is the whole-form check, and every
+ * other message is one `validateForm` can return. The single-page form does
+ * not ask for the effect, so `validateForm` does not check it, and
  * `buildCreatePayload` sends only a usable one.
  */
 export function validateStep(step: FormStep, state: ExperimentFormState): string | null {
@@ -285,11 +494,15 @@ export function validateStep(step: FormStep, state: ExperimentFormState): string
     case 'details':
       return checkName(state.name) ?? checkMetrics(state.metrics);
     case 'variants':
-      return checkVariants(state.variants);
+      return checkVariants(state.variants) ?? balanceSplitProblem(state);
     case 'estimate':
-      return plannedEffectProblem(state.plannedEffectPct);
+      return bayesianConfigProblem(state) ?? plannedEffectProblem(state.plannedEffectPct);
     case 'review':
-      return validateForm(state.name, state.variants, state.metrics);
+      return (
+        validateForm(state.name, state.variants, state.metrics) ??
+        balanceSplitProblem(state) ??
+        bayesianConfigProblem(state)
+      );
   }
 }
 
@@ -346,13 +559,210 @@ export function buildCreatePayload(state: ExperimentFormState): CreateExperiment
         is_primary: m.is_primary,
       };
       if (m.is_primary && plannedEffect !== undefined) metric.expected_effect = plannedEffect;
+      // Sent only when true; without it the API stores false.
+      if (m.lower_is_better === true) metric.lower_is_better = true;
       return metric;
     }),
     confidence_level: state.confidenceLevel,
     correction_method: state.correctionMethod,
   };
-  if (state.bayesianEnabled) payload.bayesian_enabled = true;
+  if (state.bayesianEnabled) {
+    payload.bayesian_enabled = true;
+    // Only a change is sent: with all five at their defaults the API stores the defaults itself.
+    const bayesianConfig = buildBayesianConfig(state.bayesianConfig);
+    if (bayesianConfig) payload.bayesian_config = bayesianConfig;
+  }
+  if (state.sequentialEnabled) payload.sequential_testing_enabled = true;
+  // Sent only when on: a draft that does not balance is created as before.
+  const balance = buildBalancePayload(state.balance);
+  if (balance) payload.balance_within = balance;
   return payload;
+}
+
+// --- design edit: a draft's variants and metrics (#1453) ---------------------
+//
+// `PUT /api/v1/experiments/{id}` REPLACES both lists in one commit: a variant
+// or a metric left out is deleted, and a field left out of an item is reset to
+// its default, with a 200. So the experiment page's design edit always sends
+// every item, and every stored field of each, including the ones no editor
+// shows (`MetricFormData.carried`).
+
+/** A stored configuration as the variant editor shows it: indented JSON, or blank for none. */
+export function configurationText(configuration: Record<string, unknown> | null | undefined): string {
+  return configuration == null ? '' : JSON.stringify(configuration, null, 2);
+}
+
+function variantFromStored(variant: ExperimentVariant): VariantFormData {
+  return {
+    name: variant.name,
+    description: variant.description ?? '',
+    traffic_allocation: variant.traffic_allocation,
+    is_control: variant.is_control,
+    configuration_text: configurationText(variant.configuration),
+  };
+}
+
+function metricFromStored(metric: ExperimentMetric, holdsPlannedEffect: boolean): MetricFormData {
+  return {
+    name: metric.name,
+    event_name: metric.event_name,
+    metric_type: metric.metric_type as MetricType,
+    is_primary: metric.is_primary,
+    lower_is_better: metric.lower_is_better === true,
+    carried: {
+      description: metric.description ?? null,
+      aggregation_method: metric.aggregation_method ?? null,
+      minimum_sample_size: metric.minimum_sample_size ?? null,
+      expected_effect: holdsPlannedEffect ? null : (metric.expected_effect ?? null),
+      event_value_path: metric.event_value_path ?? null,
+    },
+  };
+}
+
+/**
+ * The form state the design edit starts from: the experiment's variants and
+ * metrics as stored, in the order the API listed them. The first primary
+ * metric's `expected_effect` becomes `designPlannedEffect`.
+ */
+export function formStateFromExperiment(experiment: Experiment): ExperimentFormState {
+  const planned = experiment.metrics.findIndex((m) => m.is_primary);
+  const state: ExperimentFormState = {
+    ...createInitialFormState(),
+    name: experiment.name,
+    variants: experiment.variants.map(variantFromStored),
+    metrics: experiment.metrics.map((m, i) => metricFromStored(m, i === planned)),
+    balance: balanceStateFromStored(experiment.balance_within),
+    balanceStored: experiment.balance_within ?? null,
+  };
+  if (planned >= 0) state.designPlannedEffect = experiment.metrics[planned].expected_effect ?? null;
+  return state;
+}
+
+/**
+ * The design edit's body: exactly `{variants, metrics}`, both complete.
+ *
+ * - A variant carries all five `VariantBase` fields. A blank description and
+ *   no configuration are sent as null.
+ * - A metric carries what the editor shows, plus `carried` as it was read.
+ *   `aggregation_method` and `minimum_sample_size` are left out when they
+ *   have no value (the API refuses null there and stores its default); the
+ *   Optional fields are sent as null.
+ * - The primary metric's `expected_effect` is `designPlannedEffect`, so it
+ *   moves to a new primary, as `buildCreatePayload` puts the planned effect on
+ *   the primary only. With no stored primary, each metric keeps its own.
+ *
+ * Names and event names are trimmed, as on create. Validation
+ * (`checkDesign`) refuses a configuration that does not parse before this is
+ * called.
+ */
+export function buildDesignPayload(state: ExperimentFormState): ExperimentDesignUpdate {
+  const variants = state.variants.map((v): DesignVariant => {
+    const configuration = parseConfiguration(v.configuration_text);
+    return {
+      name: v.name.trim(),
+      description: v.description === '' ? null : v.description,
+      is_control: v.is_control,
+      traffic_allocation: Number(v.traffic_allocation) || 0,
+      configuration: configuration.ok && configuration.value !== undefined ? configuration.value : null,
+    };
+  });
+  const metrics = state.metrics.map((m): DesignMetric => {
+    const carried = m.carried;
+    const takesPlan = m.is_primary && state.designPlannedEffect !== undefined;
+    const metric: DesignMetric = {
+      name: m.name.trim(),
+      description: carried?.description ?? null,
+      event_name: m.event_name.trim(),
+      metric_type: m.metric_type,
+      is_primary: m.is_primary,
+      expected_effect: takesPlan ? (state.designPlannedEffect ?? null) : (carried?.expected_effect ?? null),
+      event_value_path: carried?.event_value_path ?? null,
+      lower_is_better: m.lower_is_better === true,
+    };
+    if (carried?.aggregation_method != null) metric.aggregation_method = carried.aggregation_method;
+    if (carried?.minimum_sample_size != null) metric.minimum_sample_size = carried.minimum_sample_size;
+    return metric;
+  });
+  const body: ExperimentDesignUpdate = { variants, metrics };
+  // Only a change to the setting is sent: a save that leaves it alone sends the two lists, as before.
+  const balance = buildBalancePayload(state.balance);
+  if (!sameBalance(balance, state.balanceStored ?? null)) body.balance_within = balance;
+  return body;
+}
+
+/** The design edit's own refusals; every other one is guided setup's (`checkVariants`, `checkMetrics`). */
+export const TWO_VARIANTS = 'An experiment needs at least two variants to start.';
+export const ONE_CONTROL = 'Only one variant can be the control.';
+export const ONE_PRIMARY = 'Only one metric can be the primary metric.';
+
+/** The control a refusal is about, so the form can move focus there. */
+export type DesignField =
+  | { list: 'variants' | 'metrics'; index: -1; field: 'add' }
+  | { list: 'variants'; index: number; field: 'name' | 'traffic_allocation' | 'is_control' | 'configuration' }
+  | { list: 'metrics'; index: number; field: 'name' | 'event_name' | 'is_primary' };
+
+export interface DesignProblem {
+  message: string;
+  field: DesignField;
+}
+
+function indexesWhere<T>(items: T[], test: (item: T) => boolean): number[] {
+  return items.flatMap((item, i) => (test(item) ? [i] : []));
+}
+
+/** The field `checkVariants`' first problem is about, found in the order it checks. */
+function variantProblemField(variants: VariantFormData[]): DesignField {
+  const unnamed = variants.findIndex((v) => !v.name.trim());
+  if (unnamed >= 0) return { list: 'variants', index: unnamed, field: 'name' };
+  if (!variants.some((v) => v.is_control)) return { list: 'variants', index: 0, field: 'is_control' };
+  if (allocationTotalOf(variants) !== 100) return { list: 'variants', index: 0, field: 'traffic_allocation' };
+  const empty = variants.findIndex(hasNoShare);
+  if (empty >= 0) return { list: 'variants', index: empty, field: 'traffic_allocation' };
+  const configuration = configurationProblems(variants).findIndex((p) => p !== null);
+  return { list: 'variants', index: Math.max(configuration, 0), field: 'configuration' };
+}
+
+/** The field `checkMetrics`' first problem is about, found in the order it checks. */
+function metricProblemField(metrics: MetricFormData[]): DesignField {
+  if (metrics.length === 0) return { list: 'metrics', index: -1, field: 'add' };
+  const blank = metrics.findIndex((m) => !m.name.trim() || !m.event_name.trim());
+  if (blank >= 0) {
+    return { list: 'metrics', index: blank, field: metrics[blank].name.trim() ? 'event_name' : 'name' };
+  }
+  const names = metrics.map((m) => m.name.trim());
+  const repeat = names.findIndex((name, i) => names.indexOf(name) !== i);
+  if (repeat >= 0) return { list: 'metrics', index: repeat, field: 'name' };
+  return { list: 'metrics', index: 0, field: 'is_primary' };
+}
+
+/**
+ * The design edit's first problem, or null when it can be sent. In order:
+ * at least two variants (Start refuses fewer, and a scheduled draft would be
+ * started without that check), guided setup's variant checks, exactly one
+ * control, guided setup's metric checks, exactly one primary. The API accepts
+ * one variant, no metric, two controls and two primaries, so only this stops
+ * them.
+ */
+export function checkDesign(state: ExperimentFormState): DesignProblem | null {
+  const { variants, metrics } = state;
+  if (variants.length < 2) return { message: TWO_VARIANTS, field: { list: 'variants', index: -1, field: 'add' } };
+  const variantProblem = checkVariants(variants);
+  if (variantProblem !== null) return { message: variantProblem, field: variantProblemField(variants) };
+  const controls = indexesWhere(variants, (v) => v.is_control);
+  if (controls.length > 1) {
+    return { message: ONE_CONTROL, field: { list: 'variants', index: controls[0], field: 'is_control' } };
+  }
+  const splitRefusal = balanceSplitProblem(state);
+  if (splitRefusal !== null) {
+    return { message: splitRefusal, field: { list: 'variants', index: 0, field: 'traffic_allocation' } };
+  }
+  const metricProblem = checkMetrics(metrics);
+  if (metricProblem !== null) return { message: metricProblem, field: metricProblemField(metrics) };
+  const primaries = indexesWhere(metrics, (m) => m.is_primary);
+  if (primaries.length > 1) {
+    return { message: ONE_PRIMARY, field: { list: 'metrics', index: primaries[0], field: 'is_primary' } };
+  }
+  return null;
 }
 
 // --- reducer -----------------------------------------------------------------
@@ -367,7 +777,19 @@ export type ExperimentFormAction =
   | { type: 'setConfidenceLevel'; confidenceLevel: number }
   | { type: 'setCorrectionMethod'; correctionMethod: CorrectionMethod }
   | { type: 'setBayesianEnabled'; bayesianEnabled: boolean }
+  | { type: 'setBayesianField'; field: BayesianNumberField; value: string }
+  | { type: 'setSequentialEnabled'; sequentialEnabled: boolean }
   | { type: 'setPlannedEffect'; plannedEffectPct: string }
+  | { type: 'setBalanceOn'; on: boolean }
+  | { type: 'setBalanceGroupBy'; groupBy: BalanceFormState['groupBy'] }
+  | { type: 'setBalanceCustomKey'; customKey: string }
+  /** `from` is the key as it stood when the text field was entered. */
+  | { type: 'commitBalanceCustomKey'; from: string }
+  | { type: 'addBalanceValue'; value: string }
+  | { type: 'removeBalanceValue'; index: number }
+  | { type: 'addBalanceSegment'; segmentId: string }
+  | { type: 'removeBalanceSegment'; index: number }
+  | { type: 'moveBalanceSegment'; index: number; by: -1 | 1 }
   | { type: 'addVariant' }
   | { type: 'removeVariant'; index: number }
   | {
@@ -409,8 +831,49 @@ export function experimentFormReducer(
       return { ...state, correctionMethod: action.correctionMethod };
     case 'setBayesianEnabled':
       return { ...state, bayesianEnabled: action.bayesianEnabled };
+    case 'setBayesianField':
+      return { ...state, bayesianConfig: { ...state.bayesianConfig, [action.field]: action.value } };
+    case 'setSequentialEnabled':
+      return { ...state, sequentialEnabled: action.sequentialEnabled };
     case 'setPlannedEffect':
       return { ...state, plannedEffectPct: action.plannedEffectPct };
+
+    case 'setBalanceOn':
+      return { ...state, balance: { ...state.balance, on: action.on } };
+    case 'setBalanceGroupBy':
+      // The values belong to the key they were listed for.
+      return { ...state, balance: { ...state.balance, groupBy: action.groupBy, values: [] } };
+    case 'setBalanceCustomKey':
+      // Typing only changes the text: a typo fixed mid-word keeps the values listed so far.
+      return { ...state, balance: { ...state.balance, customKey: action.customKey } };
+    case 'commitBalanceCustomKey':
+      // The key is settled (blur or Enter): values listed for another key do not go with this one.
+      if (state.balance.customKey === action.from) return state;
+      return { ...state, balance: { ...state.balance, values: [] } };
+    case 'addBalanceValue':
+      // A value is matched exactly, so it is kept as typed; only nothing is not added.
+      if (action.value.trim() === '') return state;
+      return { ...state, balance: { ...state.balance, values: [...state.balance.values, action.value] } };
+    case 'removeBalanceValue':
+      return {
+        ...state,
+        balance: { ...state.balance, values: state.balance.values.filter((_, i) => i !== action.index) },
+      };
+    case 'addBalanceSegment':
+      if (action.segmentId === '' || state.balance.segments.includes(action.segmentId)) return state;
+      return { ...state, balance: { ...state.balance, segments: [...state.balance.segments, action.segmentId] } };
+    case 'removeBalanceSegment':
+      return {
+        ...state,
+        balance: { ...state.balance, segments: state.balance.segments.filter((_, i) => i !== action.index) },
+      };
+    case 'moveBalanceSegment': {
+      const to = action.index + action.by;
+      if (to < 0 || to >= state.balance.segments.length) return state;
+      const segments = [...state.balance.segments];
+      [segments[action.index], segments[to]] = [segments[to], segments[action.index]];
+      return { ...state, balance: { ...state.balance, segments } };
+    }
 
     case 'addVariant':
       return {

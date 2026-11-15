@@ -6,7 +6,7 @@ used in the P3-C: Audience Segmentation API.
 """
 
 from enum import Enum
-from typing import Annotated, Any, List, Optional
+from typing import Annotated, Any, List, Literal, Optional
 
 from pydantic import (
     BaseModel,
@@ -18,7 +18,10 @@ from pydantic import (
 )
 
 from backend.app.core.targeting_adapter import (
+    SEGMENT_RULES_SUBJECT,
     TargetingRulesError,
+    check_segment_vocabulary,
+    overflow_refusal,
     validate_segment_rules,
 )
 from backend.app.schemas.storable_text import StorableTextModel
@@ -44,10 +47,25 @@ def _checked_segment_rules(value: Any) -> Any:
 
     The value is returned as given, never rewritten. The message is fixed
     text naming a place and a reason, never the submitted rules (see
-    ``validate_segment_rules``).
+    ``validate_segment_rules``). A word membership never matches, such as an
+    unknown distance unit (#1204), or a value it cannot read, such as a
+    negative radius or a geo comparison the converter drops (#1525, #1526),
+    a time window the engine cannot read (#1669) or a number comparison with
+    an integer too large for a float (#1673), is refused here too: on the
+    write path only, because ``validate_segment_rules`` also decides whether
+    a stored segment can be evaluated. For the same reason an integer too
+    large for a float in a geo value, which makes ``validate_segment_rules``
+    raise ``OverflowError``, is answered here, around that call only, as a
+    value that is not a number is (``overflow_refusal``, #1672).
     """
     try:
-        validate_segment_rules(value)
+        try:
+            rules = validate_segment_rules(value)
+        except OverflowError:
+            raise overflow_refusal(
+                value, dashboard=True, subject=SEGMENT_RULES_SUBJECT
+            ) from None
+        check_segment_vocabulary(rules, value)
     except TargetingRulesError as err:
         raise ValueError(str(err)) from None
     return value
@@ -421,12 +439,73 @@ class SegmentExperimentResponse(BaseModel):
     )
 
 
-class AudiencePreviewResponse(BaseModel):
-    """Estimated audience size from preview evaluation."""
+#: Why a preview gives no percentage: no user seen with attributes, or fewer
+#: than the preview's floor.
+PreviewReason = Literal["no_exposures_with_context", "too_few_users"]
+#: What ended the preview's read: enough users, the row cap, or the window.
+PreviewEndedBy = Literal["sample_size", "cap", "window"]
 
-    estimated_percentage: float
-    sample_size: int
-    matched: int
+
+class AudiencePreviewResponse(BaseModel):
+    """How many of the users seen most recently the rules match.
+
+    The users are the most recent ones with an exposure (a /tracking/assign
+    call) in the last 30 days, each counted once, with the attributes sent as
+    context on their latest one. It is not a random sample: it leans toward
+    frequent users and the time of day.
+    """
+
+    estimated_percentage: Optional[float] = Field(
+        ...,
+        description=(
+            "matched / sample_size x 100, to 2 decimals. null when reason is set: "
+            "no user seen with attributes, or fewer than 30."
+        ),
+    )
+    sample_size: int = Field(
+        ...,
+        description=(
+            "Distinct users read whose latest exposure carried attributes; at "
+            "most the requested sample_size."
+        ),
+    )
+    matched: int = Field(..., description="Of those users, how many the rules match.")
+    source: Literal["exposure_metadata"] = Field(
+        ...,
+        description="Where the attributes come from: the exposures' stored context.",
+    )
+    window_days: int = Field(
+        ...,
+        description="The read goes back at most this many days (fixed at 30).",
+    )
+    sampled_since: Optional[str] = Field(
+        ...,
+        description=(
+            "The time of the oldest exposure read, UTC ISO-8601; null when none "
+            "was read."
+        ),
+    )
+    ended_by: PreviewEndedBy = Field(
+        ...,
+        description=(
+            "sample_size: enough users were found; cap: the row cap was reached "
+            "first; window: every exposure in the window was read."
+        ),
+    )
+    users_without_context: int = Field(
+        ...,
+        description=(
+            "Distinct users read whose latest exposure carried no attributes; "
+            "not counted in sample_size."
+        ),
+    )
+    reason: Optional[PreviewReason] = Field(
+        ...,
+        description=(
+            "Why estimated_percentage is null: no_exposures_with_context (no user "
+            "with attributes) or too_few_users (1 to 29). null otherwise."
+        ),
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -434,6 +513,12 @@ class AudiencePreviewResponse(BaseModel):
                 "estimated_percentage": 35.5,
                 "sample_size": 1000,
                 "matched": 355,
+                "source": "exposure_metadata",
+                "window_days": 30,
+                "sampled_since": "2026-11-06T09:12:45.120391+00:00",
+                "ended_by": "sample_size",
+                "users_without_context": 42,
+                "reason": None,
             }
         }
     )

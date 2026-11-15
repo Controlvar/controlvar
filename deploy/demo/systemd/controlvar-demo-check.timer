@@ -1,0 +1,10 @@
+# Every hour at half past: never at the reset's own minute.
+[Unit]
+Description=Controlvar demo: hourly check
+
+[Timer]
+OnCalendar=*-*-* *:30:00 UTC
+Persistent=false
+
+[Install]
+WantedBy=timers.target

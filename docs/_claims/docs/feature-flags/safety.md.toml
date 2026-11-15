@@ -34,6 +34,14 @@ text = "The safety monitor runs every 5 minutes by default (SAFETY_CHECK_INTERVA
 by = [
     "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_settings_have_scheduler_interval_defaults",
     "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_interval_defaults_come_from_settings",
+    "test:backend/tests/unit/core/test_safety_scheduler_off_loop.py::test_the_safety_loop_checks_then_sleeps_the_interval_in_seconds",
+]
+
+[[unit]]
+text = "A rollback reaches clients as any change to the flag does: see Turning a Flag Off."
+by = [
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p8_p9_the_monitor_turns_the_flag_off_once",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_every_sdk_but_the_edge_sdk_keeps_an_answer_five_minutes_and_the_edge_sdk_one",
 ]
 
 [[unit]]
@@ -113,11 +121,12 @@ text = "Which errors count"
 by = ["exempt:label"]
 
 [[unit]]
-text = "A flag's error metrics, and so automatic rollback, count two kinds of error: flag evaluations that fail on the server, and error reports sent to POST /api/v1/tracking/errors or /errors/batch with a server-side key, an API key with the sdk:ruleset scope whose owner can change feature flags (ADMIN, DEVELOPER or a superuser)."
+text = "A flag's error metrics, and so automatic rollback, count two kinds of error: flag evaluations that fail on the server, and error reports sent to POST /api/v1/tracking/errors or /errors/batch with a server-side key, an API key with the sdk:ruleset scope whose owner can change feature flags (ADMIN, DEVELOPER, a superuser, or in the full profile anyone whose custom role or direct grant gives feature_flag (update))."
 by = [
     "test:backend/tests/integration/api/test_error_report_source.py::test_a_report_sent_with_a_server_side_key_rolls_back",
     "test:backend/tests/integration/api/test_error_report_source.py::test_an_evaluation_that_fails_on_the_server_still_rolls_back",
     "test:backend/tests/integration/api/test_error_report_source.py::test_rows_of_every_stored_shape_are_counted_as_documented",
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
 ]
 
 [[unit]]
@@ -128,12 +137,23 @@ by = [
 ]
 
 [[unit]]
-text = "The same goes for an sdk:ruleset key whose owner has since lost the role."
-by = ["test:backend/tests/integration/api/test_error_report_source.py::test_a_scoped_key_whose_owner_can_no_longer_change_flags_does_not_count"]
+text = "The same goes for an sdk:ruleset key whose owner can no longer change feature flags."
+by = [
+    "test:backend/tests/integration/api/test_error_report_source.py::test_a_scoped_key_whose_owner_can_no_longer_change_flags_does_not_count",
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
+]
 
 [[unit]]
 text = "To have app errors count, send them to your server and forward them from there with a server-side key; see Reporting client-side errors."
 by = ["exempt:advice"]
+
+[[unit]]
+text = "A server using the JavaScript or Python SDK sends one with reportError or report_error; true from either means the report was stored, not that it counts."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs one report to /api/v1/tracking/errors with the server field names and resolves true on 201",
+    "test:sdk/python/tests/test_client.py::TestReportError::test_posts_one_report_with_the_server_field_names_and_returns_true_on_201",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_the_stored_source_follows_the_presented_key",
+]
 
 [[unit]]
 text = "GET /api/v1/metrics/summary counts errors by the same rule: its error_rate leaves out the reports that do not count, and its uncounted_error_count is the number of them in its period."
@@ -147,6 +167,37 @@ by = [
     "test:backend/tests/integration/api/test_metrics_summary_error_rule.py::test_the_summary_counts_errors_by_the_safety_checks_rule",
     "test:backend/tests/integration/api/test_metrics_summary_error_rule.py::test_the_summary_still_differs_from_the_check_in_period_and_denominator",
 ]
+
+[[unit]]
+text = "What the error rate divides by"
+by = ["exempt:label"]
+
+[[unit]]
+text = "error_rate divides the errors that count by every evaluation of the flag in the same 15-minute window, whichever API key asked for it, your app's own key included."
+by = [
+    "journey:feature-flag-safety#unhealthy",
+    "journey:feature-flag-safety#control-healthy",
+    "test:backend/tests/integration/api/test_safety_defaults_and_manual_rollback.py::test_the_check_reads_the_last_15_minutes_of_errors_and_latency",
+]
+
+[[unit]]
+text = "Each GET /api/v1/feature-flags/user/{user_id} counts as one evaluation of every active flag."
+by = ["test:backend/tests/integration/api/test_safety_error_rate_denominator.py::test_a_user_flags_request_counts_one_evaluation_of_every_active_flag"]
+
+[[unit]]
+text = "Evaluation counts that a server-side SDK reports after evaluating locally count too; see Local evaluation."
+by = [
+    "test:backend/tests/integration/api/test_flag_evaluations_api.py::TestRecording::test_the_safety_denominator_counts_the_rows",
+    "test:backend/tests/integration/api/test_flag_evaluations_api.py::test_7c_locally_evaluated_flag_is_rolled_back_by_the_safety_monitor",
+]
+
+[[unit]]
+text = "error_count counts errors only, so it does not change with how often the flag is evaluated."
+by = ["test:backend/tests/integration/api/test_safety_error_rate_denominator.py::test_error_count_does_not_change_with_how_often_the_flag_is_evaluated"]
+
+[[unit]]
+text = "To roll back on a number of errors whatever the traffic, set a critical_threshold on error_count, alone or beside error_rate."
+by = ["test:backend/tests/integration/api/test_safety_error_rate_denominator.py::test_a_critical_threshold_on_error_count_breaches_whatever_the_traffic"]
 
 [[unit]]
 text = "Metrics You Can Monitor"
@@ -544,7 +595,10 @@ by = ["journey:feature-flag-safety#rollback-audit"]
 
 [[unit]]
 text = "Its new_value holds trigger_type (automatic), previous_percentage, new_percentage, deactivated and paused_schedules (see Audit Logging)"
-by = ["journey:feature-flag-safety#rollback-audit"]
+by = [
+    "journey:feature-flag-safety#rollback-audit",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p12_an_automatic_partial_rollback_keeps_rule_users_and_pauses_only_the_active_schedule",
+]
 
 [[unit]]
 text = "Sends a Slack alert to SLACK_DEFAULT_CHANNEL and a safety_rollback event to NOTIFICATION_WEBHOOK_URL, each when configured."
@@ -622,6 +676,10 @@ text = "The targeting rules are left as written."
 by = ["test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p11_the_documented_restore_steps_restore_every_user"]
 
 [[unit]]
+text = "For a string, number or json flag, every user then gets its off value."
+by = ["test:backend/tests/integration/api/test_flag_values_api.py::test_a_safety_rollback_serves_the_off_value"]
+
+[[unit]]
 text = "A rollback to 1–100% lowers only the global rollout_percentage."
 by = ["test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p4_a_partial_rollback_lowers_only_the_global_rollout"]
 
@@ -631,17 +689,24 @@ by = ["test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p4_
 
 [[unit]]
 text = "A user who matches a rule is bucketed by that rule's own rollout_percentage (100 unless the rule sets one), so the rollback does not change whether that user gets the flag."
-by = ["test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p4_a_partial_rollback_lowers_only_the_global_rollout"]
+by = [
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p4_a_partial_rollback_lowers_only_the_global_rollout",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p12_an_automatic_partial_rollback_keeps_rule_users_and_pauses_only_the_active_schedule",
+]
 
 [[unit]]
 text = "Either way, the flag's active rollout schedules are paused, so a later stage cannot raise the percentage again; they stay paused until you resume them."
-by = ["test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p10_a_tick_and_a_stage_advance_after_a_rollback_leave_users_off"]
+by = [
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p10_a_tick_and_a_stage_advance_after_a_rollback_leave_users_off",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p12_an_automatic_partial_rollback_keeps_rule_users_and_pauses_only_the_active_schedule",
+]
 
 [[unit]]
-text = "So the flag's default value is served to every user after a rollback to 0%, and after a partial rollback to the users it removes, while users matched by a targeting rule keep their rule's percentage."
+text = "So the flag's off value is served to every user after a rollback to 0%, and after a partial rollback to the users it removes, while users matched by a targeting rule keep their rule's percentage."
 by = [
     "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p1_a_rule_matched_user_is_off_after_a_rollback_to_0",
     "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p4_a_partial_rollback_lowers_only_the_global_rollout",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_a_safety_rollback_serves_the_off_value",
 ]
 
 [[unit]]
@@ -824,6 +889,20 @@ by = ["test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p11
 [[unit]]
 text = "The ids are in the rollback response's details.paused_schedules."
 by = ["test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p11_the_documented_restore_steps_restore_every_user"]
+
+[[unit]]
+text = "After an automatic rollback they are in the safety_rollback audit entry's new_value.paused_schedules."
+by = [
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_manual_rollback_is_recorded_by_the_calling_user",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_monitor_rollback_is_recorded_by_the_safety_monitor",
+]
+
+[[unit]]
+text = "If that entry is missing, list the flag's paused schedules with GET /api/v1/rollout-schedules/?feature_flag_id=$FLAG_ID&status=paused; a schedule paused by hand is listed too."
+by = [
+    "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestListRolloutSchedules::test_filter_by_feature_flag_id",
+    "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestListRolloutSchedules::test_filter_by_status_draft",
+]
 
 [[unit]]
 text = "Check the flag's thresholds."

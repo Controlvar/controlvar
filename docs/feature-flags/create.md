@@ -11,7 +11,9 @@ written against the stack from the [Quick Start](../getting-started/quick-start.
 - **A running stack.** [Quick Start](../getting-started/quick-start.md) Step 1 starts one
   on `localhost`. On your own deployment, use its URL wherever this page says
   `localhost:8000` or `localhost:3000`.
-- **A user account with the ADMIN or DEVELOPER role.** Creating, changing and turning a
+- **A user account that may create and change flags:** one with the ADMIN or DEVELOPER role,
+  or in the full profile one whose custom role or direct grant gives `feature_flag (create)`
+  and `feature_flag (update)`. Creating, changing and turning a
   flag on all take a user login. An API key can't do them (the API answers `401`). A
   superuser creates accounts under **Admin → Users**. The examples below use the demo
   administrator, `admin@demo.com`.
@@ -34,6 +36,28 @@ navigation, then click **+ New Flag**.
 | **Name** (required) | The label shown in the dashboard. | `New Checkout Flow` |
 | **Key** (required) | The identifier your code passes to the SDK. It's filled in from the name (`new_checkout_flow`), and you can edit it. Use lowercase letters, digits, `-` and `_`. The dashboard can't change it after the flag is created. | `new-checkout-flow` |
 | **Description** | What the flag controls, and when it should be removed. | `Redesigned single-page checkout experience` |
+
+### Optional: serve a value instead of on or off
+
+Under **Values**, the **Type** is **Boolean** unless you choose another: the flag is on or
+off, and your code reads whether it is on. Choose **String**, **Number** or **JSON** to
+serve a value instead, and two fields appear:
+
+| Field | What it holds |
+|-------|---------------|
+| **On value** | What users the flag is on for get: users who match a targeting rule, and the rollout percentage of everyone else. |
+| **Off value** | What everyone else gets, and what everyone gets while the flag is off. |
+
+A string may be empty. A number is written as in JSON, such as `10`, `-3` or `2.5`. A JSON
+value is an object or an array, such as `{"color": "blue"}`. The two values must differ.
+If a value can't be used, the reason is shown under its field and the flag is not created.
+The type can't be changed after the flag is created; the two values can, on the flag's page.
+
+A new flag starts off, so everyone gets its off value until you turn it on. Its page names
+its type beside the status, and reads *Everyone gets the off value* while it is off and
+*Rules and rollout decide who gets the on value* while it is on. Every application that
+evaluates the flag can read both values, so don't put secrets in them.
+[Serve a value](#serve-a-value) creates the same kind of flag with the API.
 
 ### Step 3: Add targeting rules (optional)
 
@@ -69,13 +93,16 @@ match no targeting rule:
 | `100%` | Everyone |
 
 Each user always lands on the same side of the percentage. Raising it adds users, and
-takes none away.
+takes none away. Lowering it takes users away and adds none, and returning to an earlier
+percentage gives back the same users.
 
 ### Step 5: Create the flag, then turn it on
 
 Click **Create Feature Flag**. The flag starts **off** (its page reads *Not serving*), so
 creating it never exposes anyone. When you're ready, turn it on with the switch beside
-*Not serving*, and the page then reads *Serving*. The same switch turns it off again.
+*Not serving*, and the page then reads *Serving*. The same switch turns it off again. Clients
+serve the change within their cache lifetime, 5 minutes by default, the next time they ask for the
+flag: see [Turning a Flag Off](kill-switch.md).
 
 The dashboard's **On**/**Off** is the API's `is_active` (`true`/`false`), reported
 beside it as `status` (`"active"`/`"inactive"`). You set it with `is_active`.
@@ -147,17 +174,22 @@ The request takes these fields:
 - `is_active` (default `false`);
 - `rollout_percentage` (0–100, default 0);
 - `targeting_rules`;
-- `default_value`: what the flag serves when it is off. Only `false` is accepted for now,
-  and it is the default; `true` answers `422`;
+- `value_type`: `boolean` (the default), `string`, `number` or `json` (see
+  [Serve a value](#serve-a-value));
+- `on_value` and `off_value`: what a `string`, `number` or `json` flag serves;
+- `default_value`: deprecated, `off_value` replaces it. Only `false` is accepted, for every
+  flag, and it is the default; `true` answers `422`;
 - `tags`.
 
 **Any other field answers `422`** (`"type": "extra_forbidden"`), so a misspelled or
 unsupported field is never dropped silently. `null` is refused for `key`, `name`,
-`is_active`, `rollout_percentage` and `default_value`. A key that already exists answers
-`409`, and a key with capitals or spaces answers `422`.
+`is_active`, `rollout_percentage`, `default_value`, `value_type`, `on_value` and
+`off_value`. A key that already exists answers `409`, and a key with capitals or spaces
+answers `422`.
 
 The fields a response carries but no request writes (`id`, `owner_id`, `created_at`,
-`updated_at` and `status`) are accepted and ignored, so a GET body can be sent back
+`updated_at` and `status`, and a list item's `stale` and `stale_reasons`) are accepted
+and ignored, so a GET body can be sent back
 unchanged unless its `targeting_rules` are ones PUT now refuses (422); omitting the field
 still works (see [Add targeting rules](#add-targeting-rules)). A `status` must match:
 `"inactive"` (in any case) on a create without `is_active: true`, and the flag's current
@@ -220,7 +252,16 @@ update, and nothing is saved. That is:
 - an unknown operator or logical operator (`and`, `or` or `not`, in any case);
 - a value the operator cannot use (`"abc"` for `greater_than`, `"not-a-version"` for
   `semver_gte`), a `regex` pattern RE2 refuses, and a list operator with more than 1,000
-  values;
+  values; a `before` or `after` value that cannot be read as a date, an `array_length` value
+  that cannot be read as a whole number (or `between` without whole-number `min` and `max`), a
+  native `gt`, `gte`, `lt` or `lte` value that cannot be read as a number, a `geo_distance`
+  radius that is missing, below 0 or not a number, and a comparison on a dashboard
+  `geo_within_radius` rule, which the dashboard shape does not read; a `between` whose bounds
+  are not two numbers or two dates, a dashboard `time_window` the engine cannot read, and a geo
+  number, or a dashboard number comparison, too large for a floating-point number;
+- in the native shape, a `time_window` the engine cannot read: it needs `days`,
+  `start_time` with `end_time`, or `start_date` with `end_date`, and needs no `start` or
+  `end`;
 - a `rollout_percentage`, top-level or on a native rule, that is not an integer from 0 to
   100 (`100.0` is accepted; `33.5`, `true` and `"50"` are not), or an `id` that is not text
   of 1 to 100 characters.
@@ -361,9 +402,10 @@ a `status` in it must be the flag's current status.
 
 ### Archived flags
 
-An archived flag is retired: it is never served, and nothing turns it back on by
-accident. Every request that would turn it on (`PUT` with `"is_active": true`,
-`/activate`, `/enable`, `/toggle`, and bulk `enable`) answers `400` with
+An archived flag is retired: every evaluation answers it as off (`enabled: false`,
+`reason: "inactive"`, and its off value, which a value method returns instead of your
+default), in local evaluation too, and nothing turns it back on by accident. Every request
+that would turn it on (`PUT` with `"is_active": true`, `/activate`, `/enable`, `/toggle`, and bulk `enable`) answers `400` with
 
 ```text
 This flag is archived. Unarchive it before turning it on.
@@ -374,8 +416,36 @@ and leaves the flag archived. A request that turns it off (`"is_active": false`,
 archived flag is already off. The way back is
 `POST /api/v1/feature-flags/$FLAG_ID/unarchive` (beta), which makes the flag
 inactive; turn it on afterwards as usual. A flag is archived with
-`POST /api/v1/feature-flags/bulk-toggle` and `"action": "archive"`. The dashboard has no
-archive or unarchive action yet.
+`POST /api/v1/feature-flags/bulk-toggle` and `"action": "archive"`. In the dashboard, anyone
+with permission to change feature flags (the ADMIN and DEVELOPER roles have it) archives a
+flag with **Archive** on its page, which asks you to confirm, and brings it back with
+**Unarchive** there. An archived flag reads **Archived**, with no on/off switch on either
+page: in its place each page says to unarchive it first, and the flag's page links to this
+section. The flag list has an **Archived** filter.
+[Stale Flags](stale-flags.md) lists the flags that look ready to archive.
+
+### Deleting a flag
+
+`DELETE /api/v1/feature-flags/$FLAG_ID` removes a flag for good; it cannot be undone.
+While any code may still ask for the flag, archive it instead. After a delete:
+
+- As of v0.42.0, evaluating its key answers `404`.
+- Each SDK answers it as it does for any failure: see its page
+  ([JavaScript](../sdk/javascript.md), [React](../sdk/react.md),
+  [React Native](../sdk/react-native.md), [Python](../sdk/python.md),
+  [Go](../sdk/go.md), [Java](../sdk/java.md), [Ruby](../sdk/ruby.md),
+  [PHP](../sdk/php.md), [.NET](../sdk/dotnet.md), [Elixir](../sdk/elixir.md),
+  [iOS](../sdk/ios.md), [Android](../sdk/android.md), [Flutter](../sdk/flutter.md),
+  [Edge](../sdk/edge.md)).
+- A client keeps an answer it cached until the cache expires, 5 minutes by default.
+- Its rollout schedules and their stages, its safety configuration and its rollback
+  records are deleted with it.
+- Its events are kept, with `feature_flag_id` null.
+- The audit log records the delete as `feature_flag_delete`.
+- Only a role that may delete flags can do it (ADMIN, DEVELOPER, or in the full
+  profile a custom role with `feature_flag (delete)`); anyone else gets `403`.
+
+In the dashboard, Delete on the flag's page asks you to type its key first.
 
 ### Create an API key
 
@@ -388,6 +458,111 @@ KEY=$(curl -s -X POST localhost:8000/api/v1/api-keys \
   -d '{"name":"flag-guide"}' | jq -r .key)
 ```
 
+### Serve a value
+
+A flag can serve a string, a number or a JSON value instead of on or off. Its `value_type`
+is set when it is created, and it has two values: `on_value`, what the users it is on for
+get, and `off_value`, what everyone else gets, and everyone while the flag is off. This
+creates a string flag for a checkout button's label, on for enterprise-plan users, and
+turns it on:
+
+```{.bash exec}
+LABEL=$(curl -s -X POST localhost:8000/api/v1/feature-flags/ \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{
+    "key": "checkout-button-label",
+    "name": "Checkout button label",
+    "value_type": "string",
+    "on_value": "Complete purchase",
+    "off_value": "Buy now",
+    "rollout_percentage": 0,
+    "is_active": true,
+    "targeting_rules": {
+      "logical_operator": "AND",
+      "groups": [
+        {
+          "logical_operator": "AND",
+          "conditions": [
+            {"attribute": "user.plan", "operator": "equals", "value": "enterprise"}
+          ]
+        }
+      ]
+    }
+  }')
+
+jq '{key, status, value_type, on_value, off_value}' <<<"$LABEL"
+```
+<!-- expect: "on_value": "Complete purchase" -->
+<!-- expect: "off_value": "Buy now" -->
+
+A user on the enterprise plan matches the rule, so the flag is on for them and they get the
+on value:
+
+```{.bash exec}
+curl -s -G localhost:8000/api/v1/feature-flags/evaluate/checkout-button-label \
+  -H "X-API-Key: $KEY" \
+  --data-urlencode "user_id=user-123" \
+  --data-urlencode 'context={"plan":"enterprise"}' | jq
+```
+<!-- expect: "value": "Complete purchase" -->
+<!-- expect: "value_type": "string" -->
+
+```json
+{
+  "key": "checkout-button-label",
+  "enabled": true,
+  "value": "Complete purchase",
+  "value_type": "string",
+  "config": null,
+  "reason": "targeting_rule"
+}
+```
+
+A user on the free plan matches no rule, and the rollout percentage is 0, so they get the
+off value:
+
+```{.bash exec}
+curl -s -G localhost:8000/api/v1/feature-flags/evaluate/checkout-button-label \
+  -H "X-API-Key: $KEY" \
+  --data-urlencode "user_id=user-123" \
+  --data-urlencode 'context={"plan":"free"}' | jq -c '{enabled, value, reason}'
+```
+<!-- expect: {"enabled":false,"value":"Buy now","reason":"rollout"} -->
+
+**What the API checks.** A `string` flag's two values are strings (an empty string is
+allowed), a `number` flag's are numbers (not `true` or `false`), and a `json` flag's are
+JSON objects or arrays. A create sends both, and they must differ: `3` and `3.0` are the
+same number. Each value is at most 8,192 bytes as compact JSON and 10 levels deep, every
+number in it is finite and from -9007199254740991 to 9007199254740991, and no string in it
+holds a NUL or an unpaired surrogate character. A value outside these answers `422` at that
+field, and the message names the field, never the value. This number flag is given text:
+
+```{.bash exec}
+curl -s -X POST localhost:8000/api/v1/feature-flags/ \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"key": "checkout-retries", "name": "Checkout retries", "value_type": "number",
+       "on_value": "ten", "off_value": 3}' | jq -c '{loc: .detail[0].loc, msg: .detail[0].msg}'
+```
+<!-- expect: "loc":["body","on_value"] -->
+<!-- expect: "msg":"on_value must be a number, because value_type is number" -->
+
+```json
+{"loc":["body","on_value"],"msg":"on_value must be a number, because value_type is number"}
+```
+
+`value_type` cannot change once the flag exists: an update may send it back unchanged, and
+any other value answers `422` with `"type": "read_only"`. An update may send either value
+on its own; it is checked against the flag's type, and the two values as they will be
+stored must still differ. A boolean flag's `on_value` is `true` and its `off_value` is
+`false`: a request may send those back, so a GET body still round-trips, and any other
+value answers `422`. `default_value` is deprecated and accepts only `false`, for every flag;
+read `off_value`.
+
+Every application that evaluates the flag can read both of its values, so do not put
+secrets in them.
+
 ---
 
 ## Flag Key Naming Conventions
@@ -399,8 +574,8 @@ digit. Anything else is refused with `422`.
 
 ## When a Flag Evaluates to Off
 
-A flag is on or off for each user. Its `default_value`, what it serves when it is off,
-is `false` for every flag for now. Evaluation returns `enabled: false` when:
+Every flag serves two values. Evaluation returns `enabled: false`, and `value` set to the
+flag's `off_value` (`false` for a boolean flag), when:
 
 - the flag is off (`reason: "inactive"`), which includes a flag that a safety rollback to
   0% turned off (see [Safety Monitoring](safety.md#what-a-rollback-changes));
@@ -413,6 +588,8 @@ is `false` for every flag for now. Evaluation returns `enabled: false` when:
 When the call itself fails (a network error or a wrong API key), the SDKs'
 `isFeatureEnabled` and `is_feature_enabled` return `false`. So a flag your code can't
 reach behaves as off.
+
+How soon each client serves a change: [Turning a Flag Off](kill-switch.md).
 
 ---
 
@@ -477,6 +654,8 @@ curl -s -G localhost:8000/api/v1/feature-flags/evaluate/new-checkout-flow \
 {
   "key": "new-checkout-flow",
   "enabled": true,
+  "value": true,
+  "value_type": "boolean",
   "config": null,
   "reason": "targeting_rule"
 }
@@ -510,17 +689,19 @@ curl -s -G localhost:8000/api/v1/feature-flags/evaluate/new-checkout-flow \
 decided), `rollout` (no rule matched; the global rollout percentage decided), `inactive` or
 `error`. A `context` that is not a JSON object returns `422`.
 `GET /api/v1/feature-flags/user/{user_id}?context=...` evaluates every active flag the same way
-and returns `{"flag-key": true|false, ...}`.
+and returns `{"flag-key": true|false, ...}`. A value flag answers `true` when the user gets
+its on value.
 
 ### Reporting client-side errors
 
 Safety monitoring computes a flag's error rate from `error_logs` rows divided by its
 evaluations. The errors your applications see behind a flag (crashes, failed requests)
 count toward it when they are reported with a server-side key: an API key with the
-`sdk:ruleset` scope, created by a user who can change feature flags (ADMIN, DEVELOPER or a
-superuser). A browser or mobile app sends its errors to your server, and the server forwards
-them with that key. Keep the key on the server: it can also download every flag's targeting
-rules.
+`sdk:ruleset` scope, created by a user who can change feature flags (ADMIN, DEVELOPER, a
+superuser, or in the full profile anyone whose custom role or direct grant gives
+`feature_flag (update)`). A browser or mobile app sends its errors to your server, and the
+server forwards them with that key. Keep the key on the server: it can also download every
+flag's targeting rules.
 
 ```{.bash exec}
 SERVER_KEY=$(curl -s -X POST localhost:8000/api/v1/api-keys \
@@ -546,6 +727,10 @@ A report sent with `$KEY`, or with any other key without the `sdk:ruleset` scope
 (`201`) and stored the same way, but does not count toward the error rate or automatic
 rollback: the flag's safety check shows it in `details.uncounted_error_count` (see
 [Which errors count](safety.md#which-errors-count)).
+
+A server that uses the JavaScript or Python SDK sends the same request with `reportError` or
+`report_error` (see [Reporting errors](../sdk/javascript.md#reporting-errors)). Their `true`
+means the report was stored (`201`); whether it counts depends on the key, as above.
 
 `POST /api/v1/tracking/errors/batch` accepts `{"errors": [...]}` (up to 100) and returns
 `{"success_count", "failure_count", "errors"}`. At least one of `feature_flag_key` /

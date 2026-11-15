@@ -14,6 +14,8 @@
  *
  * const client = OpenFeature.getClient();
  * const enabled = await client.getBooleanValue('my-feature', false, { targetingKey: 'user-123' });
+ * // Every context key but targetingKey goes to the server as the user's attributes.
+ * const label = await client.getStringValue('checkout-button-label', 'Buy now', { targetingKey: 'user-123', plan: 'pro' });
  *
  * // Experiments and tracking go through the underlying JS SDK client:
  * const variant = await provider.client.getVariant('checkout_flow', { userId: 'user-123' });

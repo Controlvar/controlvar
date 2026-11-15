@@ -40,7 +40,11 @@ _FENCE = re.compile(
 _URL = re.compile(
     r"^(?:https?://)?(?:localhost|127\.0\.0\.1)(?::\d+)?(?P<path>/[^?#]*)"
 )
-_MCP_URL = re.compile(r'"url"\s*:\s*"(?P<url>[^"]+)"')
+#: The requests the page documents: its ``curl`` examples (sign in, create a key,
+#: read it back from the list, the manifest twice, then the AI endpoints),
+#: counted exactly so that an example dropped from the page cannot leave the
+#: check passing on fewer (R2).
+DOCUMENTED_REQUESTS = 17
 _BODY_FLAGS = {
     "-d",
     "--data",
@@ -120,13 +124,20 @@ def curl_pairs(body: str) -> list[tuple[str, str]]:
 
 
 def mcp_client_pairs(body: str) -> list[tuple[str, str]]:
-    """The URLs an MCP client is told to connect to; its first request is a POST."""
+    """The URLs an MCP client is told to connect to; its first request is a POST.
+
+    Only a server entry's own top-level ``url`` is one. A stdio entry
+    (``command``, ``args``, ``env``) is started, not connected to, and a key
+    named ``url`` inside its ``env`` is a setting, not an address.
+    """
     if "mcpServers" not in body:
         return []
     pairs = []
-    for match in _MCP_URL.finditer(body):
-        url = _URL.match(match.group("url").split("://", 1)[-1])
-        assert url, f"an MCP client URL that is not this API: {match.group('url')}"
+    for entry in json.loads(body)["mcpServers"].values():
+        if "url" not in entry:
+            continue
+        url = _URL.match(entry["url"].split("://", 1)[-1])
+        assert url, f"an MCP client URL that is not this API: {entry['url']}"
         pairs.append(("POST", url.group("path")))
     return pairs
 
@@ -177,7 +188,11 @@ def test_every_request_the_page_documents_is_served():
         "serve (no such method on that path)"
     )
     assert ("GET", "/api/v1/mcp/manifest") in pairs
-    assert len(pairs) >= 10, f"the page documents too few requests to check: {pairs}"
+    assert len(pairs) == DOCUMENTED_REQUESTS, (
+        f"expected {DOCUMENTED_REQUESTS} documented requests, found {len(pairs)}: "
+        f"{pairs}. If you added or removed an example on purpose, set "
+        "DOCUMENTED_REQUESTS."
+    )
 
 
 def test_the_page_tells_no_one_to_set_a_claude_api_key():
@@ -219,6 +234,36 @@ def test_an_mcp_client_connecting_to_the_manifest_is_refused(planted):
     pairs = documented_pairs(planted)
     assert pairs == [("POST", "/api/v1/mcp/manifest")]
     assert unserved(pairs) == ["POST /api/v1/mcp/manifest"]
+
+
+STDIO_CONFIG = """
+```json
+{
+  "mcpServers": {
+    "controlvar": {
+      "command": "node",
+      "args": ["/path/to/controlvar/sdk/mcp/dist/index.js"],
+      "env": {"url": "not an address", "CONTROLVAR_API_URL": "http://localhost:8000"}
+    }
+  }
+}
+```
+"""
+
+
+def test_a_stdio_server_is_started_not_connected_to():
+    """A key named ``url`` inside ``env`` is a setting, not an address, and a
+    stdio entry yields no request (R2: this used to fail on the page's own
+    config block)."""
+    assert documented_pairs(STDIO_CONFIG) == []
+
+
+def test_a_url_on_a_server_entry_is_still_a_post_whatever_else_it_holds():
+    both = STDIO_CONFIG.replace(
+        '"command": "node",',
+        '"url": "http://localhost:8000/api/v1/mcp/manifest", "command": "node",',
+    )
+    assert documented_pairs(both) == [("POST", "/api/v1/mcp/manifest")]
 
 
 def test_a_wrong_method_on_a_real_path_is_refused():

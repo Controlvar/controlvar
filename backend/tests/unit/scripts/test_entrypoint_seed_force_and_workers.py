@@ -5,7 +5,9 @@ database: a seed the ``seed_markers`` table already records is skipped, and
 ``SEED_FORCE=true`` applies it again. It starts uvicorn with
 ``--workers $WEB_CONCURRENCY``. The real script runs here with ``python`` and
 ``uvicorn`` replaced by stubs that record their arguments, so no database or
-server is needed.
+server is needed. ``python -m backend.app.core.proxy_trust``, the list of
+proxies uvicorn is started with, is answered by the real module, run by the
+interpreter running these tests.
 """
 
 from __future__ import annotations
@@ -13,6 +15,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Tuple
 
@@ -24,11 +27,18 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 ENTRYPOINT = REPO_ROOT / "backend" / "docker-entrypoint.sh"
 BASH = shutil.which("bash")
 
-#: Records every call; a marker check says the seed is already applied.
+#: Records every call; a marker check says the seed is already applied. The
+#: trusted-proxy list is the real module's (STUB_ENV says where it is).
 STUB = """#!/usr/bin/env bash
+if [ "$*" = "-m backend.app.core.proxy_trust" ]; then
+    PYTHONPATH="$STUB_REPO_ROOT" exec "$STUB_REAL_PYTHON" -m backend.app.core.proxy_trust
+fi
 printf '%s %s\\n' "$(basename "$0")" "$*" >> "$STUB_LOG"
 exit 0
 """
+
+#: What STUB needs to run the real ``backend.app.core.proxy_trust``.
+STUB_ENV = {"STUB_REAL_PYTHON": sys.executable, "STUB_REPO_ROOT": str(REPO_ROOT)}
 
 pytestmark.append(
     pytest.mark.skipif(
@@ -59,6 +69,7 @@ def run(tmp_path: Path, *command: str, **env_vars: str) -> Tuple[int, str, str]:
         "ENVIRONMENT": "development",
         "AWS_CONFIG_FILE": os.devnull,
         "AWS_SHARED_CREDENTIALS_FILE": os.devnull,
+        **STUB_ENV,
         **env_vars,
     }
     driver = (

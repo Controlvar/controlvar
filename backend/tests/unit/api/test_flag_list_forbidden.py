@@ -20,8 +20,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.api import deps
+from backend.app.api.read_scope import get_current_reader
 from backend.app.api.v1.endpoints import feature_flags as ff
 from backend.app.main import app
+from backend.app.models.feature_flag import FeatureFlagStatus
 from backend.app.models.user import UserRole
 
 pytestmark = [pytest.mark.unit, pytest.mark.regression]
@@ -39,7 +41,9 @@ def signed_in():
     user.is_active = True
 
     saved = dict(app.dependency_overrides)
-    app.dependency_overrides[deps.get_current_active_user] = lambda: user
+    # The list takes its user from get_current_reader (a sign-in, or an
+    # mcp:read key); an override of get_current_active_user does not reach it.
+    app.dependency_overrides[get_current_reader] = lambda: user
     app.dependency_overrides[deps.get_db] = lambda: MagicMock()
     try:
         yield user
@@ -80,7 +84,26 @@ def test_the_status_query_still_reaches_the_filter(signed_in):
         )
 
     assert resp.status_code == 200, resp.text
-    assert resp.json() == {"items": [], "total": 0, "skip": 0, "limit": 100}
-    assert get_multi.call_args.kwargs["status"] == "INACTIVE"
+    body = resp.json()
+    # The stale fields (#1808) are decided by the database, a mock here.
+    assert set(body) == {
+        "items",
+        "total",
+        "skip",
+        "limit",
+        "stale_days",
+        "evaluations_seen",
+    }
+    assert {k: body[k] for k in ("items", "total", "skip", "limit")} == {
+        "items": [],
+        "total": 0,
+        "skip": 0,
+        "limit": 100,
+    }
+    # The text reaches the filter as the enum member (#955), never as text.
+    assert get_multi.call_args.kwargs["status"] is FeatureFlagStatus.INACTIVE
     assert get_multi.call_args.kwargs["search"] == "chk"
-    assert count.call_args.kwargs == {"status": "INACTIVE", "search": "chk"}
+    assert count.call_args.kwargs == {
+        "status": FeatureFlagStatus.INACTIVE,
+        "search": "chk",
+    }

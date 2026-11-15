@@ -274,10 +274,12 @@ class Mouse:
 
 
 class Element:
-    """Any element: on the page, on top, holding *text*."""
+    """Any element: on the page, on top, holding *text*; as a field it starts
+    empty and holds what is typed into it (gate 12 reads it back)."""
 
     def __init__(self, page):
         self.page = page
+        self.value = ""
 
     def nth(self, index):
         return self
@@ -301,10 +303,13 @@ class Element:
         return self.page.drawn
 
     def press_sequentially(self, text, delay):
-        pass
+        self.value += text
 
     def fill(self, text):
-        pass
+        self.value = text
+
+    def input_value(self):
+        return self.value
 
 
 DRAWN_JS = "the stand-in's page text and fields"

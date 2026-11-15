@@ -67,8 +67,12 @@ from backend.app.models.safety import (
     SafetyRollbackRecord,
     SafetySettings,
 )
-from backend.app.schemas.feature_flag import FeatureFlagListResponse
+from backend.app.schemas.feature_flag import (
+    FeatureFlagListItem,
+    FeatureFlagListResponse,
+)
 from backend.app.services.feature_flag_service import FeatureFlagService
+from backend.app.services.stale_flags import stale_reasons, utc_now
 from backend.tests.integration.conftest import make_client_for_user
 
 pytestmark = [pytest.mark.integration, pytest.mark.regression]
@@ -243,7 +247,16 @@ def _fresh(session_factory, flag):
         detail = FeatureFlagService(session).get_feature_flag(flag.id)
         items = crud_feature_flag.get_multi(session, skip=0, limit=100, search=flag.key)
         total = crud_feature_flag.count(session, search=flag.key)
-        listing = FeatureFlagListResponse(items=items, total=total, skip=0, limit=100)
+        days = deps.settings.STALE_FLAG_DAYS
+        reasons, seen = stale_reasons(session, items, now=utc_now(), days=days)
+        listing = FeatureFlagListResponse(
+            items=[FeatureFlagListItem.of(item, reasons[item.id]) for item in items],
+            total=total,
+            skip=0,
+            limit=100,
+            stale_days=days,
+            evaluations_seen=seen,
+        )
         return jsonable_encoder(detail), listing.model_dump(mode="json")
     finally:
         session.close()

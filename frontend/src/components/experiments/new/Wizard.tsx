@@ -6,7 +6,9 @@ import { PageTitle } from '@/components/PageTitle';
 import { docsUrl } from '@/services/docs';
 import { EXPERIMENT_TYPE_LABELS, METRIC_TYPE_LABELS } from '@/types/experiments';
 import {
+  bayesianConfigProblem,
   buildCreatePayload,
+  checkVariants,
   configurationProblems,
   ExperimentFormAction,
   ExperimentFormState,
@@ -14,9 +16,11 @@ import {
   FORM_STEPS,
   FormStep,
   maxReachableStep,
-  validateForm,
   validateStep,
 } from './formState';
+import { BalanceWithinFields, focusBalanceField, splitProblemShown } from './BalanceWithinFields';
+import { balanceSummary } from './balanceWithin';
+import { useSegmentList } from '@/hooks/useSegmentList';
 import { BasicInfoFields } from './BasicInfoFields';
 import { VariantsEditor } from './VariantsEditor';
 import { MetricsEditor } from './MetricsEditor';
@@ -31,6 +35,7 @@ import { AnalysisSettingsFields } from './AnalysisSettingsFields';
 import { describeSettings } from '@/components/results/shared/analysisSettings';
 import { CreateError, footMessage } from './createErrors';
 import { TargetingProblems } from './TargetingProblems';
+import { RulesSummary } from '@/components/experiments/RulesSummary';
 
 export const NEW_EXPERIMENT_PATH = '/experiments/new';
 
@@ -55,7 +60,7 @@ export const FRESH_LOAD_NOTICE =
 
 const TYPE_DESCRIPTIONS: Record<string, string> = {
   a_b: 'Compare a control with one or more alternatives.',
-  mv: 'Compare several combinations of changes at once.',
+  mv: 'Compare several versions against a control, with each user seeing one version.',
 };
 
 /** Input types where Enter means "Next" on the first three steps. */
@@ -110,6 +115,7 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
   const [visitedMax, setVisitedMax] = useState(0);
   const [estimate, setEstimate] = useState<EstimatePanelState>(INITIAL_ESTIMATE_PANEL);
   const [revealProblems, setRevealProblems] = useState(0);
+  const [revealBayesian, setRevealBayesian] = useState(0);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const firstRunRef = useRef(true);
   const shownRef = useRef<number | null>(null);
@@ -119,6 +125,13 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
 
   const current = pinned ?? (requested < 0 ? 0 : Math.min(requested, maxReachable));
   const step = FORM_STEPS[current];
+
+  // The Review row names the saved segments the setting lists, never their ids.
+  const segmentList = useSegmentList(
+    state.balance.on && state.balance.groupBy === 'segments' && state.balance.segments.length > 0,
+  );
+  const segmentNames =
+    segmentList.state === 'ready' ? new Map(segmentList.segments.map((s) => [s.id, s.name] as const)) : null;
 
   const moveTo = (index: number, how: 'push' | 'replace') => {
     pinnedRef.current = index;
@@ -179,12 +192,17 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
       if (key instanceof HTMLInputElement) {
         key.focus();
         key.select();
+      } else if (error?.balance && FORM_STEPS[current] === 'variants') {
+        // "Edit balance": the control the API's refusal is about, not the heading.
+        focusBalanceField(error.balance.field);
       } else {
         headingRef.current?.focus();
       }
       setStepError(null);
     }
     shownRef.current = current;
+    // Runs when the step changes; the error is read as it stands.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current]);
 
   const next = () => {
@@ -195,6 +213,10 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
       if (step === 'variants' && configurationProblems(state.variants).some((p) => p !== null)) {
         setRevealProblems((n) => n + 1);
       }
+      // The split is the problem (its line is under the allocations): focus goes there.
+      if (step === 'variants' && checkVariants(state.variants) === null) focusBalanceField('split');
+      // An Advanced Bayesian setting may sit in a closed section: open it and focus it.
+      if (step === 'estimate' && bayesianConfigProblem(state) !== null) setRevealBayesian((n) => n + 1);
       return;
     }
     setStepError(null);
@@ -259,9 +281,7 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
             // marks another. Review is the whole form.
             const problem =
               !isCurrent && index <= visitedMax
-                ? s === 'review'
-                  ? validateForm(state.name, state.variants, state.metrics)
-                  : validateStep(s, state)
+                ? validateStep(s, state)
                 : null;
             const status = isCurrent
               ? 'current step'
@@ -373,8 +393,7 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
                 >
                   bandit
                 </a>{' '}
-                experiments need settings this flow does not ask for. Create them through the API or an
-                SDK.
+                experiments need settings this flow does not ask for. Create them through the API.
               </p>
             </fieldset>
           )}
@@ -398,7 +417,15 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
                 variants={state.variants}
                 dispatch={dispatch}
                 revealProblems={revealProblems}
+                splitProblem={splitProblemShown(state, error?.balance)}
               />
+              <div className="pt-2">
+                <BalanceWithinFields
+                  balance={state.balance}
+                  dispatch={dispatch}
+                  issue={error?.balance ?? null}
+                />
+              </div>
               <div className="pt-2">
                 <TargetingRuleBuilder
                   value={state.rules}
@@ -416,6 +443,9 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
                 dispatch={dispatch}
                 variantCount={state.variants.length}
                 bayesianEnabled={state.bayesianEnabled}
+                bayesianConfig={state.bayesianConfig}
+                sequentialEnabled={state.sequentialEnabled}
+                revealProblems={revealBayesian}
               />
               {/* Saved settings above; the estimate below, whose effect is saved. */}
               <section
@@ -489,13 +519,39 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
                     </li>
                   ))}
                 </ul>
-                <p className="mt-1" data-testid="review-targeting">
-                  {payload.targeting_rules
-                    ? `Targeting: ${state.rules.groups.length} rule ${
-                        state.rules.groups.length === 1 ? 'group' : 'groups'
-                      }`
-                    : 'Targeting: everyone'}
+                {/* Who can join, in words: the rules this create sends (#1425). */}
+                <div className="mt-1" data-testid="review-targeting">
+                  {payload.targeting_rules ? (
+                    <>
+                      <p className="font-medium">Targeting:</p>
+                      <RulesSummary value={payload.targeting_rules} draft />
+                    </>
+                  ) : (
+                    <p>
+                      <span className="font-medium">Targeting:</span> everyone
+                    </p>
+                  )}
+                </div>
+                <p className="mt-1" data-testid="review-balance">
+                  Balance: {balanceSummary(payload.balance_within ?? null, segmentNames)}
                 </p>
+                {error?.balance && (
+                  <div
+                    role="alert"
+                    className="mt-2 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700"
+                    data-testid="balance-review-error"
+                  >
+                    <p>{error.balance.message}</p>
+                    <button
+                      type="button"
+                      onClick={() => goTo(FORM_STEPS.indexOf('variants'))}
+                      className="mt-2 font-medium underline hover:text-red-900 focus:outline-none focus:ring-2 focus:ring-blue-600 rounded"
+                      data-testid="balance-error-edit"
+                    >
+                      Edit balance
+                    </button>
+                  </div>
+                )}
                 <div className="mt-2">
                   <TargetingProblems error={error}>
                     <button
@@ -516,6 +572,7 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
                     payload.correction_method ?? state.correctionMethod,
                   )}
                   {payload.bayesian_enabled ? ' · Bayesian analysis on' : ''}
+                  {payload.sequential_testing_enabled ? ' · Sequential testing (beta) on' : ''}
                 </p>
               </ReviewRow>
               <ReviewRow title="Sample size" onEdit={() => goTo(3)} editLabel="Edit sample size">
@@ -527,6 +584,7 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
                       state.plannedEffectPct,
                       state.variants.length,
                       state.confidenceLevel,
+                      state.correctionMethod,
                     )?.samples_per_variant ?? null,
                   )}
                 </p>

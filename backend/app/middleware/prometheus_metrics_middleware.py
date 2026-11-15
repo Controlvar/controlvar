@@ -2,42 +2,76 @@
 FastAPI/Starlette middleware that automatically records Prometheus metrics
 for every HTTP request.
 
-Endpoint paths are normalised — UUIDs and numeric IDs are replaced with
-``{id}`` — so that high-cardinality path segments do not explode the label
-space of the Prometheus counter and histogram.
+A request is labelled by the route it matched, as that route's template
+(``/api/v1/feature-flags/user/{user_id}``), never by the path the client
+sent, and ``UNMATCHED_ENDPOINT`` when it matched no route. The method label
+is mapped to a fixed set by :func:`backend.app.core.metrics.record_request`.
 """
 
-import re
 import time
 from typing import Awaitable, Callable
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.types import Scope
 
 from backend.app.core.metrics import record_request
 
-# Matches UUID v4 segments in URL paths
-_UUID_PATTERN: re.Pattern = re.compile(
-    r"/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
-    re.IGNORECASE,
-)
+#: The ``endpoint`` label of a request that reached no route: a 404, the
+#: redirect to a path's trailing-slash form, and a response a middleware gave
+#: before routing (a refused ``Host``, a 429, a body whose ``Content-Length``
+#: is over the size limit). A body over the limit that arrives without a
+#: ``Content-Length`` is refused while its route reads it, so it is labelled
+#: with that route's template.
+UNMATCHED_ENDPOINT = "unmatched"
 
-# Matches purely-numeric path segments (e.g. /users/42)
-_NUMERIC_PATTERN: re.Pattern = re.compile(r"/\d+")
+
+def _template(route: object) -> str | None:
+    template = getattr(route, "path_format", None)
+    return template if isinstance(template, str) and template else None
 
 
-def normalize_path(path: str) -> str:
-    """Replace dynamic path segments with ``{id}`` for stable metric labels.
+def route_template(scope: Scope) -> str:
+    """The template of the route this request matched, or ``UNMATCHED_ENDPOINT``.
 
-    Two categories of dynamic segments are replaced:
+    Read once the request has been handled: routing records what it matched
+    in the scope, which every layer of the stack shares. Nothing here reads
+    the request path, so the label takes only the values the application's
+    routes define, plus ``UNMATCHED_ENDPOINT``.
 
-    * UUID v4 (e.g. ``550e8400-e29b-41d4-a716-446655440000``)
-    * Pure numeric IDs (e.g. ``42``)
+    * A route inside an included router (every ``/api/v1`` route except the
+      documentation pages and ``/api/v1/openapi.json``, and the health
+      routes): FastAPI keeps that route's full template in
+      ``scope["fastapi"]["effective_route_context"].path_format``. The key is
+      not public FastAPI API. If a FastAPI upgrade drops it, these routes are
+      labelled ``UNMATCHED_ENDPOINT`` and
+      ``test_metric_labels_stay_bounded_route_templates`` fails, naming this
+      function. ``scope["route"].path`` is not a substitute: for an included
+      route it is relative to its router (``/user/{user_id}``, and ``/`` for
+      every router's list endpoint).
+    * A route registered on the application itself (the API documentation
+      pages and ``/api/v1/openapi.json``): its own template, found among the
+      root router's routes. The root router's paths are already full ones.
     """
-    path = _UUID_PATTERN.sub("/{id}", path)
-    path = _NUMERIC_PATTERN.sub("/{id}", path)
-    return path
+    fastapi_scope = scope.get("fastapi")
+    if isinstance(fastapi_scope, dict):
+        template = _template(fastapi_scope.get("effective_route_context"))
+        if template is not None:
+            return template
+
+    route = scope.get("route")
+    endpoint = scope.get("endpoint")
+    if route is None and endpoint is None:
+        return UNMATCHED_ENDPOINT
+    for candidate in getattr(scope.get("router"), "routes", ()):
+        if candidate is route or (
+            endpoint is not None and getattr(candidate, "endpoint", None) is endpoint
+        ):
+            template = _template(candidate)
+            if template is not None:
+                return template
+    return UNMATCHED_ENDPOINT
 
 
 class PrometheusMetricsMiddleware(BaseHTTPMiddleware):
@@ -45,7 +79,8 @@ class PrometheusMetricsMiddleware(BaseHTTPMiddleware):
 
     Uses :func:`backend.app.core.metrics.record_request` to increment the
     ``http_requests_total`` counter and observe the
-    ``http_request_duration_seconds`` histogram.
+    ``http_request_duration_seconds`` histogram, with the ``endpoint`` label
+    from :func:`route_template`.
     """
 
     async def dispatch(
@@ -57,10 +92,9 @@ class PrometheusMetricsMiddleware(BaseHTTPMiddleware):
         response: Response = await call_next(request)
         duration: float = time.time() - start_time
 
-        endpoint: str = normalize_path(request.url.path)
         record_request(
             method=request.method,
-            endpoint=endpoint,
+            endpoint=route_template(request.scope),
             status_code=response.status_code,
             duration=duration,
         )

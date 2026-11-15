@@ -91,8 +91,11 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini history
 Output, for example:
 
 ```text
-37dcb2969766 -> 4c2c09a2b3e8 (head), Safety rollback records: safety_config_id nullable, its foreign key ON DELETE SET NULL
-d29a479daafe -> 37dcb2969766, Segments: a kind (rules or id_list), and the members of an id list
+4955571d232c -> t1812_user_totp (head), Two-step sign-in: each local account's authenticator secret and recovery codes
+c448_balance_within -> 4955571d232c, Visual experiments: page changes, pages and goals, and the editor's tokens
+7b6b4b4fe246 -> c448_balance_within, Experiments: balance the split within groups as users arrive
+607c51a59bf5 -> 85dd4796bb8b, Events: an event_id is stored once per user, experiment, flag and event name
+4c2c09a2b3e8 -> 607c51a59bf5, Feature flags: a value type and two values, held by one check
 ...
 <base> -> 84a772608a6e, Initial schema
 ```
@@ -116,8 +119,8 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini current
 Output, for a full install (a core install prints the first line only):
 
 ```text
-4c2c09a2b3e8 (head)
-modules_0002_warehouse_analysis (head)
+t1812_user_totp (head)
+modules_0005_redshift (head)
 ```
 
 One line per head: the revision ID of the last migration applied on each
@@ -155,16 +158,34 @@ Roll back the most recent migration **of one branch**. With two heads a bare
 `-1` is ambiguous — alembic warns and picks one, which may not be the branch you
 meant — so name the branch:
 
-The modules branch has two revisions: `modules_0001_rbac` and, after it,
-`modules_0002_warehouse_analysis`. `modules@-1` unapplies the newest one only;
-`modules@-2` unapplies both, newest first.
+The modules branch has five revisions: `modules_0001_rbac`, then
+`modules_0002_warehouse_analysis`, then `modules_0003_lower_is_better`, then
+`modules_0004_rbac_activation`, then `modules_0005_redshift`. Name
+the modules revision to end at rather than counting back: a relative step such
+as `modules@-2` counts from the newest revision the image has, so it unapplies
+a different revision once a release adds one.
 
-The modules branch, one revision back (modules_0002_warehouse_analysis):
+The modules branch, back to a named revision:
 
-```{.bash skip reason="destructive: unapplies modules revisions and drops the tables they created"}
-docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade modules@-1
-docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade modules@-2
+```{.bash skip reason="destructive: unapplies modules revisions; see what each drops"}
+docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade modules_0004_rbac_activation
+docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade modules_0003_lower_is_better
+docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade modules_0002_warehouse_analysis
+docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade modules_0001_rbac
 ```
+
+`downgrade modules_0004_rbac_activation` unapplies `modules_0005_redshift`
+only, which puts back the previous release's constraints on
+`warehouse_connections` and changes no row; it refuses while any Amazon
+Redshift connection is stored. `downgrade modules_0003_lower_is_better` also
+unapplies `modules_0004_rbac_activation`, which drops the column
+`activated_at` from `user_custom_roles` and `direct_permission_grants`, with
+any activation time stored in it. `downgrade modules_0002_warehouse_analysis`
+also unapplies `modules_0003_lower_is_better`, which drops the column
+`warehouse_sources.lower_is_better`, every metric source's lower-is-better
+setting. `downgrade modules_0001_rbac` also unapplies
+`modules_0002_warehouse_analysis`, which drops the three warehouse tables it
+created, with their rows. `modules@-5` unapplies all five, newest first.
 
 One step back on the core chain:
 
@@ -177,10 +198,15 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrad
 filter a downgrade by branch label: `downgrade modules@base` resolves to **the
 whole core chain** to base, and drops every table in the schema.
 
-Each modules revision downgrades only the objects its own `upgrade()` created
-(it marks them with a PostgreSQL COMMENT as it goes). On a database whose
-tables came from the bootstrap rather than from those migrations, their
-downgrade is a no-op — it will not drop populated tables it never made.
+`modules_0001_rbac` and `modules_0002_warehouse_analysis` downgrade only the
+objects their own `upgrade()` created (each marks them with a PostgreSQL
+COMMENT as it goes). On a database whose tables came from the bootstrap rather
+than from those migrations, their downgrade is a no-op — it will not drop
+populated tables it never made. `modules_0003_lower_is_better` drops its column
+on every database, however the column was made.
+`modules_0004_rbac_activation` drops its two columns on every database in the
+same way, and `modules_0005_redshift` puts back its three constraints on every
+database.
 
 ### `modules_0002_warehouse_analysis` removes saved warehouse connections
 
@@ -189,14 +215,85 @@ adds `warehouse_sources` and `warehouse_analysis_runs`. **Every row of the
 earlier `warehouse_connections` is deleted** — connections saved through the
 earlier warehouse endpoints — and nothing is copied into the new table.
 
-Downgrading it cannot bring those rows back: `downgrade modules@-1` drops the
-three tables it created and puts back an **empty** table of the earlier shape.
+Downgrading it cannot bring those rows back: `downgrade modules_0001_rbac`
+first unapplies `modules_0005_redshift`, which refuses while any Amazon
+Redshift connection is stored, `modules_0004_rbac_activation`, which drops the
+activation-time column of custom role assignments and direct grants, with any
+activation time stored in it, and `modules_0003_lower_is_better`, which drops
+each metric source's
+lower-is-better setting, then drops the three tables this revision created and
+puts back an **empty** table of the earlier shape.
 If you need the rows, take a snapshot of the database before upgrading to the
 release that carries this revision, and restore that snapshot to go back. The
 migration logs how many rows it removed:
 
 ```text
 modules_0002: removing 3 legacy warehouse connection rows
+```
+
+### `modules_0003_lower_is_better` gives each warehouse metric source a direction
+
+This revision adds the column `warehouse_sources.lower_is_better` (`boolean`,
+`NOT NULL`, default `false`), and every source already stored gets `false`.
+
+The previous release runs against this schema unchanged: the sources it
+creates get `false` from the column's default.
+
+**Its downgrade drops the column on every database**, however the column was
+made, and with it every metric source's setting; an upgrade afterwards sets
+each source back to `false`, not to what was stored.
+
+Until someone marks them again, those metrics are analysed as higher is
+better. Before downgrading, note which metric sources are marked: the
+dashboard's Warehouse › Metric sources list tags each one "lower is better".
+The [compliance audit trail](../api/compliance.md#list-audit-events) keeps a
+record too, and a downgrade leaves it in place: each source's latest entry
+(`resource_type=warehouse_source`) carries its definition as last saved,
+`lower_is_better` included.
+
+### `modules_0004_rbac_activation` adds an activation time to custom role assignments and direct grants
+
+This revision adds a nullable `activated_at` column to `user_custom_roles` and
+`direct_permission_grants`. It sets no default and fills in nothing, so every
+assignment and grant already stored has none. It logs them, so you have a
+record of what existed when it ran: one WARNING that counts them, then one line
+per row (at most 200, then `… and N more`), or one INFO line when there are
+none.
+
+```text
+modules_0004_rbac_activation: 2 custom role assignments and 1 direct permission grant have no activation time (activated_at is empty; expired grants and grants with is_active false are not counted or listed). See docs/self-hosting/migrations.md, "modules_0004_rbac_activation":
+assignment user_id=<uuid> role_name=data-scientist
+grant user_id=<uuid> resource=experiment actions=["update"] expires_at=<iso or none>
+```
+
+Read the log where the `1ab99332f0ba` section below says (Docker Compose,
+Helm, AWS). Downgrading this revision (to `modules_0003_lower_is_better`)
+drops both columns, and any activation time stored in them; upgrading
+afterwards adds them empty.
+
+Since the release in which custom roles took effect, assigning a role or making
+a grant records an activation time, and only assignments and grants that have
+one take effect (see [RBAC](../api/rbac.md)). Downgrading below this revision
+after that release drops every activation time: every assignment and grant is
+inactive again, and stays inactive after upgrading; assign the roles and make
+the grants again.
+
+### `modules_0005_redshift` lets a warehouse connection be an Amazon Redshift connection
+
+This revision changes three constraints of `warehouse_connections` and no
+column or row, so that a connection may be an Amazon Redshift one
+(`warehouse_type` `redshift`). Like an Amazon Athena connection, it stores no
+secret and has the external ID generated when it is saved; unlike one, it has
+no per-query byte cap. Every connection already stored is kept as it is, and
+the previous release keeps saving BigQuery, Snowflake and Athena connections
+against the upgraded schema.
+
+Downgrading this revision (to `modules_0004_rbac_activation`) puts back the
+previous release's constraints and changes no row. It refuses while any
+Amazon Redshift connection is stored, names them, and changes nothing:
+
+```text
+modules_0005_redshift: refusing to downgrade: 1 warehouse connection(s) are Amazon Redshift connections (<id>). The previous release's warehouse_connections constraints refuse that type. Delete those connections, or restore the backup taken before the upgrade to this release. Nothing was changed.
 ```
 
 ### `1ab99332f0ba` rewrites stored event times to UTC
@@ -332,6 +429,34 @@ nothing, because nothing could put the members back and every id-list segment
 would return as a rules segment with no rules (see
 [`37dcb2969766`](#37dcb2969766-adds-segments-made-from-a-list-of-user-ids)).
 
+Past `607c51a59bf5` it also runs that revision's downgrade, which drops
+`feature_flags.value_type`, `on_value` and `off_value`. **So it also stops while
+any flag is a string, number or json flag**: that downgrade refuses, names those
+flags, and changes nothing (see
+[`607c51a59bf5`](#607c51a59bf5-gives-each-flag-a-value-type-and-two-values)).
+
+Past `85dd4796bb8b` it also drops the table `event_dedup_keys`, and with it every
+stored `event_id` (see
+[`85dd4796bb8b`](#85dd4796bb8b-stores-an-event-sent-again-with-its-event_id-once)).
+
+Past `7b6b4b4fe246` it also runs that revision's downgrade, which drops
+`rollout_stages.started_at`, the recorded start of every rollout stage (see
+[`7b6b4b4fe246`](#7b6b4b4fe246-records-when-each-rollout-stage-started)).
+
+Past `c448_balance_within` it also runs that revision's downgrade, which drops
+every experiment's balance setting, every user's group and every counter (see
+[`c448_balance_within`](#c448_balance_within-balances-the-split-within-groups)).
+
+Past `4955571d232c` it also runs that revision's downgrade, which drops the
+table `visual_tokens` and the columns `experiments.visual_config` and
+`variants.visual_changes`: every visual experiment's pages, goals and page
+changes (see [`4955571d232c`](#4955571d232c-stores-visual-experiments)).
+
+Past `t1812_user_totp` it first runs that revision's downgrade, which drops the
+table `user_totp`: every account's two-step sign-in secret, recovery codes and
+wrong-code count (see
+[`t1812_user_totp`](#t1812_user_totp-stores-two-step-sign-in-secrets)).
+
 ### `d29a479daafe` records who each global holdout covers
 
 This revision adds `activated_at`, `deactivated_at` and `hash_salt` to
@@ -398,6 +523,29 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini -x allow
 The Database Migration workflow does not pass `-x`, so on AWS it stops at this
 revision while any id list has members.
 
+From a release that carries `607c51a59bf5`, the same downgrade first runs that
+revision's downgrade, which drops each flag's value type and values and refuses
+while any flag is a string, number or json flag (see
+[`607c51a59bf5`](#607c51a59bf5-gives-each-flag-a-value-type-and-two-values)).
+From a release that carries `85dd4796bb8b`, it also drops the table
+`event_dedup_keys` before that.
+From a release that carries `7b6b4b4fe246`, it also runs that revision's
+downgrade, which drops `rollout_stages.started_at`, the recorded start of every
+rollout stage (see
+[`7b6b4b4fe246`](#7b6b4b4fe246-records-when-each-rollout-stage-started)).
+From a release that carries `c448_balance_within`, it also runs that
+revision's downgrade, which drops every experiment's balance setting, every
+user's group and every counter (see
+[`c448_balance_within`](#c448_balance_within-balances-the-split-within-groups)).
+From a release that carries `4955571d232c`, it also runs that revision's
+downgrade, which drops the table `visual_tokens` and the columns
+`experiments.visual_config` and `variants.visual_changes` (see
+[`4955571d232c`](#4955571d232c-stores-visual-experiments)).
+From a release that carries `t1812_user_totp`, it also runs that revision's
+downgrade, which drops the table `user_totp`, every account's two-step sign-in
+secret, recovery codes and wrong-code count (see
+[`t1812_user_totp`](#t1812_user_totp-stores-two-step-sign-in-secrets)).
+
 ### `4c2c09a2b3e8` keeps rollback records without a safety configuration
 
 This revision makes `safety_rollback_records.safety_config_id` nullable and
@@ -423,6 +571,237 @@ still serves, before the API is rolled back
 ([Database Rollback Procedure](../deployment/rollback-runbook.md#database-rollback-procedure)),
 and this release records a null `safety_config_id` for each rollback of a flag
 on the defaults, which NOT NULL would refuse.
+
+### `607c51a59bf5` gives each flag a value type and two values
+
+This revision adds three columns to `feature_flags`: `value_type` (`boolean`,
+`string`, `number` or `json`, default `boolean`), and `on_value` and
+`off_value` (`jsonb`), the values a string, number or json flag serves to the
+users it is on for and to everyone else. It also adds the check
+`check_flag_values`: a boolean flag stores neither value, a string or number
+flag stores two different values of its type, and a json flag stores two
+different objects or arrays. Every flag already stored becomes a boolean flag,
+which is what it was.
+
+The previous release runs against this schema unchanged: the flags it creates
+get `boolean` from the column's default, and it reads and updates flags without
+touching the two values.
+
+**The downgrade refuses while any flag is a string, number or json flag.**
+`607c51a59bf5`'s downgrade drops the check and the three columns, which would
+delete each such flag's value type and both of its values, and nothing could
+rebuild them. So while any flag's `value_type` is not `boolean` the downgrade
+refuses, names those flags, and changes nothing:
+
+```text
+607c51a59bf5: refusing to downgrade: 2 feature flag(s) serve a string, number or json value (checkout-copy, price-tier). ...
+```
+
+To go on, delete those flags or convert each to a boolean flag, or restore the
+backup taken before the upgrade. With only boolean flags stored, the downgrade
+drops the check and the three columns, and nothing else. Neither the upgrade
+nor the downgrade can be emitted as SQL (`--sql`).
+
+From a release that carries `7b6b4b4fe246`, a downgrade to `4c2c09a2b3e8` also
+runs that revision's downgrade, which drops `rollout_stages.started_at`, the
+recorded start of every rollout stage (see
+[`7b6b4b4fe246`](#7b6b4b4fe246-records-when-each-rollout-stage-started)).
+From a release that carries `c448_balance_within`, it also runs that
+revision's downgrade, which drops every experiment's balance setting, every
+user's group and every counter (see
+[`c448_balance_within`](#c448_balance_within-balances-the-split-within-groups)).
+From a release that carries `4955571d232c`, it also runs that revision's
+downgrade, which drops the table `visual_tokens` and the columns
+`experiments.visual_config` and `variants.visual_changes` (see
+[`4955571d232c`](#4955571d232c-stores-visual-experiments)).
+From a release that carries `t1812_user_totp`, it first runs that revision's
+downgrade, which drops the table `user_totp`, every account's two-step sign-in
+secret, recovery codes and wrong-code count (see
+[`t1812_user_totp`](#t1812_user_totp-stores-two-step-sign-in-secrets)).
+
+### `85dd4796bb8b` stores an event sent again with its event_id once
+
+This revision adds the table `event_dedup_keys`: one row per event stored with
+an `event_id`, holding the user id and a key made from the event's experiment,
+flag, event name and `event_id`
+([How events count](../guides/how-events-count.md#sending-an-event-again)). It
+changes nothing in `events`, and it has no foreign key to `events`, so it takes
+no lock on `events` and completes while the previous release keeps writing
+events.
+
+The previous release runs against this schema unchanged: it never reads or
+writes the table, so an event it stores during the deploy is stored as every
+event was before, even when it carries an `event_id`.
+
+**The downgrade drops the table and every key in it.** No event is changed or
+removed. Until the API is rolled back too, this release answers `500` to an
+event that carries an `event_id`, because the table is gone, and stores every
+other event as before; so roll the API back straight after the downgrade, as the
+rollback runbook does.
+
+### `7b6b4b4fe246` records when each rollout stage started
+
+This revision adds `rollout_stages.started_at`, the time the scheduler or
+`POST /api/v1/rollout-schedules/stages/{stage_id}/advance` started the stage. It
+is empty until a stage starts. The upgrade fills it for every stage in progress
+with the time the scheduler measured from before, so no stage's completion time
+moves; a stage that was pending, or that finished before the upgrade, stays
+empty.
+
+The previous release runs against this schema unchanged: it never reads or
+writes the column. A stage it starts while a deploy is rolling has an empty
+`started_at`; this release then measures from the stage's `updated_at`, as
+before, so an edit to that stage restarts its clock until it completes. To list
+them:
+
+```sql
+-- Stages in progress with no recorded start
+SELECT id FROM experimentation.rollout_stages
+ WHERE status = 'IN_PROGRESS' AND started_at IS NULL;
+```
+
+**The downgrade drops every recorded start.** `7b6b4b4fe246`'s downgrade drops
+`rollout_stages.started_at`; it does not refuse, and nothing can restore the
+exact values. An upgrade afterwards sets each stage in progress from its
+`updated_at`, which an edit may have moved, so a stage edited in the meantime
+restarts its clock from the edit. Where the API migrates on start (Docker
+Compose, and the Helm chart's init container), the previous release refuses to
+start against this revision. To go back to it, first downgrade to the previous
+release's heads, with this release still running
+([An Older Image Against a Newer Database](#an-older-image-against-a-newer-database)),
+and with the Engineering Lead's approval at the moment it runs when any stage
+is `IN_PROGRESS`. This revision's own `down_revision` is `85dd4796bb8b`; from a
+release that carries `c448_balance_within`, this also runs that revision's
+downgrade, which drops every experiment's balance setting, every user's group
+and every counter (see
+[`c448_balance_within`](#c448_balance_within-balances-the-split-within-groups)):
+
+```{.bash skip reason="destructive: drops rollout_stages.started_at"}
+docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade 85dd4796bb8b
+```
+
+From a release that carries `4955571d232c`, it also runs that revision's
+downgrade, which drops the table `visual_tokens` and the columns
+`experiments.visual_config` and `variants.visual_changes` (see
+[`4955571d232c`](#4955571d232c-stores-visual-experiments)).
+From a release that carries `t1812_user_totp`, it first runs that revision's
+downgrade, which drops the table `user_totp`, every account's two-step sign-in
+secret, recovery codes and wrong-code count (see
+[`t1812_user_totp`](#t1812_user_totp-stores-two-step-sign-in-secrets)).
+
+On Helm, run the same command in an API pod with `kubectl exec`. Once the
+database is at the previous release's heads, start the previous release. The
+upgrade cannot be emitted as SQL (`--sql`).
+
+### `c448_balance_within` balances the split within groups
+
+This revision adds what an experiment needs to
+[balance its split within groups](../guides/balance-within-groups.md):
+`experiments.balance_within`, the setting, and `experiments.balance_seed`, the
+key of the experiment's block order, which the server makes and never answers;
+`assignments.balance_group` and `assignments.balance_seq`, the group each user
+was balanced in and their place in it; and the table `balance_group_counters`,
+each group's next place. Every column is nullable with no default, nothing is
+backfilled, and every experiment stored before the upgrade balances nothing.
+
+The previous release runs against this schema unchanged: it never reads or
+writes the new columns or the table. While it serves, during a rolling deploy
+or for as long as a rollback to it lasts, it assigns every new user of a
+balanced experiment by the hash and stores no group, so those users stay
+outside the blocks for good. To count them:
+
+```sql
+-- Users of balanced experiments assigned without a group
+SELECT a.experiment_id, count(*) FROM experimentation.assignments a
+  JOIN experimentation.experiments e ON e.id = a.experiment_id
+ WHERE e.balance_within IS NOT NULL AND a.balance_group IS NULL
+ GROUP BY a.experiment_id;
+```
+
+**The downgrade drops every balance setting.** c448_balance_within adds the
+balance setting, each user's group and place in it, and the per-group
+counters. Its downgrade drops every experiment's balance setting, every user's
+group and every counter; they cannot be recovered. Run it only with a human go
+at that moment. It does not refuse, and it removes no assignment: every user
+keeps their variant. An upgrade afterwards starts every experiment with no
+balance setting. Where the API migrates on start (Docker Compose, and the Helm
+chart's init container), the previous release refuses to start against this
+revision. To go back to it, first downgrade to the previous release's heads,
+with this release still running
+([An Older Image Against a Newer Database](#an-older-image-against-a-newer-database)).
+This revision's own `down_revision` is `7b6b4b4fe246`; from a release that
+carries no later revision, this undoes this revision alone:
+
+```{.bash skip reason="destructive: drops every experiment's balance setting and every user's group"}
+docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade 7b6b4b4fe246
+```
+
+From a release that carries `4955571d232c`, it also runs that revision's
+downgrade, which drops the table `visual_tokens` and the columns
+`experiments.visual_config` and `variants.visual_changes` (see
+[`4955571d232c`](#4955571d232c-stores-visual-experiments)).
+From a release that carries `t1812_user_totp`, it first runs that revision's
+downgrade, which drops the table `user_totp`, every account's two-step sign-in
+secret, recovery codes and wrong-code count (see
+[`t1812_user_totp`](#t1812_user_totp-stores-two-step-sign-in-secrets)).
+
+On Helm, run the same command in an API pod with `kubectl exec`. The upgrade
+cannot be emitted as SQL (`--sql`).
+
+### `4955571d232c` stores visual experiments
+
+This revision adds what a visual experiment stores: `experiments.visual_config`,
+its pages, the page its editor opens and its goals; `variants.visual_changes`, a
+variant's page changes; and the table `visual_tokens`, for the visual editor's
+sign-in and its preview links. Both columns are empty on every experiment and
+variant already stored.
+
+The previous release runs against this schema unchanged: it never reads or
+writes the two columns or the table, and stores experiments and variants as
+before.
+
+**The downgrade drops every visual experiment's design.** `4955571d232c`'s
+downgrade drops the table `visual_tokens` and the columns
+`experiments.visual_config` and `variants.visual_changes`; it does not refuse,
+and nothing can restore them. The experiments stay, as ordinary experiments
+with no page changes. This revision's own `down_revision` is
+`c448_balance_within`; from a release that carries no later revision, this
+undoes this revision alone:
+
+```{.bash skip reason="destructive: drops visual_tokens, experiments.visual_config and variants.visual_changes"}
+docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade c448_balance_within
+```
+
+From a release that carries `t1812_user_totp`, it first runs that revision's
+downgrade, which drops the table `user_totp`, every account's two-step sign-in
+secret, recovery codes and wrong-code count (see
+[`t1812_user_totp`](#t1812_user_totp-stores-two-step-sign-in-secrets)).
+
+On Helm, run the same command in an API pod with `kubectl exec`.
+
+### `t1812_user_totp` stores two-step sign-in secrets
+
+This revision adds the table `user_totp`, one row per local account that has
+set two-step sign-in up or started to: the account's authenticator secret,
+sealed with a key derived from `SECRET_KEY`; its recovery codes, as bcrypt
+hashes; the last code step it used; and its count of wrong codes. The `users`
+table is not changed, and the new table is empty after the upgrade.
+
+The previous release runs against this schema unchanged: it never reads or
+writes the table.
+
+**The downgrade drops every account's two-step sign-in.** `t1812_user_totp`'s
+downgrade drops the table `user_totp`: every account's two-step sign-in
+secret, recovery codes and wrong-code count. It does not refuse, and nothing
+can restore them: those accounts then sign in with the password alone and must
+set two-step sign-in up again. This revision's own `down_revision` is
+`4955571d232c`; this undoes this revision alone:
+
+```{.bash skip reason="destructive: drops user_totp, every account's two-step sign-in"}
+docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade 4955571d232c
+```
+
+On Helm, run the same command in an API pod with `kubectl exec`.
 
 Roll back to a specific revision:
 
@@ -602,9 +981,8 @@ leaves the rows untouched and logs a WARNING naming the foreign revisions (exit
 0); when the core chain is *behind* — a newer core image against a database the
 full image built — it refuses with a message naming them. `downgrade` and
 `stamp` do not skip: they fail with alembic's own "Can't locate revision
-identified by 'modules_0002_warehouse_analysis'" (or `modules_0001_rbac`, on a
-database a release before the warehouse tables migrated), and the schema is
-untouched.
+identified by '…'", naming the modules revision the database records, and the
+schema is untouched.
 
 The escape hatch, when you really do want the core image to own that database:
 take a backup, then from the core image
@@ -638,6 +1016,35 @@ names:
 - run the newer release that migrated the database, or
 - restore the backup taken before that upgrade, and run the older image
   against the restored database.
+
+On Docker Compose, the Compose README's
+[Upgrade](https://github.com/Controlvar/controlvar/blob/main/deploy/compose/README.md#upgrade)
+procedure takes that backup before it upgrades, and its last step restores it
+only when the older image refuses the database.
+
+A third way, when the newer release's migrations can be undone: with the newer
+release still running, downgrade to the heads of the older release, then start
+the older image. Those are its core head and, on a full install, its modules
+head too, one `alembic downgrade <id>` for each; `alembic heads`, run with the
+older image, prints them. The core head alone is not enough when the newer
+release also moved the modules branch: the older image still refuses, naming
+the modules revision. Each migration in between runs its downgrade on the way:
+from a release that carries `7b6b4b4fe246`, whose own `down_revision` is
+`85dd4796bb8b`, that includes its downgrade, which drops the recorded start of
+every rollout stage (see
+[`7b6b4b4fe246`](#7b6b4b4fe246-records-when-each-rollout-stage-started)); from
+a release that carries `c448_balance_within`, whose own `down_revision` is
+`7b6b4b4fe246`, that includes its downgrade, which drops every experiment's
+balance setting, every user's group and every counter (see
+[`c448_balance_within`](#c448_balance_within-balances-the-split-within-groups)).
+From a release that carries `4955571d232c`, whose own `down_revision` is
+`c448_balance_within`, it includes that downgrade too, which drops every visual
+experiment's pages, goals and page changes (see
+[`4955571d232c`](#4955571d232c-stores-visual-experiments)).
+From a release that carries `t1812_user_totp`, whose own `down_revision` is
+`4955571d232c`, it includes that downgrade too, which drops every account's
+two-step sign-in secret, recovery codes and wrong-code count (see
+[`t1812_user_totp`](#t1812_user_totp-stores-two-step-sign-in-secrets)).
 
 Do not edit `alembic_version` to make the older image start.
 
@@ -704,6 +1111,41 @@ What this means for you:
   `segment_members` and its rows; it refuses while that table has any.
   [`4c2c09a2b3e8`](#4c2c09a2b3e8-keeps-rollback-records-without-a-safety-configuration)
   is backward-compatible for a rollback, and undoing it changes nothing.
+  [`607c51a59bf5`](#607c51a59bf5-gives-each-flag-a-value-type-and-two-values)
+  is backward-compatible for a rollback too, and undoing it drops each flag's
+  value type and values; it refuses while any flag is a string, number or json
+  flag.
+  [`85dd4796bb8b`](#85dd4796bb8b-stores-an-event-sent-again-with-its-event_id-once)
+  is backward-compatible for a rollback too, and undoing it drops
+  `event_dedup_keys`, every stored `event_id`, and no event.
+  [`7b6b4b4fe246`](#7b6b4b4fe246-records-when-each-rollout-stage-started)
+  is backward-compatible for a rollback too, and undoing it drops the recorded
+  start of every rollout stage; an upgrade afterwards sets each stage in
+  progress from its `updated_at`.
+  [`c448_balance_within`](#c448_balance_within-balances-the-split-within-groups)
+  is backward-compatible for a rollback too: the older release assigns every
+  balanced experiment's new users by the hash, with no group, for as long as
+  it serves. Undoing it drops every experiment's balance setting, every user's
+  group and every counter.
+  [`4955571d232c`](#4955571d232c-stores-visual-experiments)
+  is backward-compatible for a rollback too, and undoing it drops every visual
+  experiment's pages, goals and page changes, and every visual editor sign-in
+  and preview link.
+  [`t1812_user_totp`](#t1812_user_totp-stores-two-step-sign-in-secrets)
+  is backward-compatible for a rollback too, and undoing it drops every
+  account's two-step sign-in secret, recovery codes and wrong-code count:
+  those accounts then sign in with the password alone.
+  [`modules_0003_lower_is_better`](#modules_0003_lower_is_better-gives-each-warehouse-metric-source-a-direction)
+  is backward-compatible for a rollback, and undoing it drops every warehouse
+  metric source's lower-is-better setting; an upgrade afterwards sets each back
+  to `false`, not to the choice.
+  [`modules_0004_rbac_activation`](#modules_0004_rbac_activation-adds-an-activation-time-to-custom-role-assignments-and-direct-grants)
+  is backward-compatible for a rollback too, and undoing it drops the
+  activation-time column of custom role assignments and direct grants, with
+  any activation time stored in it; an upgrade afterwards adds the column empty.
+  [`modules_0005_redshift`](#modules_0005_redshift-lets-a-warehouse-connection-be-an-amazon-redshift-connection)
+  is backward-compatible for a rollback too, and undoing it changes no row; it
+  refuses while any Amazon Redshift connection is stored.
 - Compose runs one API container, which is the only writer and keeps `RUN_MIGRATIONS=true`.
   The chart already keeps the bootstrap out of the serving container: it runs
   it in an init container.
@@ -855,9 +1297,9 @@ The statements below use the schema `experimentation`. If your
 
 **Do not delete the account instead of retiring it.** Deleting a user deletes
 or detaches what refers to it: its API keys, reports, notification
-preferences, role assignments and workspace memberships are deleted with it,
-and the experiments, flags, audit records and everything else that names it
-lose that reference. Retiring keeps all of that.
+preferences, role assignments, workspace memberships and visual editor
+sign-ins and preview links are deleted with it, and the experiments, flags,
+audit records and everything else that names it lose that reference. Retiring keeps all of that.
 
 **Do not build the index by hand.** Run the upgrade, which locks the table,
 checks for groups and builds the index in one transaction. An index built

@@ -4,7 +4,7 @@
 document = "demo/streampulse/README.md"
 
 [[unit]]
-text = "StreamPulse — mobile feature-flag demo for Controlvar"
+text = "StreamPulse — device-targeting demo for Controlvar (web SDK)"
 by = ["exempt:label"]
 
 [[unit]]
@@ -47,6 +47,37 @@ by = [
 [[unit]]
 text = "No audio, no images, no external fonts or CDNs."
 by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_app_loads_no_image_font_audio_or_cdn"]
+
+[[unit]]
+text = "The phone is drawn in the browser and uses the React SDK, which sends the device's attributes with every flag evaluation."
+by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_builds_against_the_react_sdk_source_with_its_own_react",
+    "test:demo/streampulse/src/__tests__/StreamPulseApp.test.tsx::mounts the SDK provider once for the default device with the device as user + attributes and a 5 s cache",
+    "test:demo/streampulse/src/__tests__/devices.test.ts::maps a device to the SDK user: id = device_id, every attribute as targeting context",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::appends context=<url-encoded JSON of user.attributes> when the user has attributes",
+    "journey:demo-streampulse#rule-matches-the-premium-iphone",
+]
+
+[[unit]]
+text = "The native iOS, Android and Flutter SDKs do not send attributes on flag evaluation yet (#438), so a rule like the Search tab's would not match from them."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_native_sdks_send_no_context_on_flag_evaluation",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_no_context_keeps_existing_behaviour",
+]
+
+[[unit]]
+text = "The React Native SDK sends them, as the React SDK does."
+by = [
+    "test:sdk/react-native/__tests__/hooks.test.tsx::regression #1520: useFlag puts the attributes on the wire",
+    "test:sdk/react-native/__tests__/client.test.ts::isFeatureEnabled passes the attributes on",
+]
+
+[[unit]]
+text = "Guided examples walks the Search tab's rule one step at a time, with what you will see at each step."
+by = [
+    "journey:guided-examples#premium-iphone",
+    "journey:guided-examples#apply-below",
+]
 
 [[unit]]
 text = "Screens ↔ platform features"
@@ -122,9 +153,14 @@ by = [
 ]
 
 [[unit]]
-text = "Every tracked event is sent with an explicit experimentKey / featureFlagKey (see the table); screen_view {screen} has no key and is fanned out by the SDK to everything cached for the device."
+text = "Every tracked event is sent with an explicit experimentKey / featureFlagKey (see the table); screen_view {screen} has no key and is fanned out by the SDK to every experiment and flag it answered for the device since the page was loaded (up to 24 hours; \"Refresh now\" clears only the cache, so it keeps them)."
 by = [
     "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::POSTs one entry per cached assignment to /api/v1/tracking/batch",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::sends an untagged purchase made 301 s after the assignment to the experiment",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::does not send to a key answered more than 24 hours ago: the event goes once with no key",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::still fans out to the attributed keys after clearCache, which empties only the cache",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::another client instance has none of them: its event goes once with no key",
+    "test:demo/streampulse/src/__tests__/ControlvarPanel.test.tsx::\"Refresh now\" clears the SDK cache and asks the page to re-evaluate; links point at the dashboard",
     "test:demo/streampulse/src/__tests__/screens.test.tsx::flag on: \"AI search ✨\" with explanations; search {query, engine: ai, results} attributed to the flag",
 ]
 
@@ -163,13 +199,21 @@ by = [
 ]
 
 [[unit]]
-text = "Powered by Controlvar — per flag: on/off + the server reason (targeting_rule, rollout, inactive, error) spelled out; per experiment: the variant and whether the device was actually enrolled (assigned: false → \"in global holdout streampulse-holdout\", \"excluded: mutual exclusion group streampulse-profile\", \"excluded: targeting rules\"); the last 8 events; links to the dashboard; Refresh now (clears the SDK cache and re-evaluates)."
+text = "Powered by Controlvar — per flag: on/off + the server reason (targeting_rule, rollout, inactive, error) spelled out; per experiment, once its screen has assigned it: the variant and whether the device was actually enrolled (assigned: false → \"in global holdout streampulse-holdout\", \"excluded: mutual exclusion group streampulse-profile\", \"excluded: targeting rules\"); the last 8 events; links to the dashboard; Refresh now (clears the SDK cache and re-evaluates)."
 by = [
+    "test:demo/streampulse/src/__tests__/ControlvarPanel.test.tsx::shows the variant for assigned experiments and a human label for every assigned:false reason",
     "journey:demo-streampulse#premium-iphone",
     "journey:demo-streampulse#gb-iphone",
     "journey:demo-streampulse#profile",
     "journey:demo-streampulse#holdout",
     "journey:demo-streampulse#refresh-now",
+]
+
+[[unit]]
+text = "The panel assigns no experiment itself, because an assignment records that the device saw the experiment: until its screen opens, an experiment reads not assigned yet and names that screen."
+by = [
+    "test:demo/streampulse/src/__tests__/ControlvarPanel.test.tsx::assigns no experiment itself: a flag can still be loading, an experiment no screen opened is not assigned yet",
+    "test:demo/streampulse/src/__tests__/ControlvarPanel.test.tsx::a device that opens only the Notifications screen is assigned to the push test alone",
 ]
 
 [[unit]]
@@ -372,9 +416,9 @@ text = "react and react-dom are aliased to this app's copies to avoid the duplic
 by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_builds_against_the_react_sdk_source_with_its_own_react"]
 
 [[unit]]
-text = "StreamPulse uses useFeatureFlag(...).reason and useExperiment(...).assigned / .reason (React SDK ≥ 1.1.0 with the assigned/reason fields)."
+text = "StreamPulse uses useFeatureFlag(...).reason and useExperiment(...).assigned / .reason (React SDK 0.1.0 or later, with the assigned/reason fields)."
 by = [
-    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_react_sdk_is_1_1_0_with_the_hooks_the_apps_use",
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_react_sdk_is_0_1_0_with_the_hooks_the_apps_use",
     "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::exposes the server reason when the response carries one",
     "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::maps an ineligible user (assigned: false + reason) onto the control variant the server returned",
 ]
@@ -544,7 +588,7 @@ text = "Global holdout."
 by = ["journey:demo-streampulse#holdout"]
 
 [[unit]]
-text = "Type a custom device id such as sp-holdout-15 (bucket 1 under the demo holdout's salt) and Apply device: every experiment reads in global holdout streampulse-holdout (control shown) and no exposure is recorded."
+text = "Type a custom device id such as sp-holdout-15 (bucket 1 under the demo holdout's salt) and Apply device: every experiment whose screen you open reads in global holdout streampulse-holdout (control shown) and no exposure is recorded."
 by = [
     "test:backend/tests/integration/services/test_seed_streampulse_holdout.py::test_the_demo_salt_keeps_the_documented_ids_where_the_demo_says",
     "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_holdout_users_get_control_and_are_not_recorded",
@@ -584,9 +628,11 @@ text = "Symptom | Cause / fix"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Yellow banner \"NEXT_PUBLIC_CONTROLVAR_API_KEY is not set\"; panel shows error: API error: 401 everywhere | The key is missing or wrong. Run python backend/scripts/seed_streampulse.py (it rewrites .env.local and .api_key), then restart npm run dev — Next reads env vars at startup."
+text = "Yellow banner \"NEXT_PUBLIC_CONTROLVAR_API_KEY is not set\"; panel shows error: API error: 401 for every flag, and every experiment stays not assigned yet | The key is missing or wrong. Run python backend/scripts/seed_streampulse.py (it rewrites .env.local and .api_key), then restart npm run dev — Next reads env vars at startup."
 by = [
     "test:demo/streampulse/src/__tests__/StreamPulseApp.test.tsx::warns when the API key is missing but still renders the app",
+    "test:demo/streampulse/src/__tests__/ControlvarPanel.test.tsx::assigns no experiment itself: a flag can still be loading, an experiment no screen opened is not assigned yet",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::does not include failed assignments",
     "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_rejects_unknown_key",
     "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_seed_writes_its_key_files_and_backfills_its_history",
 ]
@@ -596,9 +642,9 @@ text = "401 in the network tab although .env.local has a key | The key was revok
 by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_rejects_unknown_key"]
 
 [[unit]]
-text = "404 on /tracking/assign or /feature-flags/evaluate/streampulse_... | The StreamPulse experiments are not seeded or not ACTIVE, or the flags are not seeded (--reset removes both; a flag that is not ACTIVE answers enabled: false, not a 404). Run the seed script."
+text = "404 on /tracking/assign or /feature-flags/evaluate/streampulse_... | The StreamPulse experiments or flags are not seeded (--reset removes both). A paused or completed experiment answers its control variant with assigned: false, and a flag that is not ACTIVE answers enabled: false: neither is a 404. Run the seed script."
 by = [
-    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_inactive_experiment_returns_404",
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_each_status_answers_an_enrolled_and_a_new_user",
     "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_unknown_key_returns_404",
     "journey:demo-streampulse#recs-off-evaluated",
 ]
@@ -611,10 +657,12 @@ by = [
 ]
 
 [[unit]]
-text = "Every flag off, every experiment error, nothing loads | Backend not running on NEXT_PUBLIC_CONTROLVAR_API_URL. Start it from the repository root: ENVIRONMENT=development uvicorn backend.app.main:app --reload."
+text = "Every flag off, every experiment not assigned yet, nothing loads | Backend not running on NEXT_PUBLIC_CONTROLVAR_API_URL. Start it from the repository root: ENVIRONMENT=development uvicorn backend.app.main:app --reload."
 by = [
     "test:sdk/react/src/__tests__/useFeatureFlag.test.tsx::sets error on network failure",
     "test:sdk/react/src/__tests__/useExperiment.test.tsx::sets error and keeps the control defaults on network failure",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::does not include failed assignments",
+    "test:demo/streampulse/src/__tests__/ControlvarPanel.test.tsx::assigns no experiment itself: a flag can still be loading, an experiment no screen opened is not assigned yet",
 ]
 
 [[unit]]
@@ -634,7 +682,7 @@ by = [
 ]
 
 [[unit]]
-text = "A preset shows \"in global holdout streampulse-holdout\" for every experiment | That id hashes into the 2 % holdout. The shipped preset ids do not; if you changed one, pick another id (or use it to demonstrate the holdout)."
+text = "A preset shows \"in global holdout streampulse-holdout\" for every experiment you open | That id hashes into the 2 % holdout. The shipped preset ids do not; if you changed one, pick another id (or use it to demonstrate the holdout)."
 by = [
     "journey:demo-streampulse#holdout",
     "test:backend/tests/integration/services/test_seed_streampulse_holdout.py::test_the_demo_salt_keeps_the_documented_ids_where_the_demo_says",
@@ -655,7 +703,7 @@ by = [
 [[unit]]
 text = "npm run typecheck fails inside sdk/react/src | The app needs ExperimentAssignment.assigned / .reason and FeatureFlagEvaluation.reason from the React SDK; make sure sdk/react is at the version in this repo."
 by = [
-    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_react_sdk_is_1_1_0_with_the_hooks_the_apps_use",
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_react_sdk_is_0_1_0_with_the_hooks_the_apps_use",
     "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::exposes the server reason when the response carries one",
 ]
 

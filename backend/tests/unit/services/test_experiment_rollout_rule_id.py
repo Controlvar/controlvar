@@ -284,7 +284,7 @@ REPO = Path(__file__).resolve().parents[4]
 #: A third one must call ``stamp_rollout_rule_id`` before it is added here.
 ACTIVE_WRITES = {
     ("backend/app/services/experiment_service.py", "start_experiment"),
-    ("backend/app/core/scheduler.py", "process_scheduled_experiments"),
+    ("backend/app/core/scheduler.py", "_process_due"),
 }
 
 

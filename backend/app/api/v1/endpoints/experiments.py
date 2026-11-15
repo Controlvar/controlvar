@@ -9,7 +9,7 @@ AB testing and feature experimentation.
 import copy
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 from uuid import UUID
 
 from fastapi import (
@@ -24,15 +24,25 @@ from fastapi import (
     status,
 )
 from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from sqlalchemy import text
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
-from backend.app.api import deps
+from backend.app.api import deps, experiment_cache
+from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.query_params import MAX_OFFSET, describe_as_int64
+from backend.app.api.read_scope import get_current_reader
 from backend.app.api.segment_rules import (
+    refuse_clone_with_unusable_balance_segments,
     refuse_clone_with_unusable_segments,
+    refuse_unusable_balance_segments,
     refuse_unusable_segments,
 )
 from backend.app.api.v1.endpoints import results as results_endpoints
+from backend.app.api.v1.endpoints.power_calculator import OUT_OF_RANGE_MESSAGE
+from backend.app.core.balanced_blocks import balance_problem, balance_setting
 from backend.app.core.logger import failure_detail, unexpected_failure
 from backend.app.core.logging import logger
 from backend.app.core.optional_modules import (
@@ -49,17 +59,35 @@ from backend.app.core.permissions import (
 from backend.app.core.scheduler import experiment_scheduler
 from backend.app.models.audit_log import ActionType, EntityType
 from backend.app.models.compliance_audit_event import AuditAction, AuditOutcome
-from backend.app.models.experiment import Experiment, ExperimentStatus
+from backend.app.models.experiment import (
+    Experiment,
+    ExperimentStatus,
+    ExperimentType,
+)
 from backend.app.models.user import User, UserRole
 from backend.app.schemas.experiment import (
     ExperimentCreate,
     ExperimentDetailResponse,
     ExperimentListResponse,
     ExperimentResponse,
+    ExperimentStartRequest,
     ExperimentUpdate,
     ScheduleConfig,
 )
+from backend.app.schemas.power_calculator import MAX_COUNT, MAX_VARIANTS
 from backend.app.schemas.results import ExperimentResultsResponse
+from backend.app.schemas.split_url_config import (
+    CHAIN,
+    SAME_ENTRY,
+    SPLIT_URL_CONFIG_ERROR,
+    SplitUrlConfig,
+    find_split_url_config_problem,
+    split_url_config_problem,
+    split_url_conflict,
+    split_url_entries,
+)
+from backend.app.schemas.storable_text import storable_text_param
+from backend.app.schemas.visual import VISUAL_CONFIG_ERROR, visual_write_problem
 from backend.app.services.analysis_service import AnalysisService
 from backend.app.services.audit_log_service import AuditLogService
 from backend.app.services.audit_service import (
@@ -70,6 +98,7 @@ from backend.app.services.audit_service import (
 )
 from backend.app.services.experiment_service import (
     END_DATE_PASSED,
+    SORT_BY_COLUMNS,
     AnalysisConfigError,
     EndDatePassedError,
     ExperimentService,
@@ -82,11 +111,64 @@ from backend.app.services.power_calculator_service import (
     SampleSizeNotFiniteError,
     sample_size_two_proportions,
 )
+from backend.app.services.segment_breakdown import NUL_IN_DIMENSION
+from backend.app.services.visual import (
+    DATED_DRAFT_REFUSED,
+    DESIGN_ETAG_MISSING,
+    DESIGN_ETAG_STALE,
+    SCHEDULED_START_REFUSED,
+    VISUAL_CONFIG_REMOVAL_REFUSED,
+    carry_over_visual_changes,
+    clone_visual_problem,
+    design_etag,
+    is_visual,
+    visual_config_of,
+    visual_start_problem,
+)
+
+#: ``sort_by`` on the list (#786): the columns, in exact case. The message is
+#: the 422's for any other non-empty value; it never repeats the value sent.
+SORT_BY_MESSAGE = "sort_by must be one of: " + ", ".join(SORT_BY_COLUMNS)
+SORT_BY_DESCRIPTION = (
+    "Column to sort by, in exact case: "
+    + ", ".join(SORT_BY_COLUMNS)
+    + ". An empty value applies no sort; any other value answers 422."
+)
 
 #: The states in which ``PUT /experiments/{id}`` accepts ``targeting_rules``
 #: (#523). PAUSED only when targeting is the one field sent; see the route.
 TARGETING_EDITABLE_STATUSES = frozenset(
     {ExperimentStatus.DRAFT, ExperimentStatus.PAUSED}
+)
+
+#: What ``PUT /experiments/{id}`` refuses to change once the experiment has left
+#: DRAFT, for every role, a superuser included: on presence, so the stored
+#: value or null sent back is refused too, with "Cannot update <field> for
+#: experiments in <status> status" naming the first match in this order. The
+#: variants and metrics, how the results are judged (#580), which users share
+#: a group's blocks (#448: decided before the first one is assigned), and how
+#: the results are analysed: CUPED, sequential testing and Bayesian analysis,
+#: each switch with its config (#848), and a visual experiment's pages and
+#: goals (#1545). ``balance_within`` precedes #848's five, and ``visual_config``
+#: comes last, so a request this check refused before keeps the field its
+#: detail names. ``start_date`` and ``end_date`` are not fields of ``ExperimentUpdate``,
+#: so the schema drops them and they never match here; a body naming them
+#: changes nothing. Every request field is classified against this list by
+#: ``backend/tests/unit/api/test_experiment_update_fields_classified.py``.
+FIXED_AFTER_DRAFT = (
+    "variants",
+    "metrics",
+    "start_date",
+    "end_date",
+    "correction_method",
+    "confidence_level",
+    "balance_within",
+    "variance_reduction_config",
+    "sequential_testing_enabled",
+    "sequential_testing_config",
+    "bayesian_enabled",
+    "bayesian_config",
+    "visual_config",
 )
 
 #: An experiment's status changes only through the lifecycle endpoints, which
@@ -100,8 +182,45 @@ STATUS_ON_CREATE = (
     "POST /api/v1/experiments/{id}/start, /pause, /complete or /archive."
 )
 
+# Start refuses a split URL experiment whose configuration cannot split (#393).
+# Each text says what to change and where; none carries a URL or names the
+# other experiment. ``{id}`` is literal.
+SPLIT_URL_START_FIX_HINT = (
+    "Change it with PUT /api/v1/experiments/{id}; the dashboard cannot edit "
+    "split_url_config."
+)
+SPLIT_URL_START_NO_CONFIG = (
+    "This split URL experiment has no split_url_config, so it cannot start. "
+    "Add one with PUT /api/v1/experiments/{id}; the dashboard cannot edit "
+    "split_url_config."
+)
+#: Followed by the configuration's first problem, then the hint.
+SPLIT_URL_START_NOT_VALID = "The split_url_config is not valid: "
+SPLIT_URL_START_SAME_ENTRY = (
+    "Another active split URL experiment already uses the same control page "
+    "(host and path) as this experiment. Two active split URL experiments "
+    "cannot share a control page. Pause or complete the other one, or change "
+    "this experiment's control URL with PUT /api/v1/experiments/{id}; the "
+    "dashboard cannot edit split_url_config."
+)
+SPLIT_URL_START_CHAIN = (
+    "Split URL experiments must not chain: this experiment's control page is a "
+    "variant page of another active split URL experiment, or one of its "
+    "variant pages is the other's control page, so a visitor could be sent "
+    "from one test into the other. Pause or complete the other experiment, or "
+    "change the URLs here with PUT /api/v1/experiments/{id}; the dashboard "
+    "cannot edit split_url_config."
+)
+#: The one warning for another active split URL experiment that start's
+#: checks pass over. The experiment id is the only value in it.
+SPLIT_URL_START_CHECK_SKIPPED = (
+    "Split URL start check skipped experiment %s: its stored split_url_config "
+    "is not valid"
+)
+
 # Create router with tag for documentation grouping
 router = APIRouter(
+    route_class=OffLoopRoute,
     tags=["Experiments"],
     responses={
         status.HTTP_401_UNAUTHORIZED: {
@@ -189,7 +308,9 @@ async def _invalidate_experiment_cache(
         return
     try:
         if experiment_id is not None:
-            await cache_control.redis.delete(f"experiment:{experiment_id}")
+            await cache_control.redis.delete(
+                experiment_cache.experiment_detail_cache_key(experiment_id)
+            )
         keys = [
             key async for key in cache_control.redis.scan_iter(match="experiments:*")
         ]
@@ -265,6 +386,296 @@ def _reject_unroutable_split_url(experiment_type: Any) -> None:
     )
 
 
+def _is_split_url(experiment_type: Any) -> bool:
+    return getattr(experiment_type, "value", experiment_type) == "split_url"
+
+
+def _refuse_split_url_update(
+    experiment: Experiment, experiment_in: ExperimentUpdate, fields_sent: set
+) -> None:
+    """Refuse an update whose result is a split URL experiment that cannot
+    split (#393).
+
+    The result is what the request sent, and what is stored for every field
+    it left out (a ``variants`` of null changes nothing, so the stored ones
+    count). Only a request that sends ``variants``, ``split_url_config`` or
+    ``experiment_type`` is checked. The 422 is at the rule's place inside
+    ``split_url_config`` when that was sent, else at ``variants``, else at
+    ``experiment_type``, with the text create gives.
+    """
+    if not fields_sent & {"variants", "split_url_config", "experiment_type"}:
+        return
+    experiment_type = (
+        experiment_in.experiment_type
+        if "experiment_type" in fields_sent
+        else experiment.experiment_type
+    )
+    if not _is_split_url(experiment_type):
+        return
+    config = (
+        experiment_in.split_url_config
+        if "split_url_config" in fields_sent
+        else experiment.split_url_config
+    )
+    if not isinstance(config, SplitUrlConfig) and not config:
+        return
+    variants = experiment_in.variants if "variants" in fields_sent else None
+    if variants is None:
+        variants = experiment.variants
+    problem = find_split_url_config_problem(config, variants)
+    if problem is None:
+        return
+    if "split_url_config" in fields_sent:
+        loc = ["body", "split_url_config", *problem.loc]
+    elif "variants" in fields_sent:
+        loc = ["body", "variants"]
+    else:
+        loc = ["body", "experiment_type"]
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail=[{"loc": loc, "msg": problem.message, "type": SPLIT_URL_CONFIG_ERROR}],
+    )
+
+
+#: The update fields a balanced experiment is judged on (#448).
+_BALANCE_FIELDS = frozenset(
+    {"balance_within", "variants", "optimization_type", "experiment_type"}
+)
+
+
+def _balance_refusal(experiment: Experiment) -> Optional[str]:
+    """Why a stored experiment cannot balance as it is, or None (#448)."""
+    return balance_problem(
+        balance_setting(experiment),
+        optimization_type=getattr(experiment, "optimization_type", None),
+        experiment_type=getattr(experiment, "experiment_type", None),
+        allocations=[v.traffic_allocation for v in experiment.variants or []],
+    )
+
+
+def _refuse_unbalanceable_update(
+    experiment: Experiment, experiment_in: ExperimentUpdate, fields_sent: set
+) -> None:
+    """Refuse an update whose result balances a bandit, a split URL experiment
+    or a split not in steps of 5 (#448), in either order: the setting sent to
+    a bandit, or a bandit, a split or a type sent to a balanced experiment.
+
+    The result is what the request sent, and what is stored for every field
+    it left out (a ``variants`` of null changes nothing). Only a request that
+    sends one of ``_BALANCE_FIELDS`` is judged. The 422 is at
+    ``balance_within``, whichever field changed.
+    """
+    if not fields_sent & _BALANCE_FIELDS:
+        return
+
+    def result(name: str) -> Any:
+        if name in fields_sent:
+            return getattr(experiment_in, name)
+        return getattr(experiment, name)
+
+    variants = experiment_in.variants if "variants" in fields_sent else None
+    if variants is None:
+        variants = experiment.variants or []
+    problem = balance_problem(
+        result("balance_within"),
+        optimization_type=result("optimization_type"),
+        experiment_type=result("experiment_type"),
+        allocations=[v.traffic_allocation for v in variants],
+    )
+    if problem is None:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail=[
+            {"loc": ["body", "balance_within"], "msg": problem, "type": "value_error"}
+        ],
+    )
+
+
+def _end_transaction_on_refusal(db: Session) -> None:
+    """Roll *db* back as a 4xx is raised, so a row read for update is freed at
+    once (#1545). Defence in depth: with production's async ``get_db``,
+    FastAPI (0.141.1) unwinds the request's dependencies, closing the
+    session, before it writes the error response, so the row is already free
+    when the response starts even without this. A rollback that fails is
+    logged, never raised over the refusal."""
+    try:
+        db.rollback()
+    except Exception as error:  # the refusal is the answer, not this
+        logger.warning(
+            "Rollback after a refused request failed (%s)", type(error).__name__
+        )
+
+
+#: How long PUT /{experiment_id} with visual_config, and PUT
+#: /{experiment_id}/schedule with a start date, wait for another transaction's
+#: hold on the experiment's row (``_read_row_for_update``) before they give up
+#: with a database error (a 500). The bound and the pattern are users.py's
+#: (``SUPERUSER_LOCK_TIMEOUT``): these handlers run on the API's event loop, so
+#: a wait holds every other request for as long as it lasts.
+EXPERIMENT_ROW_LOCK_TIMEOUT = "5s"
+
+
+def _read_row_for_update(db: Session, experiment_id: UUID) -> Optional[Experiment]:
+    """Read the experiment's row again, for update, and refresh the object the
+    session already holds with it (#1545). None if the row is gone.
+
+    FOR NO KEY UPDATE (``key_share=True``): it excludes the other route's read
+    and every write of the row, and not the FOR KEY SHARE that an insert of a
+    row referencing the experiment (an assignment, an event) holds. Called
+    after the route's role and state checks, so a caller they refuse never
+    waits on the row, and with no ``await`` between this call and the commit.
+    A wait longer than ``EXPERIMENT_ROW_LOCK_TIMEOUT`` ends the request with a
+    database error (a 500), as on users.py's superuser rows.
+    """
+    # The value is the module constant above, never request data.
+    db.execute(text(f"SET LOCAL lock_timeout = '{EXPERIMENT_ROW_LOCK_TIMEOUT}'"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text  # fmt: skip
+    return (
+        db.query(Experiment)
+        .filter(Experiment.id == experiment_id)
+        .with_for_update(key_share=True)
+        .populate_existing()
+        .first()
+    )
+
+
+def _refuse_fields_fixed_after_draft(
+    experiment: Experiment, update_data: Dict[str, Any]
+) -> None:
+    """400 when *experiment* is not a draft and *update_data* carries one of
+    ``FIXED_AFTER_DRAFT``. Presence, not difference: re-sending the stored
+    value is refused too."""
+    if experiment.status == ExperimentStatus.DRAFT:
+        return
+    for field in FIXED_AFTER_DRAFT:
+        if field in update_data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot update {field} for experiments in {experiment.status.value} status",
+            )
+
+
+def _visual_refusal(loc: List[Any], message: str, error_type: str) -> HTTPException:
+    """A 422 in the shape of a request-validation error, at *loc*."""
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail=[{"loc": ["body", *loc], "msg": message, "type": error_type}],
+    )
+
+
+#: The fields of an update whose result a visual design rule reads, in the
+#: order a refusal names the one it is placed at when the rule's own field
+#: was not sent.
+_VISUAL_RULE_FIELDS = ("visual_config", "variants", "metrics", "experiment_type")
+
+
+def _refuse_visual_update(
+    experiment: Experiment, update_data: Dict[str, Any], fields_sent: set
+) -> None:
+    """A visual experiment's rules on the result of an update (#1545).
+
+    Refused with 422 at ``["body", "visual_config"]`` (C1): ``visual_config:
+    null`` on a visual draft, and ``visual_config`` on a draft that has a
+    scheduled start. Then a variants list is completed with the stored page
+    changes of each variant it left them out of (S1's carry-over, in place),
+    and the result -- what the request sent, and what is stored for every
+    field it left out -- is held to ``visual_write_problem``.
+    """
+    stored_config = visual_config_of(experiment)
+    if "visual_config" in fields_sent:
+        sent = update_data.get("visual_config")
+        if sent is None and stored_config is not None:
+            raise _visual_refusal(
+                ["visual_config"], VISUAL_CONFIG_REMOVAL_REFUSED, VISUAL_CONFIG_ERROR
+            )
+        if sent is not None and experiment.start_date is not None:
+            raise _visual_refusal(
+                ["visual_config"],
+                DATED_DRAFT_REFUSED.format(id=experiment.id),
+                VISUAL_CONFIG_ERROR,
+            )
+    if update_data.get("variants") is not None:
+        update_data["variants"] = carry_over_visual_changes(
+            experiment.variants, update_data["variants"]
+        )
+    if not fields_sent & set(_VISUAL_RULE_FIELDS):
+        return
+
+    def merged(field: str, stored: Any) -> Any:
+        value = update_data.get(field)
+        return stored if value is None else value
+
+    visual_config = (
+        update_data.get("visual_config")
+        if "visual_config" in update_data
+        else stored_config
+    )
+    stored_variants = [
+        {
+            "is_control": getattr(v, "is_control", False),
+            "visual_changes": getattr(v, "visual_changes", None),
+        }
+        for v in experiment.variants
+    ]
+    problem = visual_write_problem(
+        merged("experiment_type", experiment.experiment_type),
+        visual_config,
+        merged("variants", stored_variants),
+        merged("metrics", experiment.metric_definitions),
+    )
+    if problem is None:
+        return
+    loc, message, error_type = problem
+    if loc[0] not in fields_sent:
+        loc = (next(f for f in _VISUAL_RULE_FIELDS if f in fields_sent),)
+    raise _visual_refusal(list(loc), message, error_type)
+
+
+def _split_url_start_refusal(db: Session, experiment: Experiment) -> Optional[str]:
+    """Why a split URL experiment cannot start, as start's 400 text, or None.
+
+    In order: it has no configuration; its configuration fails
+    ``split_url_config_problem``; another active split URL experiment has the
+    same entry (control URL host and path); the two would chain. Another
+    active split URL experiment whose stored configuration fails the rules is
+    skipped, with one warning, and never makes this raise.
+    """
+    if not _is_split_url(experiment.experiment_type):
+        return None
+    if not experiment.split_url_config:
+        return SPLIT_URL_START_NO_CONFIG
+    problem = split_url_config_problem(experiment.split_url_config, experiment.variants)
+    if problem is not None:
+        return SPLIT_URL_START_NOT_VALID + problem + " " + SPLIT_URL_START_FIX_HINT
+    mine = split_url_entries(experiment.split_url_config, experiment.variants)
+    if mine is None:
+        # No control variant: start has already refused that.
+        return None
+
+    others = (
+        db.query(Experiment)
+        .filter(
+            Experiment.experiment_type == ExperimentType.SPLIT_URL,
+            Experiment.status == ExperimentStatus.ACTIVE,
+            Experiment.id != experiment.id,
+        )
+        .order_by(Experiment.id)
+        .all()
+    )
+    conflicts = set()
+    for other in others:
+        theirs = split_url_entries(other.split_url_config, other.variants)
+        if theirs is None:
+            logger.warning(SPLIT_URL_START_CHECK_SKIPPED, other.id)
+            continue
+        conflicts.add(split_url_conflict(mine, theirs))
+    if SAME_ENTRY in conflicts:
+        return SPLIT_URL_START_SAME_ENTRY
+    if CHAIN in conflicts:
+        return SPLIT_URL_START_CHAIN
+    return None
+
+
 @router.get(
     "/",
     response_model=ExperimentListResponse,
@@ -273,23 +684,27 @@ def _reject_unroutable_split_url(experiment_type: Any) -> None:
 )
 async def list_experiments(
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_active_user),
+    # A sign-in, or an API key with the mcp:read scope (read_scope.py).
+    current_user: User = Depends(get_current_reader),
     cache_control: Dict[str, Any] = Depends(deps.get_cache_control),
     status_filter: Optional[str] = Query(
         None,
         description="Filter by experiment status (draft, active, paused, completed, archived)",
     ),
-    skip: int = Query(0, ge=0, description="Number of records to skip for pagination"),
+    skip: int = Query(
+        0,
+        ge=0,
+        le=MAX_OFFSET,
+        description="Number of records to skip for pagination",
+        json_schema_extra=describe_as_int64,
+    ),
     limit: int = Query(
         100, ge=1, le=500, description="Maximum number of records to return"
     ),
     search: Optional[str] = Query(
         None, description="Search term to filter experiment names and descriptions"
     ),
-    sort_by: Optional[str] = Query(
-        "created_at",
-        description="Field to sort by (created_at, updated_at, name, status)",
-    ),
+    sort_by: Optional[str] = Query("created_at", description=SORT_BY_DESCRIPTION),
     sort_order: Optional[str] = Query("desc", description="Sort order (asc, desc)"),
 ) -> ExperimentListResponse:
     """
@@ -322,6 +737,14 @@ async def list_experiments(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to list experiments",
+        )
+
+    # After the permission check, so a caller who may not list learns nothing
+    # about the columns; before the `try`, whose `except Exception` would turn
+    # this 422 into a 500 (#786).
+    if sort_by and sort_by not in SORT_BY_COLUMNS:
+        raise RequestValidationError(
+            [{"type": "enum", "loc": ("query", "sort_by"), "msg": SORT_BY_MESSAGE}]
         )
 
     try:
@@ -425,6 +848,8 @@ async def create_experiment(
 
     # Every segment the rules name exists and is active (#440).
     refuse_unusable_segments(db, experiment_in.targeting_rules)
+    # So is every segment the experiment balances within (#448).
+    refuse_unusable_balance_segments(db, experiment_in.balance_within)
 
     try:
         # Create experiment service
@@ -472,7 +897,8 @@ async def create_experiment(
         except Exception as _audit_err:
             db.rollback()
             logger.warning(
-                f"Compliance audit logging failed for experiment create: {_audit_err}"
+                "Compliance audit logging failed for experiment create (%s)",
+                type(_audit_err).__name__,
             )
 
         created_id = (
@@ -526,7 +952,8 @@ async def create_experiment(
 async def get_experiment(
     experiment_id: UUID = Path(..., description="The ID of the experiment to retrieve"),
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_active_user),
+    # A sign-in, or an API key with the mcp:read scope (read_scope.py).
+    current_user: User = Depends(get_current_reader),
     cache_control: Dict[str, Any] = Depends(deps.get_cache_control),
 ) -> ExperimentDetailResponse:
     """
@@ -574,7 +1001,8 @@ async def get_experiment(
         # The cached detail is returned only after the same checks as an
         # uncached read. The owner's name is not in the cache: it is looked
         # up on every read, cached or not, so a rename shows on the next one.
-        cached_data = await _cache_get(cache_control, f"experiment:{experiment_id}")
+        detail_key = experiment_cache.experiment_detail_cache_key(experiment_id)
+        cached_data = await _cache_get(cache_control, detail_key)
         if cached_data:
             detail = ExperimentDetailResponse.model_validate_json(cached_data)
             detail.owner_name = _owner_name(db, detail.owner_id)
@@ -631,11 +1059,7 @@ async def get_experiment(
                 else:
                     raise
 
-        await _cache_set(
-            cache_control,
-            f"experiment:{experiment_id}",
-            response.model_dump(mode="json"),
-        )
+        await _cache_set(cache_control, detail_key, response.model_dump(mode="json"))
 
         detail = ExperimentDetailResponse.model_validate(response.model_dump())
         detail.owner_name = _owner_name(db, detail.owner_id)
@@ -678,6 +1102,16 @@ async def update_experiment(
     - Basic properties: name, description, hypothesis
     - Variants: if experiment is in DRAFT status
     - Metrics: if experiment is in DRAFT status
+    - `balance_within`: if experiment is in DRAFT status, for every role
+      including superusers
+    - Analysis settings (`correction_method`, `confidence_level`,
+      `variance_reduction_config`, `sequential_testing_enabled`,
+      `sequential_testing_config`, `bayesian_enabled`, `bayesian_config`):
+      if experiment is in DRAFT status, for every role including superusers.
+      Outside DRAFT a request that includes one is refused, even when the
+      value equals the stored one or is null. To change one on a running
+      experiment, clone it (`POST /api/v1/experiments/{id}/clone`, a draft
+      copy) and set it on the copy.
     - Targeting (`targeting_rules`): while the experiment is DRAFT or PAUSED,
       for every role including superusers. On a PAUSED experiment it must be
       the only field in the request. On an ACTIVE, COMPLETED or ARCHIVED
@@ -707,14 +1141,30 @@ async def update_experiment(
             (the detail names the state): any change to a non-DRAFT experiment
             by a non-superuser, other than targeting alone on a PAUSED one;
             targeting outside DRAFT or PAUSED; targeting with other fields on
-            a PAUSED experiment; variants or metrics outside DRAFT
+            a PAUSED experiment; variants, metrics, `balance_within` or an
+            analysis setting outside DRAFT
         HTTPException 404: If the experiment doesn't exist
         HTTPException 422: If `targeting_rules` is not a valid rule set,
-            `status` differs from the experiment's current status, or the
-            request contains `schedule`
+            `status` differs from the experiment's current status, the
+            request contains `schedule`, `metrics` is an empty list or repeats
+            a metric name, or a request sending `variants`,
+            `split_url_config` or `experiment_type` would leave a split URL
+            experiment whose `split_url_config` does not match its variants.
+            An empty or repeating `metrics` is refused before the caller's
+            role, the experiment's existence or its state is checked.
+            Also (#1545): `visual_config: null` on a visual draft, and
+            `visual_config` on a draft with a scheduled start, at
+            `["body", "visual_config"]`; and, at the field the rule is about,
+            a result in which page changes sit on the control or on an
+            experiment without `visual_config`, a goal's event_name is no
+            metric's, or a split URL experiment has `visual_config`.
+
+    A variant sent without `visual_changes` keeps the page changes stored
+    for the variant of the same name; `visual_changes: null` removes them.
     """
     try:
-        # Get experiment
+        # Get experiment. A request that sends visual_config reads the row
+        # again, for update, once the role and state checks below have passed.
         experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
         if not experiment:
             raise HTTPException(
@@ -804,26 +1254,47 @@ async def update_experiment(
         update_data = experiment_in.model_dump(exclude_unset=True)
         update_data.pop("status", None)
 
-        # For non-draft experiments, prevent updates to restricted fields.
-        # This runs after the superuser passes the guard above, so it binds
-        # every role: once an experiment leaves draft, nobody changes how its
-        # results are judged (#580). It works on presence, so re-sending the
-        # stored value is refused too.
-        if experiment.status != ExperimentStatus.DRAFT:
-            restricted_fields = [
-                "variants",
-                "metrics",
-                "start_date",
-                "end_date",
-                "correction_method",
-                "confidence_level",
-            ]
-            for field in restricted_fields:
-                if field in update_data:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"Cannot update {field} for experiments in {experiment.status.value} status",
-                    )
+        # For non-draft experiments, refuse FIXED_AFTER_DRAFT. This runs after
+        # the superuser passes the guard above, so it binds every role: once
+        # an experiment leaves draft, nobody changes how its results are
+        # judged or analysed (#580, #848). It works on presence, so re-sending
+        # the stored value, or null, is refused too.
+        _refuse_fields_fixed_after_draft(experiment, update_data)
+
+        # A request that sends visual_config reads the row again, for update,
+        # now that the role and state checks above have passed: the start date
+        # checked below must be the committed one, and PUT /schedule reads the
+        # row the same way before it checks visual_config (#1545). The row
+        # read here is a draft or the request is refused: visual_config is
+        # fixed outside draft. No await may come between this read and the
+        # commit; a refusal rolls back at once (the except below).
+        if "visual_config" in fields_sent:
+            experiment = _read_row_for_update(db, experiment_id)
+            if not experiment:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Experiment not found",
+                )
+            _refuse_fields_fixed_after_draft(experiment, update_data)
+
+        # A visual draft keeps its visual settings, a dated draft cannot
+        # become visual, and the design that results follows the visual rules
+        # (#1545). The stored page changes of a variant sent without them are
+        # carried over into update_data here.
+        _refuse_visual_update(experiment, update_data, fields_sent)
+
+        # A split URL experiment's URL variants match its variants (#393), on
+        # the result of this update.
+        _refuse_split_url_update(experiment, experiment_in, fields_sent)
+
+        # A balanced experiment is not a bandit, not a split URL experiment,
+        # and its shares are multiples of 5 (#448), on the result too.
+        _refuse_unbalanceable_update(experiment, experiment_in, fields_sent)
+
+        # Every segment a draft is set to balance within exists and is
+        # active (#448).
+        if "balance_within" in fields_sent:
+            refuse_unusable_balance_segments(db, experiment_in.balance_within)
 
         # Capture pre-update snapshot for audit trail. The update below
         # rebinds targeting_rules (setattr) rather than changing the dict,
@@ -886,7 +1357,8 @@ async def update_experiment(
         except Exception as _audit_err:
             db.rollback()
             logger.warning(
-                f"Compliance audit logging failed for experiment update: {_audit_err}"
+                "Compliance audit logging failed for experiment update (%s)",
+                type(_audit_err).__name__,
             )
 
         record_experiment_change(
@@ -936,7 +1408,9 @@ async def update_experiment(
             else:
                 raise
     except HTTPException:
-        # Let deliberate 4xx responses through instead of wrapping them in a 500.
+        # Let deliberate 4xx responses through instead of wrapping them in a
+        # 500, ending the transaction first (a row read for update is freed).
+        _end_transaction_on_refusal(db)
         raise
     except Exception as e:
         raise unexpected_failure(
@@ -1083,7 +1557,8 @@ async def delete_experiment(
     except Exception as _audit_err:
         db.rollback()
         logger.warning(
-            f"Compliance audit logging failed for experiment delete: {_audit_err}"
+            "Compliance audit logging failed for experiment delete (%s)",
+            type(_audit_err).__name__,
         )
 
     AuditService.record_after_commit(
@@ -1110,6 +1585,13 @@ async def delete_experiment(
 )
 async def start_experiment(
     experiment_id: UUID = Path(..., description="The ID of the experiment to start"),
+    start: Optional[ExperimentStartRequest] = Body(
+        None,
+        description=(
+            "Optional. A visual draft needs its design_etag here; every other "
+            "start takes no body, null or {}."
+        ),
+    ),
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_active_user),
     cache_control: Dict[str, Any] = Depends(deps.get_cache_control),
@@ -1134,6 +1616,21 @@ async def start_experiment(
     - An experiment with no start date must not have an end date that has
       passed: set a later one, or clear it, with
       PUT /{experiment_id}/schedule first
+    - A split URL experiment must have a `split_url_config` whose URL
+      variants match its variants. Its control URL's host and path must not
+      be those of an active split URL experiment's control URL or of one of
+      that experiment's variant URLs, and none of its variant URLs may have
+      the host and path of an active split URL experiment's control URL
+    - A visual draft (one with `visual_config`, #1545) is started with the
+      body `{"design_etag": ...}`, the `design_etag` of the version being
+      started as `GET /api/v1/experiments/{id}` returned it: without one it
+      answers 400, and with one that is not its current design's it answers
+      409 and nothing is started. It needs a page change in a non-control
+      variant, stored visual settings and page changes that are valid, and a
+      metric for every goal. Every other start takes no body (an empty body,
+      `null` and `{}` are the same), and ignores a `design_etag` sent.
+
+    Starting an experiment ends every visual editor sign-in of it.
 
     Returns:
         ExperimentResponse: The updated experiment with ACTIVE status
@@ -1141,6 +1638,8 @@ async def start_experiment(
     Raises:
         HTTPException 400: If the experiment cannot be started
         HTTPException 403: If the caller's role does not hold UPDATE on experiments
+        HTTPException 409: If a visual draft's design_etag is not its
+            current design's
     """
     try:
         # Get experiment
@@ -1166,6 +1665,20 @@ async def start_experiment(
                 detail=f"Cannot start experiment with status: {experiment.status.value}",
             )
 
+        # A visual draft starts only as the version the caller reviewed (#1545,
+        # C2): the etag is computed from the row read above, never a cache.
+        if experiment.status == ExperimentStatus.DRAFT and is_visual(experiment):
+            sent = start.design_etag if start is not None else None
+            if not sent:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=DESIGN_ETAG_MISSING.format(id=experiment.id),
+                )
+            if sent != design_etag(experiment):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT, detail=DESIGN_ETAG_STALE
+                )
+
         # Check for required components
         if not experiment.variants or len(experiment.variants) < 2:
             raise HTTPException(
@@ -1184,6 +1697,31 @@ async def start_experiment(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Experiment must have at least one metric defined",
+            )
+
+        # A split URL experiment whose configuration cannot split (#393).
+        # Here, before the service: a check the service fails raises
+        # ValueError, which the except below turns into a 500.
+        split_url_refusal = _split_url_start_refusal(db, experiment)
+        if split_url_refusal is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=split_url_refusal
+            )
+
+        # A balanced experiment the API would refuse to store as it is (#448):
+        # only a write that bypassed create and update makes one.
+        balance_refusal = _balance_refusal(experiment)
+        if balance_refusal is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=balance_refusal
+            )
+
+        # The one visual start check (#1545, C1), with its text; the
+        # scheduler makes the same one.
+        visual_refusal = visual_start_problem(experiment)
+        if visual_refusal is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=visual_refusal
             )
 
         before_audit = audit_snapshot(EntityType.EXPERIMENT, experiment)
@@ -1336,6 +1874,11 @@ async def update_experiment_schedule(
 
     start_date may not be more than ten minutes in the past.
 
+    A visual draft (one with `visual_config`, #1545) takes no start date: it
+    starts only with POST /{experiment_id}/start. A request with a start date
+    other than null answers 400; `{"start_date": null}` clears one, and an end
+    date is accepted.
+
     Returns:
         ExperimentResponse: The updated experiment with scheduling information
 
@@ -1348,7 +1891,9 @@ async def update_experiment_schedule(
             time zone name
     """
     try:
-        # Get experiment by ID
+        # Get experiment by ID. A request that sends a start date reads the
+        # row again, for update, once the role and state checks below have
+        # passed.
         experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
         if not experiment:
             raise HTTPException(
@@ -1367,6 +1912,35 @@ async def update_experiment_schedule(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Cannot schedule experiment with status {experiment.status.value}. "
                 f"Experiment must be in DRAFT or PAUSED status.",
+            )
+
+        # A request that sends a start date reads the row again, for update,
+        # now that the role and state checks above have passed, as a PUT that
+        # sends visual_config does, so each checks the other's committed value
+        # (#1545). The service checks the state again on the row read here. No
+        # await may come between this read and the commit; a refusal rolls
+        # back at once (the except below).
+        if schedule.start_date is not None:
+            experiment = _read_row_for_update(db, experiment_id)
+            if not experiment:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Experiment not found",
+                )
+
+        # A visual draft starts only with Start, which checks the design shown
+        # (#1545, C1): it is never given a start date. A null start date
+        # clears one written outside the API; an end date is accepted, and a
+        # paused visual experiment's resume is unchanged.
+        if (
+            experiment.status == ExperimentStatus.DRAFT
+            and is_visual(experiment)
+            and "start_date" in schedule.model_fields_set
+            and schedule.start_date is not None
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=SCHEDULED_START_REFUSED,
             )
 
         # Update experiment schedule
@@ -1403,7 +1977,9 @@ async def update_experiment_schedule(
 
         return ExperimentResponse.model_validate(updated_experiment)
     except HTTPException:
-        # Let deliberate 4xx responses through instead of wrapping them in a 500.
+        # Let deliberate 4xx responses through instead of wrapping them in a
+        # 500, ending the transaction first (a row read for update is freed).
+        _end_transaction_on_refusal(db)
         raise
     except Exception as e:
         raise unexpected_failure(
@@ -1517,7 +2093,8 @@ async def get_experiment_results(
         ..., description="The ID of the experiment to get results for"
     ),
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_active_user),
+    # A sign-in, or an API key with the mcp:read scope (read_scope.py).
+    current_user: User = Depends(get_current_reader),
 ) -> ExperimentResultsResponse:
     """
     Get experiment results and statistical analysis.
@@ -1533,33 +2110,63 @@ async def get_experiment_results(
         HTTPException 403: If the caller's role does not hold READ on experiments
         HTTPException 404: If the experiment does not exist
     """
-    experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
-    if not experiment:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Experiment not found"
+    # The lookup, the 404 and DRAFT checks and the computation run in the
+    # thread pool, so a long computation does not hold up this process's other
+    # requests (#1738). The permission is decided here first, while the
+    # request's session can still load the caller: an API key's first use in a
+    # window commits, which expires its owner, and a role-less user's grants
+    # are read through the row's session. Once ``db`` is closed the row is
+    # detached and is not read again. What the check raised is re-raised after
+    # the lookup, so the order stays 404, 403, 400.
+    refusal: Optional[Exception] = None
+    try:
+        deps.get_experiment_read_access(None, current_user)
+    except Exception as exc:
+        refusal = exc
+    db.close()
+    return await run_in_threadpool(_experiment_results, experiment_id, refusal, db)
+
+
+def _experiment_results(
+    experiment_id: UUID, refusal: Optional[Exception], db: Session
+) -> ExperimentResultsResponse:
+    """The answer of ``GET /experiments/{experiment_id}/results``, read on *db*.
+
+    *refusal* is what the caller's permission check raised, or None. Closes
+    *db*.
+    """
+    try:
+        experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
+        if not experiment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Experiment not found"
+            )
+
+        if refusal is not None:
+            raise refusal
+
+        if experiment.status == ExperimentStatus.DRAFT:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot get results for experiments in DRAFT status",
+            )
+
+        # None, explicitly: the route function's own defaults are ``Query``
+        # objects, not values. None means the experiment's stored settings, so
+        # this goes through the same resolution, cache key, snapshot rule and
+        # labels as ``GET /results/{id}`` with no options (#580). The results
+        # route does not read ``current_user``; the caller was admitted above.
+        return results_endpoints.get_experiment_results(
+            experiment_id=experiment_id,
+            confidence_level=None,
+            correction_method=None,
+            use_cache=True,
+            breakdown=None,
+            db=db,
+            current_user=None,
         )
-
-    deps.get_experiment_read_access(experiment, current_user)
-
-    if experiment.status == ExperimentStatus.DRAFT:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot get results for experiments in DRAFT status",
-        )
-
-    # None, explicitly: the route function's own defaults are ``Query``
-    # objects, not values. None means the experiment's stored settings, so
-    # this goes through the same resolution, cache key, snapshot rule and
-    # labels as ``GET /results/{id}`` with no options (#580).
-    return results_endpoints.get_experiment_results(
-        experiment_id=experiment_id,
-        confidence_level=None,
-        correction_method=None,
-        use_cache=True,
-        breakdown=None,
-        db=db,
-        current_user=current_user,
-    )
+    finally:
+        db.close()
 
 
 # New endpoints
@@ -1684,6 +2291,8 @@ async def clone_experiment(
     Raises:
         HTTPException 403: If the caller's role does not hold READ and CREATE on experiments
         HTTPException 404: If the source experiment doesn't exist
+        HTTPException 422: If the source's stored visual settings or page
+            changes (#1545), which the clone copies, are not valid
     """
     try:
         # Get source experiment
@@ -1710,8 +2319,19 @@ async def clone_experiment(
         _reject_unroutable_split_url(experiment.experiment_type)
 
         # The clone's rules are the source's, and every segment they name
-        # must still be usable (#440).
+        # must still be usable (#440); so must every segment it would
+        # balance within (#448).
         refuse_clone_with_unusable_segments(db, experiment.targeting_rules)
+        refuse_clone_with_unusable_balance_segments(db, balance_setting(experiment))
+
+        # The clone copies the source's visual settings and page changes, so
+        # they are checked as a create checks them (#1545).
+        visual_refusal = clone_visual_problem(experiment)
+        if visual_refusal is not None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=visual_refusal,
+            )
 
         # Create experiment service
         experiment_service = ExperimentService(db)
@@ -1786,22 +2406,16 @@ async def get_daily_experiment_results(
         HTTPException 403: If the caller's role does not hold READ on experiments
     """
     try:
-        # Get experiment
-        experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
-        if not experiment:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Experiment not found"
-            )
-
-        # Before the cache read: the role must hold READ on experiments
-        experiment = deps.get_experiment_read_access(experiment, current_user)
-
-        # Check if experiment has results
-        if experiment.status == ExperimentStatus.DRAFT:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot get results for experiments in DRAFT status",
-            )
+        # The lookup, the 404, 403 and DRAFT checks and the analysis run in the
+        # thread pool, so a long analysis does not hold up this process's other
+        # requests (#1762). The permission is decided here first, as in
+        # get_experiment_results, and raised after the lookup, so the order
+        # stays 404, 403, 400, and a refused caller never reaches the cache.
+        # The cache client is async, so the cache is read and written here,
+        # between the checks and the analysis.
+        refusal = _results_read_refusal(current_user)
+        db.close()
+        await run_in_threadpool(_admit_results_read, experiment_id, refusal, db)
 
         metric_part = f":{metric_id}" if metric_id else ""
         cache_key = f"experiment_daily_results:{experiment_id}{metric_part}"
@@ -1809,19 +2423,10 @@ async def get_daily_experiment_results(
         if cached_data:
             return json.loads(cached_data)
 
-        # Create analysis service
-        analysis_service = AnalysisService(db)
-
-        # Get daily results
         try:
-            if metric_id:
-                results = analysis_service.get_daily_results(
-                    experiment_id=experiment_id, metric_id=metric_id
-                )
-            else:
-                results = analysis_service.get_daily_results(
-                    experiment_id=experiment_id
-                )
+            results = await run_in_threadpool(
+                _daily_results, experiment_id, metric_id, db
+            )
         except ValueError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -1839,6 +2444,67 @@ async def get_daily_experiment_results(
             db=db,
             logger=logger,
         )
+
+
+def _results_read_refusal(current_user: User) -> Optional[Exception]:
+    """What the caller's permission check for the daily and segmented results
+    raises, or None when it admits them.
+
+    Called in the handler, before the request's session is closed: the check
+    may read the caller's grants through that session, and once it is closed
+    the user row is detached and is not read again. The value is raised by
+    :func:`_admit_results_read` after the lookup.
+    """
+    try:
+        deps.get_experiment_read_access(None, current_user)
+    except Exception as exc:
+        return exc
+    return None
+
+
+def _admit_results_read(
+    experiment_id: UUID, refusal: Optional[Exception], db: Session
+) -> None:
+    """The checks of the daily and segmented results routes, read on *db*.
+
+    404 for an unknown experiment, then *refusal* (see
+    :func:`_results_read_refusal`), then 400 for a draft. Closes *db*.
+    """
+    try:
+        experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
+        if not experiment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Experiment not found"
+            )
+
+        if refusal is not None:
+            raise refusal
+
+        if experiment.status == ExperimentStatus.DRAFT:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot get results for experiments in DRAFT status",
+            )
+    finally:
+        db.close()
+
+
+def _daily_results(
+    experiment_id: UUID, metric_id: Optional[UUID], db: Session
+) -> List[Dict[str, Any]]:
+    """The daily results of an admitted caller's request, read on *db*.
+
+    Closes *db*.
+    """
+    try:
+        analysis_service = AnalysisService(db)
+        if metric_id:
+            return analysis_service.get_daily_results(
+                experiment_id=experiment_id, metric_id=metric_id
+            )
+        return analysis_service.get_daily_results(experiment_id=experiment_id)
+    finally:
+        db.close()
 
 
 @router.get(
@@ -1879,21 +2545,15 @@ async def get_segmented_experiment_results(
         HTTPException 403: If the caller's role does not hold READ on experiments
     """
     try:
-        # Get experiment
-        experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
-        if not experiment:
+        # As get_daily_experiment_results (#1762): the permission decided here,
+        # the checks and the analysis in the thread pool, the cache here.
+        refusal = _results_read_refusal(current_user)
+        db.close()
+        await run_in_threadpool(_admit_results_read, experiment_id, refusal, db)
+        if "\x00" in segment_by:
+            # Refused before the cache: the database driver cannot bind it.
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Experiment not found"
-            )
-
-        # Before the cache read: the role must hold READ on experiments
-        experiment = deps.get_experiment_read_access(experiment, current_user)
-
-        # Check if experiment has results
-        if experiment.status == ExperimentStatus.DRAFT:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot get results for experiments in DRAFT status",
+                status_code=status.HTTP_400_BAD_REQUEST, detail=NUL_IN_DIMENSION
             )
 
         metric_part = f":{metric_id}" if metric_id else ""
@@ -1904,21 +2564,10 @@ async def get_segmented_experiment_results(
         if cached_data:
             return json.loads(cached_data)
 
-        # Create analysis service
-        analysis_service = AnalysisService(db)
-
-        # Get segmented results
         try:
-            if metric_id:
-                results = analysis_service.get_segmented_results(
-                    experiment_id=experiment_id,
-                    segment_by=segment_by,
-                    metric_id=metric_id,
-                )
-            else:
-                results = analysis_service.get_segmented_results(
-                    experiment_id=experiment_id, segment_by=segment_by
-                )
+            results = await run_in_threadpool(
+                _segmented_results, experiment_id, segment_by, metric_id, db
+            )
         except ValueError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -1938,6 +2587,28 @@ async def get_segmented_experiment_results(
         )
 
 
+def _segmented_results(
+    experiment_id: UUID, segment_by: str, metric_id: Optional[UUID], db: Session
+) -> Dict[str, Any]:
+    """The segmented results of an admitted caller's request, read on *db*.
+
+    Closes *db*.
+    """
+    try:
+        analysis_service = AnalysisService(db)
+        if metric_id:
+            return analysis_service.get_segmented_results(
+                experiment_id=experiment_id,
+                segment_by=segment_by,
+                metric_id=metric_id,
+            )
+        return analysis_service.get_segmented_results(
+            experiment_id=experiment_id, segment_by=segment_by
+        )
+    finally:
+        db.close()
+
+
 @router.post(
     "/{experiment_id}/metadata",
     response_model=Dict[str, Any],
@@ -1945,8 +2616,15 @@ async def get_segmented_experiment_results(
     response_description="Returns the updated experiment with metadata",
 )
 async def update_experiment_metadata(
+    # NUL or a lone surrogate anywhere in the body answers 422 (#961). Body()
+    # sits inside Annotated because, as the default, FastAPI 0.141 drops the
+    # validator beside it; with no default the parameter must come first.
+    metadata: Annotated[
+        Dict[str, Any],
+        Body(..., description="Metadata to update"),
+        storable_text_param("metadata"),
+    ],
     experiment_id: UUID = Path(..., description="The ID of the experiment to update"),
-    metadata: Dict[str, Any] = Body(..., description="Metadata to update"),
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_active_user),
     cache_control: Dict[str, Any] = Depends(deps.get_cache_control),
@@ -2025,47 +2703,88 @@ async def update_experiment_metadata(
 )
 async def calculate_experiment_sample_size(
     baseline_rate: float = Query(
-        ..., gt=0, lt=1, description="Baseline conversion rate (0-1)"
+        ...,
+        gt=0,
+        lt=1,
+        allow_inf_nan=False,
+        description="Baseline conversion rate (0-1)",
     ),
     minimum_detectable_effect: float = Query(
         ...,
         gt=0,
+        allow_inf_nan=False,
         description="Minimum detectable effect (relative change, e.g. 0.1 for 10%)",
     ),
     statistical_power: float = Query(
-        0.8, ge=0.5, le=0.99, description="Statistical power (0.5-0.99)"
+        0.8,
+        ge=0.5,
+        le=0.99,
+        allow_inf_nan=False,
+        description="Statistical power (0.5-0.99)",
     ),
     significance_level: float = Query(
-        0.05, ge=0.01, le=0.1, description="Significance level (0.01-0.1)"
+        0.05,
+        ge=0.01,
+        le=0.1,
+        allow_inf_nan=False,
+        description=(
+            "Significance level (0.01-0.1): 1 minus the experiment's confidence "
+            "level. A correction divides it between the comparisons; the answer's "
+            "alpha is each comparison's level."
+        ),
     ),
     is_one_sided: bool = Query(
         False, description="Whether the test is one-sided (default: two-sided)"
     ),
     daily_traffic: Optional[int] = Query(
-        None, gt=0, description="Daily traffic to the experiment (optional)"
+        None,
+        gt=0,
+        le=MAX_COUNT,
+        description="Daily traffic to the experiment (optional)",
     ),
     traffic_allocation: Optional[float] = Query(
         None,
         gt=0,
         le=1,
+        allow_inf_nan=False,
         description="Fraction of traffic allocated to the experiment (0-1)",
     ),
     variant_count: int = Query(
-        2, ge=2, description="Number of variants (including control)"
+        2,
+        ge=2,
+        le=MAX_VARIANTS,
+        description="Number of variants including control (2-100)",
+    ),
+    correction_method: str = Query(
+        "none",
+        pattern="^(none|bonferroni|benjamini_hochberg)$",
+        description=(
+            "Correction for comparing several variants with the control: send the "
+            "experiment's correction_method. 'bonferroni' and 'benjamini_hochberg' "
+            "plan each comparison at significance_level / (variant_count - 1), as "
+            "GET /api/v1/results/{experiment_id}/sample-size does; "
+            "Benjamini-Hochberg is planned at Bonferroni's level. The default, "
+            "'none', plans each comparison at significance_level."
+        ),
     ),
     current_user: User = Depends(deps.get_current_active_user),
 ) -> Dict[str, Any]:
     """
-    Calculate the required sample size for an experiment.
+    The users each variant needs, for planning a new experiment.
 
-    This endpoint calculates the number of samples needed per variant and in total
-    to achieve the desired statistical power for detecting the minimum effect size.
+    Plans a two-proportion test of a relative lift of ``minimum_detectable_effect``
+    over ``baseline_rate`` (pooled variance under the null hypothesis, unpooled
+    under the alternative), the formula ``GET /api/v1/results/{experiment_id}/sample-size``
+    uses. With ``correction_method`` ``bonferroni`` or ``benjamini_hochberg``, each
+    of the ``variant_count - 1`` comparisons with the control is planned at
+    ``significance_level / (variant_count - 1)``; Benjamini-Hochberg is planned at
+    Bonferroni's level. The answer echoes ``correction_method``, ``comparisons`` and
+    ``alpha``, the significance each comparison is planned at. With ``daily_traffic``
+    and ``traffic_allocation`` it also estimates the days needed, assuming an even
+    split. Nothing is saved.
 
-    Optionally, if daily traffic and traffic allocation are provided, it also
-    estimates how long the experiment will need to run to collect the required sample.
-
-    Returns:
-        Dict[str, Any]: Sample size calculation results
+    A baseline that the effect raises to 100% or more answers 422, and so does one
+    too close to its treatment rate for the size to be a finite number.
     """
     import math
 
@@ -2078,14 +2797,26 @@ async def calculate_experiment_sample_size(
             detail=TREATMENT_RATE_CEILING_MESSAGE,
         )
 
+    # Each of the variant_count - 1 comparisons with the control is planned at
+    # significance_level / (variant_count - 1) under either correction, as the
+    # results page's Sample Size tab plans it (results.py; Bonferroni bounds
+    # Benjamini-Hochberg, so BH is planned at Bonferroni's level). The division
+    # comes after validation, so 99% with several variants can be planned.
+    comparisons = variant_count - 1
+    alpha = (
+        significance_level
+        if correction_method == "none"
+        else significance_level / comparisons
+    )
+
     # Two arms through the same formula as the results page's Sample Size tab
-    # (pooled variance under H0, unpooled under H1), with no multiple-comparison
-    # correction; every variant needs this many users.
+    # (pooled variance under H0, unpooled under H1), at the per-comparison
+    # alpha; every variant needs this many users.
     try:
         samples_per_variant = sample_size_two_proportions(
             p1=baseline_rate,
             p2=treatment_rate,
-            alpha=significance_level,
+            alpha=alpha,
             power=statistical_power,
             two_tailed=not is_one_sided,
         )
@@ -2117,8 +2848,23 @@ async def calculate_experiment_sample_size(
         # Calculate daily traffic per variant
         daily_variant_traffic = daily_experiment_traffic / variant_count
 
+        # A traffic share so small that the users per variant per day come to 0
+        # (5e-324 of one user), or a day count too large to be a finite number,
+        # cannot be calculated with: the fixed out-of-range 422, not a 500.
+        if not daily_variant_traffic > 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=OUT_OF_RANGE_MESSAGE,
+            )
+        days = samples_per_variant / daily_variant_traffic
+        if not math.isfinite(days):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=OUT_OF_RANGE_MESSAGE,
+            )
+
         # Calculate days needed
-        days_needed = math.ceil(samples_per_variant / daily_variant_traffic)
+        days_needed = math.ceil(days)
 
         # Add estimates for different time periods
         estimated_duration_days = {
@@ -2140,6 +2886,9 @@ async def calculate_experiment_sample_size(
         "statistical_power": statistical_power,
         "significance_level": significance_level,
         "is_one_sided": is_one_sided,
+        "correction_method": correction_method,
+        "comparisons": comparisons,
+        "alpha": alpha,
         "samples_per_variant": samples_per_variant,
         "total_samples": total_samples,
         "estimated_duration_days": estimated_duration_days,
@@ -2189,7 +2938,9 @@ async def trigger_schedule_processing(
 @router.get(
     "/{experiment_id}/split-url/preview",
     summary="Preview split URL assignment for a user",
-    response_description="Returns the predicted URL variant for the given user",
+    response_description=(
+        "The URL that visitor id gets now, without recording anything"
+    ),
     responses={
         status.HTTP_501_NOT_IMPLEMENTED: {
             "description": "The split_url module is not installed in this deployment",
@@ -2198,18 +2949,23 @@ async def trigger_schedule_processing(
 )
 async def preview_split_url_assignment(
     experiment_id: UUID = Path(..., description="The ID of the split URL experiment"),
-    user_id: str = Query(..., description="User ID to simulate assignment for"),
+    user_id: str = Query(..., description="The visitor id to preview"),
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_active_user),
 ) -> Dict[str, Any]:
     """
-    Preview the split URL variant assignment for a given user.
+    Returns the URL that visitor id gets now, without recording anything:
+    their stored variant if they have one, else the variant a new visitor with
+    that id would get (the bandit weights for a bandit experiment, else the
+    traffic allocation). It checks no eligibility rule: a visitor the global
+    holdout, mutual exclusion or targeting would keep out is served the
+    control page by POST /api/v1/tracking/split-url/assign instead.
 
-    The route is declared here so the URL exists in every profile; the body
-    lives in the split_url module (``experiments_split_url``) and is reached
-    through the ``core.optional_modules`` seam. Builds without split-URL
-    routing answer HTTP 501 rather than a meaningless assignment.
+    For ADMIN and DEVELOPER users (and superusers). A deployment without split
+    URL testing (the core profile) answers 501.
     """
+    # Declared here so the URL exists in every profile; the body is the
+    # split_url module's, reached through backend.app.core.optional_modules.
     # The route's own access policy comes before the seam is consulted, so a
     # VIEWER is told no in every profile rather than learning from a 501
     # which bodies this build has (the same order the compliance routes use).

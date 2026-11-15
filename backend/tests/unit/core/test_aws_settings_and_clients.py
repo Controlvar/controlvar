@@ -109,8 +109,21 @@ def test_compose_sets_aws_default_region_from_aws_region_and_helm_leaves_it_to_e
     assert 'include "controlvar.extraEnv"' in template
     for path in chart.rglob("*"):
         if path.is_file():
-            text = path.read_text(errors="ignore")
-            assert "AWS_DEFAULT_REGION" not in text and "AWS_REGION" not in text, path
+            assert "AWS_DEFAULT_REGION" not in path.read_text(errors="ignore"), path
+    # AWS_REGION, which the Cognito client reads (#708), is the chart's
+    # `awsRegion` value, empty by default, and rendered only when set.
+    assert values["awsRegion"] == ""
+    config = (chart / "templates" / "config.yaml").read_text()
+    assert (
+        "{{- with .Values.awsRegion }}\n  AWS_REGION: {{ . | quote }}\n  {{- end }}"
+        in config
+    )
+    readers = sorted(
+        path.relative_to(chart).as_posix()
+        for path in chart.rglob("*")
+        if path.is_file() and "AWS_REGION" in path.read_text(errors="ignore")
+    )
+    assert readers == ["templates/config.yaml", "values.yaml"], readers
 
 
 def test_nothing_sends_events_to_kinesis_or_indexes_them_into_opensearch():

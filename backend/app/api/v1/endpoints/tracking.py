@@ -13,13 +13,21 @@ from typing import Annotated, Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 from pydantic import ValidationError
+from sqlalchemy import inspect
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps
-from backend.app.api.sdk_scope import require_sdk_ruleset_key
+from backend.app.api.off_loop_route import OffLoopRoute, release_request_sessions
+from backend.app.api.sdk_scope import require_batch_assign_key
+from backend.app.core.balanced_blocks import balance_setting
 from backend.app.core.context_limits import check_context
 from backend.app.core.logger import failure_detail, unexpected_failure
-from backend.app.core.metrics import record_event_tracked, record_experiment_assignment
+from backend.app.core.metrics import (
+    record_event_duplicate,
+    record_event_tracked,
+    record_experiment_assignment,
+)
 from backend.app.models.api_key import APIKey
 from backend.app.models.assignment import Assignment
 from backend.app.models.event import Event
@@ -41,12 +49,16 @@ from backend.app.schemas.tracking import (
     UntaggedEventCreate,
     VariantAssignmentResponse,
 )
-from backend.app.services.assignment_service import AssignmentService
+from backend.app.services.assignment_service import (
+    LAZY_VARIANTS_WITHOUT_VISUAL_CHANGES,
+    WITHOUT_VISUAL_CONFIG,
+    AssignmentService,
+)
 from backend.app.services.bandit_routing import bandit_chooser
 from backend.app.services.event_service import EventService
 
 # Create router
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 logger = logging.getLogger(__name__)
 
@@ -113,10 +125,49 @@ def _event_model(
     return UntaggedEventCreate
 
 
-def _event_response(event: Event) -> EventResponse:
-    """Build the public response model from a stored Event row."""
+def _variant_at_receipt(db: Session, experiment: Experiment, user_id: str) -> Any:
+    """The variant ``/track`` and ``/batch`` tag an event with.
+
+    The user's stored assignment, while the experiment is ACTIVE; otherwise
+    ``None``. The status is the one read when the event is received. For a
+    draft, paused, completed or archived experiment the event is stored with
+    its ``experiment_id`` and no variant, so it counts in no variant's
+    results: an event received while the experiment is not running is not
+    taken as evidence about the variant the user was assigned. The assignment
+    rows are kept, and ``backend/scripts/retag_events_from_assignments.py``
+    can tag such events from them afterwards.
+    """
+    if experiment.status != ExperimentStatus.ACTIVE:
+        return None
+    assignment = (
+        db.query(Assignment)
+        .filter(
+            Assignment.experiment_id == experiment.id,
+            Assignment.user_id == user_id,
+        )
+        .order_by(Assignment.created_at.desc())
+        .first()
+    )
+    return assignment.variant_id if assignment else None
+
+
+def _event_response(
+    event: Event,
+    *,
+    event_id: Optional[str],
+    stored_id: Any = None,
+) -> EventResponse:
+    """Build the public response model from an Event.
+
+    For a stored event, ``event`` is the row and ``stored_id`` is None. For a
+    duplicate (#1543), ``event`` is the one this request built and never
+    stored, and ``stored_id`` is the id of the event already stored with the
+    same key: the answer's ``id`` is that one, and every other field comes
+    from this request or this request's time, never from the stored row.
+    """
+    duplicate = stored_id is not None
     return EventResponse(
-        id=str(event.id),
+        id=str(stored_id if duplicate else event.id),
         event_type=event.event_type,
         event_name=event.event_name or event.event_type,
         user_id=event.user_id,
@@ -128,6 +179,101 @@ def _event_response(event: Event) -> EventResponse:
         timestamp=event.created_at,
         created_at=event.created_at,
         updated_at=event.updated_at or datetime.now(timezone.utc),
+        duplicate=duplicate,
+        event_id=event_id,
+    )
+
+
+def _store_once(
+    db: Session,
+    event_data: EventCreate | UntaggedEventCreate,
+    event_id: Optional[str],
+    *,
+    route: str,
+    allow_untagged: bool,
+) -> tuple[Event, Any]:
+    """Store one event unless its ``event_id`` was already stored (#1543).
+
+    Returns ``(event, stored_id)``: the stored row and None, or, for a
+    duplicate, the event this request built (never stored) and the id of the
+    event already stored. Counts the event in ``events_tracked_total`` only
+    when a row was written, and a duplicate in ``events_duplicate_total``.
+    """
+    stored_id, created, event = EventService(db).track_event_once(
+        event_data, event_id, allow_untagged=allow_untagged
+    )
+    if created:
+        record_event_tracked(str(event_data.event_type))
+        return event, None
+    record_event_duplicate(route)
+    return EventService.build_event(
+        event_data, allow_untagged=allow_untagged
+    ), stored_id
+
+
+def _reread_without_visual_settings(db: Session, experiment: Experiment) -> None:
+    """Read back an *experiment* a commit expired, as touching it would, but
+    without ``visual_config``, and so that its variants then load without
+    their ``visual_changes`` (#1545).
+
+    A commit expires every column, and touching the expired object reloads
+    each one, whatever the query that loaded it deferred. ``Session.get``
+    with ``populate_existing`` reads the row with the statement that reload
+    uses, and takes options. Nothing is read for an object no commit expired.
+    """
+    state = inspect(experiment)
+    if not state.expired:
+        return
+    db.get(
+        Experiment,
+        state.identity,
+        options=[WITHOUT_VISUAL_CONFIG, LAZY_VARIANTS_WITHOUT_VISUAL_CHANGES],
+        populate_existing=True,
+    )
+
+
+def _not_running_answer(
+    request: AssignmentRequest, experiment: Experiment
+) -> VariantAssignmentResponse:
+    """``/assign``'s answer for an experiment that is not ACTIVE.
+
+    The experiment's control variant, ``assigned: false`` and ``reason`` set
+    to the status (``draft``, ``paused``, ``completed`` or ``archived``), for
+    every user, enrolled or not. Nothing is recorded: no assignment, no view
+    event, no holdout population row, no bandit call. Stored assignments are
+    left as they are, so a resumed experiment answers each enrolled user with
+    their variant again.
+
+    An experiment with no variant flagged as the control answers 404: serving
+    its first variant could show a treatment to everyone. Neither a draft nor
+    any other experiment can be put in that state through the API, which
+    refuses an experiment without a control on create and on update; only a
+    direct database write makes one.
+    """
+    reason = experiment.status.value
+    control = next((v for v in experiment.variants or [] if v.is_control), None)
+    if control is None:
+        if experiment.status == ExperimentStatus.DRAFT:
+            detail = (
+                f"Experiment '{request.experiment_key}' is a draft with no control "
+                "variant: mark one of its variants as the control."
+            )
+        else:
+            detail = (
+                f"Experiment '{request.experiment_key}' is {reason} and has no "
+                "control variant to serve."
+            )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+    record_experiment_assignment(experiment_id=str(experiment.id), variant_id=reason)
+    return VariantAssignmentResponse(
+        experiment_key=request.experiment_key,
+        user_id=request.user_id,
+        variant_id=str(control.id),
+        variant_name=control.name,
+        is_control=bool(control.is_control),
+        configuration=control.configuration,
+        assigned=False,
+        reason=reason,
     )
 
 
@@ -164,6 +310,9 @@ async def assign_user_to_experiment(
     - Targeting rules
     - Traffic allocation percentages
 
+    For an experiment that balances within groups, a new user's variant also
+    depends on the users of their group assigned before them.
+
     This means that the same user will always get the same variant assignment
     for a specific experiment, including across experiments in the same mutual
     exclusion group: a user enrolled in one experiment of a group is not
@@ -178,6 +327,14 @@ async def assign_user_to_experiment(
     ``holdout`` | ``mutual_exclusion`` | ``targeting``; nothing is recorded
     for them.  Existing assignments are always returned as-is.
 
+    An experiment that is not ACTIVE (a draft, or paused, completed or
+    archived) answers every user, enrolled or not, with HTTP 200, its control
+    variant, ``assigned: false`` and ``reason`` set to its status: ``draft``
+    | ``paused`` | ``completed`` | ``archived``.  Nothing is recorded, and
+    users who were assigned keep their assignment, so a resumed experiment
+    gives them their variant again.  A draft with no control variant answers
+    404.
+
     **Authentication**: Requires a valid API key in the X-API-Key header.
 
     Returns:
@@ -186,28 +343,31 @@ async def assign_user_to_experiment(
 
     Raises:
         HTTPException 401: If the API key is invalid
-        HTTPException 404: If the experiment doesn't exist or is not active
+        HTTPException 404: If no experiment has the key, or a draft has no
+            control variant
         HTTPException 500: If there's an error during assignment
     """
     # The limits of backend.app.core.context_limits, before anything is read
     # or written.
     check_context(request.context)
 
-    # Get experiment by key
+    # Get experiment by key, whatever its status (the key is unique), without
+    # the visual columns (#1545), which no assignment reads.
     experiment = (
         db.query(Experiment)
-        .filter(
-            Experiment.key == request.experiment_key,
-            Experiment.status == ExperimentStatus.ACTIVE,
-        )
+        .options(WITHOUT_VISUAL_CONFIG, LAZY_VARIANTS_WITHOUT_VISUAL_CHANGES)
+        .filter(Experiment.key == request.experiment_key)
         .first()
     )
 
     if not experiment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Active experiment with key '{request.experiment_key}' not found",
+            detail=f"No experiment has the key '{request.experiment_key}'.",
         )
+
+    if experiment.status != ExperimentStatus.ACTIVE:
+        return _not_running_answer(request, experiment)
 
     # Create assignment service
     assignment_service = AssignmentService(db)
@@ -219,7 +379,9 @@ async def assign_user_to_experiment(
         request.user_id
     )
 
-    try:
+    def assign_and_answer() -> VariantAssignmentResponse:
+        # A balanced experiment's release (below) expired it.
+        _reread_without_visual_settings(db, experiment)
         # Attempt to assign the user
         assignment_data = assignment_service.assign_user(
             user_id=request.user_id,
@@ -227,6 +389,10 @@ async def assign_user_to_experiment(
             context=request.context,
             override_variant_id=override_variant_id,
         )
+
+        # assign_user's commit expired the experiment (#1545: re-read it, as
+        # touching it would, without the visual columns).
+        _reread_without_visual_settings(db, experiment)
 
         # Get the variant
         variant_id = assignment_data.get("variant_id")
@@ -264,6 +430,22 @@ async def assign_user_to_experiment(
             assigned=bool(assignment_data.get("assigned", True)),
             reason=str(assignment_data.get("reason") or "assigned"),
         )
+
+    try:
+        if balance_setting(experiment) is not None:
+            # A balanced experiment's new user takes a place from their
+            # group's counter row, which another request can be holding
+            # (#448), so the assignment runs in a worker thread, off the event
+            # loop. The request's sessions are released first: their
+            # transaction ends and the connection goes back to the pool while
+            # the request waits for a worker, and the session, whose objects
+            # stay attached, reads again inside it (one thread at a time).
+            # test_route_worker_steps.py and the balanced row of
+            # test_api_key_routes_under_overload.py pin both. Every other
+            # experiment is assigned here, as before.
+            release_request_sessions()
+            return await run_in_threadpool(assign_and_answer)
+        return assign_and_answer()
     except ValidationError as e:
         # A response that does not build is not the caller's mistake, and
         # pydantic's text repeats the values: answer as an unexpected failure.
@@ -319,12 +501,12 @@ BATCH_FAILURE_SENTENCE = "Could not assign the users to the experiment"
         429: {"description": "More than 60 requests a minute from this address"},
     },
 )
-def assign_users_to_experiment_batch(
+async def assign_users_to_experiment_batch(
     request: AssignmentBatchRequest = Body(
         ..., description="The experiment and its users"
     ),
     db: Session = Depends(deps.get_db),
-    api_key: APIKey = Depends(require_sdk_ruleset_key),
+    api_key: APIKey = Depends(require_batch_assign_key),
 ) -> AssignmentBatchResponse:
     """
     Assign up to 1,000 users to an ACTIVE experiment in one request.
@@ -334,142 +516,160 @@ def assign_users_to_experiment_batch(
     checks for a new user (global holdout, mutual exclusion group, targeting
     rules against that user's ``context``) and the same sticky answer for a
     user already assigned. Users are processed in request order and each new
-    assignment is committed on its own, as N single calls would be.
+    assignment is committed on its own, as N single calls would be. For an
+    experiment that balances within groups, the same list sent in another
+    order can split differently; each user keeps the variant they got.
 
     Only assignments are recorded, never a view event: the user's first
     ``POST /api/v1/tracking/assign`` records that they saw the experiment.
 
     **Authentication**: an API key with the ``sdk:ruleset`` scope, whose owner
-    can change feature flags and experiments (ADMIN, DEVELOPER or a superuser).
+    can change feature flags and experiments: ADMIN, DEVELOPER, a superuser, or
+    in the full profile anyone whose custom roles or direct grants give
+    ``feature_flag (update)`` and ``experiment (update)``. A key whose owner can
+    change feature flags but not experiments is refused with 403 before anyone
+    is assigned.
 
     A plain ``def``: FastAPI runs it in the thread pool, so a batch does not
     hold the event loop while it works through its users.
     """
-    # Every user's context is held to the limits of
-    # backend.app.core.context_limits before the first user is assigned: one
-    # over a limit refuses the whole request, and nobody is assigned.
-    for index in range(len(request.users)):
-        check_context(request.users[index].context, field=f"users[{index}]")
+    db.close()
+    return await run_in_threadpool(_assign_users_in_batch, request, db)
 
-    experiment = (
-        db.query(Experiment)
-        .filter(
-            Experiment.key == request.experiment_key,
-            Experiment.status == ExperimentStatus.ACTIVE,
-        )
-        .first()
-    )
-    if not experiment:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Active experiment with key '{request.experiment_key}' not found",
-        )
 
-    # Plain values only from here on: every commit below expires the ORM
-    # objects of a production session, and touching one again reloads it.
-    experiment_id = str(experiment.id)
-    variants = {
-        str(v.id): BatchVariant(
-            name=v.name,
-            is_control=bool(v.is_control),
-            configuration=v.configuration,
-        )
-        for v in experiment.variants
-    }
-    choose = bandit_chooser(db, experiment)
-    service = AssignmentService(db)
-    total = len(request.users)
+def _assign_users_in_batch(
+    request: AssignmentBatchRequest, db: Session
+) -> AssignmentBatchResponse:
+    """Assign *request*'s users on *db*, as the batch route answers; closes *db*."""
+    try:
+        # Every user's context is held to the limits of
+        # backend.app.core.context_limits before the first user is assigned:
+        # one over a limit refuses the whole request, and nobody is assigned.
+        for index in range(len(request.users)):
+            check_context(request.users[index].context, field=f"users[{index}]")
 
-    assignments: List[BatchAssignment] = []
-    counts = BatchAssignmentCounts()
-    for index, user in enumerate(request.users):
-        try:
-            data = service.assign_user(
-                user_id=user.user_id,
+        experiment = (
+            db.query(Experiment)
+            .options(WITHOUT_VISUAL_CONFIG, LAZY_VARIANTS_WITHOUT_VISUAL_CHANGES)
+            .filter(
+                Experiment.key == request.experiment_key,
+                Experiment.status == ExperimentStatus.ACTIVE,
+            )
+            .first()
+        )
+        if not experiment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Active experiment with key '{request.experiment_key}' not found",
+            )
+
+        # Plain values only from here on: every commit below expires the ORM
+        # objects of a production session, and touching one again reloads it.
+        experiment_id = str(experiment.id)
+        variants = {
+            str(v.id): BatchVariant(
+                name=v.name,
+                is_control=bool(v.is_control),
+                configuration=v.configuration,
+            )
+            for v in experiment.variants
+        }
+        choose = bandit_chooser(db, experiment)
+        service = AssignmentService(db)
+        total = len(request.users)
+
+        assignments: List[BatchAssignment] = []
+        counts = BatchAssignmentCounts()
+        for index, user in enumerate(request.users):
+            try:
+                data = service.assign_user(
+                    user_id=user.user_id,
+                    experiment_id=experiment_id,
+                    track_exposure=False,
+                    override_variant_id=choose(user.user_id),
+                    context=user.context,
+                )
+            except ValidationError as e:
+                # pydantic's ValidationError is a ValueError, and not the
+                # experiment changing: an unexpected failure.
+                logger.error(
+                    "Batch assign failed at user %d of %d in experiment %s (%s)",
+                    index + 1,
+                    total,
+                    experiment_id,
+                    type(e).__name__,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=failure_detail(BATCH_FAILURE_SENTENCE),
+                )
+            except ValueError as e:
+                # assign_user raises ValueError when the experiment is gone, is
+                # no longer ACTIVE, or its variants no longer fit.
+                logger.warning(
+                    "Batch assign stopped at user %d of %d: experiment %s changed (%s)",
+                    index + 1,
+                    total,
+                    experiment_id,
+                    type(e).__name__,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=EXPERIMENT_CHANGED_DETAIL,
+                )
+            except Exception as e:
+                # The class name only: a database error's text repeats the
+                # row's parameters, the user id among them.
+                logger.error(
+                    "Batch assign failed at user %d of %d in experiment %s (%s)",
+                    index + 1,
+                    total,
+                    experiment_id,
+                    type(e).__name__,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=failure_detail(BATCH_FAILURE_SENTENCE),
+                )
+
+            variant_id = str(data.get("variant_id"))
+            if variant_id not in variants:
+                logger.error(
+                    "Batch assign failed at user %d of %d in experiment %s "
+                    "(assigned variant not in the experiment)",
+                    index + 1,
+                    total,
+                    experiment_id,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=failure_detail(BATCH_FAILURE_SENTENCE),
+                )
+            assigned = bool(data.get("assigned", True))
+            reason = str(data.get("reason") or "assigned")
+            record_experiment_assignment(
                 experiment_id=experiment_id,
-                track_exposure=False,
-                override_variant_id=choose(user.user_id),
-                context=user.context,
+                variant_id=variant_id if assigned else reason,
             )
-        except ValidationError as e:
-            # pydantic's ValidationError is a ValueError, and not the
-            # experiment changing: an unexpected failure.
-            logger.error(
-                "Batch assign failed at user %d of %d in experiment %s (%s)",
-                index + 1,
-                total,
-                experiment_id,
-                type(e).__name__,
+            assignments.append(
+                BatchAssignment(
+                    user_id=user.user_id,
+                    variant_id=variant_id,
+                    assigned=assigned,
+                    reason=reason,
+                )
             )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=failure_detail(BATCH_FAILURE_SENTENCE),
-            )
-        except ValueError as e:
-            # assign_user raises ValueError when the experiment is gone, is no
-            # longer ACTIVE, or its variants no longer fit.
-            logger.warning(
-                "Batch assign stopped at user %d of %d: experiment %s changed (%s)",
-                index + 1,
-                total,
-                experiment_id,
-                type(e).__name__,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=EXPERIMENT_CHANGED_DETAIL,
-            )
-        except Exception as e:
-            # The class name only: a database error's text repeats the row's
-            # parameters, the user id among them.
-            logger.error(
-                "Batch assign failed at user %d of %d in experiment %s (%s)",
-                index + 1,
-                total,
-                experiment_id,
-                type(e).__name__,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=failure_detail(BATCH_FAILURE_SENTENCE),
-            )
+            if reason in BatchAssignmentCounts.model_fields:
+                setattr(counts, reason, getattr(counts, reason) + 1)
 
-        variant_id = str(data.get("variant_id"))
-        if variant_id not in variants:
-            logger.error(
-                "Batch assign failed at user %d of %d in experiment %s "
-                "(assigned variant not in the experiment)",
-                index + 1,
-                total,
-                experiment_id,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=failure_detail(BATCH_FAILURE_SENTENCE),
-            )
-        assigned = bool(data.get("assigned", True))
-        reason = str(data.get("reason") or "assigned")
-        record_experiment_assignment(
-            experiment_id=experiment_id,
-            variant_id=variant_id if assigned else reason,
+        return AssignmentBatchResponse(
+            experiment_key=request.experiment_key,
+            variants=variants,
+            assignments=assignments,
+            counts=counts,
         )
-        assignments.append(
-            BatchAssignment(
-                user_id=user.user_id,
-                variant_id=variant_id,
-                assigned=assigned,
-                reason=reason,
-            )
-        )
-        if reason in BatchAssignmentCounts.model_fields:
-            setattr(counts, reason, getattr(counts, reason) + 1)
-
-    return AssignmentBatchResponse(
-        experiment_key=request.experiment_key,
-        variants=variants,
-        assignments=assignments,
-        counts=counts,
-    )
+    finally:
+        db.close()
 
 
 @router.post(
@@ -494,6 +694,11 @@ async def track_event(
     - A feature flag (using feature_flag_key)
     - Or both
 
+    While the experiment is running (ACTIVE), the event is tagged with the
+    variant the user is assigned to. An event for a draft, paused, completed
+    or archived experiment is stored with the experiment and no variant, so
+    it counts in no variant's results.
+
     Additional data can be included:
     - Numeric value (for revenue, durations, counts)
     - Metadata (additional contextual information)
@@ -514,26 +719,14 @@ async def track_event(
     if request.experiment_key:
         experiment = (
             db.query(Experiment)
+            .options(WITHOUT_VISUAL_CONFIG)
             .filter(Experiment.key == request.experiment_key)
             .first()
         )
 
         if experiment:
             experiment_id = experiment.id
-
-            # Find variant if user has an assignment
-            assignment = (
-                db.query(Assignment)
-                .filter(
-                    Assignment.experiment_id == experiment_id,
-                    Assignment.user_id == request.user_id,
-                )
-                .order_by(Assignment.created_at.desc())
-                .first()
-            )
-
-            if assignment:
-                variant_id = assignment.variant_id
+            variant_id = _variant_at_receipt(db, experiment, request.user_id)
 
     # Find feature flag ID if specified
     feature_flag_id = None
@@ -571,12 +764,14 @@ async def track_event(
             value=request.value,
             properties=request.metadata,
             timestamp=request.timestamp or datetime.now(timezone.utc),
+            event_id=request.event_id,
         )
 
-        # Track the event
-        event = EventService(db).track_event(event_data, allow_untagged=True)
-        record_event_tracked(str(event_data.event_type))
-        return _event_response(event)
+        # Track the event, once per event_id (#1543)
+        event, stored_id = _store_once(
+            db, event_data, request.event_id, route="track", allow_untagged=True
+        )
+        return _event_response(event, event_id=request.event_id, stored_id=stored_id)
     except ValidationError as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -634,9 +829,17 @@ async def track_event_by_ids(
         # Raises ValueError for an id that is not a UUID, as track_event does.
         unknown = service.unknown_id_fields(event_data)
         if not unknown:
-            event = service.track_event(event_data)
-            record_event_tracked(str(event_data.event_type))
-            return _event_response(event)
+            # Once per event_id (#1543), with the rule /track and /batch use.
+            event, stored_id = _store_once(
+                db,
+                event_data,
+                event_data.event_id,
+                route="events",
+                allow_untagged=False,
+            )
+            return _event_response(
+                event, event_id=event_data.event_id, stored_id=stored_id
+            )
     except ValidationError as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -706,6 +909,10 @@ async def track_events_batch(
     The batch can contain up to 100 events. If any events fail validation,
     the response will include details about which events failed and why.
 
+    Each event is tagged as ``/track`` tags it: with the user's variant while
+    the experiment is running (ACTIVE), and with no variant for a draft,
+    paused, completed or archived experiment.
+
     **Authentication**: Requires a valid API key in the X-API-Key header.
 
     Returns:
@@ -723,12 +930,11 @@ async def track_events_batch(
             detail="Batch size exceeds the limit of 100 events",
         )
 
-    # Create event service
-    event_service = EventService(db)
-
-    # Initialize counters
+    # Initialize counters. A duplicate (#1543) counts in success_count and in
+    # duplicate_count; nothing is written for it.
     success_count = 0
     failure_count = 0
+    duplicate_count = 0
     errors = []
 
     # Process each event
@@ -740,26 +946,16 @@ async def track_events_batch(
             if event_request.experiment_key:
                 experiment = (
                     db.query(Experiment)
+                    .options(WITHOUT_VISUAL_CONFIG)
                     .filter(Experiment.key == event_request.experiment_key)
                     .first()
                 )
 
                 if experiment:
                     experiment_id = experiment.id
-
-                    # Find variant if user has an assignment
-                    assignment = (
-                        db.query(Assignment)
-                        .filter(
-                            Assignment.experiment_id == experiment_id,
-                            Assignment.user_id == event_request.user_id,
-                        )
-                        .order_by(Assignment.created_at.desc())
-                        .first()
+                    variant_id = _variant_at_receipt(
+                        db, experiment, event_request.user_id
                     )
-
-                    if assignment:
-                        variant_id = assignment.variant_id
 
             # Find feature flag ID if specified
             feature_flag_id = None
@@ -804,12 +1000,21 @@ async def track_events_batch(
                 value=event_request.value,
                 properties=event_request.metadata,
                 timestamp=event_request.timestamp or datetime.now(timezone.utc),
+                event_id=event_request.event_id,
             )
 
-            # Track the event
-            event_service.track_event(event_data, allow_untagged=True)
-            record_event_tracked(str(event_data.event_type))
+            # Track the event, once per event_id (#1543). Items commit one at
+            # a time, so a repeat later in this batch finds the earlier one.
+            _, stored_id = _store_once(
+                db,
+                event_data,
+                event_request.event_id,
+                route="batch",
+                allow_untagged=True,
+            )
             success_count += 1
+            if stored_id is not None:
+                duplicate_count += 1
 
         except ValidationError as e:
             failure_count += 1
@@ -848,6 +1053,7 @@ async def track_events_batch(
     return EventBatchResponse(
         success_count=success_count,
         failure_count=failure_count,
+        duplicate_count=duplicate_count,
         errors=errors if errors else None,
     )
 

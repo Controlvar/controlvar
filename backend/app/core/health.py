@@ -50,11 +50,12 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 
 # ---------------------------------------------------------------------------

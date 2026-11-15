@@ -1,15 +1,23 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
+import {
+  ExperimentScheduleSection,
+  SCHEDULE_HEADING,
+  SCHEDULE_SAVED,
+} from '@/components/experiments/ExperimentScheduleSection';
 import { isApiError } from '@/services/api';
+import { demoRefusalMessage } from '@/utils/demoMode';
 import { ExperimentDetailsUpdate, ExperimentsService } from '@/services/experiments';
 import { Experiment } from '@/types/experiments';
-import { canChangeExperiment, canCreateExperiment } from '@/utils/experimentPermissions';
+import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
+import { canChangeExperiment, canCreateExperiment, canDeleteExperiment } from '@/utils/experimentPermissions';
+import { DESIGN_HEADING, ExperimentDesignForm } from './ExperimentDesignForm';
 
 /** The API's limits on these fields (`ExperimentUpdate`). */
 export const NAME_MAX = 100;
 export const TEXT_MAX = 2000;
 
-export type ManageAction = 'clone' | 'edit' | 'delete';
+export type ManageAction = 'clone' | 'edit' | 'delete' | 'design';
 
 /**
  * Fixed copy for every failure. Nothing the server sends in an error is shown:
@@ -20,7 +28,7 @@ export const UNREACHABLE = 'Could not reach the server. Check your connection an
 
 export const ERROR_COPY: Record<ManageAction, Record<number, string> & { fallback: string }> = {
   clone: {
-    403: 'Cloning an experiment requires the ADMIN or DEVELOPER role.',
+    403: 'Cloning an experiment needs permission to create experiments, which the ADMIN and DEVELOPER roles have.',
     404: 'This experiment no longer exists, so it cannot be cloned.',
     409: "This experiment's targeting uses a segment that is not active, so it cannot be cloned.",
     501: 'This server cannot run split-URL experiments, so this one cannot be cloned.',
@@ -28,7 +36,7 @@ export const ERROR_COPY: Record<ManageAction, Record<number, string> & { fallbac
   },
   edit: {
     400: 'This experiment is no longer a draft, so its details cannot be changed. Reload the page to see its status.',
-    403: 'Changing an experiment requires the ADMIN or DEVELOPER role.',
+    403: 'Changing an experiment needs permission to change experiments, which the ADMIN and DEVELOPER roles have.',
     404: 'This experiment no longer exists.',
     422:
       'The details were not accepted. The name must be 1 to 100 characters, and the description ' +
@@ -37,27 +45,70 @@ export const ERROR_COPY: Record<ManageAction, Record<number, string> & { fallbac
   },
   delete: {
     400: 'This experiment has started and can no longer be deleted. Archive it once it is complete.',
-    403: 'Deleting an experiment requires the ADMIN or DEVELOPER role.',
+    403: 'Deleting an experiment needs permission to delete experiments, which the ADMIN and DEVELOPER roles have.',
     404: 'This experiment no longer exists.',
     fallback: 'Could not delete this draft. Try again.',
   },
+  design: {
+    400:
+      'This experiment is no longer a draft, so its variants and metrics cannot be changed. ' +
+      'Reload the page to see its status.',
+    403: 'Changing an experiment needs permission to change experiments, which the ADMIN and DEVELOPER roles have.',
+    404: 'This experiment no longer exists.',
+    422:
+      'The variants and metrics were not accepted. Check that the split adds up to 100%, one ' +
+      'variant is the control, and every metric has a name and an event name.',
+    fallback: 'Could not save the variants and metrics. Try again.',
+  },
 };
+
+/**
+ * A design save on a split URL experiment whose variants no longer match its
+ * `split_url_config` (#1560) answers 422 with the type `split_url_config`
+ * (`SPLIT_URL_CONFIG_ERROR` in backend/app/schemas/split_url_config.py). The
+ * generic 422 copy names none of that, and the dashboard cannot edit the
+ * configuration, so this says where the change is made (#1562). It is chosen
+ * by the type of the error's first item; its text is still never shown.
+ */
+export const DESIGN_SPLIT_URL_COPY =
+  'The variants were not accepted. This is a split URL experiment: its variants and its ' +
+  'split_url_config change together, through PUT /api/v1/experiments/{id}, and the dashboard ' +
+  'cannot edit split_url_config.';
+
+/** The `type` of the first item of a validation list, or undefined. */
+function firstErrorType(detail: unknown): unknown {
+  if (!Array.isArray(detail) || detail.length === 0) return undefined;
+  const first: unknown = detail[0];
+  return first && typeof first === 'object' ? (first as Record<string, unknown>).type : undefined;
+}
 
 export const DELETE_CONFIRM =
   'Delete this draft? It has never run, so no data is lost. This cannot be undone.';
 
 export const EDIT_NOTE =
-  'Only the name, description and hypothesis can be changed here. Variants and metrics cannot; ' +
-  'to change them, delete this draft and create it again.';
+  'Only the name, description and hypothesis are changed here; use Edit variants and metrics for the rest.';
 
 export const NAME_REQUIRED = 'Enter a name.';
 
 export const SAVED = 'Details saved.';
 
-/** The fixed sentence for a failed action, chosen by the answer's status only. */
+export const DESIGN_SAVED = 'Variants and metrics saved.';
+
+/**
+ * The fixed sentence for a failed action, chosen by the answer's status, and
+ * for a design save's 422 also by the type of its first item (#1562).
+ * A time-out shows the dashboard's own time-out sentence instead (#1040): the
+ * API may still carry out the change, and "could not reach" invites a repeat.
+ */
 export function errorCopy(action: ManageAction, err: unknown): string {
   if (!isApiError(err)) return ERROR_COPY[action].fallback;
+  if (err.timedOut) return err.message;
   if (err.status === 0) return UNREACHABLE;
+  const demo = demoRefusalMessage(err);
+  if (demo) return demo;
+  if (action === 'design' && err.status === 422 && firstErrorType(err.detail) === 'split_url_config') {
+    return DESIGN_SPLIT_URL_COPY;
+  }
   return ERROR_COPY[action][err.status] ?? ERROR_COPY[action].fallback;
 }
 
@@ -92,8 +143,15 @@ export function detailsChanges(experiment: Experiment, draft: DetailsDraft): Exp
 interface ExperimentManageSectionProps {
   experiment: Experiment;
   user: { role?: string; is_superuser?: boolean } | null | undefined;
-  /** Called with the API's answer after a details edit. */
+  /** Called with the API's answer after a details or a design edit. */
   onSaved: (updated: Experiment) => void;
+  /**
+   * Told, in the same render, when the variants and metrics form opens or
+   * closes, so the page can take its read-only Variants and Metrics cards
+   * away while it is open. The form is shown on a DRAFT only, so the page
+   * shows its cards again once the experiment is not one, without a call.
+   */
+  onDesignOpenChange?: (open: boolean) => void;
 }
 
 const BUTTON =
@@ -104,33 +162,57 @@ const DANGER = `${BUTTON} bg-white text-red-700 border-red-300 hover:bg-red-50`;
 /**
  * Clone an experiment, and edit or delete a draft. It sits apart from the
  * lifecycle buttons, and offers only what the API would accept:
- * - Clone: any status, to a role that may create experiments.
- * - Edit details and Delete draft: a DRAFT experiment, to a role that may
- *   change experiments. Who created the experiment is not considered.
- * ANALYST and VIEWER get nothing, so the section renders nothing for them.
+ * - Clone: any status, to a user who may create experiments.
+ * - Schedule, Edit details and Edit variants and metrics: a DRAFT
+ *   experiment, to a user who may change experiments.
+ * - Delete draft: a DRAFT experiment, to a user who may delete experiments.
+ * "May" is the built-in role or, in the full profile, the user's custom roles
+ * and direct grants (the effective map). Who created the experiment is not
+ * considered. A user who may do none of it gets nothing, so the section
+ * renders nothing for them (and nothing while the effective map is on its
+ * way).
  */
-export function ExperimentManageSection({ experiment, user, onSaved }: ExperimentManageSectionProps) {
+export function ExperimentManageSection({
+  experiment,
+  user,
+  onSaved,
+  onDesignOpenChange,
+}: ExperimentManageSectionProps) {
   const router = useRouter();
   const isDraft = experiment.status === 'draft';
-  const mayClone = canCreateExperiment(user);
-  const mayChangeDraft = isDraft && canChangeExperiment(user);
+  const { effective } = useEffectivePermissions();
+  const mayClone = canCreateExperiment(user, effective);
+  const mayChangeDraft = isDraft && canChangeExperiment(user, effective);
+  const mayDeleteDraft = isDraft && canDeleteExperiment(user, effective);
 
   const [pending, setPending] = useState<ManageAction | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState<'details' | 'design' | null>(null);
   const [draft, setDraft] = useState<DetailsDraft | null>(null);
   const [nameError, setNameError] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [designOpen, setDesignOpen] = useState(false);
   // Where focus returns once a form or confirmation closes. Set here and
   // applied after the render, when the button is enabled again.
-  const [returnFocus, setReturnFocus] = useState<'edit' | 'delete' | null>(null);
+  const [returnFocus, setReturnFocus] = useState<'edit' | 'design' | 'delete' | null>(null);
 
   const editButton = useRef<HTMLButtonElement>(null);
+  const designButton = useRef<HTMLButtonElement>(null);
   const deleteButton = useRef<HTMLButtonElement>(null);
   const nameInput = useRef<HTMLInputElement>(null);
   const confirmRegion = useRef<HTMLDivElement>(null);
 
+  // The schedule form (#1454): a DRAFT only, so it goes once the experiment
+  // starts. Focus returns to its button when it closes.
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduleSaved, setScheduleSaved] = useState(false);
+  const [scheduleFocus, setScheduleFocus] = useState(false);
+  const scheduleButton = useRef<HTMLButtonElement>(null);
+  const scheduling = scheduleOpen && mayChangeDraft;
+
   const editing = draft !== null;
+  // Only a draft is ever edited: once it starts, the form goes.
+  const designing = designOpen && mayChangeDraft;
 
   useEffect(() => {
     if (editing) nameInput.current?.focus();
@@ -141,16 +223,30 @@ export function ExperimentManageSection({ experiment, user, onSaved }: Experimen
   }, [confirmingDelete]);
 
   useEffect(() => {
+    if (!scheduleFocus || scheduling) return;
+    scheduleButton.current?.focus();
+    setScheduleFocus(false);
+  }, [scheduleFocus, scheduling]);
+
+  useEffect(() => {
     if (returnFocus === null || pending !== null) return;
-    (returnFocus === 'edit' ? editButton : deleteButton).current?.focus();
+    const button = { edit: editButton, design: designButton, delete: deleteButton }[returnFocus];
+    button.current?.focus();
     setReturnFocus(null);
   }, [returnFocus, pending]);
 
-  if (!mayClone && !mayChangeDraft) return null;
+  if (!mayClone && !mayChangeDraft && !mayDeleteDraft) return null;
+
+  // The page hears it in the same render, so its cards and the form never
+  // show together or both go missing.
+  const setDesign = (open: boolean) => {
+    setDesignOpen(open);
+    onDesignOpenChange?.(open);
+  };
 
   const clone = async () => {
     setError(null);
-    setSaved(false);
+    setSaved(null);
     setPending('clone');
     try {
       const created = await ExperimentsService.clone(experiment.id);
@@ -164,9 +260,11 @@ export function ExperimentManageSection({ experiment, user, onSaved }: Experimen
 
   const openEdit = () => {
     setError(null);
-    setSaved(false);
+    setSaved(null);
     setNameError(false);
+    resetSchedule();
     setConfirmingDelete(false);
+    setDesign(false);
     setDraft({
       name: experiment.name,
       description: experiment.description ?? '',
@@ -200,7 +298,7 @@ export function ExperimentManageSection({ experiment, user, onSaved }: Experimen
       const updated = await ExperimentsService.updateDetails(experiment.id, body);
       onSaved(updated);
       setDraft(null);
-      setSaved(true);
+      setSaved('details');
       setReturnFocus('edit');
     } catch (err) {
       setError(errorCopy('edit', err));
@@ -209,11 +307,35 @@ export function ExperimentManageSection({ experiment, user, onSaved }: Experimen
     }
   };
 
+  const openDesign = () => {
+    setError(null);
+    setSaved(null);
+    setConfirmingDelete(false);
+    setDraft(null);
+    setNameError(false);
+    resetSchedule();
+    setDesign(true);
+  };
+
+  const closeDesign = () => {
+    setDesign(false);
+    setReturnFocus('design');
+  };
+
+  const designSaved = (updated: Experiment) => {
+    onSaved(updated);
+    setDesign(false);
+    setSaved('design');
+    setReturnFocus('design');
+  };
+
   const askDelete = () => {
     setError(null);
-    setSaved(false);
+    setSaved(null);
     setDraft(null);
+    setDesign(false);
     setConfirmingDelete(true);
+    resetSchedule();
   };
 
   const cancelDelete = () => {
@@ -232,6 +354,35 @@ export function ExperimentManageSection({ experiment, user, onSaved }: Experimen
       setError(errorCopy('delete', err));
       setPending(null);
     }
+  };
+
+  // Schedule (#1454). Opening it closes the other forms, as they close it.
+  const resetSchedule = () => {
+    setScheduleOpen(false);
+    setScheduleSaved(false);
+  };
+
+  const openSchedule = () => {
+    setError(null);
+    setSaved(null);
+    setDraft(null);
+    setNameError(false);
+    setConfirmingDelete(false);
+    setDesign(false);
+    setScheduleSaved(false);
+    setScheduleOpen(true);
+  };
+
+  const closeSchedule = () => {
+    setScheduleOpen(false);
+    setScheduleFocus(true);
+  };
+
+  const scheduleDone = (updated: Experiment) => {
+    onSaved(updated);
+    setScheduleOpen(false);
+    setScheduleSaved(true);
+    setScheduleFocus(true);
   };
 
   const busy = pending !== null;
@@ -253,6 +404,17 @@ export function ExperimentManageSection({ experiment, user, onSaved }: Experimen
         )}
         {mayChangeDraft && (
           <>
+            {/* A draft only: on a PAUSED experiment the route schedules a resume, which stays in the API. */}
+            <button
+              ref={scheduleButton}
+              type="button"
+              onClick={openSchedule}
+              disabled={busy || scheduling}
+              className={SECONDARY}
+              data-testid="experiment-schedule"
+            >
+              {SCHEDULE_HEADING}
+            </button>
             <button
               ref={editButton}
               type="button"
@@ -264,23 +426,50 @@ export function ExperimentManageSection({ experiment, user, onSaved }: Experimen
               Edit details
             </button>
             <button
-              ref={deleteButton}
+              ref={designButton}
               type="button"
-              onClick={askDelete}
-              disabled={busy || confirmingDelete}
-              className={DANGER}
-              data-testid="experiment-delete"
+              onClick={openDesign}
+              disabled={busy || designing}
+              className={SECONDARY}
+              data-testid="experiment-edit-variants"
             >
-              {pending === 'delete' ? 'Deleting…' : 'Delete draft'}
+              {DESIGN_HEADING}
             </button>
           </>
         )}
+        {mayDeleteDraft && (
+          <button
+            ref={deleteButton}
+            type="button"
+            onClick={askDelete}
+            disabled={busy || confirmingDelete}
+            className={DANGER}
+            data-testid="experiment-delete"
+          >
+            {pending === 'delete' ? 'Deleting…' : 'Delete draft'}
+          </button>
+        )}
       </div>
 
-      {saved && (
+      {saved === 'details' && (
         <p role="status" className="mt-3 text-sm text-green-700" data-testid="manage-saved">
           {SAVED}
         </p>
+      )}
+
+      {saved === 'design' && (
+        <p role="status" className="mt-3 text-sm text-green-700" data-testid="design-saved">
+          {DESIGN_SAVED}
+        </p>
+      )}
+
+      {designing && (
+        <ExperimentDesignForm
+          experiment={experiment}
+          onSaved={designSaved}
+          onCancel={closeDesign}
+          describeError={(err) => errorCopy('design', err)}
+        />
       )}
 
       {confirmingDelete && (
@@ -399,6 +588,16 @@ export function ExperimentManageSection({ experiment, user, onSaved }: Experimen
             </button>
           </div>
         </form>
+      )}
+
+      {scheduleSaved && (
+        <p role="status" className="mt-3 text-sm text-green-700" data-testid="schedule-saved">
+          {SCHEDULE_SAVED}
+        </p>
+      )}
+
+      {scheduling && (
+        <ExperimentScheduleSection experiment={experiment} onSaved={scheduleDone} onClose={closeSchedule} />
       )}
 
       {error && (

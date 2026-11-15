@@ -31,7 +31,9 @@ set the same environment variables and call ``configure_mappers()`` again.
 from __future__ import annotations
 
 import pytest
+from sqlalchemy.orm import sessionmaker
 
+from backend.app.api import deps
 from backend.app.modules_loader import load_modules, modules_failure
 from backend.tests.conftest import (  # fixture re-exports
     active_experiment,
@@ -66,6 +68,29 @@ def pytest_ignore_collect(collection_path, config):
     ``unit/warehouse/test_live_check_harness.py`` runs both paths.
     """
     return ignore_live_directory(collection_path, config.getoption("markexpr", ""))
+
+
+@pytest.fixture(autouse=True)
+def _own_sessions_on_the_test_database(request, monkeypatch):
+    """In a test that has the test database, routes' own sessions use it too.
+
+    Some module routes do their database work in a worker thread, on a
+    session they open there from ``deps.SessionLocal`` -- not on the request's
+    ``get_db`` session, so a fixture that overrides ``get_db`` does not reach
+    them. In every test that asks for ``db_session`` (directly or through
+    another fixture), ``deps.SessionLocal`` makes a fresh session on the test
+    engine instead: what ``make_client_for_user``'s ``get_db`` override does
+    per request. A test that needs its own factory (a small pool, a mock)
+    patches ``deps.SessionLocal`` itself; its fixture runs after this one.
+    """
+    if "db_session" not in request.fixturenames:
+        return
+    engine = request.getfixturevalue("db_session").get_bind()
+    monkeypatch.setattr(
+        deps,
+        "SessionLocal",
+        sessionmaker(bind=engine, autocommit=False, autoflush=False),
+    )
 
 
 def pytest_collection_modifyitems(config, items):

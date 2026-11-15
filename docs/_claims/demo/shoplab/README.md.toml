@@ -23,6 +23,14 @@ by = [
 ]
 
 [[unit]]
+text = "Guided examples walks the hero banner test, a pause and the free-shipping flag one step at a time, with what you will see at each step."
+by = [
+    "journey:guided-examples#press-counted",
+    "journey:guided-examples#order-counted",
+    "journey:guided-examples#banner-back",
+]
+
+[[unit]]
 text = "Nothing is for sale."
 by = ["exempt:example"]
 
@@ -92,16 +100,33 @@ by = [
 ]
 
 [[unit]]
-text = "The bottom-right Powered by Controlvar panel shows the visitor id, the variant for each of the four experiments, both flags, the last 8 tracked events, a \"New visitor\" button (new id + reload → fresh assignments) and a link to the dashboard."
-by = ["journey:demo-shoplab#panel"]
+text = "The bottom-right Powered by Controlvar panel shows the visitor id, each experiment's variant once a page has assigned it, both flags, the last 8 tracked events, a \"New visitor\" button (new id + reload → fresh assignments) and a link to the dashboard."
+by = [
+    "test:demo/shoplab/src/__tests__/ControlvarPanel.test.tsx::shows the visitor id and the variant of each experiment a page has assigned",
+    "test:demo/shoplab/src/__tests__/ControlvarPanel.test.tsx::shows an experiment a page assigns while the panel is open",
+    "journey:demo-shoplab#panel",
+]
+
+[[unit]]
+text = "The panel assigns no experiment itself, because an assignment records that the visitor saw the experiment: until the page that uses it opens, an experiment reads not assigned yet and names that page."
+by = [
+    "test:demo/shoplab/src/__tests__/ControlvarPanel.test.tsx::assigns no experiment itself, and names the page that assigns each one",
+    "test:demo/shoplab/src/__tests__/ControlvarPanel.test.tsx::a fresh visitor who opens only the home page is assigned to the hero test alone",
+    "journey:demo-shoplab#panel",
+]
 
 [[unit]]
 text = "Event vocabulary (all event_type == event_name): page_view {page} · hero_cta_click · product_click {product_id, position, sort} · add_to_cart value = unit price {product_id, quantity, button} · begin_checkout value = cart total {items, flow} · purchase value = order total {items, flow, order_id} · search {query, results, engine} (attached to the shoplab_new_search flag)."
 by = ["test:demo/shoplab/simulator/test_traffic.py::test_batch_payloads_have_the_right_keys"]
 
 [[unit]]
-text = "Events without an explicit key are fanned out by the SDK to every experiment the visitor has been assigned to in the session."
-by = ["test:sdk/react/src/__tests__/ExperimentationClient.test.ts::POSTs one entry per cached assignment to /api/v1/tracking/batch"]
+text = "Events without an explicit key are fanned out by the SDK to every experiment the visitor has been assigned to since the page was loaded (up to 24 hours), so an order placed long after the checkout page assigned the visitor still counts."
+by = [
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::POSTs one entry per cached assignment to /api/v1/tracking/batch",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::sends an untagged purchase made 301 s after the assignment to the experiment",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::does not send to a key answered more than 24 hours ago: the event goes once with no key",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::another client instance has none of them: its event goes once with no key",
+]
 
 [[unit]]
 text = "Running it"
@@ -240,6 +265,10 @@ text = "From the repository root, with the venv active, this sends 3 visitors a 
 by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_simulator_runs_until_stopped_and_takes_the_documented_options"]
 
 [[unit]]
+text = "demo/setup-local.sh starts one that runs until stopped and writes its process id to demo/.pids/shoplab-simulator.pid; from the repository root, this stops it, but only if the process with that id is still the simulator, and prints its line only once the process has gone, so the numbers hold still while you check an order of your own:"
+by = ["journey:demo-shoplab#stop-simulator"]
+
+[[unit]]
 text = "To print one visitor's planned events without touching the network:"
 by = ["test:demo/shoplab/simulator/test_traffic.py::test_dry_run_prints_plan_without_network"]
 
@@ -251,11 +280,15 @@ by = [
 ]
 
 [[unit]]
-text = "Each visitor is assigned to the four experiments (POST /tracking/assign, context = persona attributes), has both flags evaluated, then walks the funnel with the spec's true conversion rates (hero CTA 12% vs 15%; sort click 22/19/28%; add-to-cart 8.0/8.5/10.5/9.5%; purchase after checkout 62% vs 68%, lognormal order value with median $85; search click 35% with the new engine vs 25% without)."
+text = "Each visitor has both flags evaluated, then is assigned to the hero banner, product sort and buy button experiments as its visit starts, and to the checkout flow only if it begins checkout (POST /tracking/assign, context = persona attributes)."
 by = [
-    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_simulator_walks_the_funnel_at_the_spec_rates",
+    "test:demo/shoplab/simulator/test_traffic.py::test_each_experiment_is_assigned_where_the_storefront_assigns_it",
     "test:demo/shoplab/simulator/test_traffic.py::test_assignment_and_flag_calls_carry_context",
 ]
+
+[[unit]]
+text = "It walks the funnel with the spec's true conversion rates (hero CTA 12% vs 15%; sort click 22/19/28%; add-to-cart 8.0/8.5/10.5/9.5%; purchase after checkout 62% vs 68%, lognormal order value with median $85; search click 35% with the new engine vs 25% without)."
+by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_simulator_walks_the_funnel_at_the_spec_rates"]
 
 [[unit]]
 text = "Three personas scale intent — casual 60%, shopper 30%, power 10% — calibrated so the population rates equal the spec."
@@ -322,7 +355,7 @@ by = [
 ]
 
 [[unit]]
-text = "Then go to /products and note \"Sorted by Recommended for you\"."
+text = "Then go to /products and note the sort the page names: it follows the visitor's arm, and \"Recommended for you\" is ml_personalized's, the arm the weights favour."
 by = ["journey:demo-shoplab#products"]
 
 [[unit]]
@@ -333,7 +366,7 @@ by = [
 ]
 
 [[unit]]
-text = "orange_buy_now wins on add-to-cart; show the multivariate breakdown and the sequential-testing status."
+text = "orange_buy_now wins on add-to-cart; show the multivariate breakdown."
 by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_simulator_walks_the_funnel_at_the_spec_rates"]
 
 [[unit]]
@@ -409,16 +442,18 @@ text = "Symptom | Cause / fix"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Panel shows error for every experiment; network tab shows 401 | Wrong or missing NEXT_PUBLIC_CONTROLVAR_API_KEY. Re-run the seed script (it rewrites .env.local and .api_key), then restart npm run dev (env vars are read at startup)."
+text = "Every experiment in the panel stays not assigned yet and both flags read off; network tab shows 401 | Wrong or missing NEXT_PUBLIC_CONTROLVAR_API_KEY. Re-run the seed script (it rewrites .env.local and .api_key), then restart npm run dev (env vars are read at startup)."
 by = [
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::does not include failed assignments",
+    "test:demo/shoplab/src/__tests__/ControlvarPanel.test.tsx::assigns no experiment itself, and names the page that assigns each one",
     "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_rejects_unknown_key",
     "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_seed_writes_its_key_files_and_backfills_its_history",
 ]
 
 [[unit]]
-text = "404 on /tracking/assign or /feature-flags/evaluate/... | The ShopLab experiments are not seeded or not ACTIVE, or the flags are not seeded (a flag that is not ACTIVE answers enabled: false, not a 404). Run the seed script."
+text = "404 on /tracking/assign or /feature-flags/evaluate/... | The ShopLab experiments or flags are not seeded. A paused or completed experiment answers its control variant with assigned: false, and a flag that is not ACTIVE answers enabled: false: neither is a 404. Run the seed script."
 by = [
-    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_inactive_experiment_returns_404",
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_each_status_answers_an_enrolled_and_a_new_user",
     "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_unknown_key_returns_404",
     "journey:demo-shoplab#banner-off-evaluated",
 ]
@@ -447,8 +482,8 @@ by = [
 ]
 
 [[unit]]
-text = "npm run typecheck fails inside sdk/react/src | The app is written against React SDK v1.1.0's surface (useExperiment, useTrackEvent, ExperimentAssignment.configuration, ...). Make sure sdk/react is on that version."
-by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_react_sdk_is_1_1_0_with_the_hooks_the_apps_use"]
+text = "npm run typecheck fails inside sdk/react/src | The app is written against React SDK 0.1.0's surface (useExperiment, useTrackEvent, ExperimentAssignment.configuration, ...). Make sure sdk/react is on that version."
+by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_react_sdk_is_0_1_0_with_the_hooks_the_apps_use"]
 
 [[unit]]
 text = "Running with docker compose --profile demo: 401 everywhere, and the simulator log says no /data/demo/shoplab/.api_key | The shoplab seed did not run. Run SEED=demo,shoplab,streampulse docker compose --profile demo up -d --wait: it applies the missing seeds to the existing database (no down -v)."

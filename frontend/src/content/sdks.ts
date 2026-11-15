@@ -1,3 +1,5 @@
+import { docsUrl } from '@/services/docs';
+
 /**
  * Every SDK in `sdk/`, by directory, with the name the public pages call it.
  *
@@ -30,4 +32,33 @@ export const SDKS: Readonly<Record<string, string>> = {
   react: 'React',
   'react-native': 'React Native',
   ruby: 'Ruby',
+};
+
+/**
+ * Each SDK's guide, by the same keys as `SDKS`, for a page that links every
+ * SDK from that list.
+ *
+ * Every value is a `docsUrl` call with a literal page, never one built from the key:
+ * `docs-links.test.ts` checks a link's page only when the call is a literal,
+ * and refuses any other call (#1459, PE 6). Two directories have a guide of
+ * another name: `js` is sdk/javascript, and both OpenFeature providers share
+ * sdk/openfeature. `tests/content/sdks.test.tsx` holds the keys to `SDKS`.
+ */
+export const SDK_GUIDES: Readonly<Record<string, string>> = {
+  android: docsUrl('sdk/android'),
+  dotnet: docsUrl('sdk/dotnet'),
+  edge: docsUrl('sdk/edge'),
+  elixir: docsUrl('sdk/elixir'),
+  flutter: docsUrl('sdk/flutter'),
+  go: docsUrl('sdk/go'),
+  ios: docsUrl('sdk/ios'),
+  java: docsUrl('sdk/java'),
+  js: docsUrl('sdk/javascript'),
+  openfeature: docsUrl('sdk/openfeature'),
+  'openfeature-python': docsUrl('sdk/openfeature'),
+  php: docsUrl('sdk/php'),
+  python: docsUrl('sdk/python'),
+  react: docsUrl('sdk/react'),
+  'react-native': docsUrl('sdk/react-native'),
+  ruby: docsUrl('sdk/ruby'),
 };

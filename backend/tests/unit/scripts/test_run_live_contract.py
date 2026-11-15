@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import json
 import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -44,6 +45,52 @@ GOOD = {
     "track": {"ok": True},
     "fanout": {"ok": True},
 }
+#: What the smoke of an SDK in EXPOSURE_SDKS adds: one hook call, for the
+#: contract experiment and the variant GOOD was assigned.
+EXPOSURE = {
+    "calls": 1,
+    "payload": {
+        "experiment_key": "sdk_contract_ab",
+        "variant_name": "control",
+        "variant_id": "v-control",
+        "user_id": "smoke-user",
+    },
+}
+#: What the smoke of an SDK in ATTRIBUTE_SDKS adds (#1520): the seed's targeted
+#: flag on for plan=pro through its rule, off for plan=free.
+TARGETED = {"pro": True, "free": False, "reason": "targeting_rule"}
+#: What the smoke of an SDK in EVENT_ID_SDKS adds (#1543, C4): the user and
+#: event name the database is asked about, the one id, and two sends.
+EVENT_ID = {
+    "user_id": "smoke-user",
+    "event_name": "contract_dedup_1",
+    "id": "contract-1",
+    "sends": 2,
+}
+#: What the smoke of an SDK in VALUE_SDKS adds (#1810): what its string,
+#: number and json getters returned for the seed's three value flags, each on
+#: at 100%, so each is its on value.
+VALUES = {"string": "on-copy", "number": 10, "json": {"color": "blue"}}
+PR_QA_GATE = REPO_ROOT / ".github" / "workflows" / "pr-qa-gate.yml"
+PLATFORM = REPO_ROOT / ".github" / "workflows" / "_platform.yml"
+
+
+def good(runner, sdk: str, experiment_key: str = "sdk_contract_ab") -> dict:
+    """A passing report from *sdk*'s smoke: GOOD, with EXPOSURE only if the
+    runner lists *sdk* in EXPOSURE_SDKS, TARGETED only if it lists *sdk* in
+    ATTRIBUTE_SDKS, EVENT_ID only if in EVENT_ID_SDKS and VALUES only if in
+    VALUE_SDKS (an unlisted SDK may report none of them)."""
+    report = {"sdk": sdk, **GOOD}
+    if sdk in runner.EXPOSURE_SDKS:
+        hook = {**EXPOSURE["payload"], "experiment_key": experiment_key}
+        report["exposure"] = {**EXPOSURE, "payload": hook}
+    if sdk in runner.ATTRIBUTE_SDKS:
+        report["targeted"] = dict(TARGETED)
+    if sdk in runner.EVENT_ID_SDKS:
+        report["event_id"] = dict(EVENT_ID)
+    if sdk in runner.VALUE_SDKS:
+        report["values"] = json.loads(json.dumps(VALUES))
+    return report
 
 
 @pytest.fixture
@@ -65,6 +112,9 @@ def runner(monkeypatch, tmp_path):
     ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("CONTROLVAR_API_KEY", "contract-key")
+    # No database here: the one event sent twice is one stored row, unless a
+    # test says otherwise.
+    monkeypatch.setattr(module, "_event_rows", lambda user_id, event_name: 1)
     return module
 
 
@@ -77,7 +127,7 @@ def run_main(
     def fake_run(command, env, timeout):
         ran.append((command, env))
         sdk = next(name for name, (cmd, _) in runner.MANIFEST.items() if cmd == command)
-        return "PASS", "0.1s", {"sdk": sdk, **GOOD}
+        return "PASS", "0.1s", good(runner, sdk, env["CONTRACT_EXPERIMENT_KEY"])
 
     monkeypatch.setattr(runner, "_run_command", fake_run)
     monkeypatch.setattr(sys, "argv", ["run_live_contract.py", *args])
@@ -130,16 +180,530 @@ def test_strict_fails_on_a_missing_toolchain_and_the_default_skips_it(
 def test_a_smoke_must_report_a_sticky_assignment_an_enabled_flag_and_both_tracks(
     runner,
 ):
-    assert runner.validate("python", {"sdk": "python", **GOOD}) == []
-    for change, problem in (
-        ({"assign": {**GOOD["assign"], "sticky": False}}, "assignment was not sticky"),
-        ({"flag": {"enabled": False}}, "flag.enabled=False (seeded flag is 100% on)"),
-        ({"track": {"ok": False}}, "track failed"),
-        ({"fanout": {"ok": False}}, "fan-out track failed"),
-    ):
-        assert runner.validate("python", {"sdk": "python", **GOOD, **change}) == [
-            problem
-        ]
+    # Every SDK the runner knows, with the report its smoke gives: an SDK that
+    # joins EXPOSURE_SDKS is checked here with its exposure block.
+    for sdk in runner.MANIFEST:
+        report = good(runner, sdk)
+        assert runner.validate(sdk, report) == [], sdk
+        for change, problem in (
+            (
+                {"assign": {**GOOD["assign"], "sticky": False}},
+                "assignment was not sticky",
+            ),
+            (
+                {"flag": {"enabled": False}},
+                "flag.enabled=False (seeded flag is 100% on)",
+            ),
+            ({"track": {"ok": False}}, "track failed"),
+            ({"fanout": {"ok": False}}, "fan-out track failed"),
+        ):
+            assert runner.validate(sdk, {**report, **change}) == [problem], sdk
+
+
+def test_a_listed_sdk_passes_with_one_exposure_and_an_unlisted_one_without_any(
+    monkeypatch, runner
+):
+    monkeypatch.setattr(runner, "EXPOSURE_SDKS", frozenset({"js"}))
+    listed, unlisted = good(runner, "js"), good(runner, "python")
+    assert listed["exposure"] == EXPOSURE and "exposure" not in unlisted
+    assert runner.validate("js", listed) == []
+    assert runner.validate("python", unlisted) == []
+
+
+@pytest.mark.parametrize(
+    ("sdk", "exposure", "problem"),
+    [
+        pytest.param(
+            "js",
+            {**EXPOSURE, "calls": 0},
+            "exposure.calls=0 (two assigns on one client; expected 1)",
+            id="calls-0",
+        ),
+        pytest.param(
+            "js",
+            {**EXPOSURE, "calls": 2},
+            "exposure.calls=2 (two assigns on one client; expected 1)",
+            id="calls-2",
+        ),
+        pytest.param(
+            "js",
+            None,
+            "exposure missing (js is in EXPOSURE_SDKS)",
+            id="missing",
+        ),
+        pytest.param(
+            "js",
+            {
+                **EXPOSURE,
+                "payload": {**EXPOSURE["payload"], "variant_name": "treatment"},
+            },
+            "exposure.payload.variant_name='treatment' != assign.variant_name='control'",
+            id="wrong-variant",
+        ),
+        pytest.param(
+            "python",
+            EXPOSURE,
+            "exposure reported but python is not in EXPOSURE_SDKS",
+            id="unlisted",
+        ),
+        pytest.param(
+            "js",
+            {**EXPOSURE, "calls": True},
+            "exposure.calls=True (two assigns on one client; expected 1)",
+            id="calls-true",
+        ),
+        pytest.param(
+            "js",
+            {**EXPOSURE, "payload": {**EXPOSURE["payload"], "experiment_key": "other"}},
+            "exposure.payload.experiment_key='other', expected 'sdk_contract_ab'",
+            id="wrong-experiment",
+        ),
+    ],
+)
+def test_each_wrong_exposure_report_gives_exactly_its_problem(
+    monkeypatch, runner, sdk, exposure, problem
+):
+    """The gate's own planted reports, with "js" listed and "python" not."""
+    monkeypatch.setattr(runner, "EXPOSURE_SDKS", frozenset({"js"}))
+    monkeypatch.setattr(runner, "ATTRIBUTE_SDKS", frozenset())  # exposure alone here
+    monkeypatch.setattr(runner, "EVENT_ID_SDKS", frozenset())  # exposure alone here
+    monkeypatch.setattr(runner, "VALUE_SDKS", frozenset())  # exposure alone here
+    report = {"sdk": sdk, **GOOD}
+    if exposure is not None:
+        report["exposure"] = exposure
+    assert runner.validate(sdk, report) == [problem]
+
+
+def test_java_js_and_python_are_the_sdks_that_send_one_event_twice_with_one_id(runner):
+    assert runner.EVENT_ID_SDKS == frozenset({"java", "js", "python"})
+    for sdk in sorted(runner.EVENT_ID_SDKS):
+        assert good(runner, sdk)["event_id"] == EVENT_ID
+        assert runner.validate(sdk, good(runner, sdk)) == []
+
+
+@pytest.mark.parametrize(
+    ("sdk", "report", "problems"),
+    [
+        pytest.param(
+            "java", None, ["event_id missing (java is in EVENT_ID_SDKS)"], id="missing"
+        ),
+        pytest.param(
+            "java",
+            {**EVENT_ID, "sends": 1},
+            ["event_id.sends=1 (the same event is to be sent twice)"],
+            id="sent-once",
+        ),
+        pytest.param(
+            "java",
+            {**EVENT_ID, "sends": True},
+            ["event_id.sends=True (the same event is to be sent twice)"],
+            id="sends-true",
+        ),
+        pytest.param(
+            "java",
+            {**EVENT_ID, "id": ""},
+            ["event_id.id='' (expected a non-empty string)"],
+            id="no-id",
+        ),
+        pytest.param(
+            "go",
+            EVENT_ID,
+            ["event_id reported but go is not in EVENT_ID_SDKS"],
+            id="unlisted",
+        ),
+    ],
+)
+def test_each_wrong_event_id_report_gives_exactly_its_problems(
+    monkeypatch, runner, sdk, report, problems
+):
+    """The gate's own planted reports, with "java" listed and "go" not."""
+    monkeypatch.setattr(runner, "EVENT_ID_SDKS", frozenset({"java"}))
+    payload = {**good(runner, sdk)}
+    payload.pop("event_id", None)
+    if report is not None:
+        payload["event_id"] = report
+    assert runner.validate(sdk, payload) == problems
+
+
+def test_the_event_sent_twice_must_be_one_stored_row(monkeypatch, runner):
+    asked = []
+
+    def rows(user_id, event_name):
+        asked.append((user_id, event_name))
+        return 1
+
+    monkeypatch.setattr(runner, "_event_rows", rows)
+    monkeypatch.setattr(
+        runner, "_run_command", lambda c, e, t: ("PASS", "0.1s", good(runner, "java"))
+    )
+    env = {"CONTRACT_EXPERIMENT_KEY": "sdk_contract_ab"}
+    assert runner.run_one("java", "cmd", env, 5) == ("PASS", "control in 0.1s")
+    assert asked == [("smoke-user", "contract_dedup_1")]
+
+
+def test_two_stored_rows_for_the_one_event_fail_the_sdk(monkeypatch, runner):
+    """The planted defect: a fresh id per send, or a server that does not dedupe."""
+    monkeypatch.setattr(runner, "_event_rows", lambda user_id, event_name: 2)
+    monkeypatch.setattr(
+        runner, "_run_command", lambda c, e, t: ("PASS", "0.1s", good(runner, "java"))
+    )
+    env = {"CONTRACT_EXPERIMENT_KEY": "sdk_contract_ab"}
+    status, detail = runner.run_one("java", "cmd", env, 5)
+    assert status == "FAIL"
+    assert "left 2 stored row(s)" in detail and "expected 1" in detail
+
+
+def test_no_stored_row_or_no_database_fails_the_sdk(monkeypatch, runner):
+    monkeypatch.setattr(
+        runner, "_run_command", lambda c, e, t: ("PASS", "0.1s", good(runner, "java"))
+    )
+    env = {"CONTRACT_EXPERIMENT_KEY": "sdk_contract_ab"}
+    monkeypatch.setattr(runner, "_event_rows", lambda user_id, event_name: 0)
+    assert runner.run_one("java", "cmd", env, 5)[0] == "FAIL"
+
+    def unreachable(user_id, event_name):
+        raise RuntimeError("no database")
+
+    monkeypatch.setattr(runner, "_event_rows", unreachable)
+    status, detail = runner.run_one("java", "cmd", env, 5)
+    assert status == "FAIL" and "cannot count the stored events: no database" in detail
+
+
+def test_an_sdk_that_is_not_listed_is_not_asked_of_the_database(monkeypatch, runner):
+    def never(user_id, event_name):
+        raise AssertionError("the database was read for an unlisted SDK")
+
+    monkeypatch.setattr(runner, "_event_rows", never)
+    monkeypatch.setattr(
+        runner, "_run_command", lambda c, e, t: ("PASS", "0.1s", good(runner, "go"))
+    )
+    env = {"CONTRACT_EXPERIMENT_KEY": "sdk_contract_ab"}
+    assert runner.run_one("go", "cmd", env, 5)[0] == "PASS"
+
+
+def test_js_react_native_java_and_dotnet_must_show_their_attributes_reach_flag_evaluation(
+    runner,
+):
+    """#1520 (plan D211 gate 4f), with java (#1718) and dotnet (#1719) since
+    D253: the four SDKs whose smokes report the targeted flag, and each passes
+    with exactly TARGETED."""
+    assert runner.ATTRIBUTE_SDKS == frozenset({"js", "react-native", "java", "dotnet"})
+    assert runner.TARGETED_FLAG_KEY == "sdk_contract_targeted"
+    for sdk in sorted(runner.ATTRIBUTE_SDKS):
+        report = good(runner, sdk)
+        assert report["targeted"] == TARGETED
+        assert runner.validate(sdk, report) == [], sdk
+
+
+@pytest.mark.parametrize(
+    ("sdk", "targeted", "problems"),
+    [
+        pytest.param(
+            "react-native",
+            {**TARGETED, "pro": False, "reason": "rollout"},
+            [
+                "targeted.pro=False (seeded rule plan=pro)",
+                "targeted.reason='rollout' (expected 'targeting_rule' for plan=pro)",
+            ],
+            id="context-dropped",
+        ),
+        pytest.param(
+            "js",
+            {**TARGETED, "free": True},
+            ["targeted.free=True (seeded rollout 0)"],
+            id="free-on",
+        ),
+        pytest.param(
+            "react-native",
+            {**TARGETED, "reason": None},
+            ["targeted.reason=None (expected 'targeting_rule' for plan=pro)"],
+            id="no-reason",
+        ),
+        pytest.param(
+            "react-native",
+            {**TARGETED, "pro": 1},
+            ["targeted.pro=1 (seeded rule plan=pro)"],
+            id="pro-not-a-bool",
+        ),
+        pytest.param(
+            "react-native",
+            None,
+            ["targeted missing (react-native is in ATTRIBUTE_SDKS)"],
+            id="missing",
+        ),
+        pytest.param(
+            "python",
+            TARGETED,
+            ["targeted reported but python is not in ATTRIBUTE_SDKS"],
+            id="unlisted",
+        ),
+    ],
+)
+def test_each_wrong_targeted_report_gives_exactly_its_problems(
+    runner, sdk, targeted, problems
+):
+    """The gate's own planted reports. ``context-dropped`` is what an SDK that
+    sends no attributes reports: the server answers the rollout, 0%."""
+    report = good(runner, sdk)
+    report.pop("targeted", None)
+    if targeted is not None:
+        report["targeted"] = targeted
+    assert runner.validate(sdk, report) == problems
+
+
+def test_a_smoke_that_drops_the_attributes_fails_its_row(monkeypatch, runner, capsys):
+    """main() on react-native whose smoke reports what a dropped context gets."""
+    dropped = {
+        **good(runner, "react-native"),
+        "targeted": {"pro": False, "free": False, "reason": "rollout"},
+    }
+    monkeypatch.setattr(
+        runner, "_run_command", lambda command, env, timeout: ("PASS", "0.1s", dropped)
+    )
+    monkeypatch.setattr(runner.shutil, "which", lambda tool: f"/usr/bin/{tool}")
+    monkeypatch.setattr(sys, "argv", ["run_live_contract.py", "--sdk", "react-native"])
+    assert runner.main() == 1
+    out = " ".join(capsys.readouterr().out.split())
+    assert "FAIL react-native targeted.pro=False (seeded rule plan=pro)" in out
+
+
+def test_every_attribute_sdk_runs_in_ci_where_a_skip_is_a_failure(
+    monkeypatch, runner, capsys
+):
+    """The SDK Live Contract job names every SDK in ATTRIBUTE_SDKS and runs the
+    runner with --strict, under which a missing toolchain fails the row: an
+    SDK that cannot run cannot pass as SKIP."""
+    import yaml
+
+    job = yaml.safe_load(PR_QA_GATE.read_text(encoding="utf-8"))["jobs"][
+        "sdk-live-contract"
+    ]
+    assert set(runner.ATTRIBUTE_SDKS) <= set(job["with"]["sdks"].split())
+    platform = PLATFORM.read_text(encoding="utf-8")
+    assert (
+        "python tests/sdk-contract/live/run_live_contract.py --strict $args" in platform
+    )
+
+    monkeypatch.setattr(runner.shutil, "which", lambda tool: None)
+    monkeypatch.setattr(runner, "check_ruleset", lambda *args: ("PASS", "ok"))
+    monkeypatch.setenv("CONTROLVAR_LOCAL_API_KEY", "scoped")
+    status, ran = run_main(monkeypatch, runner, "--sdk", "react-native", "--strict")
+    assert (status, ran) == (1, [])
+    out = " ".join(capsys.readouterr().out.split())
+    assert "FAIL react-native missing toolchain: node, npx" in out
+
+
+def test_the_sdks_whose_smokes_report_the_flag_values(runner):
+    """#1810: the SDKs whose smokes read the seed's three value flags with their
+    typed getters (React: what useFlagValue reads), and each passes with
+    exactly VALUES."""
+    assert runner.VALUE_SDKS == frozenset(
+        {"js", "react", "react-native", "java", "dotnet"}
+    )
+    for sdk in sorted(runner.VALUE_SDKS):
+        report = good(runner, sdk)
+        assert report["values"] == VALUES
+        assert runner.validate(sdk, report) == [], sdk
+
+
+def test_the_values_a_smoke_must_report_are_the_seeds_on_values(runner):
+    """The runner judges against the seed's own on values (each flag is on at
+    100% while the SDK rows run; the published rows, which turn them off, run
+    last)."""
+    from backend.scripts import seed_sdk_contract as seed
+
+    on_values = {kind: on for kind, (_, on, _) in seed.VALUE_FLAGS.items()}
+    assert runner.VALUE_EXPECTED == on_values == VALUES
+
+
+@pytest.mark.parametrize(
+    ("sdk", "values", "problems"),
+    [
+        pytest.param(
+            "js",
+            {**VALUES, "string": "off-copy"},
+            ["values.string='off-copy' (expected 'on-copy', the seed's on value)"],
+            id="off-value",
+        ),
+        pytest.param(
+            "js",
+            {**VALUES, "number": -1},
+            ["values.number=-1 (expected 10, the seed's on value)"],
+            id="the-default",
+        ),
+        pytest.param(
+            "js",
+            {**VALUES, "number": "10"},
+            ["values.number='10' (expected 10, the seed's on value)"],
+            id="number-as-text",
+        ),
+        pytest.param(
+            "js",
+            {**VALUES, "number": True},
+            ["values.number=True (expected 10, the seed's on value)"],
+            id="number-true",
+        ),
+        pytest.param(
+            "js",
+            {**VALUES, "json": ["fallback"]},
+            [
+                "values.json=['fallback'] (expected {'color': 'blue'}, "
+                "the seed's on value)"
+            ],
+            id="json-off-value",
+        ),
+        pytest.param(
+            "js",
+            {"string": "on-copy", "number": 10},
+            ["values.json=None (expected {'color': 'blue'}, the seed's on value)"],
+            id="json-missing",
+        ),
+        pytest.param("js", {**VALUES, "number": 10.0}, [], id="a-double-is-10"),
+        # The Java smoke's getNumberValue returns a double, which it writes as 10.0.
+        pytest.param("java", {**VALUES, "number": 10.0}, [], id="java-writes-10.0"),
+        pytest.param(
+            "java",
+            {**VALUES, "string": "smoke-default"},
+            ["values.string='smoke-default' (expected 'on-copy', the seed's on value)"],
+            id="java-the-default",
+        ),
+        # The .NET smoke's GetNumberValueAsync returns a double too.
+        pytest.param("dotnet", {**VALUES, "number": 10.0}, [], id="dotnet-a-double"),
+        pytest.param(
+            "dotnet",
+            {**VALUES, "json": ["smoke-default"]},
+            [
+                "values.json=['smoke-default'] (expected {'color': 'blue'}, "
+                "the seed's on value)"
+            ],
+            id="dotnet-the-default",
+        ),
+        pytest.param(
+            "js", None, ["values missing (js is in VALUE_SDKS)"], id="missing"
+        ),
+        pytest.param(
+            "python",
+            VALUES,
+            ["values reported but python is not in VALUE_SDKS"],
+            id="unlisted",
+        ),
+    ],
+)
+def test_each_wrong_values_report_gives_exactly_its_problems(
+    runner, sdk, values, problems
+):
+    """The gate's own planted reports. ``off-value`` is what an SDK that reads
+    the off value for an on user reports; ``the-default`` one whose getter fell
+    back."""
+    report = good(runner, sdk)
+    report.pop("values", None)
+    if values is not None:
+        report["values"] = values
+    assert runner.validate(sdk, report) == problems
+
+
+def test_a_smoke_that_reports_the_off_value_fails_its_row(monkeypatch, runner, capsys):
+    """main() on js whose smoke reports the string flag's off value."""
+    wrong = {**good(runner, "js"), "values": {**VALUES, "string": "off-copy"}}
+    monkeypatch.setattr(
+        runner, "_run_command", lambda command, env, timeout: ("PASS", "0.1s", wrong)
+    )
+    monkeypatch.setattr(runner.shutil, "which", lambda tool: f"/usr/bin/{tool}")
+    monkeypatch.setattr(runner, "check_ruleset", lambda *args: ("PASS", "ok"))
+    monkeypatch.setattr(runner, "LOCAL_MANIFEST", {})
+    monkeypatch.setattr(runner, "PUBLISHED_LOCAL", {})
+    monkeypatch.setattr(sys, "argv", ["run_live_contract.py", "--sdk", "js"])
+    assert runner.main() == 1
+    out = " ".join(capsys.readouterr().out.split())
+    assert (
+        "FAIL js values.string='off-copy' (expected 'on-copy', the seed's on value)"
+        in out
+    )
+
+
+def test_every_value_sdk_runs_in_the_sdk_live_contract_job(runner):
+    """CI runs every SDK in VALUE_SDKS with --strict (the attribute test above
+    pins --strict), so a value SDK cannot pass as SKIP."""
+    import yaml
+
+    job = yaml.safe_load(PR_QA_GATE.read_text(encoding="utf-8"))["jobs"][
+        "sdk-live-contract"
+    ]
+    assert set(runner.VALUE_SDKS) <= set(job["with"]["sdks"].split())
+
+
+def test_the_seeds_targeted_flag_is_on_only_through_its_plan_rule(runner):
+    """The flag the targeted reports are judged against: ACTIVE at 0%, one rule
+    plan equals pro at 100%; put back to exactly that when it already exists."""
+    from types import SimpleNamespace
+
+    from backend.app.core.targeting_adapter import (
+        expand_context,
+        match_targeting_rule,
+        normalise_targeting_rules,
+    )
+    from backend.app.models import register_core_models
+    from backend.app.models.feature_flag import FeatureFlagStatus
+    from backend.scripts import seed_sdk_contract as seed
+
+    register_core_models()
+    assert seed.TARGETED_FLAG_KEY == runner.TARGETED_FLAG_KEY
+    rules = normalise_targeting_rules(seed.TARGETED_FLAG_RULES)
+    matched = match_targeting_rule(rules, expand_context({"plan": "pro"}))
+    assert matched is not None and matched.rollout_percentage == 100
+    assert match_targeting_rule(rules, expand_context({"plan": "free"})) is None
+    assert match_targeting_rule(rules, expand_context({})) is None
+
+    class Db:
+        def __init__(self, existing):
+            self.existing, self.added = existing, []
+
+        def query(self, model):
+            return self
+
+        def filter(self, *criteria):
+            return self
+
+        def first(self):
+            return self.existing
+
+        def add(self, obj):
+            self.added.append(obj)
+
+        def commit(self):
+            pass
+
+        def refresh(self, obj):
+            pass
+
+    admin = SimpleNamespace(id="00000000-0000-0000-0000-000000000001")
+    created = seed.seed_targeted_flag(Db(None), admin)
+    edited = SimpleNamespace(
+        id="f",
+        status=FeatureFlagStatus.INACTIVE,
+        rollout_percentage=50,
+        targeting_rules={},
+    )
+    restored = seed.seed_targeted_flag(Db(edited), admin)
+    for flag in (created, restored):
+        assert flag.status == FeatureFlagStatus.ACTIVE
+        assert flag.rollout_percentage == 0
+        assert flag.targeting_rules == seed.TARGETED_FLAG_RULES
+    assert created.key == "sdk_contract_targeted"
+
+
+def test_a_run_checks_the_exposure_against_the_experiment_it_gave_the_smoke(
+    monkeypatch, runner, capsys
+):
+    """main() hands validate() the CONTRACT_EXPERIMENT_KEY the smoke was given,
+    not the default."""
+    monkeypatch.setattr(runner, "EXPOSURE_SDKS", frozenset({"go"}))
+    monkeypatch.setenv("CONTRACT_EXPERIMENT_KEY", "another_ab")
+    monkeypatch.setattr(runner.shutil, "which", lambda tool: f"/usr/bin/{tool}")
+    status, ran = run_main(monkeypatch, runner, "--sdk", "go")
+    assert ran[0][1]["CONTRACT_EXPERIMENT_KEY"] == "another_ab"
+    assert "PASS go" in " ".join(capsys.readouterr().out.split())
+    assert status == 0
 
 
 def test_the_seed_creates_the_fixtures_the_runner_defaults_to(monkeypatch, runner):
@@ -148,18 +712,24 @@ def test_the_seed_creates_the_fixtures_the_runner_defaults_to(monkeypatch, runne
         for node in ast.parse(SEED.read_text(encoding="utf-8")).body
         if isinstance(node, ast.Assign)
         and isinstance(node.targets[0], ast.Name)
-        and node.targets[0].id in ("EXPERIMENT_KEY", "FLAG_KEY")
+        and node.targets[0].id in ("EXPERIMENT_KEY", "FLAG_KEY", "TARGETED_FLAG_KEY")
     }
     assert constants == {
         "EXPERIMENT_KEY": "sdk_contract_ab",
         "FLAG_KEY": "sdk_contract_flag",
+        "TARGETED_FLAG_KEY": "sdk_contract_targeted",
     }
     monkeypatch.setattr(runner.shutil, "which", lambda tool: f"/usr/bin/{tool}")
     _, ran = run_main(monkeypatch, runner, "--sdk", "go")
     env = ran[0][1]
-    assert (env["CONTRACT_EXPERIMENT_KEY"], env["CONTRACT_FLAG_KEY"]) == (
+    assert (
+        env["CONTRACT_EXPERIMENT_KEY"],
+        env["CONTRACT_FLAG_KEY"],
+        env["CONTRACT_TARGETED_FLAG_KEY"],
+    ) == (
         constants["EXPERIMENT_KEY"],
         constants["FLAG_KEY"],
+        constants["TARGETED_FLAG_KEY"],
     )
 
 
@@ -219,6 +789,9 @@ def test_the_smokes_are_given_each_setting_under_both_names(monkeypatch, runner)
         "run_local",
         lambda sdk, command, env, timeout, flag: local.append(env) or ("PASS", "ok"),
     )
+    monkeypatch.setattr(
+        runner, "run_published_local", lambda *args: ("PASS", "not run here")
+    )
     _, ran = run_main(monkeypatch, runner, "--sdk", "js")
     env = ran[0][1]
     for setting in ("url", "key"):
@@ -230,3 +803,419 @@ def test_the_smokes_are_given_each_setting_under_both_names(monkeypatch, runner)
     name, old, _ = SETTINGS["local"]
     assert local and local[0][name] == "scoped"
     assert local[0][old] == runner.DECOY_KEY != "scoped"
+
+
+# ---------------------------------------------------------------------------
+# The published releases against the live server (#1497, G3)
+# ---------------------------------------------------------------------------
+
+
+def test_the_published_releases_run_last_with_the_scoped_key(monkeypatch, runner):
+    monkeypatch.setenv("CONTROLVAR_LOCAL_API_KEY", "scoped")
+    monkeypatch.setattr(runner.shutil, "which", lambda tool: f"/usr/bin/{tool}")
+    monkeypatch.setattr(runner, "check_ruleset", lambda *args: ("PASS", "ok"))
+    order = []
+    monkeypatch.setattr(
+        runner,
+        "run_local",
+        lambda sdk, command, env, timeout, flag: (
+            order.append(("local", sdk)) or ("PASS", "ok")
+        ),
+    )
+    monkeypatch.setattr(
+        runner,
+        "run_published_local",
+        lambda sdk, version, api_url, key, timeout: (
+            order.append(("published", sdk, version, key)) or ("PASS", "ok")
+        ),
+    )
+    status, _ = run_main(
+        monkeypatch, runner, "--sdk", "python", "--sdk", "js", "--strict"
+    )
+    assert status == 0
+    assert order == [
+        ("local", "python"),
+        ("local", "js"),
+        ("published", "python", "0.2.0", "scoped"),
+        ("published", "js", "0.2.0", "scoped"),
+    ]
+
+
+def test_a_published_row_fails_under_strict_without_node_or_a_key(
+    monkeypatch, runner, capsys
+):
+    monkeypatch.setattr(runner, "check_ruleset", lambda *args: ("PASS", "ok"))
+    monkeypatch.setattr(runner, "run_local", lambda *args: ("PASS", "ok"))
+    monkeypatch.setattr(
+        runner, "run_published_local", lambda *args: pytest.fail("must not run")
+    )
+    monkeypatch.setattr(
+        runner.shutil, "which", lambda tool: None if tool == "node" else tool
+    )
+    monkeypatch.setenv("CONTROLVAR_LOCAL_API_KEY", "scoped")
+    assert run_main(monkeypatch, runner, "--sdk", "js", "--strict")[0] == 1
+    out = " ".join(capsys.readouterr().out.split())
+    assert "FAIL js 0.2.0 (published, local) missing toolchain: node" in out
+    monkeypatch.delenv("CONTROLVAR_LOCAL_API_KEY")
+    assert run_main(monkeypatch, runner, "--sdk", "python", "--strict")[0] == 1
+    out = " ".join(capsys.readouterr().out.split())
+    assert "FAIL python 0.2.0 (published, local) no sdk:ruleset key" in out
+
+
+def test_the_published_rows_use_the_pins_the_seeds_flags_and_its_developer(runner):
+    from backend.app.core.flag_values import BOOLEAN, VALUE_TYPES
+    from backend.app.models.user import UserRole
+    from backend.scripts import seed_sdk_contract as seed
+    from backend.scripts.seed_demo_data import DEMO_USERS
+
+    pinned = {(a.language, a.version) for a in runner._published_sdks().load_pins()}
+    assert runner.PUBLISHED_LOCAL == {"python": "0.2.0", "js": "0.2.0"}
+    assert set(runner.PUBLISHED_LOCAL.items()) <= pinned
+    assert set(seed.VALUE_FLAGS) == set(VALUE_TYPES) - {BOOLEAN}
+    assert runner.VALUE_FLAG_KEYS == tuple(
+        key for key, _, _ in seed.VALUE_FLAGS.values()
+    )
+    (developer,) = [u for u in DEMO_USERS if u["email"] == runner.TOGGLE_USER[0]]
+    assert developer["password"] == runner.TOGGLE_USER[1]
+    assert developer["role"] == UserRole.DEVELOPER and not developer["is_superuser"]
+
+
+#: A stand-in for a published release's live harness: it prints the "loaded"
+#: report, waits for the runner's line, and prints the "after" report.
+FAKE_HARNESS = """
+import json, sys
+reports = json.load(open(sys.argv[1]))
+print(json.dumps(reports[0]), flush=True)
+sys.stdin.readline()
+print(json.dumps(reports[1]), flush=True)
+"""
+
+
+def _fake_published(monkeypatch, runner, tmp_path, loaded, after):
+    """``run_published_local`` with everything around it replaced: the pins,
+    the download, the API and the harness. Returns the flag changes made."""
+    from types import SimpleNamespace
+
+    artefact = SimpleNamespace(
+        language="python", version="0.2.0", digest="sha256:" + "0" * 64
+    )
+    monkeypatch.setattr(
+        runner,
+        "_published_sdks",
+        lambda: SimpleNamespace(
+            load_pins=lambda: [artefact],
+            fetch=lambda a, cache: b"",
+            extract=lambda a, data, dest: dest.mkdir(parents=True) or dest,
+            check_identity=lambda a, extraction, report: "controlvar/local.py",
+        ),
+    )
+    script = tmp_path / "harness.py"
+    script.write_text(FAKE_HARNESS)
+    reports = tmp_path / "reports.json"
+    reports.write_text(json.dumps([loaded, after]))
+    monkeypatch.setattr(
+        runner,
+        "_published_harness",
+        lambda language, root, config: [sys.executable, str(script), str(reports)],
+    )
+    monkeypatch.setattr(
+        runner, "_ruleset_request", lambda url, key: (200, {"etag": '"v1"'}, b"")
+    )
+    monkeypatch.setattr(runner, "_sign_in", lambda url: "token")
+    monkeypatch.setattr(
+        runner, "_flag_ids", lambda url, token, keys: {k: f"id-{k}" for k in keys}
+    )
+    turned = []
+    monkeypatch.setattr(
+        runner, "_turn", lambda url, token, ids, on: turned.append((sorted(ids), on))
+    )
+    return turned
+
+
+def _report(phase, answer, version="v1", ready=True):
+    return {
+        "phase": phase,
+        "seconds": 5.0,
+        "ready": {"ok": ready},
+        "status": {"ready": ready, "version": version},
+        "answers": {
+            key: dict(answer)
+            for key in (
+                "sdk_contract_value_string",
+                "sdk_contract_value_number",
+                "sdk_contract_value_json",
+            )
+        },
+        "errors": [],
+    }
+
+
+def test_a_published_release_that_receives_the_change_passes(
+    monkeypatch, runner, tmp_path
+):
+    turned = _fake_published(
+        monkeypatch,
+        runner,
+        tmp_path,
+        _report("loaded", runner.PUBLISHED_ON),
+        _report("after", runner.PUBLISHED_OFF),
+    )
+    status, detail = runner.run_published_local("python", "0.2.0", "http://x", "k", 30)
+    assert status == "PASS", detail
+    assert "each answered inactive locally after 5.0s" in detail
+    keys = sorted(runner.VALUE_FLAG_KEYS)
+    assert turned == [(keys, False), (keys, True)]
+
+
+def test_an_answer_that_does_not_change_fails_and_the_flags_go_back_on(
+    monkeypatch, runner, tmp_path
+):
+    """The QA plan's G3 failure: the release kept answering on."""
+    turned = _fake_published(
+        monkeypatch,
+        runner,
+        tmp_path,
+        _report("loaded", runner.PUBLISHED_ON),
+        _report("after", runner.PUBLISHED_ON),
+    )
+    status, detail = runner.run_published_local("python", "0.2.0", "http://x", "k", 30)
+    assert status == "FAIL"
+    assert "answer unchanged after the flags were turned off" in detail
+    assert [on for _, on in turned] == [False, True]
+
+
+def test_a_release_that_cannot_read_the_ruleset_fails_before_any_change(
+    monkeypatch, runner, tmp_path
+):
+    """A refused document: the release answers from the server, and no flag
+    is touched."""
+    server = {**runner.PUBLISHED_ON, "source": "server"}
+    turned = _fake_published(
+        monkeypatch,
+        runner,
+        tmp_path,
+        _report("loaded", server, version=None, ready=False),
+        _report("after", server, version=None, ready=False),
+    )
+    status, detail = runner.run_published_local("python", "0.2.0", "http://x", "k", 30)
+    assert status == "FAIL"
+    assert "did not load the ruleset the server serves (v1)" in detail
+    assert '"source": "server"' in detail
+    assert turned == []
+
+
+# ---------------------------------------------------------------------------
+# The React SDK's bootstrap (#1518)
+# ---------------------------------------------------------------------------
+
+#: A bootstrap as the live server builds it for the contract seed.
+LIVE_BOOTSTRAP = {
+    "userId": "bootstrap-user",
+    "flags": {
+        "sdk_contract_flag": {
+            "key": "sdk_contract_flag",
+            "enabled": True,
+            "value": True,
+            "value_type": "boolean",
+            "config": None,
+            "reason": "rollout",
+        }
+    },
+    "experiments": {
+        "sdk_contract_ab": {
+            "experiment_key": "sdk_contract_ab",
+            "user_id": "bootstrap-user",
+            "variant_id": "v-control",
+            "variant_name": "control",
+            "is_control": True,
+            "configuration": None,
+            "assigned": True,
+            "reason": "assigned",
+        }
+    },
+}
+#: The page's example: other keys and values, the live fields.
+DOCUMENTED = {
+    "userId": "9f1c",
+    "flags": {
+        "new_search": {
+            **LIVE_BOOTSTRAP["flags"]["sdk_contract_flag"],
+            "key": "new_search",
+        }
+    },
+    "experiments": {
+        "checkout_flow": {
+            **LIVE_BOOTSTRAP["experiments"]["sdk_contract_ab"],
+            "experiment_key": "checkout_flow",
+        }
+    },
+}
+
+
+def _server_report(user_id: str = "bootstrap-user") -> dict:
+    bootstrap = json.loads(
+        json.dumps(LIVE_BOOTSTRAP).replace("bootstrap-user", user_id)
+    )
+    return {
+        "sdk": "react",
+        "step": "server",
+        "bootstrap": bootstrap,
+        "html": "<span>on|control|ready</span>",
+        "requests_during_render": 0,
+    }
+
+
+def _problems(runner, counts, server=None, client=None, documented=DOCUMENTED):
+    return runner.bootstrap_problems(
+        server or _server_report(),
+        client or {"sdk": "react", "step": "client", "variant_name": "control"},
+        counts,
+        "bootstrap-user",
+        "sdk_contract_flag",
+        "sdk_contract_ab",
+        documented,
+    )
+
+
+def test_a_bootstrap_run_passes_with_one_exposure_row_per_step(runner):
+    assert _problems(runner, (1, 2)) == []
+
+
+def test_each_wrong_exposure_count_gives_exactly_its_problem(runner):
+    """5i's planted defect, in memory: a server step that assigns twice stores
+    two rows; a client step that does not assign stores none."""
+    assert _problems(runner, (2, 3)) == [
+        "exposure rows after the server step: 2, expected 1"
+    ]
+    assert _problems(runner, (1, 1)) == [
+        "exposure rows added by the client step: 0, expected 1"
+    ]
+    assert _problems(runner, (0, 1)) == [
+        "exposure rows after the server step: 0, expected 1"
+    ]
+
+
+def test_a_client_step_that_adds_two_rows_gives_exactly_its_problem(runner):
+    """The count is exact, not a lower bound: a client step that records two
+    exposures is as wrong as one that records none (#1653)."""
+    assert _problems(runner, (1, 3)) == [
+        "exposure rows added by the client step: 2, expected 1"
+    ]
+
+
+def test_a_client_assigned_another_variant_than_the_bootstrap_fails(runner):
+    client = {"sdk": "react", "step": "client", "variant_name": "treatment"}
+    assert _problems(runner, (1, 2), client=client) == [
+        "the client step was assigned 'treatment', the bootstrap 'control'"
+        " (assignment is sticky)"
+    ]
+
+
+def test_a_flag_that_is_not_on_in_the_bootstrap_fails(runner):
+    server = _server_report()
+    server["bootstrap"]["flags"]["sdk_contract_flag"]["enabled"] = False
+    (problem,) = _problems(runner, (1, 2), server=server)
+    assert problem.startswith("bootstrap.flags['sdk_contract_flag'] is {")
+    assert problem.endswith("(seeded flag is 100% on)")
+    server["bootstrap"]["flags"] = {}
+    # (The page-example comparison also notices the empty flags; only the first
+    # problem is this check's.)
+    assert _problems(runner, (1, 2), server=server)[0] == (
+        "bootstrap.flags['sdk_contract_flag'] is None (seeded flag is 100% on)"
+    )
+
+
+def test_a_page_example_with_other_top_level_keys_than_the_live_bootstrap_fails(
+    runner,
+):
+    extra = {**DOCUMENTED, "extra": 1}
+    assert _problems(runner, (1, 2), documented=extra) == [
+        "the page's example has the keys ['experiments', 'extra', 'flags', 'userId'],"
+        " the live one ['experiments', 'flags', 'userId']"
+    ]
+    short = {k: v for k, v in DOCUMENTED.items() if k != "experiments"}
+    (problem,) = [p for p in _problems(runner, (1, 2), documented=short) if "keys" in p]
+    assert problem.startswith("the page's example has the keys ['flags', 'userId']")
+
+
+def test_a_server_render_that_made_a_request_fails(runner):
+    server = {**_server_report(), "requests_during_render": 1}
+    assert _problems(runner, (1, 2), server=server) == [
+        "the server render made 1 request(s), expected 0"
+    ]
+
+
+def test_the_pages_example_must_have_the_live_fields(runner):
+    old_body = json.loads(json.dumps(DOCUMENTED))
+    del old_body["flags"]["new_search"]["value_type"]
+    problems = _problems(runner, (1, 2), documented=old_body)
+    assert len(problems) == 1
+    assert problems[0].startswith("the page's example flags entries have the fields")
+    assert "regenerate the example" in problems[0]
+    (missing,) = _problems(runner, (1, 2), documented=None)
+    assert missing.endswith("/react.md has no JSON example of a bootstrap")
+
+
+def test_the_pages_example_is_the_json_fence_holding_a_bootstrap(runner):
+    page = (
+        'text\n```json\n{"not": "it"}\n```\nmore\n```json\n'
+        + json.dumps(DOCUMENTED, indent=2)
+        + "\n```\n"
+    )
+    assert runner.documented_bootstrap(page) == DOCUMENTED
+    assert runner.documented_bootstrap("```json\n{broken\n```\n") is None
+
+
+def test_react_runs_its_bootstrap_after_its_row_for_one_new_user(
+    monkeypatch, runner, tmp_path, capsys
+):
+    """main() --sdk react: the react smoke, then the bootstrap's server and
+    client steps for one user, the rows read after each."""
+    page = tmp_path / "react.md"
+    page.write_text("```json\n" + json.dumps(DOCUMENTED) + "\n```\n", encoding="utf-8")
+    monkeypatch.setattr(runner, "REACT_PAGE", page)
+    monkeypatch.setattr(runner, "REPO_ROOT", tmp_path)
+    ran: List[Tuple[str, Dict[str, str]]] = []
+    rows = iter([1, 2])
+
+    def fake_run(command, env, timeout):
+        ran.append((command, env))
+        if command == runner.BOOTSTRAP_SMOKE:
+            step = env["CONTRACT_BOOTSTRAP_STEP"]
+            if step == "server":
+                return "PASS", "0.1s", _server_report(env["CONTRACT_USER_ID"])
+            return (
+                "PASS",
+                "0.1s",
+                {"sdk": "react", "step": "client", "variant_name": "control"},
+            )
+        return "PASS", "0.1s", good(runner, "react")
+
+    read: List[Tuple[str, str]] = []
+    monkeypatch.setattr(runner, "_run_command", fake_run)
+    monkeypatch.setattr(
+        runner,
+        "_exposure_rows",
+        lambda user, key: read.append((user, key)) or next(rows),
+    )
+    monkeypatch.setattr(runner.shutil, "which", lambda tool: f"/usr/bin/{tool}")
+    monkeypatch.setattr(sys, "argv", ["run_live_contract.py", "--sdk", "react"])
+    assert runner.main() == 0
+    assert [command for command, _ in ran] == [
+        runner.MANIFEST["react"][0],
+        runner.BOOTSTRAP_SMOKE,
+        runner.BOOTSTRAP_SMOKE,
+    ]
+    steps = [
+        (env["CONTRACT_BOOTSTRAP_STEP"], env["CONTRACT_USER_ID"]) for _, env in ran[1:]
+    ]
+    assert [step for step, _ in steps] == ["server", "client"]
+    user = steps[0][1]
+    assert user.startswith("bootstrap-") and steps[1][1] == user
+    assert read == [(user, "sdk_contract_ab"), (user, "sdk_contract_ab")]
+    out = " ".join(capsys.readouterr().out.split())
+    assert (
+        "PASS react (bootstrap) exposure rows 1 after the server render, +1 after hydration"
+        in out
+    )
+    assert '"value_type": "boolean"' in out

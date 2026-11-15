@@ -144,6 +144,8 @@ function results(overrides: Record<string, unknown> = {}) {
         metric_name: 'Checkout',
         metric_type: 'conversion',
         is_primary: true,
+        // The API always sends the direction; without it the table judges nothing.
+        lower_is_better: false,
         variants: [
           variant('v-ctrl', 'control', true, null, false),
           variant('v-up', 'better', false, 12.5, true),
@@ -285,6 +287,28 @@ describe('the improvement column', () => {
     expect(unclear).toHaveClass('text-slate-500');
     expect(unclear).not.toHaveClass('text-green-700');
     expect(unclear).not.toHaveClass('text-red-700');
+  });
+});
+
+describe('#442: the effect size and interval columns', () => {
+  it('are in the table on the page, with the numbers the server sent in each row', async () => {
+    const body = results();
+    const [control, better] = body.metrics[0].variants;
+    Object.assign(control, { std_dev: 0.3, confidence_interval: [0.0814, 0.1186] });
+    Object.assign(better, {
+      mean: 0.12,
+      std_dev: 0.3249,
+      confidence_interval: [0.0816, 0.1584],
+      effect_size: 0.0636,
+      effect_size_label: 'negligible',
+    });
+    install(body, { bayesian_enabled: false });
+    await renderLoaded();
+    expect(screen.getByTestId('effect-size-column')).toHaveTextContent('Effect size');
+    expect(screen.getByTestId('variant-interval-column')).toHaveTextContent('Interval (95%)');
+    const row = screen.getByRole('row', { name: /better/ });
+    expect(within(row).getByText('0.06 (negligible)')).toBeInTheDocument();
+    expect(within(row).getByText('8.16% to 15.84%')).toBeInTheDocument();
   });
 });
 

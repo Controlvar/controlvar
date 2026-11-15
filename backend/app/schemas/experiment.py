@@ -8,7 +8,7 @@ These models are used for request/response validation and documentation.
 from datetime import datetime, timedelta, timezone, tzinfo
 from enum import Enum
 from functools import lru_cache
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, Union
 from zoneinfo import ZoneInfo, available_timezones
 
 from pydantic import (
@@ -16,21 +16,54 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    ValidationError,
     ValidationInfo,
     field_validator,
     model_validator,
 )
-from pydantic_core import PydanticCustomError
+from pydantic_core import InitErrorDetails, PydanticCustomError, PydanticKnownError
 
+from backend.app.core.balanced_blocks import balance_problem
 from backend.app.core.targeting_adapter import (
     TargetingRulesError,
     validate_experiment_targeting,
 )
+from backend.app.schemas.balance_within import BalanceWithin
 from backend.app.schemas.bandit import OptimizationType
 from backend.app.schemas.bayesian import BayesianConfig
+from backend.app.schemas.finite_number import FiniteFloat
 from backend.app.schemas.results import CorrectionMethod
-from backend.app.schemas.split_url_config import SplitUrlConfig
+from backend.app.schemas.split_url_config import (
+    SPLIT_URL_CONFIG_ERROR,
+    SplitUrlConfig,
+    find_split_url_config_problem,
+)
 from backend.app.schemas.variance_reduction import VarianceReductionConfig
+from backend.app.schemas.visual import (
+    VisualChanges,
+    VisualConfig,
+    visual_write_error,
+    visual_write_problem,
+)
+
+#: What ``balance_within`` takes on a create and an update (#448).
+BALANCE_WITHIN_DESCRIPTION = (
+    "Beta. Balance the split within groups of users as they are assigned: "
+    '`{"attribute": "tier", "values": ["gold", "silver"]}` puts each new '
+    "user in the group of their `context.tier` (a top-level key, matched "
+    "exactly; any other value is `other`, no value is `unknown`), and each "
+    "group gets the experiment's split among its own users. "
+    '`{"segments": ["<segment id>", ...]}` (1 to 10 active saved segments) '
+    "puts each new user in the group of the first listed segment they belong "
+    "to, and in `other` when they belong to none. Every share must be a "
+    "multiple of 5; a bandit or a split URL experiment cannot balance. Null "
+    "balances nothing."
+)
+
+
+def balance_within_error(message: str) -> PydanticCustomError:
+    """A refusal of ``balance_within`` judged with the rest of the experiment."""
+    return PydanticCustomError("value_error", message)
 
 
 class ExperimentStatus(str, Enum):
@@ -66,6 +99,30 @@ class MetricType(str, Enum):
 #: in one carries ``le=INT32_MAX``, so a larger value answers 422 instead of
 #: reaching the database (#559).
 INT32_MAX = 2**31 - 1
+
+#: What a metric's type means to the analysis (#439).  The same words on the
+#: request (``MetricBase``) and the response (``MetricResponse``).
+METRIC_TYPE_DESCRIPTION = (
+    "What the metric measures.  conversion: the share of assigned users who "
+    "sent event_name.  count: the number of event_name events per assigned "
+    "user; their value is not read.  revenue, duration and custom: the total "
+    "value of a user's event_name events, per assigned user.  In each mean a "
+    "user with none counts as 0."
+)
+
+#: ``aggregation_method`` and ``event_value_path`` are accepted, stored and
+#: returned, and no analysis reads them (#439).  Their descriptions say so.
+AGGREGATION_METHOD_DESCRIPTION = (
+    "Not read: the analysis does not use it, and how a metric is analysed "
+    "follows from metric_type (see analysis in the results).  Stored and "
+    "returned as sent."
+)
+EVENT_VALUE_PATH_DESCRIPTION = (
+    "Not read: the analysis does not use it.  A revenue, duration or custom "
+    "metric adds up each event's top-level value; a count or conversion "
+    "metric does not read value, and values inside an event's properties are "
+    "never read.  Stored and returned as sent."
+)
 
 
 #: The message for a ``time_zone`` that is not a known IANA zone name. Fixed:
@@ -196,10 +253,12 @@ class MetricBase(BaseModel):
     event_name: str = Field(
         ..., min_length=1, max_length=100, description="Event name to track"
     )
-    metric_type: MetricType = Field(MetricType.CONVERSION, description="Type of metric")
+    metric_type: MetricType = Field(
+        MetricType.CONVERSION, description=METRIC_TYPE_DESCRIPTION
+    )
     is_primary: bool = Field(False, description="Whether this is the primary metric")
     aggregation_method: str = Field(
-        "average", max_length=50, description="How to aggregate the metric"
+        "average", max_length=50, description=AGGREGATION_METHOD_DESCRIPTION
     )
     minimum_sample_size: int = Field(
         100,
@@ -207,7 +266,7 @@ class MetricBase(BaseModel):
         le=INT32_MAX,
         description="Minimum sample size for statistical significance",
     )
-    expected_effect: Optional[float] = Field(
+    expected_effect: Optional[FiniteFloat] = Field(
         None,
         description=(
             "The minimum detectable effect the results page plans the sample "
@@ -219,7 +278,7 @@ class MetricBase(BaseModel):
     event_value_path: Optional[str] = Field(
         None,
         max_length=100,
-        description="JSON path to extract value from event payload",
+        description=EVENT_VALUE_PATH_DESCRIPTION,
     )
     lower_is_better: bool = Field(False, description="Whether lower values are better")
 
@@ -231,14 +290,59 @@ class MetricBase(BaseModel):
                 "event_name": "purchase_completed",
                 "metric_type": "conversion",
                 "is_primary": True,
-                "aggregation_method": "average",
                 "minimum_sample_size": 200,
                 "expected_effect": 0.05,
-                "event_value_path": "value",
                 "lower_is_better": False,
             }
         }
     )
+
+
+#: The 422 message for a metric name that repeats in one request (#1461). It
+#: gives the 0-based positions of the first repeated pair and never a name, so
+#: nothing from the request is echoed.
+DUPLICATE_METRIC_MESSAGE = (
+    "duplicate metric name; each name may appear once per experiment "
+    "(first seen at metrics[{first}], repeated at metrics[{second}])"
+)
+
+#: What ``metrics`` takes on a create and an update, in their descriptions.
+METRIC_NAMES_DESCRIPTION = (
+    "Each name may appear once: names are compared exactly, so case and spaces "
+    "count (`Revenue` and `revenue` are two metrics), and a repeated name is "
+    "refused with 422."
+)
+
+
+def refuse_duplicate_metric_names(
+    metrics: Optional[List[MetricBase]],
+) -> Optional[List[MetricBase]]:
+    """Refuse a metric list in which a name repeats (#1461).
+
+    Names are compared exactly, as the unique index on (experiment, name)
+    compares them: nothing is trimmed or case-folded, so a pair the database
+    stores side by side (``Revenue`` and ``revenue``) is still accepted.
+
+    The error is ``value_error`` with :data:`DUPLICATE_METRIC_MESSAGE` filled
+    in for the first name that repeats, scanning in order: the position where
+    it was first seen and the position where it repeats.
+
+    Pure: it reads the list and returns it unchanged, so a second run over the
+    same list gives the same answer. The create route builds
+    ``ExperimentCreate`` twice, and the wizard builds it once from its own
+    payload. ``None`` (an update that leaves the metrics as they are) passes.
+    """
+    if metrics is None:
+        return None
+    first_seen: Dict[str, int] = {}
+    for position, metric in enumerate(metrics):
+        first = first_seen.setdefault(metric.name, position)
+        if first != position:
+            raise PydanticCustomError(
+                "value_error",
+                DUPLICATE_METRIC_MESSAGE.format(first=first, second=position),
+            )
+    return metrics
 
 
 class VariantBase(BaseModel):
@@ -255,6 +359,17 @@ class VariantBase(BaseModel):
     )
     configuration: Optional[Dict[str, Any]] = Field(
         None, description="Variant-specific configuration"
+    )
+    visual_changes: Optional[VisualChanges] = Field(
+        None,
+        description=(
+            "A visual experiment's page changes for this variant (#1545): "
+            '{"version": 1, "changes": [...]}, at most 100 changes and 64 KiB. '
+            "Only on a non-control variant of an experiment with visual_config. "
+            "On an update, a variant sent without this field keeps the changes "
+            "stored for the variant of the same name; null removes them. Stored "
+            "and returned; nothing applies them to a page yet."
+        ),
     )
 
     model_config = ConfigDict(
@@ -294,6 +409,23 @@ def _checked_targeting_rules(
     return value
 
 
+def split_url_config_error(
+    title: str, loc: Tuple[Union[str, int], ...], message: str
+) -> ValidationError:
+    """A refusal of ``split_url_config`` at *loc* inside it, raised from its
+    field validator so the 422 names the rule's place (#393)."""
+    return ValidationError.from_exception_data(
+        title,
+        [
+            InitErrorDetails(
+                type=PydanticCustomError(SPLIT_URL_CONFIG_ERROR, message),
+                loc=loc,
+                input=None,
+            )
+        ],
+    )
+
+
 class ExperimentBase(BaseModel):
     """Base model for experiment data."""
 
@@ -331,7 +463,7 @@ class SequentialTestingConfigInput(BaseModel):
             "an alias of it; the analysis reports 'msprt'."
         ),
     )
-    alpha: float = Field(
+    alpha: FiniteFloat = Field(
         default=0.05,
         gt=0.0,
         le=0.2,
@@ -340,7 +472,7 @@ class SequentialTestingConfigInput(BaseModel):
             "stopping boundary is 1/alpha."
         ),
     )
-    tau_squared: float = Field(
+    tau_squared: FiniteFloat = Field(
         default=0.001,
         gt=0.0,
         le=1.0,
@@ -379,6 +511,18 @@ CONFIDENCE_LEVEL_DESCRIPTION = (
     "follows it; sequential analysis does not."
 )
 
+#: ``visual_config`` on a create and an update (#1545).
+VISUAL_CONFIG_DESCRIPTION = (
+    "Makes this a visual experiment (#1545): "
+    '{"version": 1, "editor_url": ..., "pages": [{"match": "exact"|"prefix", '
+    '"url": ...}], "goals": [...]}, with 1 to 10 pages and 0 to 10 goals; each '
+    "goal's event_name is the event_name of one of the metrics. Not on a split "
+    "URL experiment. Cannot change once the experiment leaves draft. A visual draft "
+    "keeps it (null is refused with 422), cannot be given a scheduled start, "
+    "and starts only with POST /api/v1/experiments/{id}/start carrying its "
+    "design_etag. Stored and returned; nothing applies it to a page yet."
+)
+
 
 class ExperimentCreate(ExperimentBase):
     """Model for creating a new experiment."""
@@ -391,10 +535,21 @@ class ExperimentCreate(ExperimentBase):
             "`POST /api/v1/experiments/{id}/start`."
         ),
     )
+    # #1545. Declared before `variants` and `metrics`, whose validators read it.
+    visual_config: Optional[VisualConfig] = Field(
+        default=None, description=VISUAL_CONFIG_DESCRIPTION
+    )
     variants: List[VariantBase] = Field(
         ..., min_length=1, description="Experiment variants"
     )
-    metrics: List[MetricBase] = Field(..., min_length=1, description="Metrics to track")
+    metrics: List[MetricBase] = Field(
+        ...,
+        description=(
+            "Metrics to track: at least one, except on an experiment created "
+            "with visual_config, which may have none until it starts (start "
+            "still refuses an experiment without a metric). " + METRIC_NAMES_DESCRIPTION
+        ),
+    )
 
     # EP-021: Sequential testing
     sequential_testing_enabled: bool = Field(
@@ -430,10 +585,17 @@ class ExperimentCreate(ExperimentBase):
         description="Traffic optimization algorithm (default: fixed A/B split).",
     )
 
-    # EP-036: Split URL testing configuration
+    # EP-036: Split URL testing configuration. Declared after `variants` and
+    # `experiment_type`, which its validator reads.
     split_url_config: Optional[SplitUrlConfig] = Field(
         default=None,
         description="Split URL experiment configuration (required when experiment_type=split_url).",
+    )
+
+    # #448: declared after `variants`, `experiment_type` and
+    # `optimization_type`, which its validator reads.
+    balance_within: Optional[BalanceWithin] = Field(
+        default=None, description=BALANCE_WITHIN_DESCRIPTION
     )
 
     # #580: how the results judge this experiment
@@ -441,7 +603,7 @@ class ExperimentCreate(ExperimentBase):
         default=CorrectionMethod.BENJAMINI_HOCHBERG,
         description=CORRECTION_METHOD_DESCRIPTION,
     )
-    confidence_level: float = Field(
+    confidence_level: FiniteFloat = Field(
         default=0.95,
         ge=0.80,
         le=0.99,
@@ -502,12 +664,14 @@ class ExperimentCreate(ExperimentBase):
                         "is_primary": True,
                     },
                     {
-                        "name": "Average Order Value",
-                        "description": "Average value of completed orders",
+                        "name": "Revenue per user",
+                        "description": (
+                            "Each user's purchase values added up, averaged "
+                            "over every assigned user"
+                        ),
                         "event_name": "purchase",
                         "metric_type": "revenue",
                         "is_primary": False,
-                        "event_value_path": "order_value",
                     },
                 ],
             }
@@ -525,6 +689,67 @@ class ExperimentCreate(ExperimentBase):
         from the first one's dump, and the value is returned unchanged.
         """
         return _checked_targeting_rules(value)
+
+    @field_validator("metrics")
+    @classmethod
+    def validate_metric_names(
+        cls, value: List[MetricBase], info: ValidationInfo
+    ) -> List[MetricBase]:
+        """Refuse a repeated metric name (#1461); the list is returned as is.
+
+        An empty list is refused with the ``too_short`` error a ``min_length``
+        of 1 gives, unless the experiment is created with ``visual_config``
+        (S2', #1545): a visual experiment's metrics are chosen in its editor.
+        """
+        if not value and info.data.get("visual_config") is None:
+            raise PydanticKnownError(
+                "too_short", {"field_type": "List", "min_length": 1, "actual_length": 0}
+            )
+        return refuse_duplicate_metric_names(value)
+
+    @field_validator("split_url_config")
+    @classmethod
+    def validate_split_url_config(
+        cls, config: Optional[SplitUrlConfig], info: ValidationInfo
+    ) -> Optional[SplitUrlConfig]:
+        """A split_url experiment's URL variants match its variants (#393).
+
+        The 422 is at the rule's place inside ``split_url_config``. When
+        ``variants`` was refused on its own there is nothing to compare.
+        """
+        experiment_type = info.data.get("experiment_type")
+        variants = info.data.get("variants")
+        if (
+            config is None
+            or variants is None
+            or getattr(experiment_type, "value", experiment_type) != "split_url"
+        ):
+            return config
+        problem = find_split_url_config_problem(config, variants)
+        if problem is not None:
+            raise split_url_config_error(cls.__name__, problem.loc, problem.message)
+        return config
+
+    @field_validator("balance_within")
+    @classmethod
+    def validate_balance_within(
+        cls, value: Optional[BalanceWithin], info: ValidationInfo
+    ) -> Optional[BalanceWithin]:
+        """A bandit, a split URL experiment or a split not in steps of 5 cannot
+        balance (#448). When ``variants`` was refused on its own there is no
+        split to judge. Idempotent: the value is returned as given."""
+        variants = info.data.get("variants")
+        if value is None or variants is None:
+            return value
+        problem = balance_problem(
+            value,
+            optimization_type=info.data.get("optimization_type"),
+            experiment_type=info.data.get("experiment_type"),
+            allocations=[variant.traffic_allocation for variant in variants],
+        )
+        if problem is not None:
+            raise balance_within_error(problem)
+        return value
 
     @model_validator(mode="after")
     def default_bayesian_config(self):
@@ -548,6 +773,19 @@ class ExperimentCreate(ExperimentBase):
 
         return self
 
+    @model_validator(mode="after")
+    def validate_visual_design(self):
+        """A visual experiment's rules across fields (#1545): no visual
+        settings on a split URL experiment, page changes only beside
+        ``visual_config`` and never on the control, and every goal's
+        event name one of the metrics'. The 422 is at the rule's place."""
+        problem = visual_write_problem(
+            self.experiment_type, self.visual_config, self.variants, self.metrics
+        )
+        if problem is not None:
+            raise visual_write_error(type(self).__name__, problem)
+        return self
+
 
 #: ``ExperimentUpdate`` fields stored in a NOT NULL column. An update may leave
 #: any of them out, but may not set one to null (#541).
@@ -560,6 +798,11 @@ NOT_NULL_UPDATE_FIELDS = (
     "correction_method",
     "confidence_level",
 )
+
+
+#: Ends the description of each analysis setting an update may change only on
+#: a draft (#848), as #580's two say it.
+ANALYSIS_SETTING_DRAFT_ONLY = "Changeable only while the experiment is a draft."
 
 
 #: The one message for a ``schedule`` sent to ``PUT /experiments/{id}`` (#595).
@@ -605,7 +848,17 @@ class ExperimentUpdate(BaseModel):
     variants: Optional[List[VariantBase]] = Field(
         None, description="Experiment variants"
     )
-    metrics: Optional[List[MetricBase]] = Field(None, description="Metrics to track")
+    metrics: Optional[List[MetricBase]] = Field(
+        None,
+        min_length=1,
+        description=(
+            "Metrics to track, replacing the stored ones: at least one, so an "
+            "empty list is refused with 422. "
+            + METRIC_NAMES_DESCRIPTION
+            + " Left out or null, the metrics are not changed. Changeable only "
+            "while the experiment is a draft."
+        ),
+    )
     # Declared only so a request carrying it is refused (#595). Without the
     # declaration pydantic's default ``extra="ignore"`` would drop the key and
     # answer 200, which is the defect: the update never applied a schedule.
@@ -619,19 +872,26 @@ class ExperimentUpdate(BaseModel):
         json_schema_extra={"deprecated": True},
     )
 
-    # EP-021: Sequential testing
+    # EP-021: Sequential testing. #848: this and the analysis settings below
+    # are refused outside draft, like #580's two.
     sequential_testing_enabled: bool = Field(
-        default=None, description="Enable or disable sequential testing."
+        default=None,
+        description=(
+            "Enable or disable sequential testing. " + ANALYSIS_SETTING_DRAFT_ONLY
+        ),
     )
     sequential_testing_config: Optional[SequentialTestingConfigInput] = Field(
         default=None,
-        description="Sequential testing configuration.",
+        description="Sequential testing configuration. " + ANALYSIS_SETTING_DRAFT_ONLY,
     )
 
     # Issue #21: CUPED variance reduction
     variance_reduction_config: Optional[VarianceReductionConfig] = Field(
         default=None,
-        description="CUPED / Winsorization variance-reduction configuration.",
+        description=(
+            "CUPED / Winsorization variance-reduction configuration. "
+            + ANALYSIS_SETTING_DRAFT_ONLY
+        ),
     )
 
     # EP-035: Bayesian analysis (#216). bayesian_decision is not accepted:
@@ -640,12 +900,16 @@ class ExperimentUpdate(BaseModel):
         default=None,
         description=(
             "Turn Bayesian analysis on or off. Turning it on with no stored or "
-            "supplied bayesian_config stores the default BayesianConfig."
+            "supplied bayesian_config stores the default BayesianConfig. "
+            + ANALYSIS_SETTING_DRAFT_ONLY
         ),
     )
     bayesian_config: Optional[BayesianConfig] = Field(
         default=None,
-        description="Bayesian analysis configuration (priors, loss threshold, ROPE).",
+        description=(
+            "Bayesian analysis configuration (priors, loss threshold, ROPE). "
+            + ANALYSIS_SETTING_DRAFT_ONLY
+        ),
     )
 
     # Issue #22: MAB optimization type
@@ -660,13 +924,28 @@ class ExperimentUpdate(BaseModel):
         description="Split URL experiment configuration.",
     )
 
+    # #448: draft only, judged with the rest of the experiment as it would be
+    # stored (the update route).
+    balance_within: Optional[BalanceWithin] = Field(
+        default=None,
+        description=BALANCE_WITHIN_DESCRIPTION
+        + " Changeable only while the experiment is a draft.",
+    )
+
+    # #1545: a visual experiment's pages, editor page and goals; draft only.
+    visual_config: Optional[VisualConfig] = Field(
+        default=None,
+        description=VISUAL_CONFIG_DESCRIPTION
+        + " Refused with 422 on a draft that has a scheduled start.",
+    )
+
     # #580: how the results judge this experiment; draft only
     correction_method: CorrectionMethod = Field(
         default=None,
         description=CORRECTION_METHOD_DESCRIPTION
         + " Changeable only while the experiment is a draft; cannot be null.",
     )
-    confidence_level: float = Field(
+    confidence_level: FiniteFloat = Field(
         default=None,
         ge=0.80,
         le=0.99,
@@ -715,6 +994,18 @@ class ExperimentUpdate(BaseModel):
         """Refuse rules assignment would not apply as they read."""
         return _checked_targeting_rules(value)
 
+    @field_validator("metrics")
+    @classmethod
+    def validate_metric_names(
+        cls, value: Optional[List[MetricBase]]
+    ) -> Optional[List[MetricBase]]:
+        """Refuse a repeated metric name (#1461), as a create does.
+
+        Runs after ``min_length``, so an empty list keeps the ``too_short``
+        error a create gives it; null passes and changes nothing.
+        """
+        return refuse_duplicate_metric_names(value)
+
     @model_validator(mode="after")
     def validate_variants(self):
         """Validate variants if provided."""
@@ -743,6 +1034,10 @@ class VariantResponse(BaseModel):
     is_control: bool
     traffic_allocation: int
     configuration: Optional[Dict[str, Any]] = None
+    visual_changes: Optional[Dict[str, Any]] = Field(
+        None,
+        description="The variant's page changes, as stored (#1545); null when none.",
+    )
     experiment_id: UUID4
     created_at: datetime
     updated_at: datetime
@@ -757,12 +1052,14 @@ class MetricResponse(BaseModel):
     name: str
     description: Optional[str] = None
     event_name: str
-    metric_type: str
+    metric_type: str = Field(..., description=METRIC_TYPE_DESCRIPTION)
     is_primary: bool
-    aggregation_method: str
+    aggregation_method: str = Field(..., description=AGGREGATION_METHOD_DESCRIPTION)
     minimum_sample_size: int
     expected_effect: Optional[float] = None
-    event_value_path: Optional[str] = None
+    event_value_path: Optional[str] = Field(
+        None, description=EVENT_VALUE_PATH_DESCRIPTION
+    )
     lower_is_better: bool
     experiment_id: UUID4
     created_at: datetime
@@ -834,6 +1131,38 @@ class ExperimentResponse(BaseModel):
     # EP-036: Split URL testing configuration
     split_url_config: Optional[Dict[str, Any]] = None
 
+    # #448: echoed, so a client learns whether the server stored it (an older
+    # server ignores the field and answers 200 without it).
+    balance_within: Optional[Dict[str, Any]] = Field(
+        None,
+        description=(
+            "Beta. What the experiment balances its split within: "
+            '`{"attribute": ..., "values": [...]}`, `{"segments": [...]}`, or '
+            "null when it balances nothing."
+        ),
+    )
+
+    # #1545: a visual experiment's settings, and the version of its design.
+    visual_config: Optional[Dict[str, Any]] = Field(
+        None,
+        description=(
+            "The experiment's visual settings, as stored (#1545); null for an "
+            "experiment that is not visual."
+        ),
+    )
+    design_etag: Optional[str] = Field(
+        None,
+        description=(
+            "A visual experiment's design version (#1545): the SHA-256 hex of "
+            "its targeting rules, exclusion group, balance_within (when set), "
+            "visual_config and every field of every variant and metric. Any "
+            "change to one of them "
+            "changes it. Starting a visual draft sends it in the body of POST "
+            "/api/v1/experiments/{id}/start, and a different value answers 409. "
+            "Null for an experiment that is not visual."
+        ),
+    )
+
     # #580: how the results judge this experiment. The defaults are what the
     # migration backfilled; ExperimentService._experiment_to_dict copies the
     # stored values, so a response never reports a default over a choice.
@@ -854,6 +1183,28 @@ class ExperimentResponse(BaseModel):
         if hasattr(value, "value"):
             return value.value
         return value
+
+
+class ExperimentStartRequest(BaseModel):
+    """The optional body of ``POST /api/v1/experiments/{id}/start`` (#1545).
+
+    No body, ``null`` and ``{}`` all start as before. An unknown key is
+    ignored, as on ``PUT /experiments/{id}`` (#595).
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    design_etag: Optional[str] = Field(
+        None,
+        max_length=128,
+        description=(
+            "Required to start a visual draft: the design_etag of the version "
+            "being started, as GET /api/v1/experiments/{id} returned it. "
+            "Missing answers 400; different from the experiment's current one "
+            "answers 409 and nothing is started. Ignored for any other "
+            "experiment and on a resume."
+        ),
+    )
 
 
 class ExperimentDetailResponse(ExperimentResponse):

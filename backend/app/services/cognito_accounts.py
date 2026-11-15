@@ -23,7 +23,9 @@ written):
                                                              ``linked_elsewhere``
 4  the username names a row with neither                     refuse
                                                              ``legacy_unlinked``
-5  the identity has no email address                         refuse ``no_email``
+5  the identity has no email address                         refuse ``no_email``;
+   or its ``email_verified`` attribute is not ``true``       refuse
+                                                             ``email_unverified``
 6  another row holds the address, in any letter case         refuse ``email_taken``
 7  a value for the new row is longer than its column         refuse
                                                              ``field_too_long``
@@ -77,6 +79,7 @@ REASON_LOCAL_PASSWORD = "local_password"
 REASON_LINKED_ELSEWHERE = "linked_elsewhere"
 REASON_LEGACY_UNLINKED = "legacy_unlinked"
 REASON_NO_EMAIL = "no_email"
+REASON_EMAIL_UNVERIFIED = "email_unverified"
 REASON_EMAIL_TAKEN = "email_taken"
 REASON_FIELD_TOO_LONG = "field_too_long"
 REASON_COMMIT_FAILED = "commit_failed"
@@ -158,6 +161,12 @@ def _text(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
+def _is_verified(value: Any) -> bool:
+    """``email_verified`` as Cognito returns it: the string ``"true"``, in any
+    letter case. Absent, ``"false"`` or anything else is not verified."""
+    return _text(value).lower() == "true"
+
+
 def resolve_cognito_user(db: Session, user_data: Mapping[str, Any]) -> User:
     """Return the account for a Cognito identity, creating it on first sign-in.
 
@@ -216,10 +225,13 @@ def resolve_cognito_user(db: Session, user_data: Mapping[str, Any]) -> User:
             raise refuse(REASON_LINKED_ELSEWHERE, namesake.id)
         raise refuse(REASON_LEGACY_UNLINKED, namesake.id)
 
-    # 5. Every account has an email address.
+    # 5. Every account has an email address, and a first sign-in needs it
+    # verified.
     email = _text(attributes.get("email"))
     if not email:
         raise refuse(REASON_NO_EMAIL)
+    if not _is_verified(attributes.get("email_verified")):
+        raise refuse(REASON_EMAIL_UNVERIFIED)
 
     # 6. An address belongs to one account, whatever its letter case. The
     # account is never linked by email.

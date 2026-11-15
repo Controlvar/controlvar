@@ -206,7 +206,8 @@ class ExportService:
         total_assignments: int = self._count_assignments(start_date, end_date)
         total_events: int = self._count_events(start_date, end_date)
 
-        # Experiments with a winner are those whose summary JSON contains a winner
+        # Experiments whose current results name a winner, as the export's
+        # winner_variant column shows it
         experiments_with_winners: int = self._count_experiments_with_winners(
             start_date, end_date
         )
@@ -316,7 +317,10 @@ class ExportService:
         the computation behind ``GET /api/v1/results/{id}`` -- so the export
         and the results API agree. An experiment whose results cannot be
         computed (it has no control variant, for example) keeps its variant
-        rows with the result columns empty.
+        rows with the result columns empty.  ``conversion_rate`` is empty too
+        when the primary metric is analysed as a mean (a revenue, count,
+        duration or custom metric): its ``mean`` is a value per user, not a
+        rate.
         """
         rows: List[VariantExportRow] = []
         for exp in experiments:
@@ -326,6 +330,7 @@ class ExportService:
                 if primary
                 else {}
             )
+            is_rate = (primary or {}).get("analysis", "proportion") == "proportion"
             for variant in getattr(exp, "variants", []):
                 result = by_variant.get(str(variant.id))
                 rows.append(
@@ -337,7 +342,7 @@ class ExportService:
                         is_control=bool(getattr(variant, "is_control", False)),
                         assignments=result["sample_size"] if result else None,
                         conversions=result["conversions"] if result else None,
-                        conversion_rate=result["mean"] if result else None,
+                        conversion_rate=result["mean"] if result and is_rate else None,
                         p_value=result["p_value"] if result else None,
                         is_significant=result["is_significant"] if result else None,
                         relative_improvement_pct=(
@@ -425,17 +430,6 @@ class ExportService:
             duration = round(delta.total_seconds() / 86400, 2)
 
         summary = (results or {}).get("summary") or {}
-        winner_id = summary.get("winning_variant_id")
-        winner_name: Optional[str] = None
-        if winner_id:
-            winner_name = next(
-                (
-                    str(v.name)
-                    for v in getattr(exp, "variants", [])
-                    if str(v.id) == str(winner_id)
-                ),
-                None,
-            )
 
         return ExperimentExportRow(
             experiment_id=str(exp.id),
@@ -447,8 +441,33 @@ class ExportService:
             duration_days=duration,
             total_assignments=total_assignments,
             total_events=total_events,
-            winner_variant=winner_name,
+            winner_variant=self._winner_name(exp, results),
             recommendation=summary.get("recommendation"),
+        )
+
+    @staticmethod
+    def _winner_name(
+        exp: Experiment, results: Optional[Dict[str, Any]]
+    ) -> Optional[str]:
+        """
+        The name of the variant the results summary names as the winner.
+
+        ``results`` is the experiment's ``get_experiment_results`` output;
+        None when it has none, no winner, or a winner that is not one of the
+        experiment's variants. The export's ``winner_variant`` column and the
+        overview's ``experiments_with_winners`` both read it.
+        """
+        summary = (results or {}).get("summary") or {}
+        winner_id = summary.get("winning_variant_id")
+        if not winner_id:
+            return None
+        return next(
+            (
+                str(v.name)
+                for v in getattr(exp, "variants", [])
+                if str(v.id) == str(winner_id)
+            ),
+            None,
         )
 
     def _feature_flag_to_row(
@@ -577,23 +596,23 @@ class ExportService:
         end_date: Optional[datetime],
     ) -> int:
         """
-        Count experiments whose reports indicate a winner exists.
-
-        Falls back to 0 when the Report model or relationship is unavailable.
+        Count the experiments created in the window whose current results name
+        a winner, the winner the export's winner_variant column shows (via
+        _winner_name). An experiment whose results cannot be computed
+        (ValueError: no control variant, not found) is skipped and not counted.
+        Any other error propagates, so the overview answers 500; it never falls
+        back to 0.
         """
-        try:
-            from backend.app.models.report import Report
-
-            query = self.db.query(Report)
-            if start_date:
-                query = query.filter(Report.created_at >= start_date)
-            if end_date:
-                query = query.filter(Report.created_at <= end_date)
-            # Reports that have a winner recorded in their summary JSON
-            query = query.filter(Report.summary.isnot(None))
-            return int(query.count())
-        except Exception:
-            return 0
+        query = self.db.query(Experiment)
+        if start_date:
+            query = query.filter(Experiment.created_at >= start_date)
+        if end_date:
+            query = query.filter(Experiment.created_at <= end_date)
+        return sum(
+            1
+            for exp in query.all()
+            if self._winner_name(exp, self._results_for(exp)) is not None
+        )
 
     def _average_experiment_duration(
         self,

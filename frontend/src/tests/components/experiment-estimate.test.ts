@@ -3,7 +3,7 @@
  * itself is exercised through the page in experiment-new-guided.test.tsx.
  */
 import {
-  buildEstimateQuery,
+  buildEstimateQuery as buildWith,
   ESTIMATE_PROBLEMS,
   EstimateInputs,
   INITIAL_ESTIMATE_INPUTS,
@@ -14,7 +14,12 @@ import {
   plannedEffectFraction,
   plannedEffectProblem,
 } from '@/components/experiments/new/estimate';
-import { CONFIDENCE_OPTIONS } from '@/components/results/shared/analysisSettings';
+import {
+  CONFIDENCE_OPTIONS,
+  CORRECTION_OPTIONS,
+  DEFAULT_CONFIDENCE_LEVEL,
+  DEFAULT_CORRECTION_METHOD,
+} from '@/components/results/shared/analysisSettings';
 
 const inputs = (over: Partial<EstimateInputs> = {}): EstimateInputs => ({
   ...INITIAL_ESTIMATE_INPUTS,
@@ -22,6 +27,14 @@ const inputs = (over: Partial<EstimateInputs> = {}): EstimateInputs => ({
   mdePct: '5',
   ...over,
 });
+
+/** The query at the form's defaults: 95% and Benjamini-Hochberg, unless given. */
+const buildEstimateQuery = (
+  given: EstimateInputs,
+  variantCount: number,
+  confidenceLevel = DEFAULT_CONFIDENCE_LEVEL,
+  correctionMethod = DEFAULT_CORRECTION_METHOD,
+) => buildWith(given, variantCount, confidenceLevel, correctionMethod);
 
 describe('estimate options', () => {
   it('offers power 80/90/95%, defaulting to 80%', () => {
@@ -35,8 +48,8 @@ describe('estimate options', () => {
 
   it('keeps every option inside the bounds the endpoint accepts', () => {
     // statistical_power: ge=0.5, le=0.99; significance_level: ge=0.01, le=0.1.
-    // A frontend-divided alpha (0.05 / 2) would be refused, so the estimate
-    // never divides it (PE condition 9).
+    // A frontend-divided alpha (0.01 / 2) would be refused, so the estimate
+    // sends the undivided level and the endpoint divides it (#820).
     for (const p of POWER_OPTIONS) {
       expect(p).toBeGreaterThanOrEqual(0.5);
       expect(p).toBeLessThanOrEqual(0.99);
@@ -58,11 +71,12 @@ describe('buildEstimateQuery', () => {
         statistical_power: 0.8,
         significance_level: 0.05,
         variant_count: 2,
+        correction_method: 'benjamini_hochberg',
       },
     });
   });
 
-  it('plans at 1 minus the confidence level it is given, with no correction for 3 variants', () => {
+  it('sends 1 minus the confidence level it is given, undivided, for 3 variants', () => {
     const built = buildEstimateQuery(inputs(), 3, 0.9);
     expect(built.ok && built.query.significance_level).toBe(0.1);
   });
@@ -70,6 +84,22 @@ describe('buildEstimateQuery', () => {
   it('sends the variant count it is given', () => {
     const built = buildEstimateQuery(inputs(), 3);
     expect(built.ok && built.query.variant_count).toBe(3);
+  });
+
+  it.each(CORRECTION_OPTIONS)('sends the correction it is given: %s', (method) => {
+    expect(CORRECTION_OPTIONS).toEqual(['benjamini_hochberg', 'bonferroni', 'none']);
+    const built = buildWith(inputs(), 3, 0.95, method);
+    expect(built.ok && built.query.correction_method).toBe(method);
+  });
+
+  it('refuses more than 100 variants, and plans for 100', () => {
+    expect(buildEstimateQuery(inputs(), 101)).toEqual({ ok: false, problem: ESTIMATE_PROBLEMS.tooManyVariants });
+    expect(buildEstimateQuery(inputs(), 100).ok).toBe(true);
+  });
+
+  it('accepts exactly 1,000,000,000,000 daily users, the most the endpoint takes', () => {
+    const built = buildEstimateQuery(inputs({ dailyUsers: '1000000000000' }), 2);
+    expect(built.ok && built.query.daily_traffic).toBe(1000000000000);
   });
 
   it('sends daily users with the share as a fraction', () => {
@@ -86,6 +116,7 @@ describe('buildEstimateQuery', () => {
     const built = buildEstimateQuery(inputs(), 2);
     expect(built.ok && Object.keys(built.query).sort()).toEqual([
       'baseline_rate',
+      'correction_method',
       'minimum_detectable_effect',
       'significance_level',
       'statistical_power',
@@ -95,6 +126,7 @@ describe('buildEstimateQuery', () => {
 
   it.each([
     ['fewer than two variants', inputs(), 1, ESTIMATE_PROBLEMS.variants],
+    ['more than 100 variants', inputs(), 101, ESTIMATE_PROBLEMS.tooManyVariants],
     ['a blank baseline', inputs({ baselinePct: '' }), 2, ESTIMATE_PROBLEMS.baseline],
     ['a baseline of 0', inputs({ baselinePct: '0' }), 2, ESTIMATE_PROBLEMS.baseline],
     ['a baseline below 0.01%', inputs({ baselinePct: '0.001' }), 2, ESTIMATE_PROBLEMS.baseline],
@@ -107,6 +139,8 @@ describe('buildEstimateQuery', () => {
     ['an effect above 100%', inputs({ baselinePct: '1', mdePct: '150' }), 2, ESTIMATE_PROBLEMS.mdeHigh],
     ['fractional daily users', inputs({ dailyUsers: '10.5' }), 2, ESTIMATE_PROBLEMS.dailyUsers],
     ['zero daily users', inputs({ dailyUsers: '0' }), 2, ESTIMATE_PROBLEMS.dailyUsers],
+    ['more than 1,000,000,000,000 daily users', inputs({ dailyUsers: '1000000000001' }), 2, ESTIMATE_PROBLEMS.dailyUsers],
+    ['1e309 daily users', inputs({ dailyUsers: '1e309' }), 2, ESTIMATE_PROBLEMS.dailyUsers],
     ['a share of 0%', inputs({ dailyUsers: '100', sharePct: '0' }), 2, ESTIMATE_PROBLEMS.share],
     ['a share above 100%', inputs({ dailyUsers: '100', sharePct: '101' }), 2, ESTIMATE_PROBLEMS.share],
     ['a share without daily users', inputs({ sharePct: '50' }), 2, ESTIMATE_PROBLEMS.shareWithoutUsers],

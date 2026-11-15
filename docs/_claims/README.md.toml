@@ -15,6 +15,18 @@ by = [
 ]
 
 [[unit]]
+text = "Website: controlvar.com · Documentation: docs.controlvar.com"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The power calculator: the baseline conversion rate, the minimum detectable effect, the sample size each variant needs, and a power curve."
+by = ["journey:power-calculator#calculator"]
+
+[[unit]]
+text = "Watch the walkthrough videos on controlvar.com."
+by = ["exempt:navigation"]
+
+[[unit]]
 text = "The core, the optional modules and the dashboard are Apache-2.0; the client SDKs under sdk/ are MIT."
 by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_tree_is_apache_and_the_sdks_are_mit"]
 
@@ -30,6 +42,36 @@ by = [
 ]
 
 [[unit]]
+text = "Try the live demo"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A read-only copy runs at https://demo.controlvar.com: the dashboard as a viewer, with ShopLab and StreamPulse sending it simulated traffic."
+by = [
+    "test:backend/tests/unit/infrastructure/test_demo_box.py::test_the_sites_are_exactly_the_demo_host_and_its_two_storefronts",
+    "test:backend/tests/unit/infrastructure/test_demo_box.py::test_the_overlay_turns_demo_mode_on_itself",
+    "test:backend/tests/integration/demo/test_demo_mode_sign_in.py::test_only_a_non_superuser_viewer_signs_in",
+    "test:backend/tests/unit/infrastructure/test_demo_box.py::test_the_two_demo_apps_send_simulated_traffic",
+]
+
+[[unit]]
+text = "Creating and changing things is turned off there, and everything is rebuilt every night at 08:00 UTC."
+by = [
+    "test:backend/tests/smoke/test_demo_mode_routes.py::test_every_mutating_route_is_refused_for_a_signed_in_viewer",
+    "test:backend/tests/unit/middleware/test_demo_mode_middleware.py::test_the_allow_list_is_eight_posts_under_the_api_prefix",
+    "test:backend/tests/unit/infrastructure/test_demo_box.py::test_the_reset_time_is_the_one_the_dashboard_shows",
+    "test:backend/tests/unit/infrastructure/test_demo_box.py::TestTheBoxScripts::test_no_answer_twice_rebuilds_and_reopens",
+]
+
+[[unit]]
+text = "To create experiments, run it on your machine (below)."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The live demo says what is turned off there, and why."
+by = ["exempt:navigation"]
+
+[[unit]]
 text = "Try it on your machine"
 by = ["exempt:label"]
 
@@ -42,7 +84,43 @@ text = "Clone the repository:"
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "Then start the stack from the repository root:"
+text = "On the published images"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Start the released images from deploy/compose/; nothing is built:"
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_images_are_the_published_ones_at_this_version",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_nothing_is_built",
+]
+
+[[unit]]
+text = "Open http://localhost:8080 and sign in as admin@example.com with the FIRST_SUPERUSER_PASSWORD that generate-env.sh wrote to deploy/compose/.env."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestGenerator::test_without_inputs_it_writes_the_local_url_and_the_example_admin",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestGenerator::test_it_writes_every_required_setting_privately",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_only_the_dashboard_publishes_a_port_on_loopback_by_default",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestWorkflow::test_it_rehearses_in_the_compose_topology",
+]
+
+[[unit]]
+text = "This stack has no demo data and no demo account."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestApiEnvironment::test_production_with_no_seed_and_no_bypass",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestText::test_no_demo_material",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestWorkflow::test_it_refuses_the_demo_login_and_checks_only_the_dashboard_publishes",
+]
+
+[[unit]]
+text = "Its settings are in deploy/compose/README.md."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Built from source, with the demo data"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Start the stack from the repository root:"
 by = ["exempt:instruction"]
 
 [[unit]]
@@ -144,8 +222,9 @@ by = [
 ]
 
 [[unit]]
-text = "StreamPulse (demo/streampulse, http://localhost:3300): a simulated mobile app with a device picker, targeting by OS version/region/tier, a kill switch, mutual exclusion and a scripted rollout story in which a crash spike triggers an automatic safety rollback."
+text = "StreamPulse (demo/streampulse, http://localhost:3300): a phone drawn in a web page with the React SDK, with a device picker, targeting by OS version/region/tier, a kill switch, mutual exclusion and a scripted rollout story in which a crash spike triggers an automatic safety rollback."
 by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_builds_against_the_react_sdk_source_with_its_own_react",
     "journey:demo-streampulse#app",
     "journey:demo-streampulse#premium-iphone",
     "journey:demo-streampulse#rule-matches-the-premium-iphone",
@@ -160,6 +239,13 @@ by = [
 [[unit]]
 text = "Walkthrough: demo/DEMO_GUIDE.md."
 by = ["exempt:navigation"]
+
+[[unit]]
+text = "Step by step, with what you will see at each step: Guided examples."
+by = [
+    "journey:guided-examples#stop-simulator",
+    "journey:guided-examples#apply-below",
+]
 
 [[unit]]
 text = "What it does"
@@ -250,6 +336,7 @@ by = [
 text = "Automated Safety: monitoring every 5 minutes by default, with automatic rollback capabilities"
 by = [
     "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_settings_have_scheduler_interval_defaults",
+    "test:backend/tests/unit/core/test_safety_scheduler_off_loop.py::test_the_safety_loop_checks_then_sleeps_the_interval_in_seconds",
     "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_rollback_uses_config_rollback_percentage",
 ]
 
@@ -274,10 +361,11 @@ text = "Configurable Thresholds: Per-feature flag safety configuration"
 by = ["test:backend/tests/integration/api/test_safety_api.py::TestFeatureFlagSafetyConfig::test_superuser_can_set_safety_config"]
 
 [[unit]]
-text = "Complete Audit Trail: All rollbacks logged with reasoning"
+text = "Rollback History: every rollback, automatic or manual, is stored with its reason; it also appears in the flag's audit history, unless that entry could not be written"
 by = [
     "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_automatic_rollback_reason_words_the_breach_in_the_scheduler",
     "test:backend/tests/integration/services/test_safety_service_coverage.py::TestExecuteRollback::test_every_rollback_is_recorded_and_audited_with_its_reason",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_a_refused_monitor_entry_never_blocks_a_rollback",
 ]
 
 [[unit]]
@@ -285,22 +373,22 @@ text = "What it does not do (yet)"
 by = ["exempt:label"]
 
 [[unit]]
-text = "A flag is on or off for each user: it carries no variants or values."
+text = "A flag serves two values, its on value and its off value; no rule or rollout splits users among three or more."
 by = [
     "test:backend/tests/unit/api/test_documented_limits.py::test_a_flag_request_with_variants_is_refused",
-    "test:backend/tests/unit/api/test_documented_limits.py::test_a_flag_serves_false_when_off_and_nothing_else",
-    "test:backend/tests/integration/api/test_front_door_behaviour.py::test_every_flag_evaluates_with_a_null_config",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_boolean_flag_serves_false_when_off_and_a_value_flag_its_off_value",
+    "test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestValueFields::test_no_third_value_or_split_is_accepted",
 ]
 
 [[unit]]
-text = "To serve one of several experiences, run a multivariate experiment."
+text = "For three or more experiences, run a multivariate experiment."
 by = ["exempt:advice"]
 
 [[unit]]
-text = "Every metric is analysed as a conversion: whether each user sent the metric's event."
+text = "A revenue, count, duration or custom metric's sequential, Bayesian, sample-size, breakdown and daily views are of the share of users who sent its event."
 by = [
-    "test:backend/tests/integration/api/test_front_door_behaviour.py::test_a_revenue_metric_is_analysed_as_a_conversion",
-    "test:backend/tests/unit/api/test_documented_limits.py::test_the_results_use_one_proportion_test_for_every_metric",
+    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_the_other_analyses_of_a_revenue_metric_stay_on_the_share_of_buyers",
+    "test:backend/tests/integration/api/test_revenue_breakdown_share_of_buyers.py::test_a_revenue_metric_breakdown_is_the_share_of_buyers",
 ]
 
 [[unit]]
@@ -403,12 +491,59 @@ text = "Go | go get github.com/controlvar/controlvar/sdk/go"
 by = ["journey:sdk-go#quick-start-user-on"]
 
 [[unit]]
+text = "React | npm install @controlvar/react-sdk"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = "React Native | npm install @controlvar/react-native-sdk"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = "OpenFeature (Node) | npm install @controlvar/openfeature-provider @openfeature/server-sdk"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = "OpenFeature (Python) | pip install controlvar-openfeature"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = "Java | com.controlvar:controlvar-sdk (Maven Central)"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = ".NET | dotnet add package Controlvar.SDK"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
 text = "Every other SDK installs from a clone of this repository."
 by = ["exempt:instruction"]
 
 [[unit]]
 text = "The SDK guide says how, and what CI runs for each one."
 by = ["exempt:navigation"]
+
+[[unit]]
+text = "The Controlvar MCP server is not an SDK."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_sdk_mcp_is_the_mcp_server_and_not_an_sdk"]
+
+[[unit]]
+text = "An AI assistant such as Claude Code starts it on your computer to read your instance's feature flags, experiments and results with your API key, and it changes no flag or experiment."
+by = [
+    "test:sdk/mcp/__tests__/surface.test.ts::the six tools and their annotations, whatever tools.json says",
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_sdk_mcp_is_the_mcp_server_and_not_an_sdk",
+]
+
+[[unit]]
+text = "The @controlvar/mcp-server package is on npm."
+by = ["mechanism:registry-availability"]
+
+[[unit]]
+text = "The MCP Server and the AI Endpoints has the command that adds it to Claude Code, and the settings for Claude Desktop and Cursor."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Its source is sdk/mcp."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_sdk_mcp_is_the_mcp_server_and_not_an_sdk"]
 
 [[unit]]
 text = "Documentation"
@@ -424,6 +559,10 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "Targeting rules: operators, attribute aliases and examples"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The Controlvar books: engineering, programming and the craft of shipping software, taught through this codebase, for newcomers to a language or framework, engineers who already code, and contributors (CC BY 4.0)"
 by = ["exempt:navigation"]
 
 [[unit]]
@@ -512,18 +651,21 @@ text = "Module | What it adds"
 by = ["exempt:label"]
 
 [[unit]]
-text = "workspaces | Group users into teams, with workspace roles and email invites. Grouping only: access to experiments and flags is by platform role"
+text = "workspaces | Group users into teams, with workspace roles and email invites. Grouping only: workspace roles play no part in access to experiments and flags"
 by = [
     "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_changing_a_members_workspace_role_writes_one_role_assign",
     "test:modules/backend/tests/integration/api/test_workspace_invite_binding.py::test_the_invited_address_joins_with_the_invited_role",
-    "test:backend/tests/unit/api/test_documented_limits.py::test_the_permission_check_reads_only_the_built_in_role",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_permission_check_reads_grants_only_through_the_capability",
+    "test:modules/backend/tests/integration/api/test_workspace_roles_scope.py::test_the_platform_role_not_the_workspace_decides",
 ]
 
 [[unit]]
-text = "rbac | Roles beyond the built-in four, and permissions granted directly to a user. Both are recorded, but they do not change what anyone can do yet: each user's built-in role decides (#891)"
+text = "rbac | Roles beyond the built-in four, and permissions granted directly to a user, optionally until a date. Both add to what the user's built-in role allows"
 by = [
     "test:modules/backend/tests/unit/services/test_rbac_service.py::TestCreateCustomRole::test_creates_role_with_name",
-    "test:backend/tests/unit/api/test_documented_limits.py::test_the_permission_check_reads_only_the_built_in_role",
+    "test:backend/tests/unit/core/test_built_in_roles_decide.py::test_a_custom_role_or_a_grant_adds_only_grantable_pairs",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+    "test:modules/backend/tests/integration/rbac/test_rbac_provider.py::test_a_grant_yields_its_pairs_only_when_activated_active_and_unexpired",
 ]
 
 [[unit]]
@@ -579,11 +721,11 @@ by = [
 ]
 
 [[unit]]
-text = "split_url | Server-side URL splitting at the edge. The edge router has no configuration source in this release, so it does not split traffic yet; experiments, their URL configuration and the preview work (#393)"
+text = "split_url | Split URL experiments: each variant is its own URL. Your server or edge asks the API where to send each visitor (on AWS an optional CloudFront router can). The AWS installer installs the core profile, so it does not include them"
 by = [
-    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerPassThrough::test_no_config_header_passes_through",
-    "test:modules/backend/tests/unit/test_front_door_module_facts.py::test_the_split_url_construct_sets_no_router_configuration",
-    "test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlPreview::test_admin_can_preview_split_url_assignment",
+    "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_a_split_url_experiment_splits_its_visitors",
+    "test:modules/backend/tests/integration/split_url/test_split_url_router_e2e.py::test_a_split_url_experiment_splits_its_visitors_through_the_router",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_the_full_profile_stops_before_the_deploy",
 ]
 
 [[unit]]
@@ -651,4 +793,8 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "CONTRIBUTING.md covers the development setup, the test suites and the core/modules boundary."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "ROADMAP.md says what is planned Now, Next and Later, and how to influence it."
 by = ["exempt:navigation"]

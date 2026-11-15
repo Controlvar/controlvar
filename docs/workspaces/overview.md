@@ -24,8 +24,8 @@ Workspaces do **not** decide which experiments, feature flags or API keys a
 user can see or change. Experiments and feature flags are not created inside a
 workspace, and workspace membership plays no part when they are listed, read
 or changed. That is decided by the user's **platform role** (ADMIN, DEVELOPER,
-ANALYST or VIEWER) across the whole installation — see [Role-based access
-control](../rbac/README.md).
+ANALYST or VIEWER), plus their custom roles and direct grants, across the whole
+installation — see [Role-based access control](../rbac/README.md).
 
 If you need teams to be unable to see each other's experiments and flags, run a
 separate installation for each team.

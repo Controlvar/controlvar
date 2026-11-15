@@ -1,0 +1,11 @@
+# The disk guard (deploy/demo/diskguard.sh). provision.sh installs it.
+[Unit]
+Description=Controlvar demo: reset when the disk is 80% full
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/controlvar-demo/box.env
+ExecStart=/opt/controlvar-demo/recipe/deploy/demo/diskguard.sh
+TimeoutStartSec=1800

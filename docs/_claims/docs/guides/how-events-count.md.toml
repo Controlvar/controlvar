@@ -1,0 +1,370 @@
+# What verifies each unit of docs/guides/how-events-count.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/guides/how-events-count.md"
+
+[[unit]]
+text = "How events count"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Which of the events you send count in an experiment's results."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The rules are the same for every SDK, because each one sends its events through POST /api/v1/tracking/track and POST /api/v1/tracking/batch."
+by = [
+    "test:backend/tests/unit/api/test_how_events_count_rules.py::test_every_sdk_directory_is_listed",
+    "test:backend/tests/unit/api/test_how_events_count_rules.py::test_every_sdk_sends_its_events_through_track_and_batch",
+]
+
+[[unit]]
+text = "The event | Stored | Counts in its variant's results"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Sent again with the same event_id | No: the first one is kept | Once"
+by = [
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r1_a_purchase_sent_again_with_its_event_id_is_stored_and_counted_once",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r7_the_first_write_wins_and_the_answer_echoes_this_request",
+]
+
+[[unit]]
+text = "Sent again without an event_id | Yes, each time | Each time: a count metric counts it again, and a revenue, duration or custom metric adds its value again; a conversion metric counts the user once"
+by = [
+    "test:backend/tests/integration/api/test_how_events_count.py::test_an_event_sent_again_is_stored_and_counted_again",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r8_without_an_event_id_two_identical_purchases_are_both_stored",
+]
+
+[[unit]]
+text = "Received before the user is assigned to the experiment | Yes, with no variant | No"
+by = ["test:backend/tests/integration/api/test_how_events_count.py::test_an_event_received_before_the_assignment_counts_in_no_variant"]
+
+[[unit]]
+text = "Received while the experiment is a draft, paused, completed or archived | Yes, with no variant | No"
+by = [
+    "test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_each_status_and_route_stores_the_variant_only_while_active",
+    "test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_converting_users_per_variant_across_pause_resume_and_complete",
+]
+
+[[unit]]
+text = "Received after the user is assigned, with an earlier timestamp | Yes | Yes"
+by = ["test:backend/tests/integration/api/test_how_events_count.py::test_the_variant_is_the_one_at_receipt_whatever_the_timestamp"]
+
+[[unit]]
+text = "With a value that is not a finite number from -10^12 to 10^12 | No: /track and /events answer 422; /batch reports the entry in errors and stores the others, but refuses the whole request when the number in the JSON is NaN or infinite | No"
+by = [
+    "test:backend/tests/unit/api/test_event_value_bound.py::test_track_refuses_a_value_beyond_the_bound",
+    "test:backend/tests/unit/api/test_event_value_bound.py::test_events_refuses_a_value_beyond_the_bound_at_the_field",
+    "test:backend/tests/unit/api/test_event_value_bound.py::test_batch_reports_the_entry_beyond_the_bound_and_stores_the_others",
+    "test:backend/tests/integration/api/test_tracking_non_finite_numbers.py::test_one_non_finite_number_refuses_the_whole_batch",
+]
+
+[[unit]]
+text = "Stored before the server refused such a value, with a value larger than 10^12 in size | Yes | Its user counts as converting; the value adds nothing"
+by = ["test:backend/tests/integration/api/test_revenue_per_user_results.py::test_values_that_are_not_finite_or_too_large_add_nothing"]
+
+[[unit]]
+text = "Sent by a bot or a crawler | Yes | Yes"
+by = [
+    "test:backend/tests/integration/api/test_how_events_count.py::test_an_event_from_a_crawler_is_stored_and_counted",
+    "test:backend/tests/unit/api/test_how_events_count_rules.py::test_the_event_path_reads_no_user_agent",
+]
+
+[[unit]]
+text = "Sending an event again"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A request that timed out may already have been stored."
+by = [
+    "test:sdk/python/tests/test_client.py::TestTrackNeverRaises::test_a_timeout_returns_false_although_the_event_was_sent",
+    "test:sdk/python/tests/test_transport.py::test_network_failures_raise_transport_error",
+]
+
+[[unit]]
+text = "An event you send again without an event_id is stored again, and then a count metric counts it twice and a revenue, duration or custom metric adds its value twice."
+by = [
+    "test:backend/tests/integration/api/test_how_events_count.py::test_an_event_sent_again_is_stored_and_counted_again",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r8_without_an_event_id_two_identical_purchases_are_both_stored",
+]
+
+[[unit]]
+text = "To have it counted once, give it an event_id."
+by = ["test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r1_a_purchase_sent_again_with_its_event_id_is_stored_and_counted_once"]
+
+[[unit]]
+text = "event_id is your id for one event: text of up to 255 characters, compared exactly."
+by = [
+    "test:backend/tests/unit/schemas/test_tracking_event_id.py::test_255_characters_of_any_width_are_accepted",
+    "test:backend/tests/unit/services/test_event_dedup.py::test_the_event_id_is_compared_exactly",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r15_the_longest_user_id_and_event_id_in_four_byte_characters",
+]
+
+[[unit]]
+text = "Leaving it out, null and \"\" all mean no event_id."
+by = [
+    "test:backend/tests/unit/schemas/test_tracking_event_id.py::test_empty_and_null_mean_no_event_id",
+    "test:backend/tests/unit/schemas/test_tracking_event_id.py::test_an_absent_event_id_is_none",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r12_an_empty_or_null_event_id_means_none",
+]
+
+[[unit]]
+text = "A number, longer text, or text holding NUL is refused with 422, and in /batch one such event refuses the whole request."
+by = [
+    "test:backend/tests/unit/schemas/test_tracking_event_id.py::test_an_invalid_event_id_is_refused",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r12_an_invalid_event_id_is_refused_and_a_batch_with_one_stores_nothing",
+]
+
+[[unit]]
+text = "The server does not store an event when it already has one with the same event_id, user, experiment, flag and event name."
+by = [
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r1_a_purchase_sent_again_with_its_event_id_is_stored_and_counted_once",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r4_one_event_through_track_batch_and_events_is_one_row",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r9_a_flag_only_event_and_an_untagged_event_are_each_stored_once",
+]
+
+[[unit]]
+text = "POST /api/v1/tracking/track and POST /api/v1/tracking/events answer it with 200, \"duplicate\": true and the stored event's id; POST /api/v1/tracking/batch counts it in success_count and in duplicate_count."
+by = [
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r1_a_purchase_sent_again_with_its_event_id_is_stored_and_counted_once",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r4_one_event_through_track_batch_and_events_is_one_row",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r2_the_same_item_twice_in_one_batch_is_stored_once",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r3_a_full_batch_sent_twice_is_stored_once",
+]
+
+[[unit]]
+text = "The first one sent is kept: the value, metadata and timestamp of a later one are not compared and not stored."
+by = [
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r7_the_first_write_wins_and_the_answer_echoes_this_request",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r10_a_duplicate_leaves_the_stored_row_and_cuped_history_alone",
+]
+
+[[unit]]
+text = "The same event_id for another user, experiment, flag or event name is another event."
+by = [
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r5_the_same_event_id_from_two_users_is_two_events",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r6_one_event_id_fanned_out_to_three_experiments_and_a_flag",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r14_two_event_names_with_one_event_id_are_two_events",
+]
+
+[[unit]]
+text = "So an event sent to each of a user's experiments and flags counts once in each of them, and an order id given to both checkout_completed and purchase is two events."
+by = [
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r6_one_event_id_fanned_out_to_three_experiments_and_a_flag",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r14_two_event_names_with_one_event_id_are_two_events",
+]
+
+[[unit]]
+text = "The experiment and the flag are the ones the event was given when it was received."
+by = [
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r13_an_event_first_stored_while_paused_stays_untagged_when_sent_again",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r4_one_event_through_track_batch_and_events_is_one_row",
+]
+
+[[unit]]
+text = "An event first received while its experiment was paused is not stored again when it is sent again after the experiment is started, and stays out of every variant's results."
+by = ["test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r13_an_event_first_stored_while_paused_stays_untagged_when_sent_again"]
+
+[[unit]]
+text = "Events stored before you send event_id keep their repeats."
+by = ["test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_m4_rows_stored_without_a_key_are_read_as_before"]
+
+[[unit]]
+text = "Send it before you start an experiment, so that the whole experiment is counted the same way."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "To check that your server counts a repeat once, send one event twice with the same event_id: the second answer has \"duplicate\": true."
+by = ["test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r1_a_purchase_sent_again_with_its_event_id_is_stored_and_counted_once"]
+
+[[unit]]
+text = "Give each event an event_id that your own system decides and does not publish: the id the SDK makes, a random UUID, or, for events you send from your server with a server-side key, your order or message id."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "From a browser or an app, let the SDK make the id."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Send revenue events from your server."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Make the id once, when the event happens, and send that same id each time."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "The Java SDK gives every event an event_id (Event ids)."
+by = [
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::trackSendsAGeneratedEventId",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::fanOutEntriesShareOneEventId",
+    "test:backend/tests/unit/api/test_how_events_count_rules.py::test_the_sdks_with_an_event_id_option_name_it",
+]
+
+[[unit]]
+text = "The JavaScript SDK sends the eventId you give it, and makes none itself (Event ids)."
+by = [
+    "test:sdk/js/__tests__/event-id.test.ts::sends event_id on a track with an explicit key",
+    "test:sdk/js/__tests__/event-id.test.ts::makes no id of its own: two tracks without an eventId send none",
+    "test:backend/tests/unit/api/test_how_events_count_rules.py::test_the_sdks_with_an_event_id_option_name_it",
+]
+
+[[unit]]
+text = "The Python SDK sends the event_id you give it, and makes none itself (Event ids)."
+by = [
+    "test:sdk/python/tests/test_event_id.py::TestEventId::test_sends_event_id_on_a_track_with_an_explicit_key",
+    "test:sdk/python/tests/test_event_id.py::TestEventId::test_makes_no_id_of_its_own_two_tracks_without_an_event_id_send_none",
+    "test:backend/tests/unit/api/test_how_events_count_rules.py::test_the_sdks_with_an_event_id_option_name_it",
+]
+
+[[unit]]
+text = "No other SDK has an event_id option yet (Limitations): send an event that may be sent again to POST /api/v1/tracking/track or POST /api/v1/tracking/batch yourself."
+by = [
+    "test:backend/tests/unit/api/test_how_events_count_rules.py::test_no_other_sdk_has_an_event_id_option_yet",
+    "test:backend/tests/unit/api/test_how_events_count_rules.py::test_every_sdk_directory_is_listed",
+]
+
+[[unit]]
+text = "event_dedup_keys holds your app's user ids and keeps them when events are deleted."
+by = ["test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_a_key_outlives_its_event_and_is_remembered_while_it_is_kept"]
+
+[[unit]]
+text = "An operator erasing one person's events by hand must delete their keys too."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "An event_id is remembered for as long as its key is kept."
+by = ["test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_a_key_outlives_its_event_and_is_remembered_while_it_is_kept"]
+
+[[unit]]
+text = "When sending fails"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The JavaScript and Python SDKs retry a 429 once, after Retry-After; the server stores nothing for a 429."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::retries once after Retry-After and returns the second response",
+    "test:sdk/js/__tests__/client.test.ts::also retries tracking requests",
+    "test:sdk/js/__tests__/client.test.ts::gives up after the single retry and surfaces status 429",
+    "test:sdk/python/tests/test_client.py::TestRateLimit::test_retries_once_after_retry_after",
+    "test:sdk/python/tests/test_client.py::TestRateLimit::test_track_returns_false_after_retry",
+    "test:backend/tests/unit/api/test_how_events_count_rules.py::test_a_429_is_answered_before_the_route_runs",
+]
+
+[[unit]]
+text = "When an event counts"
+by = ["exempt:label"]
+
+[[unit]]
+text = "An event sent to POST /api/v1/tracking/track or POST /api/v1/tracking/batch counts for the variant the user is assigned to when the server receives it."
+by = [
+    "test:backend/tests/integration/api/test_how_events_count.py::test_an_event_received_before_the_assignment_counts_in_no_variant",
+    "test:backend/tests/integration/api/test_how_events_count.py::test_the_variant_is_the_one_at_receipt_whatever_the_timestamp",
+]
+
+[[unit]]
+text = "Its timestamp does not change that."
+by = ["test:backend/tests/integration/api/test_how_events_count.py::test_the_variant_is_the_one_at_receipt_whatever_the_timestamp"]
+
+[[unit]]
+text = "An event received by /track or /batch before the user's assignment is stored with no variant, and counts in no variant's results, even after the user is assigned."
+by = ["test:backend/tests/integration/api/test_how_events_count.py::test_an_event_received_before_the_assignment_counts_in_no_variant"]
+
+[[unit]]
+text = "Track a user's events for an experiment once its assignment has answered."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "An event received while the experiment is a draft, paused, completed or archived is stored with no variant, and counts in no variant's results, even after the experiment is started again."
+by = [
+    "test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_each_status_and_route_stores_the_variant_only_while_active",
+    "test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_converting_users_per_variant_across_pause_resume_and_complete",
+    "test:backend/tests/integration/api/test_how_events_count.py::test_an_event_received_while_paused_counts_in_no_variant_after_the_start",
+]
+
+[[unit]]
+text = "POST /api/v1/tracking/events stores the variant_id it is sent, whatever the experiment's status; the event counts for that variant once the user is assigned to it, whether the assignment came before or after the event, and in no variant while the user is assigned to another or to none."
+by = [
+    "test:backend/tests/integration/api/test_how_events_count.py::test_events_by_ids_sent_before_the_assignment_count_once_it_names_that_variant",
+    "test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_events_by_ids_keep_the_variant_they_name_for_a_paused_experiment",
+    "test:backend/tests/integration/api/test_how_events_count.py::test_events_by_ids_count_only_for_a_user_assigned_to_that_variant",
+]
+
+[[unit]]
+text = "The results summary's Total Events counts every stored event of the experiment, the ones that count in no variant included."
+by = [
+    "test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_converting_users_per_variant_across_pause_resume_and_complete",
+    "test:backend/tests/integration/api/test_how_events_count.py::test_an_event_received_before_the_assignment_counts_in_no_variant",
+    "test:backend/tests/integration/api/test_how_events_count.py::test_events_by_ids_count_only_for_a_user_assigned_to_that_variant",
+]
+
+[[unit]]
+text = "Holdout results and CUPED history have their own rules: see Mutual Exclusion Groups and CUPED."
+by = [
+    "test:backend/tests/integration/api/test_cuped_history_sent_by_tracking.py::test_history_is_matched_by_exact_id_and_dated_in_utc",
+    "test:backend/tests/integration/api/test_holdout_results.py::TestWindow::test_an_event_received_before_first_seen_does_not_count",
+]
+
+[[unit]]
+text = "Timestamps"
+by = ["exempt:label"]
+
+[[unit]]
+text = "timestamp is when the event happened, by the sender's clock."
+by = [
+    "test:backend/tests/integration/api/test_how_events_count.py::test_the_variant_is_the_one_at_receipt_whatever_the_timestamp",
+    "test:backend/tests/integration/api/test_tracking_untagged_events.py::TestUntaggedTrack::test_an_event_with_no_key_is_stored_as_history",
+]
+
+[[unit]]
+text = "Without one it is the time the server received the event."
+by = ["test:backend/tests/integration/api/test_how_events_count.py::test_an_event_without_a_timestamp_is_dated_when_it_is_received"]
+
+[[unit]]
+text = "The Ruby, PHP and Elixir SDKs send the host's clock when you give none."
+by = [
+    "test:sdk/ruby/spec/controlvar/client_spec.rb::POSTs one /api/v1/tracking/track with the event body",
+    "test:sdk/php/tests/ExperimentationClientTest.php::testTrackWithExperimentKeyPostsOneTrackRequest",
+    "test:sdk/elixir/test/controlvar/client_test.exs::POSTs one /api/v1/tracking/track with the full body",
+]
+
+[[unit]]
+text = "Any timestamp is stored, however far in the past or the future, with one exception: a value at the very edge of the date range whose UTC offset moves it past 0001-01-01 or 9999-12-31 (9999-12-31T23:59:59-01:00, say) is refused with 422, or reported in a batch's errors, and nothing is stored."
+by = [
+    "test:backend/tests/integration/api/test_how_events_count.py::test_the_variant_is_the_one_at_receipt_whatever_the_timestamp",
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_edge_timestamp_is_refused_and_nothing_is_stored",
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_the_same_edges_in_range_are_still_stored",
+]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id} does not read it."
+by = ["test:backend/tests/integration/api/test_how_events_count.py::test_the_results_do_not_read_the_timestamp"]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id}/daily puts each user's first conversion on the UTC day of its timestamp."
+by = [
+    "test:backend/tests/integration/api/test_how_events_count.py::test_the_daily_series_dates_a_first_conversion_by_the_utc_day_of_its_timestamp",
+    "test:backend/tests/integration/api/test_converting_users_consistency.py::test_daily_series_counts_each_user_on_the_day_of_the_first_conversion",
+]
+
+[[unit]]
+text = "A day before the experiment's first day counts on that first day, and a day after its last day on that last day."
+by = ["test:backend/tests/integration/api/test_converting_users_consistency.py::test_daily_series_ends_at_the_results_count_when_users_convert_outside_the_window"]
+
+[[unit]]
+text = "Bots"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Nothing detects bots or crawlers, and nothing limits the events one user sends beyond the per-address rate limit."
+by = [
+    "test:backend/tests/unit/api/test_how_events_count_rules.py::test_the_event_path_reads_no_user_agent",
+    "test:backend/tests/unit/api/test_how_events_count_rules.py::test_the_rate_limit_counts_requests_per_address_not_per_user",
+    "test:backend/tests/integration/api/test_how_events_count.py::test_an_event_from_a_crawler_is_stored_and_counted",
+    "test:backend/tests/integration/api/test_how_events_count.py::test_one_user_can_send_any_number_of_events",
+]
+
+[[unit]]
+text = "Keep bots out where you assign them: do not request an assignment for a bot."
+by = ["exempt:advice"]

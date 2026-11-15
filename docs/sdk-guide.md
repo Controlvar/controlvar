@@ -15,10 +15,10 @@ No other SDK buckets locally, and experiments are always assigned by the server.
 | Purpose | Method and path | Body / query | Response |
 |---|---|---|---|
 | Assign a user to an experiment (sticky) | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason}` |
-| Evaluate a flag | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=<url-encoded JSON, optional>` | — | `{key, enabled, config, reason}` |
+| Evaluate a flag | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=<url-encoded JSON, optional>` | — | `{key, enabled, value, value_type, config, reason}` |
 | All flags for a user | `GET /api/v1/feature-flags/user/{user_id}` | — | `{flag_key: boolean, …}` |
-| Track one event | `POST /api/v1/tracking/track` | `{event_type, event_name?, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | stored event |
-| Track up to 100 events | `POST /api/v1/tracking/batch` | `{events: [...]}` | `{success_count, failure_count, errors}` |
+| Track one event | `POST /api/v1/tracking/track` | `{event_type, event_name?, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?, event_id?}` | stored event, with `duplicate` and `event_id` |
+| Track up to 100 events | `POST /api/v1/tracking/batch` | `{events: [...]}` | `{success_count, failure_count, duplicate_count, errors}` |
 | A user's assignments | `GET /api/v1/tracking/assignments/{user_id}` | — | list |
 
 Each entry of the batch response's `errors` is `{index, event_type, user_id, error}`. `error` says
@@ -26,13 +26,21 @@ why the item was refused (for example, a key that was given was not found), or r
 `Could not store this event (request ID: <id>).` when the server failed to store it; quote that ID
 when you report the failure.
 
+On `/tracking/track`, `/tracking/batch` and `/tracking/events` an event's `metadata` may be at most
+16,384 bytes as compact JSON in UTF-8 and nest at most 64 levels
+([Event limits](api/endpoints.md#track-event)): over either limit, `/track` and `/events` answer
+422 and `/batch` reports the entry in `errors`.
+
 An assign call for a user who is not eligible (global holdout, mutual exclusion group or targeting
 rules) still answers 200 with the control variant, `assigned: false` and `reason` set to `holdout`,
-`mutual_exclusion` or `targeting`; nothing is recorded for that user. Otherwise `assigned` is `true`,
+`mutual_exclusion` or `targeting`; nothing is recorded for that user. An experiment that is not
+ACTIVE answers every user the same way, with `reason` set to its status (`draft`, `paused`,
+`completed` or `archived`). Otherwise `assigned` is `true`,
 `reason` is `assigned`, and every call, sticky ones included, records that the user saw the experiment.
 
 Conversions are matched to experiment metrics by `event_name` (exposures excluded), whatever `event_type`
-an SDK sends. Full request/response examples: [Tracking Endpoints](api/endpoints.md#tracking-endpoints). Per-IP rate
+an SDK sends. An event sent again is stored again unless it carries an `event_id`; see
+[How events count](guides/how-events-count.md#sending-an-event-again). Full request/response examples: [Tracking Endpoints](api/endpoints.md#tracking-endpoints). Per-IP rate
 limit for these paths: `SDK_RATE_LIMIT_PER_MINUTE` (default 6000/min).
 
 **Targeting context.** The user's attributes (`user.attributes` / `user_attributes`) are sent as `context`:
@@ -41,17 +49,21 @@ A flag's targeting rules — as written in the dashboard rule editor — evaluat
 `reason` (`targeting_rule` / `rollout` / `inactive` / `error`) says which path decided. Attribute lookup is
 aliased: a top-level `country` also matches a rule on `user.country` (likewise `device.` / `app.` prefixes),
 and nested objects flatten to dotted keys (`{"app": {"version": "3.2.1"}}` answers `app.version`). The
-JavaScript, Python and React SDKs send it on both calls; each SDK's page says what that SDK sends.
+JavaScript, Python, React and Go SDKs send it on both calls; each SDK's page says what that SDK sends.
 
 ## SDK status
 
 Every SDK uses the contract above: the server decides assignment and flag
-evaluation, results are cached per user + key, and `track` fans out to the user's cached assignments and
-flags when no key is given. The cached assignments include answers with `"assigned": false` (a user the
+evaluation, results are cached per user + key, and `track` fans out to the user's assignments and flags
+when no key is given: those answered in the last 24 hours in the JavaScript, Python and React SDKs, the
+cached ones in the others. They include answers with `"assigned": false` (a user the
 global holdout kept out, for example): holdout results count those users' events like everyone else's. The MD5 consistent hash remains exported by each SDK as a compatibility utility
 (the golden-vector tests still cover it). It is not the function the server buckets flag rollouts with,
 and nothing uses it to decide a flag or a variant; local evaluation (JavaScript and Python, opt-in) uses
 the server's `md5-mod100-v1` bucketing instead.
+
+How long a cached answer keeps a flag change from your users, SDK by SDK:
+[Turning a Flag Off](feature-flags/kill-switch.md).
 
 "Verified live" means the SDK's `contract_smoke` entry point passed
 `tests/sdk-contract/live/run_live_contract.py` against a running backend (see
@@ -82,6 +94,7 @@ when touched.
 | Android (Kotlin) | `sdk/android` | JUnit 5 | yes, in CI — the smoke runs the JVM build of the Kotlin sources (no emulator); the Android library tests run in the nightly tier | [android.md](sdk/android.md) |
 | Flutter / Dart | `sdk/flutter` | `flutter test` | not yet (unit tests run in the nightly tier) | [flutter.md](sdk/flutter.md) |
 | Elixir | `sdk/elixir` | ExUnit | not yet (unit tests run in the nightly tier) | [elixir.md](sdk/elixir.md) |
+| MCP server (not an SDK) | `sdk/mcp` | jest | no: it is not an SDK, and has no contract smoke | [sdk/mcp/README.md](https://github.com/Controlvar/controlvar/blob/main/sdk/mcp/README.md) |
 
 Rows marked "not yet" have a `contract_smoke` entry point that no CI job runs against a live backend;
 their unit tests run in the nightly tier and on pull requests that touch them. Run `run_live_contract.py --sdk <name> --strict` on a
@@ -96,10 +109,10 @@ synchronous. Full reference: [Python SDK](sdk/python.md).
 
 ### Installation
 
-The `controlvar` package is on [PyPI](https://pypi.org/project/controlvar/) (0.1.1, beta):
+The `controlvar` package is on [PyPI](https://pypi.org/project/controlvar/) (0.3.0, beta):
 
 ```bash
-pip install controlvar==0.1.1
+pip install controlvar==0.3.0
 ```
 
 To work on the SDK itself, install it from a clone of this repository instead:
@@ -142,7 +155,7 @@ client.track("user-123", "purchase", event_value=49.99,
              properties={"payment_method": "card"},
              experiment_key="checkout_button_color")
 
-# Track without a key: fans out to every cached assignment and flag for the user
+# Track without a key: sent to every experiment and flag answered for the user
 client.track("user-123", "page_view", properties={"page": "/checkout"})
 ```
 
@@ -162,7 +175,7 @@ client = ExperimentationClient(
 
 | Method | Returns | On failure |
 |---|---|---|
-| `get_assignment(experiment_key, user_id, user_attributes=None)` | `Assignment(experiment_key, user_id, variant_id, variant_name, is_control, configuration)` | raises `ExperimentationError(status, body)` (404 when the experiment is not ACTIVE) |
+| `get_assignment(experiment_key, user_id, user_attributes=None)` | `Assignment(experiment_key, user_id, variant_id, variant_name, is_control, configuration)` | raises `ExperimentationError(status, body)` (404 when no experiment has the key, or for a draft with no control variant); an experiment that is not ACTIVE returns its control variant |
 | `get_variant(experiment_key, user_id, user_attributes=None)` | `str` | `default_variant` |
 | `get_feature_flag(flag_key, user_id, user_attributes=None)` | `FlagEvaluation(key, enabled, config, reason)` | raises `ExperimentationError` |
 | `is_feature_enabled(flag_key, user_id, user_attributes=None)` | `bool` | `False` |
@@ -191,14 +204,14 @@ Smoke against a live backend: `python sdk/python/examples/contract_smoke.py`.
 
 ### Installation
 
-The `@controlvar/js-sdk` package is on [npm](https://www.npmjs.com/package/@controlvar/js-sdk) (0.1.1, beta):
+The `@controlvar/js-sdk` package is on [npm](https://www.npmjs.com/package/@controlvar/js-sdk) (0.3.0, beta):
 
 ```bash
-npm install @controlvar/js-sdk@0.1.1
+npm install @controlvar/js-sdk@0.3.0
 ```
 
 To work on the SDK itself, build it from a clone of this repository instead. `npm pack` writes
-`controlvar-js-sdk-0.1.1.tgz`:
+`controlvar-js-sdk-0.3.0.tgz`:
 
 ```bash
 cd sdk/js
@@ -208,7 +221,7 @@ npm ci && npm run build && npm pack
 Then, in your app, install the packed tarball:
 
 ```bash
-npm install /path/to/controlvar/sdk/js/controlvar-js-sdk-0.1.1.tgz
+npm install /path/to/controlvar/sdk/js/controlvar-js-sdk-0.3.0.tgz
 ```
 
 ### Quick Start
@@ -238,7 +251,7 @@ const isEnabled = await client.isFeatureEnabled('dark_mode', user); // false on 
 // Track for a specific experiment (POST /api/v1/tracking/track)
 await client.track('user-123', 'purchase', { value: 49.99, experimentKey: 'checkout_button_color' });
 
-// Track without a key: fans out to every cached assignment and flag for the user
+// Track without a key: sent to every experiment and flag answered for the user
 await client.track('user-123', 'page_view', { properties: { page: '/checkout' } });
 ```
 
@@ -269,6 +282,7 @@ const client = new ExperimentationClient({
 | `trackBatch(events)` | `Promise<BatchResult>` | never rejects; chunked at 100 |
 | `fetchAssignments(userId)` | server-side list from `/tracking/assignments/{userId}` | rejects |
 | `getAssignments(userId)`, `getEvaluatedFlags(userId)`, `clearCache()` | local cache access | — |
+| `getCachedFlags(userId)` | `FlagEvaluation[]`: cached, unexpired evaluations; with local evaluation each carries `source` (`'local'` or `'server'`) | — |
 | `consistentHash(userId, flagKey)`, `md5Hex(...)` (module exports) | compatibility hash utilities | — |
 
 Concurrent calls for the same user + key share one request; failures are never cached; a 429 is
@@ -325,17 +339,21 @@ function CheckoutButton() {
 
 ### Installation
 
-Install it from a clone of this repository: `mvn install` in `sdk/java` builds both modules and
-installs them into your local `~/.m2`, where the dependency below resolves.
+The Java SDK and its Spring Boot starter are on
+[Maven Central](https://central.sonatype.com/artifact/com.controlvar/controlvar-sdk):
 
 ```xml
 <dependency>
   <groupId>com.controlvar</groupId>
   <artifactId>controlvar-sdk</artifactId>
-  <version>1.0.0</version>
+  <version>0.1.0</version>
 </dependency>
 <!-- Spring Boot: use controlvar-spring-boot-starter instead -->
 ```
+
+To work on the SDK itself, install it from a clone of this repository instead: `./mvnw install` in
+`sdk/java` builds both modules and installs them into your local `~/.m2`, where the dependency
+above resolves.
 
 ### Quick Start
 
@@ -353,7 +371,7 @@ ExperimentationClient client = new ExperimentationClient(config);
 
 User user = User.builder("user-123")
     .attribute("country", "US")
-    .attribute("plan", "pro")          // sent as `context` on assignment
+    .attribute("plan", "pro")          // sent as `context` on assignment and flag evaluation
     .build();
 
 // Sticky experiment assignment (POST /api/v1/tracking/assign)
@@ -362,7 +380,7 @@ assignment.getVariantName();       // "control" | "treatment"
 assignment.isControl();
 assignment.getConfiguration();     // Map<String,Object> or null
 
-// Feature flag (GET /api/v1/feature-flags/evaluate/{key}?user_id=...)
+// Feature flag (GET /api/v1/feature-flags/evaluate/{key}?user_id=...&context=..., the attributes as JSON)
 FlagEvaluation flag = client.evaluateFeatureFlag(user, "dark_mode");
 flag.isEnabled(); flag.getConfig();
 boolean on = client.isFeatureEnabled(user, "dark_mode");   // false on failure
@@ -384,7 +402,7 @@ client.trackBatch(List.of(...));     // chunked at 100; trackEventSync / trackBa
 
 | Method | Returns | On failure |
 |---|---|---|
-| `getExperimentAssignment(user, experimentKey)` | `ExperimentAssignment` (`getExperimentKey, getUserId, getVariantId, getVariantName, isControl, getConfiguration`) | throws `ExperimentationException` (unchecked; 404 when not ACTIVE, network errors) |
+| `getExperimentAssignment(user, experimentKey)` | `ExperimentAssignment` (`getExperimentKey, getUserId, getVariantId, getVariantName, isControl, getConfiguration`) | throws `ExperimentationException` (unchecked; 404 when no experiment has the key or a draft has no control variant, network errors); an experiment that is not ACTIVE returns its control variant |
 | `evaluateFeatureFlag(user, flagKey)` | `FlagEvaluation` (`getKey, isEnabled, getConfig, getConfigMap`) | throws `ExperimentationException` |
 | `isFeatureEnabled(user, flagKey)` | `boolean` | `false` |
 | `trackEvent(userId, eventName, properties[, experimentKey, featureFlagKey, value])`, `trackEvent(TrackEvent)` | `void` (async) | swallowed |

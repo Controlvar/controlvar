@@ -1,0 +1,404 @@
+/**
+ * V-S2 and V-OPT: the configuration the server refuses at start-up, and the
+ * plain-HTTP rule with its opt-in. Each case spawns the built server with a
+ * real, explicit environment (no proxy variable unless the case is about
+ * one), sends `initialize`, and reads what happened: a refusal is one stderr
+ * line naming the variable, exit code 2, nothing on stdout, and no value
+ * echoed that might be a secret; an acceptance answers `initialize`.
+ */
+
+import { ARGUMENTS_REFUSED, readConfig } from "../src/config";
+import { call, initialize, json, newKey, refused, start, startStub } from "./helpers";
+
+const KEY = newKey();
+
+function env(url: string | undefined, extra: Record<string, string> = {}): Record<string, string> {
+  const out: Record<string, string> = { CONTROLVAR_API_KEY: KEY, ...extra };
+  if (url !== undefined) out.CONTROLVAR_API_URL = url;
+  return out;
+}
+
+async function expectRefused(
+  environment: Record<string, string>,
+  naming: string,
+  options: { args?: string[]; secrets?: string[]; notShown?: string[]; text?: string } = {},
+) {
+  const { proc, exit, lines } = await refused(environment, options.args ?? [], options.secrets ?? []);
+  expect(exit.code).toBe(2);
+  expect(proc.stdoutLines).toEqual([]); // initialize never answered
+  expect(lines).toHaveLength(1);
+  expect(lines[0]).toContain(naming);
+  if (options.text !== undefined) expect(lines[0]).toBe(options.text);
+  for (const value of options.notShown ?? []) expect(lines[0]).not.toContain(value);
+  return lines[0];
+}
+
+async function expectAccepted(environment: Record<string, string>) {
+  const proc = start(environment);
+  const answer = await initialize(proc);
+  expect(answer.result?.serverInfo?.name).toBe("controlvar");
+  return proc;
+}
+
+describe("V-S2: arguments", () => {
+  test.each([["check"], ["--help"], ["--version"], [newKey()]])("the argument %s is refused and not echoed", async (arg) => {
+    await expectRefused(env("http://localhost:8000"), "CONTROLVAR_API_URL", {
+      args: [arg],
+      secrets: arg.startsWith("eptk_") ? [arg] : [],
+      notShown: [arg],
+      text: ARGUMENTS_REFUSED,
+    });
+  });
+});
+
+describe("V-S2: CONTROLVAR_API_URL", () => {
+  test("missing", async () => {
+    await expectRefused(env(undefined), "CONTROLVAR_API_URL is not set");
+  });
+
+  test.each([[""], ["   "]])("empty: %j", async (value) => {
+    await expectRefused(env(value), "CONTROLVAR_API_URL is not set");
+  });
+
+  test.each([["localhost:8000"], ["ftp://controlvar.example.com"], ["not a url"], ["//controlvar.example.com"]])(
+    "not http(s): %s",
+    async (value) => {
+      const line = await expectRefused(env(value), "CONTROLVAR_API_URL");
+      expect(line).toContain("not an http:// or https:// address");
+    },
+  );
+
+  test.each([
+    ["https://user:hunter2-password@controlvar.example.com", "hunter2-password"],
+    ["https://some-user@controlvar.example.com", "some-user"],
+    ["https://controlvar.example.com/?token=query-canary", "query-canary"],
+    ["https://controlvar.example.com/#fragment-canary", "fragment-canary"],
+  ])("user info, query or fragment, never echoed: %s", async (value, canary) => {
+    const line = await expectRefused(env(value), "CONTROLVAR_API_URL", { notShown: [canary, value] });
+    expect(line).toContain("user name, password, query or fragment");
+  });
+
+  test("a URL with user info and no http scheme is not echoed either", async () => {
+    await expectRefused(env("ftp://user:pw-canary@h"), "CONTROLVAR_API_URL", { notShown: ["pw-canary"] });
+  });
+
+  test.each([["https://h/prefix"], ["https://h/api/v1"], ["https://h//"]])("a path is refused: %s", async (value) => {
+    const line = await expectRefused(env(value), "CONTROLVAR_API_URL");
+    expect(line).toContain("which has a path");
+  });
+
+  test.each([["https://h"], ["https://h/"]])("an origin is accepted: %s", async (value) => {
+    await expectAccepted(env(value));
+  });
+});
+
+describe("V-S2: the host check and every request use the same parsed URL", () => {
+  test.each([["/?"], ["/#"], ["@"]])("http://localhost:<port>%s reaches /api/v1/... at that origin", async (form) => {
+    const stub = await startStub((_request, response) => json(response, 200, { items: [], total: 0, skip: 0, limit: 50 }));
+    const url = form === "@" ? `http://@localhost:${stub.port}` : `http://localhost:${stub.port}${form}`;
+    const proc = await expectAccepted(env(url));
+    const result = await call(proc, "list_feature_flags");
+    expect(result.isError).toBe(false);
+    expect(stub.requests.map((r) => r.url.split("?")[0])).toEqual(["/api/v1/feature-flags/"]);
+  });
+});
+
+describe("V-S2: CONTROLVAR_API_KEY", () => {
+  test("missing", async () => {
+    await expectRefused({ CONTROLVAR_API_URL: "http://localhost:8000" }, "CONTROLVAR_API_KEY is not set");
+  });
+
+  test("blank", async () => {
+    await expectRefused({ CONTROLVAR_API_URL: "http://localhost:8000", CONTROLVAR_API_KEY: "  " }, "CONTROLVAR_API_KEY is not set");
+  });
+
+  test("a sign-in token is named as one, and not echoed", async () => {
+    // Starts like a sign-in token (a JWT's encoded header) and is not one.
+    const token = "eyJ-not-a-real-sign-in-token-canary";
+    const line = await expectRefused(
+      { CONTROLVAR_API_URL: "http://localhost:8000", CONTROLVAR_API_KEY: token },
+      "CONTROLVAR_API_KEY",
+      { notShown: [token] },
+    );
+    expect(line).toContain("looks like a sign-in token");
+  });
+
+  test.each([
+    ["too long", `eptk_${"a".repeat(196)}`],
+    ["a space inside", "eptk_0123456789 abcdef0123456789abcdef"],
+    ["not ASCII", "eptk_0123456789abcdef0123456789abcdé"],
+  ])("refused, never echoed: %s", async (_name, value) => {
+    const line = await expectRefused(
+      { CONTROLVAR_API_URL: "http://localhost:8000", CONTROLVAR_API_KEY: value },
+      "CONTROLVAR_API_KEY",
+    );
+    expect(line).toContain("is not an API key");
+  });
+
+  test("a key that does not start eptk_ is accepted (the seed scripts store any value)", async () => {
+    await expectAccepted({ CONTROLVAR_API_URL: "http://localhost:8000", CONTROLVAR_API_KEY: "seeded-demo-key-0001" });
+  });
+});
+
+describe("V-OPT: plain HTTP without the opt-in", () => {
+  test.each([
+    ["http://localhost:8000"],
+    ["http://127.0.0.1:8000"],
+    ["http://[::1]:8000"],
+    ["http://LOCALHOST:8000"],
+    ["https://controlvar.example.com"],
+  ])("accepted with no warning: %s", async (url) => {
+    const proc = await expectAccepted(env(url));
+    expect(proc.stderr()).toBe("");
+  });
+
+  test.each([
+    ["http://controlvar.example.com"],
+    ["http://10.0.0.5:8000"],
+    ["http://127.0.0.2:8000"],
+    ["http://0.0.0.0:8000"],
+    ["http://foo.localhost:8000"],
+    ["http://localhost.example.com"],
+    ["http://localhost.:8000"],
+  ])("refused with E2d: %s", async (url) => {
+    const line = await expectRefused(env(url), "CONTROLVAR_API_URL");
+    expect(line).toContain("a plain http:// address on another computer");
+    expect(line).toContain("CONTROLVAR_ALLOW_INSECURE_HTTP=1");
+  });
+
+  test("NODE_USE_ENV_PROXY=1 makes localhost another computer: E2d, naming the variable", async () => {
+    const line = await expectRefused(env("http://localhost:8000", { NODE_USE_ENV_PROXY: "1" }), "CONTROLVAR_API_URL");
+    expect(line).toContain("NODE_USE_ENV_PROXY");
+  });
+});
+
+describe("V-OPT: the --use-env-proxy flag, read in-process", () => {
+  // No Node this package runs on accepts the flag (each says "bad option",
+  // and "not allowed in NODE_OPTIONS"), so a spawned server cannot show it:
+  // readConfig is given the flag directly, in execArgv and in NODE_OPTIONS.
+  const local = { CONTROLVAR_API_URL: "http://localhost:8000", CONTROLVAR_API_KEY: KEY };
+  const throughProxy = "NODE_USE_ENV_PROXY (or --use-env-proxy) makes Node send requests through a proxy";
+
+  test("with neither, http://localhost:8000 is accepted", () => {
+    expect(readConfig([], local, []).ok).toBe(true);
+    expect(readConfig([], { ...local, NODE_OPTIONS: "--max-old-space-size=100" }, ["--max-old-space-size=100"]).ok).toBe(true);
+  });
+
+  test.each([["--use-env-proxy"], ["--use-env-proxy=1"]])("execArgv %s gives E2d", (flag) => {
+    const result = readConfig([], local, [flag]);
+    if (result.ok) throw new Error(`execArgv ${flag} was accepted for http://localhost:8000`);
+    expect(result.message).toContain(throughProxy);
+  });
+
+  test.each([["--use-env-proxy"], ["--max-old-space-size=100 --use-env-proxy"], ["--use-env-proxy=1"]])(
+    "NODE_OPTIONS=%j gives E2d",
+    (options) => {
+      const result = readConfig([], { ...local, NODE_OPTIONS: options }, []);
+      if (result.ok) throw new Error(`NODE_OPTIONS=${options} was accepted for http://localhost:8000`);
+      expect(result.message).toContain(throughProxy);
+    },
+  );
+});
+
+describe("V-OPT: CONTROLVAR_ALLOW_INSECURE_HTTP with any value but 1", () => {
+  const canary = "insecure-value-canary-0123456789";
+  test.each([[""], ["0"], ["true"], ["TRUE"], ["yes"], ["on"], [" 1"], ["1 "], ["01"], [canary]])(
+    "%j is refused with E2e, for an https:// address too",
+    async (value) => {
+      for (const url of ["http://10.0.0.5:8000", "https://controlvar.example.com"]) {
+        // The canary is a secret to the scan after the test: no part of it
+        // may be echoed. (The short values occur in the message's own words.)
+        const line = await expectRefused(env(url, { CONTROLVAR_ALLOW_INSECURE_HTTP: value }), "CONTROLVAR_ALLOW_INSECURE_HTTP", {
+          secrets: value === canary ? [canary] : [],
+          notShown: value === canary ? [canary] : [],
+        });
+        expect(line).toContain("has a value this server does not accept");
+      }
+    },
+  );
+});
+
+describe("V-OPT: CONTROLVAR_ALLOW_INSECURE_HTTP=1", () => {
+  const optIn = { CONTROLVAR_ALLOW_INSECURE_HTTP: "1" };
+
+  test("http://10.0.0.5:8000 answers initialize, with exactly one W1 line at every start", async () => {
+    for (let start = 1; start <= 2; start += 1) {
+      const proc = await expectAccepted(env("http://10.0.0.5:8000", optIn));
+      const lines = proc.stderr().replace(/\n$/, "").split("\n");
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toMatch(/^Warning: CONTROLVAR_ALLOW_INSECURE_HTTP=1: /);
+      expect(lines[0]).toContain("10.0.0.5:8000");
+    }
+  });
+
+  test.each([["https://controlvar.example.com"], ["http://localhost:8000"]])("no warning for %s", async (url) => {
+    const proc = await expectAccepted(env(url, optIn));
+    expect(proc.stderr()).toBe("");
+  });
+
+  test("with NODE_USE_ENV_PROXY set, localhost is accepted with a W1 line naming the variable", async () => {
+    const proc = await expectAccepted(env("http://localhost:8000", { ...optIn, NODE_USE_ENV_PROXY: "1" }));
+    const lines = proc.stderr().replace(/\n$/, "").split("\n");
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("NODE_USE_ENV_PROXY");
+    expect(lines[0]).toContain("localhost:8000");
+  });
+
+  test("it lifts no other rule: user info", async () => {
+    const line = await expectRefused(env("http://u:pw-canary-123@10.0.0.5", optIn), "CONTROLVAR_API_URL", {
+      notShown: ["pw-canary-123"],
+    });
+    expect(line).toContain("user name, password, query or fragment");
+  });
+
+  test("it lifts no other rule: a path", async () => {
+    const line = await expectRefused(env("http://10.0.0.5/prefix", optIn), "CONTROLVAR_API_URL");
+    expect(line).toContain("which has a path");
+  });
+});
+
+describe("configuration errors never echo a value shaped like a key", () => {
+  const local = { CONTROLVAR_API_KEY: KEY };
+  const keyShaped = `eptk_${"a1b2c3d4".repeat(4)}`;
+  const signInShaped = "eyJhbGciOiJIUzI1NiJ9-canary";
+  const dottedSignInShaped = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2ln";
+  const both = [[keyShaped], [signInShaped]];
+  const run = (url: string, extra: Record<string, string> = {}) =>
+    readConfig([], { ...local, CONTROLVAR_API_URL: url, ...extra }, []);
+  const message = (result: ReturnType<typeof readConfig>): string => {
+    if (result.ok) throw new Error("accepted");
+    return result.message;
+  };
+  const warnings = (result: ReturnType<typeof readConfig>): string => {
+    if (!result.ok) throw new Error(result.message);
+    return result.config.warnings.join("\n");
+  };
+  // No part of the value (its first 8 characters, in either case) may appear.
+  const hides = (text: string, value: string) => {
+    expect(text).not.toContain(value);
+    expect(text.toLowerCase()).not.toContain(value.slice(0, 8).toLowerCase());
+  };
+
+  // Refused at once, with a fixed message, wherever the value sits in the address.
+  test.each([
+    ["https://<v>"],
+    ["http://<v>"],
+    ["https:<v>"],
+    ["https://<v>/x"],
+    ["http://<v>:8000"],
+    ["http://cv.<v>"],
+    ["https://cv.<v>/x"],
+    ["ftp://<v>"],
+  ])("a key in the host is refused with a fixed message: %s", (shape) => {
+    for (const value of [keyShaped, keyShaped.toUpperCase(), signInShaped.toLowerCase()]) {
+      const text = message(run(shape.replace("<v>", value)));
+      expect(text).toContain("looks like an API key, not an address");
+      hides(text, value);
+    }
+  });
+
+  test.each([[dottedSignInShaped], [`  ${dottedSignInShaped}`]])("a dotted sign-in token as the host: %j", (value) => {
+    for (const url of [`http://${value.trim()}`, `https://${value.trim()}/x`]) {
+      const text = message(run(url));
+      expect(text).toContain("looks like an API key, not an address");
+      hides(text, value.trim());
+    }
+  });
+
+  // The API-key shape is refused anywhere in the host, not only at the start of a label.
+  test.each([["https://x<v>"], ['https://"<v>"'], ["https://cv.x<v>.com"]])(
+    "an API-key shape inside a label is refused with a fixed message: %s",
+    (shape) => {
+      const text = message(run(shape.replace("<v>", keyShaped)));
+      expect(text).toContain("looks like an API key, not an address");
+      hides(text, keyShaped);
+    },
+  );
+
+  // A sign-in shape in the middle of a label is accepted as a host name, but never printed.
+  test("E2d and W1: a sign-in shape in the middle of a label is not echoed", () => {
+    const url = `http://a.x${signInShaped}.com`;
+    hides(message(run(url)), signInShaped);
+    hides(warnings(run(url, { CONTROLVAR_ALLOW_INSECURE_HTTP: "1" })), signInShaped);
+  });
+
+  // E2a: the address is not http(s) and has no host to refuse.
+  test.each(both)("E2a: %s is not echoed", (value) => {
+    hides(message(run(value)), value);
+  });
+
+  test.each([[`Bearer ${keyShaped}`], [`CONTROLVAR_API_KEY=${keyShaped}`], [`  ${keyShaped}`], [`\t${signInShaped}`]])(
+    "E2a: a key inside or after other text is not echoed: %j",
+    (value) => {
+      const text = message(run(value));
+      expect(text).toContain("not an http:// or https:// address");
+      hides(text, keyShaped.slice(0, 8));
+      hides(text, signInShaped);
+    },
+  );
+
+  test("E2a and E3: the match is case-insensitive", () => {
+    for (const value of [signInShaped.toLowerCase(), signInShaped.toUpperCase(), keyShaped.toUpperCase()]) {
+      hides(message(run(`  ${value}`)), value);
+      hides(message(run(`https://controlvar.example.com/${value}`)), value);
+    }
+  });
+
+  test("E2a: an ordinary value is still echoed", () => {
+    expect(message(run("ftp://controlvar.example.com"))).toContain('"ftp://controlvar.example.com"');
+  });
+
+  // E3: a path.
+  test.each([[`https://controlvar.example.com/${keyShaped}`], [`https://controlvar.example.com/a/${signInShaped}`]])(
+    "E3: a path containing a key is not echoed: %s",
+    (value) => {
+      const text = message(run(value));
+      expect(text).toContain("has a path");
+      hides(text, keyShaped.slice(0, 8));
+      hides(text, signInShaped);
+    },
+  );
+
+  test("E3: an ordinary path is still echoed", () => {
+    expect(message(run("https://h/prefix"))).toContain('"https://h/prefix"');
+  });
+
+  // E2d: plain http:// on another computer.
+  test("E2d: a host with neither . nor : is not echoed", () => {
+    const text = message(run("http://intranet-canary"));
+    expect(text).toContain("a plain http:// address on another computer");
+    expect(text).not.toContain("intranet-canary");
+  });
+
+  test("E2d: an ordinary host is still echoed", () => {
+    expect(message(run("http://controlvar.example.com"))).toContain('"http://controlvar.example.com"');
+    expect(message(run("http://10.0.0.5:8000"))).toContain('"http://10.0.0.5:8000"');
+  });
+
+  test("E2d through a proxy: the names of this computer are echoed, a bare host is not", () => {
+    const proxy = { NODE_USE_ENV_PROXY: "1" };
+    expect(message(run("http://localhost:8000", proxy))).toContain('"http://localhost:8000"');
+    expect(message(run("http://localhost", proxy))).toContain('"http://localhost"');
+    expect(message(run("http://intranet-canary", proxy))).not.toContain("intranet-canary");
+  });
+
+  // W1: the opt-in warning.
+  const optIn = { CONTROLVAR_ALLOW_INSECURE_HTTP: "1" };
+  test("W1: a host with neither . nor : is not echoed", () => {
+    const text = warnings(run("http://intranet-canary", optIn));
+    expect(text).toContain("CONTROLVAR_ALLOW_INSECURE_HTTP=1");
+    expect(text).not.toContain("intranet-canary");
+  });
+
+  test("W1: an ordinary host is still echoed, with and without a proxy", () => {
+    expect(warnings(run("http://10.0.0.5:8000", optIn))).toContain("10.0.0.5:8000");
+    expect(warnings(run("http://localhost:8000", { ...optIn, NODE_USE_ENV_PROXY: "1" }))).toContain("localhost:8000");
+  });
+
+  test("a key-shaped value is never in a warning, the only success output", () => {
+    for (const value of [keyShaped, signInShaped, dottedSignInShaped]) {
+      const result = run(`http://${value}`, optIn);
+      expect(result.ok).toBe(false);
+    }
+  });
+});

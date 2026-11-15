@@ -3,9 +3,10 @@
 ``infrastructure/cdk/stacks/authentication_stack.py`` creates the reference
 pool: administrator-created users only, email as a sign-in alias, email,
 given name and family name required, and the password policy below.  moto
-4.2.14 enforces none of the admin-only, required-attribute or alias rules
-(the docs' steps for those are written from AWS's documentation), but the
-shape is kept so a moto release that starts enforcing them is exercised.
+5.2.5, like 4.2.14 before it, enforces none of the admin-only,
+required-attribute or alias rules (the docs' steps for those are written from
+AWS's documentation), but the shape is kept so a moto release that starts
+enforcing them is exercised.
 
 :func:`run_documented_onboarding` makes the boto3 calls that the commands of
 ``docs/cognito_integration.md`` "Adding a user" make, read from the page by

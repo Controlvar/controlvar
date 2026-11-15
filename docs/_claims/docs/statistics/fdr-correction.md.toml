@@ -138,10 +138,12 @@ text = "The p-values are the ones you send: the experiment in the path must exis
 by = ["test:backend/tests/integration/api/test_post_strat_api.py::TestFDRCorrectionEndpoint::test_fdr_correction_nonexistent_experiment_returns_404"]
 
 [[unit]]
-text = "Any logged-in user can call it."
+text = "Anyone who may view the experiment can call it."
 by = [
     "test:backend/tests/integration/api/test_experiment_errors_fixed_message.py",
     "test:backend/tests/integration/api/test_post_strat_api.py::TestPostStratAuthRequired::test_fdr_correction_requires_auth",
+    "test:backend/tests/integration/api/test_experiment_data_read_rule.py::test_every_shipped_role_keeps_its_answer_on_each_route",
+    "test:backend/tests/integration/api/test_experiment_data_read_rule.py::test_no_base_role_is_refused_on_results_routes",
 ]
 
 [[unit]]

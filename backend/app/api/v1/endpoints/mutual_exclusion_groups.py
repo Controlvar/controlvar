@@ -6,9 +6,9 @@ from being in conflicting experiments.
 
 Routes:
     GET    /api/v1/mutual-exclusion-groups                                — list groups
-    POST   /api/v1/mutual-exclusion-groups                                — create group (DEVELOPER+)
+    POST   /api/v1/mutual-exclusion-groups                                — create group (DEVELOPER+; 409: name taken)
     GET    /api/v1/mutual-exclusion-groups/{group_id}                     — get group
-    PUT    /api/v1/mutual-exclusion-groups/{group_id}                     — update group (DEVELOPER+; a status change ADMIN)
+    PUT    /api/v1/mutual-exclusion-groups/{group_id}                     — update group (DEVELOPER+; a status change ADMIN; 409: name taken)
     DELETE /api/v1/mutual-exclusion-groups/{group_id}                     — archive group (ADMIN)
     POST   /api/v1/mutual-exclusion-groups/{group_id}/experiments         — add experiment
     DELETE /api/v1/mutual-exclusion-groups/{group_id}/experiments/{eid}   — remove experiment
@@ -20,10 +20,14 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from backend.app.api import deps
+from backend.app.api import deps, experiment_cache
+from backend.app.api.enum_filters import enum_filter
+from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.query_params import MAX_OFFSET, describe_as_int64
 from backend.app.core.permissions import Action, ResourceType, check_permission
 from backend.app.models.audit_log import ActionType, EntityType
 from backend.app.models.experiment import Experiment
+from backend.app.models.mutual_exclusion_group import MutualExclusionGroupStatus
 from backend.app.models.user import User, UserRole
 from backend.app.schemas.mutual_exclusion_group import (
     AddExperimentToGroupRequest,
@@ -38,11 +42,23 @@ from backend.app.services.audit_service import (
     audit_identity,
     audit_snapshot,
 )
-from backend.app.services.mutual_exclusion_service import MutualExclusionService
+from backend.app.services.mutual_exclusion_service import (
+    GroupNameTaken,
+    MutualExclusionService,
+    group_name_taken_detail,
+)
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
+
+#: The list's ``status`` filter values, as the responses spell them (#955).
+GROUP_STATUS_SPELLINGS = ("active", "archived")
+
+GROUP_STATUS_FILTER_DESCRIPTION = (
+    "Only groups with this status: `active` or `archived`, in any case. Any "
+    "other value answers 422; an empty value means no filter."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -109,17 +125,25 @@ def _group_name(db: Session, group_id: UUID):
     tags=["Mutual Exclusion Groups"],
 )
 def list_groups(
-    status_filter: str = Query(default=None, alias="status"),
-    skip: int = Query(default=0, ge=0),
+    status_filter: str = Query(
+        default=None, alias="status", description=GROUP_STATUS_FILTER_DESCRIPTION
+    ),
+    skip: int = Query(
+        default=0, ge=0, le=MAX_OFFSET, json_schema_extra=describe_as_int64
+    ),
     limit: int = Query(default=100, ge=1, le=1000),
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_active_user),
 ) -> MutualExclusionGroupListResponse:
     """List mutual exclusion groups with optional status filter."""
     _require_developer(current_user)
+    # After the permission check (#955); the member goes to the query.
+    status_member = enum_filter(
+        status_filter, MutualExclusionGroupStatus, "status", GROUP_STATUS_SPELLINGS
+    )
     service = MutualExclusionService(db)
-    items = service.list_groups(status=status_filter, skip=skip, limit=limit)
-    total = service.count_groups(status=status_filter)
+    items = service.list_groups(status=status_member, skip=skip, limit=limit)
+    total = service.count_groups(status=status_member)
     return MutualExclusionGroupListResponse(items=items, total=total)
 
 
@@ -133,8 +157,14 @@ def list_groups(
     response_model=MutualExclusionGroupResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a mutual exclusion group",
-    description="Create a new mutual exclusion group. Requires DEVELOPER or ADMIN role.",
+    description=(
+        "Create a new mutual exclusion group. Requires permission to create "
+        "experiments: DEVELOPER or ADMIN, or in the full profile a custom role "
+        "or direct grant giving experiment (create). "
+        "409 when another group has the name (compared exactly, case included)."
+    ),
     tags=["Mutual Exclusion Groups"],
+    responses={409: {"description": "Another mutual exclusion group has this name"}},
 )
 def create_group(
     data: MutualExclusionGroupCreate,
@@ -144,12 +174,18 @@ def create_group(
     """Create a new mutual exclusion group."""
     _require_developer(current_user)
     service = MutualExclusionService(db)
-    group = service.create_group(
-        name=data.name,
-        description=data.description,
-        traffic_allocation=data.traffic_allocation,
-        owner_id=current_user.id,
-    )
+    try:
+        group = service.create_group(
+            name=data.name,
+            description=data.description,
+            traffic_allocation=data.traffic_allocation,
+            owner_id=current_user.id,
+        )
+    except GroupNameTaken:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=group_name_taken_detail(data.name),
+        ) from None
     response = MutualExclusionGroupResponse.model_validate(group)
     _record(
         db,
@@ -202,12 +238,16 @@ def get_group(
     summary="Update a mutual exclusion group",
     description=(
         "Update a mutual exclusion group's name, description or traffic "
-        "allocation. Requires DEVELOPER or ADMIN role. Changing status "
+        "allocation. Requires permission to create experiments: DEVELOPER or "
+        "ADMIN, or in the full profile a custom role or direct grant giving "
+        "experiment (create). Changing status "
         "(archiving or unarchiving) requires ADMIN role, as archiving through "
         "DELETE does; sending the group's current status is accepted from a "
-        "DEVELOPER."
+        "DEVELOPER. 409 when another group has the name (compared exactly, "
+        "case included)."
     ),
     tags=["Mutual Exclusion Groups"],
+    responses={409: {"description": "Another mutual exclusion group has this name"}},
 )
 def update_group(
     group_id: UUID,
@@ -230,13 +270,19 @@ def update_group(
     if data.status is not None and data.status.value != _status_value(existing.status):
         _require_admin(current_user)
     before = audit_snapshot(EntityType.MUTUAL_EXCLUSION_GROUP, existing)
-    group = service.update_group(
-        group_id=group_id,
-        name=data.name,
-        description=data.description,
-        traffic_allocation=data.traffic_allocation,
-        status=data.status.value if data.status else None,
-    )
+    try:
+        group = service.update_group(
+            group_id=group_id,
+            name=data.name,
+            description=data.description,
+            traffic_allocation=data.traffic_allocation,
+            status=data.status.value if data.status else None,
+        )
+    except GroupNameTaken:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=group_name_taken_detail(data.name),
+        ) from None
     if not group:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -315,16 +361,24 @@ def archive_group(
     "/{group_id}/experiments",
     status_code=status.HTTP_200_OK,
     summary="Add experiment to mutual exclusion group",
-    description="Add an experiment to a mutual exclusion group. Requires DEVELOPER or ADMIN role.",
+    description=(
+        "Add an experiment to a mutual exclusion group. Requires permission to "
+        "create experiments: DEVELOPER or ADMIN, or in the full profile a custom "
+        "role or direct grant giving experiment (create)."
+    ),
     tags=["Mutual Exclusion Groups"],
 )
-def add_experiment_to_group(
+async def add_experiment_to_group(
     group_id: UUID,
     data: AddExperimentToGroupRequest,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_active_user),
 ):
-    """Add an experiment to a mutual exclusion group."""
+    """Add an experiment to a mutual exclusion group.
+
+    The experiment's cached detail shows its group, so it is dropped once the
+    change is committed.
+    """
     _require_developer(current_user)
     service = MutualExclusionService(db)
     already_member = (
@@ -335,6 +389,7 @@ def add_experiment_to_group(
     )
     try:
         service.add_experiment_to_group(group_id, data.experiment_id)
+        await experiment_cache.drop_cached_experiment_details([data.experiment_id])
         if not already_member:
             _record(
                 db,
@@ -366,20 +421,29 @@ def add_experiment_to_group(
     "/{group_id}/experiments/{experiment_id}",
     status_code=status.HTTP_200_OK,
     summary="Remove experiment from mutual exclusion group",
-    description="Remove an experiment from a mutual exclusion group. Requires DEVELOPER or ADMIN role.",
+    description=(
+        "Remove an experiment from a mutual exclusion group. Requires permission "
+        "to create experiments: DEVELOPER or ADMIN, or in the full profile a "
+        "custom role or direct grant giving experiment (create)."
+    ),
     tags=["Mutual Exclusion Groups"],
 )
-def remove_experiment_from_group(
+async def remove_experiment_from_group(
     group_id: UUID,
     experiment_id: UUID,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_active_user),
 ):
-    """Remove an experiment from a mutual exclusion group."""
+    """Remove an experiment from a mutual exclusion group.
+
+    The experiment's cached detail shows its group, so it is dropped once the
+    change is committed.
+    """
     _require_developer(current_user)
     service = MutualExclusionService(db)
     try:
         service.remove_experiment_from_group(group_id, experiment_id)
+        await experiment_cache.drop_cached_experiment_details([experiment_id])
         _record(
             db,
             current_user,

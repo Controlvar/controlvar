@@ -1,18 +1,22 @@
 # Event tracking service
 # backend/app/services/event_service.py
 import logging
+import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Union
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, Union
 from uuid import UUID
 
-from sqlalchemy import desc, func
+from sqlalchemy import desc, func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from backend.app.models.assignment import Assignment
 from backend.app.models.event import Event, EventType, normalize_event_timestamp
+from backend.app.models.event_dedup_key import EventDedupKey
 from backend.app.models.experiment import Experiment, Variant
 from backend.app.models.feature_flag import FeatureFlag
 from backend.app.schemas.tracking import EventCreate, UntaggedEventCreate
+from backend.app.services.event_dedup import dedup_key
 
 logger = logging.getLogger(__name__)
 
@@ -195,6 +199,74 @@ class EventService:
         except Exception as e:
             # The type only: a database error's text repeats the row's
             # parameters, the user id among them.
+            logger.error(f"Error tracking event: {type(e).__name__}")
+            self.db.rollback()
+            raise
+
+    def track_event_once(
+        self,
+        event_data: Union[EventCreate, UntaggedEventCreate, Mapping[str, Any]],
+        event_id: Optional[str],
+        *,
+        allow_untagged: bool,
+    ) -> Tuple[UUID, bool, Optional[Event]]:
+        """Store an event unless one with the same key is already stored (#1543).
+
+        Returns ``(id, created, event)``:
+
+        * ``event_id`` None: :meth:`track_event`, unchanged, and
+          ``(event.id, True, event)``;
+        * the key (``event_dedup.dedup_key`` over the built event's
+          experiment, flag and event name, and ``event_id``) claimed now: the
+          event is stored with the id the claim recorded, in the same
+          transaction, and ``(id, True, event)``;
+        * the key already claimed: nothing is written and
+          ``(stored id, False, None)``, the stored id being the event that
+          claimed it.
+
+        The claim is ``INSERT ... ON CONFLICT DO NOTHING RETURNING``. A claim
+        on a key that an uncommitted transaction holds waits for it: when that
+        one commits this is a duplicate, when it rolls back this one stores.
+        So a duplicate or a race raises nothing and logs nothing.
+        ``allow_untagged`` is passed through to :meth:`build_event`.
+        """
+        if event_id is None:
+            event = self.track_event(event_data, allow_untagged=allow_untagged)
+            return event.id, True, event
+        try:
+            event = self.build_event(event_data, allow_untagged=allow_untagged)
+            key = dedup_key(
+                event.experiment_id,
+                event.feature_flag_id,
+                event.event_name or "",
+                event_id,
+            )
+            keys = EventDedupKey.__table__
+            claim_id = uuid.uuid4()
+            claimed = self.db.execute(
+                pg_insert(keys)
+                .values(user_id=event.user_id, dedup_key=key, stored_event_id=claim_id)
+                .on_conflict_do_nothing(
+                    index_elements=[keys.c.user_id, keys.c.dedup_key]
+                )
+                .returning(keys.c.stored_event_id)
+            ).scalar_one_or_none()
+            if claimed is not None:
+                event.id = claimed
+                self.db.add(event)
+                self.db.commit()
+                self.db.refresh(event)
+                return event.id, True, event
+            stored_id = self.db.execute(
+                select(keys.c.stored_event_id).where(
+                    keys.c.user_id == event.user_id, keys.c.dedup_key == key
+                )
+            ).scalar_one()
+            self.db.rollback()
+            return stored_id, False, None
+        except Exception as e:
+            # The type only, as track_event: a database error's text repeats
+            # the row's parameters, the user id among them.
             logger.error(f"Error tracking event: {type(e).__name__}")
             self.db.rollback()
             raise

@@ -83,6 +83,20 @@ def _clear():
     app.dependency_overrides.clear()
 
 
+@pytest.fixture(autouse=True)
+def _own_session_is_the_mock_db(monkeypatch):
+    """The webhook routes open their own session (``deps.SessionLocal``) in a
+    worker rather than taking ``get_db``'s; give them the mock ``get_db`` is
+    overridden with, so a test's configured answers reach them too."""
+    real = deps.SessionLocal
+
+    def session():
+        override = app.dependency_overrides.get(deps.get_db)
+        return real() if override is None else override()
+
+    monkeypatch.setattr(deps, "SessionLocal", session)
+
+
 # ---------------------------------------------------------------------------
 # TestListIntegrations
 # ---------------------------------------------------------------------------
@@ -544,6 +558,29 @@ class TestUpdateIntegration:
         response = client.put("/api/v1/integrations/salesforce", json=payload)
 
         assert response.status_code == 200
+
+    @pytest.mark.regression
+    @pytest.mark.parametrize(
+        ("length", "expected"),
+        [(1024, 200), (1025, 422)],
+    )
+    def test_last_error_over_the_column_length_is_422(self, length, expected):
+        """A last_error past 1,024 characters answers 422, not a database 500."""
+        admin = _make_user(UserRole.ADMIN)
+        mock_db = _override(admin)
+        config = _make_config(IntegrationType.SALESFORCE)
+        mock_db.query.return_value.filter.return_value.first.return_value = config
+        mock_db.refresh.side_effect = lambda obj: None
+
+        client = TestClient(app)
+        response = client.put(
+            "/api/v1/integrations/salesforce", json={"last_error": "x" * length}
+        )
+
+        assert response.status_code == expected
+        if expected == 422:
+            assert "1024 characters" in response.text
+            mock_db.commit.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

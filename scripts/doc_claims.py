@@ -627,6 +627,7 @@ EXEMPT_CATEGORIES: Tuple[str, ...] = (
 #: Where a policy statement (what the project does, not what the product does)
 #: may stand as exempt:policy, and nowhere else.
 POLICY_DOCUMENTS: Tuple[str, ...] = (
+    "ROADMAP.md",
     "SECURITY.md",
     "docs/api/stability.md",
     "docs/security/incident-response.md",
@@ -741,6 +742,34 @@ MECHANISMS: Dict[str, Mechanism] = {
         "::test_each_description_is_true_of_its_page",
         quotes=True,
     ),
+    # The MCP server page's tool table against sdk/mcp/tools.json, the server's
+    # own answer to tools/list.
+    "mcp-page-tools": Mechanism(
+        "backend/tests/unit/docs/test_mcp_page_tools.py"
+        "::test_the_pages_tool_table_is_the_servers_tools",
+        holds=(
+            (
+                "docs/mcp-server.md",
+                r"^(?:list_feature_flags|get_feature_flag|evaluate_feature_flag"
+                r"|list_experiments|get_experiment|get_experiment_results)"
+                r" \| [^|]{1,100} \| (?:GET|POST) /api/v1/[^|]{1,100}$",
+            ),
+        ),
+    ),
+    # The sentences that introduce the page's client snippets, which that test
+    # parses: the environment variables they set, and how they start the server.
+    "mcp-page-snippets": Mechanism(
+        "backend/tests/unit/docs/test_mcp_page_config.py"
+        "::test_every_client_snippet_names_the_real_server",
+        holds=_whole(
+            "docs/mcp-server.md",
+            "Each assistant starts the server itself, with two settings: "
+            "CONTROLVAR_API_URL is your instance's address and "
+            "CONTROLVAR_API_KEY is the key.",
+            "Run this in the project directory where you want the server, "
+            "with the key in $KEY:",
+        ),
+    ),
     "integrations-claims": Mechanism(
         "backend/tests/unit/docs/test_integrations_docs_claims.py"
         "::test_every_claim_about_what_the_platform_does_is_on_the_list",
@@ -773,7 +802,38 @@ MECHANISMS: Dict[str, Mechanism] = {
             (
                 "docs/getting-started/faq.md",
                 r"\((?:npm|pip) install (?:@controlvar/[A-Za-z0-9_-]{1,60}"
-                r"|controlvar), [0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}, beta\)",
+                r"|controlvar(?:-openfeature)?), [0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4},"
+                r" beta\)",
+            ),
+        ),
+    ),
+    # A sentence that puts SDKs on npm, PyPI, Maven Central or NuGet names
+    # only SDKs on that registry (ON_REGISTRY in test_sdk_doc_versions.py).
+    # The sweep reads every page; these are the units that cite it.
+    "registry-availability": Mechanism(
+        "backend/tests/unit/docs/test_registry_availability.py"
+        "::test_every_registry_sentence_names_only_sdks_on_that_registry",
+        holds=(
+            (
+                "docs/getting-started/faq.md",
+                r"\b(?:is|are) on (?:npm|PyPI|Maven Central|NuGet)\b|^So are the ",
+            ),
+            (
+                "docs/getting-started/limitations.md",
+                r"^Every SDK on a package registry \| ",
+            ),
+            ("demo/DEMO_GUIDE.md", r"\bon (?:npm and PyPI|PyPI and npm)\b"),
+            (
+                "docs/sdk-guide.md",
+                r"^The Java SDK and its Spring Boot starter are on Maven Central:$",
+            ),
+            (
+                "docs/capabilities.md",
+                r"^Released SDKs: ",
+            ),
+            (
+                "README.md",
+                r"^The @controlvar/mcp-server package is on npm\.$",
             ),
         ),
     ),
@@ -893,9 +953,36 @@ MECHANISMS: Dict[str, Mechanism] = {
         holds=(
             (
                 "docs/api/warehouse-analytics.md",
-                r"\b(?:BigQuery|Snowflake|Amazon Athena) is available\b",
+                r"\b(?:BigQuery|Snowflake|Amazon Athena|Amazon Redshift) is available\b",
             ),
         ),
+    ),
+    # The Troubleshooting table: one row per error code, each with the status a
+    # route answers with (#1809). The wording of a row's two last cells is read
+    # in review; the test holds the code set and the status.
+    "warehouse-troubleshooting": Mechanism(
+        "modules/backend/tests/unit/test_warehouse_docs_availability.py"
+        "::test_the_troubleshooting_table_has_one_row_per_error_code_with_its_status",
+        holds=(
+            (
+                "docs/api/warehouse-analytics.md",
+                r"^(?:Code \| Status \| What it means \| What to check"
+                r"|[a-z0-9_]{3,40} \| [0-9]{3} \| [^|]{1,700} \| [^|]{1,700})$",
+            ),
+        )
+        + _whole(
+            "docs/api/warehouse-analytics.md",
+            "The codes below are the whole set.",
+            "A failed call answers with one as code, and a failed run reports one as its error_code.",
+            'A metric that could not be computed can carry fewer_than_2_units, no_units or join_key_mismatch as its "Not computed" reason while the run itself succeeds.',
+            "Status is the HTTP status of a route that answers with the code directly.",
+        ),
+    ),
+    # The heading the unrecognised-error text points at.
+    "warehouse-troubleshooting-pointer": Mechanism(
+        "modules/backend/tests/unit/test_warehouse_docs_availability.py"
+        "::test_the_unrecognised_error_text_names_a_section_the_page_has",
+        holds=_whole("docs/api/warehouse-analytics.md", "Troubleshooting"),
     ),
     # The Doc Examples guide's "When the check fails" sample is what the check
     # prints; the sentence above the sample says what that output is.
@@ -1650,13 +1737,13 @@ MECHANISMS: Dict[str, Mechanism] = {
             "This command applies all unapplied migrations in order.",
         ),
     ),
-    # The modules branch: its two revisions, in order.
+    # The modules branch: its five revisions, in order.
     "alembic-plan-branch": Mechanism(
         "backend/tests/unit/db/test_alembic_plan.py"
         "::test_the_core_plan_is_the_full_plan_without_the_branch",
         holds=_whole(
             "docs/self-hosting/migrations.md",
-            "The modules branch has two revisions: modules_0001_rbac and, after it, modules_0002_warehouse_analysis.",
+            "The modules branch has five revisions: modules_0001_rbac, then modules_0002_warehouse_analysis, then modules_0003_lower_is_better, then modules_0004_rbac_activation, then modules_0005_redshift.",
         ),
     ),
     # modules_0001_rbac runs after a7b8c9d0e1f2.
@@ -1668,16 +1755,36 @@ MECHANISMS: Dict[str, Mechanism] = {
             "modules_0001_rbac is a child of the core revision a7b8c9d0e1f2, not an alembic base, and with a single tree root alembic cannot filter a downgrade by branch label: downgrade modules@base resolves to the whole core chain to base, and drops every table in the schema.",
         ),
     ),
-    # modules@-1 is one revision; modules@base is the whole chain.
+    # modules@-1 is one revision, modules@-<length> the whole branch;
+    # modules@base is the whole chain.
     "alembic-plan-unapply": Mechanism(
         "backend/tests/unit/db/test_alembic_plan.py"
         "::test_unapplying_the_branch_is_one_revision_and_modules_at_base_is_all_of_them",
         holds=_whole(
             "docs/self-hosting/migrations.md",
             "Roll back the most recent migration of one branch.",
-            "The modules branch has two revisions: modules_0001_rbac and, after it, modules_0002_warehouse_analysis.",
+            "The modules branch has five revisions: modules_0001_rbac, then modules_0002_warehouse_analysis, then modules_0003_lower_is_better, then modules_0004_rbac_activation, then modules_0005_redshift.",
+            "modules@-5 unapplies all five, newest first.",
             "Not modules@base.",
             "modules_0001_rbac is a child of the core revision a7b8c9d0e1f2, not an alembic base, and with a single tree root alembic cannot filter a downgrade by branch label: downgrade modules@base resolves to the whole core chain to base, and drops every table in the schema.",
+        )
+        + _whole(
+            "docs/development/database/migrations.md",
+            "The modules branch has five revisions, modules_0001_rbac, modules_0002_warehouse_analysis, modules_0003_lower_is_better, modules_0004_rbac_activation and then modules_0005_redshift: downgrade modules@-1 unapplies modules_0005_redshift only, and downgrade modules@-5 the whole branch.",
+        ),
+    ),
+    # A relative modules downgrade the documents give is one revision or the
+    # whole branch; any other target is named by its id.
+    "alembic-plan-relative-downgrade": Mechanism(
+        "backend/tests/unit/db/test_alembic_plan.py"
+        "::test_a_documented_relative_modules_downgrade_is_one_revision_or_the_whole_branch",
+        holds=_whole(
+            "docs/self-hosting/migrations.md",
+            "Name the modules revision to end at rather than counting back: a relative step such as modules@-2 counts from the newest revision the image has, so it unapplies a different revision once a release adds one.",
+        )
+        + _whole(
+            "docs/development/database/migrations.md",
+            "To stop anywhere in between, name the revision to end at, such as downgrade modules_0002_warehouse_analysis: a count in between names a different revision once the branch grows.",
         ),
     ),
     # The page's holdout query orders rows as d29a479daafe keeps one.
@@ -1817,6 +1924,10 @@ MECHANISMS: Dict[str, Mechanism] = {
             "docs/self-hosting/migrations.md",
             "Each file represents one atomic schema change, identified by a unique revision ID.",
             "Run the upgrade, which locks the table, checks for groups and builds the index in one transaction.",
+        )
+        + _whole(
+            "deploy/compose/README.md",
+            "It does not when the migration failed: a migration that fails is undone with every other migration of that start.",
         ),
     ),
     # The upgrade locks users and waits at most its lock timeout.
@@ -1836,6 +1947,31 @@ MECHANISMS: Dict[str, Mechanism] = {
         holds=_whole(
             "docs/self-hosting/migrations.md",
             "The upgrade waits at most 30 seconds for the lock on users, so that it never holds up the API's writes for long.",
+        ),
+    ),
+    # The AWS installer page's cache backup: its window against the Redis stack, and
+    # the report line's file and group against the sweep, names.sh and the stack.
+    "aws-install-cache-backup": Mechanism(
+        "backend/tests/unit/docs/test_aws_install_page.py"
+        "::test_the_cache_backup_the_page_names_is_the_one_the_files_make",
+        holds=_whole(
+            "docs/self-hosting/aws-install.md",
+            "The cache takes an automatic backup in a daily window, 02:00 to 03:00 UTC.",
+        ),
+    ),
+    # The Bayesian page's example response: the sentence under the decision
+    # table against the posteriors the example prints and the product at the
+    # example's seed.
+    "bayesian-example": Mechanism(
+        "backend/tests/unit/docs/test_docs_bayesian_example.py"
+        "::test_the_sentence_under_the_table_explains_the_example",
+        holds=(
+            (
+                "docs/api/bayesian.md",
+                r"^The example response above answers [A-Z_]{1,20}: the treatment's"
+                r" expected loss, [0-9.]{1,12}, is below the default loss_threshold,"
+                r" but its probability to be best, [0-9.]{1,12}, is under 0\.975\.$",
+            ),
         ),
     ),
 }

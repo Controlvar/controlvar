@@ -21,7 +21,7 @@ from typing import Iterator
 import boto3
 import pytest
 from fastapi.testclient import TestClient
-from moto import mock_cognitoidp
+from moto import mock_aws
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
@@ -59,7 +59,7 @@ def onboarding(db_session: Session, monkeypatch) -> Iterator[tuple]:
     app.dependency_overrides[deps.get_db] = override_get_db
     app.dependency_overrides[session_get_db] = override_get_db
     try:
-        with mock_cognitoidp():
+        with mock_aws():
             idp = boto3.client("cognito-idp", region_name=REGION)
             pool_id, client_id = create_reference_like_pool(idp)
             # /token builds its service from the environment; /users/me goes

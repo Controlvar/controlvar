@@ -33,7 +33,7 @@ by = ["docex:docs/api/endpoints.md#\"admin@demo.com\""]
 [[unit]]
 text = "OAuth2 Bearer tokens for user authentication"
 by = [
-    "test:backend/tests/unit/api/test_api_key_is_not_a_sign_in.py::test_a_management_route_refuses_a_request_that_carries_only_an_api_key",
+    "test:backend/tests/unit/api/test_api_key_is_not_a_sign_in.py::test_a_route_outside_the_sdk_and_mcp_read_sets_refuses_a_request_that_carries_only_an_api_key",
     "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_bearer_token_is_not_an_api_key",
 ]
 
@@ -103,6 +103,13 @@ by = [
 ]
 
 [[unit]]
+text = "A key that carries the mcp:read scope can also list feature flags and experiments and read an experiment and its results (see Scopes)."
+by = [
+    "test:backend/tests/smoke/test_mcp_read_routes.py::test_the_mcp_read_routes_are_exactly_these",
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_key_with_the_scope_is_served",
+]
+
+[[unit]]
 text = "Obtain an API key."
 by = ["exempt:instruction"]
 
@@ -156,8 +163,16 @@ text = "Cannot access admin endpoints"
 by = ["test:backend/tests/integration/api/test_admin_users_api.py::TestAdminUserList::test_a_non_superuser_is_refused"]
 
 [[unit]]
-text = "Feature flags are by role, not ownership: ADMIN and DEVELOPER may read, create, change and delete any flag; ANALYST and VIEWER may read any flag and change none"
+text = "Feature flags are by permission, not ownership: ADMIN and DEVELOPER may read, create, change and delete any flag; ANALYST and VIEWER may read any flag and, by their role, change none."
 by = ["test:backend/tests/unit/core/test_feature_flag_access_rule.py::test_the_shipped_table_on_someone_elses_flag"]
+
+[[unit]]
+text = "In the full profile a custom role or direct grant can add feature_flag (create), (update) or (delete), and then admits any flag"
+by = [
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_bulk_toggle_follows_a_flag_update_grant",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]
 
 [[unit]]
 text = "Experiments: reading an experiment and its results under /api/v1/experiments/{experiment_id} needs the role's READ on experiments (all four roles hold it); who owns the experiment is not considered."
@@ -168,8 +183,15 @@ text = "ADMIN and DEVELOPER may create experiments, clone any experiment, and up
 by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py::test_status_by_route_and_caller"]
 
 [[unit]]
-text = "ANALYST and VIEWER change no experiment, including one they own"
+text = "ANALYST and VIEWER change no experiment by their role, including one they own."
 by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py::test_status_by_route_and_caller"]
+
+[[unit]]
+text = "In the full profile a custom role or direct grant can add these: experiment (create) creates and clones, experiment (update) updates, starts, pauses, completes, archives, annotates and schedules, and experiment (delete) deletes a draft"
+by = [
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]
 
 [[unit]]
 text = "Superusers:"
@@ -279,12 +301,46 @@ text = "Step 2: Create a new experiment."
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "It needs at least one variant and one metric, and experiment_type is a_b, mv, split_url or bandit."
-by = ["docex:docs/api/endpoints.md#{\"loc\":[\"body\",\"name\"],\"msg\":\"String should have at least 1 character\"}"]
+text = "It needs at least one variant and one metric, though a visual experiment (one sent with visual_config) may be created without metrics, and experiment_type is a_b, mv, split_url or bandit."
+by = [
+    "docex:docs/api/endpoints.md#{\"loc\":[\"body\",\"name\"],\"msg\":\"String should have at least 1 character\"}",
+    "test:backend/tests/unit/schemas/test_visual_changes.py::test_a_visual_experiment_may_be_created_without_a_metric",
+    "test:backend/tests/unit/schemas/test_visual_changes.py::test_any_other_experiment_still_needs_one",
+    "test:backend/tests/integration/api/test_visual_experiment_api.py::test_uc9_a_visual_experiment_without_a_metric_is_created_and_cannot_start",
+]
 
 [[unit]]
 text = "key is what the tracking API and the SDKs call it by:"
 by = ["docex:docs/api/endpoints.md#\"assigned\": true"]
+
+[[unit]]
+text = "Each metric's name may appear once in an experiment, compared exactly: case and spaces count, so Revenue and revenue are two metrics."
+by = [
+    "test:backend/tests/integration/api/test_experiment_metric_names.py::test_create_and_update_answer_the_same_list_alike",
+    "test:backend/tests/unit/schemas/test_experiment_metric_names.py::test_names_are_compared_exactly",
+]
+
+[[unit]]
+text = "A list that repeats a name answers 422 at [\"body\", \"metrics\"], and nothing is written."
+by = [
+    "test:backend/tests/integration/api/test_experiment_metric_names.py::test_create_and_update_answer_the_same_list_alike",
+    "test:backend/tests/integration/api/test_experiment_metric_names.py::test_an_update_repeating_a_name_is_422_and_keeps_the_stored_metrics",
+]
+
+[[unit]]
+text = "The msg gives the 0-based positions of the first repeated pair and never the name, for example duplicate metric name; each name may appear once per experiment (first seen at metrics[0], repeated at metrics[2])."
+by = [
+    "test:backend/tests/integration/api/test_experiment_metric_names.py::test_an_update_repeating_a_name_is_422_and_keeps_the_stored_metrics",
+    "test:backend/tests/unit/schemas/test_experiment_metric_names.py::test_a_repeat_is_refused_naming_the_first_repeated_pair",
+]
+
+[[unit]]
+text = "PUT /api/v1/experiments/{experiment_id} gives the same answer, and refuses an empty metrics list with 422 as a create does; leaving metrics out, or sending null, leaves the metrics as they are."
+by = [
+    "test:backend/tests/integration/api/test_experiment_metric_names.py::test_an_update_with_an_empty_list_is_422_too_short_as_on_create",
+    "test:backend/tests/integration/api/test_experiment_metric_names.py::test_create_and_update_answer_the_same_list_alike",
+    "test:backend/tests/integration/api/test_experiment_metric_names.py::test_an_update_without_metrics_leaves_them_unchanged",
+]
 
 [[unit]]
 text = "A new experiment is a draft."
@@ -415,6 +471,7 @@ by = ["exempt:label"]
 [[unit]]
 text = "Limits are counted per client address and per path: most routes allow 300 requests a minute to each path from one address, and a path with an id in it, such as /api/v1/experiments/{experiment_id}, counts separately for each id."
 by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestSdkRateLimitIsPerPath::test_sdk_paths_with_different_ids_are_counted_separately",
     "test:backend/tests/unit/middleware/test_ai_rate_limits.py::test_the_neighbouring_paths_keep_their_limits",
     "test:backend/tests/unit/middleware/test_rate_limiter.py::TestExportRateLimit::test_neighbouring_paths_keep_their_limits",
 ]
@@ -447,14 +504,58 @@ text = "A targeting context has limits of its own, below"
 by = ["test:backend/tests/unit/core/test_context_limits.py::test_the_limits_are_8192_bytes_and_10_levels"]
 
 [[unit]]
+text = "An event's metadata on /tracking/track, /tracking/batch and /tracking/events has limits of its own: 16,384 bytes and 64 levels (Track Event)"
+by = [
+    "test:backend/tests/unit/schemas/test_event_metadata_size.py::test_the_limit_in_the_schema_is_the_documented_one",
+    "test:backend/tests/unit/schemas/test_event_metadata_size.py::test_metadata_over_the_limit_is_refused_naming_the_field",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_metadata_within_the_limit_is_stored_as_sent",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_metadata_over_the_limit_is_refused_and_nothing_is_stored",
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_over_deep_metadata_is_refused_and_nothing_is_stored",
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_metadata_at_the_limit_is_stored",
+]
+
+[[unit]]
+text = "Number Fields"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A number field (\"type\": \"number\" in the OpenAPI document) in the body or the query that is given NaN, Infinity, -Infinity or a number too large for a double such as 1e400, quoted or not, answers 422 with \"type\": \"finite_number\" at its place: {\"type\": \"finite_number\", \"loc\": [\"query\", \"mde\"], \"msg\": \"Input should be a finite number\"}."
+by = [
+    "test:backend/tests/unit/schemas/test_typed_number_fields_finite.py::test_typed_number_fields_refuse_non_finite_strings",
+    "test:backend/tests/unit/schemas/test_typed_number_fields_finite.py::test_the_power_curve_refuses_a_nan_effect_at_the_parameter",
+    "test:backend/tests/smoke/test_every_json_body_route_refuses_non_finite.py::test_every_json_body_operation_refuses_a_non_finite_number",
+]
+
+[[unit]]
+text = "That holds on every route, including the power calculator's, which need no sign-in."
+by = [
+    "test:backend/tests/unit/schemas/test_typed_number_fields_finite.py::test_the_number_fields_are_counted_per_profile",
+    "test:backend/tests/unit/schemas/test_typed_number_fields_finite.py::test_typed_number_fields_refuse_non_finite_strings",
+    "test:backend/tests/unit/schemas/test_typed_number_fields_finite.py::test_the_planner_refuses_an_infinite_runtime_at_the_field",
+    "test:backend/tests/unit/schemas/test_typed_number_fields_finite.py::test_the_power_curve_refuses_a_nan_effect_at_the_parameter",
+]
+
+[[unit]]
+text = "A field that takes only a JSON number answers \"type\": \"float_type\" to any string, these four included."
+by = ["test:backend/tests/unit/schemas/test_typed_number_fields_finite.py::test_typed_number_fields_refuse_non_finite_strings"]
+
+[[unit]]
+text = "A tracking event's value keeps its own refusals (Track Event)."
+by = [
+    "test:backend/tests/unit/schemas/test_typed_number_fields_finite.py::test_the_exemptions_are_exactly_fields_the_walk_finds",
+    "test:backend/tests/unit/schemas/test_typed_number_fields_finite.py::test_an_exempt_field_refuses_the_strings_its_own_way",
+]
+
+[[unit]]
 text = "Targeting Context Limits"
 by = ["exempt:label"]
 
 [[unit]]
-text = "The routes that take a targeting context hold it to two limits before it is matched against any rule: GET and POST /api/v1/feature-flags/evaluate/{flag_key}, GET /api/v1/feature-flags/user/{user_id}, POST /api/v1/tracking/assign, and each user's context in POST /api/v1/tracking/assign/batch."
+text = "The routes that take a targeting context hold it to two limits before it is matched against any rule: GET and POST /api/v1/feature-flags/evaluate/{flag_key}, GET /api/v1/feature-flags/user/{user_id}, POST /api/v1/tracking/assign, each user's context in POST /api/v1/tracking/assign/batch, and POST /api/v1/tracking/visual (beta)."
 by = [
     "test:backend/tests/integration/api/test_targeting_context_limits.py::test_a_context_over_the_limits_answers_422_and_nothing_is_recorded",
     "test:backend/tests/integration/api/test_targeting_context_limits.py::test_the_batch_is_refused_whole_before_the_first_user_is_assigned",
+    "test:backend/tests/integration/api/test_visual_tracking_api.py::test_a_context_over_the_limits_is_refused",
 ]
 
 [[unit]]
@@ -529,12 +630,51 @@ text = "List endpoints that page take skip and limit parameters"
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
-text = "The default and the largest limit differ by route (the experiments list: 100, at most 500; the feature flags list: 100, with no maximum)."
-by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+text = "The feature flags list is ordered by creation time, oldest first (ties by id), so paging with skip reads each flag once unless flags are created or deleted meanwhile"
+by = ["test:backend/tests/integration/api/test_flag_list_order.py::test_walking_the_pages_returns_every_flag_exactly_once_oldest_first"]
 
 [[unit]]
-text = "The API's OpenAPI document, GET /api/v1/openapi.json, gives each route's default limit and, where it has one, its maximum"
-by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+text = "The default and the largest limit differ by route (the experiments list: 100, at most 500; the feature flags list: 100, at most 9223372036854775807)."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/unit/api/test_paging_params_declared.py::test_1001_the_flag_list_document_gains_only_the_bounds",
+]
+
+[[unit]]
+text = "The API's OpenAPI document, GET /api/v1/openapi.json, gives each route's default limit and its maximum; a bound of 9223372036854775807 is given as \"format\": \"int64\""
+by = [
+    "test:backend/tests/unit/api/test_paging_params_declared.py::test_1001_the_served_document_gives_every_paging_param_its_bounds",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "skip (and offset, where a route takes it instead) is at most 9223372036854775807, the largest offset PostgreSQL takes; a larger one answers 422 and nothing is read"
+by = [
+    "test:backend/tests/integration/api/test_offset_bounds_api.py::test_1001_every_offset_route_takes_the_largest_offset_and_refuses_the_next",
+    "test:backend/tests/unit/api/test_paging_params_declared.py::test_1001_every_paging_param_has_a_minimum_and_a_maximum",
+]
+
+[[unit]]
+text = "page, where a route takes it, is from 1 to 9223372036854775808, and the page must start within the largest offset: (page - 1) times the route's limit (or its page_size) at most 9223372036854775807."
+by = [
+    "test:backend/tests/integration/api/test_offset_bounds_api.py::test_1001_every_page_route_takes_the_last_page_and_refuses_the_next",
+    "test:backend/tests/integration/api/test_offset_bounds_api.py::test_1001_every_page_route_refuses_a_page_that_starts_past_the_largest_offset",
+]
+
+[[unit]]
+text = "Otherwise the route answers 422 at [\"query\", \"page\"]"
+by = [
+    "test:backend/tests/integration/api/test_offset_bounds_api.py::test_1001_every_page_route_takes_the_last_page_and_refuses_the_next",
+    "test:backend/tests/integration/api/test_offset_bounds_api.py::test_1001_every_page_route_refuses_a_page_that_starts_past_the_largest_offset",
+]
+
+[[unit]]
+text = "A skip one past the largest:"
+by = ["docex:docs/api/endpoints.md#{\"loc\":[\"query\",\"skip\"],\"type\":\"less_than_equal\"}"]
+
+[[unit]]
+text = "A page that starts past it, though page and limit are each in range:"
+by = ["docex:docs/api/endpoints.md#(page - 1) * limit must be at most 9223372036854775807"]
 
 [[unit]]
 text = "Caching"
@@ -549,7 +689,13 @@ by = [
 
 [[unit]]
 text = "A change to the experiment clears its cached detail; its cached daily and segmented results stay until they expire"
-by = ["test:backend/tests/unit/api/test_experiment_cache_scope.py::test_a_change_clears_the_detail_and_leaves_the_daily_and_segmented_results"]
+by = [
+    "test:backend/tests/unit/api/test_experiment_cache_scope.py::test_a_change_clears_the_detail_and_leaves_the_daily_and_segmented_results",
+    "test:backend/tests/integration/api/test_experiment_cache_redis.py::test_adding_an_experiment_to_a_group_is_read_back_at_once",
+    "test:backend/tests/integration/api/test_experiment_cache_redis.py::test_removing_an_experiment_from_a_group_is_read_back_at_once",
+    "test:backend/tests/integration/api/test_experiment_cache_redis.py::test_a_scheduled_start_or_resume_is_read_back_at_once",
+    "test:backend/tests/integration/api/test_experiment_cache_redis.py::test_a_scheduled_end_is_read_back_at_once",
+]
 
 [[unit]]
 text = "Feature flags are not cached: the flag list and a flag's detail are read from the database on every request, whatever CACHE_ENABLED says"
@@ -648,7 +794,8 @@ by = ["exempt:label"]
 [[unit]]
 text = "Headers: Authorization: Bearer {token}"
 by = [
-    "test:backend/tests/unit/api/test_api_key_is_not_a_sign_in.py::test_a_management_route_refuses_a_request_that_carries_only_an_api_key",
+    "test:backend/tests/unit/api/test_api_key_is_not_a_sign_in.py::test_a_route_outside_the_sdk_and_mcp_read_sets_refuses_a_request_that_carries_only_an_api_key",
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_valid_bearer_does_not_read_the_key",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
 count = 16
@@ -677,7 +824,7 @@ count = 6
 [[unit]]
 text = "skip: int (default: 0)"
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
-count = 4
+count = 3
 
 [[unit]]
 text = "limit: int (default: 100, max: 100)"
@@ -939,8 +1086,32 @@ by = ["test:backend/tests/integration/api/test_own_access_put.py::TestDeleteAnsw
 
 [[unit]]
 text = "404 \"User not found\"."
-by = ["test:backend/tests/integration/api/test_admin_users_api.py::TestPatchRefusals::test_an_unknown_user_is_404"]
-count = 4
+by = [
+    "test:backend/tests/integration/api/test_admin_users_api.py::TestPatchRefusals::test_an_unknown_user_is_404",
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_a_uuid_with_no_account_still_answers_404",
+]
+count = 5
+
+[[unit]]
+text = "Errors: 400 \"Invalid user ID format\" when {user_id} is not a UUID (a caller who is not a superuser gets 403 first)."
+by = [
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_a_superuser_gets_400_for_an_id_that_is_not_a_uuid",
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_a_viewer_gets_403_on_get_and_400_on_put_and_delete",
+]
+
+[[unit]]
+text = "403 \"Not enough permissions\" when a caller who is not a superuser asks for another account."
+by = ["test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_a_viewer_gets_403_on_get_and_400_on_put_and_delete"]
+
+[[unit]]
+text = "400 \"Invalid user ID format\" when {user_id} is not a UUID, me included: GET /api/v1/users/me returns your account and its id."
+by = [
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_a_superuser_gets_400_for_an_id_that_is_not_a_uuid",
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_a_viewer_gets_403_on_get_and_400_on_put_and_delete",
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_me_is_an_id_that_is_not_a_uuid_on_put_and_delete",
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_get_users_me_still_returns_the_callers_account",
+]
+count = 2
 
 [[unit]]
 text = "Change Your Password"
@@ -1142,6 +1313,118 @@ by = [
 ]
 
 [[unit]]
+text = "The difference from the control, its intervals and the impact"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Each treatment of each metric in metrics carries its difference from the control."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_every_metric_type_carries_the_fields_through_the_results",
+    "test:backend/tests/integration/api/test_results_difference_intervals.py::test_a_mean_metric_carries_the_relative_interval_and_the_impact",
+]
+
+[[unit]]
+text = "absolute_difference is in the unit of mean: for a metric analysed as a proportion, the difference of the shares of users who converted, computed from conversions and sample_size (0.012 is 1.2 percentage points); for one analysed as a mean, the difference per assigned user."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_a_proportion_difference_is_the_difference_of_the_shares",
+    "test:backend/tests/unit/services/test_revenue_per_user.py",
+]
+
+[[unit]]
+text = "absolute_difference_ci is its interval, relative_improvement_pct_ci the interval of relative_improvement_pct, and incremental_impact with incremental_impact_ci the difference and its interval times the treatment's own sample_size."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_proportion_impact_is_the_difference_times_the_treatments_users",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_mean_impact_is_the_difference_times_the_treatments_users",
+]
+
+[[unit]]
+text = "The control's are all null."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_every_metric_type_carries_the_fields_through_the_results",
+    "test:backend/tests/integration/api/test_results_difference_intervals.py::test_a_proportion_with_a_control_at_0_has_a_difference_and_no_relative_change",
+]
+
+[[unit]]
+text = "The intervals are at the response's confidence_level and are not adjusted for multiple comparisons."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_proportion_interval_is_newcombes",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_b5_an_adjusted_treatment_is_not_significant_although_its_interval_excludes_0",
+]
+
+[[unit]]
+text = "For a proportion the difference's interval is Newcombe's, built from each variant's Wilson score interval; for a mean it is Welch's."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_proportion_interval_is_newcombes",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_mean_interval_is_welchs",
+]
+
+[[unit]]
+text = "The relative change's interval is the MOVER-R interval on the same per-variant limits (Fieller's interval, for a mean), so the three intervals agree on whether 0 is inside."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_relative_interval_matches_the_oracle_over_a_grid",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_mean_relative_interval_solves_its_defining_equations",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_proportion_grids_hold_r1_and_r2",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_seeded_mean_rows_match_the_oracle_and_hold_r1_and_r2",
+]
+
+[[unit]]
+text = "is_significant is decided by the test, not by an interval."
+by = ["test:backend/tests/unit/services/test_difference_intervals.py::test_the_proportion_interval_against_significance"]
+
+[[unit]]
+text = "With two or more treatments under a correction, an interval can exclude 0 on a treatment that is not significant."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_b5_an_adjusted_treatment_is_not_significant_although_its_interval_excludes_0",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_mean_interval_against_significance",
+]
+
+[[unit]]
+text = "For a proportion, near the threshold, the interval and Fisher's exact test can disagree either way: 128 of 1,000 against 100 of 1,000 is not significant (p 0.057) while its interval runs from +0.0001 to +0.056, and 3 of 50 against 18 of 100 is significant (p 0.049) while its interval reaches +0.00003."
+by = ["test:backend/tests/unit/services/test_difference_intervals.py::test_named_boundary_tables"]
+
+[[unit]]
+text = "For a proportion, relative_improvement_pct_ci is null only when an arm has no users or the control has no conversions."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_a_treatment_with_no_users_has_no_intervals",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_every_none_on_the_grids_is_counted",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_every_none_on_the_architects_grid_is_counted",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_a_control_at_0_has_no_relative_interval",
+]
+
+[[unit]]
+text = "The ratio is taken over values of 0 and above, so the lower end is never below -100%, and at low counts the interval is wide: a treatment with 6 converting users out of 200 against a control with 2 out of 200 gives -34.2% to +1,206.3% at 0.95."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_a_low_count_control_has_a_bounded_relative_interval",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_a_treatment_with_no_conversions_at_the_exact_edge",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_proportion_grids_hold_r1_and_r2",
+]
+
+[[unit]]
+text = "For a mean it is null when absolute_difference_ci is, when the control's mean is 0, and when the control's mean plus or minus its margin reaches 0, where Fieller's set of ratios is unbounded."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_a_control_at_0_has_no_relative_interval",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_a_mean_with_no_variation_has_an_impact_but_no_interval",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_a_mean_control_whose_interval_reaches_0_has_no_relative_interval",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_a_mean_control_at_the_float_edge_has_no_relative_interval",
+]
+
+[[unit]]
+text = "absolute_difference_ci is null only when absolute_difference is, or for a mean when neither variant's values vary."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_every_none_on_the_grids_is_counted",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_an_arm_with_no_users_has_no_difference",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_a_mean_with_no_variation_has_an_impact_but_no_interval",
+]
+
+[[unit]]
+text = "The impact is a plain number over the treatment's own assigned users: converting users for a proportion, the total of the per-user values for a mean, with no currency or unit and no projection to other users or a later period."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_impact_is_a_plain_number",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_proportion_impact_is_the_difference_times_the_treatments_users",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_mean_impact_is_the_difference_times_the_treatments_users",
+]
+
+[[unit]]
 text = "The planned effect"
 by = ["exempt:label"]
 
@@ -1200,8 +1483,20 @@ text = "status: string (optional): ACTIVE, INACTIVE or ARCHIVED, in upper case (
 by = ["test:backend/tests/integration/api/test_feature_flags_api.py::TestFeatureFlagsList::test_list_status_filter_uses_db_enum_casing"]
 
 [[unit]]
-text = "limit: int (default: 100; the route sets no maximum)"
-by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+text = "skip: int (default: 0; 0 to 9223372036854775807)"
+by = [
+    "test:backend/tests/integration/api/test_offset_bounds_api.py::test_1001_every_offset_route_takes_the_largest_offset_and_refuses_the_next",
+    "test:backend/tests/integration/api/test_offset_bounds_api.py::test_1001_the_flag_list_refuses_a_negative_skip_or_limit",
+    "test:backend/tests/unit/api/test_paging_params_declared.py::test_1001_the_flag_list_document_gains_only_the_bounds",
+]
+
+[[unit]]
+text = "limit: int (default: 100; 0 to 9223372036854775807, and 0 answers no items)"
+by = [
+    "test:backend/tests/integration/api/test_offset_bounds_api.py::test_the_flag_list_still_takes_limit_0_and_the_largest_limit",
+    "test:backend/tests/integration/api/test_offset_bounds_api.py::test_1001_the_flag_list_refuses_a_negative_skip_or_limit",
+    "test:backend/tests/unit/api/test_paging_params_declared.py::test_1001_the_flag_list_document_gains_only_the_bounds",
+]
 
 [[unit]]
 text = "search: string (optional): matches part of the name or the key, in any case"
@@ -1239,6 +1534,15 @@ count = 2
 [[unit]]
 text = "context: object (optional), URL-encoded JSON; at most 8,192 bytes and 10 levels deep (Targeting Context Limits)"
 by = ["test:backend/tests/integration/api/test_targeting_context_limits.py::test_a_context_over_the_limits_answers_422_and_nothing_is_recorded"]
+
+[[unit]]
+text = "A flag whose stored rules the server cannot read (only a direct database write leaves one) answers false, and the other flags are unaffected."
+by = [
+    "test:backend/tests/integration/api/test_unreadable_stored_rules_api.py::test_the_bulk_route_answers_every_other_flag",
+    "test:backend/tests/integration/api/test_unreadable_stored_rules_api.py::test_the_bulk_route_answers_every_other_flag_when_a_segment_is_unreadable",
+    "test:backend/tests/unit/services/test_unreadable_stored_rules.py::test_unreadable_stored_rules_affect_only_their_flag",
+    "test:backend/tests/unit/services/test_unreadable_stored_rules.py::test_only_a_direct_database_write_leaves_such_rules",
+]
 
 [[unit]]
 text = "Archived Flags"
@@ -1316,8 +1620,11 @@ text = "Written to the audit log as feature_flag_update (ARCHIVED to INACTIVE)."
 by = ["test:backend/tests/smoke/test_audit_inventory.py"]
 
 [[unit]]
-text = "Permissions: ADMIN and DEVELOPER; ANALYST and VIEWER get 403"
-by = ["test:backend/tests/integration/api/test_archived_flag_verbs.py::test_unarchive_is_permission_checked"]
+text = "Permissions: ADMIN and DEVELOPER, and in the full profile anyone whose custom role or direct grant gives feature_flag (update); anyone else gets 403"
+by = [
+    "test:backend/tests/integration/api/test_archived_flag_verbs.py::test_unarchive_is_permission_checked",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]
 
 [[unit]]
 text = "Response: 200 OK, the flag (the same shape as GET /api/v1/feature-flags/{flag_id})"
@@ -1343,8 +1650,9 @@ text = "They address experiments and flags by their public key, except POST /api
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
-text = "They share the per-IP SDK_RATE_LIMIT_PER_MINUTE ceiling (default 6000/min), except POST /api/v1/tracking/assign/batch, which has its own limit of 60 requests a minute."
+text = "They use the same SDK_RATE_LIMIT_PER_MINUTE limit (default 6000/min), counted per client address and per path, so each flag key, user id or other id in a path is its own counter; the exception is POST /api/v1/tracking/assign/batch, which has its own limit of 60 requests a minute."
 by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestSdkRateLimitIsPerPath::test_sdk_paths_with_different_ids_are_counted_separately",
     "test:backend/tests/unit/middleware/test_rate_limiter.py::TestExportRateLimit::test_neighbouring_paths_keep_their_limits",
     "test:backend/tests/unit/api/test_assign_batch_contract.py::test_the_limit_is_sixty_a_minute",
 ]
@@ -1386,6 +1694,22 @@ text = "A user who already has an assignment keeps it."
 by = ["test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_sticky_assignment_bypasses_all_eligibility_checks"]
 
 [[unit]]
+text = "An experiment that is not ACTIVE: a draft, or a paused, completed or archived experiment, answers every user, enrolled or not, with 200 OK, its control variant, assigned: false and reason set to its status: draft, paused, completed or archived."
+by = ["test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_each_status_answers_an_enrolled_and_a_new_user"]
+
+[[unit]]
+text = "Nothing is recorded."
+by = ["test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_an_answer_for_an_experiment_that_is_not_running_records_nothing"]
+
+[[unit]]
+text = "Users who were assigned keep their assignment, so when a paused experiment is started again each of them gets their variant back."
+by = ["test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_a_resumed_experiment_answers_enrolled_users_with_their_variant"]
+
+[[unit]]
+text = "A draft with no control variant answers 404."
+by = ["test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_a_draft_with_no_control_variant_returns_404"]
+
+[[unit]]
 text = "Body: {\"experiment_key\": string, \"user_id\": string, \"context\": object?}; context at most 8,192 bytes and 10 levels deep (Targeting Context Limits)"
 by = [
     "test:backend/tests/integration/api/test_targeting_context_limits.py::test_a_context_over_the_limits_answers_422_and_nothing_is_recorded",
@@ -1393,13 +1717,17 @@ by = [
 ]
 
 [[unit]]
-text = "assigned is false when the user was not enrolled; reason is assigned, holdout, mutual_exclusion or targeting."
-by = ["test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_reason_order_is_holdout_then_mutual_exclusion_then_targeting"]
+text = "assigned is false when the user was not enrolled; reason is assigned, holdout, mutual_exclusion or targeting, or the status of an experiment that is not ACTIVE."
+by = [
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_reason_order_is_holdout_then_mutual_exclusion_then_targeting",
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_each_status_answers_an_enrolled_and_a_new_user",
+]
 
 [[unit]]
-text = "Errors: 404 when no ACTIVE experiment has that key; 422 when context is over a limit"
+text = "Errors: 404 when no experiment has that key (No experiment has the key 'checkout'.), or for a draft with no control variant; 422 when context is over a limit"
 by = [
-    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_unknown_key_returns_404",
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_a_key_no_experiment_has_is_404_naming_the_key",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_a_draft_with_no_control_variant_returns_404",
     "test:backend/tests/integration/api/test_targeting_context_limits.py::test_a_context_over_the_limits_answers_422_and_nothing_is_recorded",
 ]
 
@@ -1436,8 +1764,12 @@ text = "See Assign a customer list to an experiment."
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "Headers: X-API-Key: {api_key}, a key with the sdk:ruleset scope whose owner is an ADMIN, a DEVELOPER or a superuser."
-by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_a_key_without_the_scope_is_403"]
+text = "Headers: X-API-Key: {api_key}, a key with the sdk:ruleset scope whose owner can change feature flags and experiments: an ADMIN, a DEVELOPER, a superuser, or in the full profile anyone whose custom roles or direct grants give feature_flag (update) and experiment (update)."
+by = [
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_a_key_without_the_scope_is_403",
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_a_built_in_developer_key_assigns_in_a_batch_as_before",
+]
 
 [[unit]]
 text = "That scope also lets the key download every feature flag's targeting rules (GET /api/v1/sdk/ruleset), so keep the key on a server; see Scopes."
@@ -1522,8 +1854,18 @@ text = "403 | the key lacks the scope | This API key does not have the 'sdk:rule
 by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_a_key_without_the_scope_is_403"]
 
 [[unit]]
-text = "403 | the key's owner is no longer an active ADMIN, DEVELOPER or superuser | This key's owner can no longer change feature flags or experiments, so the key is refused for server-side SDK use."
-by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_a_scoped_key_whose_owner_lost_the_role_is_403"]
+text = "403 | the key's owner can no longer change feature flags: inactive, or given feature_flag (update) neither by their role nor, in the full profile, by a custom role or direct grant | This key's owner can no longer change feature flags, so the key is refused for server-side SDK use."
+by = [
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_a_scoped_key_whose_owner_lost_the_role_is_403",
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
+]
+
+[[unit]]
+text = "403 | the key's owner can change feature flags but not experiments; nobody is assigned | This key's owner cannot change experiments, so the key cannot assign users in a batch, and nobody was assigned. Use a server-side key whose owner can change experiments."
+by = [
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
+    "test:backend/tests/unit/api/test_assign_batch_contract.py::test_the_owner_experiment_text",
+]
 
 [[unit]]
 text = "404 | no ACTIVE experiment has that key | Active experiment with key 'spring-email' not found"
@@ -1593,6 +1935,20 @@ text = "A key that is given but not found answers 404."
 by = ["test:backend/tests/integration/api/test_tracking_untagged_events.py::TestGivenKeysThatAreNotFound::test_track_answers_404"]
 
 [[unit]]
+text = "While the experiment is running (ACTIVE), the event is tagged with the variant the user is assigned to."
+by = [
+    "test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_each_status_and_route_stores_the_variant_only_while_active",
+    "test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_converting_users_per_variant_across_pause_resume_and_complete",
+]
+
+[[unit]]
+text = "An event for a draft, paused, completed or archived experiment is stored with the experiment and no variant, so it counts in no variant's results."
+by = [
+    "test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_each_status_and_route_stores_the_variant_only_while_active",
+    "test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_converting_users_per_variant_across_pause_resume_and_complete",
+]
+
+[[unit]]
 text = "event_type is free text (SDKs send the event name); event_name defaults to event_type."
 by = ["docex:docs/api/endpoints.md#\"event_name\": \"purchase\""]
 
@@ -1601,12 +1957,133 @@ text = "Metrics count events by event_name: a metric with event_name: \"purchase
 by = ["test:backend/tests/integration/services/test_conversion_event_matching.py"]
 
 [[unit]]
-text = "Body: {\"event_type\": string, \"event_name\": string?, \"user_id\": string, \"experiment_key\": string?, \"feature_flag_key\": string?, \"value\": number?, \"metadata\": object?, \"timestamp\": datetime?}"
+text = "Which metrics read value: a revenue, duration or custom metric adds it up per user; a count metric counts the event and does not read it; a conversion metric does not read it."
+by = [
+    "test:backend/tests/integration/api/test_value_metrics_results.py::test_duration_and_custom_add_up_each_users_values",
+    "test:backend/tests/integration/api/test_value_metrics_results.py::test_a_count_does_not_read_the_value",
+    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_a_revenue_metric_is_analysed_per_assigned_user",
+    "test:backend/tests/unit/services/test_binomial_metric_result_characterisation.py::test_binomial_metric_result_characterisation",
+]
+
+[[unit]]
+text = "event_id names one occurrence of the event: text of up to 255 characters, compared exactly; missing, null and \"\" mean none."
+by = [
+    "test:backend/tests/unit/schemas/test_tracking_event_id.py::test_255_characters_of_any_width_are_accepted",
+    "test:backend/tests/unit/schemas/test_tracking_event_id.py::test_empty_and_null_mean_no_event_id",
+    "test:backend/tests/unit/services/test_event_dedup.py::test_the_event_id_is_compared_exactly",
+]
+
+[[unit]]
+text = "An event sent again with the same event_id, user, experiment, flag and event name is not stored again; see How events count."
+by = [
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r1_a_purchase_sent_again_with_its_event_id_is_stored_and_counted_once",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r5_the_same_event_id_from_two_users_is_two_events",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r6_one_event_id_fanned_out_to_three_experiments_and_a_flag",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r14_two_event_names_with_one_event_id_are_two_events",
+]
+
+[[unit]]
+text = "Event limits: metadata may nest at most 64 levels, every JSON object and array a level and the object itself the first, so {\"a\": {\"b\": 1}} is 2 levels."
+by = [
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_over_deep_metadata_is_refused_and_nothing_is_stored",
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_metadata_at_the_limit_is_stored",
+]
+
+[[unit]]
+text = "/tracking/track, /tracking/batch and /tracking/events also hold it to 16,384 bytes as compact JSON (no spaces, characters not escaped) in UTF-8, and check depth first."
+by = [
+    "test:backend/tests/unit/schemas/test_event_metadata_size.py::test_the_limit_counts_bytes_not_characters",
+    "test:backend/tests/unit/schemas/test_event_metadata_size.py::test_the_limit_reads_characters_unescaped_and_without_spaces",
+    "test:backend/tests/unit/schemas/test_event_metadata_size.py::test_a_value_over_both_limits_gets_the_depth_message",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_metadata_within_the_limit_is_stored_as_sent",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_metadata_over_the_limit_is_refused_and_nothing_is_stored",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_events_checks_depth_before_size",
+]
+
+[[unit]]
+text = "Over either limit /tracking/track and /tracking/events answer 422 and /tracking/batch reports the entry in errors; nothing is stored for the event, even when one with that event_id is already stored, and events stored before the limits are not changed."
+by = [
+    "test:backend/tests/unit/schemas/test_event_metadata_size.py::test_metadata_over_the_limit_is_refused_naming_the_field",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_metadata_over_the_limit_is_refused_and_nothing_is_stored",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_an_oversize_retry_of_a_stored_event_id_is_refused_not_a_duplicate",
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_over_deep_metadata_is_refused_and_nothing_is_stored",
+]
+
+[[unit]]
+text = "/tracking/events accepts properties as well as metadata, with the same limits."
+by = [
+    "test:backend/tests/unit/schemas/test_event_metadata_size.py::test_each_field_is_held_on_its_own_not_their_sum",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_events_refuses_the_field_that_is_over",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_events_stores_both_fields_at_the_limit_each",
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_events_route_refuses_over_deep_properties_too",
+]
+
+[[unit]]
+text = "A refusal on /tracking/track and /tracking/batch reads Invalid event: properties not valid for either limit, properties being what the stored event calls metadata; /tracking/events names the field and the limit."
+by = [
+    "test:backend/tests/unit/schemas/test_event_metadata_size.py::test_metadata_over_the_limit_is_refused_naming_the_field",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_track_and_batch_read_the_same_text_for_either_limit",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_the_events_refusal_names_the_field_and_the_limit_never_the_value",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_events_checks_depth_before_size",
+]
+
+[[unit]]
+text = "A timestamp at the very edge of the date range whose UTC offset moves it past 0001-01-01 or 9999-12-31 answers 422 too."
+by = ["test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_edge_timestamp_is_refused_and_nothing_is_stored"]
+
+[[unit]]
+text = "/tracking/batch and /tracking/events hold events to the same limits; in a batch the entry is reported in errors and the others are stored."
+by = [
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_one_over_deep_item_does_not_fail_its_batch",
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_events_route_refuses_over_deep_properties_too",
+]
+
+[[unit]]
+text = "Numbers: value must be a finite number from -1e12 to 1e12, both included."
+by = [
+    "test:backend/tests/unit/api/test_event_value_bound.py::test_a_value_within_the_bound_is_stored",
+    "test:backend/tests/unit/api/test_event_value_bound.py::test_track_refuses_a_value_beyond_the_bound",
+    "test:backend/tests/integration/api/test_tracking_non_finite_numbers.py::test_the_bound_itself_is_stored_as_sent",
+]
+
+[[unit]]
+text = "Another value answers 422 (Invalid event: value not valid) and nothing is stored."
+by = [
+    "test:backend/tests/unit/api/test_event_value_bound.py::test_track_refuses_a_value_beyond_the_bound",
+    "test:backend/tests/unit/api/test_event_value_bound.py::test_track_refuses_a_quoted_number_beyond_the_bound",
+    "test:backend/tests/integration/api/test_tracking_non_finite_numbers.py::test_a_value_outside_the_range_answers_422_and_nothing_is_written",
+]
+
+[[unit]]
+text = "Every other number in the body, in metadata for example, must be finite."
+by = [
+    "test:backend/tests/unit/api/test_non_finite_numbers_refused.py::test_a_non_finite_number_answers_422_at_its_place_and_nothing_is_stored",
+    "test:backend/tests/smoke/test_every_json_body_route_refuses_non_finite.py::test_every_json_body_operation_refuses_a_non_finite_number",
+]
+
+[[unit]]
+text = "NaN, Infinity and -Infinity, and a number too large for a double such as 1e400, answer 422 with \"type\": \"finite_number\" at their place in the body, and nothing is stored."
+by = [
+    "test:backend/tests/unit/api/test_non_finite_numbers_refused.py::test_a_non_finite_number_answers_422_at_its_place_and_nothing_is_stored",
+    "test:backend/tests/integration/api/test_tracking_non_finite_numbers.py::test_a_non_finite_number_in_metadata_answers_422_and_nothing_is_written",
+]
+
+[[unit]]
+text = "This query lists, per experiment, the events already stored whose value is outside that range, NaN and the infinities included (the schema is experimentation unless POSTGRES_SCHEMA names another):"
+by = ["test:backend/tests/integration/api/test_tracking_non_finite_numbers.py::test_the_documented_query_finds_the_stored_values_outside_the_range"]
+
+[[unit]]
+text = "Body: {\"event_type\": string, \"event_name\": string?, \"user_id\": string, \"experiment_key\": string?, \"feature_flag_key\": string?, \"value\": number?, \"metadata\": object?, \"timestamp\": datetime?, \"event_id\": string?}"
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
-text = "Response: 200 OK (the stored event); 404 a key that was given was not found; 422 invalid body"
-by = ["test:backend/tests/integration/api/test_tracking_untagged_events.py::TestGivenKeysThatAreNotFound::test_track_answers_404"]
+text = "Response: 200 OK (the stored event, with \"duplicate\": false and the event_id sent, or null); 200 OK with \"duplicate\": true for an event already stored with that event_id: id is the stored event's, every other field is this request's, and nothing is written; 404 a key that was given was not found; 422 invalid body, an event_id that is not text or is over 255 characters among them"
+by = [
+    "test:backend/tests/integration/api/test_tracking_untagged_events.py::TestGivenKeysThatAreNotFound::test_track_answers_404",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r7_the_first_write_wins_and_the_answer_echoes_this_request",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r8_without_an_event_id_two_identical_purchases_are_both_stored",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r12_an_invalid_event_id_is_refused_and_a_batch_with_one_stores_nothing",
+]
 
 [[unit]]
 text = "Batch Track Events"
@@ -1628,10 +2105,56 @@ text = "An entry with no key is stored as history, not refused; an entry whose k
 by = ["test:backend/tests/integration/api/test_tracking_untagged_events.py::TestGivenKeysThatAreNotFound::test_batch_reports_the_item"]
 
 [[unit]]
-text = "Response: 200 OK {\"success_count\": int, \"failure_count\": int, \"errors\": [...]|null}; 422 above 100 events, and none is stored"
+text = "Each entry is tagged with a variant as /track tags it: only while its experiment is running."
+by = [
+    "test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_each_status_and_route_stores_the_variant_only_while_active",
+    "test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_converting_users_per_variant_across_pause_resume_and_complete",
+]
+
+[[unit]]
+text = "An entry already stored with its event_id (an earlier request's, or an earlier entry of this one) counts in success_count and in duplicate_count, and nothing is written for it."
+by = [
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r2_the_same_item_twice_in_one_batch_is_stored_once",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r3_a_full_batch_sent_twice_is_stored_once",
+]
+
+[[unit]]
+text = "Numbers: as on /track."
+by = [
+    "test:backend/tests/unit/api/test_non_finite_numbers_refused.py::test_a_non_finite_number_answers_422_at_its_place_and_nothing_is_stored",
+    "test:backend/tests/unit/api/test_event_value_bound.py::test_batch_reports_the_entry_beyond_the_bound_and_stores_the_others",
+]
+
+[[unit]]
+text = "An entry whose value is outside -1e12 to 1e12 is reported in errors and the others are stored."
+by = [
+    "test:backend/tests/unit/api/test_event_value_bound.py::test_batch_reports_the_entry_beyond_the_bound_and_stores_the_others",
+    "test:backend/tests/integration/api/test_tracking_non_finite_numbers.py::test_batch_stores_the_entries_within_the_range",
+]
+
+[[unit]]
+text = "A non-finite number anywhere in a /batch body refuses the whole request and stores none of its events, while a value outside -1e12 to 1e12 fails only its own entry."
+by = [
+    "test:backend/tests/unit/api/test_non_finite_numbers_refused.py::test_one_non_finite_number_refuses_the_whole_batch",
+    "test:backend/tests/integration/api/test_tracking_non_finite_numbers.py::test_one_non_finite_number_refuses_the_whole_batch",
+    "test:backend/tests/integration/api/test_tracking_non_finite_numbers.py::test_batch_stores_the_entries_within_the_range",
+]
+
+[[unit]]
+text = "Response: 200 OK {\"success_count\": int, \"failure_count\": int, \"duplicate_count\": int, \"errors\": [...]|null}; 422 above 100 events, or one entry invalid (its event_id among them), and none is stored."
 by = [
     "test:backend/tests/integration/api/test_tracking_api.py::TestBatch::test_reports_success_and_failure_per_event",
     "test:backend/tests/integration/api/test_tracking_api.py::TestBatch::test_more_than_100_events_is_422_and_stores_nothing",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r12_an_invalid_event_id_is_refused_and_a_batch_with_one_stores_nothing",
+]
+
+[[unit]]
+text = "An entry that is valid as a request but refused when its event is built (metadata nested too deep or larger than 16,384 bytes, an edge timestamp, a key not found) is reported in errors and the others are stored"
+by = [
+    "test:backend/tests/unit/schemas/test_event_metadata_size.py::test_metadata_over_the_limit_is_refused_naming_the_field",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_batch_reports_the_oversize_entry_and_stores_the_others",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_batch_holds_each_entry_to_the_limit_not_their_sum",
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_one_over_deep_item_does_not_fail_its_batch",
 ]
 
 [[unit]]
@@ -1647,8 +2170,26 @@ text = "Description: Same as /track but keyed by internal ids (experiment_id, va
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
-text = "Response: 200 OK (the stored event); 404 an id names no stored row, and nothing is stored: the detail names each such field, for example No experiment has that experiment_id.; 422 invalid body, or an id that is not a UUID"
-by = ["test:backend/tests/integration/api/test_tracking_events_unknown_ids.py"]
+text = "It stores the variant_id it is given, whatever the experiment's status."
+by = ["test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_events_by_ids_keep_the_variant_they_name_for_a_paused_experiment"]
+
+[[unit]]
+text = "It takes event_id as /track does, and the same event sent through either route is stored once."
+by = ["test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r4_one_event_through_track_batch_and_events_is_one_row"]
+
+[[unit]]
+text = "Numbers: as on /track; a value outside -1e12 to 1e12 answers 422 at [\"body\", \"value\"]."
+by = [
+    "test:backend/tests/unit/api/test_event_value_bound.py::test_events_refuses_a_value_beyond_the_bound_at_the_field",
+    "test:backend/tests/integration/api/test_tracking_non_finite_numbers.py::test_a_value_outside_the_range_answers_422_and_nothing_is_written",
+]
+
+[[unit]]
+text = "Response: 200 OK (the stored event, or \"duplicate\": true as from /track); 404 an id names no stored row, and nothing is stored: the detail names each such field, for example No experiment has that experiment_id.; 422 invalid body, or an id that is not a UUID"
+by = [
+    "test:backend/tests/integration/api/test_tracking_events_unknown_ids.py",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r4_one_event_through_track_batch_and_events_is_one_row",
+]
 
 [[unit]]
 text = "Get User Assignments"
@@ -2286,8 +2827,78 @@ text = "A refusal because of the experiment's state is a 400 whose detail names 
 by = ["test:backend/tests/integration/api/test_experiment_update_refusals.py::test_a_role_without_update_gets_403_before_any_state_check"]
 
 [[unit]]
-text = "Outside draft, only a superuser may change an experiment's other fields (Cannot update experiments in active status), and variants, metrics, start_date, end_date, correction_method and confidence_level cannot be changed by anyone (Cannot update variants for experiments in active status)."
-by = ["test:backend/tests/integration/api/test_experiment_targeting_by_state.py::test_superuser_still_changes_other_fields_when_not_draft"]
+text = "Outside draft, only a superuser may change an experiment's other fields (Cannot update experiments in active status), and variants, metrics, correction_method, confidence_level, balance_within, variance_reduction_config, sequential_testing_enabled, sequential_testing_config, bayesian_enabled and bayesian_config cannot be changed by anyone, even to the value already stored (Cannot update variants for experiments in active status); a request that includes several is refused naming the first of them in that order."
+by = [
+    "test:backend/tests/integration/api/test_experiment_targeting_by_state.py::test_superuser_still_changes_other_fields_when_not_draft",
+    "test:backend/tests/integration/api/test_experiment_update_refusals.py::test_a_state_refusal_answers_400_with_its_detail",
+    "test:backend/tests/integration/api/test_experiment_correction_settings_api.py::test_a_superuser_cannot_change_the_settings_once_out_of_draft",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_the_setting_is_locked_after_draft_for_every_role",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_superuser_cannot_change_an_analysis_setting_once_out_of_draft",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_sending_back_the_stored_value_is_refused_too",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_body_naming_every_fixed_field_is_refused_naming_each_in_the_routes_order",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_balance_within_with_an_analysis_setting_is_refused_naming_balance_within",
+    "test:backend/tests/unit/api/test_experiment_update_fields_classified.py::test_the_fixed_fields_are_exactly_the_routes_list",
+]
+
+[[unit]]
+text = "To change one of those for a running experiment, clone it (POST /api/v1/experiments/{experiment_id}/clone): the copy is a new experiment, a draft, and takes the change."
+by = ["test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_clone_of_a_running_experiment_takes_the_settings_as_a_draft"]
+
+[[unit]]
+text = "start_date and end_date are not fields of this request, so a body that names them changes neither."
+by = [
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_start_date_and_end_date_in_a_body_change_nothing",
+    "test:backend/tests/unit/api/test_experiment_update_fields_classified.py::test_the_routes_list_has_no_other_entry_that_is_not_a_field",
+]
+
+[[unit]]
+text = "Balancing the split within groups (beta)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "balance_within, sent on create or on a draft's PUT, gives each group of users the experiment's split among themselves: with {\"attribute\": \"tier\", \"values\": [\"gold\", \"silver\"]}, each new user is balanced within the group of their context.tier."
+by = [
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_create_stores_and_echoes_the_setting",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_put_on_a_draft_sets_echoes_and_clears_it",
+    "test:backend/tests/integration/api/test_balanced_assignment.py::test_a_list_and_single_assigns_share_each_groups_places",
+]
+
+[[unit]]
+text = "With {\"segments\": [\"<segment id>\", ...]}, 1 to 10 saved segments, each new user is balanced within the first listed segment they belong to, or other when they belong to none."
+by = [
+    "test:backend/tests/integration/api/test_balance_within_segments.py::test_each_user_is_balanced_in_the_first_listed_segment_they_belong_to",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_segments_are_stored_and_echoed",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_the_setting_is_refused_verbatim",
+]
+
+[[unit]]
+text = "Every experiment response carries it, null when the experiment balances nothing, and a clone copies it."
+by = [
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_put_on_a_draft_sets_echoes_and_clears_it",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_a_clone_balances_within_the_same_groups_and_starts_fresh",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_the_snapshot_carries_balance_within_and_never_its_key",
+]
+
+[[unit]]
+text = "It answers 422 at [\"body\", \"balance_within\"] for a bandit, a split URL experiment, or a split whose shares are not all multiples of 5, and at [\"body\", \"balance_within\", \"segments\"] for a segment that does not exist, is archived or inactive, or whose rules are not valid; a clone answers 409 when a segment it would balance within cannot be used."
+by = [
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_a_bandit_cannot_balance",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_a_split_url_experiment_cannot_balance_on_create",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_a_split_not_in_steps_of_5_is_refused",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_a_segment_that_cannot_be_used_is_refused",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_a_clone_of_an_experiment_balanced_within_an_archived_segment_is_refused",
+]
+
+[[unit]]
+text = "See Balance the split within groups."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Balanced experiments: for an experiment that balances within groups, a new user's variant also depends on the users of their group assigned before them; the group is read from the top level of context (Balancing the split within groups)."
+by = [
+    "test:backend/tests/integration/services/test_balance_across_processes.py::test_four_processes_keep_every_group_balanced",
+    "test:backend/tests/unit/services/test_balanced_allocation.py::test_the_label_table",
+]
 
 [[unit]]
 text = "schedule is not accepted by this endpoint."
@@ -2300,6 +2911,10 @@ by = ["test:backend/tests/integration/api/test_experiment_update_refusals.py::te
 [[unit]]
 text = "Schedule an experiment with PUT /api/v1/experiments/{experiment_id}/schedule."
 by = ["exempt:instruction"]
+
+[[unit]]
+text = "A visual draft takes no start date there: a start_date other than null is refused with 400, because it starts only with POST /start; an end_date is accepted, and {\"start_date\": null} clears a start date."
+by = ["test:backend/tests/integration/api/test_visual_experiment_api.py::test_v71a_schedule_refuses_a_start_date_on_a_visual_draft"]
 
 [[unit]]
 text = "An experiment's status"
@@ -2329,6 +2944,19 @@ by = ["test:backend/tests/integration/api/test_complete_after_early_start.py::te
 [[unit]]
 text = "An experiment with no start_date whose end_date has passed is refused with 400 and nothing is changed; set a later end_date, or clear it with null, through PUT /api/v1/experiments/{experiment_id}/schedule and start it again."
 by = ["test:backend/tests/integration/api/test_start_after_end_date.py::test_starting_a_draft_whose_end_date_has_passed_answers_400"]
+
+[[unit]]
+text = "A split URL experiment is also refused with 400 when its split_url_config is missing or cannot split; see Starting a split URL experiment."
+by = [
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_start_refuses_a_split_url_experiment_with_no_config",
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_start_refuses_a_config_that_cannot_split_saying_why",
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_start_refuses_the_same_control_page_as_an_active_experiment",
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_start_refuses_a_chain_either_way",
+]
+
+[[unit]]
+text = "A visual draft (one with visual_config) starts only with the body {\"design_etag\": \"...\"}, the design_etag that GET /api/v1/experiments/{experiment_id} returned: without it the start is refused with 400, and with a different one (its design changed after it was read) with 409, and nothing is changed."
+by = ["test:backend/tests/integration/api/test_visual_experiment_api.py::test_v68_start_refuses_a_design_changed_after_it_was_read"]
 
 [[unit]]
 text = "POST /api/v1/experiments/{experiment_id}/pause: active to paused."
@@ -2657,8 +3285,12 @@ text = "See Audit Logging Guide for full documentation."
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "ADMIN and ANALYST read every audit entry; DEVELOPER and VIEWER read only their own entries on the list, user, stream and history routes."
-by = ["test:backend/tests/integration/api/test_audit_log_reads.py::test_developer_and_viewer_read_only_their_own_entries"]
+text = "ADMIN and ANALYST, and in the full profile anyone whose custom role or direct grant gives audit_log (read), read other users' audit entries too; anyone else reads only their own entries on the list, user, stream and history routes."
+by = [
+    "test:backend/tests/integration/api/test_audit_log_reads.py::test_developer_and_viewer_read_only_their_own_entries",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]
 
 [[unit]]
 text = "See Permissions."
@@ -2750,19 +3382,167 @@ text = "Bulk-evaluate checks its one user_context once, whatever the number of s
 by = ["test:backend/tests/integration/api/test_segment_context_limits.py::test_bulk_evaluate_checks_its_one_user_context_once"]
 
 [[unit]]
-text = "POST /api/v1/segments/{id}/preview evaluates the rules in its body against the stored contexts of up to sample_size assignments (10 to 10,000, default 1,000)."
-by = ["test:backend/tests/integration/api/test_segment_rules_validated.py::test_preview_counts_only_assignments_with_a_context"]
+text = "Estimating a segment's size."
+by = ["exempt:label"]
 
 [[unit]]
-text = "Only assignments that carry a context are counted, and sample_size in the answer is how many there were."
-by = ["test:backend/tests/integration/api/test_segment_rules_validated.py::test_preview_counts_only_assignments_with_a_context"]
-
-[[unit]]
-text = "Assignment does not store a context today, so the answer is usually {\"estimated_percentage\": 0.0, \"sample_size\": 0, \"matched\": 0}: there was nothing to estimate from, which is not the same as 0%."
+text = "POST /api/v1/segments/{id}/preview estimates how many users the rules in its body match, from the attributes users sent as context to POST /api/v1/tracking/assign."
 by = [
-    "test:backend/tests/unit/services/test_audience_service.py::TestPreviewAudienceSize::test_preview_returns_zero_of_zero_when_no_assignment_has_a_context",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_preview_counts_users_who_were_assigned_through_the_tracking_api",
+    "docex:docs/api/endpoints.md#\"source\": \"exposure_metadata\"",
+]
+
+[[unit]]
+text = "Every assign call records an exposure that carries those attributes."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_each_user_is_counted_once_across_experiments_and_repeats",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_a_users_latest_attributes_are_the_ones_evaluated",
+]
+
+[[unit]]
+text = "The preview reads the exposures of the last 30 days, newest first, and takes each user's latest one."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_exposures_older_than_the_window_are_not_read",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_preview_uses_newest_not_oldest_rows",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_a_users_latest_attributes_are_the_ones_evaluated",
+]
+
+[[unit]]
+text = "It evaluates the rules, as evaluate does, against up to sample_size users (10 to 10,000, default 1,000) whose latest exposure carries attributes."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_preview_matched_equals_membership_of_each_user",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_the_read_is_capped_and_stops_at_sample_size",
     "test:backend/tests/integration/api/test_segment_rules_validated.py::test_preview_counts_only_assignments_with_a_context",
 ]
+
+[[unit]]
+text = "Nothing is copied or stored for it: it reads the exposures where they are, and they are kept as long as other events are."
+by = ["test:backend/tests/integration/api/test_segment_preview_exposures.py::test_the_preview_runs_the_same_statements_for_10_and_1000_users"]
+
+[[unit]]
+text = "Any role that can read segments may preview; the answer is counts and a share, never a stored attribute value."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_every_role_may_preview",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_no_stored_attribute_is_echoed_or_logged",
+]
+
+[[unit]]
+text = "On a stack with traffic, the answer looks like this:"
+by = ["exempt:example"]
+
+[[unit]]
+text = "sample_size in the request is a maximum."
+by = ["test:backend/tests/integration/api/test_segment_preview_exposures.py::test_the_read_is_capped_and_stops_at_sample_size"]
+
+[[unit]]
+text = "In the answer it is the number of users evaluated, and matched is how many of them the rules match."
+by = ["test:backend/tests/integration/api/test_segment_preview_exposures.py::test_preview_counts_users_who_were_assigned_through_the_tracking_api"]
+
+[[unit]]
+text = "estimated_percentage is matched divided by sample_size, as a percentage to two decimals."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_a_users_latest_attributes_are_the_ones_evaluated",
+    "test:backend/tests/unit/services/test_audience_service.py::TestPreviewAudienceSize::test_only_rows_with_a_context_object_count",
+]
+
+[[unit]]
+text = "ended_by says what ended the read: sample_size (enough users were found), cap (the read takes at most 5 exposures per user asked for, and never more than 50,000), or window (every exposure of the last 30 days was read)."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_sampled_since_is_the_oldest_row_read_and_ended_by_says_why",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_the_read_is_capped_and_stops_at_sample_size",
+]
+
+[[unit]]
+text = "sampled_since is the time of the oldest exposure read, and window_days is always 30."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_sampled_since_is_the_oldest_row_read_and_ended_by_says_why",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_exposures_older_than_the_window_are_not_read",
+]
+
+[[unit]]
+text = "users_without_context counts the users read whose latest exposure carried no attributes, because their SDK sent no context; they are not in sample_size."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_preview_empty_sample_is_not_a_percentage",
+    "test:backend/tests/integration/api/test_segment_rules_validated.py::test_preview_counts_only_assignments_with_a_context",
+]
+
+[[unit]]
+text = "If most callers send none, it is the larger number."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "With no user with attributes, estimated_percentage is null and reason is no_exposures_with_context."
+by = ["test:backend/tests/integration/api/test_segment_preview_exposures.py::test_preview_empty_sample_is_not_a_percentage"]
+
+[[unit]]
+text = "With 1 to 29, it is null and reason is too_few_users; sample_size and matched are still given."
+by = ["test:backend/tests/integration/api/test_segment_preview_exposures.py::test_fewer_than_30_users_give_no_percentage"]
+
+[[unit]]
+text = "This is a floor on the estimate's quality."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "It is not a random sample."
+by = ["test:backend/tests/integration/api/test_segment_preview_exposures.py::test_preview_uses_newest_not_oldest_rows"]
+
+[[unit]]
+text = "Unless ended_by is window, the users are the ones seen most recently, since sampled_since, which on a busy site can be minutes ago."
+by = ["test:backend/tests/integration/api/test_segment_preview_exposures.py::test_sampled_since_is_the_oldest_row_read_and_ended_by_says_why"]
+
+[[unit]]
+text = "So the sample leans toward users who call assign often and toward the time of day."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Use it as a sanity check and an order of magnitude: rules that match none of 1,000 recent users usually name an attribute that is misspelt or not sent."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "It counts only users who reached /tracking/assign: a user assigned only through /tracking/assign/batch has no exposure, and a visitor whose SDK sends attributes only after sign-in is counted from then on."
+by = [
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestParity::test_each_user_gets_what_a_single_call_gives",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_preview_counts_users_who_were_assigned_through_the_tracking_api",
+]
+
+[[unit]]
+text = "It takes each user's latest attributes, not their first exposure's, so a user whose attributes changed is counted by the new ones."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_a_users_latest_attributes_are_the_ones_evaluated",
+    "test:backend/tests/unit/services/test_audience_service.py::TestPreviewAudienceSize::test_a_users_latest_attributes_win",
+]
+
+[[unit]]
+text = "An exposure dated more than 5 minutes after the server's clock is not read, nor one whose stored attributes are longer than 8,192 bytes as PostgreSQL prints them."
+by = ["test:backend/tests/integration/api/test_segment_preview_exposures.py::test_future_dated_and_oversize_exposures_are_not_sampled"]
+
+[[unit]]
+text = "PostgreSQL prints a space after each colon and comma, which assign's own 8,192-byte limit does not count, so attributes that assign accepted close to that limit may not be read."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_future_dated_and_oversize_exposures_are_not_sampled",
+    "test:backend/tests/unit/core/test_context_limits.py::test_size_is_counted_in_utf8_bytes_of_compact_json",
+]
+
+[[unit]]
+text = "The read has 5 seconds in all."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_a_read_of_quick_fetches_that_passes_the_limit_in_all_answers_503",
+    "test:backend/tests/unit/services/test_audience_service.py::TestPreviewRead::test_postgresql_gives_each_fetch_what_is_left_of_one_budget",
+]
+
+[[unit]]
+text = "It fetches rows from the database in batches and gives each fetch only the time left, so PostgreSQL stops it at 5 seconds however many fetches it has made, and the preview then answers 503 with a fixed message."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_the_read_streams_from_a_server_side_cursor",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_a_read_of_quick_fetches_that_passes_the_limit_in_all_answers_503",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_a_read_past_the_statement_timeout_answers_503",
+    "test:backend/tests/unit/services/test_audience_service.py::TestPreviewRead::test_postgresql_gives_each_fetch_what_is_left_of_one_budget",
+    "test:backend/tests/unit/services/test_audience_service.py::TestPreviewRead::test_the_read_stops_when_its_time_is_up",
+]
+
+[[unit]]
+text = "A large events table with few exposures can take that long."
+by = ["exempt:theory"]
 
 [[unit]]
 text = "The preview also refuses, before any query, regex conditions times sample_size above 500 and conditions plus groups times sample_size above 50,000, at loc [\"query\", \"sample_size\"]."
@@ -2783,8 +3563,11 @@ text = "Flags and experiments target a segment with in_segment / not_in_segment 
 by = ["test:backend/tests/integration/api/test_segment_targeting_api.py::test_rules_naming_an_active_segment_are_accepted"]
 
 [[unit]]
-text = "DELETE /api/v1/segments/{id}, and a PUT that sets status to inactive or archived, answer 409 and change nothing while a flag that is not archived (a disabled one included), or an experiment that is draft, active or paused, has a rule naming the segment:"
-by = ["test:backend/tests/integration/api/test_segment_in_use.py::test_a_disabled_flag_and_a_paused_experiment_block"]
+text = "DELETE /api/v1/segments/{id}, and a PUT that sets status to inactive or archived, answer 409 and change nothing while a flag that is not archived (a disabled one included), or an experiment that is draft, active or paused, has a rule naming the segment, or while such an experiment balances within the segment (Balancing the split within groups):"
+by = [
+    "test:backend/tests/integration/api/test_segment_in_use.py::test_a_disabled_flag_and_a_paused_experiment_block",
+    "test:backend/tests/integration/api/test_balance_within_segments.py::test_a_segment_an_experiment_balances_within_cannot_be_archived",
+]
 
 [[unit]]
 text = "A stored row that mentions the segment's id but whose rules cannot be read is listed too."
@@ -2921,8 +3704,11 @@ text = "Who."
 by = ["test:backend/tests/integration/api/test_segment_members_api.py::test_roles_analyst_cannot_change_members"]
 
 [[unit]]
-text = "DEVELOPER and ADMIN; ANALYST and VIEWER get 403."
-by = ["test:backend/tests/integration/api/test_segment_members_api.py::test_roles_analyst_cannot_change_members"]
+text = "Users who may change experiments: DEVELOPER and ADMIN, and in the full profile anyone whose custom role or direct grant gives experiment (update); anyone else gets 403."
+by = [
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_roles_analyst_cannot_change_members",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]
 
 [[unit]]
 text = "Each change writes one segment_update audit entry with the counts, never the IDs."
@@ -2957,12 +3743,22 @@ text = "AI Endpoints and the MCP Manifest"
 by = ["exempt:label"]
 
 [[unit]]
-text = "See AI Endpoints and the MCP Manifest for full documentation."
+text = "See The MCP Server and the AI Endpoints for full documentation."
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "The manifest describes these operations as tools in the vocabulary of the Model Context Protocol, but the platform runs no MCP server: an MCP client cannot connect to it or call a tool through it."
-by = ["test:backend/tests/unit/api/test_ai_design_endpoints.py::TestMCPManifestEndpoint::test_nothing_answers_an_mcp_client"]
+text = "The MCP server is a separate program on your computer that calls this API with your API key."
+by = [
+    "test:sdk/mcp/__tests__/surface.test.ts::initialize at %s",
+    "test:sdk/mcp/__tests__/tools.test.ts::list_feature_flags: the query, the projection, and only the configured key",
+]
+
+[[unit]]
+text = "Nothing on this API answers an MCP client, and the manifest only lists the server's tools."
+by = [
+    "test:backend/tests/unit/api/test_ai_design_endpoints.py::TestMCPManifestEndpoint::test_nothing_answers_an_mcp_client",
+    "test:backend/tests/unit/api/test_ai_design_endpoints.py::TestMCPManifestEndpoint::test_the_manifest_lists_the_tools_the_mcp_server_offers",
+]
 
 [[unit]]
 text = "Call the endpoints over HTTP."
@@ -3201,15 +3997,15 @@ text = "Split URL experiments use experiment_type: split_url and carry a split_u
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
-text = "How visitors are meant to be redirected, and what does not work in this release, is on the Split URL API Reference."
-by = ["exempt:navigation"]
+text = "Your server or edge asks the API where to send each visitor, and redirects them: how to set it up is on the Split URL API Reference."
+by = ["test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_a_split_url_experiment_splits_its_visitors"]
 
 [[unit]]
 text = "Experiment management uses the existing experiment CRUD endpoints with experiment_type=split_url:"
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
-text = "Split URL-specific endpoint:"
+text = "Split URL-specific endpoints:"
 by = ["exempt:label"]
 
 [[unit]]
@@ -3217,8 +4013,11 @@ text = "Query parameters for preview: user_id (required)."
 by = ["test:modules/backend/tests/integration/api/test_split_url_api.py"]
 
 [[unit]]
-text = "The preview hashes {user_id}:{experiment_id}; it does not predict the edge router."
-by = ["test:modules/backend/tests/integration/api/test_split_url_api.py"]
+text = "The preview answers the visitor's stored variant, or the variant a new visitor with that id would get, as the assign route does, without recording anything."
+by = [
+    "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_the_preview_agrees_with_the_route_and_records_nothing",
+    "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_the_preview_answers_a_stored_assignment",
+]
 
 [[unit]]
 text = "SplitUrlConfig schema (split_url_config field):"
@@ -3229,8 +4028,51 @@ text = "At least two URL variants, with traffic_allocation values (0-100) that s
 by = ["test:backend/tests/unit/schemas/test_split_url_schemas.py"]
 
 [[unit]]
-text = "cookie_name and cookie_ttl_days (default 30) are optional."
+text = "In a split_url experiment the URL variants name the experiment's variants one to one, with the same allocations, and each url is an absolute http:// or https:// URL; see Validation Rules."
+by = [
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_a_config_that_does_not_match_its_variants_is_refused_at_its_loc",
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_a_url_no_visitor_could_be_sent_to_is_refused_at_its_loc",
+]
+
+[[unit]]
+text = "cookie_name and cookie_ttl_days (default 30) are optional, stored, and read by nothing."
 by = [
     "test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlConfigOptionalFields::test_cookie_ttl_days_default_30",
     "test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlConfigOptionalFields::test_cookie_name_defaults_to_none",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
 ]
+
+[[unit]]
+text = "Behind a proxy, the client address is the one the proxy reports, when the API is set to believe it (Users' addresses behind a proxy)."
+by = [
+    "test:backend/tests/unit/infrastructure/test_proxy_headers_trust.py::TestUvicornItself::test_the_private_ranges_return_the_real_client",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestGetClientIp::test_it_uses_the_resolved_client_and_not_the_header",
+]
+
+[[unit]]
+text = "Balanced Groups (beta)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "See Balance the split within groups for full documentation."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Returns an experiment that balances its split within groups by the group each user was balanced in: one row per group, one estimate per treatment over the groups (overall, or null with a reason), merged_groups, users_outside_blocks, unknown_share and engine_version."
+by = [
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_the_rows_are_the_stored_groups_and_add_up_to_every_user",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_too_few_users_has_no_estimate",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_a_small_group_is_merged_into_the_largest",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_the_balanced_groups_route_is_beta_and_carries_no_place_in_a_group",
+]
+
+[[unit]]
+text = "It takes no query parameters and is computed on each request."
+by = [
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_the_route_reads_and_writes_no_cache",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_the_balanced_groups_route_is_beta_and_carries_no_place_in_a_group",
+]
+
+[[unit]]
+text = "An experiment that does not balance within groups answers 409."
+by = ["test:backend/tests/integration/api/test_balanced_groups_results.py::test_an_experiment_that_balances_nothing_answers_409"]

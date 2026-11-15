@@ -7,15 +7,17 @@ than fixed page by page:
    and is not an error: ``GET /api/v1/feature-flags/evaluate/{key}`` answers
    200 with ``enabled: false`` and ``reason: "inactive"``. Only an unknown key
    is a 404 (``_evaluate_flag_by_key`` in
-   ``backend/app/api/v1/endpoints/feature_flags.py``). An experiment is
-   different: ``POST /api/v1/tracking/assign`` answers 404 when no ACTIVE
-   experiment has the key, so "404 when the experiment is not ACTIVE" is true
-   and is not refused.
+   ``backend/app/api/v1/endpoints/feature_flags.py``). Experiments are not
+   covered by these rules: ``POST /api/v1/tracking/assign`` answers an
+   experiment that is not ACTIVE with its control variant and 404s only for an
+   unknown key or a draft with no control variant, while
+   ``POST /api/v1/tracking/assign/batch`` still answers 404 for any experiment
+   that is not ACTIVE.
 2. **config-payload.** The evaluate route returns ``"config": None`` for every
    flag, and the SDK ruleset carries no variants, so an SDK's flag ``config``
-   is always null. There is no config payload to read, and the OpenFeature
-   providers' string, number and object calls always return the caller's
-   default: only boolean flags carry a value.
+   is always null. A flag's value travels in ``value``, never in ``config``
+   (#1497), so a page that reads ``config.value`` or ``config.variant`` is
+   wrong.
 3. **aws-path.** No Lambda function serves a request or processes an event,
    the API writes nothing to Kinesis, and nothing writes to OpenSearch.
    Assignment, evaluation and event tracking are API calls, events are stored
@@ -390,7 +392,7 @@ def test_every_story_has_a_rule() -> None:
     "true_text",
     [
         '`{key, enabled, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key',
-        "404 when the experiment is not ACTIVE",
+        "/assign/batch answers 404 when the experiment is not ACTIVE",
         "Errors: 401 bad key, 404 no ACTIVE experiment with that key, 422 invalid event",
         "**No Lambda function serves requests or processes events.** SDKs call the API",
         "The API does not publish tracking events to the stream today",

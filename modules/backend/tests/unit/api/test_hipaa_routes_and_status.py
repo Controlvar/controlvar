@@ -127,3 +127,30 @@ def test_ready_needs_an_active_baa_a_key_and_an_allowed_region(
     assert str(condition.compile(compile_kwargs={"literal_binds": True})).endswith(
         "is_active IS true"
     )
+
+
+@pytest.mark.regression
+def test_failed_decrypt_audit_write_logs_the_error_type_only(caplog):
+    marker = "marker-not-for-logs"
+    with (
+        patch.object(HIPAAService, "decrypt_phi_field", return_value="plain"),
+        patch.object(HIPAAService, "log_phi_access", side_effect=RuntimeError(marker)),
+        caplog.at_level("ERROR"),
+    ):
+        response = endpoint.decrypt_phi(
+            PHIDecryptRequest(ciphertext="c", field="email"),
+            request=MagicMock(),
+            current_user=_admin(),
+            db=MagicMock(),
+        )
+
+    assert response.plaintext == "plain"
+    records = [
+        r for r in caplog.records if "audit-log PHI decryption" in r.getMessage()
+    ]
+    assert len(records) == 1
+    record = records[0]
+    assert record.levelname == "ERROR"
+    assert "RuntimeError" in record.getMessage()
+    assert marker not in record.getMessage()
+    assert record.exc_info is None and marker not in (record.exc_text or "")

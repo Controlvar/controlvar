@@ -23,6 +23,7 @@ import {
   Refusal,
   classifyResponse,
   download,
+  homeReferenceProblems,
   main,
   mediaReferences,
   parseManifest,
@@ -30,8 +31,19 @@ import {
   retryAfterMs,
   toSiteVtt,
 } from './fetch-site-media.mjs';
-import { attributes, entryProblems, jpegSize, mp4Facts, pageProblems, parseVtt } from './check-site-media.mjs';
-import { platformProblems } from './check-platform-export.mjs';
+import {
+  MIN_PSNR_DB,
+  attributes,
+  check,
+  entryProblems,
+  frameProblems,
+  homeProblems,
+  jpegSize,
+  mp4Facts,
+  pageProblems,
+  parseVtt,
+} from './check-site-media.mjs';
+import { MARKETING_ONLY_PAGES, platformProblems } from './check-platform-export.mjs';
 
 const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const headers = (pairs = {}) => new Headers(pairs);
@@ -214,6 +226,22 @@ describe('the two-way reference check', () => {
     assert.deepEqual(referenceProblems(mediaReferences(html), new Set(['a.mp4', 'a.jpg', 'a.site.vtt'])), []);
     assert.equal(referenceProblems(mediaReferences(html), new Set(['a.mp4', 'a.jpg'])).length, 1);
     assert.equal(referenceProblems(mediaReferences(html), new Set(['a.mp4', 'a.jpg', 'a.site.vtt', 'b.mp4'])).length, 1);
+    assert.match(referenceProblems(mediaReferences(html), new Set(['a.mp4', 'a.jpg']))[0], /out\/walkthroughs\.html/);
+  });
+
+  it('lets the homepage reference placed posters only (site design 2026-11-11)', () => {
+    const posters = new Set(['a.jpg', 'b.jpg']);
+    assert.deepEqual(homeReferenceProblems(mediaReferences('<img src="/media/a.jpg"/><img src="/media/b.jpg"/>'), posters), []);
+    assert.deepEqual(homeReferenceProblems(mediaReferences('<p>no media</p>'), posters), []);
+    const plants = [
+      ['a video', '<img src="/media/a.jpg"/><video src="/media/a.mp4"></video>', /out\/index\.html references \/media\/a\.mp4, which is not a placed poster/],
+      ['captions', '<track src="/media/a.site.vtt"/>', /a\.site\.vtt, which is not a placed poster/],
+      ['an unplaced poster', '<img src="/media/c.jpg"/>', /c\.jpg, which is not a placed poster/],
+    ];
+    for (const [what, html, pattern] of plants) {
+      const problems = homeReferenceProblems(mediaReferences(html), posters);
+      assert.ok(problems.some((p) => pattern.test(p)), `${what}: ${problems.join('\n') || 'no problem reported'}`);
+    }
   });
 
   it("does not count Next's own /_next/static/media/ assets", () => {
@@ -244,8 +272,10 @@ function fixture() {
   const dir = scratch();
   const outDir = join(dir, 'out');
   mkdirSync(outDir);
+  // The walkthroughs page plays the video; the homepage's teaser shows its poster (site design 2026-11-11).
   const page = `<html><video src="/media/${entry.mp4.name}" poster="/media/${entry.poster.name}"><track src="/media/${stem}.site.vtt"/></video></html>`;
-  writeFileSync(join(outDir, 'index.html'), page);
+  writeFileSync(join(outDir, 'walkthroughs.html'), page);
+  writeFileSync(join(outDir, 'index.html'), `<html><a href="/walkthroughs#getting-started"><img src="/media/${entry.poster.name}"/></a></html>`);
   const manifestPath = join(dir, 'videos.json');
   writeFileSync(manifestPath, JSON.stringify({ videos: [entry] }));
   const fetchImpl = async (url) => {
@@ -264,7 +294,28 @@ describe('main', () => {
     assert.equal(await f.run(), 0);
     assert.deepEqual(readdirSync(join(f.outDir, 'media')).sort(), [f.entry.poster.name, f.entry.mp4.name, `${f.stem}.site.vtt`].sort());
     assert.equal(readFileSync(join(f.outDir, 'media', `${f.stem}.site.vtt`), 'utf8'), toSiteVtt(VTT));
-    assert.deepEqual(readdirSync(f.outDir).sort(), ['index.html', 'media']);
+    assert.deepEqual(readdirSync(f.outDir).sort(), ['index.html', 'media', 'walkthroughs.html']);
+    rmSync(f.dir, { recursive: true });
+  });
+
+  it('refuses an export with no walkthroughs page, before downloading anything', async () => {
+    const f = fixture();
+    rmSync(join(f.outDir, 'walkthroughs.html'));
+    let fetched = 0;
+    assert.equal(await f.run({ fetchImpl: async () => { fetched += 1; return new Response('', { status: 500 }); } }), 1);
+    assert.match(f.lines.join('\n'), /walkthroughs\.html does not exist/);
+    assert.equal(fetched, 0);
+    assert.deepEqual(readdirSync(f.outDir), ['index.html']);
+    rmSync(f.dir, { recursive: true });
+  });
+
+  it('refuses a homepage that plays a video, and leaves no out/media', async () => {
+    const f = fixture();
+    const home = readFileSync(join(f.outDir, 'index.html'), 'utf8').replace('</html>', `<video src="/media/${f.entry.mp4.name}"></video></html>`);
+    writeFileSync(join(f.outDir, 'index.html'), home);
+    assert.equal(await f.run(), 1);
+    assert.match(f.lines.join('\n'), /out\/index\.html references \/media\/.*\.mp4, which is not a placed poster/);
+    assert.deepEqual(readdirSync(f.outDir).sort(), ['index.html', 'walkthroughs.html']);
     rmSync(f.dir, { recursive: true });
   });
 
@@ -290,7 +341,7 @@ describe('main', () => {
     f.served.delete(f.entry.poster.name);
     assert.equal(await f.run(), 1);
     assert.match(f.lines.join('\n'), /HTTP 404/);
-    assert.deepEqual(readdirSync(f.outDir), ['index.html']);
+    assert.deepEqual(readdirSync(f.outDir).sort(), ['index.html', 'walkthroughs.html']);
     rmSync(f.dir, { recursive: true });
   });
 
@@ -301,17 +352,17 @@ describe('main', () => {
     writeFileSync(f.manifestPath, JSON.stringify(m));
     assert.equal(await f.run(), 1);
     assert.match(f.lines.join('\n'), /sha256 .* pinned 0{64}/);
-    assert.deepEqual(readdirSync(f.outDir), ['index.html']);
+    assert.deepEqual(readdirSync(f.outDir).sort(), ['index.html', 'walkthroughs.html']);
     rmSync(f.dir, { recursive: true });
   });
 
   it('refuses a page that references the approved captions instead of the positioned ones', async () => {
     const f = fixture();
-    const page = readFileSync(join(f.outDir, 'index.html'), 'utf8').replace('.site.vtt', '.vtt');
-    writeFileSync(join(f.outDir, 'index.html'), page);
+    const page = readFileSync(join(f.outDir, 'walkthroughs.html'), 'utf8').replace('.site.vtt', '.vtt');
+    writeFileSync(join(f.outDir, 'walkthroughs.html'), page);
     assert.equal(await f.run(), 1);
-    assert.match(f.lines.join('\n'), /references \/media\/.*\.vtt, which is not placed/);
-    assert.deepEqual(readdirSync(f.outDir), ['index.html']);
+    assert.match(f.lines.join('\n'), /out\/walkthroughs\.html references \/media\/.*\.vtt, which is not placed/);
+    assert.deepEqual(readdirSync(f.outDir).sort(), ['index.html', 'walkthroughs.html']);
     rmSync(f.dir, { recursive: true });
   });
 });
@@ -498,6 +549,161 @@ describe('pageProblems', () => {
       assert.ok(problems.some((p) => pattern.test(p)), problems.join('\n') || 'no problem reported');
     });
   }
+
+  it('names the walkthroughs page in what it reports', () => {
+    assert.ok(pageProblems(good + good, [entry]).every((p) => p.startsWith('out/walkthroughs.html')));
+  });
+});
+
+// The homepage's teaser (site design 2026-11-11): posters as images, no player.
+describe('homeProblems', () => {
+  const entry = {
+    slug: '01-getting-started',
+    mp4: { name: '01-getting-started-aaaaaaaaaaaa.mp4', sha256: 'a'.repeat(64) },
+    poster: { name: '01-getting-started-aaaaaaaaaaaa-poster-bbbbbbbbbbbb.jpg' },
+  };
+  // As React exports the teaser's card.
+  const good =
+    '<a href="/walkthroughs#getting-started"><img src="/media/01-getting-started-aaaaaaaaaaaa-poster-bbbbbbbbbbbb.jpg" alt="" ' +
+    'width="1280" height="720" loading="lazy" decoding="async" class="block"/><h3>Get started</h3></a>';
+
+  it('passes the teaser as React exports it', () => {
+    assert.deepEqual(homeProblems(good, [entry]), []);
+  });
+
+  const plants = [
+    ['a player', `${good}<video controls="" src="/media/01-getting-started-aaaaaaaaaaaa.mp4"></video>`, /has 1 <video>/],
+    ['a player with no media path', `${good}<video controls=""></video>`, /has 1 <video>/],
+    ['the mp4 linked', `${good}<a href="/media/01-getting-started-aaaaaaaaaaaa.mp4">x</a>`, /\.mp4, which is not a manifest poster/],
+    ['an iframe', `${good}<iframe src="/x"></iframe>`, /<iframe>/],
+    ['no poster at all', '<p>Walkthroughs</p>', /shows no walkthrough poster/],
+    ['a poster at the wrong size', good.replace('width="1280"', 'width="640"'), /is 640x720, want 1280x720/],
+    ['a poster twice', good + good, /as 2 <img>, want 1/],
+    ['a third-party image', `${good}<img src="https://cdn.example/x.jpg"/>`, /not a path on this site/],
+  ];
+  for (const [what, html, pattern] of plants) {
+    it(`fails ${what}`, () => {
+      const problems = homeProblems(html, [entry]);
+      assert.ok(problems.some((p) => pattern.test(p)), problems.join('\n') || 'no problem reported');
+    });
+  }
+});
+
+// --- poster frames (#1459, PE 7) ---------------------------------------------------------
+
+/** A row naming a frame of contentFixture's video after its first cue (VTT's starts at 3 s). */
+const frameRow = (entry) => ({
+  slug: entry.slug,
+  mp4_sha256: entry.mp4.sha256,
+  poster_sha256: entry.poster.sha256,
+  t: 50,
+  first_cue: 3,
+  crop: [1920, 940, 0, 0],
+  pad: '#f3fafe',
+  psnr_db: 43.43,
+});
+
+/** frameProblems over contentFixture's placed files, after `plant` changes the file, the manifest or the media. */
+function framed(plant = () => {}, fixture = {}) {
+  const f = contentFixture(fixture);
+  const file = { posters: [frameRow(f.entry)] };
+  const videos = [f.entry];
+  const text = plant({ file, row: file.posters[0], videos, f });
+  const problems = frameProblems(typeof text === 'string' ? text : JSON.stringify(file), videos, f.media, f.transcripts);
+  rmSync(f.dir, { recursive: true });
+  return problems;
+}
+
+/** An animation (08's shape): captions from 0 s, a transcript of kind "animation", its whole frame. */
+const ANIMATION_VTT = 'WEBVTT\n\n00:00:00.000 --> 00:00:08.000\nOne.\n';
+const asAnimation = { vtt: ANIMATION_VTT, transcriptOf: animationOf([{ on_screen: ['One.'] }]) };
+const wholeFrame = ({ row }) => Object.assign(row, { t: 1, first_cue: 0, crop: null, pad: null });
+
+describe('frameProblems', () => {
+  it('passes a row naming a frame after the first cue, and an animation whose captions start at 0', () => {
+    assert.deepEqual(framed(), []);
+    assert.deepEqual(framed(wholeFrame, asAnimation), []);
+    // t is compared in whole milliseconds: under half a millisecond before the cue counts as at it
+    assert.deepEqual(framed(({ row }) => { row.t = 2.9996; }), []);
+  });
+
+  // PE 7's plants, and the shape. Each must be refused.
+  const plants = [
+    ['a t inside the title card', ({ row }) => { row.t = 0.5; }, /t 0\.5 s is before the first cue \(3 s\): that frame is the title card/],
+    ['a t one millisecond before the first cue', ({ row }) => { row.t = 2.999; }, /before the first cue/],
+    ['a first_cue that is not the placed captions\'', ({ row }) => { row.first_cue = 3.033; }, /first_cue 3\.033 s, but the first cue of out\/media\/.*\.site\.vtt starts at 3 s/],
+    ['captions whose first cue moved, under an unchanged row', ({ f }) => {
+      const site = join(f.media, `${f.stem}.site.vtt`);
+      writeFileSync(site, readFileSync(site, 'utf8').replace('00:00:03.000 -->', '00:00:51.000 -->'));
+    }, /starts at 51 s/],
+    ['a listed video with no row', ({ file }) => { file.posters = []; }, /01-getting-started: poster-frames\.json has no row/],
+    ['a row for a video videos.json does not list', ({ file }) => {
+      file.posters.push({ ...file.posters[0], slug: '09-design-in-depth' });
+    }, /a row for "09-design-in-depth", which videos\.json does not list/],
+    ['a poster swapped in videos.json without measuring its frame again', ({ videos }) => {
+      videos[0] = { ...videos[0], poster: { ...videos[0].poster, sha256: 'b'.repeat(64) } };
+    }, /poster_sha256 .* is not the manifest's bbbbbbbbbbbb: the poster changed/],
+    ['a row of another render', ({ row }) => { row.mp4_sha256 = 'c'.repeat(64); }, /mp4_sha256 cccccccccccc is not the manifest's/],
+    ['a t after the video ends', ({ row }) => { row.t = 84; }, /t 84 s is not inside the 84\.000 s video/],
+    [`a PSNR under ${MIN_PSNR_DB} dB`, ({ row }) => { row.psnr_db = 30.53; }, /psnr_db 30\.53 is under 35/],
+    ['a t written as a string', ({ row }) => { row.t = '50'; }, /t must be a number of at least 0/],
+    // D200: a recording's crop is the page, [1920, 940, 0, 0], and nothing else (review a-round2 C1).
+    ['the old top-left 16:9 crop, unpadded', ({ row }) => { row.crop = [1664, 936, 0, 0]; row.pad = null; }, /crop \[1664,936,0,0\] is not the page, \[1920, 940, 0, 0\]/],
+    ['the old top-left 16:9 crop, padded', ({ row }) => { row.crop = [1664, 936, 0, 0]; }, /crop \[1664,936,0,0\] is not the page/],
+    ['the page shifted right', ({ row }) => { row.crop = [1920, 940, 64, 0]; }, /crop \[1920,940,64,0\] is not the page/],
+    ['a crop of another size', ({ row }) => { row.crop = [1000, 500, 0, 0]; }, /crop \[1000,500,0,0\] is not the page/],
+    ['a crop of no height', ({ row }) => { row.crop = [1920, 0, 0, 0]; }, /crop \[1920,0,0,0\] is not the page/],
+    ['a crop of two numbers', ({ row }) => { row.crop = [1920, 940]; }, /crop \[1920,940\] is not the page/],
+    ['a crop written as strings', ({ row }) => { row.crop = ['1920', '940', '0', '0']; }, /is not the page/],
+    ['a recording kept whole (crop null): its caption band left on', ({ row }) => { row.crop = null; row.pad = null; }, /crop is null \(the whole frame\), but 01-getting-started is not an animation/],
+    ['the page with no pad (a stretched poster)', ({ row }) => { row.pad = null; }, /crop is the page \(1920x940, not 16:9\), so pad must name the colour/],
+    ['an animation kept whole with a pad', (state) => { wholeFrame(state); state.row.pad = '#ffffff'; }, /pad is #ffffff, but the crop is null/, asAnimation],
+    ['an animation row whose transcript is not JSON (listed, not thrown)', (state) => {
+      wholeFrame(state);
+      writeFileSync(join(state.f.transcripts, `${state.f.entry.slug}.json`), '{"slug": ');
+    }, /cannot read src\/content\/walkthroughs\/01-getting-started\.json/, asAnimation],
+    ['a pad that is not #rrggbb', ({ row }) => { row.pad = 'white'; }, /pad must be null or a colour written #rrggbb/],
+    ['a pad in capitals', ({ row }) => { row.pad = '#F3FAFE'; }, /pad must be null or a colour written #rrggbb/],
+    ['a row with a key missing', ({ row }) => { delete row.psnr_db; }, /posters\[0\] must have exactly the keys/],
+    ['a row with an extra key', ({ row }) => { row.note = 'title card'; }, /posters\[0\] must have exactly the keys/],
+    ['two rows for one video', ({ file }) => { file.posters.push({ ...file.posters[0] }); }, /two rows for "01-getting-started"/],
+    ['a file with another top-level key', ({ file }) => JSON.stringify({ ...file, videos: [] }), /must be \{"posters": \[\.\.\.\]\} and nothing else/],
+    ['a file that is not JSON', () => '{"posters": [', /is not JSON/],
+    ['captions that were not placed', ({ f }) => { rmSync(join(f.media, `${f.stem}.site.vtt`)); }, /\.site\.vtt is missing or has no cue/],
+  ];
+  for (const [what, plant, pattern, fixture] of plants) {
+    it(`fails ${what}`, () => {
+      const problems = framed(plant, fixture);
+      assert.ok(problems.some((p) => pattern.test(p)), problems.join('\n') || 'no problem reported');
+    });
+  }
+
+  it('is part of check(), which refuses a missing poster-frames file', () => {
+    const f = contentFixture();
+    const { entry, stem } = f;
+    writeFileSync(
+      join(f.dir, 'walkthroughs.html'),
+      `<video controls="" preload="none" poster="/media/${entry.poster.name}" width="1920" height="1080" aria-labelledby="t" ` +
+        `aria-describedby="d" src="/media/${entry.mp4.name}"><track kind="captions" srcLang="en" label="English" src="/media/${stem}.site.vtt"/></video>`,
+    );
+    writeFileSync(join(f.dir, 'index.html'), `<img src="/media/${entry.poster.name}" alt="" width="1280" height="720"/>`);
+    const manifest = join(f.dir, 'videos.json');
+    writeFileSync(manifest, JSON.stringify({ videos: [entry] }));
+    const frames = join(f.dir, 'poster-frames.json');
+    writeFileSync(frames, JSON.stringify({ posters: [frameRow(entry)] }));
+    assert.deepEqual(check(f.dir, manifest, f.transcripts, frames), []);
+    writeFileSync(frames, JSON.stringify({ posters: [{ ...frameRow(entry), t: 0.5 }] }));
+    assert.ok(check(f.dir, manifest, f.transcripts, frames).some((p) => /that frame is the title card/.test(p)));
+    rmSync(frames);
+    assert.ok(check(f.dir, manifest, f.transcripts, frames).some((p) => /poster-frames\.json is missing/.test(p)));
+    // check() reads the walkthroughs page and the homepage, and refuses an export missing either.
+    writeFileSync(frames, JSON.stringify({ posters: [frameRow(entry)] }));
+    writeFileSync(join(f.dir, 'index.html'), `<video src="/media/${entry.mp4.name}"></video>`);
+    assert.ok(check(f.dir, manifest, f.transcripts, frames).some((p) => /out\/index\.html has 1 <video>/.test(p)));
+    rmSync(join(f.dir, 'walkthroughs.html'));
+    assert.match(check(f.dir, manifest, f.transcripts, frames)[0], /walkthroughs\.html is missing/);
+    rmSync(f.dir, { recursive: true });
+  });
 });
 
 // --- G2b (check-platform-export.mjs) ------------------------------------------------------
@@ -526,7 +732,13 @@ describe('platformProblems', () => {
       [(d) => mkdirSync(join(d, 'media')), /out\/media exists/],
       [(d) => writeFileSync(join(d, '_next', 'a.vtt'), 'WEBVTT'), /carries _next\/a\.vtt/],
       [(d) => writeFileSync(join(d, 'index.html'), '<p>Walkthroughs</p>'), /not the platform homepage/],
+      // The marketing build's own pages (site design 2026-11-11), as a file or a directory.
+      [(d) => writeFileSync(join(d, 'walkthroughs.html'), '<h1>Walkthroughs</h1>'), /out\/walkthroughs\.html exists: \/walkthroughs is a page of the marketing build only/],
+      [(d) => mkdirSync(join(d, 'walkthroughs')), /out\/walkthroughs exists/],
+      [(d) => writeFileSync(join(d, 'books.html'), '<h1>The Controlvar books</h1>'), /out\/books\.html exists: \/books is a page of the marketing build only/],
+      [(d) => mkdirSync(join(d, 'books')), /out\/books exists/],
     ];
+    assert.deepEqual(MARKETING_ONLY_PAGES, ['walkthroughs', 'books']);
     for (const [plant, pattern] of plants) {
       const dir = platform();
       plant(dir);
@@ -534,5 +746,21 @@ describe('platformProblems', () => {
       rmSync(dir, { recursive: true });
     }
     assert.match(platformProblems(join(tmpdir(), 'no-such-export-dir'))[0], /is missing/);
+  });
+
+  // #1459 PE 2: the homepage's screenshots are the marketing build's only. The
+  // files are in every export (public/ is copied whole) and are allowed; a
+  // reference from the platform homepage is not.
+  it('fails a /screens/ reference, and passes the screenshot files alone', () => {
+    const dir = platform();
+    mkdirSync(join(dir, 'screens'));
+    writeFileSync(join(dir, 'screens', 'results-000000000000.webp'), 'RIFF');
+    assert.deepEqual(platformProblems(dir), []);
+    writeFileSync(join(dir, 'index.html'), '<a href="/login">Sign in to the dashboard</a><img src="/screens/results-000000000000.webp"/>');
+    assert.ok(platformProblems(dir).some((p) => /references \/screens\//.test(p)), platformProblems(dir).join('\n'));
+    // Not a path under some other root, like `/_next/static/screens/`.
+    writeFileSync(join(dir, 'index.html'), '<a href="/login">Sign in to the dashboard</a><link href="/_next/static/screens/a.css"/>');
+    assert.deepEqual(platformProblems(dir), []);
+    rmSync(dir, { recursive: true });
   });
 });

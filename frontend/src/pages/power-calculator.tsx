@@ -9,6 +9,7 @@ import {
   type PowerCurvePoint,
 } from '@/utils/power';
 import { PageTitle } from '@/components/PageTitle';
+import { H1 } from '@/components/homepage/styles';
 import {
   LineChart,
   Line,
@@ -102,7 +103,9 @@ export default function PowerCalculatorPage() {
 
     try {
       // Computed here, not fetched. `utils/power.ts` is a transcription of
-      // the Python service, pinned to it by power.test.ts. The API round trip
+      // the Python service, checked by power.test.ts against vectors the
+      // service produced once (frozen: a server change shows up there only
+      // when they are regenerated). The API round trip
       // bought nothing -- the arithmetic is closed form -- and cost the page
       // its ability to work at all wherever the API is not deployed, which is
       // the published site.
@@ -164,6 +167,7 @@ export default function PowerCalculatorPage() {
     <>
       <PageTitle
         title="Power Calculator"
+        path="/power-calculator"
         description="Pre-experiment statistical power calculator: compute sample size, MDE, and runtime estimates for A/B tests. No login required."
       />
 
@@ -172,13 +176,13 @@ export default function PowerCalculatorPage() {
         <div className="max-w-7xl mx-auto px-6 lg:px-8 py-10">
           {/* Header */}
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            <h1 className={`mb-2 ${H1}`}>
               Pre-Experiment Power Calculator
             </h1>
             <p className="text-gray-500 text-base">
               Calculate the required sample size, detect the minimum effect size, and estimate
               how long your experiment needs to run. No account required.{' '}
-              <a href={docsUrl('statistics/power-analysis')} className="text-blue-600 hover:text-blue-700">
+              <a href={docsUrl('statistics/power-analysis')} className="text-blue-600 underline hover:text-blue-700">
                 Learn more
               </a>
             </p>
@@ -216,7 +220,7 @@ export default function PowerCalculatorPage() {
                       onChange={(e) => setBaselineRate(parseFloat(e.target.value))}
                       className="w-full accent-blue-600"
                     />
-                    <div className="flex justify-between text-xs text-gray-400 mt-1">
+                    <div className="flex justify-between text-xs text-gray-500 mt-1">
                       <span>1%</span><span>50%</span>
                     </div>
                   </div>
@@ -240,7 +244,7 @@ export default function PowerCalculatorPage() {
                       onChange={(e) => setMde(parseFloat(e.target.value))}
                       className="w-full accent-blue-600"
                     />
-                    <div className="flex justify-between text-xs text-gray-400 mt-1">
+                    <div className="flex justify-between text-xs text-gray-500 mt-1">
                       <span>1%</span><span>50%</span>
                     </div>
                   </div>
@@ -345,7 +349,7 @@ export default function PowerCalculatorPage() {
                       onChange={(e) => setTrafficAllocation(parseFloat(e.target.value))}
                       className="w-full accent-blue-600"
                     />
-                    <div className="flex justify-between text-xs text-gray-400 mt-1">
+                    <div className="flex justify-between text-xs text-gray-500 mt-1">
                       <span>5%</span><span>100%</span>
                     </div>
                   </div>
@@ -369,13 +373,13 @@ export default function PowerCalculatorPage() {
               {/* Key Metrics */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="bg-blue-600 text-white rounded-xl p-5">
-                  <p id="power-per-variant-name" className="text-xs font-medium opacity-80 uppercase tracking-wide mb-1">
+                  <p id="power-per-variant-name" className="text-xs font-medium uppercase tracking-wide mb-1">
                     Sample Size per Variant
                   </p>
                   <output aria-labelledby="power-per-variant-name" aria-live="polite" className="block text-3xl font-bold">
                     {loading ? '...' : result ? fmtNumber(result.per_variant) : '--'}
                   </output>
-                  <p className="text-xs opacity-70 mt-1">
+                  <p className="text-xs mt-1">
                     Total: {loading ? '...' : result ? fmtNumber(result.total) : '--'}
                   </p>
                 </div>
@@ -387,7 +391,7 @@ export default function PowerCalculatorPage() {
                   <output aria-labelledby="power-mde-absolute-name" aria-live="polite" className="block text-3xl font-bold text-gray-900">
                     {loading ? '...' : result ? `+${(result.mde_absolute * 100).toFixed(2)}%` : '--'}
                   </output>
-                  <p className="text-xs text-gray-400 mt-1">
+                  <p className="text-xs text-gray-500 mt-1">
                     {result
                       ? `${(result.baseline_rate * 100).toFixed(2)}% → ${((result.baseline_rate + result.mde_absolute) * 100).toFixed(2)}%`
                       : 'baseline → treatment'}
@@ -401,7 +405,7 @@ export default function PowerCalculatorPage() {
                   <output aria-labelledby="power-runtime-name" aria-live="polite" className="block text-3xl font-bold text-gray-900">
                     {loading ? '...' : fmtDays(result?.runtime_days ?? null)}
                   </output>
-                  <p className="text-xs text-gray-400 mt-1">
+                  <p className="text-xs text-gray-500 mt-1">
                     {dailyTraffic ? '' : 'Enter daily traffic above'}
                   </p>
                 </div>
@@ -436,7 +440,7 @@ export default function PowerCalculatorPage() {
                 <h2 className="text-sm font-semibold text-gray-700 mb-1">
                   Power Curve
                 </h2>
-                <p className="text-xs text-gray-400 mb-4">
+                <p className="text-xs text-gray-500 mb-4">
                   Sample size required per variant vs. relative effect size. Larger effects are easier to detect.
                 </p>
 

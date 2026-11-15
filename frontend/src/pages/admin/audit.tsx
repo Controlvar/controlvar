@@ -7,12 +7,13 @@ import { AuditLogTable } from '@/components/admin/audit/AuditLogTable';
 import { AUDIT_LOG_ROLES, readsAllAuditLogs } from '@/components/admin/audit/access';
 import { withAdminGuard } from '@/components/admin/withAdminGuard';
 import { useAuth } from '@/contexts/AuthContext';
+import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
 
 const TITLE = 'Audit Log';
 
 /** Shown to a user the audit API answers with their own entries only. */
 export const OWN_SCOPE_NOTE =
-  'You see the audit entries you made yourself. ADMIN and ANALYST users see every entry.';
+  "You see the audit entries you made yourself. Reading other users' entries needs permission to read the audit log, which the ADMIN and ANALYST roles have.";
 
 /**
  * The audit log, for every role (see `AUDIT_LOG_ROLES`).
@@ -25,9 +26,12 @@ export const OWN_SCOPE_NOTE =
  */
 export function AuditLogPage() {
   const { user } = useAuth();
+  const { effective, loading } = useEffectivePermissions();
   const [filters, setFilters] = useState<AuditLogFilters>({});
   const superuser = user?.is_superuser === true;
-  const ownScope = user !== null && !readsAllAuditLogs(user);
+  // Not while the effective map is on its way: a custom role or direct grant
+  // of audit_log (read) may still widen the answer (#891).
+  const ownScope = user !== null && !loading && !readsAllAuditLogs(user, effective);
 
   const content = (heading: React.ReactNode) => (
     <div data-testid="audit-log-page" className="flex flex-col gap-5">

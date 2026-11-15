@@ -6,7 +6,11 @@ They are unit tested on planted inputs (``backend/tests/unit/showcase``).
 
 from __future__ import annotations
 
+import datetime as dt
+import json
 import math
+import re
+from decimal import Decimal
 from statistics import NormalDist
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
@@ -878,6 +882,90 @@ def select_hold(option: str, shown: str, held: str, held_ms: int) -> Verdict:
     return True, numbers, ""
 
 
+def typed_as_shown(
+    text: str,
+    before: str,
+    after: str,
+    *,
+    replaced: bool,
+    secret: bool,
+    kept: Iterable[str] = (),
+) -> Verdict:
+    """Gate 12 (typed as shown): after a ``type`` step the field reads exactly
+    what the storyboard typed.
+
+    That is *text* when the step replaced the value (``clear`` or ``select``),
+    and otherwise the value *before* the step followed by *text*. A field that
+    reads anything else refuses the take: "034" after 34 was typed into an
+    emptied number box, "5034" when a selection did not take, or text put in
+    the middle of a value. The numbers and the refusal always carry the
+    lengths, and carry the values only when the step is not secret and none of
+    them holds a *kept* value (a needle).
+    """
+    expected = text if replaced else before + text
+    hidden = secret or any(
+        value and (value in text or value in before or value in after) for value in kept
+    )
+    numbers: Dict[str, Any] = {
+        "replaced": replaced,
+        "secret": secret,
+        "typed_chars": len(text),
+        "before_chars": len(before),
+        "after_chars": len(after),
+        "expected_chars": len(expected),
+        "values_shown": not hidden,
+    }
+    if not hidden:
+        numbers.update(typed=text, before=before, after=after)
+    if after == expected:
+        return True, numbers, ""
+    if hidden:
+        return (
+            False,
+            numbers,
+            f"the field reads {len(after)} characters after {len(text)} were typed;"
+            f" it should read {len(expected)} (values not shown)",
+        )
+    return (
+        False,
+        numbers,
+        f"the field reads {after!r} after {text!r} was typed; it should read"
+        f" {expected!r}",
+    )
+
+
+#: A ``datetime-local`` input's value, to the minute, as the page computes it.
+LOCAL_MINUTE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T([0-9]{2}:[0-9]{2})$")
+
+
+def date_as_set(at: str, value: str, read: str, read_back: str) -> Verdict:
+    """Gate 12 for a ``date`` step: the page computed a day at the storyboard's
+    time of day *at* (*value*, local, to the minute), the field reads exactly
+    *value* after it was filled (*read*), and the page reads that local time
+    back as itself (*read_back*: ``new Date(value)`` formatted the same way).
+
+    A time a change of daylight saving time skips is moved by the browser, so
+    it never reads back as itself: refused, never filmed as another hour."""
+    numbers = {"at": at, "value": value, "read": read, "read_back": read_back}
+    shaped = LOCAL_MINUTE.match(value or "")
+    if shaped is None or shaped.group(1) != at:
+        return (
+            False,
+            numbers,
+            f"the page computed {value!r}, which is not a day at {at}",
+        )
+    if read != value:
+        return False, numbers, f"the field reads {read!r} after {value!r} was filled"
+    if read_back != value:
+        return (
+            False,
+            numbers,
+            f"the page reads {value!r} back as {read_back!r}: that local time does"
+            " not exist in the browser's zone",
+        )
+    return True, numbers, ""
+
+
 #: How the audit log page names the actions a flag's end state checks
 #: (frontend/src/components/admin/audit/actionLabels.ts; a unit test keeps
 #: them equal).
@@ -900,6 +988,319 @@ def audit_rows(text: str) -> List[List[str]]:
     ]
 
 
+#: How the audit log page names the safety monitor and its rollback
+#: (frontend/src/components/admin/audit/actionLabels.ts; a unit test keeps
+#: them equal), and the user the API records for it. The page draws a system
+#: actor's entry, one with no user, as its name and "(automatic)"
+#: (``actorLabel``): the User cell of the monitor's rollback.
+SAFETY_MONITOR = "system:safety-monitor"
+SAFETY_MONITOR_LABEL = "Safety monitor (automatic)"
+ROLLBACK_LABEL = "Safety rollback"
+#: How the safety card and the schedule's badge read (frontend/src/pages/
+#: feature-flags/[id].tsx: the badge's text, ``humanize`` of the status).
+UNHEALTHY_LABEL = "Unhealthy"
+PAUSED_LABEL = "Paused"
+#: The start of the reason the safety monitor writes for an error-rate breach
+#: (backend/app/core/safety_scheduler.py).
+ROLLBACK_REASON = "Automatic rollback due to error_rate"
+
+
+def error_rate_metric(check: Any) -> Optional[Mapping[str, Any]]:
+    """A flag's safety check answer's ``error_rate`` metric, or None.
+
+    Its ``current_value`` is the rate the flag page draws in its safety card's
+    metric row (``safety-metric``: the value, then "/" and the threshold). The
+    answer's ``details`` hold the counts behind the rate, not the rate
+    (``SafetyService._error_window``)."""
+    if not isinstance(check, Mapping):
+        return None
+    for metric in check.get("metrics") or []:
+        if isinstance(metric, Mapping) and metric.get("name") == "error_rate":
+            return metric
+    return None
+
+
+def safety_error_rate(check: Any) -> Optional[float]:
+    """The error rate a safety check answered (``error_rate_metric``), or None."""
+    metric = error_rate_metric(check)
+    value = None if metric is None else metric.get("current_value")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
+def rate_reading(value: float) -> str:
+    """An error rate as the platform writes it in a rollback reason: four
+    significant figures as a percentage, never in exponent form, 40/240 reads
+    ``16.67%`` (``format_metric_reading`` in backend/app/services/
+    safety_service.py; a unit test keeps the two equal)."""
+    return f"{format(Decimal(f'{value * 100:.4g}'), 'f')}%"
+
+
+#: The rate a safety rollback's reason gives for its breach, "...above
+#: threshold (16.67% > 5%)" (``describe_breach``).
+_REASON_RATE = re.compile(r"\(([0-9][0-9.]*%) [<>=] [0-9][0-9.]*%\)")
+
+
+def reason_rate(reason: Optional[str]) -> Optional[str]:
+    """The one rate a rollback's reason gives, as written; None for none or several."""
+    found = _REASON_RATE.findall(reason or "")
+    return found[0] if len(found) == 1 else None
+
+
+def panel_says(text: Optional[str]) -> Optional[bool]:
+    """What StreamPulse's panel row says of a flag (its reason line,
+    demo/streampulse/src/lib/labels.ts): on, off, or None for anything else
+    (loading, an error)."""
+    line = (text or "").strip()
+    if line.startswith("on:") or line == "on":
+        return True
+    if line.startswith("off:") or line == "off":
+        return False
+    return None
+
+
+def phone_says(text: Optional[str]) -> Optional[bool]:
+    """What StreamPulse's phone draws on its Player screen
+    (demo/streampulse/src/components/screens/PlayerScreen.tsx): Player v2
+    ("Now playing", "Player v2") is on, the classic player off; None for
+    anything else."""
+    drawn = " ".join((text or "").split())
+    v2 = "Now playing" in drawn and "Player v2" in drawn
+    classic = "Classic player" in drawn
+    if v2 == classic:
+        return None
+    return v2
+
+
+def agreement(
+    agree: Any,
+    *,
+    panel: Optional[str],
+    phone: Optional[str],
+    api: Optional[Mapping[str, Any]],
+) -> Verdict:
+    """Gate 10/4 at a beat's start (plan v2 C1): the app's panel row, its phone
+    and the API's answer for the device all say the storyboard's on or off."""
+    said = {
+        "panel": panel_says(panel),
+        "phone": phone_says(phone),
+        "api": None if not api else bool(api.get("enabled")),
+    }
+    numbers = {
+        "at": f"scene {agree.scene} beat {agree.beat}",
+        "device": agree.device,
+        "wanted": agree.enabled,
+        "said": said,
+        "api_reason": None if not api else api.get("reason"),
+    }
+    if any(value != agree.enabled for value in said.values()):
+        return (
+            False,
+            numbers,
+            f"panel/phone/API disagree at cue {agree.scene} beat {agree.beat}:"
+            f" panel {said['panel']}, phone {said['phone']}, API {said['api']};"
+            f" the storyboard says {'on' if agree.enabled else 'off'}",
+        )
+    return True, numbers, ""
+
+
+def rollback_end(
+    end: Any,
+    *,
+    named: Sequence[Mapping[str, Any]],
+    schedules: Sequence[Mapping[str, Any]],
+    audit: Sequence[Mapping[str, Any]],
+    actor: Mapping[str, Any],
+    kill_named: Sequence[Mapping[str, Any]],
+    kill_audit: Sequence[Mapping[str, Any]],
+    readings: Mapping[str, str],
+    api_at_agreement: Optional[Mapping[str, Any]],
+    rollback_posts: Sequence[str],
+    log: Mapping[str, int],
+) -> Verdict:
+    """Gate 10/4 (S8a of plan v2.2, ``storyboard.RollbackEnd``): the safety
+    monitor rolled the flag back by itself, and every reading agrees.
+
+    * one flag has the name, with the key, at ``end.percentage``, active; its
+      one rollout schedule is paused;
+    * its audit entries, oldest first (*audit* is newest first, as the API
+      lists them), are exactly ``end.audit``: each by the signed-in user
+      (*actor*) but the last, one ``safety_rollback`` by the safety monitor
+      with no user, automatic, to the percentage, for an error-rate breach;
+    * the API's log (*log*: counts of its lines) holds exactly one rollback of
+      the flag, automatic, none manual; and no page asked for a rollback
+      (*rollback_posts*, from the capture's listener);
+    * the page drew it: "Unhealthy" at B9, "Paused" and the percentage after,
+      the audit log's top row the monitor's rollback of the flag, and the
+      rollback's reason, word for word; and the agreement at ``end.agree``;
+    * the kill switch is one flag, inactive, with exactly its audit entries,
+      each by the signed-in user.
+    """
+    numbers: Dict[str, Any] = {"flags_named": len(named)}
+    if len(named) != 1 or named[0].get("key") != end.key:
+        return (
+            False,
+            numbers,
+            f"{len(named)} flags are named {end.name!r} with key {end.key}",
+        )
+    flag = named[0]
+    numbers.update(
+        rollout_percentage=flag.get("rollout_percentage"),
+        status=flag.get("status"),
+        schedules=[str(s.get("status")).lower() for s in schedules],
+    )
+    if flag.get("rollout_percentage") != end.percentage:
+        return (
+            False,
+            numbers,
+            f"the flag is at {flag.get('rollout_percentage')}%, not {end.percentage}%",
+        )
+    if str(flag.get("status")).lower() != end.status:
+        return False, numbers, f"the flag is {flag.get('status')!r}, not {end.status!r}"
+    if numbers["schedules"] != [end.schedule]:
+        return (
+            False,
+            numbers,
+            f"the flag's rollout schedules are {numbers['schedules']}, not one {end.schedule}",
+        )
+    oldest_first = list(reversed(list(audit)))
+    actions = [str(e.get("action_type")) for e in oldest_first]
+    numbers["audit"] = actions
+    if actions != list(end.audit):
+        return (
+            False,
+            numbers,
+            f"the flag's audit entries are {actions}, not {list(end.audit)}",
+        )
+    email, ident = actor.get("email"), str(actor.get("id"))
+    others = [
+        f"{e.get('action_type')} by {e.get('user_email')!r}"
+        for e in oldest_first[:-1]
+        if e.get("user_email") != email or str(e.get("user_id")) != ident
+    ]
+    if others:
+        return (
+            False,
+            numbers,
+            f"not every change is by the signed-in {email!r}: {others[0]}",
+        )
+    rollback = oldest_first[-1]
+    try:
+        after = json.loads(rollback.get("new_value") or "{}")
+    except ValueError:
+        after = {}
+    reason = str(rollback.get("reason") or "")
+    numbers["rollback"] = {
+        "by": rollback.get("user_email"),
+        "user_id": rollback.get("user_id"),
+        "trigger_type": after.get("trigger_type"),
+        "new_percentage": after.get("new_percentage"),
+        "reason": reason,
+    }
+    if rollback.get("user_email") != SAFETY_MONITOR or rollback.get("user_id"):
+        return (
+            False,
+            numbers,
+            f"the rollback was made by {rollback.get('user_email')!r}; the storyboard"
+            " claims the safety monitor",
+        )
+    if (
+        after.get("trigger_type") != "automatic"
+        or after.get("new_percentage") != end.percentage
+    ):
+        return (
+            False,
+            numbers,
+            f"the rollback is {after.get('trigger_type')!r} to"
+            f" {after.get('new_percentage')}%, not automatic to {end.percentage}%",
+        )
+    if not reason.startswith(ROLLBACK_REASON):
+        return (
+            False,
+            numbers,
+            f"the rollback's reason is {reason!r}, not an error-rate breach",
+        )
+    numbers["log"] = dict(log)
+    if (log.get("rolled_back"), log.get("automatic"), log.get("manual")) != (1, 1, 0):
+        return (
+            False,
+            numbers,
+            f"the API's log holds {log.get('rolled_back')} rollback(s) of the flag,"
+            f" {log.get('automatic')} automatic and {log.get('manual')} manual; one"
+            " automatic and no other",
+        )
+    numbers["rollback_posts"] = list(rollback_posts)
+    if rollback_posts:
+        return False, numbers, f"a page asked for a rollback: {rollback_posts[0]}"
+    drawn = {
+        name: " ".join((readings.get(name) or "").split())
+        for name in (end.unhealthy, end.paused, end.rolled_back)
+    }
+    numbers["drawn"] = drawn
+    for name, wanted in (
+        (end.unhealthy, UNHEALTHY_LABEL),
+        (end.paused, PAUSED_LABEL),
+        (end.rolled_back, f"{end.percentage}%"),
+    ):
+        if drawn[name] != wanted:
+            return (
+                False,
+                numbers,
+                f"the page's {name} read {drawn[name]!r}, not {wanted!r}",
+            )
+    rows = audit_rows(readings.get(end.shown) or "")
+    top = rows[0][1:5] if rows else []
+    numbers["top_row"] = top
+    wanted_row = [SAFETY_MONITOR_LABEL, ROLLBACK_LABEL, FLAG_ENTITY_LABEL, end.name]
+    if top != wanted_row:
+        return False, numbers, f"the audit log's top row showed {top}, not {wanted_row}"
+    detail = " ".join((readings.get(end.reason) or "").split())
+    if " ".join(reason.split()) not in detail:
+        return (
+            False,
+            numbers,
+            f"the rollback's details did not show the API's reason {reason!r}",
+        )
+    ok, numbers["agreement"], why = agreement(
+        end.agree,
+        panel=readings.get(end.agree.panel),
+        phone=readings.get(end.agree.phone),
+        api=api_at_agreement,
+    )
+    if not ok:
+        return False, numbers, why
+    kill = end.kill_switch
+    kill_oldest = [str(e.get("action_type")) for e in reversed(list(kill_audit))]
+    numbers["kill_switch"] = {
+        "flags_named": len(kill_named),
+        "status": kill_named[0].get("status") if len(kill_named) == 1 else None,
+        "audit": kill_oldest,
+    }
+    if len(kill_named) != 1 or kill_named[0].get("key") != kill.key:
+        return (
+            False,
+            numbers,
+            f"{len(kill_named)} flags are named {kill.name!r} with key {kill.key}",
+        )
+    if str(kill_named[0].get("status")).lower() != "inactive":
+        return False, numbers, f"the kill switch {kill.name!r} is not off"
+    if kill_oldest != list(kill.audit):
+        return (
+            False,
+            numbers,
+            f"the kill switch's audit entries are {kill_oldest}, not {list(kill.audit)}",
+        )
+    strangers = [
+        e.get("user_email")
+        for e in kill_audit
+        if e.get("user_email") != email or str(e.get("user_id")) != ident
+    ]
+    if strangers:
+        return False, numbers, f"the kill switch was changed by {strangers[0]!r}"
+    return True, numbers, ""
+
+
 def flag_end(
     end: Any,
     *,
@@ -908,18 +1309,34 @@ def flag_end(
     audit: Sequence[Mapping[str, Any]],
     actor: Mapping[str, Any],
     shown: Optional[str],
+    answered: Optional[Sequence[Mapping[str, Any]]] = None,
 ) -> Verdict:
     """Gate 10 for a flag the video made (``storyboard.FlagEnd``).
 
     * exactly one flag has the name, with the storyboard's key;
-    * its rules are one group of one condition, ``segment`` ``in_segment`` the
-      id of the one active segment with the storyboard's segment name;
+    * its rules are one group of one condition: ``segment`` ``in_segment`` the
+      id of the one active segment with the storyboard's segment name, or the
+      storyboard's ``rule`` exactly, admitting every user it matches (no
+      ``rollout_percentage`` of its own below 100, ``rule_admits_all``);
     * its rollout percentage and status are the ones the video left it at;
+    * a flag that declares its values has that type and serves exactly those
+      two values (numbers compared as numbers, ``storyboard.values_equal``);
     * its audit entries, oldest first, are exactly the storyboard's, every one
       by the signed-in user (*actor*: their email and id);
-    * the page showed them: the audit table's top rows are those entries,
-      newest first, each with the user, the action and the flag's name.
+    * the page showed them, when the storyboard names the reading
+      (``shown``): the audit table's top rows are those entries, newest
+      first, each with the user, the action and the flag's name;
+    * each declared answer is the API's, as read after the last frame
+      (*answered*, ``run.flag_answers``): the value and the reason it gives
+      the declared user, both the ones the storyboard derived
+      (``answers_agree``); answers declared and not read are refused, never
+      passed.
+
+    A field the storyboard leaves unset is not read and not compared, and puts
+    nothing in the numbers: video 3's verdict is the one it always had.
     """
+    from showcase.capture.storyboard import values_equal
+
     numbers: Dict[str, Any] = {"flags_named": len(named)}
     if len(named) != 1:
         return False, numbers, f"{len(named)} flags are named {end.name!r}"
@@ -936,19 +1353,20 @@ def flag_end(
             numbers,
             f"{end.name!r} has key {flag.get('key')!r}, not {end.key!r}",
         )
-    matching = [
-        s
-        for s in segments
-        if s.get("name") == end.segment and str(s.get("status")).lower() == "active"
-    ]
-    numbers["segments_named"] = len(matching)
-    if len(matching) != 1:
-        return (
-            False,
-            numbers,
-            f"{len(matching)} active segments are named {end.segment!r}",
-        )
-    segment_id = str(matching[0].get("id"))
+    if end.segment is not None:
+        matching = [
+            s
+            for s in segments
+            if s.get("name") == end.segment and str(s.get("status")).lower() == "active"
+        ]
+        numbers["segments_named"] = len(matching)
+        if len(matching) != 1:
+            return (
+                False,
+                numbers,
+                f"{len(matching)} active segments are named {end.segment!r}",
+            )
+        segment_id = str(matching[0].get("id"))
     rules = flag.get("targeting_rules") or {}
     groups = rules.get("groups") if isinstance(rules, dict) else None
     conditions = (
@@ -956,25 +1374,50 @@ def flag_end(
         if isinstance(groups, list) and len(groups) == 1 and isinstance(groups[0], dict)
         else None
     )
-    if not (isinstance(conditions, list) and len(conditions) == 1):
+    if not (isinstance(conditions, list) and len(conditions) == 1) or (
+        end.segment is None and not isinstance(conditions[0], dict)
+    ):
         return (
             False,
             numbers,
             f"the flag's rules are not one group of one condition: {rules!r}",
         )
     condition = conditions[0]
-    said = (
-        condition.get("attribute"),
-        condition.get("operator"),
-        str(condition.get("value")),
-    )
-    if said != ("segment", "in_segment", segment_id):
-        return (
-            False,
-            numbers,
-            f"the flag's rule is {said[0]!r} {said[1]!r} {said[2]!r}, not 'segment'"
-            f" 'in_segment' {end.segment!r} ({segment_id})",
+    if end.segment is not None:
+        said = (
+            condition.get("attribute"),
+            condition.get("operator"),
+            str(condition.get("value")),
         )
+        if said != ("segment", "in_segment", segment_id):
+            return (
+                False,
+                numbers,
+                f"the flag's rule is {said[0]!r} {said[1]!r} {said[2]!r}, not 'segment'"
+                f" 'in_segment' {end.segment!r} ({segment_id})",
+            )
+    else:
+        said = (
+            condition.get("attribute"),
+            condition.get("operator"),
+            condition.get("value"),
+        )
+        wanted = (end.rule.attribute, end.rule.operator, end.rule.value)
+        if said != wanted:
+            return (
+                False,
+                numbers,
+                f"the flag's rule is {said[0]!r} {said[1]!r} {said[2]!r}, not"
+                f" {wanted[0]!r} {wanted[1]!r} {wanted[2]!r}",
+            )
+        if not rule_admits_all(rules):
+            return (
+                False,
+                numbers,
+                "the flag's rule admits only part of the users it matches"
+                f" (rollout_percentage {rules.get('rollout_percentage')!r}): who"
+                " it serves would depend on their bucket",
+            )
     if flag.get("rollout_percentage") != end.rollout_percentage:
         return (
             False,
@@ -988,6 +1431,26 @@ def flag_end(
             numbers,
             f"the flag is {flag.get('status')!r}, not {end.status!r}",
         )
+    if end.value_type is not None:
+        numbers.update(
+            value_type=flag.get("value_type"),
+            on_value=flag.get("on_value"),
+            off_value=flag.get("off_value"),
+        )
+        if flag.get("value_type") != end.value_type:
+            return (
+                False,
+                numbers,
+                f"the flag's type is {flag.get('value_type')!r}, not {end.value_type!r}",
+            )
+        for field in ("on_value", "off_value"):
+            if not values_equal(flag.get(field), getattr(end, field)):
+                return (
+                    False,
+                    numbers,
+                    f"the flag's {field} is {flag.get(field)!r}, not"
+                    f" {getattr(end, field)!r}",
+                )
     oldest_first = list(reversed(list(audit)))
     actions = [str(e.get("action_type")) for e in oldest_first]
     numbers["audit"] = actions
@@ -1009,17 +1472,918 @@ def flag_end(
             numbers,
             f"not every entry is by the signed-in {email!r}: {others[0]}",
         )
-    rows = audit_rows(shown or "")
-    wanted = [
-        [email, AUDIT_LABELS[action], FLAG_ENTITY_LABEL, end.name]
-        for action in reversed(list(end.audit))
+    if end.shown is not None:
+        rows = audit_rows(shown or "")
+        wanted = [
+            [email, AUDIT_LABELS[action], FLAG_ENTITY_LABEL, end.name]
+            for action in reversed(list(end.audit))
+        ]
+        drawn = [row[1:5] for row in rows[: len(wanted)]]
+        numbers["shown_rows"] = drawn
+        if drawn != wanted:
+            return (
+                False,
+                numbers,
+                f"the audit log's top rows showed {drawn}; the API says {wanted}",
+            )
+    if end.answers:
+        ok, made, why = answers_agree(end.answers, answered)
+        numbers["answers"] = made
+        if not ok:
+            return False, numbers, why
+    return True, numbers, ""
+
+
+def answers_agree(
+    declared: Sequence[Any], answered: Optional[Sequence[Mapping[str, Any]]]
+) -> Tuple[bool, List[Dict[str, Any]], str]:
+    """A flag's declared answers (``storyboard.FlagAnswer``) against the API's,
+    read after the last frame (``run.flag_answers``: in the declared order, each
+    with the user and context it asked for and the evaluate route's answer).
+
+    For each declared user, the answer's ``value`` (compared as the API
+    compares values, ``storyboard.values_equal``) and its ``reason`` are both
+    the ones the storyboard derived from the reason it declares. Refused,
+    never passed: answers not read at all (*answered* None), fewer or more
+    read than declared, one read for another user or context, and a user the
+    API answered with an error or without a value or a reason.
+    """
+    from showcase.capture.storyboard import values_equal
+
+    made: List[Dict[str, Any]] = []
+    if answered is None or len(answered) != len(declared):
+        count = "none" if answered is None else len(answered)
+        return (
+            False,
+            made,
+            f"the storyboard declares {len(declared)} answers and the API was asked"
+            f" for {count}: an unread answer is never passed",
+        )
+    for answer, read in zip(declared, answered):
+        where = f"{answer.user} {answer.context}"
+        wanted = (answer.value, answer.reason)
+        asked = (read.get("user"), read.get("context"))
+        if asked != (answer.user, answer.context):
+            return (
+                False,
+                made,
+                f"the answer for {where} was read for {asked[0]!r} {asked[1]!r}:"
+                " an unread answer is never passed",
+            )
+        reply = read.get("answer")
+        if not (isinstance(reply, Mapping) and "value" in reply and "reason" in reply):
+            made.append(
+                {"user": answer.user, "context": answer.context, "answer": reply}
+            )
+            got = read.get("error") or f"{reply!r}, with no value or no reason"
+            return (
+                False,
+                made,
+                f"the API answered {where} with {got}; the storyboard derives"
+                f" (value, reason) {wanted!r}: an unread answer is never passed",
+            )
+        said = (reply["value"], reply["reason"])
+        made.append(
+            {
+                "user": answer.user,
+                "context": answer.context,
+                "value": said[0],
+                "reason": said[1],
+            }
+        )
+        if not (values_equal(said[0], wanted[0]) and said[1] == wanted[1]):
+            return (
+                False,
+                made,
+                f"the API answers {where} with (value, reason) {said!r}; the"
+                f" storyboard derives {wanted!r}",
+            )
+    return True, made, ""
+
+
+def rule_admits_all(rules: Any) -> bool:
+    """Stored dashboard rules admit every user they match: no top-level
+    ``rollout_percentage``, an empty one, or a number of at least 100.
+
+    The server buckets a matching user only below 100
+    (backend/app/core/targeting_adapter.py ``buckets_on_rule_id``); anything
+    else here, a string or an unreadable value included, is refused rather
+    than read the server's way (a unit test holds that every rule passed here
+    is one the server does not bucket on)."""
+    if not isinstance(rules, dict) or rules.get("rollout_percentage") in (None, ""):
+        return True
+    value = rules["rollout_percentage"]
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value >= 100
+    )
+
+
+# ---------------------------------------------------------------------------
+# Gate 10 "design": an experiment the video designed and left a draft
+# ---------------------------------------------------------------------------
+
+#: How the Review step names a metric's type (frontend/src/types/experiments.ts
+#: ``METRIC_TYPE_LABELS``; a unit test keeps them equal).
+METRIC_TYPE_LABELS: Dict[str, str] = {
+    "conversion": "Conversion",
+    "revenue": "Revenue",
+    "count": "Count",
+    "duration": "Duration",
+    "custom": "Custom",
+}
+#: ``correctionName`` (frontend/src/components/results/shared/analysisSettings.ts):
+#: any other method is named "None".
+CORRECTION_NAMES: Dict[str, str] = {
+    "benjamini_hochberg": "Benjamini-Hochberg",
+    "bonferroni": "Bonferroni",
+}
+#: How the rules in words name each operator (frontend/src/types/targeting.ts
+#: ``OPERATOR_LABELS``; a unit test keeps them equal).
+OPERATOR_LABELS: Dict[str, str] = {
+    "equals": "equals",
+    "not_equals": "does not equal",
+    "contains": "contains",
+    "not_contains": "does not contain",
+    "starts_with": "starts with",
+    "ends_with": "ends with",
+    "greater_than": "greater than",
+    "less_than": "less than",
+    "greater_than_or_equal": "greater than or equal to",
+    "less_than_or_equal": "less than or equal to",
+    "in": "is one of",
+    "not_in": "is not one of",
+    "regex": "matches regex",
+    "is_null": "is empty",
+    "is_not_null": "is not empty",
+    "semver_eq": "version equals",
+    "semver_gt": "version greater than",
+    "semver_lt": "version less than",
+    "semver_gte": "version >=",
+    "semver_lte": "version <=",
+    "geo_within_radius": "within radius of",
+    "time_window": "within time window",
+    "array_contains": "array contains",
+    "array_intersects": "array intersects",
+    "in_segment": "is in segment",
+    "not_in_segment": "is not in segment",
+}
+#: The Review row's addition when Bayesian analysis is on (Wizard.tsx).
+BAYESIAN_ON = " · Bayesian analysis on"
+#: ...and when sequential testing is on (Wizard.tsx, #1463).
+SEQUENTIAL_ON = " · Sequential testing (beta) on"
+#: The experiment page's term for a start still ahead ([id].tsx scheduleLabel, #1450).
+START_TERM = "Starts"
+#: The note under the experiment page's settings, word for word (pages/experiments/
+#: [id].tsx, as 5b resolved it: EM-3 of video 9's re-plan; a unit test keeps the two
+#: equal). Read whole at the payoff: a note that still lists something the video has
+#: just set on camera would be false under it (PE 1).
+API_SETTINGS_NOTE = (
+    "Set through the API, not on this page: a paused experiment's resume, turning"
+    " sequential testing on or off after creation."
+)
+
+
+def holdout_label(name: str, percentage: Any) -> str:
+    """``holdoutLabel`` (frontend/src/utils/holdouts.ts; a unit test keeps the two
+    equal): the active holdout as the experiment page and the holdouts page draw it."""
+    return f"{name}: keeps {percentage}% of new users out of every experiment"
+
+
+#: The tolerance a saved effect is compared within.
+EFFECT_TOLERANCE = 1e-12
+
+#: The fields guided setup never sets, with the value an experiment it made
+#: holds: anything else was set some other way.
+UNTOUCHED: Tuple[Tuple[str, Any], ...] = (
+    ("sequential_testing_enabled", False),
+    ("variance_reduction_config", None),
+    ("mutual_exclusion_group_id", None),
+    ("optimization_type", "fixed"),
+    ("split_url_config", None),
+    ("start_date", None),
+    ("end_date", None),
+    ("resume_at", None),
+)
+_EXPERIMENT_KEYS = (
+    "id",
+    "name",
+    "key",
+    "status",
+    "owner_id",
+    "experiment_type",
+    "variants",
+    "metrics",
+    "targeting_rules",
+    "confidence_level",
+    "correction_method",
+    "bayesian_enabled",
+)
+_VARIANT_KEYS = ("name", "traffic_allocation", "is_control", "configuration")
+_METRIC_KEYS = (
+    "name",
+    "event_name",
+    "metric_type",
+    "is_primary",
+    "expected_effect",
+    "lower_is_better",
+)
+
+
+def correction_name(method: str) -> str:
+    """``correctionName``: the correction's full name, "None" for none."""
+    return CORRECTION_NAMES.get(method, "None")
+
+
+def format_confidence(level: float) -> str:
+    """``formatConfidence``: 0.95 -> "95%", 0.925 -> "92.5%" (one decimal at
+    most, a trailing zero dropped, as ``Number(x.toFixed(1))`` prints it)."""
+    text = f"{level * 100:.1f}"
+    if text.endswith(".0"):
+        text = text[:-2]
+    return f"{text}%"
+
+
+def describe_settings(level: float, method: str) -> str:
+    """``describeSettings``: the Review row's wording of the analysis settings."""
+    correction = (
+        "no correction" if method == "none" else f"{correction_name(method)} correction"
+    )
+    return f"{format_confidence(level)} confidence · {correction}"
+
+
+def _text(value: Any) -> str:
+    """``String(value ?? '')`` for the values the rule builder sends: text, or
+    null for ``is_null`` / ``is_not_null``. A stored value of another type
+    cannot reach the readings: check 6 has refused it first."""
+    return "" if value is None else str(value)
+
+
+def condition_words(condition: Mapping[str, Any]) -> str:
+    """``describeCondition`` (frontend/src/utils/experimentTargeting.ts): one
+    condition in words, ``user.country is one of US, CA``."""
+    attribute = _text(condition.get("attribute"))
+    operator = _text(condition.get("operator"))
+    label = OPERATOR_LABELS.get(operator, operator)
+    if operator in ("is_null", "is_not_null"):
+        return f"{attribute} {label}"
+    value = condition.get("value")
+    shown = (
+        ", ".join(_text(v) for v in value) if isinstance(value, list) else _text(value)
+    )
+    return f"{attribute} {label} {shown}"
+
+
+def combine_word(logical_operator: Any) -> str:
+    """``combineWord``: "any" for OR, "all" for AND or none."""
+    return "any" if logical_operator == "OR" else "all"
+
+
+def targeting_words(rules: Any) -> str:
+    """The Review's targeting row (Wizard.tsx, #1425) as one line: "Targeting:"
+    then ``RulesSummary`` (frontend/src/components/experiments/RulesSummary.tsx)
+    for rules that hold groups, "Targeting: everyone" for none."""
+    if _stored_rules_empty(rules):
+        return "Targeting: everyone"
+    rules = rules if isinstance(rules, dict) else {}
+    groups = [g for g in rules.get("groups") or [] if isinstance(g, dict)]
+
+    def conditions(group: Mapping[str, Any]) -> List[str]:
+        return [
+            condition_words(c)
+            for c in group.get("conditions") or []
+            if isinstance(c, dict)
+        ]
+
+    if len(groups) == 1:
+        parts = [
+            f"People who match {combine_word(groups[0].get('logical_operator'))}"
+            " of these conditions:",
+            *conditions(groups[0]),
+        ]
+    else:
+        parts = [
+            f"People who match {combine_word(rules.get('logical_operator'))}"
+            " of these groups:"
+        ]
+        for index, group in enumerate(groups, start=1):
+            parts.append(
+                f"Group {index}: {combine_word(group.get('logical_operator'))}"
+                " of these conditions"
+            )
+            parts.extend(conditions(group))
+    return _one_line(" ".join(["Targeting:", *parts]))
+
+
+def _one_line(text: Optional[str]) -> str:
+    return " ".join((text or "").split())
+
+
+def _lines(text: Optional[str]) -> List[str]:
+    return [
+        " ".join(line.split()) for line in (text or "").splitlines() if line.strip()
     ]
-    drawn = [row[1:5] for row in rows[: len(wanted)]]
-    numbers["shown_rows"] = drawn
-    if drawn != wanted:
+
+
+#: The Review's variant line puts the configuration after this, as JSON.
+CONFIGURATION_SEPARATOR = ", configuration "
+
+
+def _variant_line(line: str) -> Tuple[str, Any]:
+    """A Review variant line as (its words, its configuration parsed or None).
+
+    The configuration is compared parsed: the API may return its keys in
+    another order than the wizard sent them."""
+    head, separator, tail = line.partition(CONFIGURATION_SEPARATOR)
+    if not separator:
+        return line, None
+    try:
+        return head, json.loads(tail)
+    except ValueError:
+        return line, None
+
+
+def _stored_rules_empty(rules: Any) -> bool:
+    return (
+        rules is None
+        or rules == {}
+        or (
+            isinstance(rules, dict)
+            and set(rules) <= {"groups", "logical_operator"}
+            and rules.get("groups") == []
+        )
+    )
+
+
+def _without_builder_ids(rules: Any) -> Any:
+    """The stored rules less the ``id`` the builder gives each group and each
+    condition: at those two levels only, so an id anywhere else stays a
+    difference."""
+    if not isinstance(rules, dict):
+        return rules
+    out = dict(rules)
+    groups = out.get("groups")
+    if isinstance(groups, list):
+        cleaned = []
+        for group in groups:
+            if isinstance(group, dict):
+                group = {k: v for k, v in group.items() if k != "id"}
+                conditions = group.get("conditions")
+                if isinstance(conditions, list):
+                    group["conditions"] = [
+                        {k: v for k, v in c.items() if k != "id"}
+                        if isinstance(c, dict)
+                        else c
+                        for c in conditions
+                    ]
+            cleaned.append(group)
+        out["groups"] = cleaned
+    return out
+
+
+def design_mirrors(
+    end: Any, saved: Mapping[str, Any], extra: Optional[Mapping[str, Any]] = None
+) -> Dict[str, Any]:
+    """Each reading a design end state may compare, as the product draws the
+    saved experiment *saved*: list readings as lines in the storyboard's
+    declared order (the order the wizard holds them), from the API's values
+    keyed by name, never in the API's own order.
+
+    What the video set on the draft's own pages comes in *extra*, each from
+    its own source, never formatted here: ``start_shown`` (how the page itself
+    drew the start at the ``date`` step), ``group_name`` (the group's name, read
+    from the group) and ``holdout`` (the active holdout, read from the API). A
+    reading whose source is not given has no mirror, and is refused."""
+    extra = extra or {}
+    variants = {v["name"]: v for v in saved["variants"]}
+    metrics = {m["name"]: m for m in saved["metrics"]}
+    variant_lines = []
+    for declared in end.variants:
+        api = variants[declared.name]
+        line = f"{api['name']}: {api['traffic_allocation']}%"
+        if api["is_control"]:
+            line += " (control)"
+        if api["configuration"] is not None:
+            line += CONFIGURATION_SEPARATOR + json.dumps(
+                api["configuration"], separators=(",", ":"), ensure_ascii=False
+            )
+        variant_lines.append(line)
+    metric_lines = []
+    for declared in end.metrics:
+        api = metrics[declared.name]
+        label = METRIC_TYPE_LABELS.get(str(api["metric_type"]), str(api["metric_type"]))
+        line = f"{api['name']} ({api['event_name']}, {label})"
+        if api["is_primary"]:
+            line += " — primary metric"
+        metric_lines.append(line)
+    targeting = targeting_words(saved["targeting_rules"])
+    level = float(saved["confidence_level"])
+    method = str(saved["correction_method"])
+    detail = "no correction" if method == "none" else correction_name(method)
+    mirrors: Dict[str, Any] = {
+        "review_variants": variant_lines,
+        "review_metrics": metric_lines,
+        "review_targeting": targeting,
+        "review_analysis": describe_settings(level, method)
+        + (BAYESIAN_ON if saved["bayesian_enabled"] else "")
+        + (SEQUENTIAL_ON if saved.get("sequential_testing_enabled") is True else ""),
+        "detail_analysis": f"{format_confidence(level)} confidence · {detail}",
+        "detail_bayesian": "On" if saved["bayesian_enabled"] else "Off",
+        "detail_sequential": "On"
+        if saved.get("sequential_testing_enabled") is True
+        else "Off",
+        "detail_note": API_SETTINGS_NOTE,
+    }
+    if extra.get("start_shown"):
+        mirrors["detail_start"] = f"{START_TERM} {extra['start_shown']}"
+    if extra.get("group_name"):
+        mirrors["detail_group"] = str(extra["group_name"])
+    holdout = extra.get("holdout")
+    if isinstance(holdout, Mapping) and holdout.get("name"):
+        mirrors["detail_holdout"] = holdout_label(
+            str(holdout["name"]), holdout.get("holdout_percentage")
+        )
+    return mirrors
+
+
+def _missing(item: Mapping[str, Any], keys: Sequence[str]) -> Optional[str]:
+    for key in keys:
+        if key not in item:
+            return key
+    return None
+
+
+def design_end(
+    end: Any,
+    *,
+    named: Sequence[Mapping[str, Any]],
+    total: int,
+    seed_experiments: int,
+    owner_id: Any,
+    readings: Mapping[str, str],
+    moved: Optional[Mapping[str, Any]] = None,
+    extra: Optional[Mapping[str, Any]] = None,
+) -> Verdict:
+    """Gate 10 "design" (``storyboard.DesignEnd``): the video made exactly the
+    experiment it declares, and left it a draft. In order, the first failure
+    refusing (*moved*: the ``UNTOUCHED`` fields the video set, each with the
+    value it set; ``start_date`` compared as an instant, naive as UTC; *extra*:
+    the readings' own sources for what the video set, ``design_mirrors``):
+
+    1. exactly one experiment has the name, with the key, a draft, owned by the
+       signed-in user (*owner_id*);
+    2. the API holds the seed's experiments and this one (a double-clicked
+       Create refuses);
+    3. its type;
+    4. its variants, keyed by name: allocation, control, configuration;
+    5. its metrics, keyed by name: event, type, primary, the saved effect (the
+       primary's mde, null on the others) and lower_is_better;
+    6. its targeting rule, as declared, less the builder's ids;
+    7. its confidence level, correction and Bayesian setting;
+    8. nothing guided setup cannot set (``UNTOUCHED``);
+    9. each reading named in ``shown`` said what was saved, in the product's
+       words (``design_mirrors``).
+
+    A key absent from the API's answer refuses: no check passes on a default.
+    """
+    numbers: Dict[str, Any] = {"experiments_named": len(named)}
+    if len(named) != 1:
+        return False, numbers, f"{len(named)} experiments are named {end.name!r}"
+    saved = named[0]
+    absent = _missing(saved, _EXPERIMENT_KEYS + tuple(k for k, _ in UNTOUCHED))
+    if absent:
+        return False, numbers, f"the API's answer for {end.name!r} has no {absent!r}"
+    numbers.update(
+        key=saved["key"],
+        status=saved["status"],
+        experiment_type=saved["experiment_type"],
+        owner_matches=str(saved["owner_id"]) == str(owner_id),
+    )
+    if saved["key"] != end.key:
+        return False, numbers, f"{end.name!r} has key {saved['key']!r}, not {end.key!r}"
+    if str(saved["status"]).lower() != end.status:
         return (
             False,
             numbers,
-            f"the audit log's top rows showed {drawn}; the API says {wanted}",
+            f"{end.name!r} is {saved['status']!r}, not {end.status!r}",
         )
+    if owner_id is None or str(saved["owner_id"]) != str(owner_id):
+        return (
+            False,
+            numbers,
+            f"{end.name!r} is owned by {saved['owner_id']!r}, not the signed-in user",
+        )
+    numbers.update(experiments_in_api=total, seed_experiments=seed_experiments)
+    if total != seed_experiments + 1:
+        return (
+            False,
+            numbers,
+            f"the API holds {total} experiments; the seed made {seed_experiments}"
+            " and the video 1",
+        )
+    if str(saved["experiment_type"]) != end.type:
+        return (
+            False,
+            numbers,
+            f"{end.name!r} is type {saved['experiment_type']!r}; the storyboard made"
+            f" {end.type!r}",
+        )
+    variants = list(saved["variants"])
+    for variant in variants:
+        absent = _missing(variant, _VARIANT_KEYS)
+        if absent:
+            return False, numbers, f"a variant in the API's answer has no {absent!r}"
+    names = [str(v["name"]) for v in variants]
+    numbers["variants"] = sorted(names)
+    declared = [v.name for v in end.variants]
+    if len(set(names)) != len(names) or sorted(names) != sorted(declared):
+        return (
+            False,
+            numbers,
+            f"the variants are {sorted(names)}; the storyboard made {sorted(declared)}",
+        )
+    by_name = {str(v["name"]): v for v in variants}
+    for want in end.variants:
+        got = by_name[want.name]
+        if got["traffic_allocation"] != want.allocation:
+            return (
+                False,
+                numbers,
+                f"variant {want.name!r} is {got['traffic_allocation']}%; the"
+                f" storyboard sets {want.allocation}%",
+            )
+        if bool(got["is_control"]) != want.control or not isinstance(
+            got["is_control"], bool
+        ):
+            return (
+                False,
+                numbers,
+                f"variant {want.name!r} has is_control {got['is_control']!r}; the"
+                f" storyboard says {want.control}",
+            )
+        if got["configuration"] != want.configuration:
+            return (
+                False,
+                numbers,
+                f"variant {want.name!r}'s configuration is {got['configuration']!r};"
+                f" the storyboard sets {want.configuration!r}",
+            )
+    metrics = list(saved["metrics"])
+    for metric in metrics:
+        absent = _missing(metric, _METRIC_KEYS)
+        if absent:
+            return False, numbers, f"a metric in the API's answer has no {absent!r}"
+    names = [str(m["name"]) for m in metrics]
+    numbers["metrics"] = sorted(names)
+    declared = [m.name for m in end.metrics]
+    if len(set(names)) != len(names) or sorted(names) != sorted(declared):
+        return (
+            False,
+            numbers,
+            f"the metrics are {sorted(names)}; the storyboard made {sorted(declared)}",
+        )
+    by_name = {str(m["name"]): m for m in metrics}
+    for want in end.metrics:
+        got = by_name[want.name]
+        said = (got["event_name"], str(got["metric_type"]), got["is_primary"])
+        if said != (want.event, want.type, want.primary):
+            return (
+                False,
+                numbers,
+                f"metric {want.name!r} is {said}; the storyboard made"
+                f" {(want.event, want.type, want.primary)}",
+            )
+        effect = got["expected_effect"]
+        if want.mde is None:
+            if effect is not None:
+                return (
+                    False,
+                    numbers,
+                    f"metric {want.name!r} has the planned effect {effect!r}; the"
+                    " storyboard typed none for it",
+                )
+        elif (
+            not isinstance(effect, (int, float))
+            or abs(float(effect) - want.mde) > EFFECT_TOLERANCE
+        ):
+            return (
+                False,
+                numbers,
+                f"metric {want.name!r} has the planned effect {effect!r}; the"
+                f" storyboard typed {want.mde}",
+            )
+        if got["lower_is_better"] is not want.lower_is_better:
+            return (
+                False,
+                numbers,
+                f"metric {want.name!r} has lower_is_better {got['lower_is_better']!r};"
+                f" the storyboard says {want.lower_is_better}",
+            )
+    stored = saved["targeting_rules"]
+    numbers["targeting_rules"] = stored
+    if end.targeting is None:
+        if not _stored_rules_empty(stored):
+            return (
+                False,
+                numbers,
+                f"{end.name!r} has targeting rules {stored!r}; the storyboard lets"
+                " everyone join",
+            )
+    else:
+        wanted = end.targeting.model_dump()
+        if _without_builder_ids(stored) != wanted:
+            return (
+                False,
+                numbers,
+                f"the stored targeting differs: {_without_builder_ids(stored)!r}, not"
+                f" {wanted!r} (the builder's ids aside)",
+            )
+    analysis = (
+        saved["confidence_level"],
+        saved["correction_method"],
+        saved["bayesian_enabled"],
+    )
+    numbers["analysis"] = list(analysis)
+    if (
+        not isinstance(analysis[0], (int, float))
+        or abs(float(analysis[0]) - end.analysis.confidence) > 1e-9
+    ):
+        return (
+            False,
+            numbers,
+            f"confidence_level is {analysis[0]!r}; the storyboard chose"
+            f" {end.analysis.confidence}",
+        )
+    if str(analysis[1]) != end.analysis.correction:
+        return (
+            False,
+            numbers,
+            f"correction_method is {analysis[1]!r}; the storyboard chose"
+            f" {end.analysis.correction!r}",
+        )
+    if analysis[2] is not end.analysis.bayesian:
+        return (
+            False,
+            numbers,
+            f"bayesian_enabled is {analysis[2]!r}; the storyboard turns it"
+            f" {'on' if end.analysis.bayesian else 'off'}",
+        )
+    moved = dict(moved or {})
+    for key, value in UNTOUCHED:
+        if key in moved:
+            if not _same_setting(key, saved[key], moved[key]):
+                return (
+                    False,
+                    numbers,
+                    f"{end.name!r} has {key} {saved[key]!r}; the video set"
+                    f" {moved[key]!r}",
+                )
+        elif saved[key] != value:
+            return (
+                False,
+                numbers,
+                f"{end.name!r} has {key} {saved[key]!r}: guided setup never sets"
+                f" it, so the video did not",
+            )
+    mirrors = design_mirrors(end, saved, extra)
+    shown: Dict[str, Any] = {}
+    for kind, record in end.shown.items():
+        text = readings.get(record)
+        if text is None:
+            return (
+                False,
+                numbers,
+                f"no reading {record!r} was recorded for {kind}",
+            )
+        if kind not in mirrors:
+            return (
+                False,
+                numbers,
+                f"no source was read to compare {kind} with (what the video set)",
+            )
+        wanted = mirrors[kind]
+        if isinstance(wanted, list):
+            drawn: Any = _lines(text)
+            if kind == "review_variants":
+                same = [_variant_line(x) for x in drawn] == [
+                    _variant_line(x) for x in wanted
+                ]
+            else:
+                same = drawn == wanted
+        else:
+            drawn = _one_line(text)
+            same = drawn == wanted
+        shown[kind] = drawn
+        numbers["shown"] = shown
+        if not same:
+            return (
+                False,
+                numbers,
+                f"{kind} showed {drawn!r}; the API saved {wanted!r}",
+            )
+    numbers["shown"] = shown
+    return True, numbers, ""
+
+
+def as_instant(value: Any) -> Optional[dt.datetime]:
+    """An ISO 8601 time as an aware UTC instant (naive read as UTC), or None."""
+    if not isinstance(value, str):
+        return None
+    try:
+        when = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=dt.timezone.utc)
+    return when.astimezone(dt.timezone.utc)
+
+
+def _same_setting(key: str, got: Any, wanted: Any) -> bool:
+    """A field the video set, against the value it set: a date as an instant
+    (naive read as UTC, to the second), anything else equal and of one type."""
+    if key.endswith("_date") and isinstance(wanted, str):
+        a, b = as_instant(got), as_instant(wanted)
+        return a is not None and b is not None and a.replace(microsecond=0) == b
+    return type(got) is type(wanted) and got == wanted
+
+
+def _member_names(group: Mapping[str, Any]) -> List[str]:
+    return sorted(str(e.get("name")) for e in group.get("experiments") or [])
+
+
+def eligibility_end(
+    end: Any,
+    setup: Any,
+    *,
+    groups: Optional[Mapping[str, Any]],
+    group: Optional[Mapping[str, Any]],
+    holdouts: Optional[Mapping[str, Any]],
+    active: Any,
+    saved: Mapping[str, Any],
+) -> Verdict:
+    """Gate 10's half for what the video set on the draft's own pages
+    (``DesignEnd.group``, ``holdout`` and ``analysis.sequential``), read from
+    the API off camera after the last scene, never from the cached experiment:
+
+    * the exclusion groups are exactly the setup's (none made on camera), and
+      the draft's group, read from the group itself, holds exactly the setup's
+      experiments and the draft;
+    * the API holds exactly one holdout, the one the video made: active, with
+      its name and percentage;
+    * sequential testing's configuration and method are still unset (null).
+
+    Nothing is read or judged for a field the end state does not declare."""
+    numbers: Dict[str, Any] = {}
+    made = setup.exclusion_groups if setup is not None else []
+    if end.group is not None:
+        listed = sorted(str(g.get("name")) for g in (groups or {}).get("items") or [])
+        numbers.update(groups=listed, groups_total=(groups or {}).get("total"))
+        if (groups or {}).get("total") != len(made) or listed != sorted(
+            g.name for g in made
+        ):
+            return (
+                False,
+                numbers,
+                f"the API holds the groups {listed} ({(groups or {}).get('total')});"
+                f" the setup made {sorted(g.name for g in made)} and the video none",
+            )
+        if group is None or group.get("name") != end.group:
+            return False, numbers, f"{end.group!r} could not be read"
+        declared = next(g for g in made if g.name == end.group)
+        numbers["members"] = _member_names(group)
+        wanted = sorted([*declared.experiments, end.name])
+        if numbers["members"] != wanted:
+            return (
+                False,
+                numbers,
+                f"{end.group!r} holds {numbers['members']}; the setup and the video"
+                f" put {wanted} in it",
+            )
+    if end.holdout is not None:
+        numbers.update(
+            holdouts_total=(holdouts or {}).get("total"),
+            active_holdout=None
+            if not isinstance(active, Mapping)
+            else {
+                k: active.get(k) for k in ("name", "holdout_percentage", "is_active")
+            },
+        )
+        if (holdouts or {}).get("total") != 1:
+            return (
+                False,
+                numbers,
+                f"the API holds {(holdouts or {}).get('total')!r} holdouts; the video"
+                " made 1",
+            )
+        if (
+            not isinstance(active, Mapping)
+            or active.get("name") != end.holdout.name
+            or active.get("holdout_percentage") != end.holdout.percentage
+            or active.get("is_active") is not True
+        ):
+            return (
+                False,
+                numbers,
+                f"the active holdout is {numbers['active_holdout']!r}; the video made"
+                f" {end.holdout.name!r}, active, at {end.holdout.percentage}",
+            )
+    if end.analysis.sequential:
+        numbers.update(
+            sequential_testing_config=saved.get("sequential_testing_config"),
+            sequential_testing_method=saved.get("sequential_testing_method"),
+        )
+        for key in ("sequential_testing_config", "sequential_testing_method"):
+            if saved.get(key) is not None:
+                return (
+                    False,
+                    numbers,
+                    f"{key} is {saved.get(key)!r}; guided setup sends none",
+                )
+    return True, numbers, ""
+
+
+def zone_end(
+    zone: str, locale: str, resolved_zone: Any, resolved_locale: Any
+) -> Verdict:
+    """QA 5a: the page runs in the zone and the locale the storyboard pins, as
+    the page itself resolves them (``Intl.DateTimeFormat().resolvedOptions()``
+    and ``navigator.language``), never as the tool asked for them."""
+    numbers = {
+        "declared": [zone, locale],
+        "resolved": [resolved_zone, resolved_locale],
+    }
+    if resolved_zone != zone:
+        return (
+            False,
+            numbers,
+            f"the page's zone is {resolved_zone}; the board declares {zone}",
+        )
+    if resolved_locale != locale:
+        return (
+            False,
+            numbers,
+            f"the page's locale is {resolved_locale}; the board declares {locale}",
+        )
+    return True, numbers, ""
+
+
+def instant_in_zone(value: str, zone: str) -> Optional[str]:
+    """A ``datetime-local`` value read in *zone*, as ``toISOString`` writes the
+    instant: the zone's offset on that day, never today's (QA 5b). None for a
+    value that is not one."""
+    try:
+        local = dt.datetime.strptime(value, "%Y-%m-%dT%H:%M")
+    except (TypeError, ValueError):
+        return None
+    import zoneinfo
+
+    when = local.replace(tzinfo=zoneinfo.ZoneInfo(zone)).astimezone(dt.timezone.utc)
+    return when.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+#: How an en-US page draws a local time (``toLocaleString``): 11/2/2026, 9:00:00 AM.
+EN_US_SHOWN = re.compile(
+    r"^(\d{1,2})/(\d{1,2})/(\d{4}),\s(\d{1,2}):(\d{2}):(\d{2})\s(AM|PM)$"
+)
+
+
+def shown_as_value(shown: str, value: str) -> bool:
+    """QA 5c: an en-US drawing of a local time names the value's own day and
+    minute (seconds zero)."""
+    found = EN_US_SHOWN.match(shown or "")
+    if found is None:
+        return False
+    month, day, year, hour, minute, second, half = found.groups()
+    hour24 = int(hour) % 12 + (12 if half == "PM" else 0)
+    drawn = f"{int(year):04d}-{int(month):02d}-{int(day):02d}T{hour24:02d}:{minute}"
+    return drawn == value and second == "00"
+
+
+def dates_in_zone(
+    dated: Mapping[str, Mapping[str, str]], zone: str, locale: str
+) -> Verdict:
+    """Each ``date`` step's reading against the pinned zone: the instant the page
+    gave is the value read in that zone on that day (5b), and the page drew it
+    as that day and minute (5c; en-US, the one locale a board pins)."""
+    numbers: Dict[str, Any] = {"dates": {k: dict(v) for k, v in dated.items()}}
+    if locale != "en-US":
+        return False, numbers, f"a date drawn in {locale} is not read here; en-US is"
+    for name, reading in dated.items():
+        wanted = instant_in_zone(reading.get("value", ""), zone)
+        if reading.get("instant") != wanted:
+            return (
+                False,
+                numbers,
+                f"the date {name!r} {reading.get('value')!r} is {reading.get('instant')!r}"
+                f" on the page; in {zone} it is {wanted!r}",
+            )
+        if not shown_as_value(reading.get("shown", ""), reading.get("value", "")):
+            return (
+                False,
+                numbers,
+                f"the page drew the date {name!r} as {reading.get('shown')!r}, not"
+                f" {reading.get('value')!r}",
+            )
     return True, numbers, ""

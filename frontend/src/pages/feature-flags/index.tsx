@@ -2,21 +2,54 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { PageTitle } from '@/components/PageTitle';
 import { FlagToggle } from '@/components/feature-flags/FlagToggle';
-import { useOptionalAuth } from '@/contexts/AuthContext';
-import { FLAG_ROLE_NOTE, canChangeFeatureFlags } from '@/utils/experimentPermissions';
 import {
-  FeatureFlag,
+  ARCHIVED_LABEL,
+  ArchivedFlagRowNote,
+  isFlagArchived,
+} from '@/components/feature-flags/ArchivedFlag';
+import { hasDeletedFlagNotice, takeDeletedFlagNotice } from '@/components/feature-flags/FlagManageSection';
+import { useOptionalAuth } from '@/contexts/AuthContext';
+import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
+import { useDemoMode } from '@/contexts/AuthConfigContext';
+import { DemoNote } from '@/components/DemoNote';
+import { DEMO_FLAGS_ACTION } from '@/utils/demoMode';
+import { FLAG_ROLE_NOTE, canChangeFeatureFlags, canCreateFeatureFlags } from '@/utils/experimentPermissions';
+import {
+  FeatureFlagListItem,
   FeatureFlagStatus,
   FeatureFlagsService,
   isFlagOn,
 } from '@/services/featureFlags';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
+import { flagValueType, typeLabel } from '@/utils/flagValues';
 
 const STATUS_FILTERS: Array<{ label: string; value: FeatureFlagStatus | 'all' }> = [
   { label: 'All', value: 'all' },
   { label: 'On', value: 'active' },
   { label: 'Off', value: 'inactive' },
+  // An archived flag is neither: "Off" lists only inactive ones (#1748).
+  { label: 'Archived', value: 'archived' },
 ];
+
+const STALE_FILTERS: Array<{ label: string; value: 'any' | 'stale' }> = [
+  { label: 'Any', value: 'any' },
+  { label: 'Stale', value: 'stale' },
+];
+
+/** One line per reason; N is the server's `stale_days`, never a constant here. */
+function staleReasonText(reason: string, days: number | undefined): string {
+  const n = days === undefined ? 'N' : String(days);
+  switch (reason) {
+    case 'not_evaluated':
+      return `Not evaluated in ${n} days`;
+    case 'on_for_everyone':
+      return `On for everyone, unchanged for ${n} days`;
+    case 'off_for_everyone':
+      return `Off for everyone, unchanged for ${n} days`;
+    default:
+      return reason;
+  }
+}
 
 function formatDate(value: string): string {
   const d = parseApiTimestamp(value);
@@ -25,17 +58,37 @@ function formatDate(value: string): string {
 
 export default function FeatureFlagsPage() {
   const auth = useOptionalAuth();
-  // ANALYST and VIEWER read flags and change none (#917): they get no
-  // "+ New Flag", no create link and no On/Off column, and a note saying why.
-  const canChange = canChangeFeatureFlags(auth?.user);
+  const { effective, loading: permissionsLoading } = useEffectivePermissions();
+  // Each control asks the API's own question (#917, #891): "+ New Flag" and
+  // the create link FEATURE_FLAG CREATE, the On/Off column FEATURE_FLAG
+  // UPDATE, from the role or the effective map. A user without CREATE gets a
+  // note saying why in place of the button, once the map has answered.
+  const canCreate = canCreateFeatureFlags(auth?.user, effective);
+  const canChange = canChangeFeatureFlags(auth?.user, effective);
+  const createPending = !canCreate && permissionsLoading;
+  // A read-only demo puts the demo note where "+ New Flag" or the role note would be.
+  const demo = useDemoMode();
   const [statusFilter, setStatusFilter] = useState<FeatureFlagStatus | 'all'>('all');
-  const [flags, setFlags] = useState<FeatureFlag[]>([]);
+  const [staleFilter, setStaleFilter] = useState<'any' | 'stale'>('any');
+  const [staleDays, setStaleDays] = useState<number | undefined>(undefined);
+  const [evaluationsSeen, setEvaluationsSeen] = useState(true);
+  const [flags, setFlags] = useState<FeatureFlagListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [totalFlags, setTotalFlags] = useState(0);
   const [toggling, setToggling] = useState<Record<string, boolean>>({});
   // Keyed by flag id: two toggles can fail at once and both messages matter.
   const [toggleErrors, setToggleErrors] = useState<Record<string, string>>({});
+  // "Deleted {name}." when the flag's page has just deleted one (#442). Its
+  // status region is on the page from the first render, only then, and the
+  // text is set after it, so a screen reader announces it.
+  const [announcesDelete] = useState(hasDeletedFlagNotice);
+  const [deletedStatus, setDeletedStatus] = useState('');
+
+  useEffect(() => {
+    const notice = takeDeletedFlagNotice();
+    if (notice) setDeletedStatus(notice);
+  }, []);
 
   /**
    * Sequence number of the most recent list request. Switching filters quickly
@@ -53,10 +106,14 @@ export default function FeatureFlagsPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await FeatureFlagsService.list(
-        statusFilter !== 'all' ? { status: statusFilter } : undefined,
-      );
+      // `stale` is sent only while "Stale" is pressed: "Any" sends no parameter.
+      const data = await FeatureFlagsService.list({
+        ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
+        ...(staleFilter === 'stale' ? { stale: true } : {}),
+      });
       if (!isCurrent()) return;
+      setStaleDays(data.stale_days);
+      setEvaluationsSeen(data.evaluations_seen !== false);
       setFlags(data.items ?? []);
       setTotalFlags(data.total ?? (data.items ?? []).length);
     } catch (err) {
@@ -65,7 +122,7 @@ export default function FeatureFlagsPage() {
     } finally {
       if (isCurrent()) setLoading(false);
     }
-  }, [statusFilter]);
+  }, [statusFilter, staleFilter]);
 
   useEffect(() => {
     void load();
@@ -76,7 +133,7 @@ export default function FeatureFlagsPage() {
    * only this row — a whole-list snapshot would also undo any other toggle that
    * succeeded while this request was in flight.
    */
-  const handleToggle = async (flag: FeatureFlag) => {
+  const handleToggle = async (flag: FeatureFlagListItem) => {
     const next = !isFlagOn(flag);
     const previousStatus = flag.status;
     const previousIsActive = flag.is_active;
@@ -134,7 +191,9 @@ export default function FeatureFlagsPage() {
               Turn features on and off, roll them out gradually and watch their safety signals
             </p>
           </div>
-          {canChange ? (
+          {demo ? (
+            <DemoNote action={DEMO_FLAGS_ACTION} className="text-sm text-slate-600 max-w-md" />
+          ) : canCreate ? (
             <Link
               href="/feature-flags/new"
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
@@ -142,12 +201,26 @@ export default function FeatureFlagsPage() {
             >
               + New Flag
             </Link>
-          ) : (
+          ) : createPending ? null : (
             <p className="text-sm text-slate-600" data-testid="flags-role-note">
               {FLAG_ROLE_NOTE}
             </p>
           )}
         </div>
+
+        {announcesDelete && (
+          <p
+            role="status"
+            className={
+              deletedStatus
+                ? 'mb-4 rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-700'
+                : undefined
+            }
+            data-testid="flags-deleted-status"
+          >
+            {deletedStatus}
+          </p>
+        )}
 
         {/* Filters */}
         {totalFlags > flags.length && flags.length > 0 && (
@@ -156,7 +229,13 @@ export default function FeatureFlagsPage() {
           </p>
         )}
 
-        <div className="flex gap-2 mb-6 flex-wrap" data-testid="flag-status-filter">
+        <div className="flex gap-x-6 gap-y-2 mb-6 flex-wrap">
+        <div
+          className="flex gap-2 flex-wrap"
+          data-testid="flag-status-filter"
+          role="group"
+          aria-label="Status filter"
+        >
           {STATUS_FILTERS.map((f) => (
             <button
               key={f.value}
@@ -174,6 +253,49 @@ export default function FeatureFlagsPage() {
             </button>
           ))}
         </div>
+        <div
+          className="flex gap-2 flex-wrap"
+          data-testid="flag-stale-filter"
+          role="group"
+          aria-label="Stale filter"
+        >
+          {STALE_FILTERS.map((f) => (
+            <button
+              key={f.value}
+              type="button"
+              data-testid={`flag-stale-filter-${f.value}`}
+              aria-pressed={staleFilter === f.value}
+              onClick={() => setStaleFilter(f.value)}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                staleFilter === f.value
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        </div>
+
+        {staleFilter === 'stale' && (
+          <p data-testid="flag-stale-hint" className="text-xs text-slate-500 mb-3">
+            Stale is a suggestion: nothing is changed or archived for you. A flag tagged permanent
+            is never stale; tags are set through the API.
+          </p>
+        )}
+
+        {!loading && !error && !evaluationsSeen && (
+          <p
+            role="status"
+            data-testid="flag-stale-notice"
+            className="mb-4 rounded-lg bg-slate-100 border border-slate-200 p-3 text-sm text-slate-700"
+          >
+            {`No flag evaluations have been recorded in the last ${
+              staleDays === undefined ? 'N' : staleDays
+            } days, so no flag is marked “Not evaluated”.`}
+          </p>
+        )}
 
         {loading && (
           <div className="text-center py-12" data-testid="flags-loading">
@@ -206,10 +328,14 @@ export default function FeatureFlagsPage() {
             data-testid="flags-empty"
           >
             <p className="text-slate-500 mb-4">
-              {statusFilter === 'all' ? 'No feature flags yet' : 'No flags match this filter'}
+              {staleFilter === 'stale'
+                ? 'No stale flags right now.'
+                : statusFilter === 'all'
+                  ? 'No feature flags yet'
+                  : 'No flags match this filter'}
             </p>
-            {statusFilter === 'all' ? (
-              canChange && (
+            {statusFilter === 'all' && staleFilter === 'any' ? (
+              canCreate && (
                 <Link
                   href="/feature-flags/new"
                   className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
@@ -220,7 +346,10 @@ export default function FeatureFlagsPage() {
             ) : (
               <button
                 type="button"
-                onClick={() => setStatusFilter('all')}
+                onClick={() => {
+                  setStatusFilter('all');
+                  setStaleFilter('any');
+                }}
                 className="text-sm text-blue-600 hover:underline"
               >
                 Show all flags
@@ -245,7 +374,7 @@ export default function FeatureFlagsPage() {
 
         {!loading && !error && flags.length > 0 && (
           <div
-            className="bg-white rounded-lg border border-slate-200 overflow-hidden"
+            className="bg-white rounded-lg border border-slate-200 overflow-x-auto"
             data-testid="flags-table"
           >
             <table className="w-full text-sm">
@@ -253,6 +382,7 @@ export default function FeatureFlagsPage() {
                 <tr>
                   <th className="text-left px-4 py-3 text-slate-600 font-medium">Key</th>
                   <th className="text-left px-4 py-3 text-slate-600 font-medium">Name</th>
+                  <th className="text-left px-4 py-3 text-slate-600 font-medium">Type</th>
                   <th className="text-left px-4 py-3 text-slate-600 font-medium">Status</th>
                   <th className="text-right px-4 py-3 text-slate-600 font-medium">Rollout</th>
                   <th className="text-left px-4 py-3 text-slate-600 font-medium">Updated</th>
@@ -264,6 +394,10 @@ export default function FeatureFlagsPage() {
               <tbody className="divide-y divide-slate-100">
                 {flags.map((flag) => {
                   const on = isFlagOn(flag);
+                  // The API refuses to turn an archived flag on (400), so its
+                  // row has no switch: it says to unarchive it first, which is
+                  // done on the flag's page (#1748, #442).
+                  const archived = isFlagArchived(flag);
                   return (
                     <tr
                       key={flag.id}
@@ -287,15 +421,41 @@ export default function FeatureFlagsPage() {
                           </p>
                         )}
                       </td>
+                      {/* What the flag serves (#1497); a flag from a server without values is Boolean. */}
+                      <td className="px-4 py-3 text-slate-700" data-testid="flag-value-type">
+                        {typeLabel(flagValueType(flag))}
+                      </td>
                       <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                            on ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-700'
-                          }`}
-                          data-testid="flag-status-pill"
-                        >
-                          {on ? 'On' : 'Off'}
-                        </span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                              on
+                                ? 'bg-green-100 text-green-800'
+                                : archived
+                                  ? 'bg-slate-200 text-slate-800'
+                                  : 'bg-slate-100 text-slate-700'
+                            }`}
+                            data-testid="flag-status-pill"
+                          >
+                            {archived ? ARCHIVED_LABEL : on ? 'On' : 'Off'}
+                          </span>
+                          {/* From the server's `stale`, never from tags or rules read here (#1808). */}
+                          {flag.stale === true && (
+                            <span
+                              className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-200 text-slate-800"
+                              data-testid="flag-stale-pill"
+                            >
+                              Stale
+                            </span>
+                          )}
+                        </div>
+                        {flag.stale === true && (flag.stale_reasons ?? []).length > 0 && (
+                          <ul className="mt-1 text-xs text-slate-500" data-testid="flag-stale-reasons">
+                            {(flag.stale_reasons ?? []).map((reason) => (
+                              <li key={reason}>{staleReasonText(reason, staleDays)}</li>
+                            ))}
+                          </ul>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-slate-700">
                         {flag.rollout_percentage}%
@@ -303,13 +463,17 @@ export default function FeatureFlagsPage() {
                       <td className="px-4 py-3 text-slate-500">{formatDate(flag.updated_at)}</td>
                       {canChange && (
                         <td className="px-4 py-3 text-right">
-                          <FlagToggle
-                            on={on}
-                            disabled={Boolean(toggling[flag.id])}
-                            label={`Turn ${flag.key} ${on ? 'off' : 'on'}`}
-                            onChange={() => void handleToggle(flag)}
-                            data-testid={`flag-toggle-${flag.key}`}
-                          />
+                          {archived ? (
+                            <ArchivedFlagRowNote flagKey={flag.key} />
+                          ) : (
+                            <FlagToggle
+                              on={on}
+                              disabled={Boolean(toggling[flag.id])}
+                              label={`Turn ${flag.key} ${on ? 'off' : 'on'}`}
+                              onChange={() => void handleToggle(flag)}
+                              data-testid={`flag-toggle-${flag.key}`}
+                            />
+                          )}
                         </td>
                       )}
                     </tr>

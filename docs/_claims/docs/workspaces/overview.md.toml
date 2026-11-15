@@ -81,8 +81,12 @@ text = "Experiments and feature flags are not created inside a workspace, and wo
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "That is decided by the user's platform role (ADMIN, DEVELOPER, ANALYST or VIEWER) across the whole installation — see Role-based access control."
-by = ["test:modules/backend/tests/integration/api/test_workspace_roles_scope.py::test_the_platform_role_not_the_workspace_decides"]
+text = "That is decided by the user's platform role (ADMIN, DEVELOPER, ANALYST or VIEWER), plus their custom roles and direct grants, across the whole installation — see Role-based access control."
+by = [
+    "test:modules/backend/tests/integration/api/test_workspace_roles_scope.py::test_the_platform_role_not_the_workspace_decides",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_permission_check_reads_grants_only_through_the_capability",
+    "test:backend/tests/unit/core/test_built_in_roles_decide.py::test_a_custom_role_or_a_grant_adds_only_grantable_pairs",
+]
 
 [[unit]]
 text = "If you need teams to be unable to see each other's experiments and flags, run a separate installation for each team."

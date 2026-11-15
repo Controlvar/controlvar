@@ -304,6 +304,9 @@ RATE_LIMIT_CONFIG: Dict[str, Tuple[int, int]] = {
     "/api/v1/auth/token": (10, 60),
     "/api/v1/auth/login": (10, 60),
     "/api/v1/auth/signup": (5, 60),
+    # Where the 6-digit sign-up code is guessed; its own counter, apart from
+    # sign-up's (#700).
+    "/api/v1/auth/confirm": (5, 60),
     "/api/v1/auth/forgot-password": (5, 60),
     "/api/v1/auth/reset-password": (5, 60),
     # A signed-in user's own password change: it checks the current password,
@@ -316,6 +319,10 @@ RATE_LIMIT_CONFIG: Dict[str, Tuple[int, int]] = {
     # SSO sign-in start: public; answers whether a domain has SSO, and mints a
     # signed state cookie each time. One call per sign-in in real use.
     "/api/v1/auth/sso/login": (30, 60),
+    # The Cognito Hosted UI's code exchange: a public route that turns a
+    # sign-in code into a session, limited like the password login. One call
+    # per sign-in in real use.
+    "/api/v1/auth/cognito/exchange": (10, 60),
     # Batch assignment: one request assigns up to 1,000 users, so it gets its
     # own counter rather than the SDK prefix's 6,000 a minute (60 x 1,000 =
     # 60,000 users a minute per address). The path is exact: a trailing slash
@@ -367,26 +374,50 @@ AI_INTERPRET_PATH_PREFIX = "/api/v1/ai/interpret/"
 AI_INTERPRET_RATE_LIMIT: Tuple[int, int] = (10, 60)  # 10 req/min, every id together
 
 
+#: The names of the limits that are not a ``RATE_LIMIT_CONFIG`` entry. With the
+#: ``RATE_LIMIT_CONFIG`` keys they are every value
+#: :func:`resolve_rate_limit_bucket` returns, and so every value of the
+#: ``endpoint`` label of the rate-limit metrics.
+EXPORT_BUCKET = "export"
+AI_INTERPRET_BUCKET = "ai_interpret"
+SDK_BUCKET = "sdk"
+DEFAULT_BUCKET = "default"
+
+
+def resolve_rate_limit_bucket(
+    path: str, sdk_limit_per_minute: int = DEFAULT_SDK_RATE_LIMIT_PER_MINUTE
+) -> Tuple[str, Tuple[int, int]]:
+    """
+    Return ``(bucket, (max_requests, window_seconds))`` for a request path.
+
+    Exact entries in ``RATE_LIMIT_CONFIG`` win, then the export prefix, then
+    the AI interpretation prefix, then SDK path prefixes, then
+    ``DEFAULT_RATE_LIMIT``. ``bucket`` names the rule that matched: the
+    ``RATE_LIMIT_CONFIG`` key, or ``EXPORT_BUCKET``, ``AI_INTERPRET_BUCKET``,
+    ``SDK_BUCKET`` or ``DEFAULT_BUCKET``. The rate-limit metrics are labelled
+    with it, so it comes from this one function and never from the path.
+    """
+    exact = RATE_LIMIT_CONFIG.get(path)
+    if exact is not None:
+        return path, exact
+    if path.startswith(EXPORT_PATH_PREFIX):
+        return EXPORT_BUCKET, EXPORT_RATE_LIMIT
+    if path.startswith(AI_INTERPRET_PATH_PREFIX):
+        return AI_INTERPRET_BUCKET, AI_INTERPRET_RATE_LIMIT
+    if any(path.startswith(prefix) for prefix in SDK_PATH_PREFIXES):
+        return SDK_BUCKET, (int(sdk_limit_per_minute), 60)
+    return DEFAULT_BUCKET, DEFAULT_RATE_LIMIT
+
+
 def resolve_rate_limit(
     path: str, sdk_limit_per_minute: int = DEFAULT_SDK_RATE_LIMIT_PER_MINUTE
 ) -> Tuple[int, int]:
     """
     Return ``(max_requests, window_seconds)`` for a request path.
 
-    Exact entries in ``RATE_LIMIT_CONFIG`` win, then the export prefix, then
-    the AI interpretation prefix, then SDK path prefixes, then
-    ``DEFAULT_RATE_LIMIT``.
+    The limit half of :func:`resolve_rate_limit_bucket`.
     """
-    exact = RATE_LIMIT_CONFIG.get(path)
-    if exact is not None:
-        return exact
-    if path.startswith(EXPORT_PATH_PREFIX):
-        return EXPORT_RATE_LIMIT
-    if path.startswith(AI_INTERPRET_PATH_PREFIX):
-        return AI_INTERPRET_RATE_LIMIT
-    if any(path.startswith(prefix) for prefix in SDK_PATH_PREFIXES):
-        return (int(sdk_limit_per_minute), 60)
-    return DEFAULT_RATE_LIMIT
+    return resolve_rate_limit_bucket(path, sdk_limit_per_minute)[1]
 
 
 def rate_limit_key(client_ip: str, path: str) -> str:
@@ -503,29 +534,31 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         client_ip = _get_client_ip(request)
 
-        # Determine the applicable limit for this path
-        limit, window = resolve_rate_limit(path, self._sdk_limit)
+        # Determine the applicable limit for this path, and its name
+        bucket, (limit, window) = resolve_rate_limit_bucket(path, self._sdk_limit)
 
         rate_key = rate_limit_key(client_ip, path)
         allowed, remaining = self._limiter.is_allowed(rate_key, limit, window)
 
-        # Record Prometheus metrics
+        # Record Prometheus metrics, labelled by the limit, not the path
         try:
             from backend.app.core.metrics import (
                 record_rate_limit_hit,
                 record_rate_limit_rejection,
             )
 
-            record_rate_limit_hit(path)
+            record_rate_limit_hit(bucket)
             if not allowed:
-                record_rate_limit_rejection(path)
+                record_rate_limit_rejection(bucket)
         except Exception:
             pass  # Metrics are best-effort
 
         if not allowed:
-            logger.warning(
+            log.warning(
                 "Rate limit exceeded",
-                extra={"client_ip": client_ip, "path": path, "limit": limit},
+                client_ip=client_ip,
+                path=path,
+                limit=limit,
             )
             return JSONResponse(
                 status_code=429,

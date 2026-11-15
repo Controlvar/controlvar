@@ -57,8 +57,6 @@ EXPECTED = {
     "control": {"n": 5, "converted": 2},
     "treatment": {"n": 5, "converted": 3},
 }
-#: Users per variant that have at least one event (the breakdowns see only these).
-USERS_WITH_EVENTS = {"control": 4, "treatment": 4}
 
 
 def _cleanup(db_session, exp):
@@ -386,16 +384,14 @@ def test_counts_agree_across_endpoints(admin_client, db_session, experiment):
     }
     assert exported == EXPECTED
 
-    # The breakdowns see only users with an event in a segment (c4 and t4
-    # have none), but every converting user is in exactly one segment.
+    # Every assigned user is in exactly one segment (c4 and t4, who have no
+    # events, in "unknown"), and every converting user with them, so both
+    # breakdowns add up to the headline.
     for summed in (
         _breakdown_conversions(results),
         _segmented_conversions(db_session, exp),
     ):
-        assert {k: v["converted"] for k, v in summed.items()} == {
-            k: v["converted"] for k, v in EXPECTED.items()
-        }
-        assert {k: v["n"] for k, v in summed.items()} == USERS_WITH_EVENTS
+        assert summed == EXPECTED
 
 
 def test_daily_series_counts_each_user_on_the_day_of_the_first_conversion(

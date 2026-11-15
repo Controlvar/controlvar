@@ -193,8 +193,10 @@ class TestSplitUrlRefusedWithoutRouting:
             with pytest.raises(HTTPException) as exc:
                 await experiments.update_experiment(
                     experiment_id=uuid4(),
+                    # As an ExperimentUpdate: the fields sent are model_fields_set.
                     experiment_in=SimpleNamespace(
-                        experiment_type=ExperimentType.SPLIT_URL
+                        experiment_type=ExperimentType.SPLIT_URL,
+                        model_fields_set={"experiment_type"},
                     ),
                     db=db,
                     current_user=_user(),
@@ -222,7 +224,8 @@ class TestSplitUrlRefusedWithoutRouting:
                 await experiments.update_experiment(
                     experiment_id=uuid4(),
                     experiment_in=SimpleNamespace(
-                        experiment_type=ExperimentType.SPLIT_URL
+                        experiment_type=ExperimentType.SPLIT_URL,
+                        model_fields_set={"experiment_type"},
                     ),
                     db=db,
                     current_user=_user(),
@@ -246,7 +249,8 @@ class TestSplitUrlRefusedWithoutRouting:
                 await experiments.update_experiment(
                     experiment_id=uuid4(),
                     experiment_in=SimpleNamespace(
-                        experiment_type=ExperimentType.SPLIT_URL
+                        experiment_type=ExperimentType.SPLIT_URL,
+                        model_fields_set={"experiment_type"},
                     ),
                     db=db,
                     current_user=_user(is_superuser=False),
@@ -279,7 +283,9 @@ class TestSplitUrlRefusedWithoutRouting:
                 await experiments.update_experiment(
                     experiment_id=uuid4(),
                     experiment_in=SimpleNamespace(
-                        experiment_type=ExperimentType.SPLIT_URL, name="renamed"
+                        experiment_type=ExperimentType.SPLIT_URL,
+                        name="renamed",
+                        model_fields_set={"experiment_type", "name"},
                     ),
                     db=db,
                     current_user=_user(),
@@ -343,6 +349,34 @@ class TestSplitUrlRefusedWithoutRouting:
                 )
 
         assert exc.value.status_code == 501
+
+
+class TestSplitUrlRoutingIsTheModulesOnly:
+    """#393: ``/tracking/split-url/routes`` and ``/assign`` are the split_url
+    module's routes. The core routers declare neither, so a core deployment
+    answers 404 (``scripts/core_build.sh`` runs this with ``modules/``
+    deleted), while ``/tracking/assign`` beside them is served."""
+
+    @pytest.mark.regression
+    @pytest.mark.parametrize(
+        "method, path",
+        [
+            ("GET", "/api/v1/tracking/split-url/routes"),
+            ("POST", "/api/v1/tracking/split-url/assign"),
+        ],
+    )
+    def test_the_core_routers_answer_404(self, method, path):
+        from fastapi import APIRouter, FastAPI
+        from fastapi.testclient import TestClient
+
+        from backend.app.api.api import register_core_routers
+
+        app = FastAPI()
+        app.include_router(register_core_routers(APIRouter()), prefix="/api/v1")
+        client = TestClient(app)
+
+        assert client.request(method, path, json={}).status_code == 404
+        assert client.post("/api/v1/tracking/assign", json={}).status_code == 401
 
 
 class TestComplianceRoutesRefusedWithoutTheModule:

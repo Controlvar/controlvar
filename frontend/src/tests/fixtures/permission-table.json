@@ -1,0 +1,116 @@
+{
+  "_generated_by": "python -m backend.tests.unit.core.test_dashboard_permission_table --write",
+  "roles": [
+    "ADMIN",
+    "DEVELOPER",
+    "ANALYST",
+    "VIEWER"
+  ],
+  "role_permissions": {
+    "experiment": {
+      "create": [
+        "ADMIN",
+        "DEVELOPER"
+      ],
+      "read": [
+        "ADMIN",
+        "DEVELOPER",
+        "ANALYST",
+        "VIEWER"
+      ],
+      "update": [
+        "ADMIN",
+        "DEVELOPER"
+      ],
+      "delete": [
+        "ADMIN",
+        "DEVELOPER"
+      ],
+      "list": [
+        "ADMIN",
+        "DEVELOPER",
+        "ANALYST",
+        "VIEWER"
+      ]
+    },
+    "feature_flag": {
+      "create": [
+        "ADMIN",
+        "DEVELOPER"
+      ],
+      "read": [
+        "ADMIN",
+        "DEVELOPER",
+        "ANALYST",
+        "VIEWER"
+      ],
+      "update": [
+        "ADMIN",
+        "DEVELOPER"
+      ],
+      "delete": [
+        "ADMIN",
+        "DEVELOPER"
+      ],
+      "list": [
+        "ADMIN",
+        "DEVELOPER",
+        "ANALYST",
+        "VIEWER"
+      ]
+    }
+  },
+  "audit_log_read_roles": [
+    "ADMIN",
+    "ANALYST"
+  ],
+  "administer_eligibility_roles": [
+    "ADMIN"
+  ],
+  "grantable": [
+    [
+      "audit_log",
+      "read"
+    ],
+    [
+      "experiment",
+      "create"
+    ],
+    [
+      "experiment",
+      "delete"
+    ],
+    [
+      "experiment",
+      "list"
+    ],
+    [
+      "experiment",
+      "read"
+    ],
+    [
+      "experiment",
+      "update"
+    ],
+    [
+      "feature_flag",
+      "create"
+    ],
+    [
+      "feature_flag",
+      "delete"
+    ],
+    [
+      "feature_flag",
+      "list"
+    ],
+    [
+      "feature_flag",
+      "read"
+    ],
+    [
+      "feature_flag",
+      "update"
+    ]
+  ]
+}

@@ -386,6 +386,7 @@ class TestUntaggedBatch:
         assert response.json() == {
             "success_count": 2,
             "failure_count": 0,
+            "duplicate_count": 0,
             "errors": None,
         }
         stored = db_session.query(Event).filter(Event.user_id == user_id).all()

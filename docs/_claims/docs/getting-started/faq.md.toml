@@ -149,11 +149,12 @@ by = [
 ]
 
 [[unit]]
-text = "CloudFront | Not created by the CDK. Only the split-URL module's Lambda@Edge construct would use it, and its router has no configuration source yet (#393)"
+text = "CloudFront | Not created by the CDK app. The split URL edge router, a CDK app of its own, creates a distribution and a Lambda@Edge function only when you deploy it; AWS bills both (AWS Integration)"
 by = [
     "test:infrastructure/tests/test_front_door_cdk.py::test_no_stack_creates_a_waf_cloudfront_or_api_gateway",
-    "test:modules/backend/tests/unit/infrastructure/test_split_url_distribution.py::test_cloudfront_distribution_created",
-    "test:modules/backend/tests/unit/test_front_door_module_facts.py::test_the_split_url_construct_sets_no_router_configuration",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_the_edge_app_runs_the_router_at_both_viewer_events",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_the_constructs_only_referrer_is_the_edge_app",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_nothing_deploys_the_edge_app",
 ]
 
 [[unit]]
@@ -242,10 +243,11 @@ text = "Method | Description"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Frequentist (Fisher's exact test) | Each treatment against the control: a two-sided Fisher's exact test on the users who converted and the users who did not. Every metric in the results is analysed as a conversion today; warehouse analysis (beta) compares a mean metric with Welch's t-test"
+text = "Frequentist (Fisher's exact test) | Each treatment against the control: a two-sided Fisher's exact test on the users who converted and the users who did not. A revenue, count, duration or custom metric is compared on its mean per assigned user with Welch's t-test instead; warehouse analysis (beta) compares a mean metric with Welch's t-test"
 by = [
     "test:backend/tests/unit/services/test_binomial_metric_result_characterisation.py::test_binomial_metric_result_characterisation",
-    "test:backend/tests/integration/api/test_front_door_behaviour.py::test_a_revenue_metric_is_analysed_as_a_conversion",
+    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_a_revenue_metric_is_analysed_per_assigned_user",
+    "test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_every_type_but_conversion_as_a_mean",
     "test:modules/backend/tests/integration/warehouse/test_runs_api.py::test_mean_run_end_to_end",
 ]
 
@@ -272,10 +274,11 @@ text = "CUPED | Variance reduction from each user's own events before assignment
 by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_cuped_recovers_the_seeded_history"]
 
 [[unit]]
-text = "Bayesian (Beta-Binomial) | Posterior credible intervals, Bayes factors, probability of superiority, ROPE (priors and thresholds through the API only)"
+text = "Bayesian (Beta-Binomial) | Posterior credible intervals, Bayes factors, probability of superiority, ROPE (the priors, loss threshold and credible level are set on the new-experiment form or through the API; the ROPE through the API only)"
 by = [
     "test:backend/tests/integration/api/test_bayesian_results_api.py::TestBayesianResultsEnabled::test_bayesian_variant_results_structure",
     "test:backend/tests/integration/api/test_experiment_bayesian_config_api.py::TestTurningBayesianOn::test_create_persists_config_and_enables_analysis",
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::%s: alpha 2 sends the five-field object, as the API defines it",
 ]
 
 [[unit]]
@@ -309,15 +312,24 @@ text = "What SDKs are available?"
 by = ["exempt:label"]
 
 [[unit]]
-text = "The JavaScript SDK is on npm (npm install @controlvar/js-sdk, 0.1.1, beta) and the Python SDK is on PyPI (pip install controlvar, 0.1.1, beta)."
+text = "The JavaScript SDK is on npm (npm install @controlvar/js-sdk, 0.3.0, beta) and the Python SDK is on PyPI (pip install controlvar, 0.3.0, beta)."
 by = [
     "mechanism:sdk-doc-versions",
+    "mechanism:registry-availability",
     "journey:sdk-javascript#quick-start-user-on",
     "journey:sdk-python#quick-start-user-on",
 ]
 
 [[unit]]
-text = "The Go SDK installs by module path, and the other SDKs from a clone of this repository: each SDK's page (Go, Java, React) says how."
+text = "So are the React SDK (npm install @controlvar/react-sdk, 0.1.0, beta), the React Native SDK (npm install @controlvar/react-native-sdk, 0.1.0, beta) and the two OpenFeature providers (npm install @controlvar/openfeature-provider, 0.1.0, beta; pip install controlvar-openfeature, 0.1.0, beta)."
+by = ["mechanism:sdk-doc-versions", "mechanism:registry-availability"]
+
+[[unit]]
+text = "The Java SDK is on Maven Central and the .NET SDK on NuGet."
+by = ["mechanism:registry-availability"]
+
+[[unit]]
+text = "The Go SDK installs by module path, and the other SDKs from a clone of this repository: each SDK's page (Go, Ruby) says how."
 by = ["journey:sdk-go#quick-start-user-on"]
 
 [[unit]]
@@ -333,11 +345,27 @@ text = "Python | controlvar (PyPI)"
 by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
 
 [[unit]]
-text = "Java / JVM | com.controlvar:controlvar-sdk (Maven/Gradle)"
+text = "Java / JVM | com.controlvar:controlvar-sdk (Maven Central)"
 by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
 
 [[unit]]
 text = "React | @controlvar/react-sdk (npm)"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = "React Native | @controlvar/react-native-sdk (npm)"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = "OpenFeature (Node) | @controlvar/openfeature-provider (npm)"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = "OpenFeature (Python) | controlvar-openfeature (PyPI)"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = ".NET | Controlvar.SDK (NuGet)"
 by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
 
 [[unit]]
@@ -408,7 +436,7 @@ text = "What is the difference between a feature flag and an experiment?"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Feature flags control whether a feature is visible to a user."
+text = "Feature flags control whether a feature is visible to a user, or which value they get."
 by = ["exempt:theory"]
 
 [[unit]]
@@ -417,6 +445,10 @@ by = ["exempt:theory"]
 
 [[unit]]
 text = "A flag has no statistical analysis attached to it."
+by = ["test:backend/tests/unit/api/test_documented_limits.py::test_a_flag_has_no_results_route"]
+
+[[unit]]
+text = "A flag does not measure which value does better; an experiment does."
 by = ["test:backend/tests/unit/api/test_documented_limits.py::test_a_flag_has_no_results_route"]
 
 [[unit]]
@@ -531,47 +563,32 @@ text = "How does Split URL testing work?"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Split URL testing would send different users to different URLs — for example, /checkout vs /checkout-v2 — with a Lambda@Edge router at the CDN."
-by = ["test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_returns_302_redirect"]
+text = "Split URL testing sends different visitors to different URLs — for example, /checkout vs /checkout-v2."
+by = ["test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_a_split_url_experiment_splits_its_visitors"]
 
 [[unit]]
-text = "It does not split traffic yet: the router has no configuration source in this release (#393)."
+text = "Your server or edge asks the API where to send each visitor who opens the control's URL, and redirects them; the API assigns the visitor as POST /api/v1/tracking/assign does."
 by = [
-    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerPassThrough::test_no_config_header_passes_through",
-    "test:modules/backend/tests/unit/test_front_door_module_facts.py::test_the_split_url_construct_sets_no_router_configuration",
+    "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_the_variant_seen_is_the_variant_counted",
+    "test:modules/backend/tests/integration/split_url/test_split_url_reference_integration.py::test_the_location_is_the_api_s",
 ]
 
 [[unit]]
-text = "The split-URL module ships a CloudFront construct with a Lambda@Edge router, which no stack uses: you add it to a stack yourself."
+text = "Conversions count for the variant the visitor saw when they are tracked with the same visitor id and name the experiment."
 by = [
-    "test:infrastructure/tests/test_front_door_cdk.py::test_no_stack_creates_a_waf_cloudfront_or_api_gateway",
-    "test:modules/backend/tests/unit/infrastructure/test_split_url_distribution.py::test_lambda_edge_attached_to_viewer_request",
+    "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_the_variant_seen_is_the_variant_counted",
+    "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_conversions_through_the_per_site_pattern_count_for_the_variant_seen",
 ]
 
 [[unit]]
-text = "The router reads a cookie to check whether the visitor has already been assigned."
+text = "On AWS, an optional CloudFront edge router (beta) can do the asking and the redirect."
 by = [
-    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerExistingCookie::test_existing_valid_cookie_passes_through",
-    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_returns_302_redirect",
-    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_the_fingerprint_is_ip_and_user_agent_not_a_user_id",
-    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_cookie_ttl_defaults_to_30_days",
+    "test:modules/backend/tests/integration/split_url/test_split_url_router_e2e.py::test_a_split_url_experiment_splits_its_visitors_through_the_router",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_nothing_deploys_the_edge_app",
 ]
 
 [[unit]]
-text = "If not, it hashes the client fingerprint (IP address and User-Agent) to pick a variant, returns a 302 redirect to the variant URL, and sets a cookie that lasts cookie_ttl_days (30 days by default)."
-by = [
-    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerExistingCookie::test_existing_valid_cookie_passes_through",
-    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_returns_302_redirect",
-    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_the_fingerprint_is_ip_and_user_agent_not_a_user_id",
-    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_cookie_ttl_defaults_to_30_days",
-]
-
-[[unit]]
-text = "A request that carries a cookie naming a known variant URL passes through without being bucketed again."
-by = ["test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerExistingCookie::test_existing_valid_cookie_passes_through"]
-
-[[unit]]
-text = "See Split URL Testing API for setup and the CDK construct reference."
+text = "See Split URL testing to set it up, with a reference integration in the Python standard library."
 by = ["exempt:navigation"]
 
 [[unit]]
@@ -629,12 +646,25 @@ by = [
 ]
 
 [[unit]]
-text = "Full audit log export (JSON or CSV) is available for SIEM ingestion at GET /api/v1/compliance/export."
+text = "The compliance trail exports as JSON or CSV at GET /api/v1/compliance/export (compliance module; a core deployment answers 501): flag and experiment creates, changes and deletes, without their old and new values."
 by = [
     "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestAuditExport::test_admin_can_export_csv",
     "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestAuditExport::test_admin_can_export_json",
+    "test:backend/tests/unit/services/test_compliance_trail_writers.py::test_core_answers_the_report_and_export_501_after_the_role_check",
+    "test:modules/backend/tests/unit/services/test_compliance_export_contents.py::test_every_matching_event_oldest_first_with_eight_fields",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
+
+[[unit]]
+text = "Toggles, rollbacks, sign-ins and role changes are in the audit log, which exports at GET /api/v1/audit-logs/export (beta) in every profile."
+by = [
+    "test:backend/tests/integration/api/test_audit_export.py::test_each_filter_returns_exactly_its_rows_newest_first",
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+]
+
+[[unit]]
+text = "For a SIEM, take both."
+by = ["exempt:advice"]
 
 [[unit]]
 text = "See Compliance Audit Trail API for full documentation."
@@ -741,25 +771,35 @@ by = [
 ]
 
 [[unit]]
-text = "ADMIN | Full access: user management, compliance exports, global settings, integrations"
+text = "ADMIN | Manage experiments, flags, integrations and compliance exports; user management needs a superuser account, which the Admin role alone is not"
 by = [
     "test:backend/tests/unit/core/test_permissions.py::TestHasPermission::test_admin_has_permission",
+    "test:backend/tests/integration/api/test_admin_user_routes_need_a_superuser.py::test_a_non_superuser_cannot_list_update_or_delete_through_the_admin_routes",
+    "test:backend/tests/integration/api/test_admin_user_routes_need_a_superuser.py::test_a_superuser_lists_updates_and_deletes_through_the_admin_routes",
     "test:modules/backend/tests/integration/api/test_integrations_api.py::TestCreateIntegration::test_admin_can_create_jira_integration",
 ]
 
 [[unit]]
 text = "Beyond the four base roles, admins can create custom roles with specific per-resource and per-action permissions."
-by = ["test:modules/backend/tests/unit/services/test_rbac_service.py::TestGetEffectivePermissions::test_expired_direct_grant_not_included"]
+by = [
+    "test:modules/backend/tests/unit/services/test_rbac_service.py::TestCreateCustomRole::test_persists_permissions",
+    "test:backend/tests/unit/core/test_built_in_roles_decide.py::test_a_custom_role_or_a_grant_adds_only_grantable_pairs",
+]
 
 [[unit]]
 text = "They can also grant direct permission to a user for a specific resource, with an optional expiry timestamp for temporary access."
-by = ["test:modules/backend/tests/unit/services/test_rbac_service.py::TestGetEffectivePermissions::test_expired_direct_grant_not_included"]
+by = [
+    "test:modules/backend/tests/unit/api/test_rbac_endpoints.py::TestGrantRevokePermission::test_grant_permission_returns_201",
+    "test:modules/backend/tests/integration/rbac/test_rbac_provider.py::test_a_grant_yields_its_pairs_only_when_activated_active_and_unexpired",
+]
 
 [[unit]]
-text = "Both are stored and shown by GET /api/v1/rbac/users/{user_id}/permissions, but no permission check reads them yet: what a user can do is decided by their base role (#891)."
+text = "Both add to what the user's base role allows, from their next request; they never remove a permission and never give administration."
 by = [
-    "test:modules/backend/tests/unit/services/test_rbac_service.py::TestCreateCustomRole::test_creates_role_with_name",
-    "test:backend/tests/unit/api/test_documented_limits.py::test_the_permission_check_reads_only_the_built_in_role",
+    "test:backend/tests/unit/core/test_built_in_roles_decide.py::test_a_custom_role_or_a_grant_adds_only_grantable_pairs",
+    "test:modules/backend/tests/integration/rbac/test_rbac_revocation.py",
+    "test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_layers_only_add_and_actions_are_sorted",
+    "test:modules/backend/tests/integration/rbac/test_rbac_no_escalation.py::test_all_forty_pairs_reach_no_administration",
 ]
 
 [[unit]]
@@ -782,7 +822,7 @@ by = [
 ]
 
 [[unit]]
-text = "Any active key authenticates every API-key route (flag evaluation, tracking) as the user who created it; its scopes do not narrow that."
+text = "Any active key authenticates every SDK route (flag evaluation, tracking) as the user who created it; its scopes do not narrow that."
 by = [
     "test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these",
     "test:backend/tests/smoke/test_sdk_scoped_routes.py::test_every_route_under_the_sdk_prefix_requires_the_scope",
@@ -799,6 +839,13 @@ by = [
     "journey:api-key-first-assignment#ruleset-scope",
     "journey:api-key-first-assignment#assign",
     "journey:api-key-first-assignment#track",
+]
+
+[[unit]]
+text = "A key that carries the mcp:read scope can also list feature flags and experiments and read an experiment and its results, as the user who created it."
+by = [
+    "test:backend/tests/smoke/test_mcp_read_routes.py::test_the_mcp_read_routes_are_exactly_these",
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_each_role_reads_the_four_operations_with_an_mcp_read_key",
 ]
 
 [[unit]]

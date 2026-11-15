@@ -13,11 +13,11 @@ identity for each version.
 
 ## Docker Compose
 
-Replace `deploy/compose/compose.yml` with the file of the new release, then run
-`docker compose pull` and `docker compose up -d`. The file keeps the project name
-`experimently-selfhost` and the database user `experimently` on purpose: the
-volumes are named after the project, so your database is the one you had. Do not
-change either value.
+Follow the Compose README's
+[Upgrade](https://github.com/Controlvar/controlvar/blob/main/deploy/compose/README.md#upgrade)
+procedure. `compose.yml` keeps the project name `experimently-selfhost` and the
+database user `experimently` on purpose: the volumes are named after the
+project, so your database is the one you had. Do not change either value.
 
 ## Helm
 
@@ -32,8 +32,9 @@ The `EXPERIMENTLY_PROFILE` setting keeps its name. Jira and Salesforce senders
 still authenticate with the `X-Experimently-Webhook-Secret` header, so nothing
 changes in their configuration.
 
-The MCP server's manifest, `GET /api/v1/mcp/manifest`, now gives the name
-`controlvar`. A client that matched the former name on it needs the new one.
+The MCP manifest, `GET /api/v1/mcp/manifest`, which lists the tools of the
+Controlvar MCP server, now gives the name `controlvar`. A client that matched
+the former name on it needs the new one.
 
 The dashboard keeps its sign-in token under the same key and the API keeps the
 issuer it signs tokens with, so nobody is signed out by the upgrade.

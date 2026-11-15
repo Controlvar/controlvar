@@ -5,5 +5,5 @@ export default modulePageStub({
   title: 'Warehouse',
   module: MODULES.WAREHOUSE,
   description:
-    'Analyse experiments with assignment and metric data that stays in your own warehouse (BigQuery, Snowflake, Amazon Athena).',
+    'Analyse experiments with assignment and metric data that stays in your own warehouse (BigQuery, Snowflake, Amazon Athena, Amazon Redshift).',
 });

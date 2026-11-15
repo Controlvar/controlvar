@@ -40,7 +40,10 @@ def normalize_event_timestamp(value: Any) -> str:
 
     Accepts a ``datetime`` or an ISO-8601 string (``Z`` or a numeric offset).
     Raises ``ValueError`` for anything else, so an unreadable timestamp is
-    refused rather than stored and compared as text.
+    refused rather than stored and compared as text.  That includes a value
+    at the edge of the date range whose offset moves it past 0001-01-01 or
+    9999-12-31 once converted to UTC (``datetime.astimezone`` raises
+    ``OverflowError`` for it, #1684).
     """
     if isinstance(value, datetime):
         moment = value
@@ -50,7 +53,13 @@ def normalize_event_timestamp(value: Any) -> str:
         raise ValueError("event timestamp must be a datetime or an ISO-8601 string")
     if moment.tzinfo is None:
         moment = moment.replace(tzinfo=timezone.utc)
-    return moment.astimezone(timezone.utc).isoformat()
+    try:
+        return moment.astimezone(timezone.utc).isoformat()
+    except OverflowError:
+        raise ValueError(
+            "event timestamp is outside the range that can be stored once it "
+            "is converted to UTC (0001-01-01 to 9999-12-31)"
+        ) from None
 
 
 class UTCTimestampString(TypeDecorator):

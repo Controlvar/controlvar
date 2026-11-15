@@ -1,6 +1,8 @@
+import { AttributedKeys } from './attribution';
 import { UserKeyCache } from './cache';
 import { ExperimentationError, asExperimentationError } from './errors';
-import { DEFER } from './evaluator';
+import { DEFER, copyValue, isValueOfType } from './evaluator';
+import { callExposureHook, exposureError } from './exposure';
 import {
   DEFAULT_REFRESH_INTERVAL_MS,
   LocalEvaluation,
@@ -15,6 +17,8 @@ import type {
   BatchResponse,
   BatchResult,
   ClientConfig,
+  ErrorReport,
+  Exposure,
   FlagEvaluateResponse,
   FlagEvaluation,
   SwallowedOperation,
@@ -64,6 +68,25 @@ function contextQuery(attributes: Record<string, unknown> | undefined): string {
   return `&context=${encode(JSON.stringify(attributes))}`;
 }
 
+/**
+ * A request path without its query string, as a request error message names it:
+ * `/api/v1/feature-flags/evaluate/my-flag?user_id=…&context=…` gives
+ * `/api/v1/feature-flags/evaluate/my-flag`. The query holds the user's id and attributes.
+ */
+function withoutQuery(path: string): string {
+  const question = path.indexOf('?');
+  return question === -1 ? path : path.slice(0, question);
+}
+
+/** The query of `url` (`?…`) as the URL parser writes it, or `''` when it cannot be parsed. */
+function serialisedQuery(url: string): string {
+  try {
+    return new URL(url).search;
+  } catch {
+    return '';
+  }
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -79,6 +102,32 @@ function toIso(timestamp: Date | string): string {
   return timestamp instanceof Date ? timestamp.toISOString() : String(timestamp);
 }
 
+/** The JSON type of a value the server sent without a `value_type`. */
+function jsonTypeOf(value: unknown): string {
+  return value !== null && typeof value === 'object' ? 'json' : typeof value;
+}
+
+/** A value type as the typed getters' messages name it. */
+function describeType(type: string): string {
+  switch (type) {
+    case 'boolean':
+      return 'a boolean';
+    case 'string':
+      return 'a string';
+    case 'number':
+      return 'a number';
+    case 'json':
+      return 'a JSON value';
+    default:
+      return `a value of type ${JSON.stringify(type.slice(0, 64))}`;
+  }
+}
+
+/** One body that names no experiment and no flag: nothing was attributed. */
+function isUntagged(bodies: TrackBody[]): boolean {
+  return bodies.length === 1 && !bodies[0].experiment_key && !bodies[0].feature_flag_key;
+}
+
 /**
  * Client for the Controlvar public API.
  *
@@ -91,9 +140,13 @@ function toIso(timestamp: Date | string): string {
  * - Successful evaluations/assignments are cached per user + key for
  *   `cacheTtlMs`; failures are never cached. Concurrent calls for the same
  *   user + key share one in-flight request.
+ * - Every successful answer also records its key for the key-less `track()`
+ *   fan-out, for 24 hours, or the cache lifetime if longer (see `attribution.ts`); `clearCache()` keeps that record.
  * - `getAssignment`, `evaluateFlag`, `getAllFlags` and `fetchAssignments` throw
  *   `ExperimentationError`; `getVariant` / `isFeatureEnabled` return safe
- *   defaults instead; `track` / `trackBatch` never reject.
+ *   defaults instead; `getStringValue` / `getNumberValue` / `getJsonValue` return
+ *   the caller's default and pass the reason to `onError(err, 'value')`;
+ *   `track` / `trackBatch` / `reportError` never reject.
  * - A 429 is retried once after the server's `Retry-After` (capped at `timeoutMs`).
  */
 export class ExperimentationClient {
@@ -103,8 +156,11 @@ export class ExperimentationClient {
   private readonly defaultVariant: string;
   private readonly customFetch: typeof fetch | undefined;
   private readonly onError: ClientConfig['onError'];
+  private readonly onExposure: ((exposure: Exposure) => void) | null;
   private readonly flags: UserKeyCache<FlagEvaluation>;
   private readonly assignments: UserKeyCache<Assignment>;
+  /** The keys a key-less `track()` is sent to; outlives the cache entries. */
+  private readonly attributed: AttributedKeys;
   /** Requests currently in flight, so concurrent callers share one fetch. */
   private readonly inflight = new Map<string, Promise<unknown>>();
   /** The local-evaluation runtime; `null` in server mode. */
@@ -119,9 +175,15 @@ export class ExperimentationClient {
     this.defaultVariant = config.defaultVariant ?? DEFAULT_VARIANT;
     this.customFetch = config.fetch;
     this.onError = config.onError;
+    const onExposure = config.onExposure ?? null;
+    if (onExposure !== null && typeof onExposure !== 'function') {
+      throw new Error('onExposure must be a function');
+    }
+    this.onExposure = onExposure;
     const ttl = config.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
     this.flags = new UserKeyCache<FlagEvaluation>(ttl);
     this.assignments = new UserKeyCache<Assignment>(ttl);
+    this.attributed = new AttributedKeys(ttl);
 
     const evaluation = config.evaluation ?? 'server';
     if (evaluation !== 'server' && evaluation !== 'local') {
@@ -188,8 +250,12 @@ export class ExperimentationClient {
 
   /**
    * Assign the user via `POST /api/v1/tracking/assign` (sticky on the server,
-   * records the exposure). `user.attributes` is sent as `context`.
-   * Throws `ExperimentationError` (404 when the experiment is not ACTIVE).
+   * records the exposure). `user.attributes` is sent as `context`. When the
+   * server answers `assigned: true`, `onExposure` is called before this resolves;
+   * a cached answer calls nothing.
+   * Throws `ExperimentationError` (404 when no experiment has the key, or for a
+   * draft with no control variant). An experiment that is not ACTIVE resolves to
+   * its control variant with `assigned: false` and `reason` its status.
    */
   async getAssignment(experimentKey: string, user: UserContext): Promise<Assignment> {
     const { userId, attributes } = requireUser(user);
@@ -199,10 +265,19 @@ export class ExperimentationClient {
     return this.dedupe(`assign\u0000${userId}\u0000${experimentKey}`, async () => {
       const body: Record<string, unknown> = { experiment_key: experimentKey, user_id: userId };
       if (attributes !== undefined) body.context = attributes;
-      const data = await this.requestJson<AssignResponse>('/api/v1/tracking/assign', {
-        method: 'POST',
-        body,
-      });
+      let data: AssignResponse;
+      try {
+        data = await this.requestJson<AssignResponse>('/api/v1/tracking/assign', {
+          method: 'POST',
+          body,
+        });
+      } catch (err) {
+        // A 404: a key-less track() must no longer reach this experiment.
+        if (err instanceof ExperimentationError && err.status === 404) {
+          this.attributed.forgetExperiment(userId, experimentKey);
+        }
+        throw err;
+      }
       if (!data || typeof data.variant_name !== 'string') {
         throw new ExperimentationError('Assignment response is missing variant_name', {
           code: 'INVALID_RESPONSE',
@@ -222,6 +297,12 @@ export class ExperimentationClient {
         ...(typeof data.reason === 'string' ? { reason: data.reason } : {}),
       };
       this.assignments.set(userId, experimentKey, assignment);
+      this.attributed.recordExperiment(userId, assignment.experimentKey, assignment.reason);
+      // Last, once the answer is stored and recorded. The server recorded an exposure for this
+      // request only if it said `assigned: true` (a missing field is not taken as true). This run
+      // starts only when the cache check above found no live answer, and concurrent callers share
+      // it, so each request that records an exposure reaches this line once.
+      if (data.assigned === true) this.exposed(assignment);
       return assignment;
     });
   }
@@ -266,6 +347,9 @@ export class ExperimentationClient {
    * With `evaluation: 'local'`, a flag the ruleset can answer is answered in-process from the
    * attributes passed (no request, no cache read) with `source: 'local'`; anything else is
    * evaluated by the server as above, with `source: 'server'`.
+   *
+   * `value` and `valueType` are copied from the server's `value` and `value_type` when it sends
+   * them; a local answer carries the ones the server would send.
    */
   async evaluateFlag(flagKey: string, user: UserContext): Promise<FlagEvaluation> {
     const { userId, attributes } = requireUser(user);
@@ -277,15 +361,22 @@ export class ExperimentationClient {
           enabled: answer.enabled,
           config: null,
           reason: answer.reason,
+          // A copy: a caller changing it must not change the ruleset every user is answered from.
+          value: copyValue(answer.value),
+          valueType: answer.valueType,
           source: 'local',
         };
         // Recorded for the key-less track() fan-out, exactly as a server answer is.
         this.flags.set(userId, flagKey, evaluation);
+        this.attributed.recordFlag(userId, flagKey);
         return evaluation;
       }
     }
+    // Only a server answer is reused here. A local one stays in the cache (getCachedFlags), but
+    // it was computed from a ruleset that no longer answers this call (discarded, too stale, closed,
+    // the flag now remote or gone, or attributes it cannot compare), so the server is asked (#1709).
     const cached = this.flags.get(userId, flagKey);
-    if (cached) return cached;
+    if (cached && cached.source !== 'local') return cached;
 
     return this.dedupe(`flag\u0000${userId}\u0000${flagKey}`, async () => {
       const data = await this.requestJson<FlagEvaluateResponse>(
@@ -297,8 +388,12 @@ export class ExperimentationClient {
         config: data?.config === undefined ? null : data.config,
       };
       if (typeof data?.reason === 'string') evaluation.reason = data.reason;
+      // Only copied when the server sent them: an older server's answer has neither.
+      if (data?.value !== undefined && data.value !== null) evaluation.value = data.value;
+      if (typeof data?.value_type === 'string') evaluation.valueType = data.value_type;
       if (this.local) evaluation.source = 'server';
       this.flags.set(userId, flagKey, evaluation);
+      this.attributed.recordFlag(userId, flagKey);
       return evaluation;
     });
   }
@@ -310,6 +405,35 @@ export class ExperimentationClient {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * The string a string flag serves this user: its on value when the flag is on for them, its off
+   * value otherwise. Evaluated as `evaluateFlag` does, locally included, with the same cache.
+   *
+   * Never rejects. Returns `defaultValue`, and passes the reason to `onError(err, 'value')`, when
+   * the request fails, the flag is unknown (404), the server sends no value (a server without
+   * flag values), or the flag serves another type (`err.code` `'TYPE_MISMATCH'`).
+   */
+  async getStringValue(flagKey: string, user: UserContext, defaultValue: string): Promise<string> {
+    return this.typedValue(flagKey, user, defaultValue, 'string', 'getStringValue');
+  }
+
+  /**
+   * The number a number flag serves this user (an integer or a decimal, as saved); see
+   * `getStringValue` for when it returns `defaultValue` instead. Never rejects.
+   */
+  async getNumberValue(flagKey: string, user: UserContext, defaultValue: number): Promise<number> {
+    return this.typedValue(flagKey, user, defaultValue, 'number', 'getNumberValue');
+  }
+
+  /**
+   * The JSON object or array a json flag serves this user, as a new copy on every call: changing
+   * it changes nothing the SDK keeps. It is checked to be an object or an array, not to match `T`.
+   * See `getStringValue` for when it returns `defaultValue` instead. Never rejects.
+   */
+  async getJsonValue<T = unknown>(flagKey: string, user: UserContext, defaultValue: T): Promise<T> {
+    return this.typedValue(flagKey, user, defaultValue, 'json', 'getJsonValue');
   }
 
   /**
@@ -342,6 +466,17 @@ export class ExperimentationClient {
     return this.flags.entries(userId).map(([flagKey]) => flagKey);
   }
 
+  /**
+   * The successful, unexpired flag evaluations cached for the user (no network); the twin of
+   * `getAssignments`. With `evaluation: 'local'` each carries its `source`. A `'local'` entry is
+   * never reused as an answer: a call the ruleset answers is computed afresh, and one it defers
+   * asks the server. A `'server'` entry is what `evaluateFlag` returns for that user and flag,
+   * until it expires, whenever the ruleset does not answer the call.
+   */
+  getCachedFlags(userId: string): FlagEvaluation[] {
+    return this.flags.entries(userId).map(([, evaluation]) => evaluation);
+  }
+
   // ─── Tracking ──────────────────────────────────────────────────────────────
 
   /**
@@ -349,15 +484,17 @@ export class ExperimentationClient {
    *
    * - With `experimentKey` / `featureFlagKey`: one `POST /api/v1/tracking/track`.
    * - Without keys: one `POST /api/v1/tracking/batch` (chunked at 100) with one
-   *   entry per cached assignment and one per cached evaluated flag for this
-   *   user. Nothing cached → nothing is sent.
+   *   entry per experiment and one per flag this client answered for the user in
+   *   the last 24 hours, cached or not. An experiment whose latest answer said it
+   *   is a draft, paused, completed or archived gets no entry.
+   * - Without keys and with nothing to attribute it to: one `POST /api/v1/tracking/track`
+   *   with no key, which the server stores as history.
    */
   async track(userId: string, eventName: string, options: TrackOptions = {}): Promise<void> {
     try {
       const events = this.expand({ userId, eventName, ...options });
-      if (events.length === 0) return;
 
-      if (options.experimentKey || options.featureFlagKey) {
+      if (options.experimentKey || options.featureFlagKey || isUntagged(events)) {
         await this.requestOk('/api/v1/tracking/track', { method: 'POST', body: events[0] });
         return;
       }
@@ -375,7 +512,8 @@ export class ExperimentationClient {
 
   /**
    * Send many events via `POST /api/v1/tracking/batch`, chunked at 100.
-   * Entries without a key are expanded with the same fan-out rule as `track`.
+   * Entries without a key are expanded with the same fan-out rule as `track`; one
+   * with nothing to attribute it to is sent once with no key (stored as history).
    * Never rejects: a failed chunk counts all its events as failures.
    */
   async trackBatch(events: TrackEvent[]): Promise<BatchResult> {
@@ -403,8 +541,46 @@ export class ExperimentationClient {
     return result;
   }
 
+  // ─── Error reports ─────────────────────────────────────────────────────────
+
+  /**
+   * Report an error that happened while a flag or experiment was active, with one
+   * `POST /api/v1/tracking/errors`. Works in both evaluation modes.
+   *
+   * Resolves `true` exactly when the server answered 201: the report is stored. It counts toward
+   * the flag's error rate and automatic rollback only when this client's key is a server-side key
+   * (the `sdk:ruleset` scope, created by a user who can change flags); the flag's safety check
+   * shows the others as `uncounted_error_count`. Resolves `false` on any other answer (401, 404,
+   * 422, a 429 after its one retry, 5xx) or a network failure, and passes the failure to
+   * `onError(err, 'reportError')`. Never rejects. The server checks the report; the SDK does not.
+   */
+  async reportError(report: ErrorReport): Promise<boolean> {
+    const path = '/api/v1/tracking/errors';
+    try {
+      const body: Record<string, unknown> = { error_type: report.errorType, message: report.message };
+      if (report.featureFlagKey !== undefined) body.feature_flag_key = report.featureFlagKey;
+      if (report.experimentKey !== undefined) body.experiment_key = report.experimentKey;
+      if (report.userId !== undefined) body.user_id = report.userId;
+      if (report.stackTrace !== undefined) body.stack_trace = report.stackTrace;
+      if (report.metadata !== undefined) body.metadata = report.metadata;
+      if (report.timestamp !== undefined) body.timestamp = toIso(report.timestamp);
+
+      const response = await this.request(path, { method: 'POST', body });
+      if (response.status === 201) return true;
+      this.report(await this.httpError(response, path, 'POST'), 'reportError');
+      return false;
+    } catch (err) {
+      this.report(err, 'reportError');
+      return false;
+    }
+  }
+
   // ─── Cache ─────────────────────────────────────────────────────────────────
 
+  /**
+   * Drop every cached assignment and evaluation, so the next calls ask the server again.
+   * The keys a key-less `track()` is sent to are kept.
+   */
   clearCache(): void {
     this.flags.clear();
     this.assignments.clear();
@@ -412,7 +588,10 @@ export class ExperimentationClient {
 
   // ─── Internals ─────────────────────────────────────────────────────────────
 
-  /** Build the wire bodies for one event: a single keyed body, or the fan-out list. */
+  /**
+   * Build the wire bodies for one event: a single keyed body, the fan-out list, or,
+   * with nothing to attribute it to, the single body with no key.
+   */
   private expand(event: TrackEvent): TrackBody[] {
     const base: TrackBody = {
       event_type: event.eventType ?? event.eventName,
@@ -422,6 +601,10 @@ export class ExperimentationClient {
     if (event.value !== undefined) base.value = event.value;
     if (event.properties !== undefined) base.metadata = event.properties;
     if (event.timestamp !== undefined) base.timestamp = toIso(event.timestamp);
+    // The caller's id, copied into every fan-out entry below. None is made here.
+    if (event.eventId !== undefined && event.eventId !== null && event.eventId !== '') {
+      base.event_id = event.eventId;
+    }
 
     if (event.experimentKey || event.featureFlagKey) {
       const body: TrackBody = { ...base };
@@ -430,10 +613,67 @@ export class ExperimentationClient {
       return [body];
     }
 
-    return [
-      ...this.getAssignments(event.userId).map(a => ({ ...base, experiment_key: a.experimentKey })),
-      ...this.getEvaluatedFlags(event.userId).map(flagKey => ({ ...base, feature_flag_key: flagKey })),
+    const { experiments, flags } = this.attributed.keys(event.userId);
+    const bodies: TrackBody[] = [
+      ...experiments.map(experimentKey => ({ ...base, experiment_key: experimentKey })),
+      ...flags.map(flagKey => ({ ...base, feature_flag_key: flagKey })),
     ];
+    return bodies.length > 0 ? bodies : [base];
+  }
+
+  /**
+   * The typed getters' one body: the value the flag serves this user when it is of `type` (a
+   * copy), and otherwise `defaultValue`, with the reason passed to `onError(err, 'value')`.
+   */
+  private async typedValue<T>(
+    flagKey: string,
+    user: UserContext,
+    defaultValue: T,
+    type: 'string' | 'number' | 'json',
+    method: string
+  ): Promise<T> {
+    try {
+      const { value, valueType } = await this.evaluateFlag(flagKey, user);
+      const flag = JSON.stringify(String(flagKey));
+      if (value === undefined || value === null) {
+        throw new ExperimentationError(
+          `Flag ${flag} came back without a value (from a server without flag values, or one that ` +
+            `cannot serve this flag's stored value); ${method} returned your default`,
+          { code: 'INVALID_RESPONSE' }
+        );
+      }
+      const served = typeof valueType === 'string' ? valueType : jsonTypeOf(value);
+      if (served !== type) {
+        throw new ExperimentationError(
+          `Flag ${flag} serves ${describeType(served)}; ${method} returned your default`,
+          { code: 'TYPE_MISMATCH' }
+        );
+      }
+      if (!isValueOfType(value, type)) {
+        throw new ExperimentationError(
+          `Flag ${flag} serves ${describeType(type)}, but the server's value is not one; ` +
+            `${method} returned your default`,
+          { code: 'INVALID_RESPONSE' }
+        );
+      }
+      return copyValue(value) as T;
+    } catch (err) {
+      this.report(err, 'value');
+      return defaultValue;
+    }
+  }
+
+  /** Give `onExposure` a new object holding the four values; its failures go to `onError`. */
+  private exposed(assignment: Assignment): void {
+    const hook = this.onExposure;
+    if (!hook) return;
+    const exposure: Exposure = {
+      experimentKey: assignment.experimentKey,
+      userId: assignment.userId,
+      variantId: assignment.variantId,
+      variantName: assignment.variantName,
+    };
+    callExposureHook(hook, exposure, thrown => this.report(exposureError(thrown), 'exposure'));
   }
 
   private report(err: unknown, operation: SwallowedOperation): void {
@@ -465,6 +705,8 @@ export class ExperimentationClient {
 
   private async request(path: string, init: RequestInitLite = {}): Promise<Response> {
     const method = init.method ?? 'GET';
+    const url = `${this.apiUrl}${path}`;
+    const shown = withoutQuery(path);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     let response: Response;
@@ -476,7 +718,7 @@ export class ExperimentationClient {
           code: 'NETWORK_ERROR',
         });
       }
-      response = await fetchImpl(`${this.apiUrl}${path}`, {
+      response = await fetchImpl(url, {
         method,
         headers: {
           ...(init.headers ?? {}),
@@ -491,12 +733,17 @@ export class ExperimentationClient {
       if (err instanceof ExperimentationError) throw err;
       if (controller.signal.aborted) {
         throw new ExperimentationError(
-          `Request timed out after ${this.timeoutMs} ms (${method} ${path})`,
+          `Request timed out after ${this.timeoutMs} ms (${method} ${shown})`,
           { code: 'TIMEOUT', cause: err }
         );
       }
-      const message = err instanceof Error ? err.message : String(err);
-      throw new ExperimentationError(`Network error (${method} ${path}): ${message}`, {
+      let message = err instanceof Error ? err.message : String(err);
+      // A fetch implementation may name the URL in its own message, as passed or as the URL
+      // parser writes it (`'` as `%27`, for one). The query is removed in both forms.
+      for (const query of [path.slice(shown.length), serialisedQuery(url)]) {
+        if (query.length > 1) message = message.split(query).join('');
+      }
+      throw new ExperimentationError(`Network error (${method} ${shown}): ${message}`, {
         code: 'NETWORK_ERROR',
         cause: err,
       });
@@ -523,7 +770,7 @@ export class ExperimentationClient {
     try {
       return (await response.json()) as T;
     } catch (err) {
-      throw new ExperimentationError(`Invalid JSON in response (${init.method ?? 'GET'} ${path})`, {
+      throw new ExperimentationError(`Invalid JSON in response (${init.method ?? 'GET'} ${withoutQuery(path)})`, {
         code: 'INVALID_RESPONSE',
         status: response.status,
         cause: err,
@@ -543,7 +790,7 @@ export class ExperimentationClient {
         ? String((body as { detail: unknown }).detail)
         : undefined;
     return new ExperimentationError(
-      `API error ${response.status}${detail ? `: ${detail}` : ''} (${method} ${path})`,
+      `API error ${response.status}${detail ? `: ${detail}` : ''} (${method} ${withoutQuery(path)})`,
       { code: 'HTTP_ERROR', status: response.status, body }
     );
   }

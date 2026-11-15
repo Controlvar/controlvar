@@ -2,7 +2,7 @@
 
 The runner's contract with ``binomial_metric_result`` is the counts it passes
 -- units and converting units per experiment variant, the control first -- with
-the run's alpha, correction method and the metric's identity.  The wrapper
+the run's alpha, correction method and the metric's identity and direction.  The wrapper
 records that and returns the real function's result, so the tests see both.
 """
 
@@ -39,6 +39,9 @@ def binomial_metric_result(
                 "name": metric.name,
                 "metric_type": metric.metric_type,
                 "is_primary": metric.is_primary,
+                # Attribute access, not getattr: a MetricRef without the
+                # field fails here rather than reading as higher is better.
+                "lower_is_better": metric.lower_is_better,
             },
         }
     )

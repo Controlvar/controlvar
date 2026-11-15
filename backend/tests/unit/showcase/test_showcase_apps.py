@@ -483,6 +483,8 @@ def stage(tmp_path, on_goto=None, on_beat=None):
     made.recorder.stop = lambda: None
     made.measure_zoom = lambda wanted=None: {"body": wanted}
     made.self_test_overlay = lambda spec: {"offset_px": 0}
+    # A6's read of the phone's box (video 4): a phone the frame holds whole.
+    made.fit_box = lambda testid: director.Box(100, 100, 417, 835)
     made.beat = lambda sc, index, beat: on_beat(page) if on_beat else None
     page.on_goto = (lambda url: on_goto(page, url)) if on_goto else None
     armed = []

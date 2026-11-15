@@ -16,7 +16,7 @@ This directory contains the security compliance documentation for Controlvar.
 ## Key Security Controls (Implemented)
 
 - Security headers: HSTS (1yr + preload), CSP (`default-src 'none'`, except the two API reference pages, which allow the jsdelivr assets they load), X-Frame-Options: DENY — `backend/app/middleware/security_middleware.py`
-- RBAC enforcement: 4 roles (ADMIN, DEVELOPER, ANALYST, VIEWER) — `backend/app/core/permissions.py`
+- RBAC enforcement: 4 roles (ADMIN, DEVELOPER, ANALYST, VIEWER), plus custom roles and direct grants in the full profile — `backend/app/core/permissions.py`
 - bcrypt password hashing — `backend/app/core/security.py`
 - API key expiry and revocation (an expired or revoked key is refused) — `backend/app/models/api_key.py`, `backend/app/api/deps.py`
 - Safety auto-rollback for feature flags — `backend/app/core/safety_scheduler.py`

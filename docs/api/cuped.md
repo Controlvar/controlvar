@@ -32,7 +32,8 @@ Where:
 
 The adjusted effect is the treatment's adjusted rate minus the control's. Its variance is
 each arm's residual variance over its size, so the more of the outcome the history
-explains, the narrower the interval.
+explains, the narrower the interval. Each residual variance is a sample variance, divided
+by the arm's users minus 1.
 
 What counts as history, per user:
 
@@ -43,7 +44,8 @@ What counts as history, per user:
 - it can carry any experiment key, any flag key, or none. One event is enough; a user with
   three copies of the same purchase still has `X = 1`;
 - **History counts only if the server received it before the user was assigned. Send
-  history before you start the experiment. History backfilled after the start is ignored.**
+  history before you start the experiment. History the server receives after a user was
+  assigned is ignored for that user.**
 
 ---
 
@@ -65,10 +67,13 @@ is never read.
 Events during the experiment still need the experiment's key, as they always have: an event
 without one counts in no experiment's results.
 
-The SDKs' `track()` without a key sends one event for each experiment and flag cached for the
-user, and those tagged events count as history for a later experiment. **An SDK user with
-nothing cached sends no history**, which is usual before a user's first assignment. Each
-result's `covariate_coverage_pct` shows how many users had history.
+The SDKs' `track()` without a key sends one event for each experiment and flag that SDK
+answered for the user (in the last 24 hours for the JavaScript, Python and React SDKs, while
+the answer is cached for the others), and those tagged events count as history for a later
+experiment. **With nothing to attribute it to, the JavaScript, Python and React SDKs send the
+event once with no key**, which stores it as history; the other SDKs send nothing then, which
+is usual before a user's first assignment. Each result's `covariate_coverage_pct` shows how
+many users had history.
 
 Run the commands on this page in one terminal, in order, against the stack from the
 [Quick Start](../getting-started/quick-start.md). Each uses the shell variables set by the
@@ -114,34 +119,41 @@ experiment.
 ## Choosing the method
 
 The method is part of the experiment, in its `variance_reduction_config`, set when you
-create it (`POST /api/v1/experiments/`) or change it (`PUT /api/v1/experiments/{id}`):
+create it (`POST /api/v1/experiments/`) or while it is a draft
+(`PUT /api/v1/experiments/{id}`); once it has left draft it cannot be changed (see
+[Permissions](#permissions)):
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `method` | string | `none` | `none`, `cuped`, `cuped_plus` or `winsorization` |
 | `covariate_metric_id` | string | `null` | The id of one of the experiment's metrics whose `event_name` is the history to read. By default each metric's own `event_name` |
 | `covariate_lookback_days` | int | `7` | Days of history before each user's assignment, 1–90 |
-| `winsorization_percentile` | float | `99.0` | The percentile above which values are clipped, 50–100 |
+| `winsorization_percentile` | float | `99.0` | Reserved: stored and validated (50–100), but no results view clips values with it. A mean metric's numbers are the unclipped ones |
 
 - `none` applies no adjustment: `theta` is `0` and the numbers are the unadjusted ones.
 - `cuped` adjusts as described above.
 - `cuped_plus` is currently computed as `cuped`: the response's top-level `method` says
   `cuped_plus`, and each row's `method` says `cuped`.
-- `winsorization` clips values above a percentile, which only means something for a mean
-  metric (revenue, say). This view does not apply it: a conversion metric is listed with
-  `unavailable_reason: "winsorization_needs_mean_metric"`.
+- `winsorization` is accepted and stored, but nothing clips values: a revenue metric's
+  `/results` numbers are the same as with `none`, a whale included. A conversion metric is
+  listed with `unavailable_reason: "winsorization_needs_mean_metric"`. To limit a whale's
+  effect today, cap or filter the value before you send the event.
 
-This sets the demo experiment's method to `cuped` with a 7-day lookback:
+The demo data creates `checkout_button_color` with the method `cuped` and a 7-day
+lookback. This reads the setting the experiment stores:
 
 ```{.bash exec}
-curl -s -o /dev/null -w '%{http_code}\n' -X PUT localhost:8000/api/v1/experiments/$EXP_ID \
+curl -s localhost:8000/api/v1/experiments/$EXP_ID \
   -H "Authorization: Bearer $TOKEN" \
-  -H 'content-type: application/json' \
-  -d '{"variance_reduction_config": {"method": "cuped", "covariate_lookback_days": 7}}'
+  | jq .variance_reduction_config
 ```
-<!-- expect: 200 -->
+<!-- expect: "method": "cuped" -->
+<!-- expect: "covariate_lookback_days": 7 -->
 
-It prints `200`.
+It prints `"method": "cuped"` and `"covariate_lookback_days": 7`, with the other two
+fields at their defaults. A stack whose demo data an earlier release seeded may print
+`null`: start it once with `SEED_FORCE=true`, which runs the demo seed again and sets a
+missing setting, or seed a fresh database.
 
 ---
 
@@ -154,8 +166,9 @@ takes no query parameters: the method comes from the experiment, the interval us
 experiment's stored `confidence_level`, and `corrected_p_value` applies its stored
 `correction_method` across the metric's treatments
 ([How results are judged](endpoints.md#how-results-are-judged)). Like the main results, the
-view is fixed-horizon: do not stop an experiment the first time it looks significant. Any
-logged-in user can read it; an experiment that doesn't exist answers `404`.
+view is fixed-horizon: do not stop an experiment the first time it looks significant. A
+user who may view the experiment can read it; without that permission it answers `403`, and
+an experiment that doesn't exist answers `404`.
 
 ```{.bash exec}
 curl -s localhost:8000/api/v1/results/$EXP_ID/cuped \
@@ -281,11 +294,17 @@ Three things can surprise:
 
 ## Permissions
 
-Any logged-in user can read the results. Changing an experiment's
-`variance_reduction_config` is a change to the experiment, decided by role and by the
-experiment's state, not by who created it. ANALYST and VIEWER cannot change any experiment:
-the `PUT` above answers `403` with `"You don't have permission to update experiments"`.
-ADMIN and DEVELOPER may change experiments, but only a superuser may change one that is no
-longer a draft, and the demo experiment is running: for a DEVELOPER (or an ADMIN who is not
-a superuser) the `PUT` above answers `400` with `"Cannot update experiments in active
-status"`. The demo's `admin@demo.com` is a superuser, which is why it gets `200`.
+Anyone who may view the experiment can read the results. Changing an experiment's
+`variance_reduction_config` is a change to the experiment, decided by permission and by the
+experiment's state, not by who created it. Set it when you create the experiment, or with
+`PUT /api/v1/experiments/{id}` while the experiment is a draft. ADMIN and DEVELOPER may
+change experiments, and in the full profile so may anyone whose custom role or direct grant
+gives `experiment (update)`; for anyone else that `PUT` answers `403` with
+`"You don't have permission to update experiments"`. Once the experiment has left draft,
+nobody can change it, a superuser included, even to the value it already has: on an active
+experiment the `PUT` answers `400` with
+`"Cannot update variance_reduction_config for experiments in active status"` for a superuser
+and `"Cannot update experiments in active status"` for anyone else who may change
+experiments. To use another method,
+clone the experiment (`POST /api/v1/experiments/{id}/clone`): the copy is a new experiment,
+a draft, and takes it.

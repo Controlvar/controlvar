@@ -115,7 +115,8 @@ PLATFORM_STEPS: Dict[str, str] = {
     "Make the core profile real": "${{ !inputs.skip && inputs.profile == 'core' }}",
     "Set up Python": "${{ !inputs.skip }}",
     "Set up Node.js": (
-        "${{ !inputs.skip && (contains(inputs.sdks, 'js') || "
+        "${{ !inputs.skip && (inputs.suite == 'sdk-live-contract' || "
+        "contains(inputs.sdks, 'js') || "
         "contains(inputs.sdks, 'react') || contains(inputs.sdks, 'edge') || "
         "contains(inputs.sdks, 'openfeature')) }}"
     ),
@@ -138,6 +139,11 @@ PLATFORM_STEPS: Dict[str, str] = {
     "Start the API": "${{ !inputs.skip }}",
     "Assert the running profile": "${{ !inputs.skip }}",
     "Run suite": "${{ !inputs.skip }}",
+    # sdk-live-contract's second step, never in a fuzz pass (fuzz.yml calls
+    # this workflow three times; #1607).
+    "Run the MCP server's contract suite": (
+        "${{ !inputs.skip && inputs.suite == 'sdk-live-contract' }}"
+    ),
     # Not on a fuzz run: its API log quotes the requests, and the log is public.
     "Backend log (on failure)": (
         "${{ !inputs.skip && failure() && inputs.suite != 'fuzz' }}"
@@ -172,7 +178,17 @@ DOCS_TESTS = (
     "modules/backend/tests/unit/services/test_sso_docs_messages.py",
     # Video 2's SDK card quotes docs/sdk/javascript.md's quick start line for
     # line (#1066); passes with backend/requirements.txt alone (checked).
+    # Video 9's claims check (CLAIMS) holds a sentence to the pages of docs/
+    # that state it, and imports no module it did not before.
     "backend/tests/unit/showcase/test_showcase_quoted_docs.py",
+    # The event contract's rules quote docs/guides/how-events-count.md and the
+    # pages beside it (#1544); reads the library as text, stdlib only.
+    "backend/tests/unit/ground_truth/test_contract_citations.py",
+    # Video 4's description says what docs/getting-started/limitations.md says
+    # about native SDKs (D163), so a docs-only reword of that row must meet it.
+    # Reads the manifest, storyboards and transcripts as text; passes with
+    # backend/requirements.txt alone (checked).
+    "backend/tests/unit/showcase/test_site_walkthroughs.py",
 )
 
 #: Python tests that name docs/ but are deliberately NOT in DOCS_TESTS.
@@ -182,6 +198,9 @@ NOT_DOCS_TESTS = {
     "backend/tests/unit/scripts/test_makefile_guards.py": "docs/api only",
     # Reads only docs/api/openapi-v1.full.json (same reason as above).
     "backend/tests/unit/scripts/test_load_test_runner.py": "docs/api only",
+    # Reads only docs/api/openapi-v1.full.json, for the MCP contract suite's
+    # allow-list (same reason as above).
+    "backend/tests/unit/scripts/test_run_mcp_contract.py": "docs/api only",
     # Reads only docs/api/openapi-v1.stable.json (same reason as above).
     "backend/tests/unit/api/test_segment_preview_limits.py": "docs/api only",
     # Reads only the two docs/api/ OpenAPI snapshots (same reason as above).
@@ -211,6 +230,16 @@ NOT_DOCS_TESTS = {
     "sdk/python/tests/test_readme.py": "reads sdk/python/README.md only",
     # Reads only docs/api/warehouse-analytics.md (same reason as above).
     "modules/backend/tests/unit/test_warehouse_docs_availability.py": "docs/api only",
+    # Reads only docs/api/split-url.md: the reference integration it prints,
+    # its reasons and its crawler list (same reason as above).
+    "modules/backend/tests/integration/split_url/test_split_url_reference_page.py": (
+        "docs/api only"
+    ),
+    # Reads only docs/api/openapi-v1.full.json, to hold the warehouse source
+    # components to the live document (same reason as above).
+    "modules/backend/tests/smoke/test_warehouse_source_direction_snapshot.py": (
+        "docs/api only"
+    ),
     # Runs the runbook SQL of docs/self-hosting/migrations.md against
     # PostgreSQL, which the docs-only lane does not have. It reads the page
     # through backend/tests/unit/docs/test_email_case_runbook.py, which is in
@@ -220,6 +249,15 @@ NOT_DOCS_TESTS = {
     ),
     # Hands the classifier path STRINGS such as "docs/a.py"; opens no file.
     "backend/tests/unit/scripts/test_classify_changes.py": "fixture strings only",
+    # Hands scripts/contributor_guard.py path STRINGS such as "docs/x.md";
+    # walks the tree, where docs/_claims/ and docs/security/ must each hold a
+    # file (it reads their names, opens none of them); and reads the headings
+    # of CONTRIBUTING.md, which is never docs-only (scripts/classify_changes.py),
+    # so a change to it runs this test. A docs-only change that emptied either
+    # directory would fail here on the next full run, not on its own.
+    "backend/tests/unit/scripts/test_contributor_guard.py": (
+        "names under docs/_claims/ and docs/security/; CONTRIBUTING.md headings"
+    ),
     # Gives storyboard narration claims a source STRING such as
     # "docs/getting-started/quick-start.md"; opens no file under docs/.
     "backend/tests/unit/showcase/test_showcase_narration.py": "fixture strings only",
@@ -239,6 +277,10 @@ NOT_DOCS_TESTS = {
     "backend/tests/unit/scripts/test_docs_journeys_workflow.py": (
         "fixture strings only"
     ),
+    # Pins scale-evidence.yml's pull_request path filter, two of whose entries
+    # name docs/ paths (the capacity page, the results directory); opens no
+    # file under docs/.
+    "backend/tests/unit/scripts/test_scale_workflow.py": "fixture strings only",
     # Hands stub `git` and `python3` path STRINGS such as "docs/a.md" to the
     # classifier step's script; opens no file under docs/.
     "backend/tests/unit/infrastructure/test_ci_classification.py": (
@@ -273,8 +315,8 @@ NOT_DOCS_TESTS = {
     # docs-only ones too.
     "backend/tests/smoke/test_legacy_name.py": "the lint job runs the same check",
 }
-# docs-links.test.ts (Jest) runs on a docs-only change as its pinned Python
-# twin, backend/tests/unit/docs/test_dashboard_docs_links.py.
+# A Jest test that reads docs/ runs on a docs-only change as its Python twin
+# (JEST_TWINS below).
 # The real-tree scan in test_leak_guard.py reads docs/ through `git ls-files`;
 # the required Leak Guard workflow runs the same guard on every pull request.
 
@@ -285,7 +327,13 @@ DOCS_READER = re.compile(r"""["']docs["']|["']docs/|mkdocs\.yml""")
 
 
 class _NoDuplicateKeys(yaml.SafeLoader):
-    """safe_load keeps the LAST of two `if:` keys silently; this refuses."""
+    """safe_load keeps the LAST of two `if:` keys silently; this refuses.
+
+    It also refuses a mapping, at any depth, that holds both a bare ``on`` and
+    a quoted ``"on"``: this loader reads the first as the boolean True and the
+    second as a string, so it sees two keys where GitHub sees ``on`` twice,
+    and which value a reader takes would depend on the reader. At the top of a
+    workflow that key is the trigger key."""
 
     def construct_mapping(self, node, deep=False):
         seen = set()
@@ -296,6 +344,11 @@ class _NoDuplicateKeys(yaml.SafeLoader):
                     f"duplicate key {key!r} at line {key_node.start_mark.line + 1}"
                 )
             seen.add(key)
+        if "on" in seen and any(key is True for key in seen):
+            raise AssertionError(
+                "both a key read as True (a bare `on`, `true` or `yes`) and a "
+                f'quoted `"on"` in the mapping at line {node.start_mark.line + 1}'
+            )
         return super().construct_mapping(node, deep=deep)
 
 
@@ -456,7 +509,11 @@ class TestBuildJobSteps:
         assert sorted(core_services) == ["postgres", "redis"], sorted(core_services)
         core_services.pop("redis")
         assert core_services == full["services"], "the Postgres services differ"
-        assert core["timeout-minutes"] == 60
+        # 120, not 75: on 2026-11-03 core-build's passing runs reached about
+        # 75.5 minutes and four were cancelled at 75 (one 3 s after its script
+        # printed OK). A different number is a decision about the slowest
+        # required check.
+        assert core["timeout-minutes"] == 120
         assert core["needs"] == "changes"
 
     def test_the_steps_both_jobs_have_are_the_same_step(self, gate):
@@ -586,6 +643,53 @@ def test_the_dashboard_and_api_gate_runs_on_a_docs_only_change():
     assert any(
         rel == t or (t.endswith("/") and rel.startswith(t)) for t in DOCS_TESTS
     ), f"{rel} is not in DOCS_TESTS, by path or by directory"
+
+
+#: Python twins of Jest tests that read docs/, and the Jest file each mirrors.
+#: Jest does not run on a docs-only change, so the twin is what fails the
+#: pull request that rewords the docs side; without it that pull request
+#: merges green and the next one to run the frontend suite goes red.
+JEST_TWINS = {
+    # docsUrl() links in frontend/src address pages that exist under docs/.
+    "backend/tests/unit/docs/test_dashboard_docs_links.py": (
+        "frontend/src/tests/services/docs-links.test.ts"
+    ),
+    # The homepage's quoted sentences (frontend/src/content/home-quotes.json)
+    # against the pages they quote, the linked page's "(beta)" title and its
+    # place in the mkdocs nav.
+    "backend/tests/unit/docs/test_homepage_quotes_docs.py": (
+        "frontend/src/tests/content/home-quotes.test.tsx"
+    ),
+}
+
+
+@pytest.mark.parametrize("twin", sorted(JEST_TWINS))
+def test_every_jest_twin_runs_on_a_docs_only_change(twin):
+    """The twin and its Jest file exist, and the twin is in DOCS_TESTS (by
+    path or by directory), never excused in NOT_DOCS_TESTS."""
+    assert (REPO_ROOT / twin).is_file(), f"{twin} is gone"
+    jest = JEST_TWINS[twin]
+    assert (REPO_ROOT / jest).is_file(), f"{jest}, which {twin} mirrors, is gone"
+    assert twin not in NOT_DOCS_TESTS, f"{twin} must run on a docs-only change"
+    assert any(
+        twin == t or (t.endswith("/") and twin.startswith(t)) for t in DOCS_TESTS
+    ), f"{twin} is not in DOCS_TESTS, by path or by directory"
+
+
+def test_jest_twins_lists_every_twin():
+    """A twin names its Jest file in a module-level `JEST_TWIN`; the files that
+    do are exactly JEST_TWINS's keys, so deleting an entry fails on its own."""
+    found = {
+        path.relative_to(REPO_ROOT).as_posix()
+        for root in ("backend/tests", "modules/backend/tests")
+        if (REPO_ROOT / root).is_dir()
+        for path in (REPO_ROOT / root).rglob("*.py")
+        if re.search(r"^JEST_TWIN\s*=", path.read_text(encoding="utf-8"), re.M)
+    }
+    assert found == set(JEST_TWINS), (
+        "files defining JEST_TWIN and the keys of JEST_TWINS differ: "
+        f"{sorted(found ^ set(JEST_TWINS))}"
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -28,6 +28,7 @@ import hashlib
 import json
 import os
 import pty
+import shlex
 import shutil
 import signal
 import stat
@@ -452,6 +453,71 @@ class InstallWorld(World):
             f'exec "{real}" "$@"\n'
         )
         shim.chmod(0o755)
+
+    def hold_a_clock_read(
+        self,
+        args: str,
+        once_the_deploy_blocks: bool = False,
+        once_called_with: str | None = None,
+    ) -> None:
+        """``date <args>`` run by the installer's own shell (its process group: not the
+        watcher's, whose group is its own), held once: it prints the time and closes its
+        output, so the installer has its answer and is waiting for it to end, and it ends,
+        normally, only once release_the_clock() is called. It ignores INT meanwhile, as a
+        command that has already ended would. With ``once_the_deploy_blocks``, only a call
+        made after the fake cdk deploy has blocked (pids.log) is held: the deploy step's
+        wait's, not the step announcements' before it. With ``once_called_with``, only a
+        call made after an aws call whose arguments hold that text (calls.log): a wait's
+        clock read once the wait has looked once (#1565). clock_held() says when it is
+        held.
+        """
+        real = shutil.which("date") or "/bin/date"
+        held, release = self.fake_dir / "clock-held", self.fake_dir / "clock-release"
+        hold = (
+            "import os, signal, subprocess, sys, time\n"
+            "held, release, real, args = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4:]\n"
+            "if os.getpgid(0) != os.getsid(0):\n"
+            "    os.execv(real, [real] + args)\n"
+            "try:\n"
+            '    os.mkdir(held + ".once")\n'
+            "except FileExistsError:\n"
+            "    os.execv(real, [real] + args)\n"
+            "signal.signal(signal.SIGINT, signal.SIG_IGN)\n"
+            "subprocess.run([real] + args)\n"
+            "os.dup2(os.open(os.devnull, os.O_WRONLY), 1)\n"
+            'with open(held + ".new", "w") as handle:\n'
+            '    handle.write(str(os.getpid()) + "\\n")\n'
+            'os.rename(held + ".new", held)\n'
+            f"deadline = time.time() + {SAFETY_NET_SECONDS}\n"
+            "while not os.path.exists(release) and time.time() < deadline:\n"
+            "    time.sleep(0.01)\n"
+        )
+        if once_the_deploy_blocks:
+            blocked = (
+                f'grep -q " cdk deploy$" "{self.fake_dir / "pids.log"}" 2> /dev/null'
+            )
+        elif once_called_with is not None:
+            blocked = (
+                f"grep -Fq -- {shlex.quote(once_called_with)} "
+                f'"{self.fake_dir / "calls.log"}" 2> /dev/null'
+            )
+        else:
+            blocked = "true"
+        shim = self.bin / "date"
+        shim.write_text(
+            "#!/bin/sh\n"
+            f'if [ "$*" = "{args}" ] && [ ! -e "{held}" ] && {blocked}; then\n'
+            f'    exec "{sys.executable}" -I -S -c \'{hold}\' "{held}" "{release}" "{real}" "$@"\n'
+            "fi\n"
+            f'exec "{real}" "$@"\n'
+        )
+        shim.chmod(0o755)
+
+    def clock_held(self) -> bool:
+        return (self.fake_dir / "clock-held").exists()
+
+    def release_the_clock(self) -> None:
+        (self.fake_dir / "clock-release").touch()
 
     def effect(self, **spec) -> None:
         """Something that happens on this computer during a call (fake_aws.effects)."""
@@ -911,4 +977,41 @@ def stop_group(process: subprocess.Popen) -> None:
     process.wait(timeout=SAFETY_NET_SECONDS)
 
 
-__all__ = ["FAKE", "InstallWorld", "alive", "is_aws", "is_write", "stop_group"]
+def interrupt_once_the_clock_is_held(
+    world: InstallWorld, process: subprocess.Popen, sig: int, group: bool
+) -> Result:
+    """``process`` (started with world.start or world.start_uninstall, after
+    hold_a_clock_read) signalled once its clock read is held; the read then ends,
+    normally. A run that ends before the read is held fails the test."""
+    try:
+        deadline = time.time() + SAFETY_NET_SECONDS
+        while not world.clock_held():
+            if process.poll() is not None or time.time() > deadline:
+                out, err = process.communicate()
+                raise AssertionError(
+                    f"the clock was never held: exit {process.returncode}\n"
+                    f"{as_text(out)}\n{as_text(err)}"
+                )
+            time.sleep(0.05)
+        if group:
+            os.killpg(process.pid, sig)
+        else:
+            os.kill(process.pid, sig)
+        world.release_the_clock()
+        out, err = process.communicate(timeout=SAFETY_NET_SECONDS)
+    except BaseException:
+        world.release_the_clock()
+        stop_group(process)
+        raise
+    return Result(process.returncode, as_text(out), as_text(err))
+
+
+__all__ = [
+    "FAKE",
+    "InstallWorld",
+    "alive",
+    "interrupt_once_the_clock_is_held",
+    "is_aws",
+    "is_write",
+    "stop_group",
+]

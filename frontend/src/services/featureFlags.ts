@@ -1,5 +1,6 @@
 import { TargetingRules } from '@/types/targeting';
 import type { SafetyCheckResponse } from '@/types/safety';
+import type { ValueFlagType } from '@/utils/flagValues';
 import { apiFetch } from '@/services/api';
 
 export type FeatureFlagStatus = 'active' | 'inactive' | 'archived';
@@ -26,6 +27,16 @@ export interface FeatureFlag {
   targeting_rules?: TargetingRules | Record<string, unknown> | null;
   rules?: TargetingRules | Record<string, unknown> | null;
   tags?: string[] | null;
+  /**
+   * What the flag serves (#1497): `boolean`, `string`, `number` or `json`,
+   * read as any string so a type a later release adds is still shown. Absent
+   * from a server without values: read it with `flagValueType()`.
+   */
+  value_type?: string;
+  /** What the users it is on for get; `true` for a boolean flag. */
+  on_value?: unknown;
+  /** What everyone else gets, and everyone while it is off; `false` for a boolean flag. */
+  off_value?: unknown;
   owner_id: string | null;
   created_at: string;
   updated_at: string;
@@ -50,9 +61,17 @@ export interface CreateFeatureFlagRequest {
   rollout_percentage?: number;
   targeting_rules?: TargetingRules | Record<string, unknown> | null;
   tags?: string[];
+  /** Left out for a boolean flag, which sends neither value. */
+  value_type?: ValueFlagType;
+  on_value?: unknown;
+  off_value?: unknown;
 }
 
-/** `FeatureFlagUpdate` — every field optional. */
+/**
+ * `FeatureFlagUpdate` — every field optional. It has no `value_type`: the
+ * type is set when a flag is created and the dashboard never sends it again
+ * (the API answers any other value with 422 `read_only`).
+ */
 export interface UpdateFeatureFlagRequest {
   name?: string;
   key?: string;
@@ -61,13 +80,28 @@ export interface UpdateFeatureFlagRequest {
   rollout_percentage?: number;
   targeting_rules?: TargetingRules | Record<string, unknown> | null;
   tags?: string[];
+  on_value?: unknown;
+  off_value?: unknown;
+}
+
+/** Why the list marks a flag stale (#1808); a reason a later release adds is read as any string. */
+export type StaleReason = 'not_evaluated' | 'on_for_everyone' | 'off_for_everyone' | (string & {});
+
+/** An item of `GET /feature-flags/`: the flag plus the stale marker (#1808). */
+export interface FeatureFlagListItem extends FeatureFlag {
+  stale?: boolean;
+  stale_reasons?: StaleReason[];
 }
 
 export interface FeatureFlagListResponse {
-  items: FeatureFlag[];
+  items: FeatureFlagListItem[];
   total: number;
   skip: number;
   limit: number;
+  /** N: the days the stale definition uses (`STALE_FLAG_DAYS`). */
+  stale_days?: number;
+  /** False when the installation recorded no flag evaluation in the last `stale_days` days. */
+  evaluations_seen?: boolean;
 }
 
 /** `ToggleResponse` from `POST /feature-flags/{id}/toggle|enable|disable`. */
@@ -78,6 +112,29 @@ export interface FeatureFlagToggleResponse {
   status: string;
   updated_at: string;
   audit_log_id: string | null;
+}
+
+/** One flag's line in a `BulkToggleResponse`. */
+export interface BulkToggleResult {
+  flag_id: string;
+  flag_key: string;
+  success: boolean;
+  error?: string | null;
+  old_status?: string | null;
+  new_status?: string | null;
+}
+
+/**
+ * `BulkToggleResponse` from `POST /feature-flags/bulk-toggle`. Partial success
+ * by design: a flag the server refused (no permission, not found) is a result
+ * with `success: false` inside a 200, never an error status.
+ */
+export interface BulkToggleResponse {
+  total: number;
+  succeeded: number;
+  failed: number;
+  results: BulkToggleResult[];
+  audit_log_ids: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -100,6 +157,8 @@ export interface RolloutStage {
   start_date?: string | null;
   status: RolloutStageStatus;
   completed_date?: string | null;
+  /** When the stage started (UTC, no zone); null until it starts. Read-only. */
+  started_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -137,6 +196,8 @@ export const FeatureFlagsService = {
     skip?: number;
     limit?: number;
     search?: string;
+    /** `true` lists only stale flags, `false` the rest; leave it out for all (#1808). */
+    stale?: boolean;
   }): Promise<FeatureFlagListResponse> {
     return apiFetch<FeatureFlagListResponse>(BASE, {
       query: {
@@ -144,6 +205,7 @@ export const FeatureFlagsService = {
         skip: params?.skip,
         limit: params?.limit,
         search: params?.search,
+        stale: params?.stale,
       },
     });
   },
@@ -174,6 +236,26 @@ export const FeatureFlagsService = {
       method: 'POST',
       json: { reason: reason ?? null },
     });
+  },
+
+  /**
+   * Archive one flag: the bulk toggle with `action: "archive"`, the only
+   * route that archives. It answers 200 even when it refused the flag, so the
+   * caller reads `results[0].success`, never the status alone.
+   */
+  async archive(id: string): Promise<BulkToggleResponse> {
+    return apiFetch<BulkToggleResponse>(`${BASE}/bulk-toggle`, {
+      method: 'POST',
+      json: { flag_ids: [id], action: 'archive' },
+    });
+  },
+
+  /**
+   * `POST /feature-flags/{id}/unarchive` (beta): an archived flag comes back
+   * INACTIVE, never ACTIVE; any other flag is returned unchanged.
+   */
+  async unarchive(id: string): Promise<FeatureFlag> {
+    return apiFetch<FeatureFlag>(`${BASE}/${id}/unarchive`, { method: 'POST' });
   },
 
   async listRolloutSchedules(flagId: string): Promise<RolloutScheduleListResponse> {

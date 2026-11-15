@@ -43,15 +43,26 @@ pytestmark = [pytest.mark.integration]
 REVISION = "271f03a31742"
 PREVIOUS_CORE_HEAD = "8fd44fb483a2"
 #: The core head of this tree, which ``upgrade heads`` runs on to.
-CORE_HEAD = "4c2c09a2b3e8"
+CORE_HEAD = "t1812_user_totp"
 #: Tables that a later core revision's downgrade drops: a downgrade from the
 #: head to this test's target unapplies those revisions too.  ``37dcb2969766``
 #: (#440) drops ``segment_members``; ``d29a479daafe`` (#445) drops
 #: ``holdout_population``; ``806901fb7735`` (#580) drops columns and checks, no
-#: table.
-LATER_DOWNGRADE_TABLES = {"holdout_population", "segment_members"}
-#: The modules branch's head, in the previous release and in this one alike.
-MODULES_HEAD = "modules_0002_warehouse_analysis"
+#: table; ``85dd4796bb8b`` (#1543) drops ``event_dedup_keys``;
+#: ``c448_balance_within`` (#448) drops ``balance_group_counters``;
+#: ``4955571d232c`` (#1545) drops ``visual_tokens``; ``t1812_user_totp``
+#: (#1812) drops ``user_totp``.
+LATER_DOWNGRADE_TABLES = {
+    "holdout_population",
+    "segment_members",
+    "event_dedup_keys",
+    "balance_group_counters",
+    "visual_tokens",
+    "user_totp",
+}
+#: The modules branch's head in this tree, recorded on both sides of every
+#: step here: this file is about the core chain.
+MODULES_HEAD = "modules_0005_redshift"
 
 PREVIOUS_ROWS = {
     CORE: {PREVIOUS_CORE_HEAD},

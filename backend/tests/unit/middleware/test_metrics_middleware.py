@@ -1,61 +1,19 @@
 """
-Unit tests for backend/app/middleware/metrics_middleware.py
+Unit tests for backend/app/middleware/prometheus_metrics_middleware.py
 
 Covers:
-- normalize_path: UUID replacement, no-op for non-UUIDs, multiple UUIDs
 - PrometheusMetricsMiddleware records metrics on successful requests
 - Status code and duration are forwarded correctly
+- A route registered on the app is labelled with its template
+
+These build a bare FastAPI app, whose routes sit on the root router. The
+application's own routes sit in included routers, and
+``test_metric_labels_bounded.py`` drives those.
 """
 
 import pytest
 from fastapi import FastAPI
-from starlette.responses import JSONResponse
 from starlette.testclient import TestClient
-
-# ---------------------------------------------------------------------------
-# normalize_path tests (pure function — no side-effects)
-# ---------------------------------------------------------------------------
-
-
-def test_normalize_path_replaces_uuid():
-    from backend.app.middleware.prometheus_metrics_middleware import normalize_path
-
-    path = "/api/v1/experiments/550e8400-e29b-41d4-a716-446655440000/results"
-    result = normalize_path(path)
-    assert result == "/api/v1/experiments/{id}/results"
-
-
-def test_normalize_path_leaves_non_uuid_intact():
-    from backend.app.middleware.prometheus_metrics_middleware import normalize_path
-
-    path = "/api/v1/feature-flags/evaluate/my-feature-key"
-    result = normalize_path(path)
-    assert result == "/api/v1/feature-flags/evaluate/my-feature-key"
-
-
-def test_normalize_path_multiple_uuids():
-    from backend.app.middleware.prometheus_metrics_middleware import normalize_path
-
-    path = (
-        "/api/v1/users/550e8400-e29b-41d4-a716-446655440000"
-        "/experiments/660e8400-e29b-41d4-a716-446655440001"
-    )
-    result = normalize_path(path)
-    assert result == "/api/v1/users/{id}/experiments/{id}"
-
-
-def test_normalize_path_no_uuid():
-    from backend.app.middleware.prometheus_metrics_middleware import normalize_path
-
-    path = "/api/v1/health"
-    assert normalize_path(path) == "/api/v1/health"
-
-
-def test_normalize_path_root():
-    from backend.app.middleware.prometheus_metrics_middleware import normalize_path
-
-    assert normalize_path("/") == "/"
-
 
 # ---------------------------------------------------------------------------
 # PrometheusMetricsMiddleware integration-style tests (in-process)
@@ -113,11 +71,12 @@ async def test_metrics_middleware_records_404(mocker):
     mock_record.assert_called_once()
     call_kwargs = mock_record.call_args.kwargs
     assert call_kwargs["status_code"] == 404
+    assert call_kwargs["endpoint"] == "unmatched"
 
 
 @pytest.mark.asyncio
-async def test_metrics_middleware_normalizes_uuid_path(mocker):
-    """Paths with UUIDs are normalised before being passed to record_request."""
+async def test_metrics_middleware_labels_uuid_path_with_route_template(mocker):
+    """A request is labelled with its route's template, not the path sent."""
     mock_record = mocker.patch(
         "backend.app.middleware.prometheus_metrics_middleware.record_request"
     )
@@ -139,7 +98,7 @@ async def test_metrics_middleware_normalizes_uuid_path(mocker):
 
     mock_record.assert_called_once()
     call_kwargs = mock_record.call_args.kwargs
-    assert call_kwargs["endpoint"] == "/api/v1/experiments/{id}"
+    assert call_kwargs["endpoint"] == "/api/v1/experiments/{experiment_id}"
 
 
 @pytest.mark.asyncio

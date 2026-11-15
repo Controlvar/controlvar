@@ -412,10 +412,13 @@ class TestRolloutSchedulerNotifications:
         schedules_query.populate_existing.return_value = schedules_query
         schedules_query.with_for_update.return_value = schedules_query
         schedules_query.one_or_none.return_value = mock_schedule
+        # The stages are read under that lock, from the database (#1536).
         active_query = MagicMock()
+        active_query.populate_existing.return_value = active_query
         active_query.filter.return_value = active_query
         active_query.first.return_value = None
         pending_query = MagicMock()
+        pending_query.populate_existing.return_value = pending_query
         pending_query.filter.return_value = pending_query
         pending_query.order_by.return_value = pending_query
         pending_query.all.return_value = [mock_stage]
@@ -538,6 +541,12 @@ class TestExperimentSchedulerNotifications:
         mock_exp.start_date = start_date or now
         mock_exp.end_date = end_date or now
         mock_exp.status = ExperimentStatus.DRAFT
+        # What Start requires; the scheduler starts only such a draft (#1454).
+        mock_exp.variants = [MagicMock(is_control=True), MagicMock(is_control=False)]
+        mock_exp.metric_definitions = [MagicMock()]
+        # Not a visual experiment. Only None reads as absent, so a mock's own
+        # attribute would count as visual settings and fail the start check (#1545).
+        mock_exp.visual_config = None
         return mock_exp
 
     @pytest.mark.asyncio

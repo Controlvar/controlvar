@@ -443,7 +443,7 @@ class TestTimeWindowInvalidInputs:
         "window",
         [
             {},
-            # ISO datetimes in the start/end the Condition schema asks for (#1156)
+            # ISO datetimes in start/end, keys the engine does not read (#1156)
             {"start": "2024-01-01T09:00:00", "end": "2024-01-31T17:00:00"},
             {"start": "2000-01-01T00:00:00", "end": "2000-01-02T00:00:00"},
             {"start": "2099-01-01T00:00:00", "end": "2099-01-02T00:00:00"},

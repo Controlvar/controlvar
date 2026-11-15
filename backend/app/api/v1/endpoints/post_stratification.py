@@ -4,6 +4,7 @@ Post-Stratification & BH FDR Correction endpoints — EP-043.
 Provides:
   POST /results/{experiment_id}/post-stratification
       Not available yet: answers 501 (no per-user stratum data exists).
+      Deprecated in the API document (#963).
 
   POST /results/{experiment_id}/fdr-correction
       Apply Benjamini-Hochberg FDR correction to a set of per-metric p-values.
@@ -16,7 +17,12 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from backend.app.api.deps import get_current_active_user, get_db
+from backend.app.api.deps import (
+    get_current_active_user,
+    get_db,
+    require_experiment_read,
+)
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.logger import unexpected_failure
 from backend.app.models.experiment import Experiment
 from backend.app.models.user import User
@@ -28,7 +34,10 @@ from backend.app.schemas.post_stratification import (
 )
 from backend.app.services.fdr_correction_service import BenjaminiHochbergService
 
-router = APIRouter()
+# Mounted under /results beside results.router: the same rule, before the
+# experiment is looked up or the request body is validated.
+router = APIRouter(route_class=OffLoopRoute)
+router.dependencies.append(Depends(require_experiment_read))
 logger = logging.getLogger(__name__)
 
 POST_STRAT_UNAVAILABLE_DETAIL = (
@@ -61,13 +70,14 @@ def _get_experiment_or_404(experiment_id: UUID, db: Session) -> Experiment:
 @router.post(
     "/{experiment_id}/post-stratification",
     response_model=PostStratResultResponse,
-    summary="Post-stratification variance reduction (not available yet)",
+    summary="Post-stratification variance reduction, not available yet (deprecated)",
+    deprecated=True,
     description=(
-        "Not available yet: this route answers 501 for every existing "
-        "experiment. Post-stratification needs one metric value and the "
+        "**Deprecated**, because it is not available: this route answers 501 "
+        "for every existing experiment, and it may be removed in a later "
+        "release. Post-stratification needs one metric value and the "
         "stratum attributes per assigned user, and nothing builds those rows "
-        "from an experiment's recorded assignments and events yet. The route "
-        "reports no numbers until it can compute them from that data."
+        "from an experiment's recorded assignments and events yet."
     ),
     responses={
         status.HTTP_404_NOT_FOUND: {"description": "No experiment with this ID"},

@@ -105,6 +105,9 @@ def _experiment(status, **dates):
         end_date=None,
         resume_at=None,
         owner_id=uuid.uuid4(),
+        # What Start requires; the scheduler starts only such a draft (#1454).
+        variants=[SimpleNamespace(is_control=True), SimpleNamespace(is_control=False)],
+        metric_definitions=[SimpleNamespace()],
         **dates,
     )
 

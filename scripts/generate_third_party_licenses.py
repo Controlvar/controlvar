@@ -99,6 +99,7 @@ def _node_packages() -> list[tuple[str, str]]:
         "sdk/react-native": "React Native SDK",
         "sdk/openfeature": "OpenFeature provider (JavaScript)",
         "sdk/edge": "Edge SDK",
+        "sdk/mcp": "MCP server",
     }
     sdk_root = ROOT / "sdk"
     sdks = sorted(

@@ -22,7 +22,7 @@ from fastapi.testclient import TestClient
 
 from backend.app.api.deps import get_current_user, get_db
 from backend.app.main import app
-from backend.app.models.user import User
+from backend.app.models.user import User, UserRole
 from backend.app.schemas.bayesian import (
     BayesianConfig,
     BayesianDecision,
@@ -183,7 +183,7 @@ def mock_admin_user() -> MagicMock:
     user.email = "admin@example.com"
     user.is_active = True
     user.is_superuser = True
-    user.role = "ADMIN"
+    user.role = UserRole.ADMIN
     return user
 
 
@@ -194,7 +194,7 @@ def mock_analyst_user() -> MagicMock:
     user.email = "analyst@example.com"
     user.is_active = True
     user.is_superuser = False
-    user.role = "ANALYST"
+    user.role = UserRole.ANALYST
     return user
 
 
@@ -205,7 +205,7 @@ def mock_developer_user() -> MagicMock:
     user.email = "dev@example.com"
     user.is_active = True
     user.is_superuser = False
-    user.role = "DEVELOPER"
+    user.role = UserRole.DEVELOPER
     return user
 
 

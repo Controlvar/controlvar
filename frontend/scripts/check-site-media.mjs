@@ -22,6 +22,8 @@
  *   words    the transcript's spoken lines (`src/content/walkthroughs/
  *            <slug>.json`) are the cues' text, in order; it names this mp4
  *   poster   the pinned bytes; a JPEG of 1280x720, at most 64 KiB
+ *   frame    the poster is a frame of the video itself, not its title card
+ *            (#1459): see POSTER FRAMES below
  *   all      the project's former name in none of the downloaded bytes
  *
  * That is a recording: a transcript with no `kind`. An ANIMATION (the
@@ -31,9 +33,52 @@
  * other `kind` is refused. Whether the captions are the animation's own text
  * is checked outside CI, by re-running the extractor that wrote them.
  *
- * and in `out/index.html`: one `<video>` per entry, wired as the section
- * renders it (`src/components/Walkthroughs.tsx`), its one caption track not
- * `default`, no `<iframe>`, and every `src` and `poster` on this site.
+ * and in `out/walkthroughs.html`, the walkthroughs page (site design
+ * 2026-11-11): one `<video>` per entry, wired as the page renders it
+ * (`src/components/Walkthroughs.tsx`), its one caption track not `default`,
+ * no `<iframe>`, and every `src` and `poster` on this site. In
+ * `out/index.html`, whose teaser shows posters
+ * (`src/components/homepage/WalkthroughsTeaser.tsx`): no `<video>`, no
+ * `<iframe>`, every `src` on this site, and every `/media/` path a manifest
+ * poster shown as an `<img>` of 1280x720.
+ *
+ * POSTER FRAMES (#1459). `src/content/poster-frames.json` is
+ * `{"posters": [row, ...]}`, one row per manifest entry and none for a video
+ * the manifest does not list, each row exactly
+ *
+ *   {"slug", "mp4_sha256", "poster_sha256", "t", "first_cue", "crop", "pad", "psnr_db"}
+ *
+ * It says which frame of the video the poster is: the frame at `t` seconds of
+ * the pinned mp4, transformed one of two ways (#1459, the founder's D200):
+ *
+ *   - a recording: `crop` [1920, 940, 0, 0], the whole page above the 140 px
+ *     caption band and nothing narrower, scaled to 1280x627 and padded top
+ *     and bottom to 1280x720 with the page's own background colour, `pad`
+ *     (`#rrggbb`);
+ *   - an animation (its transcript says `"kind": "animation"`): `crop` and
+ *     `pad` null, the whole frame scaled to 1280x720.
+ *
+ * `psnr_db` is the poster against that frame, transformed the same way: at
+ * least 35, measured with ffmpeg when the founder approves the poster's upload.
+ *
+ * CI CANNOT CHECK THE PIXELS. The runner has no ffmpeg, so nothing here
+ * verifies that the poster is the frame its row names: `psnr_db` is a typed
+ * number, and a swapped poster with a hand-written row (its new sha256, a
+ * plausible t, psnr_db 41) passes. That is verified by re-running the ffmpeg
+ * commands: by whoever asks for the upload approval, and by the reviewer of
+ * every manifest PR that adds or changes a row. What CI checks, with no ffmpeg:
+ *
+ *   - the row's mp4_sha256 and poster_sha256 are the manifest's, so neither
+ *     file can change without its row being written again;
+ *   - `first_cue` is the start of the first cue of the placed
+ *     `out/media/<stem>.site.vtt`, read from that file;
+ *   - `t` is at or after that start, and inside the video. A recording opens
+ *     on its title card and its first cue starts as the card ends, so a frame
+ *     before the first cue is the card. A title card is a frame of its own
+ *     video too, which is why only a pinned frame time can tell it apart;
+ *   - `psnr_db` is a number of at least 35; `crop` is exactly
+ *     [1920, 940, 0, 0] or null, and null only for an animation; `pad` is a
+ *     `#rrggbb` colour with that crop and null with a null crop.
  *
  * Exit 0 when all hold; 1 with every problem listed.
  */
@@ -41,9 +86,16 @@ import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MANIFEST, SITE_SETTING, parseManifest, placedNames, stemOf } from './fetch-site-media.mjs';
+import { HOME, MANIFEST, PAGE, SITE_SETTING, mediaReferences, parseManifest, placedNames, stemOf } from './fetch-site-media.mjs';
 
 const TRANSCRIPTS = fileURLToPath(new URL('../src/content/walkthroughs/', import.meta.url));
+export const POSTER_FRAMES = fileURLToPath(new URL('../src/content/poster-frames.json', import.meta.url));
+/** The least PSNR, in dB, of a poster against the frame its row names. */
+export const MIN_PSNR_DB = 35;
+const FRAME_KEYS = ['slug', 'mp4_sha256', 'poster_sha256', 't', 'first_cue', 'crop', 'pad', 'psnr_db'];
+const COLOUR = /^#[0-9a-f]{6}$/;
+/** A recording poster's crop (D200): the whole 1920x940 page above the caption band. */
+const PAGE_CROP = [1920, 940, 0, 0];
 // Assembled, so this file never contains the word it looks for
 // (scripts/check_legacy_name.py does the same).
 const FORMER_NAME = ['experi', 'mently'].join('');
@@ -171,14 +223,53 @@ export function attributes(source) {
 
 const unescapeHtml = (s) => s.replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 
-/** Problems with the exported page against the manifest. */
+/** Every `src` and `poster` of a page that is not a path on this site. */
+function offSite(html, page) {
+  const problems = [];
+  for (const m of html.matchAll(/\s(src|poster)\s*=\s*"([^"]*)"/gi)) {
+    const value = unescapeHtml(m[2]);
+    if (!/^\/[^/]/.test(value)) problems.push(`out/${page} ${m[1]}=${JSON.stringify(value)} is not a path on this site`);
+  }
+  return problems;
+}
+
+/**
+ * Problems with the exported homepage against the manifest: its teaser shows
+ * posters as images, and plays nothing.
+ */
+export function homeProblems(html, videos) {
+  const problems = [];
+  const videosFound = (html.match(/<video\b/gi) ?? []).length;
+  if (videosFound) problems.push(`out/${HOME} has ${videosFound} <video>; the players are the walkthroughs page's`);
+  if (/<iframe\b/i.test(html)) problems.push(`out/${HOME} has an <iframe>`);
+  const posters = new Set(videos.map((entry) => entry.poster.name));
+  const referenced = mediaReferences(html);
+  if (!referenced.size) problems.push(`out/${HOME} shows no walkthrough poster`);
+  for (const name of referenced) {
+    if (!posters.has(name)) problems.push(`out/${HOME} references /media/${name}, which is not a manifest poster`);
+  }
+  const images = [...html.matchAll(/<img\b([^>]*?)\/?>/gi)].map((m) => attributes(m[1]));
+  for (const name of referenced) {
+    const shown = images.filter((img) => img.get('src') === `/media/${name}`);
+    if (shown.length !== 1) problems.push(`out/${HOME} shows /media/${name} as ${shown.length} <img>, want 1`);
+    for (const img of shown) {
+      if (img.get('width') !== String(POSTER.width) || img.get('height') !== String(POSTER.height)) {
+        problems.push(`out/${HOME} <img> /media/${name} is ${img.get('width')}x${img.get('height')}, want ${POSTER.width}x${POSTER.height}`);
+      }
+    }
+  }
+  problems.push(...offSite(html, HOME));
+  return problems;
+}
+
+/** Problems with the exported walkthroughs page against the manifest. */
 export function pageProblems(html, videos) {
   const problems = [];
   const found = [...html.matchAll(/<video\b([^>]*)>([\s\S]*?)<\/video>/gi)];
-  if (found.length !== videos.length) problems.push(`out/index.html has ${found.length} <video>, the manifest lists ${videos.length}`);
+  if (found.length !== videos.length) problems.push(`out/${PAGE} has ${found.length} <video>, the manifest lists ${videos.length}`);
   found.slice(0, videos.length).forEach((match, i) => {
     const entry = videos[i];
-    const where = `out/index.html <video> ${i + 1} (${entry.slug})`;
+    const where = `out/${PAGE} <video> ${i + 1} (${entry.slug})`;
     const video = attributes(match[1]);
     const want = {
       src: `/media/${entry.mp4.name}`,
@@ -205,11 +296,8 @@ export function pageProblems(html, videos) {
     }
     if (track.has('default')) problems.push(`${where} <track>: default is set; an enabled track covers the burned-in headline`);
   });
-  if (/<iframe\b/i.test(html)) problems.push('out/index.html has an <iframe>');
-  for (const m of html.matchAll(/\s(src|poster)\s*=\s*"([^"]*)"/gi)) {
-    const value = unescapeHtml(m[2]);
-    if (!/^\/[^/]/.test(value)) problems.push(`out/index.html ${m[1]}=${JSON.stringify(value)} is not a path on this site`);
-  }
+  if (/<iframe\b/i.test(html)) problems.push(`out/${PAGE} has an <iframe>`);
+  problems.push(...offSite(html, PAGE));
   return problems;
 }
 
@@ -339,18 +427,111 @@ export function entryProblems(entry, mediaDir, transcriptDir = TRANSCRIPTS) {
   return problems;
 }
 
-export function check(outDir, manifestPath = MANIFEST, transcriptDir = TRANSCRIPTS) {
+const hasExactly = (value, keys) =>
+  value !== null && typeof value === 'object' && !Array.isArray(value) &&
+  Object.keys(value).length === keys.length && keys.every((k) => Object.prototype.hasOwnProperty.call(value, k));
+const finite = (value) => typeof value === 'number' && Number.isFinite(value);
+const ms = (value) => Math.round(value * 1000);
+
+/**
+ * Problems with the poster-frames file (its `text`) against the manifest's
+ * entries, the files placed in `mediaDir` and the transcripts' kinds
+ * (POSTER FRAMES above).
+ */
+export function frameProblems(text, videos, mediaDir, transcriptDir) {
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (error) {
+    return [`poster-frames.json is not JSON: ${error.message}`];
+  }
+  if (!hasExactly(data, ['posters']) || !Array.isArray(data.posters)) return ['poster-frames.json must be {"posters": [...]} and nothing else'];
+  const problems = [];
+  const rows = new Map();
+  data.posters.forEach((row, i) => {
+    if (!hasExactly(row, FRAME_KEYS)) problems.push(`poster-frames.json posters[${i}] must have exactly the keys ${FRAME_KEYS.join(', ')}`);
+    else if (rows.has(row.slug)) problems.push(`poster-frames.json has two rows for ${JSON.stringify(row.slug)}`);
+    else rows.set(row.slug, row);
+  });
+  const listed = new Set(videos.map((entry) => entry.slug));
+  for (const slug of rows.keys()) {
+    if (!listed.has(slug)) problems.push(`poster-frames.json has a row for ${JSON.stringify(slug)}, which videos.json does not list`);
+  }
+  for (const entry of videos) {
+    const where = `${entry.slug}: poster-frames.json`;
+    const row = rows.get(entry.slug);
+    if (!row) {
+      problems.push(`${where} has no row; when ${entry.poster.name}'s upload is approved, measure which frame of the video it is and add one`);
+      continue;
+    }
+    if (row.mp4_sha256 !== entry.mp4.sha256) problems.push(`${where} mp4_sha256 ${String(row.mp4_sha256).slice(0, 12)} is not the manifest's ${entry.mp4.sha256.slice(0, 12)}`);
+    if (row.poster_sha256 !== entry.poster.sha256) {
+      problems.push(`${where} poster_sha256 ${String(row.poster_sha256).slice(0, 12)} is not the manifest's ${entry.poster.sha256.slice(0, 12)}: the poster changed and its frame was not measured again`);
+    }
+    const isPage = Array.isArray(row.crop) && row.crop.length === PAGE_CROP.length && row.crop.every((n, i) => n === PAGE_CROP[i]);
+    if (row.crop !== null && !isPage) {
+      problems.push(`${where} crop ${JSON.stringify(row.crop)} is not the page, [1920, 940, 0, 0]: a recording's poster is the whole page above the caption band, padded, never cut (D200)`);
+    } else if (row.crop === null) {
+      // Unreadable or missing, the transcript cannot show an animation, so the null crop is refused (the stricter case).
+      let kind;
+      try {
+        kind = JSON.parse(readFileSync(join(transcriptDir, `${entry.slug}.json`), 'utf8')).kind;
+      } catch (error) {
+        problems.push(`${where}: cannot read src/content/walkthroughs/${entry.slug}.json (${error.message}), so a null crop cannot be shown to be an animation's`);
+      }
+      if (kind !== 'animation') problems.push(`${where} crop is null (the whole frame), but ${entry.slug} is not an animation: a recording's caption band comes off, and only an animation keeps its whole frame`);
+    }
+    if (row.pad !== null && !(typeof row.pad === 'string' && COLOUR.test(row.pad))) {
+      problems.push(`${where} pad must be null or a colour written #rrggbb`);
+    } else if (row.crop === null && row.pad !== null) {
+      problems.push(`${where} pad is ${row.pad}, but the crop is null: the whole frame is 16:9 already, so pad must be null`);
+    } else if (isPage && row.pad === null) {
+      problems.push(`${where} crop is the page (1920x940, not 16:9), so pad must name the colour it is padded with to 1280x720`);
+    }
+    const notNumbers = ['t', 'first_cue', 'psnr_db'].filter((key) => !finite(row[key]) || row[key] < 0);
+    if (notNumbers.length) {
+      problems.push(`${where} ${notNumbers.join(', ')} must be a number of at least 0`);
+      continue;
+    }
+    if (row.psnr_db < MIN_PSNR_DB) problems.push(`${where} psnr_db ${row.psnr_db} is under ${MIN_PSNR_DB}: the poster is not the frame its row names`);
+    // The first cue as placed, read from the file: never a typed value.
+    const siteName = `${stemOf(entry)}.site.vtt`;
+    const sitePath = join(mediaDir, siteName);
+    const cues = existsSync(sitePath) ? parseVtt(readFileSync(sitePath, 'utf8')).cues : [];
+    if (!cues.length) {
+      problems.push(`${where}: out/media/${siteName} is missing or has no cue, so t cannot be held to the first cue`);
+      continue;
+    }
+    const first = cues[0].start;
+    if (ms(row.first_cue) !== ms(first)) problems.push(`${where} first_cue ${row.first_cue} s, but the first cue of out/media/${siteName} starts at ${first} s`);
+    // In whole milliseconds, a WebVTT timestamp's precision: a t less than half a millisecond before the cue (2.9996 s against 3.000 s) counts as at it.
+    if (ms(row.t) < ms(first)) problems.push(`${where} t ${row.t} s is before the first cue (${first} s): that frame is the title card`);
+    const mp4Path = join(mediaDir, entry.mp4.name);
+    const duration = existsSync(mp4Path) ? mp4Facts(readFileSync(mp4Path)).duration : null;
+    if (duration === null) problems.push(`${where}: out/media/${entry.mp4.name} is missing or has no length, so t cannot be held inside the video`);
+    else if (row.t >= duration) problems.push(`${where} t ${row.t} s is not inside the ${duration.toFixed(3)} s video`);
+  }
+  return problems;
+}
+
+export function check(outDir, manifestPath = MANIFEST, transcriptDir = TRANSCRIPTS, framesPath = POSTER_FRAMES) {
   const videos = parseManifest(readFileSync(manifestPath, 'utf8'));
   const mediaDir = join(outDir, 'media');
   const problems = [];
-  const indexPath = join(outDir, 'index.html');
-  if (!existsSync(indexPath)) return [`${indexPath} is missing; run npm run build:marketing first`];
+  const indexPath = join(outDir, HOME);
+  const pagePath = join(outDir, PAGE);
+  for (const path of [indexPath, pagePath]) {
+    if (!existsSync(path)) return [`${path} is missing; run npm run build:marketing first`];
+  }
   if (!existsSync(mediaDir)) return [`${mediaDir} is missing; npm run build:marketing places it`];
   const want = videos.flatMap(placedNames).sort();
   const have = readdirSync(mediaDir).sort();
   if (JSON.stringify(want) !== JSON.stringify(have)) problems.push(`out/media holds ${JSON.stringify(have)}, want ${JSON.stringify(want)}`);
   for (const entry of videos) problems.push(...entryProblems(entry, mediaDir, transcriptDir));
-  problems.push(...pageProblems(readFileSync(indexPath, 'utf8'), videos));
+  if (!existsSync(framesPath)) problems.push(`${framesPath} is missing: every listed poster needs its frame row`);
+  else problems.push(...frameProblems(readFileSync(framesPath, 'utf8'), videos, mediaDir, transcriptDir));
+  problems.push(...pageProblems(readFileSync(pagePath, 'utf8'), videos));
+  problems.push(...homeProblems(readFileSync(indexPath, 'utf8'), videos));
   return problems;
 }
 
@@ -373,6 +554,6 @@ if (invokedAsScript()) {
     process.exitCode = 1;
   } else {
     const count = parseManifest(readFileSync(MANIFEST, 'utf8')).length;
-    console.log(`check-site-media: ${count} video(s): pinned bytes, faststart, sound as declared (recordings: AAC narration; animations: none), captions = pinned .vtt + line:-5, transcript = cues, poster 1280x720, page wiring: all hold`);
+    console.log(`check-site-media: ${count} video(s): pinned bytes, faststart, sound as declared (recordings: AAC narration; animations: none), captions = pinned .vtt + line:-5, transcript = cues, poster 1280x720, poster frame at or after the first cue, ${PAGE} wiring, ${HOME} posters only: all hold`);
   }
 }

@@ -75,9 +75,28 @@ FPS = 30
 TITLE_CARD_MS = 3000
 END_CARD_MS = 4000
 #: The finished video, cards included, is 55 to 90 seconds long (inclusive):
-#: 90 s since the videos are narrated (D71), which holds each beat longer.
+#: 90 s since the videos are narrated (D71), which holds each beat longer. A
+#: video in ``MAX_VIDEO_MS_BY_VIDEO`` may run to its own cap instead.
 MIN_VIDEO_MS = 55_000
 MAX_VIDEO_MS = 90_000
+#: The videos allowed to run longer, each with its own cap. Video 9 is to
+#: design an experiment end to end in the dashboard (D182: guided setup, then
+#: the settings set on their own pages), which the default cap does not hold.
+#: A video's cap is
+#: ``max_video_ms(slug)``: the cue sheet, gate 1, the capture's projection and
+#: the voice step's all read it there, and no other module reads these two.
+MAX_VIDEO_MS_BY_VIDEO: Dict[str, int] = {"09-design-in-depth": 150_000}
+
+
+def max_video_ms(slug: str) -> int:
+    """The longest video *slug* may be, cards included, in ms.
+
+    Its own cap, or ``MAX_VIDEO_MS``: both are read at each call, and a slug
+    the table does not name (a probe, a synthetic capture) gets the default.
+    It never raises; that every key is a registered video is a unit test.
+    """
+    return MAX_VIDEO_MS_BY_VIDEO.get(slug, MAX_VIDEO_MS)
+
 
 # --- Captions --------------------------------------------------------------
 
@@ -102,6 +121,22 @@ NEEDLES_MODE = 0o600
 #: its case and separators: a shorter value cannot be told apart from
 #: ordinary page text by OCR (and ``--------`` normalises to nothing at all).
 MIN_NEEDLE_CHARS = 8
+
+#: The three values every Quick Start stack carries in public, exactly as
+#: docker-compose.yml gives them: its two demo app keys (ShopLab's, then
+#: StreamPulse's) and its SECRET_KEY default. Each is (readable part, random
+#: part): the readable part is the product's own words and ends in ``_`` or
+#: ``-``; the random part is 24 or more lowercase hex characters, none of which
+#: ``normalise`` drops. The capture registers each value whole, as a needle
+#: (``capture.config.STATIC_NEEDLES``: the demo password, then these in this
+#: order). The render's OCR scan treats a needle as one of these only when it
+#: is exactly readable + random, and then looks for it only through its random
+#: part (``render.ocr.needle_pieces``).
+PUBLIC_VALUES: Tuple[Tuple[str, str], ...] = (
+    ("eptk_demo_shoplab_", "0123456789abcdef0123456789abcdef"),
+    ("eptk_demo_streampulse_", "0123456789abcdef0123456789ab"),
+    ("dev-only-change-me-", "9f1c7b2e4a6d8e0f1a2b3c4d5e6f7a8b"),
+)
 
 #: What OCR confuses, folded together: 0/O/@, 1/l/I/|, f/t, 2/Z, 5/S, 8/B.
 _CONFUSABLE = str.maketrans(
@@ -447,8 +482,9 @@ def caption_problems(text: str) -> List[str]:
     return problems
 
 
-def cue_timing_problems(cues: Sequence[Cue], duration_ms: int) -> List[str]:
-    """Order, overlap, reading time and gaps, on the frame-rounded times shown."""
+def cue_timing_problems(cues: Sequence[Cue], duration_ms: int, slug: str) -> List[str]:
+    """Order, overlap, reading time and gaps, on the frame-rounded times shown,
+    and the length of video *slug* with its cards (``max_video_ms``)."""
     problems: List[str] = []
     total_frames = frames_for_ms(duration_ms)
     previous: Optional[Cue] = None
@@ -491,10 +527,11 @@ def cue_timing_problems(cues: Sequence[Cue], duration_ms: int) -> List[str]:
                 f"{tail / 1000:.3f} s without a caption after cue {len(cues)}; at most {MAX_CUE_GAP_MS / 1000:.3f} s"
             )
     total_ms = ms_for_frames(video_frames(duration_ms))
-    if not MIN_VIDEO_MS <= total_ms <= MAX_VIDEO_MS:
+    longest = max_video_ms(slug)
+    if not MIN_VIDEO_MS <= total_ms <= longest:
         problems.append(
             f"the video would be {total_ms / 1000:.3f} s with its cards; a showcase is "
-            f"{MIN_VIDEO_MS // 1000}-{MAX_VIDEO_MS // 1000} s"
+            f"{MIN_VIDEO_MS // 1000}-{longest // 1000} s"
         )
     return problems
 
@@ -626,11 +663,34 @@ VOICE_GUARD_MS = 50
 STRETCH_SHORT_MS = 45
 STRETCH_LONG_MS = 5
 
-#: G10: the fixed gain the render applies (in ffmpeg, in floating point, never to
-#: the samples here), and what the voice step requires of the clips with it
-#: applied, before any capture: no clip's true peak above -1.3 dBTP, and the
-#: clips' mean loudness within -19 +-0.7 LUFS.
-VOICE_GAIN_DB = 4.5
+#: G10: the gain the render applies to a video's narration (in ffmpeg, in
+#: floating point, never to the samples here), and what the voice step requires
+#: of the clips with it applied, before any capture: no clip's true peak above
+#: -1.3 dBTP, and the clips' mean loudness within -19 +-0.7 LUFS. A video's gain
+#: is ``voice_gain_db(slug)``: G10, the mux, G13's onsets, the G17 record and
+#: the review page all read it there, and no other module reads these two.
+DEFAULT_VOICE_GAIN_DB = 4.5
+#: The videos that take another gain. Video 9's 14 clips measured a mean
+#: of -22.5 LUFS in the voice step (2026-10-29), against -23.7 to -23.9 for
+#: videos 1-4 and 6, so 4.5 dB puts them at -18.0 and G10 refuses; 3.5 dB puts
+#: them at -19.0. Why its new clips are louder is not known: a change in
+#: Polly's output level is suspected, and no Polly call has checked it. Its 26
+#: dashboard clips (D182) render at -19.33 LUFS at 3.5 dB, just under G17's
+#: window [-19.3, -18.7], so it takes 3.7 dB (-19.13 in the rehearsal).
+#: Video 10's 15 clips measured a mean of -22.8 LUFS (2026-11-05), so 4.5 dB
+#: puts them at -18.3, outside G10's window, and 3.8 dB puts them at -19.0, its
+#: centre. The cause is likewise unverified.
+VOICE_GAIN_DB_BY_VIDEO: Dict[str, float] = {
+    "09-design-in-depth": 3.7,
+    "10-serve-a-value": 3.8,
+}
+
+
+def voice_gain_db(slug: str) -> float:
+    """The gain, in dB, the render applies to video *slug*'s narration."""
+    return VOICE_GAIN_DB_BY_VIDEO.get(slug, DEFAULT_VOICE_GAIN_DB)
+
+
 PRECHECK_PEAK_DBTP = -1.3
 LOUDNESS_TARGET_LUFS = -19.0
 PRECHECK_LOUDNESS_LU = 0.7
@@ -645,8 +705,8 @@ SENTENCE_SPREAD_LU = 2.0
 VOICE_CHARACTER_CAP = 10_000
 #: The generative engine's price, for the estimate the voice step prints.
 DOLLARS_PER_MILLION_CHARACTERS = 30
-#: The voice step refuses a video projected above this share of MAX_VIDEO_MS:
-#: the length estimate runs about 3.5% short of a recording.
+#: The voice step refuses a video projected above this share of its cap
+#: (``max_video_ms``): the length estimate runs about 3.5% short of a recording.
 PROJECTION_SHARE = 0.97
 
 #: How a written word is said: applied only to the text sent to Polly, whole
@@ -842,11 +902,12 @@ def stretch_problem(raw_samples: int, samples: int) -> Optional[str]:
 
 
 def loudness_problems(
-    clips: Sequence[Tuple[str, float, float]], gain_db: float = VOICE_GAIN_DB
+    clips: Sequence[Tuple[str, float, float]], gain_db: float
 ) -> List[str]:
     """G10: each clip's true peak, and the clips' mean loudness, with *gain_db* applied.
 
-    *clips* holds ``(label, integrated LUFS, true peak dBTP)`` for one video.
+    *clips* holds ``(label, integrated LUFS, true peak dBTP)`` for one video;
+    *gain_db* is that video's ``voice_gain_db``.
     """
     problems: List[str] = []
     for label, _lufs, peak in clips:
@@ -1405,7 +1466,7 @@ def _read_cues(root: Path, problems: List[str]) -> Optional[CueSheet]:
             )
         )
     if len(cues) == len(data["cues"]):
-        problems.extend(cue_timing_problems(cues, duration_ms))
+        problems.extend(cue_timing_problems(cues, duration_ms, slug))
     return CueSheet(
         slug=slug,
         title=title,

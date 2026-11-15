@@ -14,7 +14,7 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
-from moto import mock_cognitoidp
+from moto import mock_aws
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
@@ -100,7 +100,7 @@ def test_the_documented_statement_links_an_account_a_sign_in_then_reaches(
     app.dependency_overrides[deps.get_db] = override_get_db
     app.dependency_overrides[session_get_db] = override_get_db
     try:
-        with mock_cognitoidp():
+        with mock_aws():
             monkeypatch.setattr(
                 deps.auth_service,
                 "get_user_with_groups",

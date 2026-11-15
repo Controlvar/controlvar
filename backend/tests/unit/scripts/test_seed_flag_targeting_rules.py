@@ -139,7 +139,9 @@ def _verdict(rules: Any) -> str:
 def test_every_seeded_flag_has_rules_a_save_accepts():
     sites = [site for path in SEEDS for site in _flag_sites(path)] + _story_sites()
     verdicts = {where: _verdict(rules) for where, rules in sites}
-    assert len(sites) == 11, sorted(verdicts)
+    # 12 since #1497 (F5): seed_sdk_contract.py's value flags are one more site.
+    # 13 since #1520: seed_sdk_contract.py's targeted flag (plan equals pro).
+    assert len(sites) == 13, sorted(verdicts)
     assert {w: v for w, v in verdicts.items() if v != "accepted"} == {}
 
 

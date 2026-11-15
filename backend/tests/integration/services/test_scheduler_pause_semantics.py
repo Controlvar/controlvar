@@ -21,6 +21,9 @@ Now a resume on a PAUSED experiment is its own column, ``resume_at``:
 * P6  a due DRAFT still activates, with "started automatically";
 * P7  ``PUT /schedule`` on a DRAFT experiment sets no ``resume_at``, and a
       field the request omits is left unchanged (#482);
+* P8  one tick starts and completes only what is due: a DRAFT starting
+      tomorrow stays a DRAFT, and an ACTIVE experiment ending tomorrow keeps
+      running, beside a due start and a due end;
 
 plus the refusals ``PUT /schedule`` on PAUSED makes from the values the
 experiment would end up with (400, never a constraint error), what happens to
@@ -541,6 +544,102 @@ def test_p7_draft_schedule_writes_start_date_and_keeps_what_is_omitted(
     status, resume_at, _, end_date = _row(db_session, experiment_id)
     assert (status, resume_at) == (ExperimentStatus.DRAFT, None)
     assert end_date.replace(tzinfo=timezone.utc) == end
+
+
+# --- P8: one tick, what is due and what is not ----------------------------------------
+
+
+def _set_dates_in_db(db_session, experiment_id, start_date, end_date):
+    """Write a running experiment's dates straight to the row: no route sets
+    them once it runs (``PUT /schedule`` answers 400 on ACTIVE), and an end
+    already passed needs a start before it (``check_experiment_dates``)."""
+    session = _factory(db_session)()
+    try:
+        row = session.get(Experiment, uuid.UUID(experiment_id))
+        row.start_date = start_date
+        row.end_date = end_date
+        session.commit()
+    finally:
+        session.close()
+
+
+def _tick_announcing(db_session):
+    """One scheduler tick, as ``_tick``. Returns what it announced as
+    ``{"experiment_started": {id: message}, "experiment_ended": {id: message}}``."""
+    from backend.app.core.scheduler import ExperimentScheduler
+
+    sent = {"experiment_started": {}, "experiment_ended": {}}
+    notifications = NotificationService()
+    notifications._slack = MagicMock()
+    notifications._email = MagicMock()
+
+    def capture(event_):
+        sent[event_.event_type][event_.experiment_id] = event_.message
+        return True
+
+    notifications._send = capture
+
+    scheduler = ExperimentScheduler()
+    scheduler._notification_service = notifications
+    with patch("backend.app.core.scheduler.SessionLocal", _factory(db_session)):
+        asyncio.run(scheduler.process_scheduled_experiments())
+    return sent
+
+
+def test_p8_one_tick_starts_and_ends_only_what_is_due(client, db_session, people):
+    """In one tick: a DRAFT whose start has passed starts and one starting
+    tomorrow stays a DRAFT; an ACTIVE experiment whose end has passed completes
+    and one ending tomorrow keeps running. Neither of the two not yet due is
+    announced or changed."""
+    now = _now()
+    due_start = now - timedelta(minutes=1)
+    later_start = now + timedelta(days=1)
+    due_draft = _create(client, people)
+    _ok(
+        _schedule(
+            client,
+            people,
+            due_draft,
+            {"start_date": _iso(due_start), "end_date": _iso(now + timedelta(days=7))},
+        )
+    )
+    later_draft = _create(client, people)
+    _ok(
+        _schedule(
+            client,
+            people,
+            later_draft,
+            {
+                "start_date": _iso(later_start),
+                "end_date": _iso(later_start + timedelta(days=7)),
+            },
+        )
+    )
+    due_end = _create(client, people)
+    later_end = _create(client, people)
+    for experiment_id in (due_end, later_end):
+        assert _ok(_post(client, people, experiment_id, "start"))["status"] == "active"
+    started_days_ago = now - timedelta(days=2)
+    later_end_date = now + timedelta(days=1)
+    _set_dates_in_db(db_session, due_end, started_days_ago, now - timedelta(minutes=1))
+    _set_dates_in_db(db_session, later_end, started_days_ago, later_end_date)
+
+    sent = _tick_announcing(db_session)
+    started, ended = sent["experiment_started"], sent["experiment_ended"]
+
+    assert due_draft in started, started
+    assert _row(db_session, due_draft)[0] == ExperimentStatus.ACTIVE
+    assert later_draft not in started, started
+    status, _, start_date, _ = _row(db_session, later_draft)
+    assert status == ExperimentStatus.DRAFT
+    assert start_date.replace(tzinfo=timezone.utc) == later_start
+
+    assert due_end in ended, ended
+    assert _row(db_session, due_end)[0] == ExperimentStatus.COMPLETED
+    assert later_end not in ended, ended
+    status, _, _, end_date = _row(db_session, later_end)
+    assert status == ExperimentStatus.ACTIVE
+    assert end_date.replace(tzinfo=timezone.utc) == later_end_date
 
 
 # --- PUT /schedule on DRAFT: each field (#482) -------------------------------------

@@ -10,8 +10,8 @@ You'll need an account with one of the following roles:
 
 | Role | What You Can Do |
 |------|----------------|
-| **ADMIN** | Create, change, schedule and delete any experiment (scheduling is through the API; [which actions have a screen](dashboard-and-api.md)); create and manage any feature flag |
-| **DEVELOPER** | Create, change, schedule and delete any experiment (scheduling is through the API; [which actions have a screen](dashboard-and-api.md)); create and manage any feature flag |
+| **ADMIN** | Create, change, schedule and delete any experiment ([which actions have a screen](dashboard-and-api.md)); create and manage any feature flag |
+| **DEVELOPER** | Create, change, schedule and delete any experiment ([which actions have a screen](dashboard-and-api.md)); create and manage any feature flag |
 | **ANALYST** | View all experiments, results, and reports, and every feature flag, and change no experiment or flag; like every role, create an API key, which writes tracking data |
 | **VIEWER** | View every experiment and its results, and every feature flag, and change no experiment or flag; like every role, create an API key, which writes tracking data |
 
@@ -26,6 +26,24 @@ to request access, a role change, or superuser access.
 
 [What the dashboard does, and what is API only](dashboard-and-api.md) lists, row by row, what
 has a screen and what works through the API only, with the guide for each.
+
+### Request time-outs
+
+The dashboard gives up on a request when the API has not started to answer within 30 seconds:
+120 seconds for results, for the audit-log export and for warehouse connection and source
+checks, and 31 minutes for a warehouse preview. A read that times out says the API did not
+answer. A change that times out says the request may or may not have been carried out, because
+the API may still finish it: reload the page and check before you try again.
+
+Two things the deadline does not cover. First, it ends when the API starts to answer, so a
+response that begins and then stalls while its body arrives (a download or export that stops
+partway) is not timed out, and the page can keep waiting. Second, only the places that were
+checked show the time-out wording: some other error messages put the underlying message inside
+their own fixed sentence, so a time-out there can read as an ordinary failure. User deletion is
+fixed; the others were not audited one by one.
+
+If you raise `WAREHOUSE_MAX_QUERY_TIMEOUT_SECONDS` above 1800, the dashboard still gives up on a
+warehouse preview after 31 minutes.
 
 ---
 
@@ -53,8 +71,8 @@ API (`POST /api/v1/experiments/`).
 Then choose what to measure. Mark one metric as the **primary metric** (the one you decide
 on); any others are tracked alongside it.
 
-Every metric is analysed as a conversion today: whatever its type, the results report the
-share of users who sent the metric's event.
+A conversion metric's results report the share of users who sent the metric's event; a revenue,
+count, duration or custom metric's report its mean per assigned user.
 
 The metric's **event name** must match exactly what your engineers track in code (e.g., `checkout_complete`).
 
@@ -121,23 +139,33 @@ cannot be changed after it starts:
 
 Below them, **Also analyse the primary metric with Bayesian statistics** is off by default. Turned
 on, the results also carry a Bayesian analysis of the primary metric (the probability that each
-variant is the best) with default priors; the frequentist results and the recommendation do not
-change. To set the priors, see [Bayesian analysis](../api/bayesian.md).
+variant is the best); the frequentist results and the recommendation do not change. Under it,
+**Advanced Bayesian settings** opens to the prior alpha, prior beta, loss threshold and credible
+level, each at its default (1.0, 1.0, 0.001 and 0.95); they are sent only when one of them is
+changed. A value the API would refuse is named under its field, and nothing is created until it
+is fixed. Like the two settings above, Bayesian analysis and its settings are saved with the
+experiment and cannot be changed after it starts. For what each setting does, see
+[Bayesian analysis](../api/bayesian.md).
 
 The single-page form has the same settings in a collapsed **Analysis settings** section,
 whose title shows the current values.
 
 Then, optionally, the estimate. Enter your baseline conversion rate and the smallest change
 worth detecting — a *relative* change, so 5% on a 12% baseline means 12% → 12.6% — and press
-**Calculate estimate**. At 80% power and 95% confidence that example needs 47,036 users per
+**Calculate estimate**. With two variants, at 80% power and 95% confidence that example needs 47,036 users per
 variant. Add your daily users to see roughly how many days that takes. The smallest change
 worth detecting (the minimum detectable effect) is saved with the experiment, and the results
 page's **Planned sample** plans for it; leave it blank and the results page plans for 5%. An
 effect below 0.1%, or of 100% or more, cannot be saved, and **Next** says so. The rest of the
 estimate is a guide and is not saved: the results page plans from the control variant's own
-conversion rate, at 80% power. The estimate plans each comparison at 1 − the confidence level and makes no
-correction for comparing several variants, so with three or more variants and a correction
-the experiment needs more users than it says.
+conversion rate, at 80% power. The estimate plans at 1 − the confidence level and uses the
+correction chosen above, as the results page's **Sample Size** tab does. With three or more
+variants and Bonferroni or Benjamini-Hochberg, each comparison with the control is planned at
+that level ÷ (variants − 1): with three variants the example needs 56,961 users per variant.
+With None, each comparison is planned at the full level, the same as the results.
+Benjamini-Hochberg is planned at the same level as Bonferroni and gives the same estimate.
+That is cautious: Benjamini-Hochberg finds every winner Bonferroni finds, so it may need fewer
+users.
 
 **Step 5: Review and create**
 
@@ -152,13 +180,24 @@ The experiment is created as a draft and you land on its page.
 
 Click **Start** on the experiment's page. The status changes to `ACTIVE`.
 
-You can also schedule automatic start and end dates. The dashboard has no schedule
-screen yet, so this is an API call: `PUT /api/v1/experiments/{experiment_id}/schedule`,
-on a `DRAFT` experiment, with an ADMIN or DEVELOPER token. The experiment activates at
-`start_date` and completes at `end_date`, which must be at least an hour later. A date you
-leave out of the request is left as it is, and `null` clears it. A date written without a
+You can also schedule automatic start and end dates. On a draft's page, **Schedule** opens a
+**Start** and an **End (optional)** picker in your browser's time zone, and shows under each
+the time it will be saved as, in your zone and in UTC. **Save dates** sends only the dates you
+changed, and **Remove** clears one. The page refuses a start or an end in the past, and an end
+less than an hour after the start, before it sends anything. Through the API, this is
+`PUT /api/v1/experiments/{experiment_id}/schedule`,
+on a `DRAFT` experiment, with the token of a user who may change experiments, such as an
+ADMIN or DEVELOPER. The experiment activates at
+`start_date` and completes at `end_date`, which must be at least an hour later. The scheduler
+checks every 15 minutes by default (`EXPERIMENT_SCHEDULER_INTERVAL_MINUTES`), so it can start
+or complete up to that much later. A draft that
+is not ready to start (it needs two variants, a control and a metric, and a split URL
+experiment needs a valid `split_url_config`) stays a draft until it is. A date you leave out of the request is left as it is, and `null` clears it. A date written without a
 UTC offset is read in `time_zone`, an IANA name such as `America/Los_Angeles` (default
 `UTC`); a date with an offset, like the ones below, keeps it. Dates are stored in UTC.
+The experiment's page shows these dates in your browser's time zone, as "Starts" and "Ends"
+until the experiment has started or ended, then as "Started" and "Ended", and as "Start date"
+and "End date" once it is archived.
 Clicking **Start** before the scheduled start starts the experiment right away: its start date
 becomes the time you clicked, and a scheduled end date is kept.
 
@@ -172,7 +211,7 @@ curl -s -X PUT "localhost:8000/api/v1/experiments/$EXPERIMENT_ID/schedule" \
 
 ### Pausing and Stopping
 
-**Pause**: Temporarily halt assignment of new users. Existing assignments are preserved. Use when you need to investigate anomalies or if there's a critical bug.
+**Pause**: Temporarily halt assignment of new users. Existing assignments are preserved. While the experiment is paused, every user gets the control variant (apps see `assigned: false` and the reason `paused`); when you start it again, each user who was assigned gets their variant back. An app using an SDK keeps showing the answer it cached during the pause for up to the SDK's cache time, 5 minutes by default. Use when you need to investigate anomalies or if there's a critical bug.
 
 A paused experiment stays paused until you click **Start** again. Nothing resumes it
 behind your back: not the scheduler, and not a restart of the service.
@@ -192,6 +231,13 @@ any other change of status.
 
 **Complete**: Stop the experiment. Use when you have sufficient data and are ready to make a decision. Existing data is preserved.
 
+From then on every user gets the control variant, with the reason `completed`. So ship the winning
+experience first: put it in your code, or behind a feature flag at 100%, deploy it, then complete
+the experiment, and remove the experiment call afterwards.
+
+Events the SDKs send while an experiment is paused, completed or archived (through
+`/tracking/track` and `/tracking/batch`) are stored, but they count in no variant's results.
+
 Use the **Sample Size** tab to confirm the smallest variant has reached the planned sample
 before deciding. Do not stop the experiment the first time a p-value drops below 0.05: decide at
 the planned sample size.
@@ -202,6 +248,10 @@ the planned sample size.
 
 Open the experiment from **Experiments** and choose **View results** (it cannot be chosen
 while the experiment is a draft), or go to http://localhost:3000/results/EXPERIMENT_ID.
+
+To follow one result from a visitor's click to this page on the demo stack, see [Guided examples](guided-examples.md#ab-test).
+
+Which events count, and which do not, is on [How events count](how-events-count.md).
 
 #### Experiment Summary Card
 
@@ -227,6 +277,10 @@ Shows at a glance:
   change anything, while the recommendation uses its own minimum of 100 users per variant, so
   SHIP VARIANT beside a *Planned sample* of *Not yet* is not a contradiction.
 - **Recommendation**: SHIP VARIANT / KEEP CONTROL / CONTINUE TESTING / INCONCLUSIVE
+- **Impact on the primary metric**: one line per treatment, its impact with its interval, for
+  example "One page: +124 converting users (95% CI +40 to +208)", followed by ", not
+  significant" when the treatment is not significant. When the sample-ratio check fails, the
+  same warning as on a leading variant follows the lines.
 - **Analysis**: the confidence level and correction the results use, which are the
   experiment's own settings. For example "95% confidence · Benjamini-Hochberg correction for
   the 2 comparisons with the control on each metric", or, with one treatment, "one comparison
@@ -241,7 +295,8 @@ The results page compares how many users each variant received with its traffic 
 chi-square test of the assignment counts). If they differ by more than chance allows
 (p < 0.001), a notice above the tabs says so, with each variant's users and the number expected.
 The recommendation is then **INCONCLUSIVE**, and a "Leading" variant and the Bayesian analysis
-carry a warning. A mismatch usually means assignment or tracking is broken, so do not use the
+carry a warning. So does the stopping banner on the **Sequential** tab, whatever it recommends.
+A mismatch usually means assignment or tracking is broken, so do not use the
 numbers for a decision until you find out why.
 
 When the split matches, one line below the summary card says so, with the check's p-value.
@@ -275,17 +330,34 @@ For each metric and variant pair:
 | Column | Meaning |
 |--------|---------|
 | **Sample Size** | Users assigned to this variant |
-| **Value** | Conversion rate for this variant: the share of its users who sent the metric's event |
-| **Improvement** | How much better/worse vs. control (e.g., +12.3%) |
+| **Value** | Conversion rate for this variant: the share of its users who sent the metric's event. For a revenue metric, revenue per user: each user's event values added up, averaged over every user assigned to the variant (0 for a user with none), as a plain number with no currency. A count metric reads events per user (how many times each user sent the event), a duration metric duration per user and a custom metric value per user, averaged the same way, with no unit |
+| **Effect size** | How large the difference from the control is, in a standardised unit: Cohen's h for a rate, Cohen's d for an average. It is written to two places with the label the server gives it (negligible, small, medium or large), e.g. 0.32 (small). The control's row reads Control. |
+| **Interval (95%)** | This variant's own rate or average with its confidence interval, headed with the experiment's confidence level (Interval (99%) at 99%). A variant with fewer than 2 users reads Not enough data yet. When every user of a variant has the same value, for example none converted, it reads No interval: all 200 users have the same value (with its own user count), because the interval is built from how much users differ, and they do not. The interval of the change is in the Change column. |
+| **Change** | Relative change vs. control (e.g., +12.3%). A significant change also says *better* or *worse* in the metric's direction, so a fall is better when lower is better. A treatment's Change cell shows the change from the control, its confidence interval, and the difference with its interval. For a metric whose control's average is too uncertain around 0 to bound the relative change, the cell says so in place of the interval. For a conversion metric the difference is in percentage points; for a revenue, count, duration or custom metric it is the difference per user with its confidence interval, e.g. +1.19 per user (95% CI −0.47 to +2.84). Every interval on a row is marked *unadjusted* when the p-value beside it is adjusted |
+| **Impact** | The difference times the treatment's own assigned users (converting users, events, or the total of the values sent), with its interval. It is not projected beyond those users and has no currency or unit. |
 | **p-value** | Probability the difference is due to chance (lower = more confident). Headed **Adjusted p-value** when a correction applies and a metric has two or more treatments with a p-value: the p-value after the experiment's correction, with the unadjusted value beneath it. A footnote under the table names the correction. |
 | **Significance** | (adjusted) p-value < (1 - confidence level), e.g., < 0.05 for 95% confidence |
 
-For each variant, `GET /api/v1/results/{experiment_id}` also returns `effect_size`,
-`effect_size_label` (negligible / small / medium / large) and `confidence_interval`.
+The table shows the effect size and the interval that `GET /api/v1/results/{experiment_id}`
+returns for each variant as `effect_size`, `effect_size_label` (negligible / small / medium /
+large) and `confidence_interval`.
 
-**Green** = statistically significant improvement
-**Red** = statistically significant degradation
+**Green** = significantly better in the metric's direction
+**Red** = significantly worse in the metric's direction
 **Gray** = not statistically significant
+
+The words *better* and *worse* in the cell say the same as the colour, so colour is never the
+only signal.
+
+Under the table, a revenue, count, duration or custom metric has a footnote saying what its value
+per user is. If users sent a revenue, duration or custom metric's event but every user's total
+value is 0, a note says so: send the amount, duration or number in the event's `value` field, not
+in its properties.
+
+A metric marked lower is better (`lower_is_better`), such as a guardrail, is listed like any other
+metric, with its users and conversions. No guardrail verdict is produced: the recommendation follows
+the primary metric alone, so a significant rise in a lower-is-better secondary metric does not
+change it.
 
 #### Trend Chart
 
@@ -325,8 +397,9 @@ The tab also says when:
 
 - **no users have been assigned yet**, or there is no rate to plan from (no control conversions,
   or every control user converted): type the rate you expect;
-- **the metric is not a conversion**: every metric is analysed as a conversion today, so the
-  plan is for a conversion rate. The Power Calculator plans conversion rates only too, and the
+- **the metric is not a conversion**: the plan is for a conversion rate whatever the metric's
+  type, so a revenue, count, duration or custom metric's plan is for the share of users who send
+  its event. The Power Calculator plans conversion rates only too, and the
   tab says so;
 - **a fixed sample size is a guide only**: a bandit, an uneven split, sequential testing or
   Bayesian analysis.
@@ -388,11 +461,12 @@ read-only. Saving other changes, such as the rollout percentage, leaves them as 
 
 For gradual rollouts on a schedule:
 
-Create a rollout schedule through the API with `POST /api/v1/rollout-schedules/` (the stages
-go in its `stages` list; see [Rollouts](../feature-flags/rollouts.md) for the full contract),
-then start it with
-`POST /api/v1/rollout-schedules/{schedule_id}/activate`. The flag's page in the dashboard
-shows the schedule, its status and its stages, read-only. A schedule like this one:
+On the flag's page, **Create a rollout schedule** under **Rollout schedule** takes a name and
+the stages, in order, and **Activate** starts it (see
+[Rollouts](../feature-flags/rollouts.md#in-the-dashboard)). Through the API, create one with
+`POST /api/v1/rollout-schedules/` (the stages go in its `stages` list; see
+[Rollouts](../feature-flags/rollouts.md) for the full contract), then start it with
+`POST /api/v1/rollout-schedules/{schedule_id}/activate`. A schedule like this one:
 
 | Stage | Target % | Trigger Type | Start Date |
 |-------|----------|-------------|-----------|
@@ -401,7 +475,10 @@ shows the schedule, its status and its stages, read-only. A schedule like this o
 | Stage 3 | 100% | Manual | — |
 
 The platform automatically advances time-based stages. A manual stage waits until you
-advance it with `POST /api/v1/rollout-schedules/stages/{stage_id}/advance`.
+advance it: **Start stage** or **Complete stage** on the flag's page, or
+`POST /api/v1/rollout-schedules/stages/{stage_id}/advance`.
+
+[Guided examples](guided-examples.md#rollout) points to a staged rollout with an automatic rollback that runs on the demo stack.
 
 ### Disabling / Rolling Back
 
@@ -417,13 +494,15 @@ flag off for every user and pauses its rollout schedule (see
 
 ### Archived Flags
 
-An archived flag is retired and never served. It cannot be turned on until it is
+An archived flag is retired: every evaluation answers it as off, with its off value. It cannot be turned on until it is
 unarchived: the API refuses every request that would turn it on with "This flag is
 archived. Unarchive it before turning it on." Turning it off succeeds and changes
-nothing. Archiving and unarchiving are API calls for now (bulk toggle with
-`archive`, and `POST /api/v1/feature-flags/{id}/unarchive`, which is beta); an
-unarchived flag comes back inactive. See
-[Archived flags](../feature-flags/create.md#archived-flags).
+nothing. To archive a flag, open its page and choose **Archive**, then confirm; an archived
+flag's page offers **Unarchive**, and an unarchived flag comes back inactive (off). Both need
+permission to change feature flags, which the ADMIN and DEVELOPER roles have; through the API
+they are a bulk toggle with `archive` and `POST /api/v1/feature-flags/{id}/unarchive` (beta).
+The dashboard shows an archived flag as **Archived**, with no on/off switch, and the flag list
+has an **Archived** filter. See [Archived flags](../feature-flags/create.md#archived-flags).
 
 ---
 
@@ -438,7 +517,11 @@ Filter by status: All / Draft / Active / Paused / Completed.
 
 ### Exporting Results
 
-Export results through the API:
+On an experiment's results page, **Download CSV** saves its variant rows as a CSV file.
+The file covers the primary metric only, with the experiment's saved correction and
+confidence level, and has no adjusted p-value.
+
+Through the API:
 - **CSV export**: `GET /api/v1/export/variants` downloads per-variant results as CSV
   (`?format=json` for JSON); see [Data Export](../api/data-export.md)
 - **Full results**: `GET /api/v1/results/{experiment_id}` returns JSON with all statistics
@@ -456,6 +539,8 @@ The API route is:
 ```text
 GET /api/v1/results/{experiment_id}/sequential
 ```
+
+The experiment's own page says whether sequential testing is on.
 
 The platform uses **mSPRT** (mixture Sequential Probability Ratio Test). When `recommended_action` is `stop_for_effect`, it is safe to stop: there is an effect, but it may be a harm, so the sign of the confidence sequence and the metric's `lower_is_better` decide whether to ship. An experiment running well past its expected duration is flagged `at_risk`; that is advisory, not a reason to conclude there is no effect. See the [Sequential Testing Guide](../api/sequential-testing.md) for details.
 
@@ -482,13 +567,19 @@ After an experiment concludes, use dimensional analysis to understand whether th
 
 **Important:** Segment findings are always exploratory. Use them to generate hypotheses for follow-up experiments, not as final conclusions.
 
-Access via the **Breakdowns** tab on any experiment results page, or via the route below,
-where `segment_by` is the dimension, such as `device`:
+Access via the **Breakdowns** tab on any experiment results page, which reads
+`GET /api/v1/results/{experiment_id}?breakdown={dimension}`. The same segments, as counts
+with no significance test, are at the route below, where `segment_by` is the dimension,
+such as `device`:
 ```text
 GET /api/v1/experiments/{experiment_id}/segmented-results/{segment_by}
 ```
 
 See the [Dimensional Analysis Guide](../api/dimensional-analysis.md).
+
+For an experiment that balances its split within groups, the **Breakdowns** tab opens on its
+balanced groups, from `GET /api/v1/results/{experiment_id}/balanced-groups` (beta); see
+[Balance the split within groups](balance-within-groups.md#on-the-results-page).
 
 ---
 

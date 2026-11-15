@@ -13,13 +13,19 @@ Pinned, because the verifier's PASS is only as good as these:
   that fails, so a dispatch elsewhere is red, never skipped;
 * the python-suites matrix is ``SUITES``' pytest ones, each leg installing
   what its pull request job does (pytest only for sdk/python's suite and the
-  SDK contract self-tests; Node.js beside backend/requirements.txt for the
+  SDK contract tests, the latter with the PR job's Node.js for the published
+  JS evaluators and then the check that every published one is pinned;
+  Node.js beside backend/requirements.txt for the
   CDK stack tests, with --import-mode=importlib; for the chart's render
   tests, chart.yml's pinned helm, EXPERIMENTLY_CHART_TESTS=1 and its no-skip
   check, with unit leaving their tree to it), and the jest-suites matrix its
   jest ones, each in its npm project (their reports written as JUnit); every
   session names trees that exist, and ignores only trees under its roots,
   which ``suite_of`` reads;
+  unit and integration are a leg per shard (``LEGS``, #1895), every
+  integration shard set up as integration-tests.yml's are, no job naming a
+  shard variable, and the shard check holding integration's skips as
+  integration-tests.yml does;
   each runs ``--suite`` and uploads its reports as the artifact the verifier
   downloads, for 90 days; the verify job runs after every leg (``always()``),
   reads them, never ``--staging`` or ``--registry``, and keeps its record for
@@ -184,14 +190,17 @@ def test_the_matrix_is_the_scripts_suites(doc):
     job = doc["jobs"]["python-suites"]
     assert job["name"] == rc.SUITE_JOB.format("${{ matrix.suite }}")
     include = job["strategy"]["matrix"]["include"]
+    # One leg per suite, and one per shard of unit and integration (#1895).
     assert [leg["suite"] for leg in include] == [
-        s for s in rc.SUITES if not rc.is_jest(s)
+        name for name, leg in rc.LEGS.items() if not rc.is_jest(leg.suite)
     ]
-    assert all(i.runner == "pytest" for leg in include for i in rc.SUITES[leg["suite"]])
+    assert all(
+        i.runner == "pytest" for leg in include for i in rc.LEGS[leg["suite"]].sessions
+    )
     for leg in include:
         expected = (
             "experimentation_test"
-            if leg["suite"] == "integration"
+            if rc.LEGS[leg["suite"]].suite == "integration"
             else "experimentation"
         )
         assert leg["db"] == expected
@@ -209,6 +218,57 @@ def test_the_matrix_is_the_scripts_suites(doc):
     assert upload["with"]["name"] == rc.JUNIT_ARTIFACT.format("${{ matrix.suite }}")
     assert upload["with"]["retention-days"] == 90
     assert upload["if"] == "always()"
+    # The directory --suite writes into: a shard's JUnit and its shard report.
+    assert upload["with"]["path"] == "${{ runner.temp }}/junit"
+
+
+#: The steps integration-tests.yml's shards run before the suite, which every
+#: integration shard here runs too.
+INTEGRATION_STEPS = (
+    "Install the repository (editable)",
+    "Bootstrap database schema",
+    "Start a password-protected Redis",
+)
+INTEGRATION_IF = "startsWith(matrix.suite, 'integration-')"
+
+
+def test_every_integration_shard_and_no_other_leg_is_set_up_as_integration(doc):
+    """The editable install, the bootstrap and the second Redis are on every
+    integration shard (the session's REQUIRE switches fail it without them),
+    and the condition picks out exactly those legs."""
+    steps = {s.get("name"): s for s in doc["jobs"]["python-suites"]["steps"]}
+    for name in INTEGRATION_STEPS:
+        assert steps[name]["if"] == INTEGRATION_IF, name
+    picked = [name for name in rc.LEGS if name.startswith("integration-")]
+    assert picked == [
+        name for name, leg in rc.LEGS.items() if leg.suite == "integration"
+    ]
+    assert len(picked) == 4
+
+
+def test_the_shard_check_allows_the_skip_integration_tests_yml_allows():
+    """The integration shards' skips are held as integration-tests.yml's
+    summary holds them: the benchmark's reason, and no other."""
+    jobs = _load(WORKFLOWS / "integration-tests.yml")["jobs"]
+    (step,) = [
+        s
+        for s in jobs["integration-tests"]["steps"]
+        if "check_test_shards.py" in str(s.get("run", ""))
+    ]
+    reasons = re.findall(
+        r"--allow-skip 'backend/tests/integration=([^']{1,200})'", step["run"]
+    )
+    assert reasons and tuple(reasons) == rc.SHARD_SKIPS["integration"]
+    assert rc.SHARD_SKIPS["unit"] is None
+    assert set(rc.SHARD_SKIPS) == {leg.suite for leg in rc.LEGS.values() if leg.shard}
+
+
+def test_no_job_names_a_shard_variable(doc):
+    """The script gives each sharded session its slice; a spec in a job's or
+    a step's env would reach every session the step runs (e2e, contract,
+    performance), as integration-tests.yml's F6 says."""
+    text = WORKFLOW.read_text(encoding="utf-8")
+    assert rc.SHARD_SPEC not in text
 
 
 #: The legs whose pull request job installs pytest alone (sdk-unit-tests.yml's
@@ -240,6 +300,55 @@ def test_each_leg_installs_what_its_pull_request_job_does(doc):
     assert 'python -m pytest tests/sdk-contract -v -o addopts=""' in runs
     (session,) = rc.SUITES["sdk-contract"]
     assert session.args == ("tests/sdk-contract", "-o", "addopts=")
+
+
+def test_the_sdk_contract_leg_has_the_pr_jobs_node_and_the_completeness_check(doc):
+    """pr-qa-gate.yml's SDK Contract Tests sets up Node.js, which the published
+    evaluator gate (tests/sdk-contract/test_published_ruleset.py) needs and
+    fails without (#1497). The leg sets up the same version before the suite,
+    and runs published_versions_check.py -- nightly-qa's step -- after it."""
+    gate = _load(WORKFLOWS / "pr-qa-gate.yml")["jobs"]["sdk-contracts"]["steps"]
+    their_node = next(
+        s for s in gate if str(s.get("uses", "")).startswith("actions/setup-node")
+    )
+    steps = doc["jobs"]["python-suites"]["steps"]
+    names = [s.get("name") for s in steps]
+    node = next(
+        s
+        for s in steps
+        if s.get("name") == "Set up Node.js for the published JS evaluators"
+    )
+    assert node["if"] == "matrix.suite == 'sdk-contract'"
+    assert node["uses"] == their_node["uses"]
+    assert node["with"] == {"node-version": their_node["with"]["node-version"]}
+    assert names.index(node["name"]) < names.index("Run the suite")
+
+    script = "tests/sdk-contract/published_versions_check.py"
+    check = next(
+        s
+        for s in steps
+        if s.get("name") == "Every published local evaluator is in the gate"
+    )
+    assert check["if"] == "matrix.suite == 'sdk-contract'"
+    assert check["run"].strip() == f"python {script}"
+    assert names.index("Run the suite") < names.index(check["name"])
+    assert (REPO_ROOT / script).is_file()
+    nightly = _load(WORKFLOWS / "nightly-qa.yml")["jobs"]["sdk-contract-tests"]["steps"]
+    assert check["run"].strip() in [str(s.get("run", "")).strip() for s in nightly]
+    # Never on a pull request: a publish would turn every open one red.
+    on_pull_requests = []
+    for path in sorted(WORKFLOWS.glob("*.y*ml")):
+        workflow = _load(path)
+        if "pull_request" not in _on(workflow):
+            continue
+        runs = [
+            str(step.get("run", ""))
+            for job in (workflow.get("jobs") or {}).values()
+            for step in job.get("steps") or []
+        ]
+        if any("published_versions_check.py" in run for run in runs):
+            on_pull_requests.append(path.name)
+    assert on_pull_requests == []
 
 
 def test_the_cdk_leg_runs_as_the_cdk_stack_tests_job(doc):
@@ -532,20 +641,23 @@ def test_the_required_and_skippable_jobs_are_names_in_their_workflows():
         present = set(_job_names(workflow))
         if workflow == "sdk-unit-tests.yml":
             assert "${{ matrix.sdk }}" in present
-            present |= set(rc.SDK_JOBS[:12])
+            # The Linux tier's jobs are its matrix's; the rest are named jobs.
+            present |= set(rc.SDK_JOBS[:13])
         if workflow == "rc-evidence.yml":
-            present |= {rc.suite_job(s) for s in rc.SUITES}
+            present |= {rc.suite_job(s) for s in rc.LEGS}
         assert set(names) <= present, (workflow, set(names) - present)
     for workflow, name in rc.ALLOWED_SKIPS:
         assert name in _job_names(workflow), (workflow, name)
 
 
-def test_the_16_sdk_jobs_are_sdk_unit_tests_own_lists():
+def test_the_17_sdk_jobs_are_sdk_unit_tests_own_lists():
+    """The 16 SDKs' jobs and the MCP server's."""
     text = (WORKFLOWS / "sdk-unit-tests.yml").read_text(encoding="utf-8")
     linux = ast.literal_eval(re.search(r"LINUX = (\{.*?\})\n", text, re.S).group(1))
     heavy = ast.literal_eval(re.search(r"HEAVY = (\[.*?\])\n", text).group(1))
     assert list(rc.SDK_JOBS) == list(linux) + list(heavy)
-    assert len(rc.SDK_JOBS) == 16
+    assert len(rc.SDK_JOBS) == 17
+    assert rc.SDK_JOBS[: len(linux)] == tuple(linux)
 
 
 def test_the_verdicts_the_verifier_downloads_are_uploaded_by_the_journeys():

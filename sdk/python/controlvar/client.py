@@ -9,25 +9,32 @@
   ruleset whenever the answer is provably the server's, and by the server
   otherwise; experiments always stay on the server.
 * Successful assignments/evaluations are cached per user + key for
-  ``cache_ttl_seconds``; failures are never cached.
+  ``cache_ttl_seconds``; failures are never cached. Every successful answer also
+  records its key for the key-less ``track()`` fan-out, for 24 hours
+  (:mod:`controlvar.attribution`); ``clear_cache()`` keeps that record.
 * ``get_assignment``/``get_feature_flag``/``get_all_flags``/``get_assignments``
   raise :class:`~controlvar.ExperimentationError`; the convenience
   wrappers ``get_variant``/``is_feature_enabled`` swallow it and return a
-  default; ``track``/``track_batch`` never raise.
+  default; ``get_string_value``/``get_number_value``/``get_json_value`` return
+  the caller's ``default`` and pass the reason to ``on_error(error, "value")``;
+  ``track``/``track_batch``/``report_error`` never raise.
 * Safe to share between threads.
 """
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Union
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Union, cast
 from urllib.parse import quote, urlencode
 
+from .attribution import AttributedKeys
 from .cache import UserKeyCache
-from .evaluator import DEFER
+from .evaluator import DEFER, copy_value, is_value_of_type
+from .exposure import call_exposure_hook, exposure_error
 from .local import (
     DEFAULT_REFRESH_INTERVAL_SECONDS,
     MIN_REFRESH_INTERVAL_SECONDS,
@@ -35,8 +42,14 @@ from .local import (
     LocalEvaluationStatus,
     ReadyResult,
 )
-from .transport import Response, Transport, UrllibTransport
-from .types import Assignment, BatchResult, ExperimentationError, FlagEvaluation
+from .transport import Response, Transport, UrllibTransport, failure_message
+from .types import (
+    Assignment,
+    BatchResult,
+    ExperimentationError,
+    Exposure,
+    FlagEvaluation,
+)
 from .version import __version__
 
 __all__ = ["BATCH_LIMIT", "ExperimentationClient"]
@@ -80,6 +93,53 @@ def _context_param(attributes: Optional[Mapping[str, Any]]) -> Optional[str]:
     return json.dumps(dict(attributes), separators=(",", ":"), default=_json_default)
 
 
+def _json_type_of(value: Any) -> str:
+    """The value type of a value the server sent without a ``value_type``."""
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, (int, float)):
+        return "number"
+    if isinstance(value, (dict, list)):
+        return "json"
+    return type(value).__name__
+
+
+def _describe_type(value_type: str) -> str:
+    """A value type as the typed getters' messages name it."""
+    names = {"boolean": "a boolean", "string": "a string", "number": "a number", "json": "a JSON value"}
+    if value_type in names:
+        return names[value_type]
+    return f"a value of type {json.dumps(value_type[:64], ensure_ascii=False)}"
+
+
+def _served_value(evaluation: FlagEvaluation, flag_key: str, value_type: str, method: str) -> Any:
+    """The value ``evaluation`` serves when it is of ``value_type`` (a copy); otherwise raises
+    :class:`ExperimentationError` with ``code`` ``"INVALID_RESPONSE"`` or ``"TYPE_MISMATCH"``."""
+    flag = json.dumps(str(flag_key), ensure_ascii=False)
+    value = evaluation.value
+    if value is None:
+        raise ExperimentationError(
+            f"Flag {flag} came back without a value (from a server without flag values, or one that "
+            f"cannot serve this flag's stored value); {method} returned your default",
+            code="INVALID_RESPONSE",
+        )
+    served = evaluation.value_type if isinstance(evaluation.value_type, str) else _json_type_of(value)
+    if served != value_type:
+        raise ExperimentationError(
+            f"Flag {flag} serves {_describe_type(served)}; {method} returned your default",
+            code="TYPE_MISMATCH",
+        )
+    if not is_value_of_type(value, value_type):
+        raise ExperimentationError(
+            f"Flag {flag} serves {_describe_type(value_type)}, but the server's value is not one; "
+            f"{method} returned your default",
+            code="INVALID_RESPONSE",
+        )
+    return copy_value(value)
+
+
 def _retry_after_seconds(response: Response) -> float:
     header = response.header("Retry-After")
     seconds = DEFAULT_RETRY_AFTER_SECONDS
@@ -115,10 +175,24 @@ class ExperimentationClient:
             refreshed (default 30, minimum 5, +/-10% jitter).
         max_stale_seconds: Local mode: stop answering locally once the ruleset
             has not been refreshed for this long (default: no limit).
-        on_error: Called as ``on_error(error, operation)`` when a local-mode
+        on_error: Called as ``on_error(error, operation)`` whenever a typed
+            getter returns the caller's default (``"value"``), whenever
+            ``on_exposure`` raises (``"exposure"``), and when a local-mode
             ruleset refresh (``"refresh"``), evaluation-count report
             (``"flush"``) or local evaluation (``"evaluate"``; that call then
             goes to the server) fails. Those never raise.
+        on_exposure: Called as ``on_exposure(exposure)`` with an
+            :class:`~controlvar.Exposure` once each time the server enrols the
+            user in an experiment and the answer did not come from this
+            client's cache: when ``POST /api/v1/tracking/assign`` answers
+            ``assigned`` True and the slot for that user and experiment held no
+            unexpired answer. Not called for a cached answer, ``assigned``
+            False or missing, a failed call, or a flag. It runs in the calling
+            thread, after the answer is cached and before ``get_assignment``
+            returns. If it raises, the answer is unchanged: the client logs
+            the error at ERROR and passes it to ``on_error`` with
+            ``"exposure"``. ``None`` (default) sets none; a value that is not
+            callable, or an ``async`` function, raises ``TypeError``.
     """
 
     def __init__(
@@ -133,11 +207,21 @@ class ExperimentationClient:
         refresh_interval_seconds: float = DEFAULT_REFRESH_INTERVAL_SECONDS,
         max_stale_seconds: Optional[float] = None,
         on_error: Optional[Callable[[ExperimentationError, str], None]] = None,
+        on_exposure: Optional[Callable[[Exposure], None]] = None,
     ) -> None:
         if not api_url:
             raise ValueError("api_url is required")
         if not api_key:
             raise ValueError("api_key is required")
+        if on_exposure is not None:
+            if not callable(on_exposure):
+                raise TypeError("on_exposure must be callable or None")
+            # An async def (or a partial of one) returns a coroutine the client never awaits.
+            if inspect.iscoroutinefunction(on_exposure):
+                raise TypeError(
+                    "on_exposure must not be async: the client never awaits it, "
+                    "so the body of an async def would never run"
+                )
         self.api_url = api_url.rstrip("/")
         self.timeout_seconds = float(timeout_seconds)
         self.cache_ttl_seconds = cache_ttl_seconds
@@ -146,6 +230,8 @@ class ExperimentationClient:
         self._transport: Transport = transport if transport is not None else UrllibTransport()
         self._assignments: UserKeyCache[Assignment] = UserKeyCache(cache_ttl_seconds)
         self._flags: UserKeyCache[FlagEvaluation] = UserKeyCache(cache_ttl_seconds)
+        # The keys a key-less track() is sent to; outlives the cache entries.
+        self._attributed = AttributedKeys(cache_ttl_seconds)
         self._sleep = time.sleep
         self._headers: Dict[str, str] = {
             "X-API-Key": api_key,
@@ -157,6 +243,7 @@ class ExperimentationClient:
             raise ValueError("evaluation must be 'server' or 'local'")
         self.evaluation = evaluation
         self._on_error = on_error
+        self._on_exposure = on_exposure
         self._local: Optional[LocalEvaluation] = None
         if evaluation == "local":
             interval = refresh_interval_seconds
@@ -184,12 +271,36 @@ class ExperimentationClient:
 
     def _report(self, error: ExperimentationError, operation: str) -> None:
         logger.warning("local evaluation %s failed: %s", operation, error)
+        self._call_on_error(error, operation)
+
+    def _call_on_error(self, error: ExperimentationError, operation: str) -> None:
+        """Pass a swallowed failure to ``on_error``; a handler that raises is logged, never re-raised."""
         if self._on_error is None:
             return
         try:
             self._on_error(error, operation)
-        except Exception:  # noqa: BLE001 - a failing handler must not stop the poller
+        except Exception:  # noqa: BLE001 - a failing handler must not stop the poller or a getter
             logger.exception("on_error handler raised")
+
+    def _exposed(self, user_id: str, assignment: Assignment) -> None:
+        """Give ``on_exposure`` a new :class:`Exposure` (the user id asked for, and the answer's
+        experiment key, variant id and variant name); what it raises is logged and goes to
+        ``on_error`` with ``"exposure"``."""
+        hook = self._on_exposure
+        if hook is None:
+            return
+        exposure = Exposure(
+            experiment_key=assignment.experiment_key,
+            user_id=user_id,
+            variant_id=assignment.variant_id,
+            variant_name=assignment.variant_name,
+        )
+        call_exposure_hook(hook, exposure, self._exposure_failed)
+
+    def _exposure_failed(self, thrown: Exception) -> None:
+        error = exposure_error(thrown)
+        logger.error("%s", error.message, exc_info=(type(thrown), thrown, thrown.__traceback__))
+        self._call_on_error(error, "exposure")
 
     def ready(self, timeout_seconds: Optional[float] = None) -> ReadyResult:
         """Wait until flags can be answered locally, the first ruleset fetch has finished, or
@@ -233,7 +344,48 @@ class ExperimentationClient:
         except ExperimentationError:
             raise
         except Exception as exc:  # noqa: BLE001 - normalise any transport failure
-            raise ExperimentationError(f"{method} {url} failed: {exc}") from exc
+            raise ExperimentationError(failure_message(method, url, exc)) from exc
+
+    def _exchange(
+        self,
+        method: str,
+        path: str,
+        *,
+        body: Optional[Mapping[str, Any]] = None,
+        query: Optional[Mapping[str, str]] = None,
+    ) -> Response:
+        """Send one API call and return its response, whatever the status.
+
+        Retries exactly once on 429, sleeping for ``Retry-After`` (capped at
+        :data:`MAX_RETRY_AFTER_SECONDS`). Raises :class:`ExperimentationError`
+        for a network failure. Sends nothing, and raises
+        :class:`ExperimentationError` with ``status`` ``None``, for a body
+        holding NaN or an infinite number, which JSON has no value for (and for
+        a circular reference: ``json.dumps`` refuses both with ``ValueError``).
+        Raises ``TypeError`` for a body holding an object JSON cannot encode.
+        """
+        url = self.api_url + path
+        if query:
+            url += "?" + urlencode(query, quote_via=quote)
+        data = None
+        if body is not None:
+            # Only json.dumps is in the try. A lone surrogate in the query makes urlencode above
+            # raise UnicodeEncodeError, also a ValueError, and that keeps its own path.
+            try:
+                encoded = json.dumps(body, default=_json_default, allow_nan=False)
+            except ValueError as exc:
+                raise ExperimentationError(
+                    f"{method} {path} was not sent: its body holds a value JSON cannot represent ({exc})"
+                ) from exc
+            data = encoded.encode("utf-8")
+
+        response = self._send(method, url, data)
+        if response.status == 429:
+            wait = _retry_after_seconds(response)
+            logger.debug("429 from %s %s; retrying once after %.1fs", method, path, wait)
+            self._sleep(wait)
+            response = self._send(method, url, data)
+        return response
 
     def _request(
         self,
@@ -247,20 +399,10 @@ class ExperimentationClient:
 
         Retries exactly once on 429, sleeping for ``Retry-After`` (capped at
         :data:`MAX_RETRY_AFTER_SECONDS`). Raises :class:`ExperimentationError`
-        for any non-2xx response, network failure or undecodable body.
+        for any non-2xx response, network failure or undecodable body, and for a
+        request body :meth:`_exchange` does not send (``status`` ``None``).
         """
-        url = self.api_url + path
-        if query:
-            url += "?" + urlencode(query, quote_via=quote)
-        data = None if body is None else json.dumps(body, default=_json_default).encode("utf-8")
-
-        response = self._send(method, url, data)
-        if response.status == 429:
-            wait = _retry_after_seconds(response)
-            logger.debug("429 from %s %s; retrying once after %.1fs", method, path, wait)
-            self._sleep(wait)
-            response = self._send(method, url, data)
-
+        response = self._exchange(method, path, body=body, query=query)
         if response.status < 200 or response.status >= 300:
             raise ExperimentationError(
                 f"{method} {path} failed with HTTP {response.status}",
@@ -290,8 +432,12 @@ class ExperimentationClient:
 
         Sticky on the server and cached here per user + key. ``user_attributes``
         is sent as ``context`` (used by targeting rules). Raises
-        :class:`ExperimentationError` (``status == 404`` when the experiment is
-        not ACTIVE or unknown).
+        :class:`ExperimentationError` (``status == 404`` when no experiment has
+        the key, or for a draft with no control variant). An experiment that is
+        not ACTIVE returns its control variant with ``assigned`` False and
+        ``reason`` its status. When the server answers ``assigned`` True,
+        ``on_exposure`` is called before this returns; a cached answer calls
+        nothing.
         """
         cached = self._assignments.get(user_id, experiment_key)
         if cached is not None:
@@ -300,7 +446,13 @@ class ExperimentationClient:
         body: Dict[str, Any] = {"experiment_key": experiment_key, "user_id": user_id}
         if user_attributes is not None:
             body["context"] = dict(user_attributes)
-        data = self._request("POST", "/api/v1/tracking/assign", body=body)
+        try:
+            data = self._request("POST", "/api/v1/tracking/assign", body=body)
+        except ExperimentationError as exc:
+            # A 404: a key-less track() must no longer reach this experiment.
+            if exc.status == 404:
+                self._attributed.forget_experiment(user_id, experiment_key)
+            raise
 
         if not isinstance(data, dict) or not isinstance(data.get("variant_name"), str):
             raise ExperimentationError(
@@ -321,7 +473,14 @@ class ExperimentationClient:
             assigned=data["assigned"] if isinstance(data.get("assigned"), bool) else None,
             reason=data["reason"] if isinstance(data.get("reason"), str) else None,
         )
-        self._assignments.set(user_id, experiment_key, assignment)
+        new = self._assignments.set_new(user_id, experiment_key, assignment)
+        self._attributed.record_experiment(user_id, assignment.experiment_key, assignment.reason)
+        # Last, once the answer is stored and recorded, with no lock held. The server recorded an
+        # exposure for this request only if it said ``assigned`` True (a missing field is not
+        # taken as True). Threads that asked for the same new user and experiment at once each
+        # sent a request; only the one whose answer filled the empty slot calls the hook.
+        if new and assignment.assigned is True:
+            self._exposed(user_id, assignment)
         return assignment
 
     def get_variant(
@@ -368,6 +527,12 @@ class ExperimentationClient:
         in-process from the attributes passed (no request, no cache read) with
         ``source="local"``; anything else is evaluated by the server as above,
         with ``source="server"``.
+
+        ``value`` and ``value_type`` are the server's ``value`` and
+        ``value_type`` when it sends them, and ``None`` otherwise. A local
+        answer takes them from the ruleset: the on or off value and its type, or
+        ``enabled`` and ``"boolean"`` for an entry that names no type (every
+        flag of a server from before flag values).
         """
         if self._local is not None:
             answer = self._local.answer(flag_key, user_id, user_attributes)
@@ -378,12 +543,19 @@ class ExperimentationClient:
                     config=None,
                     reason=answer["reason"],
                     source="local",
+                    # A copy: a caller changing it must not change the ruleset every user is answered from.
+                    value=copy_value(answer["value"]),
+                    value_type=answer["value_type"],
                 )
                 # Recorded for the key-less track() fan-out, as a server answer is.
                 self._flags.set(user_id, flag_key, local)
+                self._attributed.record_flag(user_id, flag_key)
                 return local
+        # Only a server answer is reused here. A local one is kept for cached_flags(), but it was
+        # computed from a ruleset that no longer answers this call (discarded, too stale, closed,
+        # the flag now remote or gone, or attributes it cannot compare), so the server is asked (#1709).
         cached = self._flags.get(user_id, flag_key)
-        if cached is not None:
+        if cached is not None and cached.source != "local":
             return cached
 
         query: Dict[str, str] = {"user_id": user_id}
@@ -402,15 +574,96 @@ class ExperimentationClient:
                 body=json.dumps(data),
             )
         reason = data.get("reason")
+        value_type = data.get("value_type")
         evaluation = FlagEvaluation(
             key=str(data.get("key") or flag_key),
             enabled=bool(data.get("enabled", False)),
             config=data.get("config"),
             reason=reason if isinstance(reason, str) else None,
             source="server" if self._local is not None else None,
+            # Only taken when the server sent them: an older server's answer has neither.
+            value=data.get("value"),
+            value_type=value_type if isinstance(value_type, str) else None,
         )
         self._flags.set(user_id, flag_key, evaluation)
+        self._attributed.record_flag(user_id, flag_key)
         return evaluation
+
+    def get_string_value(
+        self,
+        flag_key: str,
+        user_id: str,
+        user_attributes: Optional[Mapping[str, Any]] = None,
+        *,
+        default: str,
+    ) -> str:
+        """The string a string flag serves ``user_id``: its on value when the flag is on for
+        them, its off value otherwise. Evaluated as :meth:`get_feature_flag` does, locally
+        included, with the same cache.
+
+        Never raises. ``default`` is keyword-only. Returns ``default``, logs a warning and
+        passes the reason to ``on_error(error, "value")`` when the request fails, the flag is
+        unknown (404), the server sends no value (``error.code`` ``"INVALID_RESPONSE"``: a
+        server without flag values, in server mode), or the flag serves another type
+        (``error.code`` ``"TYPE_MISMATCH"``). Nothing is coerced: a boolean flag is another
+        type, and in local mode every flag of a server without flag values reads as one.
+        """
+        return cast(str, self._typed_value(flag_key, user_id, user_attributes, default, "string", "get_string_value"))
+
+    def get_number_value(
+        self,
+        flag_key: str,
+        user_id: str,
+        user_attributes: Optional[Mapping[str, Any]] = None,
+        *,
+        default: float,
+    ) -> float:
+        """The number a number flag serves ``user_id``: an ``int`` or a ``float``, as saved
+        (``10.0`` stays a ``float``), never a ``bool``. See :meth:`get_string_value` for when
+        it returns ``default`` instead. Never raises; ``default`` is keyword-only."""
+        return cast(float, self._typed_value(flag_key, user_id, user_attributes, default, "number", "get_number_value"))
+
+    def get_json_value(
+        self,
+        flag_key: str,
+        user_id: str,
+        user_attributes: Optional[Mapping[str, Any]] = None,
+        *,
+        default: Any,
+    ) -> Any:
+        """The ``dict`` or ``list`` a json flag serves ``user_id``, as a new copy on every call:
+        changing it changes nothing the SDK keeps. See :meth:`get_string_value` for when it
+        returns ``default`` instead. Never raises; ``default`` is keyword-only."""
+        return self._typed_value(flag_key, user_id, user_attributes, default, "json", "get_json_value")
+
+    def _typed_value(
+        self,
+        flag_key: str,
+        user_id: str,
+        user_attributes: Optional[Mapping[str, Any]],
+        default: Any,
+        value_type: str,
+        method: str,
+    ) -> Any:
+        """The typed getters' one body: the value the flag serves when it is of ``value_type``
+        (a copy), and otherwise ``default``, with the reason logged and passed to
+        ``on_error(error, "value")``."""
+        try:
+            evaluation = self.get_feature_flag(flag_key, user_id, user_attributes)
+            return _served_value(evaluation, flag_key, value_type, method)
+        except Exception as exc:  # noqa: BLE001 - a typed getter never raises
+            if isinstance(exc, ExperimentationError):
+                error = exc
+            else:
+                error = ExperimentationError(
+                    f"Flag {json.dumps(str(flag_key), ensure_ascii=False)} could not be evaluated "
+                    f"({type(exc).__name__}: {exc}); {method} returned your default"
+                )
+                error.__cause__ = exc
+            # Logged as is_feature_enabled logs, and passed to on_error.
+            logger.warning("%s(%s, %s) failed: %s", method, flag_key, user_id, error)
+            self._call_on_error(error, "value")
+            return default
 
     def is_feature_enabled(
         self,
@@ -463,12 +716,17 @@ class ExperimentationClient:
         properties: Optional[Mapping[str, Any]],
         event_type: Optional[str],
         timestamp: Union[datetime, str, None],
+        event_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         body: Dict[str, Any] = {
             "event_type": event_type or event_name,
             "event_name": event_name,
             "user_id": user_id,
         }
+        # The caller's id, copied into every fan-out entry. None is made here, and
+        # None and "" mean no id (the server reads them that way too).
+        if event_id is not None and event_id != "":
+            body["event_id"] = event_id
         if event_value is not None:
             body["value"] = float(event_value)
         if properties is not None:
@@ -488,22 +746,35 @@ class ExperimentationClient:
         feature_flag_key: Optional[str] = None,
         event_type: Optional[str] = None,
         timestamp: Union[datetime, str, None] = None,
+        event_id: Optional[str] = None,
     ) -> bool:
         """Record an event. Never raises.
 
         * With ``experiment_key`` and/or ``feature_flag_key``: one
           ``POST /api/v1/tracking/track``.
         * Without a key: one ``POST /api/v1/tracking/batch`` (chunked at 100)
-          containing one entry per cached assignment (``experiment_key``) plus
-          one per cached evaluated flag (``feature_flag_key``) for this user.
-          If nothing is cached for the user, nothing is sent and ``False`` is
-          returned.
+          containing one entry per experiment (``experiment_key``) plus one per
+          flag (``feature_flag_key``) this client answered for the user in the
+          last 24 hours, cached or not. An experiment whose latest answer said it
+          is a draft, paused, completed or archived gets no entry.
+        * Without a key and with nothing to attribute it to: one
+          ``POST /api/v1/tracking/track`` with no key, which the server stores as
+          history.
 
-        ``event_type`` defaults to ``event_name``. Returns ``True`` only when
-        the server accepted the event(s).
+        ``event_type`` defaults to ``event_name``. ``event_id`` is your id for
+        this event, sent as ``event_id`` on every request this call makes (and
+        so on every fan-out entry): the server stores an event sent again with
+        the same ``event_id``, user, experiment, flag and event name only once.
+        The SDK makes no id, and sends none for ``None`` or ``""``; the server
+        refuses (422) an id of more than 255 characters or one holding NUL, and
+        the SDK does not check it. Returns ``True`` when the
+        event was sent and the server answered 2xx (every request, when a
+        fan-out takes more than one); ``False`` otherwise. A 2xx batch can still
+        report a failed entry, for example a key the server no longer has; use
+        :meth:`track_batch` to read the per-entry results.
         """
         try:
-            base = self._event_body(user_id, event_name, event_value, properties, event_type, timestamp)
+            base = self._event_body(user_id, event_name, event_value, properties, event_type, timestamp, event_id)
             if experiment_key or feature_flag_key:
                 body = dict(base)
                 if experiment_key:
@@ -513,25 +784,38 @@ class ExperimentationClient:
                 self._request("POST", "/api/v1/tracking/track", body=body)
                 return True
 
-            events: List[Dict[str, Any]] = [
-                dict(base, experiment_key=assignment.experiment_key)
-                for assignment in self.cached_assignments(user_id)
-            ]
-            events.extend(dict(base, feature_flag_key=flag.key) for flag in self.cached_flags(user_id))
+            experiments, flags = self._attributed.keys(user_id)
+            events: List[Dict[str, Any]] = [dict(base, experiment_key=key) for key in experiments]
+            events.extend(dict(base, feature_flag_key=key) for key in flags)
             if not events:
-                logger.debug("track(%s, %s): nothing cached for user; nothing sent", user_id, event_name)
-                return False
-            return self.track_batch(events).ok
+                # Nothing to attribute it to: sent once with no key, stored as history.
+                self._request("POST", "/api/v1/tracking/track", body=base)
+                return True
+            return self._post_batches(events)
         except Exception as exc:  # noqa: BLE001 - fire-and-forget
             logger.warning("track(%s, %s) failed: %s", user_id, event_name, exc)
             return False
+
+    def _post_batches(self, events: List[Dict[str, Any]]) -> bool:
+        """``POST /api/v1/tracking/batch`` in chunks of 100; ``True`` when every
+        chunk was answered 2xx. A failed chunk is logged and the rest are still sent."""
+        ok = True
+        for start in range(0, len(events), BATCH_LIMIT):
+            try:
+                self._request("POST", "/api/v1/tracking/batch", body={"events": events[start : start + BATCH_LIMIT]})
+            except Exception as exc:  # noqa: BLE001 - never raise
+                logger.warning("track fan-out chunk starting at %d failed: %s", start, exc)
+                ok = False
+        return ok
 
     def track_batch(self, events: Iterable[Mapping[str, Any]]) -> BatchResult:
         """Send raw track bodies via ``POST /api/v1/tracking/batch`` in chunks of 100. Never raises.
 
         Each event is a dict with the ``/tracking/track`` fields
         (``event_type``/``event_name``, ``user_id``, optional ``experiment_key``,
-        ``feature_flag_key``, ``value``, ``metadata``, ``timestamp``). An event
+        ``feature_flag_key``, ``value``, ``metadata``, ``timestamp``, ``event_id``;
+        an ``event_id`` is sent as given, and the same chunk is sent again with
+        the same ids on a 429). An event
         with no key is stored as history and counts in no experiment's results;
         tag outcome events.
         ``event_type`` defaults to ``event_name`` when missing. A chunk that
@@ -577,10 +861,68 @@ class ExperimentationClient:
             body["timestamp"] = _iso_timestamp(body["timestamp"])
         return body
 
+    # ---------------------------------------------------------- error reports
+
+    def report_error(
+        self,
+        error_type: str,
+        message: str,
+        *,
+        feature_flag_key: Optional[str] = None,
+        experiment_key: Optional[str] = None,
+        user_id: Optional[str] = None,
+        stack_trace: Optional[str] = None,
+        metadata: Optional[Mapping[str, Any]] = None,
+        timestamp: Union[datetime, str, None] = None,
+    ) -> bool:
+        """Report an error that happened while a flag or experiment was active, with one
+        ``POST /api/v1/tracking/errors``. Works in both evaluation modes. Never raises.
+
+        Returns ``True`` exactly when the server answered 201: the report is stored. It
+        counts toward the flag's error rate and automatic rollback only when this client's
+        key is a server-side key (the ``sdk:ruleset`` scope, created by a user who can change
+        flags); the flag's safety check shows the others as ``uncounted_error_count``.
+        Returns ``False``, and logs a warning, on any other answer (401, 404, 422, a 429
+        after its one retry, 5xx) or a network failure. The server checks the report (it
+        needs ``feature_flag_key`` or ``experiment_key``); the SDK does not. ``timestamp``
+        (a ``datetime``, naive meaning UTC, or an ISO-8601 string) is kept with the report
+        as ``client_timestamp``; the stored row is timed when the server receives it.
+        """
+        path = "/api/v1/tracking/errors"
+        try:
+            body: Dict[str, Any] = {"error_type": error_type, "message": message}
+            if feature_flag_key is not None:
+                body["feature_flag_key"] = feature_flag_key
+            if experiment_key is not None:
+                body["experiment_key"] = experiment_key
+            if user_id is not None:
+                body["user_id"] = user_id
+            if stack_trace is not None:
+                body["stack_trace"] = stack_trace
+            if metadata is not None:
+                body["metadata"] = dict(metadata)
+            stamp = _iso_timestamp(timestamp)
+            if stamp is not None:
+                body["timestamp"] = stamp
+            response = self._exchange("POST", path, body=body)
+        except Exception as exc:  # noqa: BLE001 - never raise
+            logger.warning("report_error(%s) failed: %s", error_type, exc)
+            return False
+        if response.status == 201:
+            return True
+        logger.warning(
+            "report_error(%s) was not stored: POST %s answered HTTP %d: %s",
+            error_type,
+            path,
+            response.status,
+            response.text()[:200],
+        )
+        return False
+
     # ------------------------------------------------------------------ cache
 
     def cached_assignments(self, user_id: str) -> List[Assignment]:
-        """Successful, unexpired assignments cached for the user (what ``track`` fans out to)."""
+        """Successful, unexpired assignments cached for the user."""
         return [assignment for _, assignment in self._assignments.entries(user_id)]
 
     def cached_flags(self, user_id: str) -> List[FlagEvaluation]:
@@ -588,6 +930,7 @@ class ExperimentationClient:
         return [evaluation for _, evaluation in self._flags.entries(user_id)]
 
     def clear_cache(self) -> None:
-        """Drop every cached assignment and evaluation."""
+        """Drop every cached assignment and evaluation, so the next calls ask the
+        server again. The keys a key-less ``track()`` is sent to are kept."""
         self._assignments.clear()
         self._flags.clear()

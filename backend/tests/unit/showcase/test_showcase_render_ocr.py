@@ -11,6 +11,7 @@ nothing stops the scan instead of passing it.
 from __future__ import annotations
 
 import random
+import string
 from pathlib import Path
 
 import pytest
@@ -192,7 +193,7 @@ def test_the_self_test_refuses_an_engine_that_reads_nothing(tmp_path, monkeypatc
     with pytest.raises(Refused) as caught:
         ocr.self_test(
             [blind],
-            lambda needle, key, faint, path: path.write_bytes(b"png"),
+            lambda needle, key, faint, hex_value, path: path.write_bytes(b"png"),
             workdir(tmp_path),
         )
     text = str(caught.value)
@@ -201,20 +202,28 @@ def test_the_self_test_refuses_an_engine_that_reads_nothing(tmp_path, monkeypatc
         in text
     )
     assert "did not see the key-shaped canary; scan not run" in text
+    assert (
+        "OCR self-test: tesseract read the hex canary at 0.00 (needs 0.70); scan not run"
+        in text
+    )
 
 
 def test_the_self_test_passes_an_engine_that_reads_the_canary(tmp_path, monkeypatch):
     monkeypatch.setattr(encode, "png_to_h264_and_back", lambda png, work: png)
     drawn = {}
 
-    def draw(needle, key, faint, path):
-        drawn["text"] = f"Shown once: {needle}\nHeader {key}\nLast edited by {faint}"
+    def draw(needle, key, faint, hex_value, path):
+        drawn["text"] = (
+            f"Shown once: {needle}\nHeader {key}\nSigning secret: {hex_value}\n"
+            f"Last edited by {faint}"
+        )
         path.write_bytes(b"png")
 
     reader = FakeEngine("vision", lambda paths: dict.fromkeys(paths, drawn["text"]))
     assert ocr.self_test([reader], draw, workdir(tmp_path)) == {
         "canary": {"vision": 1.0},
         "faint": {"vision": 1.0},
+        "hex": {"vision": 1.0},
     }
     assert not (tmp_path / "canary").exists()
 
@@ -497,22 +506,28 @@ def test_an_extraction_that_returns_the_wrong_frames_is_refused(tmp_path, monkey
 
 
 class Canary:
-    """Draws the canary page as text; ``reader(faint=...)`` reads it back with or without the faint line."""
+    """Draws the canary page as text; ``reader(faint=...)`` reads it back with or without the faint line.
+
+    ``reader(..., extra=...)`` adds a line of its own, so a test can tell the
+    engines' readings apart.
+    """
 
     def __init__(self):
         self.lines = {}
+        self.hex_value = None
 
-    def draw(self, needle, key, faint, path):
+    def draw(self, needle, key, faint, hex_value, path):
+        self.hex_value = hex_value
         self.lines = {
-            "dark": f"One-time password {needle}\nX-API-Key {key}",
+            "dark": f"One-time password {needle}\nX-API-Key {key}\nSigning secret: {hex_value}",
             "faint": f"Last edited by {faint}",
         }
         path.write_bytes(b"png")
 
-    def reader(self, *, faint):
+    def reader(self, *, faint, extra=""):
         def read(paths):
             text = self.lines["dark"] + ("\n" + self.lines["faint"] if faint else "")
-            return dict.fromkeys(paths, text)
+            return dict.fromkeys(paths, text + ("\n" + extra if extra else ""))
 
         return read
 
@@ -520,7 +535,7 @@ class Canary:
 def test_the_faint_canary_is_the_faintest_dashboard_style_or_fainter():
     assert templates.FAINT_CANARY_PX == 13
     assert templates.FAINT_CANARY_COLOUR == "#94A3B8"
-    page = templates.canary_html("CANARY-AAAA", "eptk_bbbb", "FAINT-CCCC")
+    page = templates.canary_html("CANARY-AAAA", "eptk_bbbb", "FAINT-CCCC", "c0ffee")
     assert (
         ".faint{font-size:13px;color:#94A3B8;" in page
         and '<div class="faint">Last edited by FAINT-CCCC</div>' in page
@@ -559,3 +574,105 @@ def test_one_engine_reading_the_faint_canary_is_enough(tmp_path, monkeypatch):
     assert result["canary"] == {"vision": 1.0, "tesseract": 1.0}
     assert result["faint"]["tesseract"] == 1.0
     assert result["faint"]["vision"] < ocr.NEEDLE_THRESHOLD
+
+
+# --- The hex canary (gate-7 matcher plan, D4; row 14) -------------------------------------------
+# After the gate-7 matcher change, gate 7 looks for the three public values only through
+# their random parts, which are hex, so the self-test also proves every engine reads hex.
+
+
+def hex_read_at(monkeypatch, canary, scores):
+    """Score the hex canary at ``scores[extra]`` for the reading that carries that extra line."""
+    real = ocr.needle_similarity
+
+    def similarity(normalised_needle, normalised_text):
+        if normalised_needle == ocr.normalise(canary.hex_value):
+            for extra, score in scores.items():
+                if ocr.normalise(extra) in normalised_text:
+                    return score
+        return real(normalised_needle, normalised_text)
+
+    monkeypatch.setattr(ocr, "needle_similarity", similarity)
+
+
+def test_an_engine_that_reads_the_hex_canary_at_0_69_refuses_the_scan(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(encode, "png_to_h264_and_back", lambda png, work: png)
+    canary = Canary()
+    engines = [
+        FakeEngine("vision", canary.reader(faint=True)),
+        FakeEngine("tesseract", canary.reader(faint=True, extra="read by tesseract")),
+    ]
+    hex_read_at(monkeypatch, canary, {"read by tesseract": 0.69})
+    with pytest.raises(Refused) as caught:
+        ocr.self_test(engines, canary.draw, workdir(tmp_path))
+    text = str(caught.value)
+    assert (
+        "OCR self-test: tesseract read the hex canary at 0.69 (needs 0.70); scan not run"
+        in text
+    )
+    assert "vision read the hex canary" not in text
+    assert not (tmp_path / "canary").exists()
+
+
+def test_every_engine_reading_the_hex_canary_at_0_70_passes_and_is_recorded(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(encode, "png_to_h264_and_back", lambda png, work: png)
+    canary = Canary()
+    engines = [
+        FakeEngine("vision", canary.reader(faint=True, extra="read by vision")),
+        FakeEngine("tesseract", canary.reader(faint=True, extra="read by tesseract")),
+    ]
+    hex_read_at(
+        monkeypatch, canary, {"read by vision": 0.70, "read by tesseract": 0.70}
+    )
+    result = ocr.self_test(engines, canary.draw, workdir(tmp_path))
+    assert result["hex"] == {"vision": 0.7, "tesseract": 0.7}
+    assert result["canary"] == {"vision": 1.0, "tesseract": 1.0}
+
+
+def test_the_hex_canary_is_32_hex_characters_made_up_for_each_run(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(encode, "png_to_h264_and_back", lambda png, work: png)
+    drawn = []
+    for _ in range(2):
+        canary = Canary()
+        ocr.self_test(
+            [FakeEngine("vision", canary.reader(faint=True))],
+            canary.draw,
+            workdir(tmp_path),
+        )
+        drawn.append(canary.hex_value)
+    assert [len(value) for value in drawn] == [32, 32]
+    assert all(c in string.hexdigits[:16] for value in drawn for c in value)
+    same = drawn[0] == drawn[1]  # never print the canary values, even made-up ones
+    assert not same, "the hex canary was the same in two runs"
+
+
+def test_the_hex_canary_is_drawn_like_the_key():
+    page = templates.canary_html("CANARY-AAAA", "eptk_bbbb", "FAINT-CCCC", "c0ffee")
+    assert f".mono{{font-family:{templates.MONO_STACK};font-size:14px;" in page
+    assert '<div class="mono">X-API-Key: eptk_bbbb</div>' in page
+    assert '<div class="mono">Signing secret: c0ffee</div>' in page
+
+
+class FakeBrowser:
+    def __init__(self):
+        self.pages = []
+
+    def card(self, page, path):
+        self.pages.append(page)
+        path.write_bytes(b"png")
+
+
+def test_the_canary_drawer_draws_every_value_it_is_given(tmp_path):
+    browser = FakeBrowser()
+    draw = ocr.canary_drawer(browser)
+    draw("CANARY-AAAA", "eptk_bbbb", "FAINT-CCCC", "c0ffee", tmp_path / "c.png")
+    assert browser.pages == [
+        templates.canary_html("CANARY-AAAA", "eptk_bbbb", "FAINT-CCCC", "c0ffee")
+    ]
+    assert "Signing secret: c0ffee" in browser.pages[0]

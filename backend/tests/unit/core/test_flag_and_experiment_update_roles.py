@@ -1,10 +1,13 @@
-"""Who can change feature flags is who can change experiments, for every role.
+"""Who can change feature flags is who can change experiments, for every built-in role.
 
-``require_sdk_ruleset_key`` (``backend/app/api/sdk_scope.py``) admits a scoped
-key only while its owner holds ``UPDATE`` on feature flags. Batch assignment
-(``POST /api/v1/tracking/assign/batch``) writes experiment assignments behind
-that same check, so it relies on the two role sets being equal. This pins
-them equal, role by role, for non-superusers (a superuser passes every check).
+A fact about the four built-in roles, pinned role by role for non-superusers
+(a superuser passes every check). Nothing relies on it any more: in the full
+profile a custom role or direct grant can give one of the two without the
+other, so batch assignment (``POST /api/v1/tracking/assign/batch``) checks
+``UPDATE`` on experiments for the key's owner itself
+(``sdk_scope.require_batch_assign_key``), and
+``modules/backend/tests/integration/rbac/test_rbac_server_keys.py`` is the
+gate for that (#891).
 """
 
 from __future__ import annotations

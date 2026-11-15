@@ -20,7 +20,13 @@ The contract (``schema`` 1, beta)::
                                              "value": ["US", "CA"]}],
                              "groups": []}}],
         "default_rule": null},
+       {"key": "checkout_label", "active": true, "evaluation": "local",
+        "rollout_percentage": 50, "rules": [], "default_rule": null,
+        "value_type": "string", "on_value": "Buy now",
+        "off_value": "Purchase"},
        {"key": "old_flag", "active": false},
+       {"key": "old_label", "active": false, "value_type": "string",
+        "off_value": "Purchase"},
        {"key": "semver_flag", "active": true, "evaluation": "remote"}]}
 
 * Stored rules are read through the same
@@ -39,6 +45,32 @@ The contract (``schema`` 1, beta)::
   name and never compiles or runs a pattern.
 * Inactive flags ship as ``{"key", "active": false}``: the server answers
   them ``enabled: false, reason: "inactive"`` whatever their rules say.
+* A string, number or json flag (#1497) adds what it serves: a local entry
+  ``value_type``, ``on_value`` (to the users it is on for) and ``off_value``
+  (to everyone else); an inactive entry ``value_type`` and ``off_value``,
+  the value every user gets while it is off. A remote entry carries no value
+  (the SDK asks the server), and a boolean flag's entry no value field at
+  all, so a deployment with no value flags serves exactly the bytes it served
+  before. ``evaluation`` and the rule shapes are unchanged: a release that
+  does not read values answers such a flag's ``enabled`` and ``reason``
+  locally, as for any other flag.
+* A flag whose stored values cannot be served (a type this release does not
+  know, or a value outside the value rules, which only a direct database
+  write or a release with wider limits leaves:
+  :func:`~backend.app.core.flag_values.servable_values`, the evaluate route's
+  own test) is ``{"key", "active": true, "evaluation": "remote"}`` whatever
+  its status: the SDK asks the server, which answers it without a value. Its
+  values never reach the document. The cost is when an inactive such flag
+  (a kill switch) reaches a local client: the 0.1.1 and 0.2.0 SDKs answer a
+  remote entry from their cache of the server's answer for the same user and
+  flag, kept up to 300 s by default, and ``getAllFlags`` always asks the
+  server.
+* An active flag whose stored rules cannot be read (they raise when read,
+  which only a direct database write leaves: #1674) is the same remote entry,
+  and the server answers it ``enabled: false``, ``reason: "error"``. The rest
+  of the document is built as before. An SDK answers a bulk call locally only
+  when every active flag is local, so while such a flag is active every local
+  ``getAllFlags`` / ``get_all_flags`` call goes to the server.
 * Nothing else about a flag is included: not its name, description, owner,
   tags, variants or workspace.
 * ``version`` is the sha256 of the canonical JSON of everything else
@@ -57,10 +89,18 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 from typing import Any, Dict, Iterable, List, Optional
 
-from backend.app.core.targeting_adapter import normalise_targeting_rules
+from backend.app.core.flag_values import (
+    BOOLEAN,
+    flag_value_type,
+    is_portable_number,
+    servable_values,
+)
+from backend.app.core.targeting_adapter import (
+    normalise_targeting_rules,
+    report_unreadable_rules,
+)
 from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
 from backend.app.schemas.targeting_rule import (
     Condition,
@@ -75,11 +115,6 @@ RULESET_SCHEMA = 1
 
 #: The server's flag bucketing function, by name (see the module docstring).
 BUCKETING = "md5-mod100-v1"
-
-#: The largest integer both Python and JavaScript represent exactly. A number
-#: of greater magnitude on either side of a comparison is answered by the
-#: server.
-MAX_SAFE_INTEGER = 2**53 - 1
 
 #: Operators an SDK may evaluate itself (the engine's names). Every other
 #: operator makes its flag ``evaluation: "remote"``.
@@ -135,21 +170,13 @@ EVALUATION_REMOTE = "remote"
 # ---------------------------------------------------------------------------
 # Value domains
 # ---------------------------------------------------------------------------
-
-
-def is_portable_number(value: Any) -> bool:
-    """A JSON number both languages compare identically.
-
-    Not a bool (checked first: ``True`` is an ``int`` in Python), finite, and
-    of magnitude at most :data:`MAX_SAFE_INTEGER`. The magnitude is checked
-    before anything converts the value, so a huge ``int`` never reaches a
-    float conversion.
-    """
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return False
-    if isinstance(value, int):
-        return -MAX_SAFE_INTEGER <= value <= MAX_SAFE_INTEGER
-    return math.isfinite(value) and abs(value) <= MAX_SAFE_INTEGER
+#
+# A portable number is ``backend.app.core.flag_values.is_portable_number``:
+# not a bool, finite, and of magnitude at most ``MAX_SAFE_INTEGER`` (2**53 - 1,
+# the largest integer both Python and JavaScript represent exactly). A number
+# of greater magnitude on either side of a comparison is answered by the
+# server. One definition, shared with the flag value rules and the vectors
+# generator.
 
 
 def condition_is_local(condition: Condition) -> bool:
@@ -203,12 +230,35 @@ def is_active(flag: FeatureFlag) -> bool:
     return flag.status in (FeatureFlagStatus.ACTIVE, FeatureFlagStatus.ACTIVE.value)
 
 
+def value_fields(flag: FeatureFlag) -> Optional[Dict[str, Any]]:
+    """The value fields of *flag*'s local entry, or ``None`` when it has none.
+
+    ``{}`` for a boolean flag; ``{"value_type", "on_value", "off_value"}`` for
+    a string, number or json flag; ``None`` when its stored values cannot be
+    served (``servable_values``), which makes the flag a remote entry.
+    """
+    pair = servable_values(flag)
+    if pair is None:
+        return None
+    value_type = flag_value_type(flag)
+    if value_type == BOOLEAN:
+        return {}
+    return {"value_type": value_type, "on_value": pair[0], "off_value": pair[1]}
+
+
 def build_flag_entry(flag: FeatureFlag) -> Dict[str, Any]:
     """The ruleset entry for one flag."""
-    if not is_active(flag):
-        return {"key": flag.key, "active": False}
-
     remote = {"key": flag.key, "active": True, "evaluation": EVALUATION_REMOTE}
+    values = value_fields(flag)
+    if values is None:
+        return remote
+    if not is_active(flag):
+        inactive: Dict[str, Any] = {"key": flag.key, "active": False}
+        if values:
+            inactive["value_type"] = values["value_type"]
+            inactive["off_value"] = values["off_value"]
+        return inactive
+
     stored = flag.targeting_rules
     if isinstance(stored, list) and stored:
         # The legacy list shape has its own semantics (raw context, strict
@@ -217,9 +267,16 @@ def build_flag_entry(flag: FeatureFlag) -> Dict[str, Any]:
 
     rules: List[Dict[str, Any]] = []
     default_rule: Optional[Dict[str, Any]] = None
-    native = (
-        normalise_targeting_rules(stored, owner=f"flag:{flag.key}") if stored else None
-    )
+    native = None
+    if stored:
+        owner = f"flag:{flag.key}"
+        # Around the pure read only (#1674): rules that raise make this one
+        # flag remote, which the server answers false (reason "error").
+        try:
+            native = normalise_targeting_rules(stored, owner=owner)
+        except Exception as exc:
+            report_unreadable_rules(owner, exc)
+            return remote
     if native is not None:
         for rule in sorted(native.rules, key=lambda r: r.priority):
             match = _group_entry(rule.rule)
@@ -242,6 +299,7 @@ def build_flag_entry(flag: FeatureFlag) -> Dict[str, Any]:
         "rollout_percentage": int(flag.rollout_percentage or 0),
         "rules": rules,
         "default_rule": default_rule,
+        **values,
     }
 
 

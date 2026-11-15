@@ -10,11 +10,13 @@
 
 A release is ready for production when one set of runs AT ITS TAG passed. This
 script reads them; it never starts, re-runs or cancels anything. Its GitHub
-calls are ``gh api`` GETs and ``gh run download``; its other calls are GETs of
-the two package registries (``http_get``). ``--plan`` prints the dispatch
+calls are ``gh api`` GETs, ``gh run download`` and the two GETs that read a
+job's log (``read_job_log``); its other calls are GETs of the two package
+registries (``http_get``). ``--plan`` prints the dispatch
 commands, in order, for a person to run. ``--suite`` is the step of
-``rc-evidence.yml`` that runs one of the suites (``SUITES``) and writes its
-JUnit reports. ``--registry`` checks one published package only (P below):
+``rc-evidence.yml`` that runs one of the suites (``SUITES``), or one shard of a
+sharded one (``LEGS``), and writes its JUnit reports and a sharded session's
+shard report. ``--registry`` checks one published package only (P below):
 the step after each publish in the release sitting.
 
 WHAT IT READS
@@ -54,7 +56,12 @@ Then:
   render tests (with the helm chart.yml pins), the CDK stack tests, the two
   published SDKs' own suites (``sdk/python``'s pytest,
   ``sdk/js``'s jest), the SDK contract self-tests, the demo apps' jest and their
-  simulators' tests, and the frontend's jest. Every target must be in a tree
+  simulators' tests, and the frontend's jest. A sharded suite (unit and
+  integration) is one job per shard, and each shard leaves its own reports:
+  one missing fails, naming the shard. Its shards' reports
+  (``backend/tests/shard.py``'s) must show, by
+  ``scripts/check_test_shards.py``'s rules, that between them they ran every
+  test they collected exactly once. Every target must be in a tree
   some suite runs (``suite_of``); one in no suite's tree fails by name. Every
   ``test:`` target of the registries (``docs/_claims``), and the test of every
   ``mechanism:`` they use, is in them, passed and was not skipped. A Python
@@ -81,7 +88,13 @@ Then:
   resolve, test-and-build and publish jobs green. Its build job's log
   holds the record that job wrote before uploading: for PyPI each file's
   sha256 and the digest of that listing (which must hash back to it, so the
-  record was read whole), for npm the tarball's sha256. The registry's latest
+  record was read whole), for npm the tarball's sha256. The log is read in
+  two GETs (``read_job_log``), not through ``gh``: GitHub's API with the
+  token, redirect not followed, then the storage URL it redirects to, with no
+  token. A log that cannot be read, is empty or is longer than ``LOG_MAX``
+  fails P, and the reason names the hop and its HTTP status (and the
+  storage's error code; a log the storage does not have is said so), never
+  the token or a URL's query. The registry's latest
   version is the manifest's; each PyPI file's sha256 is the recorded one, file
   for file; the npm tarball the registry serves has the recorded sha256 and
   its ``dist.integrity`` is that tarball's. The description the registry shows
@@ -110,10 +123,11 @@ WHAT IT WRITES
 
 ``--out DIR``: ``rc-evidence.md`` (the run table, every check and the verdict;
 also printed), ``runs.json`` (every run listed, and each counted run's jobs),
-and copies of what it judged: ``verdicts/<artifact>/verdicts.json`` and
-``junit/*.xml``. ``rc-evidence.yml`` uploads the directory for 90 days, so the
-verdicts outlive their own 14-day artifacts. The last line is ``RC EVIDENCE:
-PASS`` or ``RC EVIDENCE: FAIL``.
+and copies of what it judged: ``verdicts/<artifact>/verdicts.json``,
+``junit/*.xml`` and the shard reports, ``junit/shard-*.json``.
+``rc-evidence.yml`` uploads the directory for 90 days, so the verdicts outlive
+their own 14-day artifacts. The last line is ``RC EVIDENCE: PASS`` or ``RC
+EVIDENCE: FAIL``.
 
 Exit status: 0 PASS; 1 FAIL; 2 usage (a tag that is not ``vX.Y.Z``, a
 malformed disposition).
@@ -189,7 +203,13 @@ WORKFLOWS: Tuple[Workflow, ...] = (
     Workflow("sdk-unit-tests.yml", "E1", plan="all 16 SDK suites"),
     Workflow("infrastructure-tests.yml", "E1", plan="the CDK stacks"),
     Workflow("chart-kind.yml", "E1", plan="the Helm chart on kind"),
-    Workflow("compose-production.yml", "E1", plan="the production compose file"),
+    Workflow(
+        "compose-production.yml",
+        "E1",
+        plan="the production compose file, and its upgrade from the previous"
+        " release (N-1 is the tag itself); dispatch it only after the tag's"
+        " release.yml run has published the images, which the upgrade pulls",
+    ),
     Workflow(
         "docs-journeys.yml",
         "E2",
@@ -212,7 +232,8 @@ SUITE_JOB = "python suites ({})"
 JEST_SUITE_JOB = "jest suites ({})"
 JUNIT_ARTIFACT = "rc-evidence-junit-{}"
 
-#: The SDK jobs of sdk-unit-tests.yml (its LINUX and HEAVY lists).
+#: The SDK jobs of sdk-unit-tests.yml (its LINUX and HEAVY lists). `mcp` is
+#: the MCP server, which is not an SDK but has its job there like one.
 SDK_JOBS: Tuple[str, ...] = (
     "js",
     "react",
@@ -226,6 +247,7 @@ SDK_JOBS: Tuple[str, ...] = (
     "ruby",
     "php",
     "dotnet",
+    "mcp",
     "elixir",
     "flutter",
     "android",
@@ -236,6 +258,7 @@ ALLOWED_SKIPS: Dict[Tuple[str, str], str] = {
     ("doc-examples.yml", "Doc Examples (cache)"): "runs on a push or a schedule only",
     ("doc-examples.yml", "File an issue on failure"): "runs only after a failure",
     ("chart-kind.yml", "File an issue on failure"): "runs only after a failure",
+    ("compose-production.yml", "File an issue on failure"): "runs only after a failure",
 }
 
 
@@ -253,6 +276,12 @@ class Invocation:
     cwd: str = ""
     #: jest: trees outside the project its config also searches (``roots``).
     also: Tuple[str, ...] = ()
+    #: pytest: run in this many shards, each a leg of its own (``LEGS``); 0
+    #: runs the session whole. At most one session of a suite is sharded.
+    shards: int = 0
+    #: In a leg: which of the ``shards`` this session is (1..shards); 0 when
+    #: it runs whole.
+    shard: int = 0
 
     @property
     def roots(self) -> Tuple[str, ...]:
@@ -289,14 +318,24 @@ _INTEGRATION_ENV: Tuple[Tuple[str, str], ...] = (
         "postgresql://postgres:postgres@localhost:5432/experimentation_test",
     ),
 )
-#: The suites rc-evidence.yml runs at the tag, one job each, as the pull
-#: request jobs run them (pr-qa-gate.yml, integration-tests.yml, chart.yml,
-#: sdk-unit-tests.yml), without -x, a shard or --passWithNoTests: the tag's
-#: whole tree. The pytest ones are the python-suites matrix, the jest ones the
-#: jest-suites matrix. sdk/python has its own rootdir (the pyproject.toml
-#: beside its tests), so ``--rootdir=.`` names its cases from the repository
-#: root, as every other report does; the two demo simulators each import a
-#: module named ``traffic`` and are a session each.
+#: The suites rc-evidence.yml runs at the tag, as the pull request jobs run
+#: them (pr-qa-gate.yml, integration-tests.yml, chart.yml,
+#: sdk-unit-tests.yml), without -x or --passWithNoTests: the tag's whole tree.
+#: Each is one job, except a suite with a sharded session, which is one job per
+#: shard (``LEGS``). The pytest ones are the python-suites matrix, the jest
+#: ones the jest-suites matrix. sdk/python has its own rootdir (the
+#: pyproject.toml beside its tests), so ``--rootdir=.`` names its cases from
+#: the repository root, as every other report does; the two demo simulators
+#: each import a module named ``traffic`` and are a session each.
+#:
+#: Sharded (#1895): unit and integration, four shards each. Run whole, at
+#: v0.45.0 the unit session took 45.0 minutes and the integration session
+#: outgrew the job's 60 (run 42944394836, cancelled after 90% of it). A shard
+#: takes the tests whose node ids hash to it (backend/tests/shard.py, as
+#: integration-tests.yml's four shards do), and the verifier proves the shards
+#: between them ran every collected test exactly once
+#: (scripts/check_test_shards.py). The other sessions of a sharded suite run
+#: whole, in its first shard.
 SUITES: Dict[str, Tuple[Invocation, ...]] = {
     # The load-testing framework's tests (docs/performance/load-testing.md's
     # registry names them) are a session of their own: collecting
@@ -314,6 +353,7 @@ SUITES: Dict[str, Tuple[Invocation, ...]] = {
                 "backend/tests/installer_sweeps/",
                 "--ignore=backend/tests/unit/chart",
             ),
+            shards=4,
         ),
         Invocation("performance.xml", ("backend/tests/performance/",)),
     ),
@@ -333,6 +373,9 @@ SUITES: Dict[str, Tuple[Invocation, ...]] = {
         for name in ("event_processor", "feature_flag_evaluation", "shared")
     ),
     "modules": (Invocation("modules.xml", ("modules/backend/tests",)),),
+    # e2e and contract run whole in the first shard, as integration-tests.yml
+    # runs them in its shard 1: a few seconds each, and a job of their own
+    # would repeat the install, the bootstrap and the second Redis for them.
     "integration": (
         Invocation(
             "integration.xml",
@@ -343,6 +386,7 @@ SUITES: Dict[str, Tuple[Invocation, ...]] = {
                 ("EXPERIMENTLY_REQUIRE_REDIS", "1"),
                 ("EXPERIMENTLY_REQUIRE_REDIS_AUTH", "1"),
             ),
+            shards=4,
         ),
         Invocation("e2e.xml", ("backend/tests/e2e/", "-m", "e2e"), _INTEGRATION_ENV),
         Invocation(
@@ -393,6 +437,101 @@ SUITES: Dict[str, Tuple[Invocation, ...]] = {
     ),
 }
 PYTEST = ("-p", "no:cov", "-q", "--tb=short")
+#: backend/tests/shard.py's two variables: a session's slice (``i/n``), and
+#: the report it writes for scripts/check_test_shards.py.
+SHARD_SPEC = "EXPERIMENTLY_TEST_SHARD"
+SHARD_REPORT = "EXPERIMENTLY_TEST_SHARD_REPORT"
+#: The skip reasons the shard check allows in each sharded suite: in
+#: integration, integration-tests.yml's one (the benchmark, which runs only
+#: with RUN_BENCHMARKS=1); in unit, any (None), as before it was sharded: E4
+#: judges a skip target by target.
+SHARD_SKIPS: Dict[str, Optional[Tuple[str, ...]]] = {
+    "unit": None,
+    "integration": ("absolute-timing benchmark; set RUN_BENCHMARKS=1 to run it",),
+}
+#: The ``-p no:NAME`` the shard check allows: PYTEST's.
+SHARD_PLUGINS_OFF = frozenset({"cov"})
+
+
+@dataclasses.dataclass(frozen=True)
+class Leg:
+    """One job of the suites matrices: a suite run whole, or one shard of it."""
+
+    name: str  # the matrix's `suite`: the suite's name, or <suite>-<shard>
+    suite: str
+    sessions: Tuple[Invocation, ...]
+    shard: int = 0  # 1..of; 0 for a suite run whole
+    of: int = 0
+
+    @property
+    def label(self) -> str:
+        """How a problem names it: the suite, and its shard."""
+        if not self.shard:
+            return self.suite
+        return f"{self.suite} (shard {self.shard} of {self.of})"
+
+    @property
+    def shard_report(self) -> str:
+        """The report its sharded session writes beside its JUnit
+        (``shard-*.json``, the name scripts/check_test_shards.py searches for)."""
+        return f"shard-{self.name}.json"
+
+
+def _legs() -> Dict[str, Leg]:
+    legs: Dict[str, Leg] = {}
+    for suite, invocations in SUITES.items():
+        sharded = [i for i in invocations if i.shards]
+        if (
+            len(sharded) > 1
+            or any(i.shard for i in invocations)
+            or any(
+                i.runner != "pytest" or not i.report.endswith(".xml") for i in sharded
+            )
+        ):
+            raise ValueError(f"suite {suite}: at most one sharded pytest session")
+        names = (
+            [suite]
+            if not sharded
+            else [f"{suite}-{n}" for n in range(1, sharded[0].shards + 1)]
+        )
+        if any(name in legs or name in SUITES and name != suite for name in names):
+            raise ValueError(f"suite {suite}: a leg's name is taken: {names}")
+        if not sharded:
+            legs[suite] = Leg(suite, suite, invocations)
+            continue
+        total = sharded[0].shards
+        stem = sharded[0].report[: -len(".xml")]
+        for index, name in zip(range(1, total + 1), names):
+            sessions = tuple(
+                dataclasses.replace(i, report=f"{stem}-{index}.xml", shard=index)
+                if i.shards
+                else i
+                for i in invocations
+                if i.shards or index == 1
+            )
+            legs[name] = Leg(name, suite, sessions, index, total)
+    return legs
+
+
+#: Every job of the suites matrices, in SUITES' order: a suite run whole is
+#: one leg under its own name; a sharded one is ``<suite>-1`` .. ``<suite>-N``,
+#: and its other sessions run in ``<suite>-1``.
+LEGS: Dict[str, Leg] = _legs()
+
+
+def _shard_check() -> Any:
+    """scripts/check_test_shards.py, from beside this file (standard library
+    only), whose rules prove a sharded suite ran every test exactly once."""
+    path = pathlib.Path(__file__).resolve().with_name("check_test_shards.py")
+    spec = importlib.util.spec_from_file_location("check_test_shards_for_rc", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+SHARD_CHECK = _shard_check()
 
 
 def is_jest(name: str) -> bool:
@@ -401,8 +540,72 @@ def is_jest(name: str) -> bool:
 
 
 def suite_job(name: str) -> str:
-    """The rc-evidence.yml job that runs suite *name*."""
-    return (JEST_SUITE_JOB if is_jest(name) else SUITE_JOB).format(name)
+    """The rc-evidence.yml job that runs leg *name* (``LEGS``)."""
+    return (JEST_SUITE_JOB if is_jest(LEGS[name].suite) else SUITE_JOB).format(name)
+
+
+def _suite_words(text: str) -> str:
+    """A session's trees as a shard report's ``suite`` gives them: each
+    without a trailing slash, sorted, space-separated."""
+    return " ".join(sorted(part.rstrip("/") for part in text.split()))
+
+
+def shard_problems(junit: pathlib.Path) -> Tuple[List[str], List[str]]:
+    """Whether each sharded suite's shards, between them, ran every test they
+    collected exactly once: scripts/check_test_shards.py's rules, over the
+    shard report of every leg of the suite in *junit*. Returns the problems,
+    and a line for each suite proven."""
+    problems: List[str] = []
+    proven: List[str] = []
+    for suite in SUITES:
+        legs = [leg for leg in LEGS.values() if leg.suite == suite and leg.shard]
+        if not legs:
+            continue
+        (session,) = [i for i in legs[0].sessions if i.shard]
+        trees = _suite_words(" ".join(session.roots))
+        before = len(problems)
+        docs = []
+        for leg in legs:
+            path = junit / leg.shard_report
+            if not path.is_file():
+                problems.append(
+                    f"suite {leg.label}: no shard report {leg.shard_report}"
+                )
+                continue
+            try:
+                doc = SHARD_CHECK.load_report(path)
+            except SHARD_CHECK.BadReport as error:
+                said_here = str(error).replace(str(path), leg.shard_report)
+                problems.append(f"suite {leg.label}: {said_here}")
+                continue
+            if (doc["shard"], doc["of"]) != (leg.shard, leg.of):
+                problems.append(
+                    f"suite {leg.label}: {leg.shard_report} is shard"
+                    f" {doc['shard']} of {doc['of']}"
+                )
+            if _suite_words(doc["suite"]) != trees:
+                problems.append(
+                    f"suite {leg.label}: {leg.shard_report} is a report of"
+                    f" {doc['suite']!r}, not {trees!r}"
+                )
+            # The session's own --ignore (unit leaves the chart's tree to the
+            # chart suite) is its design, not a narrowing; any other is one.
+            if [i.rstrip("/") for i in doc["ignore"]] == list(session.ignored):
+                doc = dict(doc, ignore=[])
+            docs.append(doc)
+        skips = SHARD_SKIPS[suite]
+        found, count = SHARD_CHECK.check_suite(
+            trees,
+            docs,
+            None if skips is None else set(skips),
+            SHARD_PLUGINS_OFF,
+        )
+        problems += found
+        if len(problems) == before:
+            proven.append(
+                f"{trees}: {count} tests in {len(legs)} shards, each ran exactly once"
+            )
+    return problems, proven
 
 
 def session_of(target: str) -> Optional[Tuple[str, Invocation]]:
@@ -497,9 +700,10 @@ REQUIRED_JOBS: Dict[str, Tuple[str, ...]] = {
     "sdk-unit-tests.yml": ("Select SDKs",) + SDK_JOBS + ("SDK Unit Tests",),
     "infrastructure-tests.yml": ("CDK Stack Tests (Python)",),
     "chart-kind.yml": ("chart-kind (core)", "chart-kind (full)"),
-    "compose-production.yml": ("Compose Production",),
+    "compose-production.yml": ("Compose Production", "Compose Upgrade"),
     "docs-journeys.yml": ("Docs journeys", "Demo journeys"),
-    "rc-evidence.yml": tuple(suite_job(name) for name in SUITES) + (VERIFY_JOB,),
+    # Every leg: each shard is a job, which must have run and succeeded.
+    "rc-evidence.yml": tuple(suite_job(name) for name in LEGS) + (VERIFY_JOB,),
 }
 
 #: The docs-journeys verdicts: the journeys job's (which records the published
@@ -547,7 +751,18 @@ class EvidenceError(RuntimeError):
 
 
 class GhError(RuntimeError):
-    """A ``gh`` call failed; the message names the command, never its output."""
+    """A ``gh`` call failed. The message names the command, its exit status,
+    the HTTP status ``gh`` reported (``status``) and, when the answer came from
+    the storage GitHub redirects a download to, that storage's error code
+    (``storage``, parsed from the body); then what ``gh`` said on stderr,
+    through ``said``. It never quotes stdout and never holds a token."""
+
+    def __init__(
+        self, message: str, status: Optional[int] = None, storage: Optional[str] = None
+    ):
+        super().__init__(message)
+        self.status = status
+        self.storage = storage
 
 
 class FetchError(RuntimeError):
@@ -577,17 +792,214 @@ def http_get(url: str) -> bytes:
     return data
 
 
+#: How much of a failed call's stderr and stdout is looked at, and how much of
+#: what it said a reason quotes. Cut before anything else reads it.
+GH_SAID_READ = 2048
+GH_SAID_MAX = 200
+#: How gh 2.90 reports an HTTP failure on stderr (measured): ``gh: Not Found
+#: (HTTP 404)`` when the body is GitHub's JSON, ``gh: HTTP 404`` when it is not.
+HTTP_STATUS = re.compile(r"\bHTTP ([1-5][0-9][0-9])\b")
+#: GitHub's API answers a job-log read with a redirect to Azure blob storage
+#: (a successful read ends at ``Server: Windows-Azure-Blob/1.0``, measured).
+#: Azure's error body is XML with a ``<Code>``; ``BlobNotFound`` is a log that
+#: is not there (measured 2026-11-05 on a skipped job, which has none).
+STORAGE_CODE = re.compile(r"<Code>([A-Za-z]{1,64})</Code>")
+#: Taken out of what gh said: a URL, query and all (a storage URL's query is
+#: its signature), and anything token-shaped -- GitHub's token prefixes, or
+#: any long unbroken run of base64 characters.
+SAID_URL = re.compile(r"[A-Za-z][A-Za-z0-9+.-]{0,20}://[^\s\"'<>]{0,2048}")
+SAID_TOKEN = re.compile(
+    r"\b(?:gh[a-z]_|github_pat_)[A-Za-z0-9_]{0,255}|[A-Za-z0-9_+/=-]{32,2048}"
+)
+
+
+def said(stderr: str, also: Sequence[str] = ()) -> str:
+    """What ``gh`` (or GitHub) said, safe to print in a public log and record:
+    its first ``GH_SAID_READ`` characters only; the token's value (and each of
+    *also*), every URL and every token-shaped word taken out; printable ASCII;
+    then cut to ``GH_SAID_MAX``."""
+    head = (stderr or "")[:GH_SAID_READ]
+    for secret in (
+        os.environ.get("GH_TOKEN", ""),
+        os.environ.get("GITHUB_TOKEN", ""),
+        *also,
+    ):
+        if len(secret) >= 8:
+            head = head.replace(secret, "<token>")
+    head = SAID_URL.sub("<url>", head)
+    head = SAID_TOKEN.sub("<token>", head)
+    head = "".join(c if " " <= c <= "~" else " " for c in head)
+    return " ".join(head[:GH_SAID_MAX].split())
+
+
+def gh_failure(command: str, code: int, stderr: str, stdout: str) -> GhError:
+    """The GhError of a ``gh`` call that exited *code*."""
+    status = HTTP_STATUS.search((stderr or "")[:GH_SAID_READ])
+    storage = STORAGE_CODE.search((stdout or "")[:GH_SAID_READ])
+    parts = [f"exit {code}"]
+    if status:
+        parts.append(f"HTTP {status.group(1)}")
+    if storage:
+        parts.append(f"storage {storage.group(1)}")
+    message = f"{command} failed ({', '.join(parts)})"
+    quoted = said(stderr)
+    return GhError(
+        f"{message}: {quoted}" if quoted else message,
+        int(status.group(1)) if status else None,
+        storage.group(1) if storage else None,
+    )
+
+
 def run_gh(args: List[str]) -> str:
-    """``gh <args>``, its stdout."""
+    """``gh <args>``, its stdout; a GhError that says why when it fails."""
+    command = f"gh {' '.join(args[:2])}"
     try:
         done = subprocess.run(
-            ["gh", *args], capture_output=True, text=True, timeout=300, check=False
+            ["gh", *args],
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=300,
+            check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
-        raise GhError(f"gh {' '.join(args[:2])}: {type(error).__name__}") from None
+        raise GhError(f"{command}: {type(error).__name__}") from None
     if done.returncode != 0:
-        raise GhError(f"gh {' '.join(args[:2])} failed (exit {done.returncode})")
+        raise gh_failure(command, done.returncode, done.stderr, done.stdout)
     return done.stdout
+
+
+# ---------------------------------------------------------------------------
+# A job's log, in two GETs (T174)
+# ---------------------------------------------------------------------------
+# ``gh api .../actions/jobs/<id>/logs`` exits 1 under a workflow's token after
+# the redirected request has ended 200 OK, saying nothing (the diagnostic run
+# 41978116497 on PR #1764: the first hop answered 302 to Azure blob storage,
+# ``gh api -i`` printed ``HTTP/1.1 200 OK`` and exited 1). So the verifier makes
+# both hops itself: GitHub's API with the token, redirect NOT followed, then
+# the Location it names, with NO Authorization header. urllib would follow the
+# redirect and send the token on to the storage host; ``_NoRedirect`` stops it.
+
+#: The most of a job's log read, in bytes. sdk-release.yml's build logs are
+#: 27-63 kB, the record about 85% of the way down (measured 2026-11-05 on the
+#: four v0.1.1 and v0.2.0 build jobs). A longer log FAILs, it is never cut:
+#: the record is either read whole or not at all.
+LOG_MAX = 32 * 1024 * 1024
+API_ROOT = "https://api.github.com"
+#: What a token looks like before it goes into a header: no whitespace, no
+#: line break.
+TOKEN = re.compile(r"[A-Za-z0-9_.-]{8,2048}")
+HOST = re.compile(r"[A-Za-z0-9.-]{1,253}")
+REDIRECTS = (301, 302, 303, 307, 308)
+USER_AGENT = {"User-Agent": "controlvar-rc-evidence"}
+
+Send = Callable[[str, Mapping[str, str]], Tuple[int, Mapping[str, str], bytes]]
+
+
+class LogError(RuntimeError):
+    """A job's log was not read. The message names the hop and what it
+    answered: the HTTP status (``status``), the storage's error code
+    (``storage``) and GitHub's message through ``said``; never the token,
+    never more of a URL than its host."""
+
+    def __init__(
+        self, message: str, status: Optional[int] = None, storage: Optional[str] = None
+    ):
+        super().__init__(message)
+        self.status = status
+        self.storage = storage
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """A redirect is an answer, never followed: urllib copies a request's
+    headers, Authorization included, onto the request it redirects to."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def http_send(
+    url: str,
+    headers: Mapping[str, str],
+    handlers: Sequence[urllib.request.BaseHandler] = (),
+) -> Tuple[int, Mapping[str, str], bytes]:
+    """One GET of *url* with exactly *headers*; a redirect comes back as the
+    answer. (status, headers, body): the body at most ``LOG_MAX`` + 1 bytes,
+    an error's at most ``GH_SAID_READ``. *handlers*: for tests only."""
+    opener = urllib.request.build_opener(_NoRedirect, *handlers)
+    request = urllib.request.Request(url, headers=dict(headers), method="GET")
+    try:
+        with opener.open(request, timeout=120) as response:
+            return response.status, response.headers, response.read(LOG_MAX + 1)
+    except urllib.error.HTTPError as error:
+        body = error.read(GH_SAID_READ) if error.fp is not None else b""
+        return error.code, error.headers or {}, body
+
+
+def host_of(url: str) -> Optional[str]:
+    """The host of an https URL, and nothing else of it; None otherwise."""
+    try:
+        parts = urllib.parse.urlsplit(url.strip()[:4096])
+    except ValueError:
+        return None
+    host = parts.hostname or ""
+    return host if parts.scheme == "https" and HOST.fullmatch(host) else None
+
+
+def github_message(body: bytes, token: str) -> str:
+    """GitHub's ``message`` in a JSON error body, through ``said``; or ''."""
+    try:
+        data = json.loads(body[:GH_SAID_READ].decode("utf-8", "replace"))
+    except ValueError:
+        return ""
+    message = data.get("message") if isinstance(data, dict) else None
+    return said(message, also=(token,)) if isinstance(message, str) else ""
+
+
+def read_job_log(repo: str, job_id: int, token: str, send: Send = http_send) -> str:
+    """Job *job_id*'s log, as text: hop 1, GitHub's API with *token*, must
+    answer a redirect with an https Location; hop 2, that Location with no
+    Authorization header, must answer 200 with at most ``LOG_MAX`` bytes.
+    Anything else is a LogError naming the hop."""
+    api = "hop 1 (GitHub's API)"
+    try:
+        status, headers, body = send(
+            f"{API_ROOT}/repos/{repo}/actions/jobs/{int(job_id)}/logs",
+            {
+                **USER_AGENT,
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"Bearer {token}",
+            },
+        )
+    except (OSError, ValueError, http.client.HTTPException) as error:
+        raise LogError(f"{api}: {type(error).__name__}") from None
+    if status not in REDIRECTS:
+        message = github_message(body, token)
+        raise LogError(
+            f"{api} answered HTTP {status}, not a redirect"
+            + (f": {message}" if message else ""),
+            status,
+        )
+    location = str(headers.get("Location") or "")
+    host = host_of(location)
+    if host is None:
+        raise LogError(f"{api} answered HTTP {status} with no https Location", status)
+    storage = f"hop 2 (log storage at {host})"
+    try:
+        status, _, body = send(location, dict(USER_AGENT))
+    except (OSError, ValueError, http.client.HTTPException) as error:
+        raise LogError(f"{storage}: {type(error).__name__}") from None
+    if status != 200:
+        found = STORAGE_CODE.search(body[:GH_SAID_READ].decode("utf-8", "replace"))
+        code = found.group(1) if found else None
+        raise LogError(
+            f"{storage} answered HTTP {status}" + (f", storage {code}" if code else ""),
+            status,
+            code,
+        )
+    if len(body) > LOG_MAX:
+        raise LogError(f"{storage}: the log is longer than {LOG_MAX} bytes", status)
+    return body.decode("utf-8", "replace")
 
 
 def git_head(root: pathlib.Path) -> Optional[str]:
@@ -621,18 +1033,40 @@ def repository(environ: Mapping[str, str], gh: Gh) -> str:
 
 
 class GitHub:
-    """Read-only: GETs of the repository's API, and artifact downloads."""
+    """Read-only: GETs of the repository's API, artifact downloads, and a
+    job's log (``read_job_log``)."""
 
-    def __init__(self, gh: Gh, repo: str):
+    def __init__(
+        self,
+        gh: Gh,
+        repo: str,
+        send: Send = http_send,
+        environ: Optional[Mapping[str, str]] = None,
+    ):
         self.gh = gh
         self.repo = repo
+        self.send = send
+        self.environ = os.environ if environ is None else environ
 
     def get(self, path: str) -> Any:
         return json.loads(self.gh(["api", f"repos/{self.repo}/{path}"]) or "null")
 
-    def text(self, path: str) -> str:
-        """A GET whose answer is text, not JSON: a job's log."""
-        return self.gh(["api", f"repos/{self.repo}/{path}"])
+    def token(self) -> str:
+        """``GH_TOKEN`` (what the run sets) or ``GITHUB_TOKEN``; on a person's
+        machine, gh's own login (``gh auth token``). Never printed."""
+        token = self.environ.get("GH_TOKEN") or self.environ.get("GITHUB_TOKEN")
+        if not token:
+            try:
+                token = self.gh(["auth", "token"]).strip()
+            except GhError as error:
+                raise LogError(f"no GitHub token to read it with: {error}") from None
+        if not TOKEN.fullmatch(token or ""):
+            raise LogError("no usable GitHub token to read it with")
+        return token
+
+    def log(self, job_id: int) -> str:
+        """Job *job_id*'s log, in two GETs; a LogError that names the hop."""
+        return read_job_log(self.repo, job_id, self.token(), self.send)
 
     def download(self, run_id: int, name: str, dest: pathlib.Path) -> None:
         dest.mkdir(parents=True, exist_ok=True)
@@ -954,6 +1388,22 @@ RECORDED_FILE = re.compile(
 RECORDED_DIGEST = re.compile(r"digest (?P<sha>[0-9a-f]{64})")
 PYPI_FILE = re.compile(r"[A-Za-z0-9._+-]{1,200}\.(?:whl|tar\.gz)")
 NPM_FILE = re.compile(r"[A-Za-z0-9._+-]{1,200}\.tgz")
+
+
+def unreadable_log(job: str, job_id: int, error: LogError) -> str:
+    """Why the log of *job* (id *job_id*) was not read: always a P FAIL. A log
+    the storage does not have is said in words (logs expire after the
+    repository's retention, 90 days on 2026-11-05; a skipped job never had
+    one); every other failure is the LogError: the hop, its HTTP status and
+    all."""
+    why = f"cannot read the log of {job!r} (job {job_id})"
+    if error.storage and error.storage.endswith("NotFound"):
+        why += (
+            ": the log is not in GitHub's log storage (past the repository's"
+            " log retention, deleted, or never written), so its record cannot be"
+            " read back"
+        )
+    return f"{why}: {error}"
 
 
 def read_record(package: Package, log: str) -> Tuple[Dict[str, str], List[str]]:
@@ -1540,15 +1990,33 @@ class Verifier:
         )
 
     def judge_claim_tests(self, registry: Registry) -> List[Check]:
-        """E4: the targets judged test by test, and the residual held at job
-        level (the SDK trees no suite here runs)."""
+        """E4: the targets judged test by test, the sharded suites' shards
+        proven to have run every test once between them, and the residual
+        held at job level (the SDK trees no suite here runs)."""
         by_job = [(t, sdk_job_of(t)) for t, _ in registry.targets]
         tested = [t for t, job in by_job if job is None]
         held: Dict[str, int] = {}
         for _, job in by_job:
             if job is not None:
                 held[job] = held.get(job, 0) + 1
-        return [self._judge_tests(tested), self._judge_sdk_jobs(held)]
+        return [
+            self._judge_tests(tested),
+            self._judge_shards(),
+            self._judge_sdk_jobs(held),
+        ]
+
+    def _judge_shards(self) -> Check:
+        """After ``_judge_tests`` has put every leg's reports in the record:
+        scripts/check_test_shards.py's rules over every shard's report."""
+        subject = "every test ran in exactly one shard"
+        if self.junit is None and SELF not in self.counted:
+            return Check(
+                "E4",
+                subject,
+                [f"no rc-evidence.yml run at {self.tag}: the shards did not run"],
+            )
+        problems, proven = shard_problems(self.out / "junit")
+        return Check("E4", subject, problems, "; ".join(proven))
 
     def _judge_sdk_jobs(self, held: Mapping[str, int]) -> Check:
         """The residual: each SDK tree's targets held by that SDK's job in the
@@ -1600,8 +2068,10 @@ class Verifier:
         junit = self.out / "junit"
         junit.mkdir(parents=True, exist_ok=True)
         if self.junit is not None:
-            for report in sorted(self.junit.glob("*.xml")):
-                shutil.copyfile(report, junit / report.name)
+            # The JUnit reports, and the sharded sessions' shard reports.
+            for pattern in ("*.xml", SHARD_CHECK.REPORT_GLOB):
+                for report in sorted(self.junit.glob(pattern)):
+                    shutil.copyfile(report, junit / report.name)
         else:
             run = self.counted.get(SELF)
             if run is None:
@@ -1613,31 +2083,35 @@ class Verifier:
                     ]
                     + outside,
                 )
-            for suite in SUITES:
+            for leg in LEGS.values():
+                artifact = JUNIT_ARTIFACT.format(leg.name)
                 try:
-                    self.github.download(run.id, JUNIT_ARTIFACT.format(suite), junit)
+                    self.github.download(run.id, artifact, junit)
                 except GhError:
                     problems.append(
-                        f"suite {suite}: no {JUNIT_ARTIFACT.format(suite)} artifact in run {run.id}"
+                        f"suite {leg.label}: no {artifact} artifact in run {run.id}"
                     )
+        # Every leg's reports: one of a shard missing is that shard's FAIL.
         cases: List[Case] = []
-        for suite, invocations in SUITES.items():
-            for invocation in invocations:
+        for leg in LEGS.values():
+            for invocation in leg.sessions:
                 report = junit / invocation.report
                 try:
                     found = read_junit(report)
                 except (OSError, ET.ParseError):
                     problems.append(
-                        f"suite {suite}: no readable JUnit report {invocation.report}"
+                        f"suite {leg.label}: no readable JUnit report {invocation.report}"
                     )
                     continue
                 if not found:
-                    problems.append(f"suite {suite}: {invocation.report} holds no test")
+                    problems.append(
+                        f"suite {leg.label}: {invocation.report} holds no test"
+                    )
                 failed = [c for c in found if c.outcome == "failed"]
                 if failed:
                     first = failed[0]
                     problems.append(
-                        f"suite {suite}: {len(failed)} tests failed or errored in"
+                        f"suite {leg.label}: {len(failed)} tests failed or errored in"
                         f" {invocation.report} (first: {first.classname}"
                         f"::{first.name[:200]})"
                     )
@@ -1813,9 +2287,15 @@ class Verifier:
             )
             return None
         try:
-            log = self.github.text(f"actions/jobs/{build['id']}/logs")
-        except GhError as error:
-            problems.append(f"cannot read the log of {package.build_job!r}: {error}")
+            log = self.github.log(build["id"])
+        except LogError as error:
+            problems.append(unreadable_log(package.build_job, build["id"], error))
+            return None
+        if not log.strip():
+            problems.append(
+                f"cannot read the log of {package.build_job!r} (job {build['id']}):"
+                " GitHub answered with an empty log"
+            )
             return None
         files, found = read_record(package, log)
         problems += [f"run {run.id}: {p}" for p in found]
@@ -1859,6 +2339,11 @@ class Verifier:
         if commit is not None:
             run = self.release_run(ref, commit, problems)
             recorded = self.release_record(package, run, problems) if run else None
+        if recorded is None and not problems:
+            # Every path that reads no record says why above; this one is for
+            # the path that forgot. The registry comparisons below compare
+            # nothing without a record, so P must not pass on them.
+            problems.append(f"no record of {package.build_job!r} was read")
         if package.registry == "PyPI":
             checked = self._judge_pypi(package, name, version, run, recorded, problems)
         else:
@@ -2246,13 +2731,22 @@ def run_suite(
     junit_dir: pathlib.Path,
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
 ) -> int:
-    """Run every session of suite *name*; 0 only when all of them passed."""
+    """Run every session of leg *name* (a suite, or one shard of it:
+    ``LEGS``); 0 only when all of them passed. A sharded session gets its
+    slice and writes its shard report beside its JUnit; no other session is
+    sliced, whatever the environment it inherits holds."""
     junit_dir = junit_dir.resolve()  # jest runs in its project, not here
     junit_dir.mkdir(parents=True, exist_ok=True)
+    leg = LEGS[name]
     failed = []
-    for invocation in SUITES[name]:
+    for invocation in leg.sessions:
         env = dict(os.environ)
         env.update(dict(invocation.env))
+        env.pop(SHARD_SPEC, None)
+        env.pop(SHARD_REPORT, None)
+        if invocation.shard:
+            env[SHARD_SPEC] = f"{invocation.shard}/{invocation.shards}"
+            env[SHARD_REPORT] = str(junit_dir / leg.shard_report)
         report = junit_dir / invocation.report
         raw = junit_dir / (report.stem + ".jest.json")
         if invocation.runner == "jest":
@@ -2299,6 +2793,7 @@ def main(
     registry: Callable[[pathlib.Path], Registry] = read_registry,
     fetch: Fetch = http_get,
     environ: Optional[Mapping[str, str]] = None,
+    send: Send = http_send,
 ) -> int:
     environ = os.environ if environ is None else environ
     parser = argparse.ArgumentParser(description=(__doc__ or "").split("\n", 1)[0])
@@ -2321,7 +2816,9 @@ def main(
         choices=sorted(PACKAGES),
         help="check only this published package against its registry",
     )
-    parser.add_argument("--suite", choices=sorted(SUITES), help="run one suite")
+    parser.add_argument(
+        "--suite", choices=sorted(LEGS), help="run one suite, or one shard of it"
+    )
     parser.add_argument(
         "--junit-dir", type=pathlib.Path, help="--suite: where it writes"
     )
@@ -2356,7 +2853,7 @@ def main(
         check_tag(args.tag)
         verifier = Verifier(
             args.tag,
-            github=GitHub(gh, repository(environ, gh)),
+            github=GitHub(gh, repository(environ, gh), send=send, environ=environ),
             root=args.root,
             out=args.out,
             dispositions=parse_dispositions(args.dispositions),

@@ -6,6 +6,7 @@ including staged percentage increases, time-based triggers, and progression crit
 """
 
 import uuid
+from datetime import datetime
 from enum import Enum
 
 from sqlalchemy import (
@@ -27,6 +28,7 @@ from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.orm import relationship
 
 from backend.app.core.database_config import get_schema_name
+from backend.app.models.column_types import UTCDateTime
 
 from .base import Base, BaseModel
 
@@ -162,8 +164,25 @@ class RolloutStage(Base, BaseModel):
         nullable=False,
     )
     trigger_configuration = Column(JSONB)  # Configuration for the trigger
-    start_date = Column(DateTime)  # For time-based triggers
-    completed_date = Column(DateTime)  # When the stage was completed
+    # UTC, stored without a zone, whatever the session's time zone; see
+    # UTCDateTime (#1462). The database type is ``timestamp without time
+    # zone``, as before.
+    start_date = Column(UTCDateTime)  # For time-based triggers
+    completed_date = Column(UTCDateTime)  # When the stage was completed
+    # BaseModel's updated_at, bound as UTC: the scheduler and the manual
+    # advance write it from an aware now. Every edit of the stage moves it, so
+    # it is not when the stage started; the scheduler reads it as the start
+    # only for a stage with no started_at (one an older release started).
+    # Only this table's updated_at changes; BaseModel is left alone.
+    updated_at = Column(
+        UTCDateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+    # When the stage went from pending to in progress, written once by the
+    # scheduler or the manual advance and by nothing else, so an edit of the
+    # stage never moves it (#1528). The scheduler measures time-based
+    # completion and min_stage_duration from it. NULL until the stage starts,
+    # and for a stage that completed or failed before migration 7b6b4b4fe246.
+    started_at = Column(UTCDateTime, nullable=True)
 
     # Relationships
     rollout_schedule = relationship("RolloutSchedule", back_populates="stages")

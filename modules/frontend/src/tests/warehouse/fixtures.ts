@@ -26,6 +26,7 @@ export function connectors(enabled: Partial<Record<WarehouseType, boolean>> = {}
     { warehouse_type: 'bigquery', name: 'BigQuery', enabled: !!enabled.bigquery },
     { warehouse_type: 'snowflake', name: 'Snowflake', enabled: !!enabled.snowflake },
     { warehouse_type: 'athena', name: 'Amazon Athena', enabled: !!enabled.athena },
+    { warehouse_type: 'redshift', name: 'Amazon Redshift', enabled: !!enabled.redshift },
   ];
 }
 
@@ -69,6 +70,27 @@ export function snowflakeConnection(overrides: Partial<Connection> = {}): Connec
   });
 }
 
+/** A saved Amazon Redshift connection (provisioned), as the API returns it. */
+export function redshiftConnection(overrides: Partial<Connection> = {}): Connection {
+  return connection({
+    id: 'c-rs',
+    name: 'Redshift prod',
+    warehouse_type: 'redshift',
+    parameters: {
+      region: 'eu-west-1',
+      role_arn: 'arn:aws:iam::123456789012:role/controlvar-warehouse/controlvar-reader',
+      cluster_identifier: 'prod-cluster-1',
+      db_user: 'controlvar_reader',
+      database: 'dev',
+    },
+    external_id: 'exp-0123456789abcdef0123456789abcdef',
+    max_bytes_per_query: null,
+    worst_case_bytes_per_day: null,
+    worst_case_seconds_per_day: 66000,
+    ...overrides,
+  });
+}
+
 export function source(overrides: Partial<Source> = {}): Source {
   return {
     id: 's-1',
@@ -86,6 +108,7 @@ export function source(overrides: Partial<Source> = {}): Source {
     metric_type: null,
     conversion_window_hours: null,
     cap_value: null,
+    lower_is_better: null,
     validated_at: '2026-09-28T11:00:00Z',
     created_at: '2026-09-28T10:30:00Z',
     updated_at: '2026-09-28T11:00:00Z',
@@ -102,6 +125,7 @@ export function metricSource(overrides: Partial<Source> = {}): Source {
     columns: { unit_id: { name: 'user_id', type: 'STRING' }, event_at: { name: 'purchased_at', type: 'TIMESTAMP' } },
     metric_type: 'proportion',
     conversion_window_hours: 168,
+    lower_is_better: false,
     ...overrides,
   });
 }

@@ -46,9 +46,9 @@ def test_the_counts_are_the_rows():
     counted = Counter(row["outcome"] for row in ROWS)
     assert dict(counted) == OUTPUTS["counts"]
     assert OUTPUTS["counts"] == {
-        "accepted": 529,
-        "blocked_in_browser": 240,
-        "refused_by_server": 368,
+        "accepted": 641,
+        "blocked_in_browser": 262,
+        "refused_by_server": 432,
     }
 
 

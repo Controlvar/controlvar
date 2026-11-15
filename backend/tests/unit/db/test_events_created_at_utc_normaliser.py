@@ -67,7 +67,8 @@ CORPUS: list[tuple[str, Optional[str], bool]] = [
     ("garbage+05:00", None, True),
     # Canonical in shape, so not selected; unreadable either way.
     ("2026-13-01T01:00:00+00:00", None, False),
-    # Out of range once moved to UTC: OverflowError, not ValueError.
+    # Out of range once moved to UTC: the frozen copy raises OverflowError; the
+    # live normaliser turns that into a ValueError (#1684). Unreadable either way.
     ("0001-01-01T00:00:00+05:00", None, True),
     ("9999-12-31T23:00:00-05:00", None, True),
     ("", None, True),
@@ -149,8 +150,14 @@ def test_the_frozen_copy_agrees_with_the_normaliser_on_random_values(frozen):
 @pytest.mark.regression
 @pytest.mark.parametrize("stored, after, candidate", CORPUS)
 def test_each_shape_becomes_what_the_corpus_says(frozen, stored, after, candidate):
-    """The hand-written expectation, then the live normaliser: all three agree."""
-    assert _outcome(frozen, stored) == _outcome(normalize_event_timestamp, stored)
+    """The hand-written expectation, then the live normaliser: all three agree,
+    except that an out-of-range date is an OverflowError in the frozen copy and
+    a ValueError in the live one (#1684)."""
+    if stored in OUT_OF_RANGE:
+        assert _outcome(frozen, stored) == ("raises", "OverflowError")
+        assert _outcome(normalize_event_timestamp, stored) == ("raises", "ValueError")
+    else:
+        assert _outcome(frozen, stored) == _outcome(normalize_event_timestamp, stored)
     if after is None:
         assert _outcome(frozen, stored)[0] == "raises"
     else:
@@ -161,14 +168,18 @@ def test_each_shape_becomes_what_the_corpus_says(frozen, stored, after, candidat
 @pytest.mark.parametrize("value", NOT_INSTANTS + OUT_OF_RANGE)
 def test_values_that_are_not_instants_raise_what_the_migration_catches(frozen, value):
     """``ValueError`` or ``OverflowError``, and nothing else: the two the
-    migration counts as unreadable.  An out-of-range date raises the second."""
+    migration counts as unreadable.  An out-of-range date raises the second in
+    the frozen copy; the live normaliser raises ``ValueError`` for it (#1684),
+    which the migration's ``except (ValueError, OverflowError)`` also covers."""
     with pytest.raises((ValueError, OverflowError)) as frozen_raised:
         frozen(value)
     with pytest.raises((ValueError, OverflowError)) as live_raised:
         normalize_event_timestamp(value)
-    assert frozen_raised.type is live_raised.type
     if value in OUT_OF_RANGE:
         assert frozen_raised.type is OverflowError
+        assert live_raised.type is ValueError
+    else:
+        assert frozen_raised.type is live_raised.type
 
 
 def test_the_canonical_output_is_a_fixed_point(frozen):

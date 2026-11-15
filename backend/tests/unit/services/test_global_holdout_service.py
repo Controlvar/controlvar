@@ -27,8 +27,15 @@ def service(mock_db):
 # ------------------------------------------------------------------
 
 
+def _no_other_holdout_has_the_name(mock_db):
+    """The name check before a write (#1019) finds no other holdout."""
+    mock_db.query.return_value.filter.return_value.first.return_value = None
+    mock_db.query.return_value.filter.return_value.filter.return_value.first.return_value = None
+
+
 class TestCreateHoldout:
     def test_creates_holdout_with_defaults(self, service, mock_db):
+        _no_other_holdout_has_the_name(mock_db)
         result = service.create_holdout(name="Main Holdout")
         mock_db.add.assert_called_once()
         mock_db.commit.assert_called_once()
@@ -39,6 +46,7 @@ class TestCreateHoldout:
         assert added.is_active is False
 
     def test_creates_holdout_with_custom_fields(self, service, mock_db):
+        _no_other_holdout_has_the_name(mock_db)
         owner = uuid4()
         service.create_holdout(
             name="Custom Holdout",
@@ -102,6 +110,7 @@ class TestUpdateHoldout:
 
     def test_updates_name(self, service, mock_db):
         mock_holdout = MagicMock(spec=GlobalHoldout)
+        _no_other_holdout_has_the_name(mock_db)
         mock_db.query.return_value.filter.return_value.first.return_value = mock_holdout
         service.update_holdout(uuid4(), name="Updated")
         assert mock_holdout.name == "Updated"

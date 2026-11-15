@@ -57,7 +57,7 @@ if (assignment != null)
 }
 else
 {
-    Console.WriteLine("Not assigned (experiment not ACTIVE, or API unreachable with nothing cached).");
+    Console.WriteLine("Not assigned (unknown experiment key, or API unreachable with nothing cached).");
 }
 
 // -----------------------------------------------------------------

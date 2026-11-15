@@ -44,7 +44,11 @@ describe('INITIAL_FORM_STATE', () => {
       confidenceLevel: 0.95,
       correctionMethod: 'benjamini_hochberg',
       bayesianEnabled: false,
+      // #442: Advanced Bayesian settings, as typed, at the API's defaults.
+      bayesianConfig: { alpha: '1.0', beta: '1.0', lossThreshold: '0.001', credibleLevel: '0.95' },
+      sequentialEnabled: false,
       plannedEffectPct: '',
+      balance: { on: false, groupBy: 'platform', customKey: '', values: [], segments: [] },
     });
   });
 
@@ -205,6 +209,16 @@ describe('validateForm and its three checks', () => {
     expect(checkMetrics([M({ event_name: ' ' })])).toBe('Every metric needs a name and an event name.');
     expect(checkMetrics([M({ is_primary: false })])).toBe('Choose a primary metric.');
     expect(checkMetrics([M(), M({ is_primary: false })])).toBe('Metric names must be unique.');
+  });
+
+  it('refuses a version at 0% even when the total is 100 (#1424)', () => {
+    const zero = [V(), V({ name: 'B', is_control: false, traffic_allocation: 0 }), V({ name: 'C', is_control: false, traffic_allocation: 50 })];
+    expect(checkVariants(zero)).toBe(
+      '“B”: This version gets 0% of traffic. Give it a share, or remove it.',
+    );
+    // A real split with no 0% version is unchanged.
+    expect(checkVariants([V(), V({ name: 'B', is_control: false })])).toBeNull();
+    expect(checkVariants([V({ traffic_allocation: 100 })])).toBeNull();
   });
 
   it('compares metric names as they are sent: trimmed, and case-sensitive like the API', () => {
@@ -566,5 +580,20 @@ describe('variant configuration in validation and the payload', () => {
     const on = buildCreatePayload(apply([{ type: 'setBayesianEnabled', bayesianEnabled: true }]));
     expect(on.bayesian_enabled).toBe(true);
     expect('bayesian_config' in on).toBe(false);
+  });
+
+  it('sends sequential_testing_enabled: true only when it is turned on, and never a config', () => {
+    const off = buildCreatePayload(createInitialFormState());
+    expect('sequential_testing_enabled' in off).toBe(false);
+    const on = buildCreatePayload(apply([{ type: 'setSequentialEnabled', sequentialEnabled: true }]));
+    expect(on.sequential_testing_enabled).toBe(true);
+    expect('sequential_testing_config' in on).toBe(false);
+    const offAgain = buildCreatePayload(
+      apply([
+        { type: 'setSequentialEnabled', sequentialEnabled: true },
+        { type: 'setSequentialEnabled', sequentialEnabled: false },
+      ]),
+    );
+    expect('sequential_testing_enabled' in offAgain).toBe(false);
   });
 });

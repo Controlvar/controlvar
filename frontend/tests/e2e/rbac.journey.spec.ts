@@ -1,4 +1,6 @@
+import { readFileSync } from "fs";
 import { test, expect, TEST_USERS, type UserRole } from "./fixtures/auth.fixture";
+import { API_URL, TOKEN_STORAGE_KEY } from "./env";
 import { ExperimentsPage } from "./pages/experiments.page";
 import { FeatureFlagsPage } from "./pages/feature-flags.page";
 
@@ -180,6 +182,10 @@ test.describe("Journey: RBAC", () => {
   // An analyst or viewer opening a running experiment is offered none of
   // them, is told why, and reads its results -- and no request they make on
   // the way is refused by the experiments or results API.
+  //
+  // The page's group and holdout rows (#1449) read routes these two roles are
+  // refused (EXPERIMENT CREATE), so the page does not ask: it says who can see
+  // them, and sends neither request.
   for (const role of ["analyst", "viewer"] as const) {
     test(`${role} sees no lifecycle action on a running experiment and reads its results`, async ({
       sessions,
@@ -187,10 +193,17 @@ test.describe("Journey: RBAC", () => {
       const page = await (await sessions(role)).newPage();
       const experiments = new ExperimentsPage(page);
       const refused: string[] = [];
+      const eligibilityRequests: string[] = [];
+      page.on("request", (request) => {
+        const { pathname } = new URL(request.url());
+        if (/^\/api\/v1\/(holdout|mutual-exclusion-groups)(\/|$)/.test(pathname)) {
+          eligibilityRequests.push(`${request.method()} ${pathname}`);
+        }
+      });
       page.on("response", (response) => {
         const { pathname } = new URL(response.url());
         if (
-          /^\/api\/v1\/(experiments|results)\//.test(pathname) &&
+          /^\/api\/v1\/(experiments|results|holdout|mutual-exclusion-groups)(\/|$)/.test(pathname) &&
           (response.status() === 401 || response.status() === 403)
         ) {
           refused.push(`${response.status()} ${response.request().method()} ${pathname}`);
@@ -217,13 +230,24 @@ test.describe("Journey: RBAC", () => {
         await expect(page.getByTestId("experiment-manage")).toHaveCount(0);
         const note = page.getByTestId("experiment-role-note");
         await expect(note).toBeVisible();
-        await expect(note).toContainText("requires the ADMIN or DEVELOPER role");
+        await expect(note).toContainText(
+          "needs permission to change experiments, which the ADMIN and DEVELOPER roles have",
+        );
         await expect(note).toContainText(`you are ${TEST_USERS[role].role}.`);
+
+        // The seeded experiment is in no group, which the experiment itself
+        // says; the holdout needs the role.
+        await expect(page.getByTestId("experiment-exclusion-group")).toHaveText("None");
+        await expect(page.getByTestId("experiment-holdout-refused")).toHaveText(
+          "Seeing this needs permission to create experiments, which the ADMIN and DEVELOPER roles have.",
+        );
+        await expect(page.getByTestId("experiment-holdout")).toHaveCount(0);
 
         await experiments.viewResults();
         await expect(page.getByTestId("results-dashboard")).toBeVisible({ timeout: 20_000 });
         await page.waitForLoadState("networkidle");
-        expect(refused, "no experiments/results request is refused").toEqual([]);
+        expect(refused, "no experiments/results/holdout/group request is refused").toEqual([]);
+        expect(eligibilityRequests, "no holdout or group request is sent").toEqual([]);
       } finally {
         await page.close();
       }
@@ -253,7 +277,7 @@ test.describe("Journey: RBAC", () => {
         const listNote = page.getByTestId("flags-role-note");
         await expect(listNote).toBeVisible({ timeout: 15_000 });
         await expect(listNote).toHaveText(
-          "Feature flags are created and changed by the ADMIN and DEVELOPER roles.",
+          "Feature flags are created and changed with the feature flag permissions, which the ADMIN and DEVELOPER roles have.",
         );
         await expect(flags.listError).toHaveCount(0);
         await expect(flags.flagList).toBeVisible({ timeout: 15_000 });
@@ -269,7 +293,7 @@ test.describe("Journey: RBAC", () => {
         const newNote = page.getByTestId("flag-new-role-note");
         await expect(newNote).toBeVisible({ timeout: 15_000 });
         await expect(newNote).toHaveText(
-          "Your role can view feature flags but not create them. Feature flags are created and changed by the ADMIN and DEVELOPER roles.",
+          "Your role can view feature flags but not create them. Feature flags are created and changed with the feature flag permissions, which the ADMIN and DEVELOPER roles have.",
         );
         await expect(page.getByRole("link", { name: "Back to feature flags" })).toBeVisible();
         await expect(flags.submitButton).toHaveCount(0);
@@ -281,7 +305,7 @@ test.describe("Journey: RBAC", () => {
         await expect(flags.detail).toBeVisible({ timeout: 15_000 });
         await expect(flags.detailKey).toHaveText(seededKey);
         await expect(page.getByTestId("flag-role-note")).toHaveText(
-          "Feature flags are created and changed by the ADMIN and DEVELOPER roles.",
+          "Feature flags are created and changed with the feature flag permissions, which the ADMIN and DEVELOPER roles have.",
         );
         await expect(flags.detailToggle).toHaveCount(0);
         await expect(flags.rolloutPercentageInput).toBeDisabled();
@@ -377,6 +401,89 @@ test.describe("Journey: RBAC", () => {
     }
   });
 
+  // #1449 (plan-1449 #14): the experiment page's read-only settings against
+  // the real API, as an ordinary DEVELOPER (the seeded admin is a superuser,
+  // so its cell would prove nothing about the role). The journey database is
+  // shared, so the only experiment it schedules is a draft it creates, and the
+  // seeded one it opens is only read.
+  test("developer reads an experiment's sequential testing, holdout, group and scheduled start", async ({
+    sessions,
+  }) => {
+    const page = await (await sessions("developer")).newPage();
+    const experiments = new ExperimentsPage(page);
+    const stamp = Date.now();
+    const holdoutAnswer = () =>
+      page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === "/api/v1/holdout" && response.request().method() === "GET",
+        { timeout: 20_000 },
+      );
+    let headers: Record<string, string> = {};
+    let draftId: string | null = null;
+    try {
+      await experiments.goto();
+      await expect(experiments.experimentList).toBeVisible({ timeout: 15_000 });
+      const token = await page.evaluate((key) => window.localStorage.getItem(key), TOKEN_STORAGE_KEY);
+      expect(token, "the developer session has a token").toBeTruthy();
+      headers = { Authorization: `Bearer ${token}` };
+
+      // The seeded msprt experiment (seed_demo_data.py: sequential testing on),
+      // opened by id: a clone of it would also match its name in the list.
+      const list = await page.request.get(`${API_URL}/api/v1/experiments/?limit=100`, { headers });
+      expect(list.status()).toBe(200);
+      const seeded = ((await list.json()) as { items: { id: string; name: string }[] }).items.find(
+        (item) => item.name === "Homepage Hero Copy Test",
+      );
+      expect(seeded, "the seeded msprt experiment").toBeTruthy();
+      const first = holdoutAnswer();
+      await page.goto(`/experiments/${seeded!.id}`);
+      await expect(experiments.detail).toBeVisible({ timeout: 15_000 });
+      const answer = await first;
+      expect(answer.status(), "a DEVELOPER may read the holdout").toBe(200);
+      // The journey seed activates no holdout, and no journey makes one.
+      expect(await answer.json()).toBeNull();
+      await expect(page.getByTestId("experiment-sequential")).toHaveText("On");
+      await expect(page.getByTestId("experiment-holdout")).toHaveText("None active");
+      await expect(page.getByTestId("experiment-exclusion-group")).toHaveText("None");
+
+      // A draft of its own, scheduled two days ahead: "Starts", nothing due.
+      draftId = await experiments.createExperiment(`E2E Scheduled ${stamp}`, `e2e_scheduled_${stamp}`);
+      const day = 24 * 60 * 60 * 1000;
+      const schedule = await page.request.put(`${API_URL}/api/v1/experiments/${draftId}/schedule`, {
+        headers,
+        data: {
+          start_date: new Date(Date.now() + 2 * day).toISOString(),
+          end_date: new Date(Date.now() + 3 * day).toISOString(),
+        },
+      });
+      expect(schedule.status(), await schedule.text()).toBe(200);
+      const second = holdoutAnswer();
+      await page.reload();
+      await expect(experiments.detail).toBeVisible({ timeout: 15_000 });
+      expect((await second).status()).toBe(200);
+      await experiments.expectStatus("draft");
+      const start = page.getByTestId("experiment-start-date");
+      await expect(start).toBeVisible();
+      await expect(start.locator("xpath=preceding-sibling::dt")).toHaveText("Starts");
+      await expect(start).not.toContainText("(due");
+      await expect(page.getByTestId("experiment-end-date").locator("xpath=preceding-sibling::dt")).toHaveText("Ends");
+      await expect(page.getByTestId("experiment-exclusion-group")).toHaveText("None");
+      await expect(page.getByTestId("experiment-holdout")).toHaveText("None active");
+    } finally {
+      // The journey database is shared, so the draft goes even when a step
+      // above failed. Only a draft can be deleted, and the route takes its id
+      // again as `experiment_key`.
+      if (draftId) {
+        const removed = await page.request.delete(
+          `${API_URL}/api/v1/experiments/${draftId}?experiment_key=${draftId}`,
+          { headers },
+        );
+        expect.soft(removed.status(), `DELETE the journey's draft ${draftId}`).toBe(204);
+      }
+      await page.close();
+    }
+  });
+
   test("developer gets guided setup", async ({ sessions }) => {
     const page = await (await sessions("developer")).newPage();
     const experiments = new ExperimentsPage(page);
@@ -420,6 +527,193 @@ test.describe("Journey: RBAC", () => {
       await page.waitForURL(/\/experiments$/, { timeout: 15_000 });
       await expect(page.getByTestId("manage-error")).toHaveCount(0);
     } finally {
+      await page.close();
+    }
+  });
+
+  // #442: a VIEWER downloads a seeded experiment's results as CSV. Every export
+  // path shares one 10-a-minute counter per address, so this makes exactly one
+  // export request per attempt (a CI retry makes at most two), and the 429
+  // copy stays in jest. The file's first line is the /variants column row that
+  // docs/api/data-export.md documents.
+  test("viewer downloads an experiment's results as CSV with one export request", async ({ sessions }) => {
+    const page = await (await sessions("viewer")).newPage();
+    const experiments = new ExperimentsPage(page);
+    const exportRequests: string[] = [];
+    page.on("request", (request) => {
+      const { pathname, search } = new URL(request.url());
+      if (/^\/api\/v1\/export\//.test(pathname)) exportRequests.push(`${request.method()} ${pathname}${search}`);
+    });
+    try {
+      await experiments.goto();
+      await expect(experiments.experimentList).toBeVisible({ timeout: 15_000 });
+      // Seeded ACTIVE by seed_demo_data.py; the journeys only read it.
+      await experiments.clickExperiment("Checkout Button Color");
+      const id = new URL(page.url()).pathname.split("/").pop();
+      expect(id).toMatch(/^[0-9a-f-]{36}$/);
+
+      await page.goto(`/results/${id}`);
+      const button = page.getByTestId("results-export-csv");
+      await expect(button).toBeVisible({ timeout: 15_000 });
+      expect(exportRequests).toEqual([]);
+
+      const [download] = await Promise.all([page.waitForEvent("download"), button.click()]);
+      expect(download.suggestedFilename()).toBe(`results-${id}.csv`);
+      const text = readFileSync(await download.path(), "utf8");
+      expect(text.split(/\r?\n/)[0]).toBe(
+        "experiment_id,experiment_name,variant_id,variant_name,is_control,assignments,conversions,conversion_rate,p_value,is_significant,relative_improvement_pct",
+      );
+      await expect(page.getByTestId("results-export-csv-error")).toHaveCount(0);
+      expect(exportRequests).toEqual([`GET /api/v1/export/reports/experiments/${id}?format=csv`]);
+    } finally {
+      await page.close();
+    }
+  });
+
+  // #442: a DEVELOPER (not a superuser) archives a flag from its page, in the
+  // Dialog, and unarchives it; an ANALYST opens the same flag and is offered
+  // neither. The flag is this attempt's own, made through the API under a key
+  // no other attempt uses (one worker, one CI retry), and deleted at the end:
+  // no seeded flag is archived.
+  test("developer archives and unarchives its own flag; an analyst is offered neither", async ({ sessions }) => {
+    const page = await (await sessions("developer")).newPage();
+    const flags = new FeatureFlagsPage(page);
+    const key = `j442-archive-${Date.now()}`;
+    let headers: Record<string, string> = {};
+    let flagId: string | null = null;
+    try {
+      await flags.goto();
+      await expect(flags.flagList).toBeVisible({ timeout: 15_000 });
+      const token = await page.evaluate((storageKey) => window.localStorage.getItem(storageKey), TOKEN_STORAGE_KEY);
+      expect(token, "the developer session has a token").toBeTruthy();
+      headers = { Authorization: `Bearer ${token}` };
+      const created = await page.request.post(`${API_URL}/api/v1/feature-flags/`, {
+        headers: { ...headers, "content-type": "application/json" },
+        data: { key, name: key },
+      });
+      expect(created.status(), await created.text()).toBe(201);
+      flagId = ((await created.json()) as { id: string }).id;
+
+      await flags.gotoFlag(flagId);
+      await expect(flags.detailKey).toHaveText(key, { timeout: 15_000 });
+      await expect(flags.statusBadge).toHaveText("Off");
+      await expect(flags.detailToggle).toBeVisible();
+
+      // Archive asks first, with focus on Cancel.
+      const control = page.getByTestId("flag-archive");
+      await control.getByRole("button", { name: "Archive" }).click();
+      const dialog = page.getByRole("dialog", { name: `Archive ${key}?` });
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+      await dialog.getByRole("button", { name: "Archive" }).click();
+      await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+
+      await expect(flags.statusBadge).toHaveText("Archived");
+      await expect(flags.detailToggle).toHaveCount(0);
+      await expect(page.getByTestId("flag-archived-note")).toContainText(
+        "This flag is archived. Unarchive it before turning it on.",
+      );
+      const stored = await page.request.get(`${API_URL}/api/v1/feature-flags/${flagId}`, { headers });
+      expect(stored.status()).toBe(200);
+      expect(String(((await stored.json()) as { status: string }).status).toLowerCase()).toBe("archived");
+
+      // The ANALYST reads the same archived flag and gets no control, only the note why.
+      const analyst = await (await sessions("analyst")).newPage();
+      try {
+        const analystFlags = new FeatureFlagsPage(analyst);
+        await analystFlags.gotoFlag(flagId);
+        await expect(analystFlags.detailKey).toHaveText(key, { timeout: 15_000 });
+        await expect(analystFlags.statusBadge).toHaveText("Archived");
+        await expect(analyst.getByTestId("flag-role-note")).toBeVisible();
+        await expect(analyst.getByTestId("flag-archive")).toHaveCount(0);
+        await expect(analyst.getByRole("button", { name: /archive/i })).toHaveCount(0);
+      } finally {
+        await analyst.close();
+      }
+
+      // Unarchive asks nothing; the flag comes back off, with its switch.
+      await control.getByRole("button", { name: "Unarchive" }).click();
+      await expect(page.getByTestId("flag-manage-status")).toHaveText(
+        "Unarchived. The flag is off; turn it on when you are ready.",
+        { timeout: 15_000 },
+      );
+      await expect(flags.statusBadge).toHaveText("Off");
+      await expect(flags.detailToggle).toHaveAttribute("aria-checked", "false");
+    } finally {
+      // Its own flag only, deleted even when a step above failed.
+      if (flagId) {
+        const removed = await page.request.delete(`${API_URL}/api/v1/feature-flags/${flagId}`, { headers });
+        expect.soft(removed.status(), `DELETE the journey's flag ${flagId}`).toBe(204);
+      }
+      await page.close();
+    }
+  });
+
+  // #442: a DEVELOPER (not a superuser) deletes a flag from its page, typing
+  // its key in the Dialog first, and the list no longer has it; an ANALYST
+  // opens the same flag beforehand and is offered no Delete. The flag is this
+  // attempt's own, made through the API under a key no other attempt uses
+  // (one worker, one CI retry): no seeded flag is deleted.
+  test("developer deletes its own flag after typing its key; an analyst is offered no delete", async ({ sessions }) => {
+    const page = await (await sessions("developer")).newPage();
+    const flags = new FeatureFlagsPage(page);
+    const key = `j442-delete-${Date.now()}`;
+    let headers: Record<string, string> = {};
+    let flagId: string | null = null;
+    try {
+      await flags.goto();
+      await expect(flags.flagList).toBeVisible({ timeout: 15_000 });
+      const token = await page.evaluate((storageKey) => window.localStorage.getItem(storageKey), TOKEN_STORAGE_KEY);
+      expect(token, "the developer session has a token").toBeTruthy();
+      headers = { Authorization: `Bearer ${token}` };
+      const created = await page.request.post(`${API_URL}/api/v1/feature-flags/`, {
+        headers: { ...headers, "content-type": "application/json" },
+        data: { key, name: key },
+      });
+      expect(created.status(), await created.text()).toBe(201);
+      flagId = ((await created.json()) as { id: string }).id;
+
+      // The ANALYST reads the flag and gets no Delete, only the note why.
+      const analyst = await (await sessions("analyst")).newPage();
+      try {
+        const analystFlags = new FeatureFlagsPage(analyst);
+        await analystFlags.gotoFlag(flagId);
+        await expect(analystFlags.detailKey).toHaveText(key, { timeout: 15_000 });
+        await expect(analyst.getByTestId("flag-role-note")).toBeVisible();
+        await expect(analyst.getByTestId("flag-delete")).toHaveCount(0);
+        await expect(analyst.getByRole("button", { name: /delete/i })).toHaveCount(0);
+      } finally {
+        await analyst.close();
+      }
+
+      await flags.gotoFlag(flagId);
+      await expect(flags.detailKey).toHaveText(key, { timeout: 15_000 });
+
+      // Delete asks for the key, with focus on Cancel, and stays disabled until it is typed.
+      await page.getByTestId("flag-delete").getByRole("button", { name: "Delete" }).click();
+      const dialog = page.getByRole("dialog", { name: `Delete ${key}?` });
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+      const confirm = dialog.getByRole("button", { name: "Delete" });
+      await expect(confirm).toBeDisabled();
+      await dialog.getByLabel(`Type ${key} to delete it`).fill(key);
+      await expect(confirm).toBeEnabled();
+      await confirm.click();
+
+      // The list, which says so and no longer has the flag.
+      await expect(page).toHaveURL(/\/feature-flags\/?$/, { timeout: 15_000 });
+      await expect(page.getByTestId("flags-deleted-status")).toHaveText(`Deleted ${key}.`, { timeout: 15_000 });
+      await expect(flags.flagList.or(flags.emptyState)).toBeVisible({ timeout: 15_000 });
+      await expect(page.locator(`[data-testid="flag-row"][data-flag-key="${key}"]`)).toHaveCount(0);
+      const gone = await page.request.get(`${API_URL}/api/v1/feature-flags/${flagId}`, { headers });
+      expect(gone.status()).toBe(404);
+    } finally {
+      // Its own flag only: removed here when a step above failed before the
+      // dialog deleted it (404 once it has).
+      if (flagId) {
+        const removed = await page.request.delete(`${API_URL}/api/v1/feature-flags/${flagId}`, { headers });
+        expect.soft([204, 404], `DELETE the journey's flag ${flagId}`).toContain(removed.status());
+      }
       await page.close();
     }
   });

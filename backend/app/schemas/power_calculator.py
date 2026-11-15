@@ -13,6 +13,8 @@ from typing import List, Optional, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from backend.app.schemas.finite_number import FiniteFloat
+
 # ---------------------------------------------------------------------------
 # Enums / literals
 # ---------------------------------------------------------------------------
@@ -47,21 +49,26 @@ class SampleSizeRequest(BaseModel):
     baseline_rate: float = Field(
         ...,
         gt=0,
-        lt=1,
-        description="Current baseline conversion/success rate (exclusive 0–1).",
+        allow_inf_nan=False,
+        description=(
+            "The metric before the change. For metric_type 'proportion' (the "
+            "default), a rate above 0 and below 1: 0.05 is 5%. For 'mean' or "
+            "'ratio', the baseline mean in the metric's own units, such as "
+            "45.0 for an average order value of 45: any finite number above 0."
+        ),
     )
-    minimum_detectable_effect: float = Field(
+    minimum_detectable_effect: FiniteFloat = Field(
         ...,
         gt=0,
         description="Minimum detectable effect as a relative lift (e.g. 0.10 = 10%).",
     )
-    alpha: float = Field(
+    alpha: FiniteFloat = Field(
         default=0.05,
         gt=0,
         lt=0.5,
         description="Type I error rate (significance level). Must be in (0, 0.5).",
     )
-    power: float = Field(
+    power: FiniteFloat = Field(
         default=0.80,
         gt=0,
         lt=1,
@@ -81,7 +88,7 @@ class SampleSizeRequest(BaseModel):
         default="proportion",
         description="Type of metric: 'proportion', 'mean', or 'ratio'.",
     )
-    baseline_std: Optional[float] = Field(
+    baseline_std: Optional[FiniteFloat] = Field(
         default=None,
         gt=0,
         description="Standard deviation of the baseline metric (required for metric_type='mean' or 'ratio').",
@@ -92,7 +99,7 @@ class SampleSizeRequest(BaseModel):
         le=MAX_COUNT,
         description="Daily users exposed to the experiment (used to compute runtime).",
     )
-    traffic_allocation: float = Field(
+    traffic_allocation: FiniteFloat = Field(
         default=1.0,
         gt=0,
         le=1.0,
@@ -126,15 +133,30 @@ class SampleSizeRequest(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def validate_baseline_plus_mde(self) -> "SampleSizeRequest":
-        """Ensure the treatment rate is still a valid probability."""
-        mde_absolute = self.baseline_rate * self.minimum_detectable_effect
-        p2 = self.baseline_rate + mde_absolute
+    def validate_proportion_bounds(self) -> "SampleSizeRequest":
+        """A proportion is a rate: it, and the rate it is raised to, stay below 1.
+
+        Only a ``proportion`` is bounded. A ``mean`` or ``ratio`` baseline is in
+        the metric's own units (#1034), so any finite value above 0 is planned.
+        """
+        if self.metric_type != "proportion":
+            return self
+        if self.baseline_rate >= 1.0:
+            raise ValueError(
+                f"baseline_rate is {self.baseline_rate}. With metric_type "
+                "'proportion' (the default) it is a rate and must be below 1: "
+                "0.05 means 5%. For a mean, such as an average order value, "
+                "send metric_type 'mean' and baseline_std."
+            )
+        p2 = self.baseline_rate + self.baseline_rate * self.minimum_detectable_effect
         if p2 >= 1.0:
             raise ValueError(
-                f"baseline_rate ({self.baseline_rate}) + mde_absolute "
-                f"({mde_absolute:.4f}) = {p2:.4f} which is >= 1.0. "
-                "Reduce baseline_rate or minimum_detectable_effect."
+                f"baseline_rate ({self.baseline_rate}) raised by "
+                f"minimum_detectable_effect ({self.minimum_detectable_effect}) "
+                f"is {p2:.4f}, and a proportion must stay below 1. Lower "
+                "baseline_rate or minimum_detectable_effect. For a mean, such "
+                "as an average order value, send metric_type 'mean' and "
+                "baseline_std."
             )
         return self
 
@@ -148,19 +170,19 @@ class MDERequest(BaseModel):
         le=MAX_COUNT,
         description="Fixed sample size per variant.",
     )
-    baseline_rate: float = Field(
+    baseline_rate: FiniteFloat = Field(
         ...,
         gt=0,
         lt=1,
         description="Current baseline conversion/success rate (exclusive 0–1).",
     )
-    alpha: float = Field(
+    alpha: FiniteFloat = Field(
         default=0.05,
         gt=0,
         lt=0.5,
         description="Type I error rate. Must be in (0, 0.5).",
     )
-    power: float = Field(
+    power: FiniteFloat = Field(
         default=0.80,
         gt=0,
         lt=1,
@@ -193,7 +215,7 @@ class RuntimeRequest(BaseModel):
         le=MAX_COUNT,
         description="Total daily users exposed to the experiment.",
     )
-    traffic_allocation: float = Field(
+    traffic_allocation: FiniteFloat = Field(
         ...,
         gt=0,
         le=1.0,
@@ -249,19 +271,19 @@ class PlanRequest(BaseModel):
         max_length=500,
         description="Plain-English description of the primary metric.",
     )
-    baseline_rate: float = Field(
+    baseline_rate: FiniteFloat = Field(
         ...,
         gt=0,
         lt=1,
         description="Baseline metric rate (0–1).",
     )
-    mde: float = Field(
+    mde: FiniteFloat = Field(
         ...,
         gt=0,
         lt=1,
         description="Minimum detectable effect (relative, e.g. 0.10 = 10%).",
     )
-    runtime_days: float = Field(
+    runtime_days: FiniteFloat = Field(
         ...,
         gt=0,
         description="Estimated runtime in days.",

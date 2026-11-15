@@ -1,6 +1,9 @@
 # SDK contract tests
 
-Two layers keep the SDKs honest.
+Three layers keep the SDKs honest: the golden vectors, the ruleset vectors and the
+value vectors (offline, against the SDKs in this tree), the published local evaluators
+(against the releases on npm and PyPI), and the live contract (against a
+running backend).
 
 ## 1. Golden vectors (offline)
 
@@ -58,11 +61,22 @@ What it holds:
   domain (a number of greater magnitude, or `is_null` on a string containing one of those code
   points, is answered by the server);
 - `cases`: `(flag, user_id, context) → expected {enabled, reason}`, each marked `must_local` or
-  not, and `counts`.
+  not, and `counts`. A case of a string, number or json flag (#1497) also carries
+  `expected_value`: the `value` the evaluate endpoint answers, the flag's `on_value` when
+  `expected.enabled` is true and its `off_value` otherwise. It sits beside `expected`, not in it,
+  so an SDK that does not read values compares `expected` as before.
 
 The property an SDK must show: for **every** case it either defers to the server or returns
 exactly `expected`, and for every `must_local` case it answers locally with exactly `expected`.
-`counts.must_local` is the number of such cases, so an SDK that defers everything fails.
+`counts.must_local` is the number of such cases, so an SDK that defers everything fails. An SDK
+that reads values also returns exactly `expected_value` (compared as JSON: `1` is not `true`)
+whenever it answers a value flag's case locally.
+
+The value flags are each value type (`string`, `number`, `json`) as each kind of ruleset entry:
+active and local (the entry carries `value_type`, `on_value` and `off_value`), active and remote
+(no value: the SDK asks the server), inactive and archived (the entry carries `value_type` and
+`off_value`). A boolean flag's entry carries no value field, exactly as before #1497.
+`test_sdk_ruleset_vectors.py` asserts every type appears as every kind, from the file itself.
 
 Which SDKs run it: the JavaScript SDK (`sdk/js/__tests__/evaluator.test.ts` runs its evaluator over
 every case and pins the local count, the operator list and the whitespace list against this file;
@@ -79,12 +93,112 @@ regenerates it in-process, with no database and no `.git`), pins the counts and 
 and runs a reference local evaluator over the file. A change to the rules engine, the targeting
 adapter or the flag service that moves any answer fails there until the file is regenerated.
 
-## 2. Live contract (against a running backend)
+## Value vectors (typed getters, #1810)
+
+`value-vectors.json` says what a typed getter (`getStringValue`, `getNumberValue`,
+`getJsonValue`; Python `get_string_value` and the rest) returns for each answer of
+`GET /api/v1/feature-flags/evaluate/{key}`, and whether it passes the reason to `onError(err,
+'value')`. Each vector has a `response` (status and body), the `getter`, the `default` it is given,
+`expect` (`"default"`, or the value it returns), `error_code` (`TYPE_MISMATCH`, `INVALID_RESPONSE`,
+or `null`, which is not compared: a 404 or a 503 carries each SDK's own transport code) and
+`reported`. It is **generated**, never edited by hand:
+
+```bash
+python -m backend.scripts.generate_value_vectors
+python -m backend.scripts.generate_value_vectors --check
+```
+
+- `served` (35): bodies the server builds, by the evaluate route's own `evaluation_answer` from
+  in-memory flags (each value type on and off, a boolean flag, falsy values, an inactive flag, a
+  stored value outside the value rules), and the route's 404 for an unknown key. Their `expect`,
+  `error_code` and `reported` come from the generator's case table (the flag's stored values and
+  the getter's type), not from the bodies and not from any SDK.
+- `malformed` (14): answers no current server sends, written in the generator: a server from
+  before flag values (neither `value` nor `value_type`), a value that does not match its
+  `value_type`, an unknown `value_type`, a number beyond 2^53-1, a 503.
+
+The JavaScript SDK (`sdk/js/__tests__/value-vectors.test.ts`) and the Python SDK
+(`sdk/python/tests/test_value_vectors.py`) each answer every vector in one test that counts the
+vectors it answered and checked and requires 49, so an empty file fails instead of running
+nothing. They run in the `js` and `python` jobs of `SDK Unit Tests`. The Go SDK does not read this
+file: its getters are methods of an evaluation result with no error channel, and it answers four of
+the malformed vectors differently (no `value_type`; a number beyond 2^53-1; json `7` and json `"x"`,
+decoded into an `any`), none of which a server sends.
+
+`backend/tests/unit/services/test_sdk_value_vectors.py` fails when the file is stale (in-process,
+no database, no `.git`), pins 35 and 14, checks that every served body as the server builds it
+now carries what its case expects, and that the generator loads nothing from under `sdk/`.
+`backend/tests/integration/api/test_flag_values_api.py` checks that both evaluate routes answer
+with `evaluation_answer` and that the 404 body is the route's.
+
+## 2. Published local evaluators (#1497)
+
+The SDKs in this tree are not the only ones reading the ruleset. Every release already on a
+registry with a local evaluator keeps reading what the server sends, and a document it cannot read
+is dropped whole: it keeps answering from its last ruleset, so a later kill switch never reaches
+it, and nothing on the server says so. `published-sdks.json` pins each such release by URL and
+digest (npm `@controlvar/js-sdk` and PyPI `controlvar`, from 0.1.1 on; the file is the list),
+with a declared `expectation`: `accepted` for every one today.
+
+`test_published_ruleset.py` (G1) downloads each one (`published_sdks.py`: three attempts, five
+seconds apart), checks the digest before unpacking it and on every later load, refuses an archive
+with an absolute path, a `..` or a link in it, and unpacks only the evaluator's code into a fresh
+directory. A harness (`harness/published_js_ruleset.cjs` under node, required by absolute path;
+`harness/published_python_ruleset.py` under `python -I -S` with only the extraction on
+`sys.path`) runs it in its own process from an empty working directory, and the test requires:
+
+- identity: every SDK module it loaded is inside the verified extraction;
+- outcome: driven through a baseline document, then `ruleset-vectors.json`'s `ruleset` plus a
+  sentinel flag, then the sentinel turned off, it loads the server's ruleset (its version moves)
+  and the sentinel answers `{enabled: false, reason: "inactive"}`. A release that refuses the
+  format passes only if its pin says `format-refused`, which is a decision taken in that file;
+- answers: every case is DEFER or exactly the server's `{enabled, reason}`, and the cases it
+  answers locally are exactly the `must_local` ones (1333 today; the count is logged). Only
+  `enabled` and `reason` are compared, never a value: 0.1.1 and 0.2.0 read none (a value flag
+  reaches them as on or off).
+
+Every run also plants a defect into the inputs, against the same releases, and checks the
+failure by its text: P1 a malformed flag, a string percentage (fails, naming the flag; an unknown `evaluation` is deferred to the server by 0.3.0, not refused), P2 a rule with no
+integer percentage, P3 a percentage of `50.0` (fails for Python, passes for JavaScript, whose
+`JSON.parse` makes it 50), P4 schema 2 under `accepted` (fails; passes under `format-refused`),
+P5 keys the releases do not know at every level (passes), P6 the same files loaded from outside
+the verified extraction (fails on identity), P7 one expected answer flipped, P8 a wrong digest
+(fails before anything is unpacked).
+
+`backend/tests/integration/api/test_ruleset_published_sdk_compat.py` (G2) does the same for the
+pinned Python releases with the route's own response bytes: a DEVELOPER creates flags of every shape
+through the API, the releases load `GET /api/v1/sdk/ruleset`, answer exactly as `/evaluate`
+does, and both kill switches (deactivate, and a safety rollback to 0%) reach them.
+
+There is no skip. With no network or no node the tests fail and say so. They run wherever
+`pytest tests/sdk-contract` runs: the SDK Contract Tests job, core-build's `vectors` step,
+nightly-qa, and rc-evidence at a release tag.
+
+`published_versions_check.py` lists every version on both registries, reads each file's member
+names (no extraction, no import), and fails when a release with a local evaluator is not pinned,
+or a pin is not the registry's file and digest. It runs in nightly-qa and rc-evidence, not on pull
+requests: a publish would otherwise turn every open pull request red until the pin lands. A new
+release with a local evaluator is added to `published-sdks.json` after it is published.
+
+```bash
+python -m pytest tests/sdk-contract/test_published_ruleset.py -o addopts="" -q
+python tests/sdk-contract/published_versions_check.py
+```
+
+## 3. Live contract (against a running backend)
 
 `live/run_live_contract.py` runs every SDK's `contract_smoke` entry point against a real backend
 and checks the JSON it prints: a sticky assignment (`control` / `treatment`), a flag evaluation
 (`enabled: true`), one tracked event with an experiment key, and one key-less event that fans out
-to the cached assignment and flag. Before the SDKs it checks `GET /api/v1/sdk/ruleset` once: the
+to the cached assignment and flag. The smokes of the SDKs in `ATTRIBUTE_SDKS` (`js` and
+`react-native`, #1520; `java` and `dotnet`, #1718 and #1719) also evaluate the seed's
+`sdk_contract_targeted` flag (0% rollout, one rule, `plan` equals `pro`, at 100%) for one user
+with `{"plan": "pro"}` and then, with nothing cached,
+`{"plan": "free"}`, and must report `"targeted": {"pro": true, "free": false, "reason":
+"targeting_rule"}`; an SDK that drops the attributes is answered by the 0% rollout and its row
+fails with `targeted.pro=False (seeded rule plan=pro)`. As with `EXPOSURE_SDKS`, an SDK not listed
+may not report it, and CI runs every listed SDK with `--strict`, so a missing toolchain fails the
+row instead of skipping it. Before the SDKs it checks `GET /api/v1/sdk/ruleset` once: the
 seed's plain key gets 403, its `sdk:ruleset` key gets the ruleset with `sdk_contract_flag` in it,
 and sending the ETag back gets 304 (the `ruleset (server)` row; `CONTROLVAR_LOCAL_API_KEY`
 overrides the scoped key). After the SDKs, each SDK with a local mode runs its local smoke with that
@@ -96,6 +210,16 @@ seed's plain key and requires that it is stored but not counted (`error_count` +
 `uncounted_error_count` +1): only reports sent with a server-side key count toward automatic
 rollback. The runner therefore needs the backend's Python environment and `POSTGRES_*`.
 
+Last come the published releases (`PUBLISHED_LOCAL`: the `js 0.2.0 (published, local)` and
+`python 0.2.0 (published, local)` rows, #1497). Each is downloaded and checked by digest as in
+section 2, and its own client runs in local mode against this server
+(`harness/published_js_live.cjs`, `harness/published_python_live.py`): it must load the ruleset
+the server serves and answer the seed's three value flags (`sdk_contract_value_string`,
+`_number`, `_json`) locally as on. The runner then signs in as the seed's DEVELOPER and turns
+them off through the API; within one refresh (5 seconds, 0.2.0's shortest) each must answer
+`inactive`, still locally. The flags are turned back on afterwards, and the seed turns them back
+on if a run stopped in between. These rows need the network (npm and PyPI) and, for js, node.
+
 ```bash
 source venv/bin/activate
 export APP_ENV=development POSTGRES_SERVER=localhost POSTGRES_DB=experimentation POSTGRES_SCHEMA=experimentation
@@ -106,7 +230,7 @@ python tests/sdk-contract/live/run_live_contract.py
 python tests/sdk-contract/live/run_live_contract.py --sdk go --sdk python --strict
 ```
 
-- `python backend/scripts/seed_sdk_contract.py`: experiment sdk_contract_ab, flag sdk_contract_flag, API keys -> live/.api_key, live/.api_key_local (sdk:ruleset); runs only with ENVIRONMENT development or test, like the demo seeds
+- `python backend/scripts/seed_sdk_contract.py`: experiment sdk_contract_ab, flag sdk_contract_flag, a string, a number and a json flag, the targeted flag sdk_contract_targeted (0%, rule plan=pro at 100%), API keys -> live/.api_key, live/.api_key_local (sdk:ruleset); runs only with ENVIRONMENT development or test, like the demo seeds
 - `uvicorn backend.app.main:app --port 8000 &`: or ./demo/setup-local.sh
 - `python tests/sdk-contract/live/run_live_contract.py`: all SDKs whose toolchain is installed
 

@@ -53,8 +53,8 @@ A metric is significant when its rank is at most $k^*$, that is, when its adjust
 ### POST `/api/v1/results/{experiment_id}/fdr-correction`
 
 Apply Benjamini-Hochberg FDR correction to per-metric p-values. The p-values are the
-ones you send: the experiment in the path must exist, but its own data isn't read. Any
-logged-in user can call it.
+ones you send: the experiment in the path must exist, but its own data isn't read. Anyone
+who may view the experiment can call it.
 
 **Request body:**
 

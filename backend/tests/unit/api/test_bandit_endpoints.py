@@ -367,6 +367,12 @@ class TestTriggerBanditUpdate:
             app.dependency_overrides.clear()
 
         assert response.status_code == 403
+        # The permission first, then the built-in roles that have it (#891):
+        # true whether the role or a custom role or grant would give it.
+        assert response.json()["detail"] == (
+            "Triggering a bandit update needs permission to change experiments, "
+            "which the DEVELOPER and ADMIN roles have."
+        )
 
     def test_trigger_update_returns_correct_exploring_status(
         self, client, developer_user

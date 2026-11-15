@@ -33,8 +33,8 @@ same numbers.
 
 ### GET /api/v1/results/{experiment_id}/bayesian
 
-Returns the Bayesian block on its own, always freshly computed. Any logged-in user can
-read it. An experiment that hasn't turned Bayesian analysis on answers `200` with
+Returns the Bayesian block on its own, always freshly computed. Anyone who may view the
+experiment can read it. An experiment that hasn't turned Bayesian analysis on answers `200` with
 `"is_enabled": false`; an experiment that doesn't exist answers `404`.
 
 Run the commands on this page in one terminal, in order, against the stack from the
@@ -74,12 +74,23 @@ demo experiment hasn't turned Bayesian analysis on.
 
 ## Turning Bayesian analysis on
 
-Set `bayesian_enabled` to `true` on `POST /api/v1/experiments/` or
-`PUT /api/v1/experiments/{experiment_id}`, and optionally a `bayesian_config`. In the dashboard,
+Set `bayesian_enabled` to `true` on `POST /api/v1/experiments/`, or with
+`PUT /api/v1/experiments/{experiment_id}` while the experiment is a draft, and optionally a
+`bayesian_config`. Once the experiment has left draft neither can be changed, by anyone, a
+superuser included: on an active experiment the `PUT` answers `400` with
+`"Cannot update bayesian_enabled for experiments in active status"` (or `bayesian_config`)
+for a superuser and `"Cannot update experiments in active status"` for anyone else who may
+change experiments. To use
+other settings, clone the experiment (`POST /api/v1/experiments/{experiment_id}/clone`): the
+copy is a new experiment, a draft, and takes them. In the dashboard,
 the new-experiment form's **Also analyse the primary metric with Bayesian statistics** checkbox
-sends `bayesian_enabled: true` with no config. Turning it on
-without a config stores the defaults in the table below. This creates an experiment with
-Bayesian analysis on, prints the stored settings, and saves its id in `$BAYES_ID`:
+sends `bayesian_enabled: true`, and **Advanced Bayesian settings** under it sets the prior
+alpha, prior beta, loss threshold and credible level. The form sends those four, with
+`prior_family` `"beta"`, as a `bayesian_config` only when one of them differs from its default,
+and never sends a `rope`.
+Turning it on without a config stores the defaults in the table below. This creates an
+experiment with Bayesian analysis on, prints the stored settings, and saves its id in
+`$BAYES_ID`:
 
 ```{.bash exec}
 BAYES=$(curl -s -X POST localhost:8000/api/v1/experiments/ \
@@ -130,8 +141,8 @@ it is answered as if it had not.
 | `credible_level` | `float` | `0.95` | Credible interval level, between 0 and 1 |
 
 A config that fails these checks is refused with `422`, and the error's `loc` names the
-field, for example `["body", "bayesian_config", "alpha"]`. So is a `PUT` that sends
-`"bayesian_config": null` while Bayesian analysis stays on; to turn it off and clear the
+field, for example `["body", "bayesian_config", "alpha"]`. So is a `PUT` to a draft that
+sends `"bayesian_config": null` while Bayesian analysis stays on; to turn it off and clear the
 config, send `"bayesian_enabled": false` with it.
 
 ---
@@ -165,24 +176,24 @@ prior. With traffic, the full response looks like this; the numbers are illustra
         "alpha": 598.0,
         "beta": 4224.0,
         "mean": 0.1240,
-        "credible_interval_lower": 0.1148,
-        "credible_interval_upper": 0.1334
+        "credible_interval_lower": 0.1149,
+        "credible_interval_upper": 0.1335
       },
-      "probability_to_be_best": 0.0269,
-      "expected_loss": 0.0148,
+      "probability_to_be_best": 0.0277,
+      "expected_loss": 0.0132,
       "bayes_factor": null
     },
     {
       "variant_key": "treatment",
       "posterior": {
-        "alpha": 666.0,
-        "beta": 4131.0,
-        "mean": 0.1388,
-        "credible_interval_lower": 0.1291,
-        "credible_interval_upper": 0.1488
+        "alpha": 658.0,
+        "beta": 4139.0,
+        "mean": 0.1372,
+        "credible_interval_lower": 0.1276,
+        "credible_interval_upper": 0.1470
       },
-      "probability_to_be_best": 0.9731,
-      "expected_loss": 0.0002,
+      "probability_to_be_best": 0.9723,
+      "expected_loss": 0.00007,
       "bayes_factor": null
     }
   ],
@@ -207,8 +218,8 @@ The rules are checked in this order:
 The decision is a recommendation: nothing stops the experiment or changes its status.
 `STOP_FUTILE` is defined but no rule returns it.
 
-The example response above answers `CONTINUE`: the treatment's expected loss, 0.0002, is
-below the default `loss_threshold`, but its probability to be best, 0.9731, is under 0.975.
+The example response above answers `CONTINUE`: the treatment's expected loss, 0.00007, is
+below the default `loss_threshold`, but its probability to be best, 0.9723, is under 0.975.
 
 ### Reading the decision
 

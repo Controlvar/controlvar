@@ -4,9 +4,35 @@ import type { ExperimentationError } from './errors';
  * Operations whose failures are swallowed and reported through `onError`:
  * `'refresh'` (a ruleset fetch), `'flush'` (sending evaluation counts) and `'evaluate'` (an
  * unexpected failure inside local evaluation; the call then goes to the server) occur only with
- * `evaluation: 'local'`.
+ * `evaluation: 'local'`. `'reportError'` is an error report the server did not store. `'value'`
+ * is a typed getter (`getStringValue`, `getNumberValue`, `getJsonValue`) that returned the
+ * caller's default. `'exposure'` is an `onExposure` that threw or whose Promise rejected (the
+ * error's `code` is `'HOOK_ERROR'`).
  */
-export type SwallowedOperation = 'track' | 'trackBatch' | 'refresh' | 'flush' | 'evaluate';
+export type SwallowedOperation =
+  | 'track'
+  | 'trackBatch'
+  | 'refresh'
+  | 'flush'
+  | 'evaluate'
+  | 'reportError'
+  | 'value'
+  | 'exposure';
+
+/**
+ * What `onExposure` receives: one experiment exposure the server recorded. A new object for every
+ * call; changing it changes nothing the client keeps.
+ */
+export interface Exposure {
+  /** The experiment's key. */
+  readonly experimentKey: string;
+  /** The user id the assignment was asked for. */
+  readonly userId: string;
+  /** The variant's id; `null` when the server sent none. */
+  readonly variantId: string | null;
+  /** The variant's name. */
+  readonly variantName: string;
+}
 
 /** Where flags are evaluated: by the server (the default) or in-process from its ruleset. */
 export type EvaluationMode = 'server' | 'local';
@@ -18,19 +44,35 @@ export interface ClientConfig {
   apiKey: string;
   /** Per-request timeout in milliseconds (default 5000). */
   timeoutMs?: number;
-  /** How long a successful evaluation/assignment is reused, per user + key (default 300 000 ms). */
+  /**
+   * How long a successful evaluation/assignment is reused, per user + key (default 300 000 ms).
+   * `0` caches nothing: every call is answered afresh.
+   */
   cacheTtlMs?: number;
   /** Variant name returned by `getVariant` when assignment fails (default `'control'`). */
   defaultVariant?: string;
   /** Custom `fetch` implementation. Defaults to the global `fetch` (Node >= 18, browsers). */
   fetch?: typeof fetch;
   /**
-   * Called with the error whenever `track` / `trackBatch` swallow a failure, and in local mode
-   * when a ruleset refresh (`'refresh'`), an evaluation-count report (`'flush'`) or a local
-   * evaluation (`'evaluate'`, which then goes to the server) fails.
+   * Called with the error whenever `track` / `trackBatch` / `reportError` swallow a failure,
+   * whenever a typed getter returns the caller's default (`'value'`), whenever `onExposure`
+   * throws or its Promise rejects (`'exposure'`), and in local mode when a ruleset refresh
+   * (`'refresh'`), an evaluation-count report (`'flush'`) or a local evaluation (`'evaluate'`,
+   * which then goes to the server) fails.
    * Those operations never reject; this is the only way to observe their failures.
    */
   onError?: (error: ExperimentationError, operation: SwallowedOperation) => void;
+  /**
+   * Called once each time the server enrols the user in an experiment and the answer did not come
+   * from this client's cache: when `POST /api/v1/tracking/assign` answers `assigned: true` and the
+   * client stores that answer. Not called for a cached answer, a call that shares a request
+   * already in flight, `assigned: false` or no `assigned`, a failed call, or a flag. It runs
+   * before `getAssignment` resolves; the client does not wait for a Promise it returns. If it
+   * throws or its Promise rejects, the answer is unchanged and the error goes to `onError` with
+   * `'exposure'`. `null` or `undefined` sets none; any other non-function makes the constructor
+   * throw.
+   */
+  onExposure?: ((exposure: Exposure) => void) | null;
   /**
    * `'server'` (default): every flag is evaluated by the server. `'local'`: flags are evaluated
    * in-process from `GET /api/v1/sdk/ruleset` (beta) whenever the answer is provably the
@@ -99,6 +141,19 @@ export interface FlagEvaluation {
    */
   reason?: string;
   /**
+   * What the flag serves this user: its on value when `enabled` is true, its off value otherwise
+   * (a string, a number, or a JSON object or array); for a boolean flag, `enabled`. `undefined`
+   * when the server did not send one (a server without flag values, or a stored value it cannot
+   * serve). A JSON value is the object the SDK caches for this user and flag: read it, or call
+   * `getJsonValue`, which returns a copy.
+   */
+  value?: unknown;
+  /**
+   * The flag's type: `'boolean'`, `'string'`, `'number'` or `'json'`. `undefined` when the
+   * server did not send one.
+   */
+  valueType?: string;
+  /**
    * Set only with `evaluation: 'local'`: `'local'` when answered in-process from the ruleset,
    * `'server'` when the server evaluated it.
    */
@@ -118,12 +173,47 @@ export interface TrackOptions {
   eventType?: string;
   /** Client-side timestamp; sent as an ISO-8601 string. */
   timestamp?: Date | string;
+  /**
+   * Your id for this event (sent as `event_id`). The server stores an event sent again with the
+   * same `event_id`, user, experiment, flag and event name only once. The SDK makes no id: leave
+   * it out, or pass `undefined`, `null` or `''`, and none is sent. An event fanned out to several
+   * experiments and flags carries the same id in every entry. The server refuses (422) an id of
+   * more than 255 characters or one holding NUL; the SDK does not check it.
+   */
+  eventId?: string;
 }
 
 /** One entry for `trackBatch`. */
 export interface TrackEvent extends TrackOptions {
   userId: string;
   eventName: string;
+}
+
+/**
+ * One error report for `reportError`, sent as `POST /api/v1/tracking/errors`. The server checks
+ * it: a report needs `featureFlagKey` or `experimentKey` (422 otherwise), and a key it does not
+ * know answers 404.
+ */
+export interface ErrorReport {
+  /** Error class, e.g. `'crash'` or `'payment_failed'` (1-100 characters). */
+  errorType: string;
+  /** What happened (not empty). */
+  message: string;
+  /** The flag that was on when it happened (sent as `feature_flag_key`). */
+  featureFlagKey?: string;
+  /** The experiment the user was in (sent as `experiment_key`). */
+  experimentKey?: string;
+  /** The user or device (sent as `user_id`). */
+  userId?: string;
+  /** Sent as `stack_trace`. */
+  stackTrace?: string;
+  /** Extra debugging data (os, app version, ...). */
+  metadata?: Record<string, unknown>;
+  /**
+   * When it happened, sent as ISO-8601. The stored row is timed when the server receives it; this
+   * value is kept in its metadata as `client_timestamp`.
+   */
+  timestamp?: Date | string;
 }
 
 /** Aggregated result of `trackBatch` across all chunks. */
@@ -149,7 +239,11 @@ export interface AssignResponse {
   configuration?: Record<string, unknown> | null;
   /** `false` when the user was not enrolled (control returned); absent on older servers. */
   assigned?: boolean;
-  /** `assigned` | `holdout` | `mutual_exclusion` | `targeting`; absent on older servers. */
+  /**
+   * `assigned` | `holdout` | `mutual_exclusion` | `targeting`, or the status of an
+   * experiment that is not ACTIVE (`draft` | `paused` | `completed` | `archived`);
+   * absent on older servers.
+   */
   reason?: string;
 }
 
@@ -160,6 +254,13 @@ export interface FlagEvaluateResponse {
   config?: unknown | null;
   /** `targeting_rule` | `rollout` | `inactive` | `error`; absent on older servers. */
   reason?: string;
+  /**
+   * The flag's `on_value` when `enabled`, its `off_value` otherwise; `enabled` for a boolean flag.
+   * Absent on older servers, and when the server cannot serve the stored value.
+   */
+  value?: unknown;
+  /** `boolean` | `string` | `number` | `json`; absent on older servers. */
+  value_type?: string;
 }
 
 /** `POST /api/v1/tracking/batch` */
@@ -179,4 +280,5 @@ export interface TrackBody {
   value?: number;
   metadata?: Record<string, unknown>;
   timestamp?: string;
+  event_id?: string;
 }

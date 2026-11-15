@@ -3,11 +3,17 @@ import {
   TargetingRuleGroup,
   TargetingRules,
   OperatorType,
+  AttributeSuggestion,
   COMMON_ATTRIBUTES,
+  FORMER_SUGGESTIONS,
+  FORMERLY_CUSTOM,
   OPERATORS_BY_TYPE,
   SEGMENT_ATTRIBUTE,
   SEGMENT_OPERATORS,
 } from '@/types/targeting';
+
+/** Every attribute the builder has a type for: the suggestions and the former ones (#1775). */
+const KNOWN_ATTRIBUTES: AttributeSuggestion[] = [...COMMON_ATTRIBUTES, ...FORMER_SUGGESTIONS];
 
 // Simple counter-based ID generator that works in both browser and Node test environments
 let _idCounter = 0;
@@ -143,7 +149,7 @@ export function jsonToRules(json: object | null): TargetingRules {
 }
 
 export function getAttributeType(attribute: string): string {
-  const found = COMMON_ATTRIBUTES.find((a) => a.value === attribute);
+  const found = KNOWN_ATTRIBUTES.find((a) => a.value === attribute);
   return found ? found.type : 'string';
 }
 
@@ -154,10 +160,11 @@ export function getAttributeType(attribute: string): string {
  */
 export interface OperatorOptions {
   /**
-   * Also offer the version operators (`semver_*`) for an attribute that is not
-   * one of `COMMON_ATTRIBUTES`, such as `os_version` or `app_version`.
-   * `app.version` offers them either way. The flag pages turn this on; the
-   * experiment pages do not.
+   * Also offer the version operators (`semver_*`) for an attribute the builder
+   * has no type for (one of neither `COMMON_ATTRIBUTES` nor
+   * `FORMER_SUGGESTIONS`), such as `os_version`, and for the `FORMERLY_CUSTOM`
+   * suggestions. `app_version` and the former `app.version` offer them either
+   * way. The flag pages turn this on; the experiment pages do not.
    */
   semverOnCustomAttributes?: boolean;
   /**
@@ -168,7 +175,7 @@ export interface OperatorOptions {
   allowSegments?: boolean;
 }
 
-/** The flag pages' builder: version operators on any attribute outside `COMMON_ATTRIBUTES`. */
+/** The flag pages' builder: version operators on any attribute the builder has no type for, and on `FORMERLY_CUSTOM`. */
 export const FLAG_OPERATOR_OPTIONS: OperatorOptions = { semverOnCustomAttributes: true };
 
 /** A segment's own rule builder: no segment operators (a segment cannot contain a segment). */
@@ -185,8 +192,15 @@ export const SEGMENT_RULES_OPERATOR_OPTIONS: OperatorOptions = { allowSegments: 
 export function getOperatorsForAttribute(attribute: string, options: OperatorOptions = {}): OperatorType[] {
   const type = getAttributeType(attribute);
   let operators = OPERATORS_BY_TYPE[type] || OPERATORS_BY_TYPE['string'];
-  const custom = !COMMON_ATTRIBUTES.some((a) => a.value === attribute);
-  if (options.semverOnCustomAttributes && custom) {
+  const custom = !KNOWN_ATTRIBUTES.some((a) => a.value === attribute);
+  if (FORMERLY_CUSTOM.includes(attribute)) {
+    // Typed operators first, so they lead the dropdown, then every one the
+    // name had as a custom attribute before #1775, without repeats.
+    const asCustom = options.semverOnCustomAttributes
+      ? [...OPERATORS_BY_TYPE['string'], ...OPERATORS_BY_TYPE['semver']]
+      : OPERATORS_BY_TYPE['string'];
+    operators = Array.from(new Set([...operators, ...asCustom]));
+  } else if (options.semverOnCustomAttributes && custom) {
     operators = [...operators, ...OPERATORS_BY_TYPE['semver']];
   }
   if (attribute === SEGMENT_ATTRIBUTE && options.allowSegments !== false) {

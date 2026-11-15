@@ -17,7 +17,7 @@
 
 # EP-037: SSO/SAML & OIDC authentication (modules/backend/app/services/sso_service.py)
 python3-saml==1.16.0   # the `onelogin.saml2` package: SAML 2.0 request/response handling
-authlib==1.8.0         # AsyncOAuth2Client for the OIDC authorization-code flow
+authlib==1.9.1         # AsyncOAuth2Client for the OIDC authorization-code flow
 defusedxml==0.7.1      # sso_service.py:32, SAML metadata parsing without the
                        # entity-expansion / external-entity holes in stdlib ElementTree
 requests==2.34.2       # sso_service.py:600,662 -- the OIDC token/userinfo fallback
@@ -28,4 +28,4 @@ requests==2.34.2       # sso_service.py:600,662 -- the OIDC token/userinfo fallb
 # generates again before it is sent (modules/backend/app/services/
 # warehouse_query_builder.py, verify_generated_sql). The import is guarded and
 # fails closed, so without this pin every warehouse query is refused.
-sqlglot==30.21.0
+sqlglot==30.23.0

@@ -34,8 +34,57 @@ from typing import Optional, Union
 import numpy as np
 
 #: Bumped whenever a change alters numbers a client could have persisted
-#: (sampling strategy, estimator, default priors, thresholds).
-ENGINE_VERSION: str = "1.4.0"
+#: (sampling strategy, estimator, default priors, thresholds).  1.5.0: the
+#: winner, the recommendation and the Bayesian decision read the metric's
+#: ``lower_is_better``, and ``/results`` analyses a revenue metric as its mean
+#: per assigned user.
+#: 1.6.0 (#1385): a bandit whose primary metric is lower-is-better counts a
+#: user who did not convert as the success, so its weights, regret estimate
+#: and history alpha/beta favour the variant with fewer conversions; the
+#: stored and reported counts stay the converting users.
+#: 1.7.0 (#439): ``/results`` analyses a count, duration or custom metric as
+#: its mean per assigned user (a count metric's per-user value is its number of
+#: events), as a revenue metric is, where it was the share of users who sent
+#: the event.
+#: 1.8.0 (#1496): each treatment of every metric carries an interval on its
+#: difference from the control, an interval on its relative change and the
+#: incremental impact; a proportion treatment's ``absolute_difference`` and its
+#: interval, null before, are filled.
+#: 1.9.0 (#1776): a segment breakdown puts each assigned user in one segment
+#: and counts their conversions there, lists the 20 values with the most users
+#: and counts the rest under ``other``, and tests each segment's treatment
+#: against the control with Fisher's exact test instead of a pooled z-test.
+#: 1.10.0 (#448): ``GET /results/{id}/balanced-groups`` returns, for an
+#: experiment that balances its split within groups, one size-weighted
+#: estimate per treatment over the groups
+#: (``backend/app/services/balanced_groups_estimate.py``).
+#: 1.11.0: a proportion treatment that is significant against a control with
+#: no conversions is the winner: which side of the control a treatment is on
+#: is the sign of its ``absolute_difference``, not of
+#: ``relative_improvement_pct``, which is None there.  The summary's
+#: KEEP_CONTROL reads the absolute difference where the relative change is
+#: None, so treatments all significantly worse than a control at 0 (for a
+#: proportion, only when lower is better) are no longer "no significant
+#: difference".
+#: 1.12.0 (#1969): a breakdown's ``has_heterogeneous_effects`` is true only
+#: when a test that the first treatment's difference from the control, in
+#: percentage points, is the same in every tested segment rejects at 1 minus
+#: the confidence level (``DimensionalAnalysisService.detect_hte``).  It no
+#: longer fires on a spread or a change of sign of the lifts, nor on a
+#: chi-squared test of the converting users alone at a fixed 0.05; the
+#: ``hte_warning`` text changes with it.
+#:
+#: The rule: an engine-changing PR bumps ``ENGINE_VERSION`` to the next minor
+#: and appends it to ``RELEASED_ENGINE_VERSIONS`` ("frozen on main", in
+#: ``backend/tests/unit/services/test_sufficient_stats_fingerprint.py``) in the
+#: same change.  A frozen version's entries are never edited, and no key is
+#: ever added under one.  A PR is engine-changing when, for the same database
+#: rows and request, it adds, removes or changes any number, decision (winner,
+#: recommendation, Bayesian decision, ``can_stop``) or allocation weight that a
+#: path stamping ``engine_version`` returns, caches or persists: results and
+#: its snapshots, Bayesian, CUPED, sequential, and the bandit's state, history
+#: and status.  A revert of an engine-changing PR bumps again.
+ENGINE_VERSION: str = "1.12.0"
 
 #: Mask that keeps the derived seed inside the signed 64-bit range.
 _SEED_MASK = (1 << 63) - 1

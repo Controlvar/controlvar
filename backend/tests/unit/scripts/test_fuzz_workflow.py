@@ -238,6 +238,37 @@ def real():
     return _load(WORKFLOW), WORKFLOW.read_text(encoding="utf-8")
 
 
+PLATFORM = REPO_ROOT / ".github" / "workflows" / "_platform.yml"
+
+
+def _fuzz_summary_prints_to_the_log(text: str) -> bool:
+    """The fuzz step cats summary.md into the job log inside a group, beside
+    the append to the step summary (which `gh run view --log` does not show)."""
+    return bool(
+        re.search(
+            r'cat "\$work/summary\.md" >> "\$GITHUB_STEP_SUMMARY"\n'
+            r"(?:[ \t]*#[^\n]*\n)?"
+            r'[ \t]*echo "::group::Fuzz summary"\n'
+            r'[ \t]*cat "\$work/summary\.md"\n'
+            r'[ \t]*echo "::endgroup::"\n',
+            text,
+        )
+    )
+
+
+def test_the_fuzz_step_prints_its_summary_to_the_job_log():
+    text = PLATFORM.read_text(encoding="utf-8")
+    assert _fuzz_summary_prints_to_the_log(text)
+    planted = text.replace('echo "::group::Fuzz summary"\n', "", 1)
+    assert planted != text and not _fuzz_summary_prints_to_the_log(planted)
+    planted = text.replace(
+        '                cat "$work/summary.md"\n                echo "::endgroup::"',
+        '                echo "::endgroup::"',
+        1,
+    )
+    assert planted != text and not _fuzz_summary_prints_to_the_log(planted)
+
+
 def test_the_fuzz_workflow_keeps_its_shape():
     doc, text = real()
     assert len(steps_of(doc)) >= 4, "found almost no steps: the reader is broken"

@@ -85,3 +85,10 @@ by = [
 [[unit]]
 text = "501 | Any existing experiment: post-stratification is not available yet"
 by = ["test:backend/tests/integration/api/test_post_strat_api.py::TestPostStratificationEndpoint::test_post_strat_with_no_data_answers_501"]
+
+[[unit]]
+text = "An experiment that balances its split within groups has a size-weighted estimate over its groups: GET /api/v1/results/{experiment_id}/balanced-groups (beta), described in Balance the split within groups."
+by = [
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_the_overall_estimate_is_corrected_across_the_treatments",
+    "test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_the_hand_worked_example_gives_its_constants",
+]

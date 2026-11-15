@@ -400,6 +400,67 @@ class TestAnOktaSsoUrlMustBeHttps:
         assert resp.status_code == 200, resp.text
 
 
+SAML_HTTPS_DETAIL = (
+    "SAML single sign-on URL must use https; check this SSO configuration's sso_url"
+)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_db
+@pytest.mark.regression
+class TestASamlSsoUrlMustBeHttps:
+    """Refused when the configuration is saved (#1100); sign-in is unchanged."""
+
+    def test_create_with_an_http_sso_url_is_refused(
+        self, admin_client: TestClient, outside_test
+    ):
+        payload = _saml_config_payload(sso_url="http://idp.acme.example/sso")
+        resp = admin_client.post(f"{BASE}/configs", json=payload)
+        assert resp.status_code == 400, resp.text
+        assert resp.json()["detail"] == SAML_HTTPS_DETAIL
+        listed = admin_client.get(f"{BASE}/configs").json()
+        assert payload["org_domain"] not in [c["org_domain"] for c in listed]
+
+    def test_update_to_an_http_sso_url_is_refused(
+        self, admin_client: TestClient, outside_test
+    ):
+        created = _create_config(admin_client, _saml_config_payload())
+        resp = admin_client.put(
+            f"{BASE}/configs/{created['id']}",
+            json={"sso_url": "http://idp.acme.example/sso"},
+        )
+        assert resp.status_code == 400, resp.text
+        assert resp.json()["detail"] == SAML_HTTPS_DETAIL
+        stored = admin_client.get(f"{BASE}/configs/{created['id']}").json()
+        assert stored["sso_url"] == "https://idp.acme.com/sso"
+
+    def test_a_stored_http_config_can_still_be_renamed_and_switched_off(
+        self, admin_client: TestClient, db_session: Session, outside_test
+    ):
+        """A row stored with an http sso_url before the check: an update that
+        sends neither sso_url nor provider_type is not checked."""
+        cfg = SSOConfig(
+            org_name="Legacy SAML Org",
+            org_domain=f"legacy-saml-{uuid.uuid4().hex[:6]}.com",
+            provider_type=SSOProviderType.SAML,
+            entity_id="https://idp.legacy.example",
+            sso_url="http://idp.legacy.example/sso",
+            x509_certificate="MIIC...cert",
+            is_active=True,
+            is_enforced=False,
+        )
+        db_session.add(cfg)
+        db_session.commit()
+        db_session.refresh(cfg)
+        for change in ({"org_name": "Legacy SAML Org Renamed"}, {"is_active": False}):
+            resp = admin_client.put(f"{BASE}/configs/{cfg.id}", json=change)
+            assert resp.status_code == 200, resp.text
+        stored = admin_client.get(f"{BASE}/configs/{cfg.id}").json()
+        assert stored["org_name"] == "Legacy SAML Org Renamed"
+        assert stored["is_active"] is False
+        assert stored["sso_url"] == "http://idp.legacy.example/sso"
+
+
 @pytest.mark.integration
 @pytest.mark.requires_db
 class TestUpdateSSOConfig:

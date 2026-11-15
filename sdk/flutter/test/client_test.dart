@@ -250,7 +250,7 @@ void main() {
     });
 
     test('404 → disabled, not cached, never throws', () async {
-      server.reply(404, {'detail': 'not active'});
+      server.reply(404, {'detail': "Feature flag with key 'ghost' not found"});
       final client = await _client(server);
 
       final result = await client.evaluateFlag('ghost', 'user-1');
@@ -305,14 +305,14 @@ void main() {
       expect(result.enabled, isTrue, reason: 'last known value served offline');
     });
 
-    test('a 404 never serves a stale value and removes it', () async {
+    test('a 404 (a deleted flag) never serves a stale value and removes it', () async {
       final store = InMemoryOfflineStore();
       server.reply(200, _flagJson);
       final client = await _client(server, offlineFallback: true, store: store);
       await client.evaluateFlag('new-ui', 'user-1');
       client.clearCache();
 
-      server.reply(404, {'detail': 'archived'});
+      server.reply(404, {'detail': "Feature flag with key 'new-ui' not found"});
       final result = await client.evaluateFlag('new-ui', 'user-1');
 
       expect(result.enabled, isFalse);
@@ -418,7 +418,7 @@ void main() {
     });
 
     test('404 → null, never throws, not cached', () async {
-      server.reply(404, {'detail': 'Experiment not active'});
+      server.reply(404, {'detail': "No experiment has the key 'ghost'."});
       final client = await _client(server);
 
       expect(await client.getAssignment('ghost', 'user-1'), isNull);

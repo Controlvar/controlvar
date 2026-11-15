@@ -282,9 +282,10 @@ def mount_module_routers(router: Any) -> int:
     global _failure
     from fastapi import APIRouter
 
+    from backend.app.api.off_loop_route import OffLoopRoute
     from backend.app.core import hooks
 
-    staging = APIRouter()
+    staging = APIRouter(route_class=OffLoopRoute)
     try:
         applied = hooks.apply_routers(staging)
     except Exception as exc:

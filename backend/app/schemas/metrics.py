@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from backend.app.models.metrics.metric import AggregationPeriod, MetricType
 
@@ -62,11 +62,15 @@ class RawMetricResponse(MetricBase):
     created_at: datetime
     updated_at: datetime
 
-    model_config = ConfigDict(
-        from_attributes=True,
-        # Map schema field 'metadata' to model field 'meta_data'
-        json_schema_extra={"metadata": {"alias": "meta_data"}},
+    # An ORM row stores this as ``meta_data``: its ``metadata`` attribute is
+    # SQLAlchemy's own ``MetaData`` registry, which is not a dict (#1625).
+    metadata: Optional[Dict[str, Any]] = Field(
+        None,
+        validation_alias=AliasChoices("meta_data", "metadata"),
+        description="Additional metric metadata",
     )
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AggregatedMetricBase(BaseModel):
@@ -101,11 +105,15 @@ class AggregatedMetricResponse(AggregatedMetricBase):
     created_at: datetime
     updated_at: datetime
 
-    model_config = ConfigDict(
-        from_attributes=True,
-        # Map schema field 'metadata' to model field 'meta_data'
-        json_schema_extra={"metadata": {"alias": "meta_data"}},
+    # An ORM row stores this as ``meta_data``: its ``metadata`` attribute is
+    # SQLAlchemy's own ``MetaData`` registry, which is not a dict (#1625).
+    metadata: Optional[Dict[str, Any]] = Field(
+        None,
+        validation_alias=AliasChoices("meta_data", "metadata"),
+        description="Additional aggregated data",
     )
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ErrorLogBase(BaseModel):
@@ -150,11 +158,15 @@ class ErrorLogResponse(ErrorLogBase):
     created_at: datetime
     updated_at: datetime
 
-    model_config = ConfigDict(
-        from_attributes=True,
-        # Map schema field 'metadata' to model field 'meta_data'
-        json_schema_extra={"metadata": {"alias": "meta_data"}},
+    # An ORM row stores this as ``meta_data``: its ``metadata`` attribute is
+    # SQLAlchemy's own ``MetaData`` registry, which is not a dict (#1625).
+    metadata: Optional[Dict[str, Any]] = Field(
+        None,
+        validation_alias=AliasChoices("meta_data", "metadata"),
+        description="Additional debug data",
     )
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class MetricsFilterParams(BaseModel):

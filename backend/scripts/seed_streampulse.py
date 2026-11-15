@@ -830,11 +830,13 @@ def _seed_player_schedule(db, flag: FeatureFlag, admin_user) -> None:
             status=status,
         )
         if status == RolloutStageStatus.IN_PROGRESS:
-            # The stage went live two days ago (the scheduler reads updated_at
-            # as the activation time).
+            # The stage went live two days ago: the scheduler measures its
+            # duration from started_at (#1528), and an older release from
+            # updated_at, so both say so.
             naive_start = start.replace(tzinfo=None)
             stage.created_at = naive_start
             stage.updated_at = naive_start
+            stage.started_at = naive_start
         db.add(stage)
 
 
@@ -1224,13 +1226,16 @@ def seed_history(
             device = _random_device(rng, f"{HISTORY_USER_PREFIX}_{_short(key)}_{i:05d}")
             variant = _pick_variant(rng, variants)
             exposure_at = now - timedelta(days=rng.uniform(0.05, HISTORY_DAYS))
+            # The attributes go on the exposure too, as /tracking/assign
+            # stores them there: the segment preview reads them (#830).
+            context = {"source": "seed_streampulse", **device}
             assignments.append(
                 Assignment(
                     experiment_id=exp.id,
                     variant_id=variant.id,
                     user_id=device["device_id"],
                     created_at=exposure_at,
-                    context={"source": "seed_streampulse", **device},
+                    context=context,
                 )
             )
             events.append(
@@ -1241,6 +1246,7 @@ def seed_history(
                     experiment_id=exp.id,
                     variant_id=variant.id,
                     value=1.0,
+                    event_metadata=dict(context),
                     created_at=exposure_at.isoformat(),
                 )
             )

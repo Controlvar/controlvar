@@ -478,7 +478,7 @@ text = "ecs:DescribeServices | .github/workflows/db-migrate.yml: aws ecs describ
 by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
 
 [[unit]]
-text = "ecs:DescribeTaskDefinition | .github/workflows/db-migrate.yml: aws ecs describe-task-definition<br>.github/workflows/deploy.yml: aws ecs describe-task-definition<br>.github/workflows/rollback.yml: aws ecs describe-task-definition<br>scripts/check_dashboard_image.py: aws ecs describe-task-definition<br>scripts/check_task_secrets.py: aws ecs describe-task-definition<br>scripts/ecs_rolling_rollout.sh: aws ecs describe-task-definition<br>scripts/refuse_migrating_api_revision.py: aws ecs describe-task-definition<br>scripts/register_task_definition.sh: aws ecs describe-task-definition"
+text = "ecs:DescribeTaskDefinition | .github/workflows/db-migrate.yml: aws ecs describe-task-definition<br>.github/workflows/deploy.yml: aws ecs describe-task-definition<br>.github/workflows/rollback.yml: aws ecs describe-task-definition<br>scripts/check_dashboard_image.py: aws ecs describe-task-definition<br>scripts/check_task_secrets.py: aws ecs describe-task-definition<br>scripts/ecs_rolling_rollout.sh: aws ecs describe-task-definition<br>scripts/refuse_api_revision_without_forwarded_allow_ips.py: aws ecs describe-task-definition<br>scripts/refuse_migrating_api_revision.py: aws ecs describe-task-definition<br>scripts/register_task_definition.sh: aws ecs describe-task-definition"
 by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
 
 [[unit]]

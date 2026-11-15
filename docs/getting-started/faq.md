@@ -31,7 +31,7 @@ A full production deployment uses the following AWS services:
 | ElastiCache Redis | Rate-limit counters and the API's caches |
 | DynamoDB | Full profile: the `counters` module's counters, which only its own routes write |
 | Lambda | No request or event processing: placeholder functions that do nothing, and a daily Glue ETL trigger in the full profile. Assignment and flag evaluation are API calls ([AWS Integration](../integrations/aws.md#lambda-functions)) |
-| CloudFront | Not created by the CDK. Only the split-URL module's Lambda@Edge construct would use it, and its router has no configuration source yet ([#393](https://github.com/Controlvar/controlvar/issues/393)) |
+| CloudFront | Not created by the CDK app. The split URL edge router, a CDK app of its own, creates a distribution and a Lambda@Edge function only when you deploy it; AWS bills both ([AWS Integration](../integrations/aws.md#the-split-url-edge-router)) |
 | Kinesis | Full profile only: a stream feeding Firehose and the S3 data lake. The API does not write to it today |
 | OpenSearch | Full profile only: a domain is created; nothing writes to it today |
 | Cognito | A user pool the CDK creates; sign-in uses local accounts by default ([Cognito Integration](../cognito_integration.md)) |
@@ -58,12 +58,12 @@ The platform supports a range of statistical approaches:
 
 | Method | Description |
 |--------|-------------|
-| Frequentist (Fisher's exact test) | Each treatment against the control: a two-sided Fisher's exact test on the users who converted and the users who did not. Every metric in the results is analysed as a conversion today; warehouse analysis (beta) compares a mean metric with Welch's t-test |
+| Frequentist (Fisher's exact test) | Each treatment against the control: a two-sided Fisher's exact test on the users who converted and the users who did not. A revenue, count, duration or custom metric is compared on its mean per assigned user with Welch's t-test instead; warehouse analysis (beta) compares a mean metric with Welch's t-test |
 | Sequential testing (mSPRT) | Continuous monitoring with valid p-values at any sample size |
 | Always-valid confidence intervals | Confidence sequences that are valid at every look |
 | Alpha spending (O'Brien-Fleming, Pocock) | Not computed yet: the response's `alpha_spending` is empty; use the mSPRT, which is valid under continuous monitoring |
 | CUPED | Variance reduction from each user's own events before assignment (API only) |
-| Bayesian (Beta-Binomial) | Posterior credible intervals, Bayes factors, probability of superiority, ROPE (priors and thresholds through the API only) |
+| Bayesian (Beta-Binomial) | Posterior credible intervals, Bayes factors, probability of superiority, ROPE (the priors, loss threshold and credible level are set on the new-experiment form or through the API; the ROPE through the API only) |
 | Multi-armed bandit | Thompson Sampling, UCB1, and Epsilon-Greedy adaptive traffic allocation |
 | Dimensional analysis | Segment-level breakdowns with Bonferroni correction and heterogeneous treatment effect detection |
 | Interaction detection (beta) | Jaccard overlap between experiments; whether one experiment's lift on its primary conversion metric differs across another's arms (API only) |
@@ -75,17 +75,25 @@ dashboard shows.
 
 ### What SDKs are available?
 
-The JavaScript SDK is on npm (`npm install @controlvar/js-sdk`, 0.1.1, beta) and the
-Python SDK is on PyPI (`pip install controlvar`, 0.1.1, beta). The Go SDK installs by module
-path, and the other SDKs from a clone of this repository: each SDK's page
-([Go](../sdk/go.md), [Java](../sdk/java.md), [React](../sdk/react.md)) says how.
+The JavaScript SDK is on npm (`npm install @controlvar/js-sdk`, 0.3.0, beta) and the
+Python SDK is on PyPI (`pip install controlvar`, 0.3.0, beta). So are the React SDK
+(`npm install @controlvar/react-sdk`, 0.1.0, beta), the React Native SDK
+(`npm install @controlvar/react-native-sdk`, 0.1.0, beta) and the two OpenFeature providers
+(`npm install @controlvar/openfeature-provider`, 0.1.0, beta; `pip install controlvar-openfeature`,
+0.1.0, beta). The Java SDK is on Maven Central and the .NET SDK on NuGet. The Go SDK installs by
+module path, and the other SDKs from a clone of this repository: each SDK's page
+([Go](../sdk/go.md), [Ruby](../sdk/ruby.md)) says how.
 
 | SDK | Package |
 |-----|---------|
 | JavaScript / TypeScript | `@controlvar/js-sdk` (npm) |
 | Python | `controlvar` (PyPI) |
-| Java / JVM | `com.controlvar:controlvar-sdk` (Maven/Gradle) |
+| Java / JVM | `com.controlvar:controlvar-sdk` (Maven Central) |
 | React | `@controlvar/react-sdk` (npm) |
+| React Native | `@controlvar/react-native-sdk` (npm) |
+| OpenFeature (Node) | `@controlvar/openfeature-provider` (npm) |
+| OpenFeature (Python) | `controlvar-openfeature` (PyPI) |
+| .NET | `Controlvar.SDK` (NuGet) |
 
 13 of the 16 SDKs run experiment variant assignment, feature flag evaluation and event tracking against a live API in CI, in the SDK Live Contract job of `pr-qa-gate.yml`. The Java SDK includes Spring Boot auto-configuration. The React SDK includes hooks, an HOC, and SSR support for Next.js.
 
@@ -110,7 +118,7 @@ For a full AWS deployment, see [CDK Deployment](../self-hosting/cdk.md).
 
 ### What is the difference between a feature flag and an experiment?
 
-**Feature flags** control whether a feature is visible to a user. They are primarily operational tools — used for gradual rollouts, kill switches, and beta programs. A flag has no statistical analysis attached to it.
+**Feature flags** control whether a feature is visible to a user, or which value they get. They are primarily operational tools — used for gradual rollouts, kill switches, and beta programs. A flag has no statistical analysis attached to it. A flag does not measure which value does better; an experiment does.
 
 **Experiments** are scientific tools for causal measurement. They split users into variants, track defined metrics, and apply statistical tests to determine whether a variant is better than the control. Experiments have a defined start and end date and produce a ship/no-ship recommendation.
 
@@ -152,11 +160,9 @@ See [Bayesian Experimentation API](../api/bayesian.md) to enable Bayesian analys
 
 ### How does Split URL testing work?
 
-Split URL testing would send different users to different URLs — for example, `/checkout` vs `/checkout-v2` — with a Lambda@Edge router at the CDN. It does not split traffic yet: the router has no configuration source in this release ([#393](https://github.com/Controlvar/controlvar/issues/393)).
+Split URL testing sends different visitors to different URLs — for example, `/checkout` vs `/checkout-v2`. Your server or edge asks the API where to send each visitor who opens the control's URL, and redirects them; the API assigns the visitor as `POST /api/v1/tracking/assign` does. Conversions count for the variant the visitor saw when they are tracked with the same visitor id and name the experiment. On AWS, an optional CloudFront edge router (beta) can do the asking and the redirect.
 
-The split-URL module ships a CloudFront construct with a Lambda@Edge router, which no stack uses: you add it to a stack yourself. The router reads a cookie to check whether the visitor has already been assigned. If not, it hashes the client fingerprint (IP address and User-Agent) to pick a variant, returns a 302 redirect to the variant URL, and sets a cookie that lasts `cookie_ttl_days` (30 days by default). A request that carries a cookie naming a known variant URL passes through without being bucketed again.
-
-See [Split URL Testing API](../api/split-url.md) for setup and the CDK construct reference.
+See [Split URL testing](../api/split-url.md) to set it up, with a reference integration in the Python standard library.
 
 ---
 
@@ -172,7 +178,7 @@ Pre-built compliance reports are available at:
 - `GET /api/v1/compliance/reports/soc2` — SOC 2 report, by default over the last 365 days
 - `GET /api/v1/compliance/reports/iso27001` — ISO 27001 report, by default over the last 730 days
 
-Full audit log export (JSON or CSV) is available for SIEM ingestion at `GET /api/v1/compliance/export`.
+The compliance trail exports as JSON or CSV at `GET /api/v1/compliance/export` (compliance module; a core deployment answers `501`): flag and experiment creates, changes and deletes, without their old and new values. Toggles, rollbacks, sign-ins and role changes are in the audit log, which exports at `GET /api/v1/audit-logs/export` (beta) in every profile. For a SIEM, take both.
 
 See [Compliance Audit Trail API](../api/compliance.md) for full documentation.
 
@@ -203,9 +209,9 @@ The platform uses a layered role-based access control system with four built-in 
 | **VIEWER** | Reads every experiment, flag and result and changes none; can create an API key, which writes tracking data |
 | **ANALYST** | View all experiments, results, audit logs, and reports |
 | **DEVELOPER** | Create and manage experiments and feature flags; read integration settings, but not change them |
-| **ADMIN** | Full access: user management, compliance exports, global settings, integrations |
+| **ADMIN** | Manage experiments, flags, integrations and compliance exports; user management needs a superuser account, which the Admin role alone is not |
 
-Beyond the four base roles, admins can create **custom roles** with specific per-resource and per-action permissions. They can also grant **direct permission** to a user for a specific resource, with an optional expiry timestamp for temporary access. Both are stored and shown by `GET /api/v1/rbac/users/{user_id}/permissions`, but no permission check reads them yet: what a user can do is decided by their base role ([#891](https://github.com/Controlvar/controlvar/issues/891)).
+Beyond the four base roles, admins can create **custom roles** with specific per-resource and per-action permissions. They can also grant **direct permission** to a user for a specific resource, with an optional expiry timestamp for temporary access. Both add to what the user's base role allows, from their next request; they never remove a permission and never give administration.
 
 See [RBAC API Reference](../api/rbac.md) for the full role and permission management API.
 
@@ -213,7 +219,7 @@ See [RBAC API Reference](../api/rbac.md) for the full role and permission manage
 
 ### How do API keys work?
 
-API keys are used for SDK authentication and server-to-server calls. Unlike JWT tokens, which sign a user in, API keys do not expire unless they are created with an expiry (`expires_at`). Any active key authenticates every API-key route (flag evaluation, tracking) as the user who created it; its `scopes` do not narrow that. The one exception is the server-side SDK routes (`GET /api/v1/sdk/ruleset`, `POST /api/v1/tracking/evaluations`, `POST /api/v1/tracking/assign/batch`), which require the `sdk:ruleset` scope.
+API keys are used for SDK authentication and server-to-server calls. Unlike JWT tokens, which sign a user in, API keys do not expire unless they are created with an expiry (`expires_at`). Any active key authenticates every SDK route (flag evaluation, tracking) as the user who created it; its `scopes` do not narrow that. The one exception is the server-side SDK routes (`GET /api/v1/sdk/ruleset`, `POST /api/v1/tracking/evaluations`, `POST /api/v1/tracking/assign/batch`), which require the `sdk:ruleset` scope. A key that carries the `mcp:read` scope can also list feature flags and experiments and read an experiment and its results, as the user who created it.
 
 Create an API key via `POST /api/v1/api-keys` with a name. The full key value is shown only once at creation time — store it securely. To use it, pass the key in the `X-API-Key: <key>` header on all SDK requests.
 

@@ -38,6 +38,9 @@ if not wg.CONFIGURE_REPO.is_file() or not wg.WORKFLOWS.is_dir():
 DYNAMIC_NAMES = {
     ("pull_request", "doc-examples.yml", "examples"),
     ("pull_request", "sdk-unit-tests.yml", "linux"),
+    # The measurement's matrix comes from its plan job; it runs only on a
+    # dispatch (its plan job's if:), and is never a required check.
+    ("pull_request", "scale-evidence.yml", "measure"),
 }
 
 

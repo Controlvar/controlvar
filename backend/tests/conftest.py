@@ -52,6 +52,7 @@ from sqlalchemy.pool import NullPool
 
 from backend.app.api import deps
 from backend.app.api.deps import CacheControl
+from backend.app.api.read_scope import get_current_reader
 from backend.app.core.config import TestSettings, settings
 from backend.app.core.database_config import get_schema_name
 from backend.app.db.session import Base, get_db, init_db
@@ -504,6 +505,9 @@ def client(db_session, monkeypatch):
     app.dependency_overrides[deps.get_current_active_user] = (
         override_get_current_active_user
     )
+    # The four read routes that also take an mcp:read key depend on this one,
+    # which an override of get_current_active_user does not reach.
+    app.dependency_overrides[get_current_reader] = override_get_current_active_user
     app.dependency_overrides[deps.get_current_superuser] = (
         override_get_current_superuser
     )
@@ -604,11 +608,13 @@ def mock_auth(client, normal_user, monkeypatch):
     app.dependency_overrides[deps.get_current_active_user] = (
         override_get_current_active_user
     )
+    app.dependency_overrides[get_current_reader] = override_get_current_active_user
 
     yield client
 
     app.dependency_overrides.pop(deps.get_current_user, None)
     app.dependency_overrides.pop(deps.get_current_active_user, None)
+    app.dependency_overrides.pop(get_current_reader, None)
 
 
 @pytest.fixture
@@ -652,6 +658,7 @@ def mock_auth_superuser(client, superuser, monkeypatch):
     app.dependency_overrides[deps.get_current_active_user] = (
         override_get_current_active_user
     )
+    app.dependency_overrides[get_current_reader] = override_get_current_active_user
     app.dependency_overrides[deps.get_current_superuser] = (
         override_get_current_superuser
     )
@@ -661,6 +668,7 @@ def mock_auth_superuser(client, superuser, monkeypatch):
     # Clean up dependency overrides
     app.dependency_overrides.pop(deps.get_current_user, None)
     app.dependency_overrides.pop(deps.get_current_active_user, None)
+    app.dependency_overrides.pop(get_current_reader, None)
     app.dependency_overrides.pop(deps.get_current_superuser, None)
 
 

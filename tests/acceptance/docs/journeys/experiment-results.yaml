@@ -43,10 +43,138 @@
 #   the three saves an effect, so the line under the cards says the plan is
 #   for the 5% default (#1257).
 #
+# Then the two further analyses the guide names ("Bayesian Analysis",
+# "Sequential Testing"), turned on through the API for two of the experiments
+# while each is still a draft: a PUT after the step that finds or makes the
+# draft and before the step that starts the experiment, so before its traffic
+# (docs/api/sequential-testing.md and docs/api/bayesian.md set them when they
+# create their own experiment). They are read after the traffic, from their own
+# routes, which are not cached. Each number is held to an oracle written from
+# those pages and textbook formulas, not from the API's code (oracles.py):
+#
+# * Sequential (mSPRT), on the A/B experiment at the documented defaults
+#   (tau_squared 0.001, alpha 0.05): lambda 4.6007 under the boundary of 20, so
+#   it continues. On the minimum-sample experiment with tau_squared 0.01:
+#   lambda 117.30, so it stops for the effect, with the confidence sequence
+#   0.0553 to 0.5447; and the same read with ?alpha=0.001: the boundary 1000,
+#   so it continues, the interval widened to -0.0557 to 0.6557. lambda, the
+#   always-valid p-value and both bounds are held to 1e-9 relative. The API
+#   and the oracle compute the same closed forms in doubles (they agreed to
+#   2e-15 on a local run), and the defects nearest the right answers are
+#   0.4% away or more: the plain variance in place of Agresti-Caffo's, a sign
+#   flip, the default tau_squared in place of the experiment's, the stored
+#   alpha in place of the request's, and the half-width without its
+#   ln((V + tau^2) / V) term.
+# * Bayesian, on the minimum-sample experiment with the prior Beta(20, 180):
+#   the posteriors are exactly the prior plus each variant's converting and
+#   non-converting users, Beta(26, 234) and Beta(44, 216), and Treatment's
+#   probability to be best is 0.990282, from integrating the two posteriors.
+#   The API estimates it from 100,000 seeded Monte Carlo draws, so its answer
+#   has a standard deviation of 0.00031 around that. It is held to 0.2%
+#   relative (0.00198, 6.4 standard deviations: a false failure about once in
+#   six billion nights). None of these wrong answers can pass: the prior
+#   ignored gives 0.999936, the prior's alpha and beta swapped 0.9664, a
+#   posterior beta counting every user 0.9791, and the control's probability
+#   0.0097, each at least 20 of its own standard deviations outside the band.
+#   The band cannot tell a normal approximation of the posteriors (0.990074)
+#   from them, nor a defect in how the draws are made that moves the estimate
+#   by less than the band. The decision is STOP_WINNER: the probability is 49
+#   standard deviations above the page's 0.975, and Treatment's expected loss
+#   (0.0000987) is under a tenth of the loss_threshold (0.001).
+# * Bayesian again, on the A/B experiment with the prior Beta(100, 900), for
+#   the defects in how the draws are made. Near 0.99 a probability barely
+#   moves when the draws are made wrongly: with each variant's draws started
+#   from the same seed, the read above still passes on 999 of 1,000 seeds of
+#   the API's own draws. Near 0.93 the same defect moves it by about 36
+#   standard deviations. Here the posteriors are Beta(140, 1260) and
+#   Beta(164, 1236), and Treatment's probability is 0.927916 (standard
+#   deviation 0.00082), held to 0.56% relative (0.0052, 6.35 standard
+#   deviations); that defect fails on 878 of the same 1,000 seeds, so on about
+#   nine nights in ten. The wrong answers listed above fail here too, each at
+#   least 20 of its own standard deviations outside the band, and a normal
+#   approximation still passes (0.927716). The decision is CONTINUE:
+#   Treatment's expected loss (0.00038) is under the loss_threshold, but its
+#   probability is more than 50 standard deviations under 0.975, so the
+#   journey reads both decisions.
+#
+# Last, a revenue metric, which the results analyse as its mean value per
+# assigned user, each user's values added up and 0 for a user with none,
+# compared with Welch's t-test (getting-started/concepts.md). A fourth
+# 50/50 experiment, created through the API, has the revenue metric "Order
+# value" on the event purchase as its primary, and a second metric on the same
+# event marked lower is better. Its traffic step sends Control 256 users of
+# whom 64 buy and Treatment 256 of whom 112, each purchase with a value from
+# the step's ramp (base -20, step 20, modulo 6: -20, 0, 20, 40, 60, 80, -20,
+# ... in each variant on its own, so a refund, an order of 0 and orders of 20
+# to 80); the oracles add the values up as whole numbers (oracles.py).
+#
+# * The revenue row: the means 1840 / 256 = 7.1875 and 3280 / 256 = 12.8125,
+#   the difference 5.625 and the buyers, 64 and 112, are held exactly
+#   (rel: 0). With 256 users a variant and whole values, each of those numbers
+#   and every sum on the way to it is a binary fraction a double holds
+#   exactly, in whatever order the API adds them up. Welch's p-value
+#   (0.0086024) and the difference's 95% interval (1.4357 to 9.8143) are held
+#   to 1e-9 relative (the API and the oracle use the same scipy; they agreed
+#   within one unit in the last place on a local run). The wrong answers
+#   nearest them: the mean over the buyers only (28.75 for Control), the
+#   refunds dropped (8.046875), and Student's t-test with a pooled variance,
+#   whose p-value (0.0085880) moves 0.17% only through its degrees of freedom,
+#   the users being equal.
+# * The lower-is-better metric is listed with lower_is_better true and the same
+#   users and buyers. That is a listing, not a guardrail check: its rise is
+#   significant (Fisher's p 0.0000112), and the recommendation is still SHIP
+#   VARIANT, from the primary metric alone.
+# * The planned sample ("Sample Size"): the plan is for the share of the
+#   control's users who bought, 64 / 256 = 0.25, whatever the metric's type;
+#   at the 5% default effect, the formula of statistics/power-analysis.md
+#   gives 19,147 per variant (oracles.sample_size_proportions, held exactly).
+# * A fifth experiment is the same in everything but its values, each doubled
+#   (base -40, step 40): the buyers are the same 64 and 112, the means and the
+#   difference double exactly (14.375, 25.625, 11.25), the interval doubles and
+#   Welch's p-value does not move.
+#
+# Then CUPED ("CUPED — Reach Significance Faster", api/cuped.md), which adjusts
+# each conversion rate for whether its users sent the metric's event before
+# they were assigned, read once per experiment from GET /results/{id}/cuped,
+# after its traffic, and held to oracles written from api/cuped.md's formula
+# (oracles.py, cuped_*): theta is the slope of the outcome on that history
+# pooled within the arms (the x coefficient of Y ~ arm + X), each arm's
+# adjusted rate is its rate minus theta times (its share with history minus
+# everyone's), and the effect's variance is each arm's residual variance (the
+# sample variance, n - 1) over its size; the p-value is a two-sided z-test's
+# and the interval goes with it.
+#
+# * New users: CUPED set by a PUT on the A/B experiment while it is a draft,
+#   before its start, with api/cuped.md's setting (the method cuped and a
+#   7-day lookback). Its users sent nothing before their assignment. theta,
+#   the coverage and the variance reduction are 0 exactly, and every adjusted
+#   number is the unadjusted one: the effect 0.06, its standard error 0.023715
+#   (p 0.0114, the interval 0.0135 to 0.1065).
+# * Returning users: a sixth 50/50 experiment, created with CUPED and a 7-day
+#   lookback. Its traffic step first sends the event, with no experiment key
+#   and dated 3 days back, for the first 80 Control users and the first 48
+#   Treatment users it chooses, before any of them is assigned (the page's
+#   rule: history counts only if the server has it before the user is
+#   assigned). Then Control's first 40 users convert and Treatment's first 56,
+#   so every converting Control user is a returning one, and every returning
+#   Treatment user converts. The coverage is 25% exactly; theta is 65/94 =
+#   0.69149, where the control alone would give 0.5 and both arms lumped
+#   together 0.6667. The unadjusted effect, 0.0625 (standard error 0.03446,
+#   not significant), becomes 0.14894 (0.02233, p 2.6e-11, the interval 0.1052
+#   to 0.1927): Control had more returning users, who convert more, and that
+#   had hidden Treatment's lift. The variance reduction is 58.0%. Every number
+#   is held to 1e-9 relative (the coverage exactly); the API agreed within one
+#   unit in the last place on a local run. The wrong answers nearest them all
+#   fail: theta 0 (the history dropped, or sent after the assignments), the
+#   adjustment's sign flipped, theta from the control alone or from both arms
+#   lumped together, the variance over n instead of n - 1 (the standard error
+#   0.2% off), and a t-test's p-value.
+#
 # The results are cached for up to five minutes, so each experiment's
 # population is complete before its results are first read, on the page or
-# through the API; nothing reads them earlier, so no cached answer can be
-# stale and the journey needs no invalidation.
+# through the API, and every analysis is set before its experiment starts;
+# nothing reads the results earlier and nothing changes a setting later, so no
+# cached answer can be stale and the journey needs no invalidation.
 #
 # Not recorded whole (video): the journey makes an API key
 # (model.reveals_credential). The launch walkthrough R5 (recordings.toml)
@@ -283,6 +411,79 @@ steps:
           - text: Draft
           - button "Start"
     fail: Create Experiment does not create a draft and land on its page
+  - id: find-experiment
+    doc: reading-results
+    do:
+      api:
+        method: GET
+        path: /api/v1/experiments/?search=journey%20results
+        as: admin
+    expect:
+      status: 200
+      json:
+        total: 1
+        items.0.key: docs_journey_results
+        items.0.status: draft
+    save:
+      experiment-id:
+        path: items.0.id
+    fail: the experiment just created is not the one draft the API finds by its name
+  - id: sequential-on
+    doc: sequential-testing-stop-experiments-early
+    do:
+      api:
+        method: PUT
+        path: /api/v1/experiments/{{experiment-id}}
+        as: admin
+        body:
+          sequential_testing_enabled: true
+    expect:
+      status: 200
+      json:
+        status: draft
+        sequential_testing_enabled: true
+    fail: sequential testing cannot be turned on for the A/B experiment while it is a draft
+  - id: bayesian-on
+    doc: bayesian-analysis
+    do:
+      api:
+        method: PUT
+        path: /api/v1/experiments/{{experiment-id}}
+        as: admin
+        body:
+          bayesian_enabled: true
+          bayesian_config:
+            prior_family: beta
+            alpha: 100.0
+            beta: 900.0
+            loss_threshold: 0.001
+            credible_level: 0.95
+    expect:
+      status: 200
+      json:
+        status: draft
+        bayesian_enabled: true
+        bayesian_config.alpha: 100.0
+        bayesian_config.beta: 900.0
+    fail: Bayesian analysis cannot be turned on with a prior of its own for the A/B experiment while it is a draft
+  - id: cuped-new-users-on
+    doc: cuped-reach-significance-faster
+    do:
+      api:
+        method: PUT
+        path: /api/v1/experiments/{{experiment-id}}
+        as: admin
+        body:
+          variance_reduction_config:
+            method: cuped
+            covariate_lookback_days: 7
+    expect:
+      status: 200
+      json:
+        status: draft
+        variance_reduction_config.method: cuped
+        variance_reduction_config.covariate_lookback_days: 7
+    fail: CUPED cannot be turned on for the A/B experiment while it is a draft
   - id: start
     doc: creating-an-experiment
     do:
@@ -296,23 +497,6 @@ steps:
           - text: Active
           - link "View results"
     fail: Start does not make the experiment active
-  - id: find-experiment
-    doc: reading-results
-    do:
-      api:
-        method: GET
-        path: /api/v1/experiments/?search=journey%20results
-        as: admin
-    expect:
-      status: 200
-      json:
-        total: 1
-        items.0.key: docs_journey_results
-        items.0.status: active
-    save:
-      experiment-id:
-        path: items.0.id
-    fail: the experiment just created is not the one active experiment the API finds by its name
   - id: api-key
     doc: creating-an-experiment
     do:
@@ -373,10 +557,10 @@ steps:
             - region "Metric comparison":
               - table:
                 - rowgroup:
-                  - row "Metric Variant Sample Size Value Improvement p-value Significance"
+                  - row "Metric Variant Sample Size Value Effect size Interval (95%) Change Impact p-value Significance"
                 - rowgroup:
                   - row /Control\(control\) 400 10\.00%/
-                  - row /Treatment 400 16\.00% \+60\.0%/
+                  - row /Treatment 400 16\.00% 0\.18 \(negligible\) 12\.41% to 19\.59% \+60\.0%/
     fail: the results page shows other counts or rates than were sent, a failed sample-ratio check, no recommendation to ship, or a p-value that is not Fisher's
   - id: results-api
     doc: exporting-results
@@ -545,10 +729,10 @@ steps:
             - region "Metric comparison":
               - table:
                 - rowgroup:
-                  - row "Metric Variant Sample Size Value Improvement p-value Significance"
+                  - row "Metric Variant Sample Size Value Effect size Interval (95%) Change Impact p-value Significance"
                 - rowgroup:
                   - row /Control\(control\) 300 10\.00%/
-                  - row /Treatment 200 20\.00% \+100\.0%/
+                  - row /Treatment 200 20\.00% 0\.28 \(small\) 14\.46% to 25\.54% \+100\.0%/
     fail: the results page shows no sample-ratio notice with each variant's users and the number expected, or recommends anything but INCONCLUSIVE
   - id: floor-experiment
     doc: experiment-summary-card
@@ -582,6 +766,50 @@ steps:
       floor-experiment-id:
         path: id
     fail: a third 50/50 experiment cannot be created as a draft
+  - id: floor-sequential-on
+    doc: sequential-testing-stop-experiments-early
+    do:
+      api:
+        method: PUT
+        path: /api/v1/experiments/{{floor-experiment-id}}
+        as: admin
+        body:
+          sequential_testing_enabled: true
+          sequential_testing_config:
+            method: msprt
+            alpha: 0.05
+            tau_squared: 0.01
+    expect:
+      status: 200
+      json:
+        status: draft
+        sequential_testing_enabled: true
+        sequential_testing_config.alpha: 0.05
+        sequential_testing_config.tau_squared: 0.01
+    fail: sequential testing cannot be turned on with its own tau-squared for the minimum-sample experiment while it is a draft
+  - id: floor-bayesian-on
+    doc: bayesian-analysis
+    do:
+      api:
+        method: PUT
+        path: /api/v1/experiments/{{floor-experiment-id}}
+        as: admin
+        body:
+          bayesian_enabled: true
+          bayesian_config:
+            prior_family: beta
+            alpha: 20.0
+            beta: 180.0
+            loss_threshold: 0.001
+            credible_level: 0.95
+    expect:
+      status: 200
+      json:
+        status: draft
+        bayesian_enabled: true
+        bayesian_config.alpha: 20.0
+        bayesian_config.beta: 180.0
+    fail: Bayesian analysis cannot be turned on with a prior of its own for the minimum-sample experiment while it is a draft
   - id: floor-start
     doc: experiment-summary-card
     do:
@@ -667,8 +895,690 @@ steps:
             - region "Metric comparison":
               - table:
                 - rowgroup:
-                  - row "Metric Variant Sample Size Value Improvement p-value Significance"
+                  - row "Metric Variant Sample Size Value Effect size Interval (95%) Change Impact p-value Significance"
                 - rowgroup:
                   - row /Control\(control\) 60 10\.00%/
-                  - row /Treatment 60 40\.00% \+300\.0%/
+                  - row /Treatment 60 40\.00% 0\.73 \(medium\) 27\.60% to 52\.40% \+300\.0%/
     fail: the results page reads "Planned sample Reached" before the planned sample is met, or recommends shipping a variant before every variant has 100 users
+  - id: sequential-results
+    doc: sequential-testing-stop-experiments-early
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{experiment-id}}/sequential
+        as: admin
+    expect:
+      status: 200
+      json:
+        method: msprt
+        msprt_result.boundary: 20
+        msprt_result.can_stop: false
+        recommended_action: continue
+      computed:
+        msprt_result.lambda_ratio:
+          oracle:
+            name: msprt_lambda_ratio
+            args: {control_users: 400, control_converted: 40, treatment_users: 400, treatment_converted: 64, tau_squared: 0.001}
+          rel: 1.0e-9
+        msprt_result.always_valid_p_value:
+          oracle:
+            name: msprt_always_valid_p
+            args: {control_users: 400, control_converted: 40, treatment_users: 400, treatment_converted: 64, tau_squared: 0.001}
+          rel: 1.0e-9
+        confidence_sequence.lower:
+          oracle:
+            name: msprt_confidence_sequence
+            args: {control_users: 400, control_converted: 40, treatment_users: 400, treatment_converted: 64, tau_squared: 0.001, alpha: 0.05, bound: lower}
+          rel: 1.0e-9
+        confidence_sequence.upper:
+          oracle:
+            name: msprt_confidence_sequence
+            args: {control_users: 400, control_converted: 40, treatment_users: 400, treatment_converted: 64, tau_squared: 0.001, alpha: 0.05, bound: upper}
+          rel: 1.0e-9
+    fail: the mSPRT's lambda, always-valid p-value or confidence sequence is not the formula's for the users sent, at the default tau-squared and alpha, or it stops
+  - id: floor-sequential
+    doc: sequential-testing-stop-experiments-early
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{floor-experiment-id}}/sequential
+        as: admin
+    expect:
+      status: 200
+      json:
+        method: msprt
+        msprt_result.boundary: 20
+        msprt_result.can_stop: true
+        msprt_result.evidence_strength: strong_for_effect
+        recommended_action: stop_for_effect
+      computed:
+        msprt_result.lambda_ratio:
+          oracle:
+            name: msprt_lambda_ratio
+            args: {control_users: 60, control_converted: 6, treatment_users: 60, treatment_converted: 24, tau_squared: 0.01}
+          rel: 1.0e-9
+        msprt_result.always_valid_p_value:
+          oracle:
+            name: msprt_always_valid_p
+            args: {control_users: 60, control_converted: 6, treatment_users: 60, treatment_converted: 24, tau_squared: 0.01}
+          rel: 1.0e-9
+        confidence_sequence.lower:
+          oracle:
+            name: msprt_confidence_sequence
+            args: {control_users: 60, control_converted: 6, treatment_users: 60, treatment_converted: 24, tau_squared: 0.01, alpha: 0.05, bound: lower}
+          rel: 1.0e-9
+        confidence_sequence.upper:
+          oracle:
+            name: msprt_confidence_sequence
+            args: {control_users: 60, control_converted: 6, treatment_users: 60, treatment_converted: 24, tau_squared: 0.01, alpha: 0.05, bound: upper}
+          rel: 1.0e-9
+    fail: the mSPRT does not stop for the effect at its boundary of 1/alpha, or its lambda or confidence sequence is not the formula's at the experiment's own tau-squared
+  - id: floor-sequential-alpha
+    doc: sequential-testing-stop-experiments-early
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{floor-experiment-id}}/sequential?alpha=0.001
+        as: admin
+    expect:
+      status: 200
+      json:
+        msprt_result.boundary: 1000
+        msprt_result.can_stop: false
+        recommended_action: continue
+      computed:
+        msprt_result.lambda_ratio:
+          oracle:
+            name: msprt_lambda_ratio
+            args: {control_users: 60, control_converted: 6, treatment_users: 60, treatment_converted: 24, tau_squared: 0.01}
+          rel: 1.0e-9
+        confidence_sequence.lower:
+          oracle:
+            name: msprt_confidence_sequence
+            args: {control_users: 60, control_converted: 6, treatment_users: 60, treatment_converted: 24, tau_squared: 0.01, alpha: 0.001, bound: lower}
+          rel: 1.0e-9
+        confidence_sequence.upper:
+          oracle:
+            name: msprt_confidence_sequence
+            args: {control_users: 60, control_converted: 6, treatment_users: 60, treatment_converted: 24, tau_squared: 0.01, alpha: 0.001, bound: upper}
+          rel: 1.0e-9
+    fail: the request's alpha does not move the boundary to 1/alpha and widen the confidence sequence to the formula's, or the mSPRT still stops
+  - id: floor-bayesian
+    doc: bayesian-analysis
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{floor-experiment-id}}/bayesian
+        as: admin
+    expect:
+      status: 200
+      json:
+        is_enabled: true
+        n_samples: 100000
+        decision: STOP_WINNER
+        variant_results.0.variant_key: Control
+        variant_results.0.posterior.alpha: 26.0
+        variant_results.0.posterior.beta: 234.0
+        variant_results.1.variant_key: Treatment
+        variant_results.1.posterior.alpha: 44.0
+        variant_results.1.posterior.beta: 216.0
+      computed:
+        variant_results.1.probability_to_be_best:
+          oracle:
+            name: bayes_prob_best
+            args: {control_users: 60, control_converted: 6, treatment_users: 60, treatment_converted: 24, prior_alpha: 20.0, prior_beta: 180.0, variant: treatment}
+          rel: 0.002
+    fail: a posterior is not the experiment's prior updated with the users sent, the treatment's probability to be best is not the two posteriors', or a clear winner is not declared
+  - id: bayesian-results
+    doc: bayesian-analysis
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{experiment-id}}/bayesian
+        as: admin
+    expect:
+      status: 200
+      json:
+        is_enabled: true
+        n_samples: 100000
+        decision: CONTINUE
+        variant_results.0.variant_key: Control
+        variant_results.0.posterior.alpha: 140.0
+        variant_results.0.posterior.beta: 1260.0
+        variant_results.1.variant_key: Treatment
+        variant_results.1.posterior.alpha: 164.0
+        variant_results.1.posterior.beta: 1236.0
+      computed:
+        variant_results.1.probability_to_be_best:
+          oracle:
+            name: bayes_prob_best
+            args: {control_users: 400, control_converted: 40, treatment_users: 400, treatment_converted: 64, prior_alpha: 100.0, prior_beta: 900.0, variant: treatment}
+          rel: 0.0056
+    fail: a posterior is not the experiment's prior updated with the users sent, the treatment's probability to be best is not the two posteriors' (a defect in how the draws are made shows here), or a probability under 0.975 is declared a winner
+  - id: revenue-experiment
+    doc: creating-an-experiment
+    do:
+      api:
+        method: POST
+        path: /api/v1/experiments/
+        as: admin
+        body:
+          name: Docs journey revenue
+          key: docs_journey_revenue
+          experiment_type: a_b
+          variants:
+            - name: Control
+              is_control: true
+              traffic_allocation: 50
+            - name: Treatment
+              is_control: false
+              traffic_allocation: 50
+          metrics:
+            - name: Order value
+              event_name: purchase
+              metric_type: revenue
+              is_primary: true
+            - name: Purchases, lower is better
+              event_name: purchase
+              metric_type: conversion
+              is_primary: false
+              lower_is_better: true
+    expect:
+      status: 201
+      json:
+        key: docs_journey_revenue
+        status: draft
+    save:
+      revenue-experiment-id:
+        path: id
+    fail: an experiment with a revenue metric and a lower-is-better metric cannot be created as a draft
+  - id: revenue-start
+    doc: creating-an-experiment
+    do:
+      api:
+        method: POST
+        path: /api/v1/experiments/{{revenue-experiment-id}}/start
+        as: admin
+    expect:
+      status: 200
+      json:
+        status: active
+    fail: the revenue experiment cannot be started
+  - id: revenue-traffic
+    doc: creating-an-experiment
+    do:
+      traffic:
+        experiment: revenue-experiment-id
+        key: sdk-key
+        as: admin
+        event: purchase
+        users: revenue-user
+        variants:
+          Control: {assigned: 256, converted: 64}
+          Treatment: {assigned: 256, converted: 112}
+        value: {mode: ramp, base: -20, step: 20, modulo: 6}
+    fail: a user is refused, assigned a variant other than the documented hash gives, or a purchase or its value is refused
+  - id: revenue-results
+    doc: creating-an-experiment
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{revenue-experiment-id}}
+        as: admin
+    expect:
+      status: 200
+      json:
+        experiment_name: Docs journey revenue
+        metrics.0.metric_name: Order value
+        metrics.0.metric_type: revenue
+        metrics.0.analysis: mean
+        metrics.0.is_primary: true
+        metrics.0.variants.0.variant_name: Control
+        metrics.0.variants.0.sample_size: 256
+        metrics.0.variants.0.conversions: 64
+        metrics.0.variants.1.variant_name: Treatment
+        metrics.0.variants.1.sample_size: 256
+        metrics.0.variants.1.conversions: 112
+        metrics.0.variants.1.statistical_test_used: welch_t_test
+        metrics.0.variants.1.is_significant: true
+        summary.total_users: 512
+        srm.warning: false
+        srm.p_value: 1.0
+      computed:
+        metrics.0.variants.0.mean:
+          oracle:
+            name: revenue_mean
+            args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -20, step: 20, modulo: 6, variant: control}
+          rel: 0
+        metrics.0.variants.1.mean:
+          oracle:
+            name: revenue_mean
+            args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -20, step: 20, modulo: 6, variant: treatment}
+          rel: 0
+        metrics.0.variants.1.absolute_difference:
+          oracle:
+            name: revenue_difference
+            args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -20, step: 20, modulo: 6}
+          rel: 0
+        metrics.0.variants.1.p_value:
+          oracle:
+            name: revenue_welch_p
+            args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -20, step: 20, modulo: 6}
+          rel: 1.0e-9
+        metrics.0.variants.1.adjusted_p_value:
+          oracle:
+            name: revenue_welch_p
+            args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -20, step: 20, modulo: 6}
+          rel: 1.0e-9
+        metrics.0.variants.1.absolute_difference_ci.0:
+          oracle:
+            name: revenue_welch_interval
+            args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -20, step: 20, modulo: 6, confidence_level: 0.95, bound: lower}
+          rel: 1.0e-9
+        metrics.0.variants.1.absolute_difference_ci.1:
+          oracle:
+            name: revenue_welch_interval
+            args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -20, step: 20, modulo: 6, confidence_level: 0.95, bound: upper}
+          rel: 1.0e-9
+    fail: a revenue metric's mean is not its value per assigned user (non-buyers counted as 0, a refund subtracted), its buyers are not the users who sent the event, or its p-value or the difference's interval is not Welch's
+  - id: guardrail-listing
+    doc: metric-comparison-table
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{revenue-experiment-id}}
+        as: admin
+    expect:
+      status: 200
+      json:
+        metrics.0.lower_is_better: false
+        metrics.1.metric_name: Purchases, lower is better
+        metrics.1.is_primary: false
+        metrics.1.lower_is_better: true
+        metrics.1.analysis: proportion
+        metrics.1.variants.0.variant_name: Control
+        metrics.1.variants.0.sample_size: 256
+        metrics.1.variants.0.conversions: 64
+        metrics.1.variants.1.variant_name: Treatment
+        metrics.1.variants.1.sample_size: 256
+        metrics.1.variants.1.conversions: 112
+        summary.recommendation: SHIP_VARIANT
+    fail: the lower-is-better metric is not listed with its direction and the users who sent its event, or its rise changes the recommendation, which follows the primary metric alone
+  - id: revenue-sample-size
+    doc: sample-size
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{revenue-experiment-id}}/sample-size
+        as: admin
+    expect:
+      status: 200
+      json:
+        metric_name: Order value
+        metric_type: revenue
+        analysed_as: conversion
+        baseline_rate: 0.25
+        baseline_source: observed
+        mde: 0.05
+        mde_source: default
+        power_target: 0.8
+        current_sample_size_per_variant: 256
+        is_adequate: false
+      computed:
+        required_sample_size_per_variant:
+          oracle:
+            name: sample_size_proportions
+            args: {baseline_rate: 0.25, minimum_detectable_effect: 0.05, alpha: 0.05, power: 0.8}
+          rel: 0
+    fail: a revenue metric's planned sample is not the two-proportion formula's for the share of the control's users who bought, at the 5% default effect
+  - id: doubled-experiment
+    doc: creating-an-experiment
+    do:
+      api:
+        method: POST
+        path: /api/v1/experiments/
+        as: admin
+        body:
+          name: Docs journey revenue doubled
+          key: docs_journey_revenue_doubled
+          experiment_type: a_b
+          variants:
+            - name: Control
+              is_control: true
+              traffic_allocation: 50
+            - name: Treatment
+              is_control: false
+              traffic_allocation: 50
+          metrics:
+            - name: Order value
+              event_name: purchase
+              metric_type: revenue
+              is_primary: true
+    expect:
+      status: 201
+      json:
+        key: docs_journey_revenue_doubled
+        status: draft
+    save:
+      doubled-experiment-id:
+        path: id
+    fail: a second experiment with a revenue metric cannot be created as a draft
+  - id: doubled-start
+    doc: creating-an-experiment
+    do:
+      api:
+        method: POST
+        path: /api/v1/experiments/{{doubled-experiment-id}}/start
+        as: admin
+    expect:
+      status: 200
+      json:
+        status: active
+    fail: the second revenue experiment cannot be started
+  - id: doubled-traffic
+    doc: creating-an-experiment
+    do:
+      traffic:
+        experiment: doubled-experiment-id
+        key: sdk-key
+        as: admin
+        event: purchase
+        users: doubled-user
+        variants:
+          Control: {assigned: 256, converted: 64}
+          Treatment: {assigned: 256, converted: 112}
+        value: {mode: ramp, base: -40, step: 40, modulo: 6}
+    fail: a user is refused, assigned a variant other than the documented hash gives, or a purchase or its value is refused
+  - id: doubled-results
+    doc: creating-an-experiment
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{doubled-experiment-id}}
+        as: admin
+    expect:
+      status: 200
+      json:
+        experiment_name: Docs journey revenue doubled
+        metrics.0.metric_name: Order value
+        metrics.0.analysis: mean
+        metrics.0.variants.0.sample_size: 256
+        metrics.0.variants.0.conversions: 64
+        metrics.0.variants.1.sample_size: 256
+        metrics.0.variants.1.conversions: 112
+        metrics.0.variants.1.statistical_test_used: welch_t_test
+      computed:
+        metrics.0.variants.0.mean:
+          oracle:
+            name: revenue_mean
+            args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -40, step: 40, modulo: 6, variant: control}
+          rel: 0
+        metrics.0.variants.1.mean:
+          oracle:
+            name: revenue_mean
+            args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -40, step: 40, modulo: 6, variant: treatment}
+          rel: 0
+        metrics.0.variants.1.absolute_difference:
+          oracle:
+            name: revenue_difference
+            args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -40, step: 40, modulo: 6}
+          rel: 0
+        metrics.0.variants.1.p_value:
+          oracle:
+            name: revenue_welch_p
+            args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -40, step: 40, modulo: 6}
+          rel: 1.0e-9
+        metrics.0.variants.1.absolute_difference_ci.0:
+          oracle:
+            name: revenue_welch_interval
+            args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -40, step: 40, modulo: 6, confidence_level: 0.95, bound: lower}
+          rel: 1.0e-9
+        metrics.0.variants.1.absolute_difference_ci.1:
+          oracle:
+            name: revenue_welch_interval
+            args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -40, step: 40, modulo: 6, confidence_level: 0.95, bound: upper}
+          rel: 1.0e-9
+    fail: with every value doubled, the buyers change, the means and the difference are not doubled, or Welch's p-value moves
+  - id: cuped-new-users
+    doc: cuped-reach-significance-faster
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{experiment-id}}/cuped
+        as: admin
+    expect:
+      status: 200
+      json:
+        analysis_status: ga
+        method: cuped
+        confidence_level: 0.95
+        correction_method: benjamini_hochberg
+        covariate_lookback_days: 7
+        metrics.0.metric_name: Checkout completed
+        metrics.0.variant_name: Treatment
+        metrics.0.method: cuped
+        metrics.0.control_sample_size: 400
+        metrics.0.treatment_sample_size: 400
+        metrics.0.covariate_event_name: checkout_completed
+        metrics.0.unavailable_reason: null
+        metrics.0.is_significant: true
+      computed:
+        metrics.0.theta:
+          oracle:
+            name: cuped_theta
+            args: {control_users: 400, control_converted: 40, control_history: 0, treatment_users: 400, treatment_converted: 64, treatment_history: 0}
+          rel: 0
+        metrics.0.covariate_coverage_pct:
+          oracle:
+            name: cuped_coverage_pct
+            args: {control_users: 400, control_converted: 40, control_history: 0, treatment_users: 400, treatment_converted: 64, treatment_history: 0}
+          rel: 0
+        metrics.0.variance_reduction_pct:
+          oracle:
+            name: cuped_variance_reduction_pct
+            args: {control_users: 400, control_converted: 40, control_history: 0, treatment_users: 400, treatment_converted: 64, treatment_history: 0}
+          rel: 0
+        metrics.0.adjusted_effect:
+          oracle:
+            name: cuped_adjusted_effect
+            args: {control_users: 400, control_converted: 40, control_history: 0, treatment_users: 400, treatment_converted: 64, treatment_history: 0}
+          rel: 1.0e-9
+        metrics.0.unadjusted_effect:
+          oracle:
+            name: cuped_unadjusted_effect
+            args: {control_users: 400, control_converted: 40, control_history: 0, treatment_users: 400, treatment_converted: 64, treatment_history: 0}
+          rel: 1.0e-9
+        metrics.0.adjusted_se:
+          oracle:
+            name: cuped_adjusted_se
+            args: {control_users: 400, control_converted: 40, control_history: 0, treatment_users: 400, treatment_converted: 64, treatment_history: 0}
+          rel: 1.0e-9
+        metrics.0.unadjusted_se:
+          oracle:
+            name: cuped_unadjusted_se
+            args: {control_users: 400, control_converted: 40, control_history: 0, treatment_users: 400, treatment_converted: 64, treatment_history: 0}
+          rel: 1.0e-9
+        metrics.0.adjusted_control_mean:
+          oracle:
+            name: cuped_adjusted_mean
+            args: {control_users: 400, control_converted: 40, control_history: 0, treatment_users: 400, treatment_converted: 64, treatment_history: 0, variant: control}
+          rel: 1.0e-9
+        metrics.0.adjusted_treatment_mean:
+          oracle:
+            name: cuped_adjusted_mean
+            args: {control_users: 400, control_converted: 40, control_history: 0, treatment_users: 400, treatment_converted: 64, treatment_history: 0, variant: treatment}
+          rel: 1.0e-9
+        metrics.0.adjusted_p_value:
+          oracle:
+            name: cuped_adjusted_p
+            args: {control_users: 400, control_converted: 40, control_history: 0, treatment_users: 400, treatment_converted: 64, treatment_history: 0}
+          rel: 1.0e-9
+        metrics.0.corrected_p_value:
+          oracle:
+            name: cuped_adjusted_p
+            args: {control_users: 400, control_converted: 40, control_history: 0, treatment_users: 400, treatment_converted: 64, treatment_history: 0}
+          rel: 1.0e-9
+        metrics.0.adjusted_ci_lower:
+          oracle:
+            name: cuped_adjusted_interval
+            args: {control_users: 400, control_converted: 40, control_history: 0, treatment_users: 400, treatment_converted: 64, treatment_history: 0, confidence_level: 0.95, bound: lower}
+          rel: 1.0e-9
+        metrics.0.adjusted_ci_upper:
+          oracle:
+            name: cuped_adjusted_interval
+            args: {control_users: 400, control_converted: 40, control_history: 0, treatment_users: 400, treatment_converted: 64, treatment_history: 0, confidence_level: 0.95, bound: upper}
+          rel: 1.0e-9
+    fail: with no user sending anything before assignment, theta is not 0, the coverage or the variance reduction is not 0, or the adjusted numbers are not the unadjusted ones
+  - id: cuped-experiment
+    doc: cuped-reach-significance-faster
+    do:
+      api:
+        method: POST
+        path: /api/v1/experiments/
+        as: admin
+        body:
+          name: Docs journey returning users
+          key: docs_journey_returning_users
+          experiment_type: a_b
+          variants:
+            - name: Control
+              is_control: true
+              traffic_allocation: 50
+            - name: Treatment
+              is_control: false
+              traffic_allocation: 50
+          metrics:
+            - name: Checkout completed
+              event_name: checkout_completed
+              metric_type: conversion
+              is_primary: true
+          variance_reduction_config:
+            method: cuped
+            covariate_lookback_days: 7
+    expect:
+      status: 201
+      json:
+        key: docs_journey_returning_users
+        status: draft
+        variance_reduction_config.method: cuped
+        variance_reduction_config.covariate_lookback_days: 7
+    save:
+      cuped-experiment-id:
+        path: id
+    fail: an experiment that reads seven days of history with CUPED cannot be created as a draft
+  - id: cuped-start
+    doc: cuped-reach-significance-faster
+    do:
+      api:
+        method: POST
+        path: /api/v1/experiments/{{cuped-experiment-id}}/start
+        as: admin
+    expect:
+      status: 200
+      json:
+        status: active
+    fail: the returning-users experiment cannot be started
+  - id: cuped-traffic
+    doc: cuped-reach-significance-faster
+    do:
+      traffic:
+        experiment: cuped-experiment-id
+        key: sdk-key
+        as: admin
+        event: checkout_completed
+        users: cuped-user
+        variants:
+          Control: {assigned: 256, converted: 40}
+          Treatment: {assigned: 256, converted: 56}
+        history: {days_before: 3, converted: {Control: 80, Treatment: 48}}
+    fail: a history event is refused, a user is refused or assigned a variant other than the documented hash gives, or a conversion is refused
+  - id: cuped-returning-users
+    doc: cuped-reach-significance-faster
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{cuped-experiment-id}}/cuped
+        as: admin
+    expect:
+      status: 200
+      json:
+        analysis_status: ga
+        method: cuped
+        confidence_level: 0.95
+        correction_method: benjamini_hochberg
+        covariate_lookback_days: 7
+        metrics.0.metric_name: Checkout completed
+        metrics.0.variant_name: Treatment
+        metrics.0.method: cuped
+        metrics.0.control_sample_size: 256
+        metrics.0.treatment_sample_size: 256
+        metrics.0.covariate_event_name: checkout_completed
+        metrics.0.unavailable_reason: null
+        metrics.0.is_significant: true
+      computed:
+        metrics.0.theta:
+          oracle:
+            name: cuped_theta
+            args: {control_users: 256, control_converted: 40, control_history: 80, treatment_users: 256, treatment_converted: 56, treatment_history: 48}
+          rel: 1.0e-9
+        metrics.0.covariate_coverage_pct:
+          oracle:
+            name: cuped_coverage_pct
+            args: {control_users: 256, control_converted: 40, control_history: 80, treatment_users: 256, treatment_converted: 56, treatment_history: 48}
+          rel: 0
+        metrics.0.variance_reduction_pct:
+          oracle:
+            name: cuped_variance_reduction_pct
+            args: {control_users: 256, control_converted: 40, control_history: 80, treatment_users: 256, treatment_converted: 56, treatment_history: 48}
+          rel: 1.0e-9
+        metrics.0.adjusted_effect:
+          oracle:
+            name: cuped_adjusted_effect
+            args: {control_users: 256, control_converted: 40, control_history: 80, treatment_users: 256, treatment_converted: 56, treatment_history: 48}
+          rel: 1.0e-9
+        metrics.0.unadjusted_effect:
+          oracle:
+            name: cuped_unadjusted_effect
+            args: {control_users: 256, control_converted: 40, control_history: 80, treatment_users: 256, treatment_converted: 56, treatment_history: 48}
+          rel: 1.0e-9
+        metrics.0.adjusted_se:
+          oracle:
+            name: cuped_adjusted_se
+            args: {control_users: 256, control_converted: 40, control_history: 80, treatment_users: 256, treatment_converted: 56, treatment_history: 48}
+          rel: 1.0e-9
+        metrics.0.unadjusted_se:
+          oracle:
+            name: cuped_unadjusted_se
+            args: {control_users: 256, control_converted: 40, control_history: 80, treatment_users: 256, treatment_converted: 56, treatment_history: 48}
+          rel: 1.0e-9
+        metrics.0.adjusted_control_mean:
+          oracle:
+            name: cuped_adjusted_mean
+            args: {control_users: 256, control_converted: 40, control_history: 80, treatment_users: 256, treatment_converted: 56, treatment_history: 48, variant: control}
+          rel: 1.0e-9
+        metrics.0.adjusted_treatment_mean:
+          oracle:
+            name: cuped_adjusted_mean
+            args: {control_users: 256, control_converted: 40, control_history: 80, treatment_users: 256, treatment_converted: 56, treatment_history: 48, variant: treatment}
+          rel: 1.0e-9
+        metrics.0.adjusted_p_value:
+          oracle:
+            name: cuped_adjusted_p
+            args: {control_users: 256, control_converted: 40, control_history: 80, treatment_users: 256, treatment_converted: 56, treatment_history: 48}
+          rel: 1.0e-9
+        metrics.0.corrected_p_value:
+          oracle:
+            name: cuped_adjusted_p
+            args: {control_users: 256, control_converted: 40, control_history: 80, treatment_users: 256, treatment_converted: 56, treatment_history: 48}
+          rel: 1.0e-9
+        metrics.0.adjusted_ci_lower:
+          oracle:
+            name: cuped_adjusted_interval
+            args: {control_users: 256, control_converted: 40, control_history: 80, treatment_users: 256, treatment_converted: 56, treatment_history: 48, confidence_level: 0.95, bound: lower}
+          rel: 1.0e-9
+        metrics.0.adjusted_ci_upper:
+          oracle:
+            name: cuped_adjusted_interval
+            args: {control_users: 256, control_converted: 40, control_history: 80, treatment_users: 256, treatment_converted: 56, treatment_history: 48, confidence_level: 0.95, bound: upper}
+          rel: 1.0e-9
+    fail: the returning users' history is not read, theta is not the slope pooled within the arms, or an adjusted number, its standard error, p-value or interval is not the formula's

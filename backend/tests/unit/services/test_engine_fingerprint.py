@@ -7,16 +7,22 @@ means something if it moves whenever the numbers move.  This test runs a fixed
 dataset through every analysis path, hashes the outputs, and compares the hash
 with the one pinned for the current version.
 
-When this test fails, the engine's output changed.  Then:
+When this test fails, the engine's output changed.  The rule: an
+engine-changing PR bumps ``ENGINE_VERSION`` to the next minor and appends it to
+``RELEASED_ENGINE_VERSIONS`` ("frozen on main") in the same change.  A frozen
+version's entries are never edited, and no key is ever added under one.  A PR
+is engine-changing when, for the same database rows and request, it adds,
+removes or changes any number, decision (winner, recommendation, Bayesian
+decision, ``can_stop``) or allocation weight that a path stamping
+``engine_version`` returns, caches or persists: results and its snapshots,
+Bayesian, CUPED, sequential, and the bandit's state, history and status.  A
+revert of an engine-changing PR bumps again.
 
-* if the current ``ENGINE_VERSION`` has **not** shipped in a release, replace
-  its hash below with the new one (the change is part of that version);
-* if it **has** shipped, bump ``ENGINE_VERSION`` in
-  ``backend/app/core/stats_engine.py`` (and ``test_stats_determinism.py`` and
-  both OpenAPI snapshots, whose ``engine_version`` defaults follow it), and add
-  the new version's hash here, keeping the old entries.
-
-Never edit the hash of a released version.
+So bump ``ENGINE_VERSION`` in ``backend/app/core/stats_engine.py`` (both
+OpenAPI snapshots follow it), append it to ``RELEASED_ENGINE_VERSIONS`` in
+``test_sufficient_stats_fingerprint.py``, add the new version's hash here and
+in every other pin table, and add its digest to ``FROZEN_DIGESTS`` in
+``test_engine_versions_frozen.py``.  Never edit an existing entry.
 """
 
 import dataclasses
@@ -32,6 +38,11 @@ import pytest
 
 from backend.app.core.stats_engine import ENGINE_VERSION
 from backend.app.services.analysis_service import AnalysisService
+from backend.app.services.balanced_groups_estimate import (
+    Arm,
+    GroupCounts,
+    balanced_overall,
+)
 from backend.app.services.bayesian_service import BayesianService
 from backend.app.services.cuped_service import CupedService
 from backend.app.services.dimensional_analysis_service import (
@@ -65,12 +76,40 @@ ENGINE_FINGERPRINTS: Dict[str, str] = {
     # Agresti-Caffo variance of the difference instead of the plug-in one,
     # which moves the ``msprt``, ``cs`` and ``analysis`` outputs below.
     "1.4.0": "003234aa770b7f48e4d42ee0e718895523371c24251dadb6e46dc8355b7e346c",
+    # 1.5.0 is #1377: the winner, the recommendation and the Bayesian
+    # decision read lower_is_better.  This dataset is higher-is-better
+    # throughout, so its output is 1.4.0's.
+    "1.5.0": "003234aa770b7f48e4d42ee0e718895523371c24251dadb6e46dc8355b7e346c",
+    # 1.6.0 is #1385: a lower-is-better bandit's weights, regret and history
+    # alpha/beta.  This dataset runs no bandit, so its output is 1.5.0's.
+    "1.6.0": "003234aa770b7f48e4d42ee0e718895523371c24251dadb6e46dc8355b7e346c",
+    # 1.7.0 is #439: count, duration and custom metrics are means in
+    # /results.  This dataset has none, so its output is 1.6.0's.
+    "1.7.0": "003234aa770b7f48e4d42ee0e718895523371c24251dadb6e46dc8355b7e346c",
+    # 1.8.0 is #1496: the difference fields are added to the results' metric
+    # results, which this fingerprint does not hash: 1.7.0's.
+    "1.8.0": "003234aa770b7f48e4d42ee0e718895523371c24251dadb6e46dc8355b7e346c",
+    # 1.9.0 is #1776: each segment's p-value is Fisher's exact test against
+    # the control, which moves the breakdown's p-values below.
+    "1.9.0": "aaa346cd662b90fd6251edbbffad936d6d0237df68ef7ffd98bc0f9288fa57b5",
+    # 1.10.0 is #448: the dataset gains the balanced-groups estimate (the
+    # ``balanced_groups`` output below), which no earlier version returns.
+    "1.10.0": "11f01afb88c2d4f930234b60a8c4004a733743f4dbd9af81132c4349ffb52c23",
+    # 1.11.0: a significant treatment against a control with no conversions
+    # is the winner.  This dataset has no such control: 1.10.0's.
+    "1.11.0": "11f01afb88c2d4f930234b60a8c4004a733743f4dbd9af81132c4349ffb52c23",
+    # 1.12.0 is #1969: the breakdown's heterogeneity flag is a test of equal
+    # percentage-point differences at the given alpha.  This dataset's flag
+    # goes from True (lifts of both signs) to False (p 0.061), and the
+    # dataset gains the walk data of #1969 (``breakdown_walk``, p 0.23).
+    "1.12.0": "99d7a3cc572e1181cf24400c893b7fbe6889425247dc2f1a759171ca5db39f84",
 }
 
 # Two ids where the control sorts AFTER the treatment, so an engine that
 # guesses the control from the smaller id produces a different fingerprint.
 _CONTROL = "ffffffff-0000-4000-8000-000000000002"
 _TREATMENT = "00000000-0000-4000-8000-000000000001"
+_SECOND_TREATMENT = "00000000-0000-4000-8000-000000000003"
 
 
 def _canonical(value: Any) -> Any:
@@ -159,7 +198,37 @@ def _engine_outputs() -> Dict[str, Any]:
     segment_results = dim.compute_segment_results(segments, base_alpha=0.05)
     outputs["breakdown"] = {
         "segments": segment_results,
-        "has_hte": dim.detect_hte(segment_results),
+        "has_hte": dim.detect_hte(segment_results, alpha=0.05),
+    }
+
+    # The walk data of #1969 (1.12.0): the same lift in every platform, the
+    # unknown segment below the heterogeneity test's floor.
+    walk = {
+        platform: {
+            _TREATMENT: {
+                "variant_name": "treatment",
+                "is_control": False,
+                "total": treatment[0],
+                "conversions": treatment[1],
+            },
+            _CONTROL: {
+                "variant_name": "control",
+                "is_control": True,
+                "total": control[0],
+                "conversions": control[1],
+            },
+        }
+        for platform, control, treatment in (
+            ("web", (90, 7), (89, 16)),
+            ("android", (88, 12), (88, 15)),
+            ("ios", (84, 6), (84, 20)),
+            ("unknown", (31, 1), (32, 4)),
+        )
+    }
+    walk_results = dim.compute_segment_results(walk, base_alpha=0.05)
+    outputs["breakdown_walk"] = {
+        "segments": walk_results,
+        "has_hte": dim.detect_hte(walk_results, alpha=0.05),
     }
 
     # Bayesian (/results bayesian_results, /bayesian), fixed seed.
@@ -212,6 +281,33 @@ def _engine_outputs() -> Dict[str, Any]:
     ty = 0.8 * tx + 0.3 + rng.normal(0.0, 1.0, 200)
     outputs["cuped"] = CupedService.compute_cuped_effect(cy, cx, ty, tx)
 
+    # The size-weighted estimate over balanced groups (/balanced-groups,
+    # 1.10.0): three variants, one group small enough to be merged.
+    arms = (
+        Arm(_CONTROL, "control", True),
+        Arm(_TREATMENT, "treatment", False),
+        Arm(_SECOND_TREATMENT, "treatment b", False),
+    )
+    groups = [
+        GroupCounts(
+            "ios",
+            {_CONTROL: (210, 21), _TREATMENT: (205, 31), _SECOND_TREATMENT: (208, 25)},
+        ),
+        GroupCounts(
+            "web",
+            {_CONTROL: (120, 30), _TREATMENT: (118, 33), _SECOND_TREATMENT: (121, 29)},
+        ),
+        GroupCounts(
+            "other", {_CONTROL: (1, 0), _TREATMENT: (2, 1), _SECOND_TREATMENT: (3, 1)}
+        ),
+    ]
+    outputs["balanced_groups"] = balanced_overall(
+        groups,
+        arms,
+        confidence_level=0.95,
+        correction_method="benjamini_hochberg",
+    )
+
     return outputs
 
 
@@ -231,8 +327,9 @@ def test_engine_output_matches_the_fingerprint_for_this_version():
     actual = engine_fingerprint()
     assert actual == ENGINE_FINGERPRINTS[ENGINE_VERSION], (
         f"The statistics engine's output changed under ENGINE_VERSION "
-        f"{ENGINE_VERSION} (fingerprint {actual}). Bump ENGINE_VERSION if "
-        f"{ENGINE_VERSION} has shipped; otherwise update its fingerprint. "
+        f"{ENGINE_VERSION} (fingerprint {actual}). An engine-changing PR "
+        "bumps ENGINE_VERSION to the next minor and appends it to "
+        "RELEASED_ENGINE_VERSIONS; never edit this version's fingerprint. "
         "See this module's docstring."
     )
 

@@ -40,7 +40,16 @@ def test_the_tree_is_apache_and_the_sdks_are_mit():
     licences = {
         tuple(a["path"]): a["SPDX-License-Identifier"] for a in reuse["annotations"]
     }
-    assert licences == {("**",): "Apache-2.0", ("sdk/**",): "MIT"}
+    # One third-party file besides: GitHub's mark in the public site's header,
+    # Primer Octicons' mark-github-16, MIT, GitHub Inc. (NOTICE). Exactly that
+    # path, so a second exception has to be added here on purpose.
+    mark = ("frontend/src/components/GitHubMark.tsx",)
+    assert licences == {("**",): "Apache-2.0", ("sdk/**",): "MIT", mark: "MIT"}
+    owners = {
+        tuple(a["path"]): a["SPDX-FileCopyrightText"] for a in reuse["annotations"]
+    }
+    assert owners[mark] == "GitHub Inc."
+    assert "Primer Octicons" in _text(mark[0]) and "GitHub Inc." in _text("NOTICE")
     assert "Apache License" in _text("LICENSE").split("\n", 3)[1]
     assert _text("sdk/LICENSE").startswith("MIT License")
 
@@ -140,7 +149,11 @@ def test_the_header_describes_the_profiles_and_the_port_overrides():
         "*_HOST_PORT",
     ):
         assert needle in header, needle
-    demo = [line for line in header.split("\n") if "--profile demo" in line]
+    demo = [
+        line
+        for line in header.split("\n")
+        if re.search(r"--profile demo\b.*\bup\b", line)
+    ]
     assert [line.lstrip("#").strip() for line in demo] == [DEMO_COMMAND], demo
 
 
@@ -247,11 +260,50 @@ def _live_contract_sdks() -> list:
     return found[0]
 
 
+#: Directories under sdk/ that are not SDKs, so not counted as one.
+NOT_SDKS = {"mcp"}
+
+
 def test_thirteen_of_the_sixteen_sdks_run_the_live_contract():
-    sdks = sorted(p.name for p in (ROOT / "sdk").iterdir() if p.is_dir())
+    directories = {p.name for p in (ROOT / "sdk").iterdir() if p.is_dir()}
+    assert NOT_SDKS <= directories
+    sdks = sorted(directories - NOT_SDKS)
     live = _live_contract_sdks()
     assert len(sdks) == 16 and len(live) == 13
     assert sorted(set(sdks) - set(live)) == ["elixir", "flutter", "ios"]
+
+
+def test_sdk_mcp_is_the_mcp_server_and_not_an_sdk():
+    from backend.tests.unit.docs.test_sdk_doc_versions import PUBLISHED
+
+    package = json.loads(_text("sdk/mcp/package.json"))
+    assert package["name"] == "@controlvar/mcp-server"
+    assert package["license"] == "MIT"
+    assert "mcp" not in _live_contract_sdks()
+    # Its README is a packaged one (I_README in scripts/check_packaged_readme.py),
+    # which quotes no version and no registry install, so it is not one of the
+    # STRICT READMEs in PUBLISHED.
+    assert "mcp" not in PUBLISHED
+    tools = json.loads(_text("sdk/mcp/tools.json"))
+    # It reads flags, experiments and results; the one tool that is not
+    # read-only records an evaluation, as an SDK's does, and destroys nothing.
+    assert {tool["name"] for tool in tools["tools"]} == {
+        "list_feature_flags",
+        "get_feature_flag",
+        "evaluate_feature_flag",
+        "list_experiments",
+        "get_experiment",
+        "get_experiment_results",
+    }
+    not_read_only = {
+        tool["name"]: tool["annotations"]
+        for tool in tools["tools"]
+        if tool["annotations"].get("readOnlyHint") is not True
+    }
+    assert list(not_read_only) == ["evaluate_feature_flag"]
+    assert not_read_only["evaluate_feature_flag"]["destructiveHint"] is False
+    # With the user's own API key.
+    assert "CONTROLVAR_API_KEY" in tools["env"]
 
 
 def test_the_sdk_package_names():
@@ -259,9 +311,20 @@ def test_the_sdk_package_names():
     assert (
         json.loads(_text("sdk/react/package.json"))["name"] == "@controlvar/react-sdk"
     )
+    assert (
+        json.loads(_text("sdk/react-native/package.json"))["name"]
+        == "@controlvar/react-native-sdk"
+    )
+    openfeature = json.loads(_text("sdk/openfeature/package.json"))
+    assert openfeature["name"] == "@controlvar/openfeature-provider"
+    assert "@openfeature/server-sdk" in openfeature["peerDependencies"]
     python = tomllib.loads(_text("sdk/python/pyproject.toml"))["project"]
     assert python["name"] == "controlvar"
     assert (ROOT / "sdk/python/controlvar/__init__.py").is_file()
+    provider = tomllib.loads(_text("sdk/openfeature-python/pyproject.toml"))
+    assert provider["project"]["name"] == "controlvar-openfeature"
+    csproj = _text("sdk/dotnet/src/Controlvar/Controlvar.csproj")
+    assert "<PackageId>Controlvar.SDK</PackageId>" in csproj
     pom = _text("sdk/java/core/pom.xml")
     assert "<groupId>com.controlvar</groupId>" in pom
     assert re.search(r"</parent>\s*<artifactId>controlvar-sdk</artifactId>", pom)
@@ -301,11 +364,11 @@ def test_the_file_hygiene_hooks(precommit):
     assert hooks["check-added-large-files"]["args"] == ["--maxkb=1024"]
 
 
-def test_the_ruff_hooks_cover_the_four_trees_at_the_pinned_version(precommit):
+def test_the_ruff_hooks_cover_the_lint_trees_at_the_pinned_version(precommit):
     ruff = precommit["https://github.com/astral-sh/ruff-pre-commit"]
     assert [h["id"] for h in ruff["hooks"]] == ["ruff", "ruff-format"]
     assert {h["files"] for h in ruff["hooks"]} == {
-        "^(backend|modules|scripts|tests/acceptance)/"
+        "^(backend|modules|scripts|tests/acceptance|tests/ground_truth|tests/usecases)/"
     }
     (pin,) = re.findall(r"^ruff==(\S+)", _text("backend/requirements.txt"), re.M)
     assert ruff["rev"] == f"v{pin}"
@@ -361,7 +424,10 @@ def test_make_lint_and_the_lint_job_run_the_same_checks():
         "actionlint",
     ):
         assert needle in job, needle
-    trees = "backend/ modules/ scripts/ tests/acceptance/"
+    trees = (
+        "backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/"
+        " tests/usecases/"
+    )
     assert f"ruff check {trees}" in job and f"ruff format --check {trees}" in job
 
 

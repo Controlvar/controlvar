@@ -410,17 +410,21 @@ def test_a_requested_baseline_just_inside_the_limit_is_still_planned(client, see
 
 
 @pytest.mark.regression
+@pytest.mark.parametrize("method", ("none", "bonferroni", "benjamini_hochberg"))
 @pytest.mark.parametrize("alpha", (0.01, 0.05, 0.10))
 @pytest.mark.parametrize("power", (0.80, 0.90, 0.95))
-@pytest.mark.parametrize("variants", (2, 3))
-def test_the_tab_and_the_guided_setup_agree(client, seed, alpha, power, variants):
+@pytest.mark.parametrize("variants", (2, 3, 4, 5, 100))
+def test_the_tab_and_the_guided_setup_agree(
+    client, seed, method, alpha, power, variants
+):
     """
-    Every significance and power the guided setup offers, at two and three
-    variants, with ``==``. The guided setup plans without a correction
-    (#820), so the tab is asked for ``none``; its default is the
-    experiment's stored correction (#580).
-    test_sample_size_one_formula.py pins the guided setup and /utils to the
-    same helper; this adds the results tab, which needs a database.
+    Every correction, significance and power the guided setup offers, at two
+    to five variants and at the maximum of 100, with ``==`` on the sizes and
+    the comparisons. Both routes are asked for the same correction (#820);
+    the tab's default would be the experiment's stored one (#580). ``alpha``
+    is compared approximately: the tab's 1 - 0.95 is 0.050000000000000044.
+    test_sample_size_correction.py pins the guided setup's numbers to
+    statsmodels; this adds the results tab, which needs a database.
     """
     arms = [("control", True, 50, 0, 0)] + [
         (f"treatment_{i}", False, 50, 0, 0) for i in range(variants - 1)
@@ -433,7 +437,7 @@ def test_the_tab_and_the_guided_setup_agree(client, seed, alpha, power, variants
         mde=0.05,
         confidence_level=round(1 - alpha, 2),
         power_target=power,
-        correction_method="none",
+        correction_method=method,
     )
     response = client.get(
         "/api/v1/experiments/analysis/sample-size",
@@ -443,14 +447,21 @@ def test_the_tab_and_the_guided_setup_agree(client, seed, alpha, power, variants
             "significance_level": alpha,
             "statistical_power": power,
             "variant_count": variants,
+            "correction_method": method,
         },
     )
     assert response.status_code == 200, response.text
-    wizard = response.json()["samples_per_variant"]
+    body = response.json()
+    wizard = body["samples_per_variant"]
     assert tab["required_sample_size_per_variant"] == wizard
-    assert tab["comparisons"] == variants - 1
+    assert tab["comparisons"] == body["comparisons"] == variants - 1
+    assert tab["correction_method"] == body["correction_method"] == method
+    assert body["alpha"] == pytest.approx(tab["alpha"], rel=1e-12)
     if (alpha, power) == (0.05, 0.80):
-        assert wizard == 47036
+        if method == "none" or variants == 2:
+            assert wizard == 47036
+        elif variants == 3:
+            assert wizard == 56961
 
 
 @pytest.mark.parametrize(

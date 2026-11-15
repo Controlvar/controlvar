@@ -13,6 +13,11 @@
 # below the 10% the slider set, with reason rollout; once the flag is turned
 # off, nobody gets it, with reason inactive.
 #
+# Then a string flag (#1497, "Optional: serve a value instead of on or off"),
+# checked the same way and by each user's value: the on value exactly for the
+# users the rollout lets in, the off value for everyone else and for everyone
+# while it is off.
+#
 # Not recorded whole (video): the journey makes an API key
 # (model.reveals_credential). The launch walkthrough R6 (recordings.toml)
 # records it all the same: the key is made and sent through the API, never in
@@ -24,7 +29,9 @@ stack: compose-dev
 profile: core
 video: false
 recordings:
+  # The walkthrough ends where it did before the value-flag steps (#1497).
   - name: R6-feature-flag
+    end: off-users
 written: 2026-10-06
 steps:
   - id: sign-in-page
@@ -388,3 +395,179 @@ steps:
         context: {country: CA, plan: enterprise}
         reason: inactive
     fail: a user still gets the flag after it is turned off, rule or not
+  # A flag that serves a value (#1497): "Optional: serve a value instead of on
+  # or off". A string flag made in the dashboard at 10%, then every user's
+  # value checked while it is off, on and off again: a form that swapped the
+  # two values, or sent neither, fails the value steps. The context matches
+  # no rule of the flag above (_contradicted in test_docs_journey_population).
+  - id: value-new-flag
+    doc: optional-serve-a-value-instead-of-on-or-off
+    do:
+      goto: /feature-flags/new
+    expect:
+      url: /feature-flags/new
+      aria: |
+        - main:
+          - heading "New Feature Flag" [level=1]
+          - heading "Values" [level=2]
+          - group "Type":
+            - radio "Boolean" [checked]
+            - radio "String"
+            - radio "Number"
+            - radio "JSON"
+          - heading "Targeting Rules" [level=3]
+    fail: the form has no Values section offering Boolean, String, Number and JSON, with Boolean chosen
+  - id: value-name
+    doc: step-2-name-the-flag
+    do:
+      fill:
+        label: Name *
+        value: Docs journey label
+        quote: false
+        reason: the field is labelled "Name *" (required); the guide's table calls it Name (required)
+    expect:
+      aria: |
+        - textbox "Key *":
+          - text: docs_journey_label
+    fail: the name cannot be typed, or the key is not filled in from it
+  - id: value-type
+    doc: optional-serve-a-value-instead-of-on-or-off
+    do:
+      click:
+        role: radio
+        name: String
+    expect:
+      aria: |
+        - main:
+          - group "Type":
+            - radio "String" [checked]
+          - textbox "On value"
+          - textbox "Off value"
+          - paragraph: Every application that evaluates this flag can read both values. Do not put secrets in them.
+    fail: choosing String does not add an On value and an Off value field
+  - id: value-on
+    doc: optional-serve-a-value-instead-of-on-or-off
+    do:
+      fill:
+        label: On value
+        value: Complete purchase
+    expect:
+      aria: |
+        - textbox "On value":
+          - text: Complete purchase
+    fail: the on value cannot be typed
+  - id: value-off
+    doc: optional-serve-a-value-instead-of-on-or-off
+    do:
+      fill:
+        label: Off value
+        value: Buy now
+    expect:
+      aria: |
+        - textbox "Off value":
+          - text: Buy now
+    fail: the off value cannot be typed
+  - id: value-rollout
+    doc: step-4-set-the-rollout-percentage
+    do:
+      fill:
+        label: Rollout percentage
+        value: "10"
+    expect:
+      aria: |
+        - slider "Rollout percentage": "10"
+        - paragraph: The share of users who match no targeting rule that get the on value. Everyone else gets the off value.
+    fail: the slider cannot be set to 10%, or a string flag's slider does not say who gets the on value
+  - id: value-create
+    doc: optional-serve-a-value-instead-of-on-or-off
+    do:
+      click:
+        role: button
+        name: Create Feature Flag
+    expect:
+      aria: |
+        - main:
+          - heading "Docs journey label" [level=1]
+          - text: Off String flag
+          - paragraph: docs_journey_label
+          - text: Everyone gets the off value
+          - switch "Turn docs_journey_label on" [checked=false]
+          - heading "Values" [level=2]
+          - paragraph: "Type: String"
+          - textbox "On value":
+            - text: Complete purchase
+          - textbox "Off value":
+            - text: Buy now
+    fail: Create Feature Flag does not create a string flag, off, with the two values, its page naming the type and reading Everyone gets the off value
+  - id: value-off-users-before
+    doc: optional-serve-a-value-instead-of-on-or-off
+    do:
+      evaluations:
+        flag: docs_journey_label
+        key: sdk-key
+        users: value-user
+        count: 50
+        context: {country: US, plan: free}
+        reason: inactive
+        on_value: Complete purchase
+        off_value: Buy now
+    fail: a user gets the on value, or no value, from a string flag that was just created off
+  - id: value-turn-on
+    doc: optional-serve-a-value-instead-of-on-or-off
+    do:
+      click:
+        role: switch
+        name: Turn docs_journey_label on
+        quote: false
+        reason: the switch beside the status, named for the flag's key
+    expect:
+      aria: |
+        - main:
+          - heading "Docs journey label" [level=1]
+          - text: On String flag
+          - text: Rules and rollout decide who gets the on value
+          - switch "Turn docs_journey_label off" [checked]
+    fail: the switch does not turn the string flag on, its page reading Rules and rollout decide who gets the on value
+  - id: value-users
+    doc: optional-serve-a-value-instead-of-on-or-off
+    do:
+      evaluations:
+        flag: docs_journey_label
+        key: sdk-key
+        users: value-user
+        count: 200
+        context: {country: US, plan: free}
+        reason: rollout
+        rollout: 10
+        on_value: Complete purchase
+        off_value: Buy now
+    fail: a user inside the 10% does not get the on value, or one outside it does not get the off value
+  - id: value-turn-off
+    doc: optional-serve-a-value-instead-of-on-or-off
+    do:
+      click:
+        role: switch
+        name: Turn docs_journey_label off
+        quote: false
+        reason: the same switch, which turns the flag off again
+    expect:
+      aria: |
+        - main:
+          - heading "Docs journey label" [level=1]
+          - text: Off String flag
+          - text: Everyone gets the off value
+          - switch "Turn docs_journey_label on" [checked=false]
+    fail: the switch does not turn the string flag off
+  - id: value-off-users
+    doc: optional-serve-a-value-instead-of-on-or-off
+    do:
+      evaluations:
+        flag: docs_journey_label
+        key: sdk-key
+        users: value-user
+        count: 200
+        context: {country: US, plan: free}
+        reason: inactive
+        on_value: Complete purchase
+        off_value: Buy now
+    fail: a user still gets the on value after the string flag is turned off

@@ -59,9 +59,10 @@ try {
   await sdk.track(userId, 'purchase', { value: 12.5, experimentKey });
   if (trackErrors.length) fail(`track: ${trackErrors[0]}`);
 
-  // 4. Track without a key: fans out to the cached assignment + the flag evaluated via OpenFeature.
+  // 4. Track without a key: the JS SDK fans it out to the assignment above and the flag
+  //    evaluated via OpenFeature.
   if (sdk.getAssignments(userId).length !== 1 || sdk.getEvaluatedFlags(userId).length !== 1) {
-    fail('cache does not hold one assignment and one flag; fan-out would send nothing');
+    fail('cache does not hold one assignment and one flag; the key-less track would not reach both');
   }
   await sdk.track(userId, 'page_view', { properties: { page: '/contract-smoke' } });
   if (trackErrors.length) fail(`fan-out: ${trackErrors[0]}`);

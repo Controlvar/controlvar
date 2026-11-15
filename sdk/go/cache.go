@@ -69,6 +69,25 @@ func (c *Cache) Set(key string, value interface{}) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	c.set(key, value)
+}
+
+// fill stores value under key as Set does, and reports whether key held no
+// unexpired entry until then: true when this call filled an empty or expired
+// slot. The check and the store are one step under the lock, so of several
+// goroutines storing the same key at once, exactly one finds the slot empty.
+func (c *Cache) fill(key string, value interface{}) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	entry, ok := c.items[key]
+	held := ok && !(c.ttl > 0 && time.Now().After(entry.expiresAt))
+	c.set(key, value)
+	return !held
+}
+
+// set is Set's body. Must be called with c.mu held.
+func (c *Cache) set(key string, value interface{}) {
 	// Update existing entry.
 	if entry, ok := c.items[key]; ok {
 		entry.value = value

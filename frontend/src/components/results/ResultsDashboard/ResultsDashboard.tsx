@@ -2,15 +2,22 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ResultsService } from '@/services/results';
 import { ExperimentsService } from '@/services/experiments';
 import {
+  BalancedGroupsResponse,
   CorrectionMethod,
   ExperimentResultsResponse,
   DailyResultsResponse,
   SampleSizeOverrides,
   SampleSizeResult,
   DimensionalBreakdownResponse,
+  MetricAnalysis,
   MetricResult,
 } from '@/types/results';
-import { analysedAsRate, rateDescription } from '@/components/results/shared/resultFormat';
+import { BalanceWithin } from '@/types/experiments';
+import {
+  analysedAsMean,
+  meanDescription,
+  rateDescription,
+} from '@/components/results/shared/resultFormat';
 import { SequentialTestingResponse } from '@/types/sequential';
 import { ExperimentSummary } from './ExperimentSummary';
 import { SrmNotice } from './SrmNotice';
@@ -20,14 +27,22 @@ import { ConversionChart } from '@/components/results/Visualizations/ConversionC
 import { TrendChart } from '@/components/results/Visualizations/TrendChart';
 import { MetricComparisonTable } from '@/components/results/MetricComparison/MetricComparisonTable';
 import { SequentialMonitor } from '@/components/results/Sequential/SequentialMonitor';
-import { BreakdownSelector } from '@/components/results/Breakdowns/BreakdownSelector';
+import {
+  BALANCED_BREAKDOWN,
+  BreakdownSelector,
+} from '@/components/results/Breakdowns/BreakdownSelector';
 import { SegmentComparisonTable } from '@/components/results/Breakdowns/SegmentComparisonTable';
+import { BalancedGroupsView } from '@/components/results/Breakdowns/BalancedGroupsView';
+import { balancedOptionLabel, balances } from '@/components/results/Breakdowns/balancedGroups';
 // EP-058: Real-time WebSocket Streaming Results
 import { LiveResultsPanel } from '@/components/experiments/LiveResultsPanel';
 import { ApiError } from '@/services/api';
+import { useAuthConfig } from '@/contexts/AuthConfigContext';
 
 interface ResultsDashboardProps {
   experimentId: string;
+  /** The tab shown first (`/results/{id}?tab=breakdowns`); Overview when absent. */
+  initialTab?: ResultsTab;
 }
 
 /** The experiment's stored settings, as `GET /results/{id}` takes them. */
@@ -50,6 +65,29 @@ interface ExperimentReading {
    * compares the share of users who sent the event, not the metric's value).
    */
   lowerIsBetter: boolean | undefined;
+  /**
+   * Each metric's event name by metric id (a result's metric_id is the
+   * metric's id), so a note can name the event. Empty when the experiment
+   * could not be read.
+   */
+  eventNames: Record<string, string>;
+  /**
+   * What the experiment balances its split within (#448), or null when it
+   * balances nothing, or could not be read: its Breakdowns tab then is as it
+   * always was.
+   */
+  balanceWithin: BalanceWithin | null;
+}
+
+/** Each metric's event name by its id; metrics without one are left out. */
+function eventNamesOf(metrics: { id?: string; event_name?: string }[]): Record<string, string> {
+  const names: Record<string, string> = {};
+  for (const m of metrics) {
+    if (typeof m.id === 'string' && typeof m.event_name === 'string' && m.event_name) {
+      names[m.id] = m.event_name;
+    }
+  }
+  return names;
 }
 
 /**
@@ -82,6 +120,9 @@ async function readExperiment(experimentId: string): Promise<ExperimentReading> 
       sequentialMetric && sequentialMetric.metric_type === 'conversion'
         ? (sequentialMetric.lower_is_better ?? false)
         : undefined;
+    const eventNames = eventNamesOf(metrics);
+    const balance = experiment?.balance_within;
+    const balanceWithin = balances(balance) ? balance : null;
     if (experiment?.correction_method && typeof experiment.confidence_level === 'number') {
       return {
         settings: {
@@ -91,9 +132,11 @@ async function readExperiment(experimentId: string): Promise<ExperimentReading> 
         bayesianEnabled,
         sequentialEnabled,
         lowerIsBetter,
+        eventNames,
+        balanceWithin,
       };
     }
-    return { settings: null, bayesianEnabled, sequentialEnabled, lowerIsBetter };
+    return { settings: null, bayesianEnabled, sequentialEnabled, lowerIsBetter, eventNames, balanceWithin };
   } catch {
     // Fall through: the results request goes without settings.
   }
@@ -102,12 +145,17 @@ async function readExperiment(experimentId: string): Promise<ExperimentReading> 
     bayesianEnabled: undefined,
     sequentialEnabled: undefined,
     lowerIsBetter: undefined,
+    eventNames: {},
+    balanceWithin: null,
   };
 }
 
 export const RESULTS_LOAD_FAILED = 'The results could not be loaded.';
 export const RESULTS_NOT_FOUND = 'No results were found for this experiment.';
 export const RESULTS_FORBIDDEN = 'You do not have access to these results.';
+/** A breakdown request that failed. Fixed words: the server's text is never shown. */
+export const BREAKDOWN_FAILED =
+  'The breakdown could not be computed. Try again; if it keeps failing, check the API logs.';
 export const RESULTS_SERVER_ERROR =
   'The server could not compute the results. Try again; if it keeps failing, check the API logs.';
 
@@ -127,16 +175,48 @@ export function resultsErrorMessage(e: unknown): string {
 }
 
 type Tab = 'overview' | 'trends' | 'sample-size' | 'sequential' | 'breakdowns' | 'live';
+export type ResultsTab = Tab;
 
 /**
- * The chart heading says what the bars are. A revenue, count or duration
- * metric is still analysed as a share of users with an event, so it is not
- * headed as revenue, nor as a "conversion rate" of revenue.
+ * The chart heading says what the bars are. A metric analysed as a mean is
+ * headed by what it is per user ("revenue per user", "events per user",
+ * "duration per user", "value per user"). A non-conversion metric a server
+ * analysed as a share of users with an event (one older than #439) is headed
+ * as that share, never as a "conversion rate" of its values.
  */
 function primaryMetricHeading(metric: MetricResult): string {
+  if (analysedAsMean(metric)) return `${metric.metric_name} — ${meanDescription(metric)}`;
   if (metric.metric_type === 'conversion') return `Conversion Rates — ${metric.metric_name}`;
-  if (analysedAsRate(metric)) return `${metric.metric_name} — ${rateDescription(metric)}`;
-  return `${metric.metric_name} — mean`;
+  return `${metric.metric_name} — ${rateDescription(metric)}`;
+}
+
+/**
+ * In the Bayesian panel, under its heading, when the primary metric is
+ * analysed as a mean: the Bayesian analysis stays on the share of users who
+ * sent the metric's event.
+ */
+function bayesianShareNote(metric: MetricResult, eventName?: string): React.ReactNode {
+  return (
+    <>
+      The Bayesian analysis compares the share of users who sent{' '}
+      {eventName ? <code>{eventName}</code> : `${metric.metric_name}'s event`}, not{' '}
+      {meanDescription(metric)}.
+    </>
+  );
+}
+
+/**
+ * How the results analysed the metric a sample-size plan is for, by its id:
+ * the Sample Size tab's note then says what the results show for it. Undefined
+ * when the plan names no metric the results carry.
+ */
+function analysisOf(
+  metrics: MetricResult[],
+  metricId: string | null | undefined,
+): MetricAnalysis | undefined {
+  const metric = metricId ? metrics.find((m) => m.metric_id === metricId) : undefined;
+  if (!metric) return undefined;
+  return analysedAsMean(metric) ? 'mean' : 'proportion';
 }
 
 function LoadingSkeleton() {
@@ -150,7 +230,7 @@ function LoadingSkeleton() {
   );
 }
 
-export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
+export function ResultsDashboard({ experimentId, initialTab }: ResultsDashboardProps) {
   const [results, setResults] = useState<ExperimentResultsResponse | null>(null);
   const [daily, setDaily] = useState<DailyResultsResponse | null>(null);
   // The sample size loads on its own, outside the page's Promise.all (#666):
@@ -173,14 +253,29 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
   const [lowerIsBetter, setLowerIsBetter] = useState<boolean | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? 'overview');
+  // A read-only demo opens no live results stream (its API refuses the
+  // socket), so the Live tab waits until `/auth/config` says this is not one.
+  const { loading: configLoading, demo } = useAuthConfig();
+  const live = !configLoading && !demo;
   // Issue #28: Breakdown state
   const [selectedBreakdown, setSelectedBreakdown] = useState<string | null>(null);
   const [breakdown, setBreakdown] = useState<DimensionalBreakdownResponse | null>(null);
   const [breakdownLoading, setBreakdownLoading] = useState(false);
+  const [breakdownFailed, setBreakdownFailed] = useState(false);
+  // #448: an experiment that balances its split within groups lists its
+  // balanced groups first on Breakdowns, and the tab opens on them until the
+  // user chooses something else.
+  const [balanceWithin, setBalanceWithin] = useState<BalanceWithin | null>(null);
+  const [balancedGroups, setBalancedGroups] = useState<BalancedGroupsResponse | null>(null);
+  const breakdownChosen = useRef(false);
+  // Only the latest breakdown request may write state, so a slow answer for
+  // an earlier choice never lands on the one shown.
+  const breakdownRequest = useRef(0);
   // The settings every results request sends (D49), once the experiment is read.
   const [stored, setStored] = useState<StoredAnalysisSettings | null>(null);
   const [bayesianEnabled, setBayesianEnabled] = useState<boolean | undefined>(undefined);
+  const [eventNames, setEventNames] = useState<Record<string, string>>({});
 
   const fetchSampleSize = useCallback(async (overrides: SampleSizeOverrides = {}) => {
     // Only the latest request may write state, so a slow answer for an
@@ -222,9 +317,12 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
       // level. If the experiment cannot be read, the results are still asked
       // for, with no settings, and the server uses the stored ones.
       const experimentRequest = readExperiment(experimentId);
-      const resultsRequest = experimentRequest.then(({ settings, bayesianEnabled: b }) => {
+      const resultsRequest = experimentRequest.then((reading) => {
+        const { settings } = reading;
         setStored(settings);
-        setBayesianEnabled(b);
+        setBayesianEnabled(reading.bayesianEnabled);
+        setEventNames(reading.eventNames);
+        setBalanceWithin(reading.balanceWithin);
         return settings
           ? ResultsService.getResults(experimentId, settings)
           : ResultsService.getResults(experimentId);
@@ -264,21 +362,41 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
 
   // Issue #28: Fetch breakdown when dimension changes
   const fetchBreakdown = useCallback(async (dim: string | null) => {
+    const request = ++breakdownRequest.current;
     if (!dim) {
       setBreakdown(null);
+      setBalancedGroups(null);
+      setBreakdownFailed(false);
+      setBreakdownLoading(false);
       return;
     }
     setBreakdownLoading(true);
+    setBreakdownFailed(false);
     try {
-      const r = await ResultsService.getResults(
-        experimentId,
-        stored ? { breakdown: dim, ...stored } : { breakdown: dim }
-      );
-      setBreakdown(r.breakdown ?? null);
+      if (dim === BALANCED_BREAKDOWN) {
+        // The balanced groups use the experiment's stored settings themselves.
+        const b = await ResultsService.getBalancedGroups(experimentId);
+        if (request !== breakdownRequest.current) return;
+        setBalancedGroups(b);
+        setBreakdown(null);
+      } else {
+        const r = await ResultsService.getResults(
+          experimentId,
+          stored ? { breakdown: dim, ...stored } : { breakdown: dim }
+        );
+        if (request !== breakdownRequest.current) return;
+        setBreakdown(r.breakdown ?? null);
+        setBalancedGroups(null);
+      }
     } catch {
+      // The server answers a breakdown it cannot compute with an error. It is
+      // shown as one, in fixed words: the server's text is never put on the page.
+      if (request !== breakdownRequest.current) return;
       setBreakdown(null);
+      setBalancedGroups(null);
+      setBreakdownFailed(true);
     } finally {
-      setBreakdownLoading(false);
+      if (request === breakdownRequest.current) setBreakdownLoading(false);
     }
   }, [experimentId, stored]);
 
@@ -290,6 +408,20 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
   useEffect(() => {
     fetchBreakdown(selectedBreakdown);
   }, [selectedBreakdown, fetchBreakdown]);
+
+  // #448: the first time Breakdowns is open for a balanced experiment, it
+  // shows the balanced groups, so they are asked for only once it is opened.
+  const balanced = balanceWithin !== null;
+  useEffect(() => {
+    if (activeTab !== 'breakdowns' || !balanced || breakdownChosen.current) return;
+    breakdownChosen.current = true;
+    setSelectedBreakdown(BALANCED_BREAKDOWN);
+  }, [activeTab, balanced]);
+
+  const chooseBreakdown = useCallback((dim: string | null) => {
+    breakdownChosen.current = true;
+    setSelectedBreakdown(dim);
+  }, []);
 
   if (loading) return <LoadingSkeleton />;
 
@@ -314,10 +446,15 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
   if (!results) return null;
 
   const primaryMetric = results.metrics.find((m) => m.is_primary) ?? results.metrics[0];
+  const primaryAsMean = primaryMetric ? analysedAsMean(primaryMetric) : false;
+  // What the Breakdowns tab shows for the choice: a balanced experiment's
+  // balanced groups, or a breakdown by a key.
+  const showsBalanced = selectedBreakdown === BALANCED_BREAKDOWN;
+  const shownBreakdown = showsBalanced ? balancedGroups : breakdown;
 
   const TABS: { id: Tab; label: string }[] = [
     { id: 'overview', label: 'Overview' },
-    { id: 'live', label: '⚡ Live' },
+    ...(live ? [{ id: 'live' as Tab, label: '⚡ Live' }] : []),
     { id: 'trends', label: 'Trends' },
     { id: 'sample-size', label: 'Sample Size' },
     ...(sequential ? [{ id: 'sequential' as Tab, label: 'Sequential' }] : []),
@@ -334,9 +471,10 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
       />
       <SrmNotice srm={results.srm} metrics={results.metrics} />
 
-      {/* Tab navigation */}
+      {/* Tab navigation. On a phone the tabs are wider than the screen, so
+          the row scrolls inside itself rather than widening the page. */}
       <nav
-        className="flex gap-1 border-b border-slate-200"
+        className="flex gap-1 overflow-x-auto border-b border-slate-200"
         aria-label="Results sections"
         role="tablist"
       >
@@ -361,7 +499,7 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
       {/* Tab panels */}
       <div id={`panel-${activeTab}`} role="tabpanel">
         {/* EP-058: Live streaming results panel */}
-        {activeTab === 'live' && (
+        {activeTab === 'live' && live && (
           <section aria-label="Live streaming results" data-testid="live-tab-panel">
             <LiveResultsPanel experimentId={experimentId} />
           </section>
@@ -382,7 +520,11 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
                     >
                       {primaryMetricHeading(primaryMetric)}
                     </h3>
-                    <ConversionChart variants={primaryMetric.variants} />
+                    <ConversionChart
+                      variants={primaryMetric.variants}
+                      analysis={primaryAsMean ? 'mean' : 'proportion'}
+                      metricType={primaryMetric.metric_type}
+                    />
                   </section>
                 )}
                 <section aria-label="Metric comparison">
@@ -393,6 +535,7 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
                     metrics={results.metrics}
                     confidenceLevel={results.confidence_level}
                     correctionMethod={results.correction_method}
+                    eventNames={eventNames}
                   />
                 </section>
               </>
@@ -401,6 +544,11 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
               bayesian={results.bayesian_results}
               bayesianEnabled={bayesianEnabled}
               srmWarning={results.srm?.warning === true}
+              note={
+                primaryMetric && primaryAsMean
+                  ? bayesianShareNote(primaryMetric, eventNames[primaryMetric.metric_id])
+                  : undefined
+              }
             />
           </div>
         )}
@@ -451,6 +599,8 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
             ) : (
               <SampleSizeMeter
                 data={sampleSize}
+                eventName={sampleSize.metric_id ? eventNames[sampleSize.metric_id] : undefined}
+                resultsAnalysis={analysisOf(results.metrics, sampleSize.metric_id)}
                 overrides={sampleSizeOverrides}
                 onRecalculate={(o) => void fetchSampleSize(o)}
                 recalculating={sampleSizeLoading}
@@ -464,7 +614,11 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
             <h3 className="text-base font-semibold text-slate-800 mb-4">
               Sequential Testing Monitor
             </h3>
-            <SequentialMonitor data={sequential} lowerIsBetter={lowerIsBetter} />
+            <SequentialMonitor
+              data={sequential}
+              lowerIsBetter={lowerIsBetter}
+              srmWarning={results.srm?.warning === true}
+            />
           </section>
         )}
 
@@ -478,7 +632,8 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
                 </h3>
                 <BreakdownSelector
                   value={selectedBreakdown}
-                  onChange={setSelectedBreakdown}
+                  onChange={chooseBreakdown}
+                  balancedLabel={balanceWithin ? balancedOptionLabel(balanceWithin) : undefined}
                 />
               </div>
 
@@ -489,11 +644,38 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
                 </div>
               )}
 
-              {!breakdownLoading && breakdown && (
+              {!breakdownLoading && !showsBalanced && breakdown && (
                 <SegmentComparisonTable breakdown={breakdown} />
               )}
 
-              {!breakdownLoading && !breakdown && selectedBreakdown && (
+              {!breakdownLoading && showsBalanced && balancedGroups && balanceWithin && (
+                <BalancedGroupsView setting={balanceWithin} data={balancedGroups} />
+              )}
+
+              {!breakdownLoading && breakdownFailed && selectedBreakdown && (
+                <div className="space-y-3" data-testid="breakdown-failed">
+                  <div
+                    role="alert"
+                    className="rounded-lg border border-red-200 bg-red-50 px-4 py-3"
+                  >
+                    <p className="text-sm text-red-700">{BREAKDOWN_FAILED}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // The button unmounts while the request runs; hand focus
+                      // to the select (which keeps it) so it never drops to the page.
+                      document.getElementById('breakdown-selector')?.focus();
+                      void fetchBreakdown(selectedBreakdown);
+                    }}
+                    className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-50 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  >
+                    Try again
+                  </button>
+                </div>
+              )}
+
+              {!breakdownLoading && !breakdownFailed && !shownBreakdown && selectedBreakdown && (
                 <p className="text-sm text-slate-500">
                   No breakdown data available for the selected dimension.
                 </p>

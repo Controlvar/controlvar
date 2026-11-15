@@ -18,7 +18,15 @@
  * The code stays in the browser's history; it is dead after 60 s and useless
  * without the secret, which leaves this tab only in the exchange body.
  */
-import { ApiError, UserMe, apiFetch, apiBase, apiUrl, navigation } from '@/services/api';
+import {
+  ApiError,
+  UserMe,
+  apiFetch,
+  apiBase,
+  apiUrl,
+  navigation,
+  signInTimeoutMessage,
+} from '@/services/api';
 
 export const SSO_LOGIN_PATH = '/api/v1/auth/sso/login';
 export const SSO_EXCHANGE_PATH = '/api/v1/auth/sso/exchange';
@@ -160,6 +168,7 @@ export async function exchangeSsoCode(code: string, secret: string): Promise<Sso
 /** Where a failed exchange sends the browser: `/login?sso_error=...`. */
 export function exchangeFailurePath(err: unknown): string {
   if (err instanceof ApiError) {
+    if (err.timedOut) return loginErrorPath(SSO_TIMED_OUT);
     if (err.status === 0) return loginErrorPath(SSO_UNREACHABLE);
     if (err.status === 429) return loginErrorPath(SSO_RATE_LIMITED);
     if (err.status >= 500) return loginErrorPath('sso_failed', { request_id: err.requestId });
@@ -171,9 +180,10 @@ export function exchangeFailurePath(err: unknown): string {
 // /login?sso_error=...
 // ---------------------------------------------------------------------------
 
-/** Dashboard-only codes: the exchange's 429 and an unreachable API. */
+/** Dashboard-only codes: the exchange's 429, an unreachable API and a timed-out exchange. */
 export const SSO_RATE_LIMITED = 'sso_rate_limited';
 export const SSO_UNREACHABLE = 'sso_unreachable';
+export const SSO_TIMED_OUT = 'sso_timed_out';
 
 export const SSO_ERROR_PARAMS = ['sso_error', 'provider', 'idp_error', 'request_id'] as const;
 
@@ -293,6 +303,9 @@ export function ssoErrorMessage(params: SsoErrorParams, ctx: SsoCopyContext): st
       return ctx.rateLimited;
     case SSO_UNREACHABLE:
       return ctx.unreachable;
+    case SSO_TIMED_OUT:
+      // The exchange uses apiFetch's default deadline.
+      return signInTimeoutMessage();
     default:
       return "Sign-in didn't complete. Start again.";
   }

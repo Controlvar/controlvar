@@ -34,7 +34,8 @@ the other variants `0.1 / n`, for `n` variants: epsilon is 0.1, and it is not a 
 
 Run the commands on this page in one terminal, in order, against the stack from the
 [Quick Start](../getting-started/quick-start.md). Each uses the shell variables set by the
-ones before it. Log in first; creating an experiment takes the DEVELOPER or ADMIN role:
+ones before it. Log in first; creating an experiment takes permission to create experiments,
+such as the DEVELOPER or ADMIN role:
 
 ```{.bash exec}
 TOKEN=$(curl -s -X POST localhost:8000/api/v1/auth/login \
@@ -84,7 +85,7 @@ that add up to 100; they decide the split until the bandit's first weight update
 ### GET /api/v1/bandit/{experiment_id}
 
 Returns the current bandit state: the algorithm, and each variant's weight, pulls,
-successes and conversion rate. Any logged-in user can read it. This also saves each
+successes and conversion rate. Anyone who may view the experiment can read it. This also saves each
 variant's id, for the weight override further down:
 
 ```{.bash exec}
@@ -170,8 +171,8 @@ An experiment whose `optimization_type` is `fixed` answers `404` here.
 
 ### POST /api/v1/bandit/{experiment_id}/update
 
-Recalculates the weights now, outside the scheduler cycle. Requires the DEVELOPER or ADMIN
-role:
+Recalculates the weights now, outside the scheduler cycle. Requires permission to change
+experiments, such as the DEVELOPER or ADMIN role:
 
 ```{.bash exec}
 curl -s -X POST localhost:8000/api/v1/bandit/$EXP_ID/update \
@@ -233,6 +234,14 @@ For each variant the scheduler needs pulls (assignments) and successes (conversi
    user who converts three times counts once. With no metric configured, every event other than an experiment view is a success.
 3. The previously persisted `BanditState`.
 4. Zero-count priors (equal weights).
+
+When the experiment's primary metric has `lower_is_better` set (uninstalls, errors), the bandit counts a user who did
+not convert as the success, so the variant with fewer converting users earns the traffic. Every algorithm and both
+live sources (DynamoDB and PostgreSQL) apply this, and so does the persisted `BanditState` fallback. The stored and
+reported `successes` and `conversion_rate` stay the converting users and their share, whatever the direction; only the
+algorithms see the flipped counts. Because a user who has not yet converted counts as a success, the most recent
+assignments look best until their exposure window has passed, so such a bandit needs a settled exposure window
+(an event that happens days after assignment gives a misleading early signal).
 
 ### How the weights affect traffic
 

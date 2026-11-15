@@ -64,14 +64,23 @@ with `limit` or `page_size`, and a few take no paging parameter. The route's ent
 the API documentation names its parameters.
 
 - `limit`: Maximum number of records to return (default: 100; the largest value allowed
-  differs by route, and some lists have none: the route's OpenAPI entry gives it)
+  differs by route, and the route's OpenAPI entry gives it)
 
 ## Filtering and Sorting
 
 Some list endpoints support filtering, and one supports sorting:
 
 - Filtering: Use query parameters (e.g., `status_filter=active`)
-- Sorting: `GET /api/v1/experiments/` takes `sort_by` and `sort_order` (e.g., `sort_by=created_at&sort_order=desc`)
+- Sorting: `GET /api/v1/experiments/` takes `sort_by` and `sort_order` (e.g., `sort_by=created_at&sort_order=desc`).
+  `sort_by` is a column of the experiment, in exact case: `id`, `created_at`, `updated_at`,
+  `name`, `key`, `description`, `hypothesis`, `status`, `experiment_type`, `owner_id`,
+  `start_date`, `end_date`, `resume_at`, `targeting_rules`, `metrics`, `tags`,
+  `experiment_metadata`, `optimization_type`, `sequential_testing_enabled`,
+  `sequential_testing_method`, `sequential_testing_config`, `variance_reduction_config`,
+  `correction_method`, `confidence_level`, `mutual_exclusion_group_id`, `bayesian_enabled`,
+  `bayesian_config`, `bayesian_decision`, `split_url_config` or `workspace_id`. An empty
+  `sort_by` applies no sort; any other value answers 422 at `["query", "sort_by"]` with a
+  message that lists the columns.
 
 ## Common Workflows
 
@@ -114,7 +123,7 @@ the SDK prefixes, then the default.
 | paths | limit |
 |---|---|
 | `/api/v1/auth/token`, `/auth/login` | 10 / min |
-| `/api/v1/auth/signup`, `/auth/forgot-password`, `/auth/reset-password` | 5 / min |
+| `/api/v1/auth/signup`, `/auth/confirm`, `/auth/forgot-password`, `/auth/reset-password` | 5 / min |
 | `/api/v1/users/me/password` | 5 / min |
 | `/api/v1/auth/sso/exchange` (full image) | 10 / min |
 | `/api/v1/auth/sso/login` (full image) | 30 / min |

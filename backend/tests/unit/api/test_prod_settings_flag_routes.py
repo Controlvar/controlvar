@@ -27,6 +27,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.api import deps
+from backend.app.api.read_scope import get_current_reader
 from backend.app.api.v1.endpoints import feature_flags as ff
 from backend.app.core.config import ProdSettings
 from backend.app.main import app
@@ -74,6 +75,9 @@ def client(prod_settings):
     saved = dict(app.dependency_overrides)
     app.dependency_overrides.clear()  # no get_cache_control override
     app.dependency_overrides[deps.get_current_active_user] = lambda: user
+    # The list's user comes from get_current_reader (a sign-in, or an mcp:read
+    # key); the detail's from get_current_active_user.
+    app.dependency_overrides[get_current_reader] = lambda: user
     app.dependency_overrides[deps.get_db] = lambda: db
     try:
         with (

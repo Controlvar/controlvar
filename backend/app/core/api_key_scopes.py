@@ -1,10 +1,10 @@
 """
 The one rule for reading an API key's ``scopes`` column.
 
-``APIKey.scopes`` is a comma-separated string (``String(255)``, nullable).
-Several writers fill it -- the create endpoint, which normalises, and the demo
-and contract seed scripts, which write literals such as ``"read,write"`` -- so
-every reader goes through :func:`parse_scopes`:
+``APIKey.scopes`` is a comma-separated string (``String(SCOPES_MAX_LENGTH)``,
+nullable). Several writers fill it -- the create endpoint, which normalises,
+and the demo and contract seed scripts, which write literals such as
+``"read,write"`` -- so every reader goes through :func:`parse_scopes`:
 
 * split on ``","``;
 * strip surrounding whitespace from each entry;
@@ -16,14 +16,27 @@ entries: ``"sdk:ruleset"`` is granted by ``"read, sdk:ruleset "`` but not by
 prefix, wildcard or substring matching.
 
 This module only parses. Whether a route requires a scope is decided where the
-route is declared (``backend/app/api/sdk_scope.py`` for ``sdk:ruleset``).
+route is declared (``backend/app/api/sdk_scope.py`` for ``sdk:ruleset``,
+``backend/app/api/read_scope.py`` for ``mcp:read``).
 """
 
 from typing import Iterable, List, Optional
 
-# The one scope name the platform enforces: it gates the server-side
-# local-evaluation ruleset download (GET /api/v1/sdk/ruleset).
+# The two scope names the platform enforces. Any other name is a label.
+#
+# sdk:ruleset gates the server-side SDK routes (GET /api/v1/sdk/ruleset and
+# the two tracking routes in backend/app/api/sdk_scope.py).
 SDK_RULESET_SCOPE = "sdk:ruleset"
+# mcp:read lets a key read flags, experiments and results on the four read
+# operations of backend/app/api/read_scope.py.
+MCP_READ_SCOPE = "mcp:read"
+
+# The length of the scopes column (backend/app/models/api_key.py), and so the
+# most the stored form -- the names joined with commas -- may hold. The create
+# request refuses a longer set with 422 (backend/app/schemas/api_key.py);
+# without that the insert failed and answered 500 (#1936). Changing it needs a
+# migration of the column.
+SCOPES_MAX_LENGTH = 255
 
 
 def parse_scopes(scopes: Optional[str]) -> List[str]:

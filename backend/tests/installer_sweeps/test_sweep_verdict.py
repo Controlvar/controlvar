@@ -356,6 +356,80 @@ def test_a_service_linked_role_that_goes_is_not_explained(again):
     assert again.report()["not-explained"] == [f"global/iam-roles.txt\t-\t{role}"]
 
 
+# --- the cache's automatic backup, which AWS removes some minutes after the cache ---------
+
+BACKUPS = "us-west-2/elasticache-snapshots.txt"
+#: The backup the uninstall's sweep read in the run of 2026-10-27, in the sweep's form
+#: (name, then source): the group's one node, and the minute AWS took it.
+BACKUP = "automatic.experimentation-redis-staging-redis-001-2026-10-27-02-40\tautomated"
+
+
+@pytest.mark.regression
+def test_the_caches_automatic_backup_is_kept_not_unexplained(sweeps):
+    """The uninstall's own sweep can still list the cache's automatic backup, which AWS
+    deletes by itself some minutes after the cache: it is kept, and the verdict passes.
+    It used to be not explained, RESIDUE, exit 1."""
+    _add(sweeps, "after", BACKUPS, BACKUP)
+    done = sweeps.verdict("before", "after")
+    assert (done.code, done.out) == (0, VERDICT.format("PENDING", 27, 10, 0, 0)), (
+        done.out
+    )
+    report = sweeps.report()
+    assert f"{BACKUPS}\t+\t{BACKUP}" in report["kept"]
+    assert report["not-explained"] == []
+
+
+#: Backups that are not the cache's own automatic one, each beside it in the list: by
+#: hand, another group's, a second node's, three stamps that are not yyyy-mm-dd-hh-mm,
+#: a backup with a name of its own, and the right line in the other region's list.
+NOT_THE_CACHES = {
+    "made-by-hand": (BACKUPS, BACKUP.replace("\tautomated", "\tmanual")),
+    "another-group": (BACKUPS, BACKUP.replace("-staging-redis-", "-prod-redis-")),
+    "a-second-node": (BACKUPS, BACKUP.replace("-redis-001-", "-redis-002-")),
+    "a-short-stamp": (BACKUPS, BACKUP.replace("-10-27-02-40", "-10-27-2-40")),
+    "a-malformed-stamp": (BACKUPS, BACKUP.replace("-10-27-02-40", "-10-27T02-40")),
+    "a-longer-stamp": (BACKUPS, BACKUP.replace("-10-27-02-40", "-10-27-02-40-1")),
+    "a-named-backup": (BACKUPS, "experimentation-redis-staging-redis-final\tmanual"),
+    "us-east-1": ("us-east-1/elasticache-snapshots.txt", BACKUP),
+}
+
+
+def test_a_backup_that_is_not_the_caches_automatic_one_is_not_explained(sweeps):
+    """Only the exact name (the group's node -001 and a yyyy-mm-dd-hh-mm stamp) with the
+    source automated is kept: anything else is someone's, and left alone. One verdict
+    over all of them beside the real one, each named in the list it must be in."""
+    _add(sweeps, "after", BACKUPS, BACKUP)
+    for file, line in NOT_THE_CACHES.values():
+        _add(sweeps, "after", file, line)
+    done = sweeps.verdict("before", "after")
+    report = sweeps.report()
+    unexplained = set(report["not-explained"])
+    kept_wrongly = {
+        name
+        for name, (file, line) in NOT_THE_CACHES.items()
+        if f"{file}\t+\t{line}" not in unexplained
+    }
+    assert kept_wrongly == set(), kept_wrongly
+    assert f"{BACKUPS}\t+\t{BACKUP}" in report["kept"]
+    assert (done.code, done.out) == (
+        1,
+        VERDICT.format("RESIDUE", 27, 10, 0, len(NOT_THE_CACHES)),
+    ), done.out
+
+
+def test_the_caches_automatic_backup_is_kept_when_it_goes(again):
+    """Both ways: a second install's before sweep holds the first uninstall's backup,
+    and AWS removes it before the second uninstall's sweep. One made by hand that goes
+    was removed by someone."""
+    manual = BACKUP.replace("\tautomated", "\tmanual")
+    _add(again, "before", BACKUPS, BACKUP, manual)
+    done = again.verdict("before", "after")
+    report = again.report()
+    assert report["kept"] == [f"{BACKUPS}\t-\t{BACKUP}"], report
+    assert report["not-explained"] == [f"{BACKUPS}\t-\t{manual}"], report
+    assert (done.code, done.out) == (1, VERDICT.format("RESIDUE", 1, 0, 0, 1)), done.out
+
+
 # --- a verdict that cannot write its report gives none ------------------------------------
 
 

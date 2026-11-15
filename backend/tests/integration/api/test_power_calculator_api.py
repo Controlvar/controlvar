@@ -695,7 +695,8 @@ class TestOverflowAnswers422:
         _assert_out_of_range(resp)
 
     def test_infinite_baseline_std_answers_422(self, client_no_raise: TestClient):
-        # JSON has no infinity, but the body parser accepts the literal.
+        # JSON has no infinity, but the body parser accepts the literal. Since
+        # #1630 every JSON body refuses it before the route, at its field.
         body = (
             '{"baseline_rate": 0.5, "minimum_detectable_effect": 0.1, '
             '"metric_type": "mean", "baseline_std": Infinity}'
@@ -705,7 +706,14 @@ class TestOverflowAnswers422:
             content=body,
             headers={"content-type": "application/json"},
         )
-        _assert_out_of_range(resp)
+        assert resp.status_code == 422, resp.text
+        assert resp.json()["detail"] == [
+            {
+                "type": "finite_number",
+                "loc": ["body", "baseline_std"],
+                "msg": "Input should be a finite number",
+            }
+        ]
 
 
 @pytest.mark.regression

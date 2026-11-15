@@ -6,6 +6,9 @@
 #   sdk/**  MIT          (sdk/LICENSE — the client SDKs and OpenFeature providers)
 #   **      Apache-2.0   (everything else: backend/, modules/, frontend/, docs/, ...)
 #
+# and one third-party file, MIT, by GitHub Inc.: GitHub's mark
+# (frontend/src/components/GitHubMark.tsx; NOTICE lists it).
+#
 # `reuse lint` (in `make lint` and the `lint` CI job) checks that every file is
 # covered and that the licence texts in LICENSES/ match the identifiers used.
 # No file carries a per-file SPDX header today; if one is added (say, to a file
@@ -31,4 +34,13 @@ SPDX-License-Identifier = "Apache-2.0"
 path = ["sdk/**"]
 precedence = "closest"
 SPDX-FileCopyrightText = "2024-2026 The Controlvar authors"
+SPDX-License-Identifier = "MIT"
+
+# GitHub's mark in the public site's header: Primer Octicons' mark-github-16,
+# copied unchanged (MIT, GitHub Inc.). After the tables above, so that, like
+# sdk/** over **, it is the last matching table and wins for this one file.
+[[annotations]]
+path = ["frontend/src/components/GitHubMark.tsx"]
+precedence = "closest"
+SPDX-FileCopyrightText = "GitHub Inc."
 SPDX-License-Identifier = "MIT"

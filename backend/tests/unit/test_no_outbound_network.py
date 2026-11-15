@@ -208,12 +208,14 @@ def test_boto3_stops_at_the_first_attempt(session):
         ("modules/lambda/example/tests/test_x.py", True),
         ("backend/tests/unit/showcase/test_showcase_contract.py", True),
         ("backend/tests/unit/showcase/capture_dirs.py", True),
+        ("backend/tests/integration/demo/test_demo_mode_db_diff.py", True),
+        ("backend/tests/integration/api/test_api_keys_api.py", False),
         ("backend/tests/unit/test_no_outbound_network.py", False),
         ("backend/tests/unit/showcase_other/test_x.py", False),
         ("modules/backend/tests/test_x.py", False),
     ],
 )
-def test_only_the_lambda_and_showcase_directories_are_guarded(relative, expected):
+def test_only_the_lambda_showcase_and_demo_directories_are_guarded(relative, expected):
     assert guard.is_guarded(REPO_ROOT / relative) is expected
 
 

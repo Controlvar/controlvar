@@ -242,6 +242,31 @@ describe('useFeatureFlag', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  // #1519: the kill-switch page says a component already on screen keeps its answer until it
+  // mounts again; the SDK neither polls nor streams.
+  it('a mounted hook does not ask again: past the cache lifetime it keeps its answer, one request', async () => {
+    jest.useFakeTimers();
+    try {
+      const fetchMock = makeFetchMock(enabledFlag);
+      const { result, rerender } = renderHook(() => useFeatureFlag('my-flag'), { wrapper: makeWrapper() });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      fetchMock.mockResolvedValue(jsonResponse(disabledFlag));
+
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(10 * 60 * 1000);
+      });
+      rerender();
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(10 * 60 * 1000);
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(result.current.isEnabled).toBe(true);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('shares the cached evaluation between two hooks for the same flag', async () => {
     const fetchMock = makeFetchMock(variantFlag);
     const { result } = renderHook(

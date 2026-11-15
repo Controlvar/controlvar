@@ -24,13 +24,31 @@ reason = "K1: the compose project name sets the volume names; a new name starts 
 [[keep]]
 path = "backend/tests/unit/infrastructure/test_production_compose.py"
 literal = "experimently-selfhost"
-count = 3
+count = 9
+reason = "K1: the compose project name sets the volume names; a new name starts an empty database"
+
+[[keep]]
+path = "deploy/compose/README.md"
+literal = "experimently-selfhost"
+count = 15
+reason = "K1: the compose project name sets the volume names; a new name starts an empty database"
+
+[[keep]]
+path = "docs/_claims/deploy/compose/README.md.toml"
+literal = "experimently-selfhost"
+count = 5
 reason = "K1: the compose project name sets the volume names; a new name starts an empty database"
 
 [[keep]]
 path = "deploy/compose/compose.yml"
 literal = "experimently-selfhost"
 count = 2
+reason = "K1: the compose project name sets the volume names; a new name starts an empty database"
+
+[[keep]]
+path = "scripts/compose_upgrade.sh"
+literal = "experimently-selfhost"
+count = 1
 reason = "K1: the compose project name sets the volume names; a new name starts an empty database"
 
 [[keep]]
@@ -346,6 +364,12 @@ count = 4
 reason = "C9: the chart keeps its directory; every reference to it"
 
 [[keep]]
+path = "backend/tests/unit/scripts/contributor_guard_tree.txt"
+literal = "charts/experimently"
+count = 23
+reason = "C9: the chart keeps its directory; a frozen listing of every tracked path, which names each file under it"
+
+[[keep]]
 path = "docs/_claims/docs/self-hosting/kubernetes.md.toml"
 literal = "charts/experimently"
 count = 2
@@ -439,6 +463,18 @@ reason = "C9: the chart's directory, built from parts"
 path = "backend/tests/unit/chart/test_chart_render.py"
 literal = "\"charts\" / \"experimently\""
 count = 1
+reason = "C9: the chart's directory, built from parts"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_proxy_trust.py"
+literal = "\"charts\" / \"experimently\""
+count = 1
+reason = "C9: the chart's directory, built from parts"
+
+[[keep]]
+path = "backend/tests/unit/docs/test_proxies_docs.py"
+literal = "\"charts\" / \"experimently\""
+count = 2
 reason = "C9: the chart's directory, built from parts"
 
 [[keep]]
@@ -828,7 +864,7 @@ reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
 [[keep]]
 path = ".github/workflows/compose-production.yml"
 literal = "EXPERIMENTLY_PROFILE"
-count = 1
+count = 2
 reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
 
 [[keep]]
@@ -1318,13 +1354,31 @@ count = 1
 reason = "K14: marker already on restored AWS resources"
 
 [[keep]]
-path = "infrastructure/cdk/stacks/fargate_service_stack.py"
+path = "infrastructure/cdk/stacks/names.py"
+literal = "Experimently/<env>"
+count = 1
+reason = "K15: the CloudWatch namespace; a new one orphans metric history"
+
+[[keep]]
+path = "infrastructure/cdk/stacks/names.py"
 literal = "Experimently/{env"
 count = 1
 reason = "K15: the CloudWatch namespace; a new one orphans metric history"
 
 [[keep]]
 path = "infrastructure/tests/test_standing_alarms.py"
+literal = "Experimently/{env"
+count = 3
+reason = "K15: the CloudWatch namespace; a new one orphans metric history"
+
+[[keep]]
+path = "infrastructure/tests/test_dashboards.py"
+literal = "Experimently/<env>"
+count = 2
+reason = "K15: the CloudWatch namespace; a new one orphans metric history"
+
+[[keep]]
+path = "infrastructure/tests/test_dashboards.py"
 literal = "Experimently/{env"
 count = 1
 reason = "K15: the CloudWatch namespace; a new one orphans metric history"
@@ -1504,6 +1558,12 @@ count = 3
 reason = "K18: CI arming switches; a mismatch fails open (env-inventory.md)"
 
 [[keep]]
+path = "backend/tests/integration/api/test_experiment_data_read_rule.py"
+literal = "EXPERIMENTLY_REQUIRE_"
+count = 2
+reason = "K18: CI arming switches; a mismatch fails open (env-inventory.md)"
+
+[[keep]]
 path = "backend/tests/integration/api/test_flag_reads_after_writers.py"
 literal = "EXPERIMENTLY_REQUIRE_"
 count = 3
@@ -1618,6 +1678,12 @@ count = 1
 reason = "K18: CI plumbing (env-inventory.md)"
 
 [[keep]]
+path = "scripts/rc_evidence.py"
+literal = "EXPERIMENTLY_TEST_SHARD"
+count = 2
+reason = "K18: CI plumbing (env-inventory.md)"
+
+[[keep]]
 path = "tests/llm/docker-compose.llm-stub.yml"
 literal = "EXPERIMENTLY_LLM_SMOKE"
 count = 1
@@ -1644,7 +1710,7 @@ reason = "K18: local image tag"
 [[keep]]
 path = ".github/workflows/pr-qa-gate.yml"
 literal = "experimently-api"
-count = 23
+count = 24
 reason = "K18: local image tag"
 
 [[keep]]
@@ -2100,6 +2166,18 @@ reason = "the guide's example release, namespace and secret: an existing install
 [[keep]]
 path = "docs/_claims/charts/experimently/README.md.toml"
 literal = "deploy/experimently-api"
+count = 1
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "docs/self-hosting/proxies.md"
+literal = "deploy/experimently-api"
+count = 1
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "docs/self-hosting/proxies.md"
+literal = "-n experimently"
 count = 1
 reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
 

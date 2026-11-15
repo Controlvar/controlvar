@@ -2,16 +2,28 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 import { API_URL, BASE_URL, IS_EXTERNAL_BASE_URL, PORT } from "./tests/e2e/env";
+import { launchOptions } from "./tests/e2e/launch";
 
 /**
  * Playwright configuration for the Controlvar dashboard.
  *
- * Four projects:
+ * Six projects:
  *   - `journeys` — the fail-hard PR journeys (`*.journey.spec.ts`), the
  *     required `browser-e2e` gate. Run them with `--project=journeys`.
  *   - `sso` — sign in with SSO from the dashboard (`*.sso.spec.ts`, C2b). It
  *     needs its own API process and the fake OIDC provider, which the
  *     `browser-e2e` job starts as steps; see tests/e2e/sso-sign-in.sso.spec.ts.
+ *   - `site` — the public site (`*.site.spec.ts`, #1459): phone width, axe
+ *     and keyboard focus over the MARKETING export, which Frontend Tests has
+ *     just built when it runs `--project=site`. Locally: `npm run
+ *     build:marketing`, then `PLAYWRIGHT_PORT=<not 3100>
+ *     PLAYWRIGHT_API_URL=http://127.0.0.1:1 npx playwright test --project=site`.
+ *   - `launch` — specs that need the browser users run (`*.launch.spec.ts`,
+ *     #1545): Desktop Chrome with tests/e2e/launch.ts's override, which keeps
+ *     third-party storage partitioning and paint holding on (Playwright's
+ *     default launch turns both off). The other projects keep the default
+ *     launch. Frontend Tests runs it right after the `site` step, over the
+ *     same export; no other workflow step does.
  *   - `extended` — everything else under tests/e2e (accessibility and the
  *     older specs); nightly territory, not a PR gate, but a failure there
  *     fails the night.
@@ -110,8 +122,34 @@ export default defineConfig({
       name: "extended",
       testMatch: /\.spec\.ts$/,
       // The visual spec has its own project below, until its baselines exist.
-      testIgnore: [/\.journey\.spec\.ts$/, /\.sso\.spec\.ts$/, /visual-regression\.spec\.ts$/],
+      // The site spec needs the marketing export, which nightly does not build.
+      // The launch specs run in `launch`, under its override, and only there.
+      testIgnore: [
+        /\.journey\.spec\.ts$/,
+        /\.sso\.spec\.ts$/,
+        /\.site\.spec\.ts$/,
+        /\.launch\.spec\.ts$/,
+        /visual-regression\.spec\.ts$/,
+      ],
       use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      // The public site over the MARKETING export (#1459): Frontend Tests runs
+      // it right after `npm run build:marketing`. The iPhone 13 descriptor
+      // names WebKit; CI installs only Chromium, and the phone checks were
+      // measured on Chromium, so `browserName` overrides it.
+      name: "site",
+      testMatch: /\.site\.spec\.ts$/,
+      use: { ...devices["iPhone 13"], browserName: "chromium" },
+    },
+    {
+      // #1545, V112: the browser users run, through tests/e2e/launch.ts.
+      // Its specs import `test` from tests/e2e/fixtures/launch.fixture.ts,
+      // which fails every test here when the running browser's command line
+      // disables either feature.
+      name: "launch",
+      testMatch: /\.launch\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], launchOptions },
     },
     {
       // Not run by any workflow. Move it back into `extended` (delete the

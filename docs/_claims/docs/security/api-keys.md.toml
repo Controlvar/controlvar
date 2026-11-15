@@ -56,21 +56,33 @@ by = [
 ]
 
 [[unit]]
-text = "An API key authenticates as the user who created it, and only on the endpoints an SDK calls: tracking, flag evaluation and the flag ruleset."
+text = "An API key authenticates as the user who created it, on the endpoints an SDK calls: tracking, flag evaluation and the flag ruleset."
 by = [
     "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestScope::test_an_inactive_owner_is_401",
+    "test:backend/tests/unit/api/test_route_surface_rules.py::test_an_api_key_is_accepted_only_by_the_sdk_routes_and_the_mcp_read_routes",
+]
+
+[[unit]]
+text = "A key that carries the mcp:read scope also reads flags, experiments and results on four read operations (see Scopes); a key without it is refused there with 403."
+by = [
+    "test:backend/tests/smoke/test_mcp_read_routes.py::test_the_mcp_read_routes_are_exactly_these",
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_key_with_the_scope_is_served",
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_key_without_the_exact_scope_is_refused_on_each_operation",
     "journey:api-key-first-assignment#management-route",
 ]
 
 [[unit]]
 text = "Creating or changing flags and experiments, and managing users, take a user login; an API key there is refused with 401 and {\"detail\":\"Not authenticated\"}, the answer to a request with no login at all."
-by = ["journey:api-key-first-assignment#management-route"]
+by = [
+    "test:backend/tests/unit/api/test_api_key_is_not_a_sign_in.py::test_a_route_outside_the_sdk_and_mcp_read_sets_refuses_a_request_that_carries_only_an_api_key",
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_scoped_key_is_refused_by_the_routes_that_change_things",
+]
 
 [[unit]]
 text = "API keys are not for signing people in: user-facing applications use the login described in Authentication."
 by = [
-    "test:backend/tests/unit/api/test_route_surface_rules.py::test_an_api_key_is_accepted_only_by_the_routes_an_sdk_calls",
-    "test:backend/tests/unit/api/test_api_key_is_not_a_sign_in.py::test_a_management_route_refuses_a_request_that_carries_only_an_api_key",
+    "test:backend/tests/unit/api/test_route_surface_rules.py::test_an_api_key_is_accepted_only_by_the_sdk_routes_and_the_mcp_read_routes",
+    "test:backend/tests/unit/api/test_api_key_is_not_a_sign_in.py::test_a_route_outside_the_sdk_and_mcp_read_sets_refuses_a_request_that_carries_only_an_api_key",
 ]
 
 [[unit]]
@@ -160,8 +172,10 @@ text = "description;"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "scopes, a list of names (see Scopes);"
-by = ["exempt:baseline"]
+text = "scopes, a list of names, at most 255 characters in all when joined with commas; a longer list answers 422 (see Scopes);"
+by = [
+    "test:backend/tests/integration/api/test_api_key_scopes_length_api.py::test_1936_a_256_character_scope_answers_422_and_stores_no_key",
+]
 
 [[unit]]
 text = "expires_at, an ISO 8601 time after which the key stops working."
@@ -186,19 +200,43 @@ text = "Scopes are stored with the key and returned when you list keys."
 by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_scopes_round_trip_as_list"]
 
 [[unit]]
-text = "One scope is enforced: sdk:ruleset."
-by = ["test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these"]
-
-[[unit]]
-text = "Every endpoint that accepts an API key, except the three below, accepts any active key, whatever its scopes."
+text = "Two scopes are enforced: sdk:ruleset and mcp:read."
 by = [
     "test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these",
-    "test:backend/tests/unit/api/test_route_surface_rules.py::test_the_ruleset_scope_and_its_owner_rule",
+    "test:backend/tests/smoke/test_mcp_read_routes.py::test_the_mcp_read_routes_are_exactly_these",
 ]
 
 [[unit]]
-text = "Names such as read, write or admin on existing keys are labels only; nothing checks them."
-by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_near_misses_are_labels_not_the_scope"]
+text = "Every endpoint that accepts an API key, except the ones listed below for each and the two a web page calls (Refused in a web page), accepts any active key, whatever its scopes."
+by = [
+    "test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these",
+    "test:backend/tests/smoke/test_page_key_routes.py::test_the_page_key_routes_are_exactly_these",
+    "test:backend/tests/unit/api/test_route_surface_rules.py::test_the_ruleset_scope_and_its_owner_rule",
+    "test:backend/tests/unit/api/test_route_surface_rules.py::test_an_api_key_is_accepted_only_by_the_sdk_routes_and_the_mcp_read_routes",
+]
+
+[[unit]]
+text = "Names such as read, write or admin on existing keys are labels only: no route requires one, though the two routes a web page calls refuse a key that carries any scope."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_near_misses_are_labels_not_the_scope",
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_key_without_the_exact_scope_is_refused_on_each_operation",
+    "test:backend/tests/integration/api/test_visual_tracking_api.py::test_a_key_with_any_scope_is_refused",
+]
+
+[[unit]]
+text = "Scope names are matched exactly and case-sensitively: the stored list is split on commas and each entry is trimmed, so \"read, sdk:ruleset \" carries sdk:ruleset, while SDK:RULESET, xsdk:ruleset and sdk:ruleset-ro do not."
+by = [
+    "test:backend/tests/unit/core/test_api_key_scopes.py::test_has_scope_is_exact_case_sensitive_membership",
+    "test:backend/tests/unit/core/test_api_key_scopes.py::test_parse_scopes",
+]
+
+[[unit]]
+text = "In the same way MCP:READ, xmcp:read and mcp:read-only do not carry mcp:read."
+by = ["test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_key_without_the_exact_scope_is_refused_on_each_operation"]
+
+[[unit]]
+text = "sdk:ruleset"
+by = ["exempt:label"]
 
 [[unit]]
 text = "sdk:ruleset is for a server: one that evaluates flags locally, or one that assigns lists of users to an experiment."
@@ -241,7 +279,7 @@ text = "Create a key with the 'sdk:ruleset' scope for server-side SDK use."
 by = ["test:backend/tests/unit/api/test_route_surface_rules.py::test_the_scope_refusal_says_what_to_create_and_the_key_header_is_x_api_key"]
 
 [[unit]]
-text = "A key with sdk:ruleset can therefore download every feature flag's targeting rules, including the values in them, so keep such a key on a server and never ship it to a browser or a mobile app."
+text = "A key with sdk:ruleset can therefore download every feature flag's targeting rules, including the values in them, and the values string, number and JSON flags serve, so keep such a key on a server and never ship it to a browser or a mobile app."
 by = ["test:backend/tests/integration/api/test_sdk_ruleset_api.py"]
 
 [[unit]]
@@ -268,30 +306,193 @@ text = "Through the API, send \"scopes\": [\"sdk:ruleset\"]."
 by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_ruleset_scope_by_role"]
 
 [[unit]]
-text = "Only users who can change feature flags can create a key with the sdk:ruleset scope: the ADMIN and DEVELOPER roles, and superusers."
-by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_ruleset_scope_by_role"]
+text = "Only users who can change feature flags can create a key with the sdk:ruleset scope: the ADMIN and DEVELOPER roles, superusers, and in the full profile anyone whose custom role or direct grant gives feature_flag (update)."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_ruleset_scope_by_role",
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
+]
 
 [[unit]]
-text = "For anyone else (ANALYST or VIEWER) the request is refused with 403 Forbidden, whose message names the roles that may create such a key, and no key is created."
-by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_ruleset_scope_by_role"]
+text = "For anyone else the request is refused with 403 Forbidden, whose message says who may create such a key, and no key is created."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_ruleset_scope_by_role",
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_experiment_update_alone_gives_no_server_key",
+    "test:backend/tests/unit/api/test_assign_batch_contract.py::test_the_key_creation_refusal_text",
+]
 
 [[unit]]
 text = "Keys without that scope can be created by every role, as before."
 by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_keys_without_the_scope_are_unchanged"]
 
 [[unit]]
-text = "Using such a key follows the same rule: both routes above accept a key with sdk:ruleset only while its owner can change feature flags, checked on every request, so a key whose owner is moved to ANALYST or VIEWER is refused with 403 from then on."
+text = "Using such a key follows the same rule: the three routes above accept a key with sdk:ruleset only while its owner can change feature flags, checked on every request, so a key whose owner loses that (moved to ANALYST or VIEWER, or a grant revoked or expired) is refused with 403 from then on."
 by = [
     "test:backend/tests/integration/api/test_sdk_ruleset_api.py",
     "test:backend/tests/integration/api/test_flag_evaluations_api.py",
     "test:backend/tests/integration/api/test_tracking_assign_batch.py",
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
+    "test:modules/backend/tests/integration/rbac/test_rbac_provider.py::test_a_grant_yields_its_pairs_only_when_activated_active_and_unexpired",
 ]
 
 [[unit]]
-text = "Scope names are matched exactly and case-sensitively: the stored list is split on commas and each entry is trimmed, so \"read, sdk:ruleset \" carries sdk:ruleset, while SDK:RULESET, xsdk:ruleset and sdk:ruleset-ro do not."
+text = "POST /api/v1/tracking/assign/batch also needs the owner to be able to change experiments; otherwise it answers 403 and assigns nobody."
 by = [
-    "test:backend/tests/unit/core/test_api_key_scopes.py::test_has_scope_is_exact_case_sensitive_membership",
-    "test:backend/tests/unit/core/test_api_key_scopes.py::test_parse_scopes",
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
+    "test:backend/tests/unit/api/test_assign_batch_contract.py::test_the_owner_experiment_text",
+]
+
+[[unit]]
+text = "mcp:read"
+by = ["exempt:label"]
+
+[[unit]]
+text = "mcp:read lets a key read flags, experiments and results."
+by = ["test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_each_role_reads_the_four_operations_with_an_mcp_read_key"]
+
+[[unit]]
+text = "These four operations accept a key that carries it, as well as a user login:"
+by = [
+    "test:backend/tests/smoke/test_mcp_read_routes.py::test_the_mcp_read_routes_are_exactly_these",
+    "test:backend/tests/smoke/test_mcp_read_routes.py::test_the_document_names_mcp_read_on_each_of_the_four_operations",
+]
+
+[[unit]]
+text = "GET /api/v1/feature-flags/, which lists the feature flags;"
+by = ["test:backend/tests/smoke/test_mcp_read_routes.py::test_the_mcp_read_routes_are_exactly_these"]
+
+[[unit]]
+text = "GET /api/v1/experiments/, which lists the experiments;"
+by = ["test:backend/tests/smoke/test_mcp_read_routes.py::test_the_mcp_read_routes_are_exactly_these"]
+
+[[unit]]
+text = "GET /api/v1/experiments/{experiment_id}, which reads one experiment;"
+by = ["test:backend/tests/smoke/test_mcp_read_routes.py::test_the_mcp_read_routes_are_exactly_these"]
+
+[[unit]]
+text = "GET /api/v1/experiments/{experiment_id}/results, which reads its results."
+by = ["test:backend/tests/smoke/test_mcp_read_routes.py::test_the_mcp_read_routes_are_exactly_these"]
+
+[[unit]]
+text = "The request reads as the user who created the key, and the operation checks that user's role as it does for a login."
+by = [
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_each_role_reads_the_four_operations_with_an_mcp_read_key",
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_the_routes_own_role_check_runs_for_a_key",
+]
+
+[[unit]]
+text = "Every role may read all four, so anyone holding the key reads everything its owner can there: every flag, with its targeting rules and the values it serves, every experiment, and every experiment's results."
+by = [
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_each_role_reads_the_four_operations_with_an_mcp_read_key",
+    "test:backend/tests/unit/core/test_permissions.py",
+]
+
+[[unit]]
+text = "Keep such a key out of browsers, mobile apps and code repositories."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "A key without the scope is refused on these four with 403:"
+by = ["test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_key_without_the_exact_scope_is_refused_on_each_operation"]
+
+[[unit]]
+text = "This API key does not have the 'mcp:read' scope."
+by = [
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_key_without_the_exact_scope_is_refused_on_each_operation",
+    "journey:api-key-first-assignment#management-route",
+]
+
+[[unit]]
+text = "Create a key with the 'mcp:read' scope to read flags, experiments and results with it."
+by = [
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_key_without_the_exact_scope_is_refused_on_each_operation",
+    "journey:api-key-first-assignment#management-route",
+]
+
+[[unit]]
+text = "The scope opens nothing else."
+by = [
+    "test:backend/tests/smoke/test_mcp_read_routes.py::test_the_mcp_read_routes_are_exactly_these",
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_scoped_key_is_refused_by_the_routes_that_change_things",
+]
+
+[[unit]]
+text = "The routes that create, change or delete flags or experiments, and the routes that manage users, still take a user login, and a request that carries a bearer token is judged on the token alone."
+by = [
+    "test:backend/tests/smoke/test_mcp_read_routes.py::test_every_mcp_read_route_is_a_get",
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_scoped_key_is_refused_by_the_routes_that_change_things",
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_an_invalid_bearer_is_401_even_with_a_valid_scoped_key",
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_valid_bearer_does_not_read_the_key",
+]
+
+[[unit]]
+text = "Every role can create a key with mcp:read: through the API, send \"scopes\": [\"mcp:read\"]."
+by = ["test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_the_scope_carries_no_role_rule_on_creation"]
+
+[[unit]]
+text = "Keys already labelled mcp:read gain that access when the instance is upgraded to a version that enforces the scope."
+by = ["test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_stored_unnormalised_scope_string_is_parsed"]
+
+[[unit]]
+text = "An ADMIN lists every user's keys, with their scopes, with GET /api/v1/api-keys?all=true."
+by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_admin_all_sees_everyone"]
+
+[[unit]]
+text = "Refused in a web page"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A key in a web page can be read by anyone who opens the page."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "So the two routes the visual editor's browser script calls answer 403 to a key that carries any scope, whatever its name:"
+by = [
+    "test:backend/tests/smoke/test_page_key_routes.py::test_the_page_key_routes_are_exactly_these",
+    "test:backend/tests/integration/api/test_visual_tracking_api.py::test_a_key_with_any_scope_is_refused",
+    "test:backend/tests/integration/api/test_visual_preview_links_api.py::test_a_key_with_any_scope_cannot_read_a_preview",
+]
+
+[[unit]]
+text = "POST /api/v1/tracking/visual (beta), which answers the visual changes and goals a visitor gets on a page;"
+by = [
+    "test:backend/tests/smoke/test_page_key_routes.py::test_the_page_key_routes_are_exactly_these",
+    "test:backend/tests/integration/api/test_visual_tracking_api.py::test_an_assigned_visitor_gets_the_changes_the_goals_and_one_exposure_per_view",
+]
+
+[[unit]]
+text = "POST /api/v1/tracking/visual/preview (beta), which answers the variant a preview link shows."
+by = [
+    "test:backend/tests/smoke/test_page_key_routes.py::test_the_page_key_routes_are_exactly_these",
+    "test:backend/tests/integration/api/test_visual_preview_links_api.py::test_a_link_shows_its_variant_on_the_page",
+]
+
+[[unit]]
+text = "The 403 says This API key has scopes, so it must stay on a server: a key in a web page can be read by anyone who opens the page."
+by = [
+    "test:backend/tests/integration/api/test_visual_tracking_api.py::test_a_key_with_any_scope_is_refused",
+    "test:backend/tests/integration/api/test_visual_preview_links_api.py::test_a_key_with_any_scope_cannot_read_a_preview",
+]
+
+[[unit]]
+text = "Use a key with no scopes on your website."
+by = [
+    "test:backend/tests/integration/api/test_visual_tracking_api.py::test_a_key_with_any_scope_is_refused",
+    "test:backend/tests/integration/api/test_visual_preview_links_api.py::test_a_key_with_any_scope_cannot_read_a_preview",
+]
+
+[[unit]]
+text = "Use a key with no scopes on a website: through the API, send \"scopes\": [] or leave scopes out."
+by = [
+    "test:backend/tests/integration/api/test_visual_tracking_api.py::test_a_key_with_no_scopes_is_served",
+    "test:backend/tests/integration/api/test_visual_tracking_api.py::test_an_assigned_visitor_gets_the_changes_the_goals_and_one_exposure_per_view",
+]
+
+[[unit]]
+text = "A key with a scope keeps working on every other route that takes a key."
+by = [
+    "test:backend/tests/integration/api/test_visual_tracking_api.py::test_a_server_key_still_works_on_the_other_sdk_routes",
+    "test:backend/tests/smoke/test_page_key_routes.py::test_the_page_key_routes_are_exactly_these",
+    "test:backend/tests/smoke/test_page_key_routes.py::test_get_api_key_reads_no_scope",
 ]
 
 [[unit]]
@@ -555,6 +756,21 @@ text = "Because no other scope limits a key, a separate key per service is what 
 by = ["test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these"]
 
 [[unit]]
+text = "Remember that a browser key answers for any user id"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A key used in a browser or a mobile app is visible to the people who use the app, and it answers for whichever user id it is sent: what that id is served, whether it is in a segment, and which experiments it is assigned to."
+by = [
+    "test:backend/tests/integration/api/test_plain_key_answers_for_any_user_id.py::test_a_flag_answers_for_any_user_id_and_an_id_list_decides_by_that_id",
+    "test:backend/tests/integration/api/test_plain_key_answers_for_any_user_id.py::test_assign_and_the_assignments_list_answer_for_any_user_id",
+]
+
+[[unit]]
+text = "Where that matters, use user ids that do not identify a person (not email addresses), in ID lists too, and read assignments from your server."
+by = ["exempt:advice"]
+
+[[unit]]
 text = "Remember that a key acts as its owner"
 by = ["test:backend/tests/unit/api/test_route_surface_rules.py::test_the_ruleset_scope_and_its_owner_rule"]
 
@@ -565,3 +781,11 @@ by = ["test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestScope::te
 [[unit]]
 text = "Create keys from an account whose role is no broader than the services need, and delete the keys of a user who leaves."
 by = ["test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestScope::test_an_inactive_owner_is_401"]
+
+[[unit]]
+text = "Removing a user from the identity provider does not revoke their API keys: deactivate the Controlvar user or delete the keys."
+by = [
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_key_does_not_consult_the_identity_provider",
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_deactivated_owner_is_401",
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_deleted_key_is_401",
+]

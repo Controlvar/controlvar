@@ -13,13 +13,13 @@
  *
  * ## Profiles
  *
- * The dump is taken from a full-profile build and carries 56 paths that only
+ * The dump is taken from a full-profile build and carries 58 paths that only
  * the modules serve. A core backend serves the rest, so the rule "every URL
  * literal exists in the dump" needs a profile, not a single document. Rather
  * than keeping two dumps in sync, one dump is kept and
  * `openapi.module-paths.json` names the modules' subset:
  *
- *   EXPERIMENTLY_PROFILE=core  →  those 56 paths are removed from the
+ *   EXPERIMENTLY_PROFILE=core  →  those 58 paths are removed from the
  *                                 document, and only the core tree
  *                                 (`frontend/src`, minus anything the manifest
  *                                 still lists there) is scanned.
@@ -78,8 +78,10 @@ describe(`frontend /api/v1 URL literals match the backend OpenAPI spec (${PROFIL
       expect(unknown).toEqual([]);
     });
 
-    it('the module subset is the 56 paths the modules registration mounts', () => {
-      expect(modulePaths).toHaveLength(56);
+    it('the module subset is the 58 paths the modules registration mounts', () => {
+      expect(modulePaths).toHaveLength(58);
+      expect(modulePaths).toContain('/api/v1/tracking/split-url/routes');
+      expect(modulePaths).toContain('/api/v1/tracking/split-url/assign');
       expect(modulePaths).toContain('/api/v1/warehouse/analysis/runs/{run_id}');
       expect(modulePaths).toContain('/api/v1/rbac/roles');
       expect(modulePaths).toContain('/api/v1/workspaces/');
@@ -96,7 +98,7 @@ describe(`frontend /api/v1 URL literals match the backend OpenAPI spec (${PROFIL
 
     it('the core document is the dump minus exactly those paths', () => {
       const core = coreDocument(fullDoc, modulePaths);
-      expect(Object.keys(core.paths)).toHaveLength(Object.keys(fullDoc.paths).length - 56);
+      expect(Object.keys(core.paths)).toHaveLength(Object.keys(fullDoc.paths).length - 58);
       expect(core.paths['/api/v1/rbac/roles']).toBeUndefined();
       expect(core.paths['/api/v1/experiments/']).toBeDefined();
       expect(core.paths['/api/v1/modules']).toBeDefined();

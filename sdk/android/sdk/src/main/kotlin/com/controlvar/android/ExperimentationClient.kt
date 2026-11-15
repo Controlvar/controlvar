@@ -61,8 +61,9 @@ class ExperimentationClient(
      * @param flagKey the feature flag's unique key
      * @param user    the user to evaluate the flag for
      * @return EvalResult with the flag key, enabled state and config
-     * @throws ExperimentationException.FlagNotFoundException if the flag is unknown or not
-     *         ACTIVE (HTTP 404) and no offline value exists
+     * @throws ExperimentationException.FlagNotFoundException if the flag key is unknown
+     *         (HTTP 404; a flag that is not ACTIVE answers 200 with `enabled: false`) and no
+     *         offline value exists
      * @throws ExperimentationException.ServerException on another non-2xx response with no offline value
      * @throws ExperimentationException.NetworkException on network failure with no offline value
      */
@@ -108,8 +109,9 @@ class ExperimentationClient(
      * @param experimentKey unique key for the experiment
      * @param user          the user requesting assignment
      * @return the assignment (experiment key, variant id/name, control flag, configuration)
-     * @throws ExperimentationException.ServerException on API error (404 when the experiment
-     *         is not ACTIVE) with no offline value
+     * @throws ExperimentationException.ServerException on API error (404 when no experiment has
+     *         the key, or for a draft with no control variant) with no offline value; an
+     *         experiment that is not ACTIVE answers its control variant, which is returned
      * @throws ExperimentationException.NetworkException on network failure with no offline value
      */
     suspend fun getAssignment(experimentKey: String, user: User): Assignment {

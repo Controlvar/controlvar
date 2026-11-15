@@ -1,0 +1,42 @@
+{
+  "slug": "10-serve-a-value",
+  "mp4": "10-serve-a-value-5afc444bad1e.mp4",
+  "items": [
+    { "on_screen": ["Controlvar", "Serve a value with a feature flag", "A/B testing and feature flags you run yourself."] },
+    { "on_screen": ["Signed in off camera. A flag can serve a value."] },
+    { "said": ["A flag can serve a value instead of on or off.", "Choose New Flag."] },
+    { "on_screen": ["Name it. The key fills in, and you can change it."] },
+    { "said": ["Name it, and the key your code uses fills itself in.", "You can change it: here, to the key the docs use."] },
+    { "on_screen": ["Choose its type: String, Number or JSON."] },
+    { "said": ["Choose its type: a string, a number, or JSON.", "Here, a string: the checkout button label."] },
+    { "on_screen": ["An on value, and an off value for everyone else."] },
+    { "said": ["Users it's on for get the on value: Complete purchase.", "Everyone else gets the off value: Buy now."] },
+    { "on_screen": ["A rule: pro plan users get the on value."] },
+    { "said": ["Add a rule: users on the pro plan get the on value."] },
+    { "on_screen": ["Rollout at 0%: only that rule's users get it."] },
+    { "said": ["With the rollout at 0%, no one else gets the on value.", "Choose Create Feature Flag."] },
+    { "on_screen": ["It starts off: everyone gets the off value."] },
+    { "said": ["It's created switched off, so everyone gets the off value."] },
+    { "on_screen": ["Switch it on when your code is ready."] },
+    { "said": ["Switch it on: rules and rollout decide who gets the on value."] },
+    { "on_screen": ["From the Go SDK docs"] },
+    {
+      "code": [
+        "label, _ := client.EvaluateFlag(ctx, \"checkout-button-label\", user) // a string flag",
+        "fmt.Println(label.StringValue(\"Buy now\"))"
+      ]
+    },
+    { "on_screen": ["As the docs give it, for the flag made above; go get installs the Go SDK's latest release."] },
+    { "on_screen": ["Your app reads the value, with a default."] },
+    { "said": ["In your app, the Go SDK reads the value for each user.", "Without an answer, it returns the default you give it."] },
+    {
+      "on_screen": [
+        "Controlvar",
+        "Open source, Apache-2.0, runs on your own infrastructure",
+        "controlvar.com",
+        "github.com/Controlvar/controlvar",
+        "Recorded on Controlvar v0.44.1, a local stack with demo data"
+      ]
+    }
+  ]
+}

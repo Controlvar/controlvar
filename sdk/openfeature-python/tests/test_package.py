@@ -30,9 +30,10 @@ def test_the_package_is_a_0_x_beta():
     assert "Development Status :: 4 - Beta" in meta["classifiers"]
 
 
-def test_it_needs_python_3_9_and_openfeature_sdk_0_10():
+def test_it_needs_python_3_10_and_openfeature_sdk_0_10():
     meta = project(PROVIDER_ROOT)
-    assert meta["requires-python"] == ">=3.9"
+    # openfeature-sdk 0.9.0 and 0.10.0 both require Python >= 3.10.
+    assert meta["requires-python"] == ">=3.10"
     assert "openfeature-sdk>=0.10.0" in meta["dependencies"]
 
 

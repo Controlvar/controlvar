@@ -23,6 +23,12 @@ from pydantic import (
 )
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+from backend.app.core.demo_mode import (
+    OUTBOUND_SETTINGS,
+    demo_account_published,
+    demo_settings_refusals,
+    refusal_message,
+)
 from backend.app.core.settings_rules import (
     CANONICAL_ENVIRONMENTS,
     ENV_FILES,
@@ -31,6 +37,7 @@ from backend.app.core.settings_rules import (
     MIN_SECRET_KEY_LENGTH,
     PUBLIC_BASE_URL_EXAMPLE,
     allowed_host_pattern_error,
+    cognito_domain_error,
     parse_allowed_hosts,
     public_base_url_error,
     secret_is_placeholder,
@@ -324,6 +331,22 @@ class Settings(BaseSettings):
     LOCAL_AUTH_MAX_FAILED_ATTEMPTS: int = 10
     LOCAL_AUTH_LOCKOUT_MINUTES: int = 15
 
+    # Demo mode: a read-only switch for a public demo install
+    # (backend/app/core/demo_mode.py). Off by default. On, the API refuses
+    # every request that could create or change something except an exact
+    # allow-list of eight POSTs, refuses every websocket, and signs in only
+    # non-superuser viewers. Read at request time, so a test can flip it on
+    # the singleton.
+    DEMO_MODE: bool = False
+    # The shared account a demo visitor signs in with, published by
+    # GET /api/v1/auth/config; while it is published, failed sign-ins are not
+    # counted (`demo_account_published`). Both or neither; only with
+    # DEMO_MODE=true and AUTH_PROVIDER=local; never FIRST_SUPERUSER; an address
+    # with an @ of at most 254 characters and a password of at most 256
+    # (`refuse_an_unsafe_demo_mode`).
+    DEMO_ACCOUNT_EMAIL: str = ""
+    DEMO_ACCOUNT_PASSWORD: str = ""
+
     # The canonical absolute base URL this service is reached at, e.g.
     # `https://api.example.com`. Every absolute URL the app EMITS is built from
     # this rather than from the request, so no handler asks the request for the
@@ -450,6 +473,10 @@ class Settings(BaseSettings):
     # but the bandit scheduler records every tick, so the tables still grow
     # without a purge. 0 disables the purge.
     ANALYSIS_HISTORY_RETENTION_DAYS: int = 90
+    # The days a flag must go unevaluated, or unchanged while it serves one
+    # answer to everyone, before the flag list marks it stale (#1808). One
+    # value for the installation, read when the process starts.
+    STALE_FLAG_DAYS: int = Field(default=30, ge=1, le=3650)
 
     METRICS_ENABLED: bool = True
     METRICS_TOKEN: Optional[str] = (
@@ -516,6 +543,19 @@ class Settings(BaseSettings):
     # Ignored under ``local``, where both routes always answer 404.  Read at
     # request time, so a test can flip it on the singleton.
     COGNITO_SELF_SIGNUP_ENABLED: bool = False
+    # Dashboard sign-in through the Cognito Hosted UI (#708). The Hosted UI's
+    # domain name alone, e.g. `<prefix>.auth.<region>.amazoncognito.com`: the
+    # dashboard sends the browser to `https://<COGNITO_DOMAIN>/oauth2/authorize`
+    # (GET /api/v1/auth/config serves it), and POST /api/v1/auth/cognito/exchange
+    # asks `https://<COGNITO_DOMAIN>/oauth2/token` for the tokens. Unset (the
+    # default), the dashboard under cognito says sign-in is not set up. A value
+    # that is not a domain name refuses to start the API
+    # (`settings_rules.cognito_domain_error`).
+    COGNITO_DOMAIN: Optional[str] = None
+    # How long the code exchange waits for Cognito's token endpoint: httpx's
+    # connect, read, write and pool timeouts, each. Past it the exchange
+    # answers 504.
+    COGNITO_TOKEN_TIMEOUT_SECONDS: float = Field(default=10, gt=0, le=60)
 
     model_config = SettingsConfigDict(
         case_sensitive=True,
@@ -688,6 +728,17 @@ class Settings(BaseSettings):
         return []
 
     @property
+    def demo_account_published(self) -> bool:
+        """True when ``DEMO_MODE`` is on and the demo account is set.
+
+        ``GET /api/v1/auth/config`` then publishes the account, password
+        included, and the local sign-in counts no failed attempts.
+        """
+        return demo_account_published(
+            self.DEMO_MODE, self.DEMO_ACCOUNT_EMAIL, self.DEMO_ACCOUNT_PASSWORD
+        )
+
+    @property
     def dev_auth_bypass_active(self) -> bool:
         """True only when the dev-admin bypass is both enabled and permitted."""
         return (
@@ -765,6 +816,37 @@ class Settings(BaseSettings):
             )
         return self
 
+    @model_validator(mode="after")
+    def refuse_an_unsafe_demo_mode(self) -> "Settings":
+        """Refuse to start with a demo configuration that is unsafe or ambiguous.
+
+        The rules are ``demo_mode.demo_settings_refusals``: the demo account is
+        two settings set together, only with ``DEMO_MODE=true`` and the local
+        provider, never ``FIRST_SUPERUSER``, and of a shape a client accepts
+        (an address with an @, at most 254 characters; a password of at most
+        256); under ``DEMO_MODE=true`` no setting or variable that calls a
+        service outside the install is set.
+        The settings ignore an unknown name (``extra="ignore"``), so a misspelt
+        ``DEMO_MODE`` alone would start a writable API; with the account set,
+        the second rule turns that typo into a refusal.
+        """
+        message = refusal_message(
+            demo_settings_refusals(
+                demo_mode=self.DEMO_MODE,
+                account_email=self.DEMO_ACCOUNT_EMAIL,
+                account_password=self.DEMO_ACCOUNT_PASSWORD,
+                auth_provider=self.AUTH_PROVIDER,
+                first_superuser=str(self.FIRST_SUPERUSER),
+                outbound_settings={
+                    name: getattr(self, name) for name in OUTBOUND_SETTINGS
+                },
+                environment=os.environ,
+            )
+        )
+        if message:
+            raise ValueError(message)
+        return self
+
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
@@ -799,6 +881,23 @@ class Settings(BaseSettings):
         if error:
             raise ValueError(error)
         return v.strip().rstrip("/")
+
+    @field_validator("COGNITO_DOMAIN")
+    @classmethod
+    def validate_cognito_domain(cls, v: Optional[str]) -> Optional[str]:
+        """The Hosted UI's domain name, or ``None`` when unset or blank.
+
+        Unset never stops the API: every Cognito deployment from before this
+        setting has none, and the dashboard then says sign-in is not set up.
+        A value that is not a domain name does, under any provider: it would
+        send every sign-in to a page that does not exist.
+        """
+        if v is None or not v.strip():
+            return None
+        error = cognito_domain_error(v)
+        if error:
+            raise ValueError(error)
+        return v
 
     @field_validator("ALLOWED_HOSTS", mode="before")
     @classmethod

@@ -44,11 +44,13 @@ pytest backend/tests/unit/  # Unit tests only
 pytest backend/tests/integration/  # Integration tests only
 
 # Code quality (ruff replaces black, isort and flake8). The scope is
-# `backend/ modules/ scripts/ tests/acceptance/` -- exactly what `make format` /
-# `make lint` and the lint CI job pass; linting backend/ alone leaves the
-# modules, the repository tooling and the acceptance runner unchecked.
-ruff format backend/ modules/ scripts/ tests/acceptance/        # Format code
-ruff check backend/ modules/ scripts/ tests/acceptance/ --fix   # Lint and auto-fix (includes import sorting)
+# `backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/
+# tests/usecases/` -- exactly what `make format` / `make lint` and the lint CI
+# job pass; linting backend/ alone leaves the modules, the repository tooling,
+# the acceptance runner, the ground-truth library and the use-case harness
+# unchecked.
+ruff format backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/        # Format code
+ruff check backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/ --fix   # Lint and auto-fix (includes import sorting)
 mypy backend/app/                             # Type checking: NOT gated, NOT clean (#788)
 make format                 # The two ruff commands above
 make lint                   # Everything the `lint` CI job runs (see below)
@@ -217,25 +219,28 @@ source venv/bin/activate && pytest -m "unit" -v
 - SDKs use `POST /api/v1/tracking/assign` (sticky assignment by `experiment_key`), `POST /api/v1/tracking/track`, `POST /api/v1/tracking/batch`, `GET /api/v1/feature-flags/evaluate/{key}?user_id=` with `X-API-Key`. The `/events` and `/assignments` routers are informational stubs.
 - The tracking API stores the event's own name in `event_type` (e.g. `"purchase"`), while `EventService.track_conversion` stores `"conversion"`. **Every analysis path must match conversions with `backend/app/services/event_matching.py`** (`conversion_event_filter(metric.event_name)`), never `Event.event_type == "conversion"`.
 - Experiments need a public `key` (auto-slugged on create) for the tracking API to find them.
+- `/tracking/track` and `/tracking/batch` tag an event with the user's stored variant only while the experiment is ACTIVE, the status read when the event is received (`_variant_at_receipt` in `tracking.py`). An event for a draft, paused, completed or archived experiment keeps its `experiment_id` with `variant_id` null, so it counts in no arm; a reader that filters on `experiment_id` alone (the results summary's `total_events`, the experiments export's event total, segment discovery) still sees it. `python -m backend.scripts.retag_events_from_assignments` tags such events from the assignment rows (dry run unless `--apply`).
+- `POST /tracking/assign` looks the experiment up by key whatever its status. A draft, paused, completed or archived experiment answers every user with 200, its `is_control` variant, `assigned: false` and `reason` = the status (`draft|paused|completed|archived`), and records nothing (`_not_running_answer` in `tracking.py`; no assignment, view event, holdout row or bandit call); stored assignments are kept, so a resumed experiment answers with them again. 404 only for an unknown key (`No experiment has the key '<k>'.`) or a draft with no control variant. `POST /tracking/assign/batch` still answers 404 for any experiment that is not ACTIVE, with its own detail.
 
 #### Multi-Armed Bandits
 - `BanditSchedulerRunner` starts in the app lifespan (`BANDIT_UPDATE_INTERVAL_MINUTES`, default 5; skipped when `APP_ENV=test`). Stats source order: DynamoDB `get_experiment_counters` → PostgreSQL (assignments + primary-metric conversions) → `BanditState` → zero priors. DynamoDB is used only when, for every variant, its pulls and successes are both at least PostgreSQL's (#430); otherwise PostgreSQL wins, so a partial DynamoDB count never replaces the complete one.
 - `/tracking/assign` routes new users by `BanditState.variant_weights` for `optimization_type != "fixed"`; existing assignments are always kept.
 
 #### Rate limits and CORS
-- SDK paths (`/api/v1/tracking/*`, `/feature-flags/evaluate/*`, `/feature-flags/user/*`, `/api/v1/sdk/*`) share `SDK_RATE_LIMIT_PER_MINUTE` (default 6000/min per IP); auth endpoints stay strict; every `/api/v1/export/*` path shares ONE counter of 10/min per IP (`EXPORT_RATE_LIMIT`, keyed on the prefix by `rate_limit_key()`); everything else 300/min. Limits resolve via `resolve_rate_limit()` in `backend/app/middleware/rate_limiter.py`. If Redis fails, `RedisRateLimiter` counts per process (limits multiply by the number of API processes) and retries Redis every 30 s (`REDIS_RETRY_SECONDS`) with client retries off (`retry=Retry(NoBackoff(), 0)` -- redis-py's default ten retries would block the event loop for seconds on every retry); each switch logs once with a `rate_limiter` field.
+- SDK paths (`/api/v1/tracking/*`, `/feature-flags/evaluate/*`, `/feature-flags/user/*`, `/api/v1/sdk/*`) use the limit `SDK_RATE_LIMIT_PER_MINUTE` (default 6000/min), counted per client address AND per path, so every flag key, user id or other id in a path is its own counter; auth endpoints stay strict; only `/api/v1/export/*` (`EXPORT_RATE_LIMIT`, 10/min) and `/api/v1/ai/interpret/*` share ONE counter per address, which `rate_limit_key()` keys on the prefix; everything else 300/min. Limits resolve via `resolve_rate_limit()` in `backend/app/middleware/rate_limiter.py`. If Redis fails, `RedisRateLimiter` counts per process (limits multiply by the number of API processes) and retries Redis every 30 s (`REDIS_RETRY_SECONDS`) with client retries off (`retry=Retry(NoBackoff(), 0)` -- redis-py's default ten retries would block the event loop for seconds on every retry); each switch logs once with a `rate_limiter` field.
 - `CORS_ORIGINS` is a plain comma-separated list (annotated `NoDecode`); `BACKEND_CORS_ORIGINS` must be a JSON array. Dev defaults include ports 3000, 3001, 3100, 3200, 8000.
 
 #### Demo applications
 - `./demo/setup-local.sh` seeds demo data, starts the API (8000), dashboard (3100), the **ShopLab** storefront (`demo/shoplab`, 3200), **StreamPulse** (`demo/streampulse`, 3300) and their simulators. Pieces by hand: `python backend/scripts/seed_shoplab.py` / `seed_streampulse.py` (idempotent; `--reset`, `--no-history`; write `demo/<app>/.api_key` and `.env.local`), `cd demo/<app> && npm run dev`, `python demo/<app>/simulator/traffic.py --rate 3`, and for StreamPulse `python demo/streampulse/simulator/rollout_story.py --auto` (needs the backend running with `SAFETY_CHECK_INTERVAL_MINUTES=1 ROLLOUT_CHECK_INTERVAL_MINUTES=1`).
 - Both demo apps consume the React SDK from source (`sdk/react/src`) via a webpack/tsconfig alias; tests there mock the SDK.
+- A pull request touching `demo/**`, or a file the simulators' pytest session loads from outside it (the root `conftest.py` and `pyproject.toml`, the plugins that conftest names, `backend/requirements.txt`; the workflow's `paths:` is the list), runs `.github/workflows/demo-apps.yml`: both demo jest suites and the simulators' pytest suites, each through `scripts/rc_evidence.py --suite <demo-shoplab|demo-streampulse|demo-simulators>`, the command rc-evidence runs at a release tag. A change under `sdk/react/` alone does not run it: the jest suites mock the SDK, so they cannot test it. The Demo Apps check is not required (it is path-filtered), so a red run does not stop a Dependabot auto-merge. It adds no suite to core-build, only seven workflow-shape cases in its unit session (about 0.1 s).
 
 #### Feature-flag targeting and assignment eligibility
 - Flag `targeting_rules` are stored in the **dashboard shape** (`{"logical_operator","groups":[{"logical_operator","conditions":[{"attribute","operator","value"}]}]}`, operators like `equals`, `semver_gte`, `in`). `backend/app/core/targeting_adapter.py` normalises that (and the native `TargetingRules` shape) to the Enhanced Rules Engine; the legacy list shape (`[{"type": "context", ...}]`) still takes the old path. `expand_context()` aliases attributes (`country` ↔ `user.country`, nested dicts flatten to dotted keys). Use these helpers anywhere rules are evaluated; do not add a fourth format.
 - SDKs send user attributes as `context` (URL-encoded JSON) on `GET /feature-flags/evaluate/{key}`; responses carry `reason` (`targeting_rule|rollout|inactive|error`).
 - `GET /api/v1/sdk/ruleset` (beta, #226) serves every flag normalised for server-side SDK-local evaluation, built by `backend/app/services/sdk_ruleset.py`; it requires an API key with the `sdk:ruleset` scope (`backend/app/api/sdk_scope.py`; `backend/tests/smoke/test_sdk_scoped_routes.py` pins which routes need it). `tests/sdk-contract/ruleset-vectors.json` is generated from the server (`python -m backend.scripts.generate_ruleset_vectors`); any change to the rules engine, the targeting adapter or the flag service's evaluation that moves an answer fails `test_sdk_ruleset_vectors.py` until the file is regenerated, and then the SDKs must agree with it.
 - `AssignmentService.assign_user` checks global holdout → mutual exclusion group → experiment targeting for NEW users; ineligible users get HTTP 200 with the control variant and `assigned: false, reason: holdout|mutual_exclusion|targeting`, no assignment row, no exposure.
-- Errors are reported with `POST /api/v1/tracking/errors[/batch]` (API key) → `error_logs`, stamped `request_data.source` `"server"` or `"client"` from the presented key (`report_source`). The safety monitor counts every row except `"client"` ones (`SafetyService.get_error_metrics`, `IS DISTINCT FROM`, so evaluation failures count), divides them by flag evaluations and rolls back to the config's `rollback_percentage`. Only an `sdk:ruleset` key whose owner can change flags stamps `"server"` (`presented_key_is_server_key`); any other key's reports are stored and shown as `uncounted_error_count`. A new `error_logs` writer must be listed in `backend/tests/smoke/test_error_log_writers.py`. Cadences: `SAFETY_CHECK_INTERVAL_MINUTES`, `ROLLOUT_CHECK_INTERVAL_MINUTES`, `BANDIT_UPDATE_INTERVAL_MINUTES`.
+- Errors are reported with `POST /api/v1/tracking/errors[/batch]` (API key) → `error_logs`, stamped `request_data.source` `"server"` or `"client"` from the presented key (`report_source`). The safety monitor counts every row except `"client"` ones (`SafetyService.get_error_metrics`, `IS DISTINCT FROM`, so evaluation failures count), divides them by every evaluation of the flag in the same 15-minute window, whichever API key asked (each `GET /feature-flags/user/{user_id}` counts one evaluation per active flag; SDK local-evaluation counts add to it), so `error_rate` follows traffic while `error_count` does not, and rolls back to the config's `rollback_percentage`. Only an `sdk:ruleset` key whose owner can change flags stamps `"server"` (`presented_key_is_server_key`); any other key's reports are stored and shown as `uncounted_error_count`. A new `error_logs` writer must be listed in `backend/tests/smoke/test_error_log_writers.py`. Cadences: `SAFETY_CHECK_INTERVAL_MINUTES`, `ROLLOUT_CHECK_INTERVAL_MINUTES`, `BANDIT_UPDATE_INTERVAL_MINUTES`.
 - `backend.app.models.register_core_models()` imports every *core* model module so standalone scripts can configure the SQLAlchemy mappers; add a new core model to `CORE_MODEL_MODULES` there. Module models are registered through `hooks.register_model_module()` by the modules registration (`modules/backend/app/register.py`), and schema builders load them with `modules_loader.require_modules_or_absent()`.
 
 #### Metrics Import Standards
@@ -379,7 +384,7 @@ alembic stamp heads
 
 #### Role-Based Access Control (RBAC)
 The `core/permissions.py` module implements a comprehensive RBAC system with four roles:
-- **ADMIN**: Full access to all resources and actions
+- **ADMIN**: Manages experiments, flags, integrations and compliance exports, but is not a superuser: user management, changing safety settings and the dashboard's Users, API Keys and Roles pages need `is_superuser` (`docs/rbac/README.md`)
 - **DEVELOPER**: Can create and manage experiments and feature flags
 - **ANALYST**: Can view all data but cannot create or modify resources
 - **VIEWER**: Read-only access to approved resources
@@ -387,11 +392,17 @@ The `core/permissions.py` module implements a comprehensive RBAC system with fou
 #### Feature Flag Permissions
 - **Access to a flag is by role, not ownership** (founder decision D11): ADMIN and
   DEVELOPER read, create, change and delete any flag; ANALYST and VIEWER read any flag
-  and change none, not even one they own. The creator is recorded as `owner_id` (a
-  UUID) and shown, but it is not an access rule.
+  and change none, not even one they own, unless (full profile) a custom role or direct
+  grant gives them feature_flag update or delete, which admits any flag, or create,
+  which lets them create flags. The creator is recorded as `owner_id` (a UUID) and
+  shown, but it is not an access rule.
 - **The one decision is `can_act_on_feature_flag(user, owner_id, action)`** in
-  `backend/app/core/permissions.py`: the role matrix first, then `FEATURE_FLAG_SCOPE`
-  (all "any flag" today; per-flag locks or approvals would go there). Every route that
+  `backend/app/core/permissions.py`: a superuser always; then, if the built-in role
+  holds the action, `FEATURE_FLAG_SCOPE` decides whose flags (all "any flag" today);
+  if it does not, a custom role or direct grant of that action admits any flag and the
+  table is never read. So a per-flag lock or approval added to `FEATURE_FLAG_SCOPE`
+  binds the built-in roles only: it must be checked on the grant path too, or grant
+  holders bypass it. Every route that
   changes a flag calls it -- the per-flag routes, bulk-toggle, and every rollout
   schedule and stage change (against the schedule's flag).
   `backend/tests/smoke/test_flag_change_routes_guarded.py` pins the exact set of
@@ -468,7 +479,7 @@ def admin_token(admin_user, monkeypatch):
 - Verify that proper 403 responses are returned when unauthorized actions are attempted
 - Use mock objects that accurately represent actual objects including ownership properties
 - All permission tests should validate that:
-  - ADMIN users can perform all actions
+  - ADMIN users can manage experiments, flags, integrations and compliance exports, but not the superuser-gated routes (`/api/v1/admin/users`, changing safety settings) unless `is_superuser`
   - DEVELOPER users can create and manage resources
   - ANALYST users can view but not modify resources
   - VIEWER users have read-only access
@@ -591,6 +602,10 @@ schedule_data = {
 3. Stage orders must be sequential without gaps.
 4. For time-based triggers, ensure the dates are in UTC timezone.
 5. Manual stages must be explicitly advanced using the API.
+6. A flag has at most one ACTIVE schedule: activating or resuming a second answers 409.
+7. Targets are checked on every write: 422 on create, 409 on add, update and `max_percentage` changes.
+8. Only the next stage can be advanced; a completed or failed stage cannot be changed, and one in progress keeps its target and order.
+9. A stage is added, or a pending one moved, only after every stage that has started (409 otherwise, #1536).
 
 ## Enhanced Rules Engine (EP-001)
 
@@ -1098,16 +1113,20 @@ genuinely cannot be public lives in `getexperimently/experimently-internal`.
 What remains non-obvious, every item of which cost a wrong report or a failed
 deploy:
 
-### A `GITHUB_TOKEN` event triggers no workflow
+### A `GITHUB_TOKEN` event triggers no workflow, and the release pull request's checks wait for approval
 
 GitHub refuses to run workflows for events its own token created, to stop
 recursion. Two consequences, both certain to recur:
 
-- **The release-please pull request has ZERO checks.** With 20 required, it can
-  never satisfy branch protection. It is not blocked on anything you can fix in
-  the pull request; merge it with `--admin` after confirming the diff is only
-  the eight files it owns: CHANGELOG.md, VERSION, `.release-please-manifest.json`
-  and the five `extra-files` (see the next section).
+- **The release-please pull request's checks never run on their own.** Its
+  `pull_request` runs exist but sit at `action_required`, waiting for a
+  maintainer's approval like a fork's (measured on #1483: 15 runs, actor
+  `github-actions[bot]`, all `action_required`), so it shows no check results
+  and does not satisfy branch protection as it stands. It is not blocked on
+  anything you can fix in the pull request; merge it with `--admin` after
+  confirming the diff is only the eight files it owns: CHANGELOG.md, VERSION,
+  `.release-please-manifest.json` and the five `extra-files` (see the next
+  section).
 - **The tag it pushes triggers nothing -- but `release.yml` does not need it
   to.** `release-please.yml` calls `release.yml` itself (`uses:
   ./.github/workflows/release.yml`, a `workflow_call`) when `release_created`
@@ -1260,12 +1279,14 @@ python -m alembic -c backend/app/db/alembic.ini current
 
 ### Code Quality Checks
 ```bash
-# Format and auto-fix backend/, modules/, scripts/ and tests/acceptance/ in
-# place (ruff: format + lint + import order)
+# Format and auto-fix backend/, modules/, scripts/, tests/acceptance/,
+# tests/ground_truth/ and tests/usecases/ in place (ruff: format + lint +
+# import order)
 make format
 
 # The full lint gate, in this order:
 #   ruff check / ruff format --check   backend/ modules/ scripts/ tests/acceptance/
+#                                      tests/ground_truth/ tests/usecases/
 #   lint-imports                       the core/modules import boundary
 #                                      ([tool.importlinter] in pyproject.toml,
 #                                      backend/lambda/.importlinter)

@@ -21,7 +21,11 @@ import {
   segmentInUse,
   usageCount,
 } from '@/utils/segmentErrors';
-import { canChangeSegments } from '@/utils/segmentPermissions';
+import { canArchiveSegments, canChangeSegments } from '@/utils/segmentPermissions';
+import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
+import { useDemoMode } from '@/contexts/AuthConfigContext';
+import { DemoNote } from '@/components/DemoNote';
+import { DEMO_SEGMENTS_ACTION } from '@/utils/demoMode';
 import { segmentRulesAreValid } from '@/utils/segmentRules';
 import { SEGMENT_RULES_OPERATOR_OPTIONS, createEmptyGroup } from '@/utils/targeting';
 
@@ -32,10 +36,13 @@ const primary = 'px-3 py-1.5 rounded-md text-sm font-medium bg-blue-600 text-whi
 function RulesSection({
   segment,
   canEdit,
+  canEstimate,
   onSaved,
 }: {
   segment: Segment;
   canEdit: boolean;
+  /** Offer "Estimate size" (not in a read-only demo). */
+  canEstimate: boolean;
   onSaved: (segment: Segment) => void;
 }) {
   const stored = segment.rules;
@@ -184,7 +191,7 @@ function RulesSection({
             {saving ? 'Saving...' : 'Save rules'}
           </button>
         )}
-        {rules !== null && (
+        {rules !== null && canEstimate && (
           <button type="button" className={button} onClick={() => void estimate()} disabled={previewing} data-testid="segment-preview">
             {previewing ? 'Estimating...' : 'Estimate size'}
           </button>
@@ -269,10 +276,13 @@ function CheckUser({ segment }: { segment: Segment }) {
 function MembersSection({
   segment,
   canEdit,
+  canCheck,
   onMemberCount,
 }: {
   segment: Segment;
   canEdit: boolean;
+  /** Offer "Check a user" (not in a read-only demo). */
+  canCheck: boolean;
   onMemberCount: (count: number) => void;
 }) {
   const count = segment.member_count ?? 0;
@@ -320,7 +330,7 @@ function MembersSection({
           />
         </div>
       )}
-      <CheckUser segment={segment} />
+      {canCheck && <CheckUser segment={segment} />}
     </section>
   );
 }
@@ -352,7 +362,7 @@ function UsageSection({ segmentId }: { segmentId: string }) {
       )}
       {usage && flags.length === 0 && experiments.length === 0 && (
         <p className="text-sm text-slate-700" data-testid="segment-usage-none">
-          No flag or experiment targeting rules name this segment.
+          No flag or experiment uses this segment.
         </p>
       )}
       {usage && (flags.length > 0 || experiments.length > 0) && (
@@ -384,8 +394,12 @@ function InUseList({ name, inUse }: { name: string; inUse: SegmentInUse }) {
   return (
     <div data-testid="segment-in-use">
       <p>
-        {name} is used by {usageCount(inUse.flags.length, inUse.experiments.length)}. Remove the segment from their
-        targeting rules, then archive it.
+        {name} is used by {usageCount(inUse.flags.length, inUse.experiments.length)}.{' '}
+        {inUse.experiments.length > 0
+          ? 'Remove the segment from the targeting rules that name it and from the segments an experiment balances ' +
+            'within, then archive it. A started experiment that balances within it lets it go once it is completed ' +
+            'or archived.'
+          : 'Remove the segment from their targeting rules, then archive it.'}
       </p>
       <ul className="mt-1 list-disc pl-5">
         {inUse.flags.map((f) => (
@@ -494,7 +508,15 @@ export default function SegmentDetailPage() {
   const rawId = router.query.id;
   const id = typeof rawId === 'string' ? rawId : undefined;
   const auth = useOptionalAuth();
-  const canChange = canChangeSegments(auth?.user);
+  const { effective, loading: permissionsLoading } = useEffectivePermissions();
+  // Rules and members ask EXPERIMENT UPDATE, Archive EXPERIMENT DELETE, each
+  // from the role or the effective map (#891). The note waits for the map.
+  const canChange = canChangeSegments(auth?.user, effective);
+  const canArchive = canArchiveSegments(auth?.user, effective);
+  const changePending = !canChange && permissionsLoading;
+  // A read-only demo: the demo note for the role note, and neither "Check a
+  // user" nor "Estimate size" (reads the API takes as POSTs, which it refuses).
+  const demo = useDemoMode();
   const [segment, setSegment] = useState<Segment | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -520,6 +542,7 @@ export default function SegmentDetailPage() {
 
   const archived = segment?.status === 'archived';
   const canEdit = canChange && !archived;
+  const mayArchive = canArchive && !archived;
 
   return (
     <div className="flex-1 bg-slate-50">
@@ -560,10 +583,15 @@ export default function SegmentDetailPage() {
                 </span>
               </div>
               {segment.description && <p className="mt-2 text-sm text-slate-700">{segment.description}</p>}
-              {!canChange && (
-                <p className="mt-2 text-sm text-slate-600" data-testid="segment-role-note">
-                  {ROLE_NOTE}
-                </p>
+              {demo ? (
+                <DemoNote action={DEMO_SEGMENTS_ACTION} className="mt-2 text-sm text-slate-600" />
+              ) : (
+                !canChange &&
+                !changePending && (
+                  <p className="mt-2 text-sm text-slate-600" data-testid="segment-role-note">
+                    {ROLE_NOTE}
+                  </p>
+                )
               )}
               {archived && (
                 <p className="mt-2 text-sm text-amber-900" data-testid="segment-archived-note">
@@ -583,19 +611,21 @@ export default function SegmentDetailPage() {
                 key={`rules-${version}`}
                 segment={segment}
                 canEdit={canEdit}
+                canEstimate={!demo}
                 onSaved={(updated) => setSegment({ ...segment, ...updated })}
               />
             ) : (
               <MembersSection
                 segment={segment}
                 canEdit={canEdit}
+                canCheck={!demo}
                 onMemberCount={(count) => setSegment((s) => (s ? { ...s, member_count: count } : s))}
               />
             )}
 
             <UsageSection segmentId={segment.id} />
 
-            {canEdit && <ArchiveSection segment={segment} onArchived={() => void load()} />}
+            {mayArchive && <ArchiveSection segment={segment} onArchived={() => void load()} />}
           </>
         )}
       </div>

@@ -12,10 +12,16 @@
 # 2026-10-06: move both later before 2031-01-08, or the scheduler starts the
 # stage on its own and the steps after the canary no longer hold.
 #
+# Stages start in stage_order, one at a time (#1460): advancing the 100% stage
+# while the canary is in progress is refused with 409, and advancing the canary
+# a second time completes it and starts the time-based stage at once, which
+# puts the flag at 50%. The scheduler would complete that stage only after 24
+# hours, so the journey ends there.
+#
 # At each percentage the flag is evaluated for 200 numbered users with an API
 # key, and each answer must be the one the documented rollout hash gives
-# (traffic.flag_bucket): nobody at 0%, exactly the users below 10% at 10%,
-# everybody at 100%.
+# (traffic.flag_bucket): nobody at 0%, exactly the users below 10% at 10%, and
+# exactly those below 50% at 50%.
 #
 # Not recorded: the journey makes an API key (model.reveals_credential), so a
 # recording could show what the run keeps out of its files.
@@ -347,7 +353,7 @@ steps:
       json:
         status: active
     fail: the paused schedule cannot be resumed by activating it again
-  - id: advance-full
+  - id: full-refused
     doc: manual-advancement
     do:
       api:
@@ -355,12 +361,11 @@ steps:
         path: /api/v1/rollout-schedules/stages/{{full-id}}/advance
         as: admin
     expect:
-      status: 200
+      status: 409
       json:
-        name: Full Rollout
-        status: in_progress
-    fail: the manual 100% stage cannot be advanced
-  - id: at-hundred
+        detail: "Stages start in stage_order, one at a time: stage_order 1 is in_progress, so this stage cannot start yet."
+    fail: the manual 100% stage can be started while the canary is in progress (#1460)
+  - id: still-ten
     doc: manual-advancement
     do:
       api:
@@ -370,9 +375,34 @@ steps:
     expect:
       status: 200
       json:
-        rollout_percentage: 100
-    fail: advancing the 100% stage does not put the flag at 100% at once
-  - id: users-at-hundred
+        rollout_percentage: 10
+    fail: the refused advance changed the flag's percentage
+  - id: complete-canary
+    doc: manual-advancement
+    do:
+      api:
+        method: POST
+        path: /api/v1/rollout-schedules/stages/{{canary-id}}/advance
+        as: admin
+    expect:
+      status: 200
+      json:
+        name: Initial Canary
+        status: completed
+    fail: advancing the canary in progress does not complete it
+  - id: at-fifty
+    doc: manual-advancement
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/{{flag-id}}
+        as: admin
+    expect:
+      status: 200
+      json:
+        rollout_percentage: 50
+    fail: completing the canary does not start the time-based stage at once and put the flag at 50%
+  - id: users-at-fifty
     doc: manual-advancement
     do:
       evaluations:
@@ -381,9 +411,9 @@ steps:
         users: rollout-user
         count: 200
         reason: rollout
-        rollout: 100
-    fail: at 100% a user does not get the flag
-  - id: flag-page-at-hundred
+        rollout: 50
+    fail: at 50% a user gets the flag other than the documented rollout hash decides
+  - id: flag-page-at-fifty
     doc: view-schedule-status
     do:
       goto: /feature-flags/{{flag-id}}
@@ -394,10 +424,12 @@ steps:
           - heading "Docs Journey Rollout" [level=1]
           - heading "Rollout schedule" [level=2]
           - list:
-            - listitem: /^Full Rollout\s*Manual 100% In progress$/
-          - text: Rollout percentage 100%
-          - slider "Rollout percentage": "100"
-    fail: the flag's page does not show the full rollout in progress and the flag at 100%
+            - listitem: /^Initial Canary\s*Manual 10% Completed$/
+            - listitem: /^Expanded Rollout\s*Time-based .* 50% In progress$/
+            - listitem: /^Full Rollout\s*Manual 100% Pending$/
+          - text: Rollout percentage 50%
+          - slider "Rollout percentage": "50"
+    fail: the flag's page does not show the canary completed, the expanded rollout in progress and the flag at 50%
   - id: cancel
     doc: cancelling-a-schedule
     do:
@@ -410,7 +442,7 @@ steps:
       json:
         status: cancelled
     fail: the schedule cannot be cancelled
-  - id: cancel-keeps-hundred
+  - id: cancel-keeps-fifty
     doc: cancelling-a-schedule
     do:
       api:
@@ -420,5 +452,5 @@ steps:
     expect:
       status: 200
       json:
-        rollout_percentage: 100
+        rollout_percentage: 50
     fail: cancelling the schedule changed the flag's percentage

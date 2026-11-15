@@ -367,7 +367,7 @@ public enum ExperimentationError: Error, LocalizedError {
     case decodingError(Error)
     /// The requested feature flag key is unknown (HTTP 404).
     case flagNotFound(String)
-    /// The requested experiment is unknown or not ACTIVE (HTTP 404).
+    /// No experiment has the requested key, or it is a draft with no control variant (HTTP 404).
     case experimentNotFound(String)
     /// The server returned an HTTP error response.
     case serverError(Int, String)
@@ -385,7 +385,7 @@ public enum ExperimentationError: Error, LocalizedError {
         case .flagNotFound(let key):
             return "Feature flag not found: '\(key)'"
         case .experimentNotFound(let key):
-            return "Experiment not found or not active: '\(key)'"
+            return "Experiment not found, or it has no control variant: '\(key)'"
         case .serverError(let code, let msg):
             return "Server error \(code): \(msg)"
         case .cancelled:

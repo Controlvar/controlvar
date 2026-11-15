@@ -156,6 +156,19 @@ def _oracle_call(oracle) -> str:
     return f"{oracle.name}({args})"
 
 
+def _moved(delta) -> str:
+    """``the number saved as before-one-page +1``: a delta, for the log."""
+    return f"the number saved as {delta.since} {delta.by:+d}"
+
+
+def cell_row(cell) -> str:
+    """The row a cell is read in, for the log: ``"one_page"``, or with
+    ``also`` ``"one_page" / "Purchaseprimary"`` (one row per metric)."""
+    if cell.also is None:
+        return f'"{cell.row}"'
+    return f'"{cell.row}" / "{cell.also}"'
+
+
 def describe_expect(step: Step) -> str:
     if step.do.crawl is not None:
         return CRAWL_EXPECTS[step.do.crawl]
@@ -198,13 +211,25 @@ def describe_expect(step: Step) -> str:
     if step.do.evaluations is not None:
         plan = step.do.evaluations
         if plan.reason == "rollout":
-            return (
+            said = (
                 f"exactly the users the documented rollout hash puts below"
                 f" {plan.rollout}% get the flag, each with reason rollout"
             )
+        elif plan.reason == "targeting_rule":
+            said = "every user gets the flag, with reason targeting_rule"
+        else:
+            said = "no user gets the flag, each with reason inactive"
+        if plan.on_value is None or plan.off_value is None:
+            return said
         if plan.reason == "targeting_rule":
-            return "every user gets the flag, with reason targeting_rule"
-        return "no user gets the flag, each with reason inactive"
+            return f"{said}, and the on value {json.dumps(plan.on_value)}"
+        if plan.reason == "inactive":
+            return f"{said}, and the off value {json.dumps(plan.off_value)}"
+        return (
+            f"{said}; each user who gets it gets the on value"
+            f" {json.dumps(plan.on_value)}, and each other user the off value"
+            f" {json.dumps(plan.off_value)}"
+        )
     expect_ = step.expect
     if expect_ is None:
         return "Doc Examples runs this section's blocks"
@@ -229,6 +254,8 @@ def describe_expect(step: Step) -> str:
                 f"json {path} = {_oracle_call(computed.oracle)} within"
                 f" {computed.rel:g} of it"
             )
+    for path, delta in (expect_.delta or {}).items():
+        parts.append(f"json {path} = {_moved(delta)} exactly")
     if expect_.number is not None:
         number = expect_.number
         parts.append(
@@ -236,15 +263,17 @@ def describe_expect(step: Step) -> str:
             f" {_oracle_call(number.oracle)}"
         )
     for cell in expect_.cells or []:
-        parts.append(
-            f'the {cell.column} of the row "{cell.row}" shows'
-            f" {_oracle_call(cell.oracle)}"
-        )
+        shown = _oracle_call(cell.oracle) if cell.oracle else _moved(cell.delta)
+        parts.append(f"the {cell.column} of the row {cell_row(cell)} shows {shown}")
     if expect_.found is not None:
         parts.append(f"{expect_.found} among the first {SEARCH_TOP} results")
     if expect_.aria is not None:
         parts.append(
             f"the screen matches its ARIA snapshot ({len(expect_.aria.splitlines())} lines)"
+        )
+    if expect_.aria_one_of is not None:
+        parts.append(
+            f"the screen matches one of its {len(expect_.aria_one_of)} ARIA snapshots"
         )
     if expect_.exit is not None:
         bound = step.do.run.up_to_seconds if step.do.run is not None else None
@@ -378,3 +407,30 @@ def within(seen: Any, wanted: float, rel: float) -> bool:
     if isinstance(seen, bool) or not isinstance(seen, (int, float)):
         return False
     return abs(seen - wanted) <= rel * abs(wanted)
+
+
+def moved_to(before: Any, since: str, by: int) -> float:
+    """The number a delta expects: *before* (the number saved as *since*) plus *by*.
+
+    StepFailed when nothing was saved as *since* that is a number (``None``,
+    a string, a boolean): a delta counts from a number, never from text.
+    """
+    if isinstance(before, bool) or not isinstance(before, (int, float)):
+        raise StepFailed(f"no number is saved as {since!r} to count {by:+d} from")
+    return before + by
+
+
+def delta_problem(seen: Any, before: Any, since: str, by: int) -> str:
+    """What is wrong with *seen* as the number saved as *since* moved by *by*, or "".
+
+    *seen* must be a number (not a boolean) exactly equal to ``before + by``.
+    """
+    wanted = moved_to(before, since, by)
+    if isinstance(seen, bool) or not isinstance(seen, (int, float)):
+        return f"is {json.dumps(seen)}, not a number"
+    if seen != wanted:
+        return (
+            f"= {json.dumps(seen)}; {since} was {json.dumps(before)}, so"
+            f" {by:+d} is {json.dumps(wanted)}"
+        )
+    return ""

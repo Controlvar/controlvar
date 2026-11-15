@@ -28,6 +28,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Tuple
 
@@ -50,8 +51,13 @@ BOOTSTRAP = "python -m backend.app.db.bootstrap"
 REFUSAL = "Refusing to upgrade schema experimentation: the stub refused"
 
 #: Records every call; the bootstrap fails, printing REFUSAL, when
-#: BOOTSTRAP_FAILS is set.
+#: BOOTSTRAP_FAILS is set. ``-m backend.app.core.proxy_trust``, the list of
+#: proxies uvicorn is started with, is answered by the real module, run by the
+#: interpreter running these tests.
 STUB = """#!/usr/bin/env bash
+if [ "$*" = "-m backend.app.core.proxy_trust" ]; then
+    PYTHONPATH="$STUB_REPO_ROOT" exec "$STUB_REAL_PYTHON" -m backend.app.core.proxy_trust
+fi
 printf '%s %s\\n' "$(basename "$0")" "$*" >> "$STUB_LOG"
 if [ -n "${BOOTSTRAP_FAILS:-}" ] && [ "$*" = "-m backend.app.db.bootstrap" ]; then
     printf '%s\\n' "$BOOTSTRAP_FAILS" >&2
@@ -87,6 +93,8 @@ def _start(tmp_path: Path, *command: str, **env_vars: str) -> Tuple[int, str, li
         "WAIT_FOR_DB": "false",
         "OPENSSL_armcap": "0",
         "ENVIRONMENT": "production",
+        "STUB_REAL_PYTHON": sys.executable,
+        "STUB_REPO_ROOT": str(REPO_ROOT),
         **env_vars,
     }
     driver = (

@@ -8,7 +8,13 @@ application's ``OpenFeature.getClient()`` reads the other, and every flag
 resolves through the NoopProvider -- default values, no error.
 
 React has the same property (two copies break hooks), which is why the two
-React SDKs already take it as a peer.
+React SDKs already take it as a peer. A React Native native module is the
+same: React Native links ``@react-native-async-storage/async-storage`` only
+from the app's own dependencies, and as a dependency at ``^1.21.0`` it was
+nested a second time under the SDK in an app on 3.x (Plan P, UX-F8), so the
+SDK's JavaScript would have called the app's native module of another major.
+The React Native SDK takes AsyncStorage as a peer at every major it supports
+(Plan P, PP-4 (b)).
 
 So each host library listed below must be:
 
@@ -20,11 +26,6 @@ So each host library listed below must be:
 * and the committed ``package-lock.json`` must say the same: its root entry
   agrees with the manifest, and the installed copy is marked ``dev`` (nothing
   in the runtime closure requires it).
-
-``sdk/react-native`` is not listed. It also takes ``react`` and
-``react-native`` as peers, but its runtime dependency
-``@react-native-async-storage/async-storage`` peer-requires ``react-native``,
-so its lock cannot mark them ``dev`` and the last check does not apply there.
 """
 
 from __future__ import annotations
@@ -43,6 +44,13 @@ HOST_PEERS: dict[str, dict[str, str]] = {
     # docs/sdk/openfeature.md: "Requires Node >= 18 and @openfeature/server-sdk >= 1.7".
     "openfeature": {"@openfeature/server-sdk": "^1.7.0"},
     "react": {"react": ">=17.0.0", "react-dom": ">=17.0.0"},
+    # docs/sdk/react-native.md and the README: react >= 16.8, react-native
+    # >= 0.65, and AsyncStorage `>=1.21.0 <4` (majors 1, 2 and 3).
+    "react-native": {
+        "react": ">=16.8.0",
+        "react-native": ">=0.65.0",
+        "@react-native-async-storage/async-storage": ">=1.21.0 <4",
+    },
 }
 
 RUNTIME_SECTIONS = ("dependencies", "optionalDependencies")

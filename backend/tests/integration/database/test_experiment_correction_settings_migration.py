@@ -44,16 +44,32 @@ pytestmark = [pytest.mark.integration]
 REVISION = "806901fb7735"
 PREVIOUS_CORE_HEAD = "1ab99332f0ba"
 #: The core head of this tree, which ``upgrade heads`` runs on to past this
-#: revision, through ``d29a479daafe`` (#445) and ``37dcb2969766`` (#440):
-#: ``4c2c09a2b3e8`` (#1206).
-CORE_HEAD = "4c2c09a2b3e8"
+#: revision, through ``d29a479daafe`` (#445), ``37dcb2969766`` (#440),
+#: ``4c2c09a2b3e8`` (#1206) and ``607c51a59bf5`` (#1497), whose downgrade drops
+#: three ``feature_flags`` columns and no table, ``85dd4796bb8b`` (#1543) and
+#: ``7b6b4b4fe246`` (#1528), whose downgrade drops ``rollout_stages.started_at``
+#: and no table, ``c448_balance_within`` (#448) and ``4955571d232c`` (#1545),
+#: whose downgrade drops ``visual_tokens`` and two columns:
+#: ``t1812_user_totp`` (#1812), whose downgrade drops ``user_totp``.
+CORE_HEAD = "t1812_user_totp"
 #: Tables that a later core revision's downgrade drops: a downgrade from the
 #: head to this test's target unapplies those revisions too.  ``d29a479daafe``
 #: (#445) drops ``holdout_population``; ``37dcb2969766`` (#440) drops
-#: ``segment_members``.
-LATER_DOWNGRADE_TABLES = {"holdout_population", "segment_members"}
-#: The modules branch's head, in the previous release and in this one alike.
-MODULES_HEAD = "modules_0002_warehouse_analysis"
+#: ``segment_members``; ``85dd4796bb8b`` (#1543) drops ``event_dedup_keys``;
+#: ``c448_balance_within`` (#448) drops ``balance_group_counters``;
+#: ``4955571d232c`` (#1545) drops ``visual_tokens``; ``t1812_user_totp``
+#: (#1812) drops ``user_totp``.
+LATER_DOWNGRADE_TABLES = {
+    "holdout_population",
+    "segment_members",
+    "event_dedup_keys",
+    "balance_group_counters",
+    "visual_tokens",
+    "user_totp",
+}
+#: The modules branch's head in this tree, recorded on both sides of every
+#: step here: this file is about the core chain.
+MODULES_HEAD = "modules_0005_redshift"
 
 PREVIOUS_ROWS = {
     CORE: {PREVIOUS_CORE_HEAD},

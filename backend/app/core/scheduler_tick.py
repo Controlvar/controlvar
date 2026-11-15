@@ -10,7 +10,8 @@ three guarantees:
    get the lock skips the tick.
 2. **Run history** — every executed tick is persisted through
    :meth:`SchedulerHealthService.record_run` (``scheduler_runs`` table), which
-   feeds ``GET /api/v1/scheduler/health``.
+   feeds ``GET /api/v1/scheduler/health``. The write runs in a worker thread
+   (:func:`run_in_worker`), never on the event loop's thread.
 3. **Prometheus signal** — ``scheduler_last_success_timestamp{name}``,
    ``scheduler_tick_duration_seconds{name}`` and
    ``scheduler_ticks_total{name,status}`` from :mod:`backend.app.core.metrics`.
@@ -25,6 +26,8 @@ its own error handling and back-off.
 from __future__ import annotations
 
 import asyncio
+import contextvars
+import functools
 import logging
 import time
 from dataclasses import dataclass, field
@@ -188,7 +191,17 @@ async def run_locked_tick(
         prom.record_scheduler_success(name)
 
     if record:
-        _persist_run(name, started_at, completed_at, status, result, error)
+        # In a worker thread, like the tick bodies (#1690): the write checks a
+        # connection out of the pool, and when every connection is held by a
+        # request waiting for this event loop, a checkout made on the loop's
+        # own thread waits the whole pool timeout and stops the API answering
+        # for that long -- and then the run record is lost as well.
+        await run_in_worker(
+            functools.partial(
+                _persist_run, name, started_at, completed_at, status, result, error
+            ),
+            label=f"{name} run record",
+        )
 
     if exc_to_raise is not None:
         raise exc_to_raise
@@ -205,6 +218,67 @@ async def run_locked_tick(
     )
 
 
+async def run_in_worker(work: Callable[[], Any], *, label: str) -> Any:
+    """
+    Run *work* in a worker thread; the event loop awaits it (#1690).
+
+    For a tick whose body is synchronous (SQLAlchemy queries, HTTP sends): run
+    on the event loop, it stops the API answering anything else until it
+    finishes. *work* must be a plain callable. A coroutine function cannot be
+    handed over as it is -- ``asyncio.to_thread`` on one only creates the
+    coroutine and never runs it, and the tick is recorded as a success that
+    did nothing -- so wrap it to create and run the coroutine inside the
+    thread, on a private event loop: ``lambda: asyncio.run(body())``.
+
+    This coroutine does not return before the thread does, in both ways it
+    can be cancelled: when its own task is cancelled (it waits for the
+    thread, then re-raises the cancellation), and when the event loop is torn
+    down (``asyncio.run`` cancels every task). The second holds because the
+    worker is a plain ``Future`` from ``run_in_executor``, not a task, so
+    teardown does not cancel it; a task such as
+    ``ensure_future(to_thread(...))`` would be cancelled with the rest and
+    this coroutine would return at once. :func:`run_locked_tick` releases the
+    scheduler's advisory lock when the tick returns, so returning early would
+    let another replica's tick run beside a thread that is still running.
+    The context copy is what ``asyncio.to_thread`` does.
+
+    Args:
+        work: Zero-argument callable, run in the loop's default executor.
+        label: What *work* does, for the one ERROR logged when it fails after
+            the tick was cancelled (``"<label> failed after the tick was
+            cancelled: ..."``).
+
+    Returns:
+        What *work* returned; raises what it raised.
+    """
+    worker = asyncio.get_running_loop().run_in_executor(
+        None, functools.partial(contextvars.copy_context().run, work)
+    )
+    try:
+        return await asyncio.shield(worker)
+    except asyncio.CancelledError:
+        await _wait_for_worker(worker, label)
+        raise
+
+
+async def _wait_for_worker(worker: "asyncio.Future[Any]", label: str) -> None:
+    """
+    Wait until *worker* is done, absorbing any further cancellation.
+
+    ``asyncio.wait`` neither cancels *worker* nor raises its exception, so a
+    second cancel during shutdown cannot end the wait early either.
+    """
+    while not worker.done():
+        try:
+            await asyncio.wait({worker})
+        except asyncio.CancelledError:
+            continue
+    if not worker.cancelled() and worker.exception() is not None:
+        logger.error(
+            "%s failed after the tick was cancelled: %s", label, worker.exception()
+        )
+
+
 __all__ = [
     "STATUS_FAILED",
     "STATUS_PARTIAL",
@@ -212,5 +286,6 @@ __all__ = [
     "STATUS_SUCCESS",
     "TickOutcome",
     "TickResult",
+    "run_in_worker",
     "run_locked_tick",
 ]

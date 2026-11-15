@@ -9,11 +9,20 @@ import { WinnerIndicator } from '@/components/results/shared/WinnerIndicator';
 import { SRM_QUALIFIER } from './SrmNotice';
 import { pct } from './SampleSizeMeter';
 import {
+  comparisonsOf,
   correctionName,
   describeSettings,
   formatConfidence,
   mostComparisons,
 } from '@/components/results/shared/analysisSettings';
+import {
+  ImpactLine,
+  NOT_ENOUGH_DATA,
+  carriesImpact,
+  impactLine,
+  showsAdjusted,
+} from '@/components/results/shared/resultFormat';
+import { LeadWithInterval } from '@/components/results/shared/IntervalText';
 
 interface ExperimentSummaryProps {
   experiment: ExperimentResultsResponse;
@@ -150,6 +159,44 @@ export function analysisSentence(experiment: ExperimentResultsResponse): string 
     : `${level} confidence · ${correctionName(method)} correction`;
 }
 
+/** One treatment's line under "Impact on {metric}:". */
+export interface SummaryImpactRow {
+  variantId: string;
+  variantName: string;
+  /** Null when there is no impact to show: "Not enough data to estimate". */
+  line: ImpactLine | null;
+  significant: boolean;
+}
+
+/**
+ * The summary card's impact (#1496): the primary metric (the one marked
+ * primary, else the first, as the chart picks it) and one row per treatment.
+ * Null when the server does not report the impact, so an older server's
+ * card is unchanged. Each interval is marked "unadjusted" exactly when that
+ * treatment's row in the table is.
+ */
+export function summaryImpact(
+  experiment: ExperimentResultsResponse,
+): { metricName: string; rows: SummaryImpactRow[] } | null {
+  const metric = experiment.metrics.find((m) => m.is_primary) ?? experiment.metrics[0];
+  if (!metric || !metric.variants.some(carriesImpact)) return null;
+  const k = comparisonsOf(metric);
+  const rows = metric.variants
+    .filter((v) => !v.is_control)
+    .map((v) => ({
+      variantId: v.variant_id,
+      variantName: v.variant_name,
+      line: impactLine(
+        metric,
+        v,
+        experiment.confidence_level,
+        showsAdjusted(v, k, experiment.correction_method),
+      ),
+      significant: v.is_significant,
+    }));
+  return rows.length > 0 ? { metricName: metric.metric_name, rows } : null;
+}
+
 export function ExperimentSummary({
   experiment,
   stored,
@@ -160,6 +207,7 @@ export function ExperimentSummary({
   const planned = plannedSampleStatus(plannedSample);
   const plannedEffect = plannedEffectSentence(plannedSample);
   const rec = RECOMMENDATION_CONFIG[summary.recommendation];
+  const impact = summaryImpact(experiment);
 
   // Find the winning variant name if there is one
   let winnerName = '';
@@ -263,6 +311,37 @@ export function ExperimentSummary({
         <p className="text-sm text-slate-700" data-testid="recommendation-reason">
           {summary.recommendation_reason}
         </p>
+      )}
+
+      {/* What the primary metric's change amounts to over each treatment's
+          own users (#1496). Plain paragraphs: no live region, no tooltip. */}
+      {impact && (
+        <div className="text-sm text-slate-700" data-testid="summary-impact">
+          <p className="font-medium text-slate-900">Impact on {impact.metricName}:</p>
+          {impact.rows.map((row) => (
+            <p key={row.variantId} data-testid="summary-impact-line">
+              {`${row.variantName}: `}
+              {row.line ? (
+                <>
+                  <LeadWithInterval
+                    lead={`${row.line.value} ${row.line.noun}`}
+                    interval={row.line.interval}
+                  />
+                  {row.significant ? '' : ', not significant'}
+                </>
+              ) : (
+                NOT_ENOUGH_DATA
+              )}
+            </p>
+          ))}
+          {/* The server's verdict only: a null check is not a mismatch. */}
+          {experiment.srm?.warning === true && (
+            <p className="mt-1 font-medium text-amber-900" data-testid="summary-impact-srm">
+              <span aria-hidden="true">⚠ </span>
+              {SRM_QUALIFIER}
+            </p>
+          )}
+        </div>
       )}
 
       {/* Winner only when the recommendation is to ship it. A significant

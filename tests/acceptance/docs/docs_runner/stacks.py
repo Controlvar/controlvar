@@ -1324,11 +1324,10 @@ DEMO_STOP = Path("demo") / "teardown-local.sh"
 #: dashboard, ShopLab and StreamPulse.
 DEMO_PORTS: Tuple[int, ...] = (5432, 6379, 8000, 3100, 3200, 3300)
 #: The files the seeds and the script write an API key to: every ``*KEY_FILE``
-#: constant of the seeds setup-local.sh runs, and the script's own. A unit test
-#: (``test_docs_journey_demo.py``) reads them out of the seeds and the script,
-#: so a key file added there and not here fails it.
+#: constant of the seeds setup-local.sh runs, and any the script writes itself
+#: (none today). A unit test (``test_docs_journey_demo.py``) reads them out of
+#: the seeds and the script, so a key file added there and not here fails it.
 DEMO_KEY_FILES: Tuple[Path, ...] = (
-    Path("demo") / ".demo_api_key",
     Path("demo") / "shoplab" / ".api_key",
     Path("demo") / "streampulse" / ".api_key",
     Path("demo") / "streampulse" / ".api_key_server",
@@ -1339,7 +1338,6 @@ DEMO_LOGS = Path("demo") / ".logs"
 DEMO_REMOVED: Tuple[Path, ...] = (
     Path("demo") / ".pids",
     DEMO_LOGS,
-    Path("demo") / ".demo_api_key",
 )
 #: The line of the script's box that says it finished.
 DEMO_READY = "Ready!"

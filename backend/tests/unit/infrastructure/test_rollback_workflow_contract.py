@@ -454,6 +454,11 @@ def test_it_does_not_check_whether_the_target_runs_migrations_on_start(
     for name, code_text in _runs():
         assert not re.search(r"\.environment\b|environment\[\?", code_text), name
         assert "refuse_migrating_api_revision" not in code_text, name
+        # Nor Deploy's FORWARDED_ALLOW_IPS check: a target from before that
+        # setting runs an image that passes uvicorn a fixed list when
+        # FORWARDED_ALLOW_IPS is unset, so it does not need the setting.
+        assert "refuse_api_revision_without_forwarded_allow_ips" not in code_text, name
+        assert "proxy_trust" not in code_text, name
         # The setting's name appears only inside the text the summary prints,
         # never in a command that reads or compares it.
         for line in code_text.splitlines():

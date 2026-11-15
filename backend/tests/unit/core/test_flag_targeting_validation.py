@@ -20,8 +20,10 @@ Pinned here, without a database:
   "no rules" by ``normalise_targeting_rules`` (V7);
 * dashboard rules hold at most 1,000 groups and conditions in all, counted
   before any condition is converted (#828); experiments are not capped;
-* the SDK ruleset vectors split exactly 143 accepted / 4 refused / 2 legacy
-  rows the API now refuses (V12);
+* the SDK ruleset vectors split exactly 153 accepted / 6 refused / 2 legacy
+  rows the API now refuses (V12); since #1204 the refused include
+  ``op-json-path`` and ``op-percentage-bucket``, operators flag evaluation does
+  not implement;
 * native rules: a key outside the schema is refused at every level -- the
   rule, its condition group, nested groups at any depth, conditions, and
   ``default_rule`` and ``default_rule.rule`` -- and a ``rollout_percentage``,
@@ -763,7 +765,13 @@ def test_what_is_accepted_is_what_the_flag_evaluator_applies(monkeypatch):
     )
     service = ffs.FeatureFlagService(db=MagicMock())
     corpus = _accepted_corpus()
-    assert len(corpus) == len(ACCEPTED) + 143 + 529
+    # The vectors' 153 accepted rows: 141 (143 until #1204 refused
+    # op-json-path and op-percentage-bucket), and since #1497 (F5) the 12
+    # value flags' (each value type, four ways a flag reaches an SDK). The
+    # builder grid's 641 accepted rows: 529 until #1775, which stopped
+    # suggesting session.new_user and suggests device_type, app_version and
+    # account_age_days with every operator they had as custom attributes.
+    assert len(corpus) == len(ACCEPTED) + 153 + 641
     with_rules = 0
     diverged = []
     for name, raw in corpus:
@@ -850,9 +858,12 @@ def test_the_ruleset_vectors_split_exactly():
             accepted.append(flag["key"])
         else:
             refused.append(flag["key"])
-    assert (len(accepted), len(refused), len(legacy)) == (143, 4, 2)
+    assert (len(accepted), len(refused), len(legacy)) == (153, 6, 2)
     assert sorted(refused) == [
         "empty-list",
+        # #1204: flag evaluation does not implement either operator.
+        "op-json-path",
+        "op-percentage-bucket",
         "unconvertible-attribute",
         "unconvertible-number",
         "unconvertible-operator",

@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.config import settings as app_settings
 from backend.app.core.logging import get_logger
-from backend.app.core.scheduler_tick import run_locked_tick
+from backend.app.core.scheduler_tick import run_in_worker, run_locked_tick
 from backend.app.db.session import SessionLocal
 from backend.app.models.audit_log import ActionType, EntityType
 from backend.app.models.feature_flag import FeatureFlag
@@ -70,6 +70,26 @@ def _as_utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
 
+def stage_started_at(stage: RolloutStage) -> Optional[datetime]:
+    """When ``stage`` started, as an aware UTC datetime, or ``None``.
+
+    The scheduler measures a time-based stage's duration and the schedule's
+    ``min_stage_duration`` from this, and from nothing else.
+
+    ``started_at`` is written once, when the stage goes from pending to in
+    progress, so editing the stage does not move it (#1528). A stage that a
+    release older than migration ``7b6b4b4fe246`` started -- an older replica
+    during a rolling deploy -- has none; for it this falls back to
+    ``updated_at``, which that release wrote at the start and which an edit
+    moves, as before.
+    """
+    if stage.started_at is not None:
+        return _as_utc(stage.started_at)
+    if stage.updated_at is not None:
+        return _as_utc(stage.updated_at)
+    return None
+
+
 class RolloutScheduler:
     """Handles scheduled tasks for feature flag rollouts."""
 
@@ -121,8 +141,9 @@ class RolloutScheduler:
         while self.is_running:
             try:
                 # One tick under the advisory lock; records the run and
-                # skips when another replica holds the lock.
-                await run_locked_tick(SCHEDULER_NAME, self.process_rollout_schedules)
+                # skips when another replica holds the lock. The tick itself
+                # runs in a worker thread.
+                await run_locked_tick(SCHEDULER_NAME, self._process_off_loop)
 
                 # Wait for the next interval
                 await asyncio.sleep(self.interval_minutes * 60)
@@ -132,6 +153,36 @@ class RolloutScheduler:
                 logger.error(f"Error in rollout scheduler: {e!s}")
                 # Wait a bit before trying again
                 await asyncio.sleep(60)
+
+    async def _process_off_loop(self) -> Dict[str, int]:
+        """
+        Run :meth:`process_rollout_schedules` in a worker thread.
+
+        The tick is synchronous SQLAlchemy behind ``async def``s that never
+        suspend on the API's event loop: its first query checks a connection
+        out of the pool. On the loop's own thread that checkout, when every
+        connection is held by a request waiting for the loop, waits the whole
+        pool timeout and stops the API answering anything for that long. Here
+        it runs unchanged in one worker thread, on a private event loop and
+        with its own session, as the safety tick does
+        (``SafetyScheduler._check_off_loop``); its notifications go with it,
+        each still sent through ``asyncio.to_thread`` after its commit.
+
+        The coroutine is created inside the thread. ``run_in_worker`` on the
+        coroutine function would only create it, never run it: the tick would
+        be recorded as a success that advanced nothing.
+
+        The body must not await anything bound to the API's event loop (the
+        process-wide Redis pool in ``backend.app.api.deps`` above all: created
+        on the private loop, it would be reused by every request after the
+        tick, on a loop that has closed). It awaits nothing of the kind today;
+        ``test_ticks_off_the_loop.py`` runs it this way with the cache on and
+        fails if it asks for the Redis pool.
+        """
+        return await run_in_worker(
+            lambda: asyncio.run(self.process_rollout_schedules()),
+            label=f"{SCHEDULER_NAME} tick",
+        )
 
     async def process_rollout_schedules(self) -> Dict[str, int]:
         """
@@ -222,10 +273,13 @@ class RolloutScheduler:
                 if updated:
                     schedules_updated += 1
                 stages_processed += transitions
+                # Each send in a worker thread: it is a synchronous HTTP call
+                # (#1690). After the commit, so nothing uncommitted is announced.
                 for notification in notifications:
                     try:
-                        self._notification_service.notify_rollout_advanced(
-                            **notification
+                        await asyncio.to_thread(
+                            self._notification_service.notify_rollout_advanced,
+                            **notification,
                         )
                     except Exception as exc:
                         logger.warning("Notification failed (non-critical): %s", exc)
@@ -265,8 +319,15 @@ class RolloutScheduler:
         """
         notifications: List[Dict[str, Any]] = []
 
+        # Lock the flag, then the schedule, before reading the stages, and
+        # read them from the database (``populate_existing``): a stage added,
+        # moved or advanced while this tick waited for the lock is seen, so
+        # the tick never starts a stage from a stale list (#1536). The API's
+        # changes take the same locks in the same order.
+        self._lock_active_schedule(db, schedule)
         current_active_stage = (
             db.query(RolloutStage)
+            .populate_existing()
             .filter(
                 and_(
                     RolloutStage.rollout_schedule_id == schedule.id,
@@ -278,6 +339,7 @@ class RolloutScheduler:
 
         next_pending_stages = (
             db.query(RolloutStage)
+            .populate_existing()
             .filter(
                 and_(
                     RolloutStage.rollout_schedule_id == schedule.id,
@@ -322,11 +384,18 @@ class RolloutScheduler:
         min_duration_hours = schedule.min_stage_duration or 0
         if next_stage is not None and min_duration_hours > 0:
             min_duration = timedelta(hours=min_duration_hours)
-            stage_started_at = _as_utc(current_active_stage.updated_at)
-            if current_time - stage_started_at < min_duration:
+            # A stage with no start cannot have run for the minimum. (Only a
+            # time-based stage with a start is due above, so this is defensive.)
+            started = stage_started_at(current_active_stage)
+            if started is None or current_time - started < min_duration:
+                until = (
+                    "the stage has a start"
+                    if started is None
+                    else started + min_duration
+                )
                 logger.info(
                     f"Minimum duration not met for next stage in schedule {schedule.id}. "
-                    f"Will wait until {stage_started_at + min_duration}"
+                    f"Will wait until {until}"
                 )
                 return False, 0, notifications
 
@@ -433,10 +502,10 @@ class RolloutScheduler:
             trigger_config = stage.trigger_configuration or {}
             duration_hours = trigger_config.get("duration", 24)  # Default to 24 hours
 
-            # If the stage has been active for at least the specified duration, it's complete
-            if stage.updated_at:
-                min_time = _as_utc(stage.updated_at) + timedelta(hours=duration_hours)
-                return current_time >= min_time
+            # Complete once the duration has passed since the stage started.
+            started = stage_started_at(stage)
+            if started is not None:
+                return current_time >= started + timedelta(hours=duration_hours)
 
             return False
 
@@ -537,8 +606,12 @@ class RolloutScheduler:
 
         before = audit_snapshot(EntityType.FEATURE_FLAG, feature_flag)
 
-        # Mark the stage as in progress
+        # Mark the stage as in progress, and record when it started: the
+        # instant its duration is measured from (#1528). updated_at is still
+        # written, so an older replica reading the row during a rolling deploy
+        # measures from the same instant.
         stage.status = RolloutStageStatus.IN_PROGRESS
+        stage.started_at = current_time
         stage.updated_at = current_time
         db.add(stage)
 

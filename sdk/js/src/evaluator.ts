@@ -21,6 +21,14 @@
  * the whole evaluation, even when a sibling has already decided the result, because the server
  * evaluates them all and can fail on the one this module would have skipped.
  *
+ * A flag's value is answered with its `enabled`: `on_value` when enabled, `off_value` otherwise,
+ * and `enabled` itself for a boolean flag (an entry with no `value_type`). An entry this SDK
+ * cannot read DEFERs that one flag and leaves the rest of the document in use: an `evaluation`
+ * other than `local` or `remote`, a `value_type` other than `string`, `number` or `json`, or value
+ * fields missing or of the wrong type. A newer server can therefore add a flag shape without
+ * stopping local evaluation for every other flag. A known shape that is malformed (an active
+ * `local` entry without integer percentages, say) still rejects the whole document.
+ *
  * `tests/sdk-contract/ruleset-vectors.json` is generated from the server and pins every answer;
  * `__tests__/evaluator.test.ts` runs this module against it.
  */
@@ -82,9 +90,23 @@ export type Defer = typeof DEFER;
 
 export type LocalReason = 'targeting_rule' | 'rollout' | 'inactive';
 
+/**
+ * The value types a ruleset entry may name in `value_type`. A boolean flag's entry names none.
+ * Any other `value_type` defers that flag.
+ */
+export const VALUE_TYPES: readonly string[] = ['string', 'number', 'json'];
+
+export type ValueType = 'boolean' | 'string' | 'number' | 'json';
+
 export interface LocalAnswer {
   enabled: boolean;
   reason: LocalReason;
+  /**
+   * The server's `value`: the flag's `on_value` when enabled, its `off_value` otherwise; `enabled`
+   * for a boolean flag. A JSON value is the ruleset's own object: copy it before handing it out.
+   */
+  value: unknown;
+  valueType: ValueType;
 }
 
 // ─── The ruleset document (schema 1) ─────────────────────────────────────────
@@ -110,10 +132,17 @@ export interface RulesetRule {
 export interface RulesetFlag {
   key: string;
   active: boolean;
-  evaluation?: 'local' | 'remote';
+  /** `local` or `remote`; any other value (a newer server's) defers the flag. */
+  evaluation?: string;
   rollout_percentage?: number;
   rules?: RulesetRule[];
   default_rule?: { id: string; rollout_percentage: number } | null;
+  /** Absent for a boolean flag; see {@link VALUE_TYPES}. */
+  value_type?: unknown;
+  /** On an active `local` entry of a string, number or json flag. */
+  on_value?: unknown;
+  /** On the active `local` and the inactive entries of a string, number or json flag. */
+  off_value?: unknown;
 }
 
 export interface RulesetDocument {
@@ -154,11 +183,15 @@ function validGroup(group: unknown, depth: number): boolean {
   return group.groups.every(child => validGroup(child, depth + 1));
 }
 
+/**
+ * Whether an entry may be indexed. Only a `local` entry's shape is checked: an inactive entry, a
+ * `remote` one and one with an `evaluation` this SDK does not know are indexed and never
+ * evaluated from their rules (see {@link evaluateLocally}).
+ */
 function validFlag(flag: unknown): flag is RulesetFlag {
   if (!isRecord(flag) || typeof flag.key !== 'string' || typeof flag.active !== 'boolean') return false;
   if (!flag.active) return true;
-  if (flag.evaluation === 'remote') return true;
-  if (flag.evaluation !== 'local') return false;
+  if (flag.evaluation !== 'local') return true;
   if (!isPercentage(flag.rollout_percentage) || !Array.isArray(flag.rules)) return false;
   for (const rule of flag.rules) {
     if (!isRecord(rule) || typeof rule.id !== 'string' || !isPercentage(rule.rollout_percentage)) return false;
@@ -417,6 +450,57 @@ export function inRollout(percentage: number, userId: string, flagKey: string): 
   return flagBucket(userId, flagKey) < percentage;
 }
 
+// ─── Flag values ─────────────────────────────────────────────────────────────
+
+/**
+ * Whether `value` is a value of `type` as the server serves one: a string; a number that is
+ * finite and within ±(2^53−1), never a boolean; a JSON object or array. Any other `type` is
+ * `false`.
+ */
+export function isValueOfType(value: unknown, type: string): boolean {
+  switch (type) {
+    case 'string':
+      return typeof value === 'string';
+    case 'number':
+      return isPortableNumber(value);
+    case 'json':
+      return value !== null && typeof value === 'object';
+    default:
+      return false;
+  }
+}
+
+/**
+ * A copy of a JSON value that shares nothing with it: an object or array is copied deeply by a
+ * JSON round trip (it came from JSON, so nothing is lost, and a `__proto__` key stays an ordinary
+ * key); a string, number, boolean or null is returned as it is.
+ */
+export function copyValue<T>(value: T): T {
+  return value !== null && typeof value === 'object' ? (JSON.parse(JSON.stringify(value)) as T) : value;
+}
+
+/**
+ * The type of value a flag's entry serves, or `null` when this SDK cannot read it: a
+ * `value_type` it does not know, or the value the entry needs (`off_value`, and `on_value` on an
+ * active entry) missing or of another type. An entry with no `value_type` is a boolean flag.
+ */
+export function entryValueType(flag: RulesetFlag): ValueType | null {
+  const type = flag.value_type;
+  if (type === undefined) return 'boolean';
+  if (typeof type !== 'string' || !VALUE_TYPES.includes(type)) return null;
+  if (!isValueOfType(flag.off_value, type)) return null;
+  if (flag.active && !isValueOfType(flag.on_value, type)) return null;
+  return type as ValueType;
+}
+
+/**
+ * Whether an active flag can be answered from the ruleset at all: a `local` entry this SDK can
+ * read. Every other active flag is evaluated by the server, for every user.
+ */
+export function readsLocally(flag: RulesetFlag): boolean {
+  return flag.evaluation === 'local' && entryValueType(flag) !== null;
+}
+
 // ─── Flags ───────────────────────────────────────────────────────────────────
 
 /**
@@ -435,24 +519,27 @@ export function evaluateLocally(
   if (!isWellFormedString(userId) || !isWellFormedString(flagKey) || !isWellFormed(context)) return DEFER;
   const flag = ruleset.flags.get(flagKey);
   if (!flag) return DEFER;
-  if (!flag.active) return { enabled: false, reason: 'inactive' };
+  const valueType = entryValueType(flag);
+  if (valueType === null) return DEFER;
+  const answer = (enabled: boolean, reason: LocalReason): LocalAnswer => ({
+    enabled,
+    reason,
+    value: valueType === 'boolean' ? enabled : enabled ? flag.on_value : flag.off_value,
+    valueType,
+  });
+  if (!flag.active) return answer(false, 'inactive');
   if (flag.evaluation !== 'local') return DEFER;
 
   const flat = flattenContext(context);
   for (const rule of flag.rules ?? []) {
     const matched = evaluateGroup(rule.match, flat);
     if (matched === DEFER) return DEFER;
-    if (matched) {
-      return { enabled: inRollout(rule.rollout_percentage, userId, flagKey), reason: 'targeting_rule' };
-    }
+    if (matched) return answer(inRollout(rule.rollout_percentage, userId, flagKey), 'targeting_rule');
   }
   if (flag.default_rule) {
-    return {
-      enabled: inRollout(flag.default_rule.rollout_percentage, userId, flagKey),
-      reason: 'targeting_rule',
-    };
+    return answer(inRollout(flag.default_rule.rollout_percentage, userId, flagKey), 'targeting_rule');
   }
-  return { enabled: inRollout(flag.rollout_percentage ?? 0, userId, flagKey), reason: 'rollout' };
+  return answer(inRollout(flag.rollout_percentage ?? 0, userId, flagKey), 'rollout');
 }
 
 /**

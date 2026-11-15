@@ -36,6 +36,9 @@ CODE = f"c0de-{uuid.uuid4().hex}"
 STATE = f"st4te-{uuid.uuid4().hex}"
 METRICS_TOKEN = f"m3trics-{uuid.uuid4().hex}"
 WS_TOKEN = f"ws-t0ken-{uuid.uuid4().hex}"
+# An attribute value inside the URL-encoded JSON an SDK sends as ``context``.
+CONTEXT_VALUE = f"c0ntext-{uuid.uuid4().hex}"
+CONTEXT = f"%7B%22plan%22%3A%22{CONTEXT_VALUE}%22%7D"
 
 
 def _free_port() -> int:
@@ -85,6 +88,12 @@ def test_the_running_api_logs_query_names_not_values(tmp_path):
         base = f"http://127.0.0.1:{port}"
         httpx.get(f"{base}{CALLBACK}?code={CODE}&state={STATE}", timeout=30)
         httpx.get(f"{base}/metrics?token={METRICS_TOKEN}&page=2", timeout=30)
+        # What an SDK sends to evaluate a flag (#1552). No API key is sent;
+        # the access line is written whatever the answer.
+        httpx.get(
+            f"{base}/api/v1/feature-flags/evaluate/k?user_id=u&context={CONTEXT}",
+            timeout=30,
+        )
         experiment = uuid.uuid4()
         try:
             with ws_connect(
@@ -101,12 +110,16 @@ def test_the_running_api_logs_query_names_not_values(tmp_path):
         log.close()
 
     written = log_path.read_text()
-    for value in (CODE, STATE, METRICS_TOKEN, WS_TOKEN):
+    for value in (CODE, STATE, METRICS_TOKEN, WS_TOKEN, CONTEXT_VALUE):
         assert value not in written, f"{value} was logged:\n{written[-5000:]}"
     assert f"{CALLBACK}?code={REDACTED}&state={REDACTED} HTTP/1.1" in written, written[
         -5000:
     ]
     assert f"/metrics?token={REDACTED}&page=2 HTTP/1.1" in written, written[-5000:]
+    assert (
+        f"/api/v1/feature-flags/evaluate/k?user_id=u&context={REDACTED} HTTP/1.1"
+        in written
+    ), written[-5000:]
     assert f"/api/v1/ws/experiments/{experiment}/results?token={REDACTED}" in written, (
         written[-5000:]
     )

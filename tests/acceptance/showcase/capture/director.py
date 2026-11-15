@@ -58,7 +58,10 @@ stand-in pages where Playwright is not installed. What it does, in order:
   sets the option without opening it, and holds the closed select on the new
   text for ``config.SETTLE_MS``; a ``click`` on a select is refused. A
   ``slide`` step glides the cursor along a range input's track while the value
-  follows it to the storyboard's number.
+  follows it to the storyboard's number. A ``date`` step presses a
+  ``datetime-local`` input as ``choose`` presses a select, its picker never
+  opened; the page computes the day and time in its own zone, the field is
+  filled, and gate 12 reads it back (``judge.date_as_set``).
 * A narrated capture (``voiced.Pacing``) holds each beat until its
   sentences' slots fit its cue (the TILE rule), less what its exit takes at
   the least, so the narration may run over the exit; a cue that still ends
@@ -91,6 +94,16 @@ stand-in pages where Playwright is not installed. What it does, in order:
   sends and the testids the page draws (``marks``) are kept for gate 10.
 * The cursor, the rings and the click pulse are drawn only while recording:
   a step in ``before`` (a cut) moves and clicks with nothing drawn.
+* A6: while an app with a fit element (``config.APP_FIT``: StreamPulse's phone)
+  is filmed, the element is whole inside the page area at every cue's start
+  and end, after every step and when the app is armed, and so is every
+  element a ring is drawn around; refused otherwise.
+* Video 4 (gate 10/4): every request to a flag's rollback path is counted
+  (none may be made), and every answer a page gets from a flag's safety check
+  is kept; a ``flag_of`` scene opens a flag's page, its id looked up off
+  camera; each scene's recording is timed on the wall clock (``scene_walls``:
+  B9's gate and S5's card read it); and ``at_cue`` is called at every cue's
+  start, after its readings, where the run reads the API off camera.
 
 A failure raises ``CaptureFailed`` naming the scene, the beat and the gate.
 """
@@ -302,6 +315,30 @@ SELECT_ARROW_PX = 22
 #: it has none, which is 1 for a range).
 RANGE_JS = """el => [el.tagName, String(el.type || '').toLowerCase(),
   Number(el.min || 0), Number(el.max || 100), Number(el.value), String(el.step || '')]"""
+#: A ``date`` step's field: its tag and its type.
+FIELD_KIND_JS = "el => [el.tagName, String(el.type || '').toLowerCase()]"
+#: A ``date`` step's value, computed by the page in its own zone: its today plus
+#: ``days`` days, at ``at`` ("HH:MM"), as a ``datetime-local`` value.
+DATE_VALUE_JS = """([days, at]) => {
+  const now = new Date();
+  const when = new Date(now.getFullYear(), now.getMonth(), now.getDate() + days,
+    Number(at.slice(0, 2)), Number(at.slice(3, 5)), 0, 0);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())}` +
+    `T${pad(when.getHours())}:${pad(when.getMinutes())}`;
+}"""
+#: A ``date`` field's value read back by the page: formatted as DATE_VALUE_JS
+#: formats it, the instant it names, and how the page draws it.
+DATE_READ_JS = """(value) => {
+  const when = new Date(value);
+  const pad = (n) => String(n).padStart(2, '0');
+  return {
+    back: `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())}` +
+      `T${pad(when.getHours())}:${pad(when.getMinutes())}`,
+    instant: isNaN(when.getTime()) ? '' : when.toISOString(),
+    shown: when.toLocaleString(),
+  };
+}"""
 
 #: Gate 9: is the element on top at this point (or something inside it)?
 ON_TOP_JS = """(el, point) => {
@@ -419,6 +456,12 @@ class Tally:
     holds_ms: List[int] = field(default_factory=list)
     #: C9: each ``choose`` step, the text its closed select showed and how long.
     choices: List[Dict[str, Any]] = field(default_factory=list)
+    #: Gate 12 (typed as shown): each ``type`` step's field read back after its
+    #: keys, as lengths (``Director.check_typed``).
+    typed: List[Dict[str, Any]] = field(default_factory=list)
+    #: Gate 12 for each ``date`` step: the value the page computed, the field
+    #: read back, and the page's own reading of it (``judge.date_as_set``).
+    dates: List[Dict[str, Any]] = field(default_factory=list)
     #: G2: one number check a narration sentence, and what each found.
     narration_checks: int = 0
     spoken: List[Dict[str, Any]] = field(default_factory=list)
@@ -438,6 +481,17 @@ class Tally:
     events: List[Dict[str, Any]] = field(default_factory=list)
     #: ...and the declared testids the page drew, by visitor.
     marks: Dict[str, List[str]] = field(default_factory=dict)
+    #: Gate 10/4: every request that asked for a flag's rollback (none may).
+    rollback_posts: List[str] = field(default_factory=list)
+    #: ...and each answer a page got from a flag's safety check: where, healthy,
+    #: and the error rate it drew.
+    safety_checks: List[Dict[str, Any]] = field(default_factory=list)
+    #: A6: each check that the app's frame held its fit element whole, and the
+    #: least room it had to the viewport's edge (frame px).
+    fit_checks: int = 0
+    fit_least_px: Optional[float] = None
+    #: A5: each app scene's first cue, and whether it showed the app's text.
+    required_checks: List[str] = field(default_factory=list)
 
 
 def decode_rgb(jpeg: bytes, width: int, height: int) -> np.ndarray:
@@ -569,10 +623,26 @@ class Director:
         marks: Tuple[str, ...] = (),
         invites: int = 0,
         masks: Tuple[str, ...] = (),
+        resolve_flag: Optional[Callable[[str], str]] = None,
+        at_cue: Optional[Callable[[str, int], None]] = None,
+        required: Optional[Dict[str, str]] = None,
     ):
         self.context = context
         self.page = page
         self.dashboard = dashboard.rstrip("/")
+        #: A5: by app, the text each of its scenes shows at its first cue
+        #: (``config.APP_REQUIRED_TEXT``, read from the recorded tree).
+        self.required: Dict[str, str] = dict(required or {})
+        #: A feature flag's id by its name, for ``flag_of`` scenes (off camera).
+        self.resolve_flag = resolve_flag
+        #: Called at each cue's start, after its readings, with the scene and
+        #: the beat: gate 10/4 reads the API there, off camera (the agreement).
+        self.at_cue = at_cue
+        #: Each scene's recording on the wall clock (``_now_ms``): when it
+        #: started and when it ended, its last frame held to then (B9, S5).
+        self.scene_walls: Dict[str, Dict[str, float]] = {}
+        #: The app whose scene is being filmed, for A6.
+        self.filming: Optional[str] = None
         #: C4 (S6): the invites the storyboard makes (its team's invitees), the
         #: elements it masks, and each invite request the listener saw.
         self.invites_expected = int(invites)
@@ -625,6 +695,9 @@ class Director:
         self.resolve = resolve
         #: Texts a beat's ``record`` kept at its cue's start, by name (gate 10).
         self.readings: Dict[str, str] = {}
+        #: Each ``date`` step's reading, by its ``record`` name: the value set,
+        #: the instant it names, and how the page draws it.
+        self.dates: Dict[str, Dict[str, str]] = {}
         self.signed_in = False
         #: A narrated capture's slots per beat (voice PR C2); empty when silent.
         self.pacing = pacing or Pacing()
@@ -762,6 +835,16 @@ class Director:
             return
         redaction.register_credentials(body, self.redactor)
         self.record_assign(path, body)
+        if SAFETY_CHECK_PATH.search(path) and isinstance(body, dict):
+            # The rate is the answer's error_rate metric, which the flag page
+            # draws as it is (B9 compares it with the API's and the reason's).
+            self.tally.safety_checks.append(
+                {
+                    "where": self.where,
+                    "is_healthy": body.get("is_healthy"),
+                    "error_rate": judge.safety_error_rate(body),
+                }
+            )
 
     def _on_request(self, request: Any) -> None:
         app = self._counted(request.url)
@@ -770,6 +853,10 @@ class Director:
         self.answered.pop(id(request), None)
         if app is not None:
             self.pending.setdefault(app, set()).add(request)
+        if is_rollback_request(request):
+            self.tally.rollback_posts.append(
+                f"{urlparse(request.url).path} ({self.where})"
+            )
         self.check_key_header(request)
         body = request_body(request)
         self.check_visitor(request, body)
@@ -1043,6 +1130,9 @@ class Director:
             overlay = self.self_test_overlay(
                 storyboard.Locator(**config.APP_SELF_TEST[app])  # type: ignore[arg-type]
             )
+            # A6 at the origin's own zoom, before any scene is filmed: a frame
+            # that cannot hold the phone fails here, not mid-video.
+            self.check_fit(app, "first load")
             self.drain(app)
         finally:
             self.counting = None
@@ -1421,6 +1511,72 @@ class Director:
         if self.tally.page_errors:
             raise CaptureFailed("gate 11", f"page error: {self.tally.page_errors[0]}")
 
+    # -- A5: the app's own words, on each of its scenes' first frame ----------------
+
+    def check_required(self, app: str) -> None:
+        """A5 (plan v2 C1): at the first cue of a scene in *app*, the viewport
+        shows the app's required text (read at that cue's start, as U4 reads
+        it); refused otherwise."""
+        wanted = self.required[app]
+        self.tally.required_checks.append(self.where)
+        if wanted not in self.start_text:
+            raise CaptureFailed(
+                "A5", f"{self.where}: the {app} frame does not show {wanted!r}"
+            )
+
+    # -- A6: the app's frame holds its fit element whole ---------------------------
+
+    def fit_box(self, testid: str) -> Optional[Box]:
+        """The fit element's box in the frame, or None when it is not drawn."""
+        try:
+            raw = self.locate(storyboard.Locator(testid=testid)).bounding_box(
+                timeout=2000
+            )
+        except PlaywrightError:
+            return None
+        if raw is None:
+            return None
+        return Box(raw["x"], raw["y"], raw["width"], raw["height"])
+
+    def check_fit(
+        self, app: Optional[str], when: str, box: Optional[Box] = None
+    ) -> None:
+        """A6 (the UX draft): while an app with a fit element (``config.APP_FIT``)
+        is filmed, that element is whole inside the page area (StreamPulse's
+        phone, status bar to tab bar), and so is anything a ring is drawn
+        around (*box*). Refused otherwise; the least room left is kept."""
+        testid = config.APP_FIT.get(app or "")
+        if testid is None:
+            return
+        self.tally.fit_checks += 1
+        width, height = config.VIEWPORT["width"], config.VIEWPORT["height"]
+        for what, found in (
+            (testid, self.fit_box(testid)),
+            ("the ringed element", box),
+        ):
+            if found is None:
+                if what == testid:
+                    raise CaptureFailed(
+                        "A6",
+                        f"{self.where} ({when}): the {app} frame draws no {testid}",
+                    )
+                continue
+            room = min(
+                found.x,
+                found.y,
+                width - (found.x + found.w),
+                height - (found.y + found.h),
+            )
+            if room < 0:
+                raise CaptureFailed(
+                    "A6",
+                    f"{self.where} ({when}): {what} is cut off: x {found.x:.0f}-"
+                    f"{found.x + found.w:.0f}, y {found.y:.0f}-{found.y + found.h:.0f}"
+                    f" in a {width}x{height} page area",
+                )
+            least = self.tally.fit_least_px
+            self.tally.fit_least_px = room if least is None else min(least, room)
+
     # -- steps ---------------------------------------------------------------------
 
     def settle(self) -> None:
@@ -1479,14 +1635,20 @@ class Director:
                 raise CaptureFailed(
                     "gate 6", f"{self.where}: a secret typed into a {kind} field"
                 )
+            before = found.input_value()
             self.move_to(box.x + min(40.0, box.w / 2), box.y + box.h / 2)
             self.page.mouse.click(box.x + min(40.0, box.w / 2), box.y + box.h / 2)
             if step.clear:
                 found.fill("")
+            elif step.select:
+                found.select_text()
             found.press_sequentially(step.text, delay=config.TYPE_DELAY_MS)
             self.page.wait_for_timeout(config.FIELD_PAUSE_MS)
+            self.check_typed(step, found, before)
         elif isinstance(step, storyboard.Look):
             _, box = self._visible_box(step.look)
+            if self.recorder.recording:
+                self.check_fit(self.filming, "a ring", box)
             self.ring(box)
             self.page.wait_for_timeout(step.ms)
             self.ring(None)
@@ -1495,11 +1657,43 @@ class Director:
             self.scroll_into_view(found)
         elif isinstance(step, storyboard.Choose):
             self.choose(step)
+        elif isinstance(step, storyboard.Date):
+            self.date(step)
         elif isinstance(step, storyboard.Slide):
             found, box = self._visible_box(step.slide)
             self.slide(found, box, step.value, step.slide.describe())
         self.check_needles()
         self.check_events()
+        if self.recorder.recording:
+            self.check_fit(self.filming, "after a step")
+
+    def check_typed(self, step: storyboard.Type, found: Locator, before: str) -> None:
+        """Gate 12 (typed as shown): the field reads what the step typed, or the
+        take refuses (``judge.typed_as_shown``). The tally keeps the lengths,
+        never the values."""
+        after = found.input_value()
+        kept = set(config.STATIC_NEEDLES) | set(self.redactor.values)
+        ok, numbers, why = judge.typed_as_shown(
+            step.text,
+            before,
+            after,
+            replaced=step.clear or step.select,
+            secret=step.secret,
+            kept=kept,
+        )
+        what = step.type.describe()
+        self.tally.typed.append(
+            {
+                "where": self.where,
+                "field": what,
+                "ok": ok,
+                "replaced": numbers["replaced"],
+                "typed_chars": numbers["typed_chars"],
+                "after_chars": numbers["after_chars"],
+            }
+        )
+        if not ok:
+            raise CaptureFailed("gate 12", f"{self.where}: {what}: {why}")
 
     def choose(self, step: storyboard.Choose) -> None:
         """C9: the cursor presses the select, the option is set without the list
@@ -1532,6 +1726,36 @@ class Director:
         self.tally.choices.append({"where": self.where, "ok": ok, **numbers})
         if not ok:
             raise CaptureFailed("C9", f"{self.where}: {what}: {why}")
+
+    def date(self, step: storyboard.Date) -> None:
+        """A ``datetime-local`` field set as ``choose`` sets a select (C9): the
+        cursor presses it, its picker never opened; the page computes the day
+        and the time in its own zone; the field is filled with it, and gate 12
+        reads it back (``judge.date_as_set``). The reading keeps the value, the
+        instant it names and how the page draws it."""
+        found, box = self._visible_box(step.date)
+        what = step.date.describe()
+        tag, kind = found.evaluate(FIELD_KIND_JS)
+        if str(tag).upper() != "INPUT" or kind != "datetime-local":
+            raise CaptureFailed(
+                "gate 12", f"{self.where}: {what} is not a datetime-local input"
+            )
+        self.move_to(*box.centre)
+        self.page.wait_for_timeout(config.POINTER_REST_MS)
+        self.click_pulse(*box.centre)
+        value = str(self.page.evaluate(DATE_VALUE_JS, [step.days_ahead, step.at]))
+        found.fill(value)
+        read = found.input_value()
+        back = self.page.evaluate(DATE_READ_JS, read)
+        ok, numbers, why = judge.date_as_set(step.at, value, read, str(back["back"]))
+        reading = {"value": read, "instant": back["instant"], "shown": back["shown"]}
+        self.tally.dates.append(
+            {"where": self.where, "field": what, "ok": ok, **numbers, **reading}
+        )
+        if not ok:
+            raise CaptureFailed("gate 12", f"{self.where}: {what}: {why}")
+        self.dates[step.record] = reading
+        self.page.wait_for_timeout(config.SETTLE_MS)
 
     def slide(self, found: Locator, box: Box, value: float, what: str) -> None:
         """Move a range input to *value*, one of its steps: the drawn cursor
@@ -1622,10 +1846,15 @@ class Director:
         found, focus = self._visible_box(beat.focus)
         self.check_needles()
         self.check_page(focus, found, beat.cue)
+        if index == 1 and scene.app in self.required:
+            self.check_required(scene.app)
+        self.check_fit(scene.app, "cue start")
         self.read_marks(scene.app)
         self.check_events()
         for name, spec in beat.record.items():
             self.readings[name] = self.locate(spec).inner_text()
+        if self.at_cue is not None:
+            self.at_cue(scene.id, index)
         if urlparse(self.page.url).path.rstrip("/") == "/experiments":
             self.listed_rows = self.page.evaluate(
                 "() => document.querySelectorAll('table tbody tr').length"
@@ -1653,6 +1882,7 @@ class Director:
             )
         self.check_needles()
         end_box = self.check_focus(focus, found, "end")
+        self.check_fit(scene.app, "cue end")
         self.check_events()
         if voice is not None:
             self.check_spoken(voice.sentences, start_text)
@@ -1748,6 +1978,13 @@ class Director:
                 raise CaptureFailed("gate 12", f"{self.where}: no experiment lookup")
             self.page.goto(f"{self.dashboard}/results/{self.resolve(scene.results_of)}")
             self.settle()
+        elif scene.flag_of is not None:
+            if self.resolve_flag is None:
+                raise CaptureFailed("gate 12", f"{self.where}: no flag lookup")
+            self.page.goto(
+                f"{self.dashboard}/feature-flags/{self.resolve_flag(scene.flag_of)}"
+            )
+            self.settle()
         else:
             assert scene.open is not None
             self.page.goto(self.origins[scene.app] + scene.open)
@@ -1756,6 +1993,9 @@ class Director:
         self.check_needles()
         self.check_events()
         began = self.recorder.now()
+        self.filming = scene.app
+        walls = self.scene_walls.setdefault(scene.id, {})
+        walls["start"] = _now_ms()
         self.recorder.start()
         try:
             if scene.card is None:
@@ -1767,6 +2007,8 @@ class Director:
             self._dispose(self._cursor_overlay)
             self._cursor_overlay = None
             self.recorder.stop()
+            walls["end"] = _now_ms()
+            self.filming = None
         if scene.card is not None:
             self.still_spans.append((began, self.recorder.now()))
         self.tally.scenes_run.append(scene.id)
@@ -1788,6 +2030,16 @@ def request_body(request: Any) -> Any:
 
 #: The tracking paths whose bodies carry events.
 EVENT_PATHS = ("/api/v1/tracking/track", "/api/v1/tracking/batch")
+#: A flag's safety check (``GET .../check``, which only evaluates), and the
+#: path that asks for a rollback (``POST .../rollback``). Gate 10/4 counts every
+#: request to the second, whatever its method: no page of video 4 may make one.
+SAFETY_CHECK_PATH = re.compile(r"/api/v1/safety/feature-flags/[^/]+/check$")
+ROLLBACK_PATH = re.compile(r"/api/v1/safety/feature-flags/[^/]+/rollback/?$")
+
+
+def is_rollback_request(request: Any) -> bool:
+    """A request to a flag's rollback path, by any method."""
+    return bool(ROLLBACK_PATH.search(urlparse(str(request.url)).path))
 
 
 def users_named(url: str, body: Any) -> List[str]:

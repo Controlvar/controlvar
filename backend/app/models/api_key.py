@@ -16,6 +16,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.orm import relationship
 
+from backend.app.core.api_key_scopes import SCOPES_MAX_LENGTH
 from backend.app.core.database_config import get_schema_name
 
 from .base import Base, BaseModel
@@ -45,8 +46,10 @@ class APIKey(Base, BaseModel):
     last_used_at = Column(DateTime, nullable=True)
 
     # Comma-separated scope names, read with backend.app.core.api_key_scopes.
-    # Only sdk:ruleset is enforced (backend/app/api/sdk_scope.py); other names are labels.
-    scopes = Column(String(255), nullable=True)
+    # sdk:ruleset (backend/app/api/sdk_scope.py) and mcp:read
+    # (backend/app/api/read_scope.py) are enforced; other names are labels.
+    # The create request refuses a set whose joined form is longer (#1936).
+    scopes = Column(String(SCOPES_MAX_LENGTH), nullable=True)
 
     # User relationship
     user_id = Column(

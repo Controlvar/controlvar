@@ -1,7 +1,17 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor, act } from '@testing-library/react';
+// The dialog makes `#__next` inert and portals beside it, so every render is
+// mounted the way Next mounts the page (#369).
+import { APP_ROOT_ID, renderInAppRoot as render } from '@/tests/helpers/renderInAppRoot';
 import { CreateApiKeyModal } from '@/components/admin/api-keys/CreateApiKeyModal';
 import type { Role } from '@/services/api';
+import userEvent from '@testing-library/user-event';
+import axe from 'axe-core';
+import {
+  MCP_READ_SCOPE,
+  MCP_READ_SCOPE_HELP,
+  MCP_READ_SCOPE_LABEL,
+} from '@/components/admin/api-keys/mcpReadScope';
 
 // The modal reads the signed-in user to decide whether to offer sdk:ruleset.
 const mockAuth = jest.fn();
@@ -29,7 +39,7 @@ beforeEach(() => {
 });
 
 const ROLE_REASON =
-  'Only users who can change feature flags (the ADMIN and DEVELOPER roles, or a superuser) can create a key with this scope.';
+  'Only users who can change feature flags can create a key with this scope; the ADMIN and DEVELOPER roles and superusers can.';
 
 const HELP_TEXT =
   "For server-side SDKs that evaluate flags locally, and for a server that forwards error reports: reports sent with this key count toward automatic rollback. A key with this scope will be able to download every flag's targeting rules, so keep it on a server.";
@@ -74,7 +84,7 @@ describe('CreateApiKeyModal', () => {
       name: 'Server-side local evaluation (sdk:ruleset)',
     });
     expect(box).not.toBeChecked();
-    expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+    expect(screen.getAllByRole('checkbox')).toHaveLength(2);
 
     // The warning is visible before anything is submitted, and a screen
     // reader hears it with the control.
@@ -204,6 +214,109 @@ describe('CreateApiKeyModal', () => {
     });
   });
 
+  describe('the mcp:read option', () => {
+    const mcpBox = () => screen.getByRole('checkbox', { name: MCP_READ_SCOPE_LABEL });
+    const okFetch = () =>
+      jest.fn().mockResolvedValue({
+        ok: true,
+        status: 201,
+        json: async () => ({ id: 'k', name: 'n', key: 'eptk_x', prefix: 'eptk_x', created_at: '' }),
+      });
+    const submitWith = async (fetchMock: jest.Mock) => {
+      fireEvent.change(screen.getByTestId('api-key-name-input'), { target: { value: 'n' } });
+      fireEvent.click(screen.getByTestId('create-api-key-submit'));
+      await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      return JSON.parse(fetchMock.mock.calls[0][1].body);
+    };
+
+    it('is the literal scope string the server expects', () => {
+      expect(MCP_READ_SCOPE).toBe('mcp:read');
+    });
+
+    it('is an unchecked checkbox, labelled by a <label for> and described by the exported help text', () => {
+      global.fetch = jest.fn();
+      render(<CreateApiKeyModal {...defaultProps} />);
+      const box = mcpBox();
+      expect(box).not.toBeChecked();
+      // Programmatic association: the label element points at the input's id.
+      const label = screen.getByText(MCP_READ_SCOPE_LABEL);
+      expect(label.tagName).toBe('LABEL');
+      expect(label).toHaveAttribute('for', box.id);
+      expect(box.id).not.toBe('');
+      // The visible help text is the exported constant, and the input points at it.
+      const help = screen.getByTestId('api-key-mcp-read-scope-help');
+      expect(help).toBeVisible();
+      expect(help.textContent).toBe(MCP_READ_SCOPE_HELP);
+      expect(box).toHaveAttribute('aria-describedby', help.id);
+      expect(box).toHaveAccessibleDescription(MCP_READ_SCOPE_HELP);
+      expect(help.className).toContain('text-slate-600');
+    });
+
+    it('says what the key reads and that its holder reads everything its owner can', () => {
+      expect(MCP_READ_SCOPE_HELP).toMatch(/flags/);
+      expect(MCP_READ_SCOPE_HELP).toMatch(/experiments/);
+      expect(MCP_READ_SCOPE_HELP).toMatch(/everything its owner can read/);
+      // No install or connect steps.
+      expect(MCP_READ_SCOPE_HELP).not.toMatch(/install|npm|connect to|config/i);
+    });
+
+    it('is keyboard operable: Space toggles it', async () => {
+      global.fetch = jest.fn();
+      const user = userEvent.setup();
+      render(<CreateApiKeyModal {...defaultProps} />);
+      mcpBox().focus();
+      expect(mcpBox()).toHaveFocus();
+      await user.keyboard(' ');
+      expect(mcpBox()).toBeChecked();
+    });
+
+    it.each(['ADMIN', 'DEVELOPER', 'ANALYST', 'VIEWER'] as Role[])('is enabled for %s', (role) => {
+      mockAuth.mockReturnValue(signedInAs(role));
+      global.fetch = jest.fn();
+      render(<CreateApiKeyModal {...defaultProps} />);
+      expect(mcpBox()).toBeEnabled();
+    });
+
+    it('sends scopes ["mcp:read"] when ticked', async () => {
+      const fetchMock = okFetch();
+      global.fetch = fetchMock;
+      render(<CreateApiKeyModal {...defaultProps} />);
+      fireEvent.click(mcpBox());
+      expect(mcpBox()).toBeChecked();
+      expect(await submitWith(fetchMock)).toEqual({ name: 'n', scopes: ['mcp:read'] });
+    });
+
+    it('sends no scopes when unticked, and not mcp:read after a tick and an untick', async () => {
+      const fetchMock = okFetch();
+      global.fetch = fetchMock;
+      render(<CreateApiKeyModal {...defaultProps} />);
+      fireEvent.click(mcpBox());
+      fireEvent.click(mcpBox());
+      expect(await submitWith(fetchMock)).toEqual({ name: 'n' });
+    });
+
+    it('sends both scopes when both are ticked', async () => {
+      const fetchMock = okFetch();
+      global.fetch = fetchMock;
+      render(<CreateApiKeyModal {...defaultProps} />);
+      fireEvent.click(screen.getByTestId('api-key-ruleset-scope'));
+      fireEvent.click(mcpBox());
+      expect(await submitWith(fetchMock)).toEqual({
+        name: 'n',
+        scopes: ['sdk:ruleset', 'mcp:read'],
+      });
+    });
+
+    it('still sends mcp:read, and only it, for a role that cannot take sdk:ruleset', async () => {
+      mockAuth.mockReturnValue(signedInAs('VIEWER'));
+      const fetchMock = okFetch();
+      global.fetch = fetchMock;
+      render(<CreateApiKeyModal {...defaultProps} />);
+      fireEvent.click(mcpBox());
+      expect(await submitWith(fetchMock)).toEqual({ name: 'n', scopes: ['mcp:read'] });
+    });
+  });
+
   it('still accepts the legacy key_value field', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
@@ -266,5 +379,396 @@ describe('CreateApiKeyModal', () => {
     global.fetch = jest.fn();
     render(<CreateApiKeyModal {...defaultProps} />);
     expect(screen.getByTestId('create-api-key-modal')).toBeInTheDocument();
+  });
+});
+
+describe('CreateApiKeyModal accessibility (axe-core in jsdom; colour contrast is not computable here)', () => {
+  const axeOptions: axe.RunOptions = { rules: { 'color-contrast': { enabled: false } } };
+
+  // Violations the dialog is known to have. #1613 (the dialog had no accessible
+  // name) is fixed, so the list is empty: any violation is new.
+  const KNOWN_DIALOG_VIOLATIONS: string[] = [];
+
+  // Selectors that are the mcp:read checkbox or its help text.
+  const MCP_TARGETS = ['#api-key-mcp-read-scope', '#api-key-mcp-read-scope-help'];
+
+  // Changed for #369 (each scan was of the render `container`): the dialog now
+  // portals to document.body, outside the container, and the container is
+  // `#__next`, inert while the dialog is open, which axe skips. A container
+  // scan would pass while checking nothing, so every scan, and every node the
+  // two positive controls plant or break, is the dialog node itself.
+  function theDialog(): HTMLElement {
+    // By role alone: a lost name must be axe's finding, not a failed query.
+    const dialog = screen.getByRole('dialog');
+    expect(document.body).toContainElement(dialog);
+    return dialog;
+  }
+
+  async function scanDialog() {
+    return axe.run(theDialog(), axeOptions);
+  }
+
+  async function scan() {
+    return (await scanDialog()).violations;
+  }
+
+  /** Violations that are neither known (#1613) nor attributable to the checkbox: any here is new. */
+  function newViolations(violations: axe.Result[]) {
+    return violations.filter((v) => !KNOWN_DIALOG_VIOLATIONS.includes(v.id)).map((v) => v.id);
+  }
+
+  /** Violations that touch the mcp:read checkbox or its help text. */
+  function attributableToMcpCheckbox(violations: axe.Result[]) {
+    return violations.filter((v) =>
+      v.nodes.some((n) => n.target.some((t) => MCP_TARGETS.includes(String(t)))),
+    );
+  }
+
+  it('the open dialog has only the known violations, and none touches the mcp:read checkbox', async () => {
+    global.fetch = jest.fn();
+    render(<CreateApiKeyModal {...defaultProps} />);
+    expect(screen.getByRole('checkbox', { name: MCP_READ_SCOPE_LABEL })).toBeInTheDocument();
+    const result = await scanDialog();
+    const { violations } = result;
+    expect(attributableToMcpCheckbox(violations).map((v) => v.id)).toStrictEqual([]);
+    expect(newViolations(violations)).toStrictEqual([]);
+    // The known list is exact.
+    expect(violations.map((v) => v.id).sort()).toStrictEqual(KNOWN_DIALOG_VIOLATIONS);
+    // A clean scan must have run the rule that names the dialog, on it.
+    expect(result.passes.map((p) => p.id)).toContain('aria-dialog-name');
+  });
+
+  it('the dialog is named by its heading', () => {
+    global.fetch = jest.fn();
+    render(<CreateApiKeyModal {...defaultProps} />);
+    expect(screen.getByRole('dialog', { name: 'Create API Key' })).toBeInTheDocument();
+  });
+
+  it('the new-violation check fires on an unlabelled input beside the checkbox (positive control)', async () => {
+    global.fetch = jest.fn();
+    render(<CreateApiKeyModal {...defaultProps} />);
+    const stray = document.createElement('input');
+    stray.type = 'checkbox';
+    theDialog().appendChild(stray);
+    const violations = await scan();
+    expect(newViolations(violations)).toContain('label');
+  });
+
+  it('the attribution check fires when the mcp:read checkbox loses its label (positive control)', async () => {
+    global.fetch = jest.fn();
+    render(<CreateApiKeyModal {...defaultProps} />);
+    theDialog().querySelector('label[for="api-key-mcp-read-scope"]')?.removeAttribute('for');
+    const violations = await scan();
+    expect(attributableToMcpCheckbox(violations).map((v) => v.id)).toContain('label');
+  });
+});
+
+describe('CreateApiKeyModal keyboard and screen-reader behaviour (#1613)', () => {
+  const SECRET = 'plaintextkey-must-not-be-announced';
+
+  function Harness() {
+    const [open, setOpen] = React.useState(false);
+    return (
+      <>
+        <button data-testid="opener" onClick={() => setOpen(true)}>
+          New key
+        </button>
+        <CreateApiKeyModal isOpen={open} onClose={() => setOpen(false)} onSuccess={jest.fn()} />
+      </>
+    );
+  }
+
+  function mockCreate() {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'k1',
+        name: 'K',
+        key: SECRET,
+        prefix: 'plaintex',
+        created_at: '2024-06-15T10:00:00Z',
+        expires_at: null,
+      }),
+    });
+  }
+
+  describe('a create that resolves after the dialog closed', () => {
+    function setup() {
+      let resolveJson: (v: unknown) => void = () => {};
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: () => new Promise((resolve) => { resolveJson = resolve; }),
+      });
+      const onSuccess = jest.fn();
+      function Page() {
+        const [open, setOpen] = React.useState(false);
+        return (
+          <>
+            <button data-testid="opener" onClick={() => setOpen(true)}>New key</button>
+            <CreateApiKeyModal isOpen={open} onClose={() => setOpen(false)} onSuccess={onSuccess} />
+          </>
+        );
+      }
+      render(<Page />);
+      fireEvent.click(screen.getByTestId('opener'));
+      fireEvent.change(screen.getByTestId('api-key-name-input'), { target: { value: 'K' } });
+      fireEvent.click(screen.getByTestId('create-api-key-submit'));
+      const created = {
+        id: 'k1', name: 'K', key: SECRET, prefix: 'plaintex', created_at: '2024-06-15T10:00:00Z',
+      };
+      return { onSuccess, resolveCreate: () => resolveJson(created) };
+    }
+
+    it.each(['Escape', 'Cancel'])('%s, then the create resolves: the next open is an empty form', async (how) => {
+      const { onSuccess, resolveCreate } = setup();
+      await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+      if (how === 'Escape') fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+      else fireEvent.click(screen.getByTestId('modal-cancel-button'));
+      expect(screen.queryByTestId('create-api-key-modal')).not.toBeInTheDocument();
+
+      await act(async () => { resolveCreate(); });
+      await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+      expect(onSuccess).toHaveBeenCalledWith(SECRET);
+
+      fireEvent.click(screen.getByTestId('opener'));
+      expect(screen.getByTestId('api-key-name-input')).toHaveValue('');
+      expect(screen.queryByTestId('masked-key-value')).not.toBeInTheDocument();
+      expect(screen.getByRole('dialog', { name: 'Create API Key' })).toBeInTheDocument();
+      expect(document.body.textContent).not.toContain(SECRET);
+      expect(document.body.textContent).not.toContain('plaintex');
+    });
+
+    it('resolving after a reopen does not put the key into the new dialog', async () => {
+      const { onSuccess, resolveCreate } = setup();
+      await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+      fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+      fireEvent.click(screen.getByTestId('opener'));
+      await act(async () => { resolveCreate(); });
+      await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+      expect(screen.queryByTestId('masked-key-value')).not.toBeInTheDocument();
+      expect(document.body.textContent).not.toContain('plaintex');
+    });
+  });
+
+  it('moves focus to the name field on open', () => {
+    global.fetch = jest.fn();
+    render(<Harness />);
+    const opener = screen.getByTestId('opener');
+    opener.focus();
+    fireEvent.click(opener);
+    expect(screen.getByTestId('api-key-name-input')).toHaveFocus();
+  });
+
+  it('Escape closes the dialog', () => {
+    global.fetch = jest.fn();
+    render(<Harness />);
+    screen.getByTestId('opener').focus();
+    fireEvent.click(screen.getByTestId('opener'));
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+    expect(screen.queryByTestId('create-api-key-modal')).not.toBeInTheDocument();
+  });
+
+  it('returns focus to the opener when it closes', () => {
+    global.fetch = jest.fn();
+    render(<Harness />);
+    const opener = screen.getByTestId('opener');
+    opener.focus();
+    fireEvent.click(opener);
+    expect(opener).not.toHaveFocus();
+    fireEvent.click(screen.getByTestId('modal-cancel-button'));
+    expect(opener).toHaveFocus();
+  });
+
+  it('keeps Tab inside the dialog', () => {
+    global.fetch = jest.fn();
+    render(<Harness />);
+    screen.getByTestId('opener').focus();
+    fireEvent.click(screen.getByTestId('opener'));
+    screen.getByTestId('create-api-key-submit').focus();
+    // Submit is disabled with an empty name, so the last focusable is Cancel.
+    screen.getByTestId('modal-cancel-button').focus();
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Tab' });
+    expect(screen.getByTestId('api-key-name-input')).toHaveFocus();
+  });
+
+  it('announces "Key created" then "Key copied" in a polite live region, never the key', async () => {
+    mockCreate();
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: jest.fn().mockResolvedValue(undefined) },
+      configurable: true,
+    });
+    render(<CreateApiKeyModal {...defaultProps} />);
+    const live = screen.getByTestId('api-key-live-region');
+    expect(live).toHaveAttribute('aria-live', 'polite');
+    expect(live).toHaveTextContent('');
+    fireEvent.change(screen.getByTestId('api-key-name-input'), { target: { value: 'K' } });
+    fireEvent.click(screen.getByTestId('create-api-key-submit'));
+    await waitFor(() => expect(live).toHaveTextContent('Key created'));
+    fireEvent.click(screen.getByTestId('copy-key-button'));
+    await waitFor(() => expect(live).toHaveTextContent('Key copied'));
+    expect(live.textContent).not.toContain(SECRET);
+  });
+
+  it('moves focus to Done once the key is shown', async () => {
+    mockCreate();
+    render(<Harness />);
+    screen.getByTestId('opener').focus();
+    fireEvent.click(screen.getByTestId('opener'));
+    fireEvent.change(screen.getByTestId('api-key-name-input'), { target: { value: 'K' } });
+    fireEvent.click(screen.getByTestId('create-api-key-submit'));
+    await waitFor(() => expect(screen.getByTestId('masked-key-value')).toBeInTheDocument());
+    expect(screen.getByTestId('modal-done-button')).toHaveFocus();
+  });
+
+  it('puts the plaintext key in no accessible name, description or live region', async () => {
+    mockCreate();
+    render(<CreateApiKeyModal {...defaultProps} />);
+    fireEvent.change(screen.getByTestId('api-key-name-input'), { target: { value: 'K' } });
+    fireEvent.click(screen.getByTestId('create-api-key-submit'));
+    await waitFor(() => expect(screen.getByTestId('masked-key-value')).toBeInTheDocument());
+    const dialog = screen.getByRole('dialog');
+    const ids = (el: Element, attr: string) =>
+      (el.getAttribute(attr) ?? '')
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((id) => document.getElementById(id)?.textContent ?? '');
+    const all = [dialog, ...Array.from(dialog.querySelectorAll('*'))];
+    for (const el of all) {
+      for (const attr of ['aria-label', 'title', 'aria-valuetext', 'aria-roledescription']) {
+        expect(el.getAttribute(attr) ?? '').not.toContain(SECRET);
+      }
+      expect(ids(el, 'aria-labelledby').join(' ')).not.toContain(SECRET);
+      expect(ids(el, 'aria-describedby').join(' ')).not.toContain(SECRET);
+      if (el.matches('[aria-live], [role="status"], [role="alert"], [role="log"]')) {
+        expect(el.textContent ?? '').not.toContain(SECRET);
+      }
+    }
+    expect(screen.getByRole('dialog', { name: 'API Key Created' })).toBeInTheDocument();
+    expect(dialog.textContent).not.toContain(SECRET);
+  });
+});
+
+/** A page with the real opener: a button that opens the dialog, as the API keys table does. */
+function OpenedFromButton({ onClose }: { onClose?: () => void }) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)}>
+        New API key
+      </button>
+      <CreateApiKeyModal
+        isOpen={open}
+        onClose={() => {
+          onClose?.();
+          setOpen(false);
+        }}
+        onSuccess={jest.fn()}
+      />
+    </>
+  );
+}
+
+describe('CreateApiKeyModal on the shared Dialog (#369)', () => {
+  const appRoot = () => document.getElementById(APP_ROOT_ID) as HTMLElement;
+  const opener = () => screen.getByRole('button', { name: 'New API key' });
+
+  beforeEach(() => {
+    global.fetch = jest.fn();
+  });
+
+  it('opens from its button as a modal dialog named "Create API Key", with focus on Name', async () => {
+    const user = userEvent.setup();
+    render(<OpenedFromButton />);
+    await user.click(opener());
+    const dialog = screen.getByRole('dialog', { name: 'Create API Key' });
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(dialog).toBe(screen.getByTestId('create-api-key-modal'));
+    expect(screen.getByTestId('api-key-name-input')).toHaveFocus();
+  });
+
+  it('the page behind it is inert while it is open, and not after', async () => {
+    const user = userEvent.setup();
+    render(<OpenedFromButton />);
+    await user.click(opener());
+    expect(appRoot()).toHaveAttribute('inert');
+    expect(appRoot().contains(screen.getByTestId('create-api-key-modal'))).toBe(false);
+    await user.keyboard('{Escape}');
+    expect(screen.queryByTestId('create-api-key-modal')).not.toBeInTheDocument();
+    expect(appRoot()).not.toHaveAttribute('inert');
+  });
+
+  it('Escape dispatched on document closes it, once, and focus returns to the opener; so does Cancel', async () => {
+    const onClose = jest.fn();
+    const user = userEvent.setup();
+    render(<OpenedFromButton onClose={onClose} />);
+
+    await user.click(opener());
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('create-api-key-modal')).not.toBeInTheDocument();
+    expect(opener()).toHaveFocus();
+
+    await user.click(opener());
+    await user.click(screen.getByTestId('modal-cancel-button'));
+    expect(onClose).toHaveBeenCalledTimes(2);
+    expect(screen.queryByTestId('create-api-key-modal')).not.toBeInTheDocument();
+    expect(opener()).toHaveFocus();
+  });
+
+  it('Escape still closes it while a create is in flight: it is never busy', async () => {
+    let finish: (response: unknown) => void = () => {};
+    global.fetch = jest.fn().mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    render(<OpenedFromButton />);
+    await user.click(opener());
+    await user.type(screen.getByTestId('api-key-name-input'), 'K');
+    await user.click(screen.getByTestId('create-api-key-submit'));
+    expect(screen.getByTestId('create-api-key-submit')).toHaveTextContent('Creating...');
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByTestId('create-api-key-modal')).not.toBeInTheDocument();
+    expect(opener()).toHaveFocus();
+
+    await act(async () => {
+      finish({
+        ok: true,
+        json: async () => ({ id: 'k', name: 'K', key: 'eptk_x', prefix: 'eptk_x', created_at: '' }),
+      });
+    });
+    expect(screen.queryByTestId('create-api-key-modal')).not.toBeInTheDocument();
+  });
+
+  it('Shift+Tab from Name wraps to Cancel and Tab from Cancel back to Name', async () => {
+    const user = userEvent.setup();
+    render(<OpenedFromButton />);
+    await user.click(opener());
+    // Create Key is disabled while the name is empty, so Cancel is the last control.
+    expect(screen.getByTestId('api-key-name-input')).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(screen.getByTestId('modal-cancel-button')).toHaveFocus();
+    await user.tab();
+    expect(screen.getByTestId('api-key-name-input')).toHaveFocus();
+  });
+
+  it('a failed create shows its error inside the dialog as an alert, and the dialog stays open', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      statusText: 'Bad Request',
+      text: async () => JSON.stringify({ detail: 'Key name already exists' }),
+    });
+    const user = userEvent.setup();
+    render(<OpenedFromButton />);
+    await user.click(opener());
+    await user.type(screen.getByTestId('api-key-name-input'), 'Dup');
+    await user.click(screen.getByTestId('create-api-key-submit'));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Key name already exists');
+    expect(screen.getByRole('dialog', { name: 'Create API Key' })).toContainElement(alert);
+    expect(appRoot()).toHaveAttribute('inert');
   });
 });

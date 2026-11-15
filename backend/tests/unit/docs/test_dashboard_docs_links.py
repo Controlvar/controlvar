@@ -12,8 +12,9 @@ allowed, no closing paren required, since `docsUrl` takes an optional anchor),
 and the same target resolution (`''` and `README` are docs/README.md).
 `TestTheTwinStillMirrorsJest` reads the Jest file as text and fails when its
 rule moves without this one. `test_every_call_is_one_the_rule_can_see` fails on
-a `docsUrl(` call the literal regex does not capture (double quotes, a
-variable, a template literal), which both scans would otherwise skip silently.
+a `docsUrl(` call that is not one literal page followed by `,` or `)` (double
+quotes, a variable, a template literal, a concatenation), which the scan would
+otherwise skip silently; the Jest file has the same rule (#1459, PE 6).
 
 Needs no Node and no node_modules: it reads files only.
 """
@@ -37,6 +38,10 @@ JEST_TWIN = SRC_ROOT / "tests" / "services" / "docs-links.test.ts"
 #: The Jest regex, `/docsUrl\(\s*'([^']*)'/g`, without its delimiters.
 PATTERN = r"docsUrl\(\s*'([^']*)'"
 CALL = re.compile(PATTERN)
+#: A call the scan can read: one literal page, then an anchor or the end. The
+#: Jest `/^docsUrl\(\s*'[^']*'\s*[,)]/`, tried at each call.
+VISIBLE_PATTERN = r"docsUrl\(\s*'[^']*'\s*[,)]"
+VISIBLE = re.compile(VISIBLE_PATTERN)
 SKIPPED_DIRS = ("tests", "__mocks__", "node_modules")
 SOURCE = re.compile(r"\.(ts|tsx)$")
 TEST_FILE = re.compile(r"\.test\.tsx?$")
@@ -112,13 +117,14 @@ def test_points_every_link_at_a_file_that_exists():
 
 
 def test_every_call_is_one_the_rule_can_see():
-    """A `docsUrl(` call the literal regex does not capture is a link neither
-    this test nor the Jest one checks. Use a single-quoted literal page."""
+    """A `docsUrl(` call that is not one literal page is a link neither this
+    test nor the Jest one checks: `docsUrl('sdk/' + key)` is read as the page
+    `sdk/`. Use a single-quoted literal page, or a map of literal calls."""
     unseen = []
     for file in _scanned_files():
         text = file.read_text(encoding="utf-8")
         for m in re.finditer(r"docsUrl\(", text):
-            if not CALL.match(text, m.start()):
+            if not VISIBLE.match(text, m.start()):
                 snippet = text[m.start() : m.start() + 60].split("\n")[0]
                 unseen.append(f"{_rel(file)}:{_line(text, m.start())}: {snippet}")
     assert unseen == [], (
@@ -132,6 +138,8 @@ class TestTheTwinStillMirrorsJest:
 
     MUST_CONTAIN = (
         f"/{PATTERN}/g",
+        f"/^{VISIBLE_PATTERN}/;",
+        "if (!literal.test(text.slice(m.index))) {",
         "file.endsWith(join('services', 'docs.ts'))",
         "entry === 'tests'",
         "entry === '__mocks__'",

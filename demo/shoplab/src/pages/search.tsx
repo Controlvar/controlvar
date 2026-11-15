@@ -97,7 +97,11 @@ export default function SearchPage() {
                   title={
                     results.engine === 'fuzzy' ? <Highlighted text={hit.product.name} words={hit.matchedWords} /> : undefined
                   }
-                  onClick={(p, position) => track('product_click', { product_id: p.id, position, sort: 'search' })}
+                  // Attached to the search flag, as the search event is: a key-less click would
+                  // fan out to the sort bandit, whose reward is product_click on the sorted list.
+                  onClick={(p, position) =>
+                    track('product_click', { product_id: p.id, position, sort: 'search' }, { featureFlagKey: FLAG_KEYS.newSearch })
+                  }
                 >
                   {results.engine === 'fuzzy' && (
                     <span className="mt-2 text-xs text-neutral-500">

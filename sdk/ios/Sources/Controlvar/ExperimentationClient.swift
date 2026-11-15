@@ -157,9 +157,10 @@ public class ExperimentationClient: ExperimentationClientProtocol {
     /// The server makes the assignment sticky and records the exposure; `user.attributes`
     /// are sent as `context` for targeting.
     ///
-    /// - Throws: `ExperimentationError.experimentNotFound` when the experiment is unknown or not
-    ///   ACTIVE; `.networkError` / `.serverError` / `.decodingError` when the request failed and
-    ///   no cached value exists.
+    /// - Throws: `ExperimentationError.experimentNotFound` when no experiment has the key or a
+    ///   draft has no control variant (HTTP 404); `.networkError` / `.serverError` /
+    ///   `.decodingError` when the request failed and no cached value exists. An experiment that
+    ///   is not ACTIVE answers its control variant.
     public func getAssignment(_ experimentKey: String, user: User) async throws -> Assignment {
         if let cached = assignmentCache.get(userId: user.id, key: experimentKey) {
             return cached

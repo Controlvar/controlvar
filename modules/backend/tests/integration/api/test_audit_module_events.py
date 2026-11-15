@@ -10,6 +10,10 @@ On Postgres, through the HTTP routes, with real local-token authentication:
   after ``{role, is_superuser}``: user changes record the superuser flag.
   ``audit_events_v2`` does not move for any of them. A request that changes
   nothing (an assignment already there, a role already equal) writes nothing.
+* #891: one entry each for a custom role created, changed and deleted
+  (entity ``role``), and a direct permission granted and revoked (entity the
+  user), with fixed ``reason`` text; the grant's own reason is in its
+  ``new_value``. A repeat, a no-op, a 404, a 409 and a 422 write none.
 * G5, with a ``BEFORE INSERT`` trigger on ``audit_logs`` that raises (dropped
   in a ``finally``):
 
@@ -17,8 +21,8 @@ On Postgres, through the HTTP routes, with real local-token authentication:
     one ERROR naming only the exception type is logged, no entry, and the
     next sign-in writes nothing (the role is already equal: not retried);
   - an SSO sign-in still creates the account;
-  - the route sites (custom role, workspace role) keep the committed change
-    and answer 200.
+  - the route sites (custom role assigned, defined, a direct grant made and
+    revoked, workspace role) keep the committed change and answer 2xx.
 
 The OIDC callback's own sign-in entry is pinned in ``test_sso_oidc_flow.py``,
 which has the provider it needs.
@@ -46,7 +50,11 @@ from backend.app.db.session import get_db as session_get_db
 from backend.app.main import app
 from backend.app.models.audit_log import AuditLog
 from backend.app.models.user import User, UserRole
-from modules.backend.app.models.custom_role import CustomRole, UserCustomRole
+from modules.backend.app.models.custom_role import (
+    CustomRole,
+    DirectPermissionGrant,
+    UserCustomRole,
+)
 from modules.backend.app.models.sso_config import SSOConfig, SSOProviderType
 from modules.backend.app.models.workspace import Workspace
 from modules.backend.app.services import sso_service
@@ -183,6 +191,9 @@ def _cleanup(db_session):
     s.query(UserCustomRole).filter(UserCustomRole.user_id.in_(user_ids)).delete(
         synchronize_session=False
     )
+    s.query(DirectPermissionGrant).filter(
+        DirectPermissionGrant.user_id.in_(user_ids)
+    ).delete(synchronize_session=False)
     s.query(CustomRole).filter(CustomRole.name.like(f"{P}-%")).delete(
         synchronize_session=False
     )
@@ -258,7 +269,7 @@ def _rows(fresh, entity_id, action=None):
 def _one(fresh, entity_id, action, *, email, user_id=None):
     """Exactly one row for this entity and action, by this actor."""
     rows = _rows(fresh, entity_id, action)
-    assert len(rows) == 1, f"expected 1, found {len(rows)}"
+    assert len(rows) == 1, f"expected 1 {action} entry, found {len(rows)}"
     row = rows[0]
     assert row.user_email == email
     assert row.user_id == user_id
@@ -376,6 +387,287 @@ def test_a_refused_entry_keeps_the_custom_role(
     assert held == 1
     assert _rows(fresh, target.id) == []
     _assert_type_only_errors(caplog)
+
+
+# --- custom role definitions and direct grants (#891) -----------------------------
+
+REFUSED = {"resource": "export", "actions": ["read"]}
+
+
+def _role_name() -> str:
+    return f"{P}-{uuid.uuid4().hex[:8]}"
+
+
+def _role_rows(fresh, action, name):
+    """Every entry of *action* on the custom role called *name*."""
+    s = fresh()
+    try:
+        return (
+            s.query(AuditLog)
+            .filter(
+                AuditLog.action_type == action,
+                AuditLog.entity_type == "role",
+                AuditLog.entity_name == name,
+            )
+            .order_by(AuditLog.timestamp)
+            .all()
+        )
+    finally:
+        s.close()
+
+
+def _one_role(fresh, action, name):
+    """Exactly one entry of *action* on the custom role called *name*."""
+    rows = _role_rows(fresh, action, name)
+    assert len(rows) == 1, f"expected 1 {action} entry, found {len(rows)}"
+    return rows[0]
+
+
+def _role_id(fresh, name):
+    s = fresh()
+    try:
+        role = s.query(CustomRole).filter(CustomRole.name == name).first()
+        return role.id if role is not None else None
+    finally:
+        s.close()
+
+
+@pytest.mark.regression
+def test_creating_a_custom_role_writes_one_role_create(client, fresh, admin):
+    name = _role_name()
+    body = {
+        "name": name,
+        "description": "reads experiments",
+        "permissions": [{"resource": "experiment", "actions": ["read", "list"]}],
+    }
+    resp = client.post(f"{V1}/rbac/roles", json=body, headers=_auth(admin))
+    assert resp.status_code == 201, resp.text
+
+    row = _one_role(fresh, "role_create", name)
+    assert row.entity_id == _role_id(fresh, name)
+    assert (row.user_email, row.user_id) == (admin.email, admin.id)
+    assert row.reason == "custom role created"
+    assert _values(row) == (
+        None,
+        {
+            "description": "reads experiments",
+            "permissions": [{"resource": "experiment", "actions": ["read", "list"]}],
+        },
+    )
+
+    # The same name again is a 409; a pair no role may hold is a 422. Neither
+    # writes an entry.
+    assert (
+        client.post(f"{V1}/rbac/roles", json=body, headers=_auth(admin)).status_code
+        == 409
+    )
+    refused = _role_name()
+    resp = client.post(
+        f"{V1}/rbac/roles",
+        json={"name": refused, "permissions": [REFUSED]},
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 422, resp.text
+    assert len(_role_rows(fresh, "role_create", name)) == 1
+    assert _role_rows(fresh, "role_create", refused) == []
+
+
+@pytest.mark.regression
+def test_changing_a_custom_role_writes_one_role_update_per_change(
+    client, fresh, admin, custom_role
+):
+    url = f"{V1}/rbac/roles/{custom_role.name}"
+    resp = client.put(url, json={"description": "now wider"}, headers=_auth(admin))
+    assert resp.status_code == 200, resp.text
+    row = _one_role(fresh, "role_update", custom_role.name)
+    assert row.entity_id == custom_role.id
+    assert (row.user_email, row.user_id) == (admin.email, admin.id)
+    assert row.reason == "custom role changed"
+    # Only what changed.
+    assert _values(row) == ({"description": "am221 role"}, {"description": "now wider"})
+
+    # The same description again changes nothing and writes nothing.
+    assert (
+        client.put(
+            url, json={"description": "now wider"}, headers=_auth(admin)
+        ).status_code
+        == 200
+    )
+    assert len(_role_rows(fresh, "role_update", custom_role.name)) == 1
+
+    wider = [{"resource": "experiment", "actions": ["read", "update"]}]
+    assert (
+        client.put(url, json={"permissions": wider}, headers=_auth(admin)).status_code
+        == 200
+    )
+    rows = _role_rows(fresh, "role_update", custom_role.name)
+    assert len(rows) == 2
+    assert _values(rows[1]) == (
+        {"permissions": [{"resource": "experiment", "actions": ["read"]}]},
+        {"permissions": wider},
+    )
+
+    # A 422 and a 404 write nothing.
+    refused = client.put(url, json={"permissions": [REFUSED]}, headers=_auth(admin))
+    assert refused.status_code == 422, refused.text
+    missing = _role_name()
+    gone = client.put(
+        f"{V1}/rbac/roles/{missing}", json={"description": "x"}, headers=_auth(admin)
+    )
+    assert gone.status_code == 404, gone.text
+    assert len(_role_rows(fresh, "role_update", custom_role.name)) == 2
+    assert _role_rows(fresh, "role_update", missing) == []
+
+
+@pytest.mark.regression
+def test_deleting_a_custom_role_writes_one_role_delete(
+    client, fresh, admin, target, custom_role
+):
+    assign = {"user_id": str(target.id), "role_name": custom_role.name}
+    assert (
+        client.post(f"{V1}/rbac/roles/assign", json=assign, headers=_auth(admin))
+    ).status_code == 200
+    url = f"{V1}/rbac/roles/{custom_role.name}"
+    resp = client.delete(url, headers=_auth(admin))
+    assert resp.status_code == 204, resp.text
+
+    row = _one_role(fresh, "role_delete", custom_role.name)
+    assert row.entity_id == custom_role.id
+    assert (row.user_email, row.user_id) == (admin.email, admin.id)
+    assert row.reason == "custom role deleted"
+    assert _values(row) == (
+        {
+            "description": "am221 role",
+            "permissions": [{"resource": "experiment", "actions": ["read"]}],
+            "assigned_users": 1,
+        },
+        None,
+    )
+
+    # Gone: a second delete is a 404 and writes nothing.
+    assert client.delete(url, headers=_auth(admin)).status_code == 404
+    assert len(_role_rows(fresh, "role_delete", custom_role.name)) == 1
+
+
+@pytest.mark.regression
+def test_granting_a_direct_permission_writes_one_permission_grant(
+    client, fresh, admin, target
+):
+    url = f"{V1}/rbac/users/{target.id}/grant"
+    body = {
+        "user_id": str(target.id),
+        "resource": "feature_flag",
+        "actions": ["update"],
+        "reason": "Quarterly access review",
+        "expires_at": "2030-01-01T00:00:00+00:00",
+    }
+    resp = client.post(url, json=body, headers=_auth(admin))
+    assert resp.status_code == 201, resp.text
+
+    row = _one(
+        fresh, target.id, "permission_grant", email=admin.email, user_id=admin.id
+    )
+    assert row.entity_name == target.username
+    # Fixed text, as role_assign has; the request's own reason is in new_value.
+    assert row.reason == "direct permission granted"
+    s = fresh()
+    try:
+        (grant,) = (
+            s.query(DirectPermissionGrant)
+            .filter(DirectPermissionGrant.user_id == target.id)
+            .all()
+        )
+    finally:
+        s.close()
+    assert _values(row) == (
+        None,
+        {
+            "resource": "feature_flag",
+            "actions": ["update"],
+            "expires_at": "2030-01-01T00:00:00+00:00",
+            "grant_id": str(grant.id),
+            "reason": "Quarterly access review",
+        },
+    )
+
+    # A pair no grant may hold is a 422: nothing stored, nothing written.
+    refused = client.post(
+        url,
+        json={"user_id": str(target.id), **REFUSED},
+        headers=_auth(admin),
+    )
+    assert refused.status_code == 422, refused.text
+    assert len(_rows(fresh, target.id, "permission_grant")) == 1
+
+
+@pytest.mark.regression
+def test_revoking_a_direct_permission_writes_one_permission_revoke(
+    client, fresh, admin, target
+):
+    grant = {"user_id": str(target.id), "resource": "experiment", "actions": ["create"]}
+    for _ in range(2):
+        made = client.post(
+            f"{V1}/rbac/users/{target.id}/grant", json=grant, headers=_auth(admin)
+        )
+        assert made.status_code == 201, made.text
+    url = f"{V1}/rbac/users/{target.id}/grant/experiment"
+    resp = client.delete(url, headers=_auth(admin))
+    assert resp.json() == {"status": "revoked", "count": 2}
+
+    row = _one(
+        fresh, target.id, "permission_revoke", email=admin.email, user_id=admin.id
+    )
+    assert row.entity_name == target.username
+    assert row.reason == "direct permission revoked"
+    assert _values(row) == ({"resource": "experiment", "count": 2}, None)
+
+    # Nothing left to revoke: count 0, nothing written.
+    assert client.delete(url, headers=_auth(admin)).json()["count"] == 0
+    assert len(_rows(fresh, target.id, "permission_revoke")) == 1
+
+
+@pytest.mark.regression
+def test_a_refused_entry_keeps_the_role_and_the_grant(
+    client, fresh, db_session, admin, target, custom_role, caplog
+):
+    """Written after the commit, as role_assign is: a refused entry is logged
+    (type only) and the change stands, for each of the five routes."""
+    name = _role_name()
+    grant = {"user_id": str(target.id), "resource": "audit_log", "actions": ["read"]}
+    with caplog.at_level(logging.ERROR), refuse_audit(db_session):
+        created = client.post(
+            f"{V1}/rbac/roles", json={"name": name}, headers=_auth(admin)
+        )
+        changed = client.put(
+            f"{V1}/rbac/roles/{name}",
+            json={"description": "kept"},
+            headers=_auth(admin),
+        )
+        deleted = client.delete(
+            f"{V1}/rbac/roles/{custom_role.name}", headers=_auth(admin)
+        )
+        granted = client.post(
+            f"{V1}/rbac/users/{target.id}/grant", json=grant, headers=_auth(admin)
+        )
+        revoked = client.delete(
+            f"{V1}/rbac/users/{target.id}/grant/audit_log", headers=_auth(admin)
+        )
+    assert created.status_code == 201, created.text
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["description"] == "kept"
+    assert deleted.status_code == 204, deleted.text
+    assert granted.status_code == 201, granted.text
+    assert revoked.json() == {"status": "revoked", "count": 1}
+    assert _role_id(fresh, name) is not None
+    assert _role_id(fresh, custom_role.name) is None
+    for action, role in (
+        ("role_create", name),
+        ("role_update", name),
+        ("role_delete", custom_role.name),
+    ):
+        assert _role_rows(fresh, action, role) == [], action
+    assert _rows(fresh, target.id) == []
+    _assert_type_only_errors(caplog, n=5)
 
 
 # --- workspace member role ------------------------------------------------------

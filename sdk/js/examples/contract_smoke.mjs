@@ -7,7 +7,7 @@
  * Env: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY (required),
  * (the former names EXPERIMENTLY_API_URL / EXPERIMENTLY_API_KEY are read when these are unset),
  *      CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag),
- *      CONTRACT_USER_ID (default smoke-<uuid>).
+ *      CONTRACT_TARGETED_FLAG_KEY (default sdk_contract_targeted), CONTRACT_USER_ID (default smoke-<uuid>).
  *
  * Prints exactly one JSON line on stdout and exits 0; on failure prints one line to stderr and exits 1.
  */
@@ -21,6 +21,7 @@ const apiUrl =
 const apiKey = process.env.CONTROLVAR_API_KEY || process.env.EXPERIMENTLY_API_KEY;
 const experimentKey = process.env.CONTRACT_EXPERIMENT_KEY || 'sdk_contract_ab';
 const flagKey = process.env.CONTRACT_FLAG_KEY || 'sdk_contract_flag';
+const targetedKey = process.env.CONTRACT_TARGETED_FLAG_KEY || 'sdk_contract_targeted';
 const userId = process.env.CONTRACT_USER_ID || `smoke-${randomUUID()}`;
 
 function fail(message) {
@@ -61,9 +62,9 @@ try {
   await client.track(userId, 'purchase', { value: 12.5, experimentKey });
   if (trackErrors.length) fail(`track: ${trackErrors[0]}`);
 
-  // 4. Track without a key: fans out to the cached assignment + evaluated flag.
+  // 4. Track without a key: fans out to the assignment + evaluated flag answered above.
   if (client.getAssignments(userId).length !== 1 || client.getEvaluatedFlags(userId).length !== 1) {
-    fail('cache does not hold one assignment and one flag; fan-out would send nothing');
+    fail('cache does not hold one assignment and one flag');
   }
   await client.track(userId, 'page_view', { properties: { page: '/contract-smoke' } });
   if (trackErrors.length) fail(`fan-out: ${trackErrors[0]}`);
@@ -77,6 +78,67 @@ try {
     fail(`batch: ${JSON.stringify(batch)}`);
   }
 
+  // 4b2. One keyed event sent twice with one fixed eventId (#1543, C4). The server is to store
+  //      it once: the runner counts the rows for this user and event name.
+  const dedupName = `contract_dedup_${randomUUID()}`;
+  const dedupId = `contract-${randomUUID()}`;
+  for (let i = 0; i < 2; i++) {
+    await client.track(userId, dedupName, { experimentKey, eventId: dedupId });
+  }
+  if (trackErrors.length) fail(`event_id: ${trackErrors[0]}`);
+
+  // 4c. The attributes reach flag evaluation (#1520). The seeded targeted flag is at 0% with one
+  //     rule, plan equals pro, at 100%. A NEW client (so the fan-out above is untouched) asks for
+  //     it with plan=pro, then, after clearCache() (the cache key is user + flag), with plan=free.
+  //     The runner requires on with the reason targeting_rule, then off.
+  const targeting = new ExperimentationClient({ apiUrl, apiKey });
+  const pro = await targeting.evaluateFlag(targetedKey, { userId, attributes: { plan: 'pro' } });
+  targeting.clearCache();
+  const free = await targeting.evaluateFlag(targetedKey, { userId, attributes: { plan: 'free' } });
+
+  // 5. The exposure hook (#1499): a NEW client with onExposure assigns the same user twice,
+  //    with no clearCache() in between. The server records an exposure for the first request
+  //    (assigned: true) and the second answer comes from the cache, so the hook is called once.
+  //    The runner checks the count, the experiment key and the variant; the user id is checked
+  //    here, the one place that knows it.
+  const exposures = [];
+  const hooked = new ExperimentationClient({ apiUrl, apiKey, onExposure: e => exposures.push({ ...e }) });
+  await hooked.getAssignment(experimentKey, { userId });
+  await hooked.getAssignment(experimentKey, { userId });
+  const wrongUser = exposures.find(e => e.userId !== userId);
+  if (wrongUser) fail(`onExposure received user ${JSON.stringify(wrongUser.userId)}, expected ${JSON.stringify(userId)}`);
+
+  // 5b. A hook that returns a rejected Promise: the client must handle the rejection (in plain
+  //     node an unhandled one ends this process with exit 1) and pass it to onError as
+  //     'exposure' with code HOOK_ERROR, the answer unchanged.
+  const hookErrors = [];
+  const rejecting = new ExperimentationClient({
+    apiUrl,
+    apiKey,
+    onExposure: () => Promise.reject(new Error('async boom')),
+    onError: (error, operation) => hookErrors.push(`${operation}/${error.code}`),
+  });
+  const fromRejecting = await rejecting.getAssignment(experimentKey, { userId });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  if (fromRejecting.variantName !== second.variantName) {
+    fail(`the client with a rejecting hook answered ${fromRejecting.variantName}, not ${second.variantName}`);
+  }
+  if (hookErrors.join() !== 'exposure/HOOK_ERROR') {
+    fail(`the rejecting hook was reported as ${JSON.stringify(hookErrors)}, expected ["exposure/HOOK_ERROR"]`);
+  }
+
+  // 6. Flag values (#1810): a NEW client (so the fan-out above is untouched) reads the seed's
+  //    string, number and json flags, each on at 100%, with the typed getters. Each default is
+  //    no flag value, so a getter that falls back shows. The report is what they returned; the
+  //    runner requires the seed's on values.
+  const valued = new ExperimentationClient({ apiUrl, apiKey });
+  const values = {
+    string: await valued.getStringValue('sdk_contract_value_string', { userId }, 'smoke-default'),
+    number: await valued.getNumberValue('sdk_contract_value_number', { userId }, -1),
+    json: await valued.getJsonValue('sdk_contract_value_json', { userId }, ['smoke-default']),
+  };
+
+  const [exposure] = exposures;
   process.stdout.write(
     JSON.stringify({
       sdk: 'js',
@@ -84,6 +146,20 @@ try {
       flag: { enabled: flag.enabled },
       track: { ok: true },
       fanout: { ok: true },
+      targeted: { pro: pro.enabled, free: free.enabled, reason: pro.reason ?? null },
+      event_id: { user_id: userId, event_name: dedupName, id: dedupId, sends: 2 },
+      exposure: {
+        calls: exposures.length,
+        payload: exposure
+          ? {
+              experiment_key: exposure.experimentKey,
+              variant_name: exposure.variantName,
+              variant_id: exposure.variantId,
+              user_id: exposure.userId,
+            }
+          : null,
+      },
+      values,
     }) + '\n'
   );
 } catch (err) {

@@ -7,7 +7,7 @@
     <parent>
         <groupId>com.controlvar</groupId>
         <artifactId>controlvar-sdk-parent</artifactId>
-        <version>1.0.0</version>
+        <version>0.1.0</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -15,7 +15,7 @@
     <packaging>jar</packaging>
 
     <name>Controlvar Java SDK — Core</name>
-    <description>Core Java/JVM client SDK for Controlvar</description>
+    <description>Java 11+ client for Controlvar feature flags, experiment assignment and event tracking, decided by the server.</description>
 
     <dependencies>
         <!-- HTTP Client -->
@@ -59,6 +59,19 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.6.0</version>
+            </plugin>
+            <!-- The contract smoke runner (com.controlvar.sdk.examples) is not API,
+                 so the jar leaves it out. examples/contract_smoke.sh runs it from
+                 core/target/classes, which still has it. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.5.1</version>
+                <configuration>
+                    <excludes>
+                        <exclude>com/controlvar/sdk/examples/**</exclude>
+                    </excludes>
+                </configuration>
             </plugin>
             <!-- Copies runtime dependencies to target/lib so the contract smoke can run with
                  java -cp "core/target/classes:core/target/lib/*" (see examples/contract_smoke.sh). -->

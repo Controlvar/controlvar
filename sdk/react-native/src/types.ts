@@ -6,8 +6,35 @@
  * `POST /api/v1/tracking/assign`, `POST /api/v1/tracking/track|batch`).
  */
 
-/** Operations whose failures are swallowed and reported through `onError`. */
-export type SwallowedOperation = 'evaluateFlag' | 'getAssignment' | 'getAllFlags' | 'track' | 'trackBatch';
+/**
+ * Operations whose failures are swallowed and reported through `onError`.
+ * `'exposure'` is an `onExposure` that threw or whose Promise rejected.
+ * `'value'` is a typed getter (`getStringValue`, `getNumberValue`,
+ * `getJsonValue`) or `useFlagValue` that returned your default.
+ */
+export type SwallowedOperation =
+  | 'evaluateFlag'
+  | 'getAssignment'
+  | 'getAllFlags'
+  | 'track'
+  | 'trackBatch'
+  | 'exposure'
+  | 'value';
+
+/**
+ * What `onExposure` receives: one experiment exposure the server recorded. A
+ * new object for every call; changing it changes nothing the client keeps.
+ */
+export interface Exposure {
+  /** The experiment's key. */
+  readonly experimentKey: string;
+  /** The user id the assignment was asked for. */
+  readonly userId: string;
+  /** The variant's id; `null` when the server sent none. */
+  readonly variantId: string | null;
+  /** The variant's name. */
+  readonly variantName: string;
+}
 
 /** Configuration for {@link ExperimentationClient}. */
 export interface SdkConfig {
@@ -30,9 +57,31 @@ export interface SdkConfig {
   offlineFallback?: boolean;
   /**
    * Called whenever the client swallows a failure (`evaluateFlag`,
-   * `getAssignment`, `getAllFlags`, `track`, `trackBatch` never throw).
+   * `getAssignment`, `getAllFlags`, `track`, `trackBatch` never throw), and
+   * whenever `onExposure` throws or its Promise rejects (`'exposure'`, with
+   * what it threw, or an `Error` wrapping it when it is not one). Each call
+   * of a typed getter, and each answer `useFlagValue` reads, calls it once
+   * with `'value'` when the request failed (with the request's own error, a
+   * 404 for an unknown flag included) or the answer holds no value of the
+   * type asked for (with a `FlagValueError`).
    */
   onError?: (error: Error, operation: SwallowedOperation) => void;
+  /**
+   * Called once each time the server enrols the user in an experiment and the
+   * answer did not come from this client's memory cache or from AsyncStorage:
+   * when `POST /api/v1/tracking/assign` answers `assigned: true` and the
+   * client stores that answer where none was cached. Not called for a cached
+   * or stored answer, the offline fallback, a call that shares a request
+   * already in flight, `assigned: false` or no `assigned`, a failed call, or
+   * a flag. With the default `offlineFallback`, a new client or
+   * `clearCache()` is answered from AsyncStorage until the stored answer
+   * expires, and calls nothing. It runs before `getAssignment` resolves; the
+   * client does not wait for a Promise it returns. If it throws or its
+   * Promise rejects, the answer is unchanged and the error goes to `onError`
+   * with `'exposure'`. `null` or `undefined` sets none; any other
+   * non-function makes the constructor throw.
+   */
+  onExposure?: ((exposure: Exposure) => void) | null;
 }
 
 /** Result of `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…`. */
@@ -40,6 +89,20 @@ export interface FlagEvaluation {
   key: string;
   enabled: boolean;
   config: unknown | null;
+  /**
+   * The value the server served the user (`value` in its answer): the flag's
+   * on value when it is on for them, its off value otherwise. Absent when the
+   * server sent none (a server without flag values, or one that cannot serve
+   * the flag's stored value), on a failure, and in an answer stored by 0.1. It
+   * is the cached answer's own value; the typed getters and `useFlagValue`
+   * read it by type and return a copy.
+   */
+  value?: unknown;
+  /**
+   * The type the server says the flag serves (`value_type` in its answer):
+   * `'boolean'`, `'string'`, `'number'` or `'json'`. Absent when it sent none.
+   */
+  valueType?: string;
 }
 
 /** Result of `POST /api/v1/tracking/assign`, mapped to camelCase. */
@@ -84,7 +147,10 @@ export interface BatchResult {
 
 /** Return type of {@link useFlag}. */
 export interface FlagState extends FlagEvaluation {
-  /** Alias of `enabled` (kept for compatibility with 0.1). */
+  /**
+   * Alias of `enabled` (kept for compatibility with 0.1), also for a string,
+   * number or JSON flag: read its value with `useFlagValue`.
+   */
   value: boolean;
   loading: boolean;
   error: Error | null;
@@ -118,12 +184,28 @@ export interface AssignResponse {
   variant_name: string;
   is_control?: boolean;
   configuration?: Record<string, unknown> | null;
+  /**
+   * `true` when the server enrolled the user and recorded an exposure;
+   * `false` for a user it did not enrol or an experiment that is not running.
+   * Read only to decide whether to call `onExposure`.
+   */
+  assigned?: boolean;
+  /** Why: `'assigned'`, `'holdout'`, `'mutual_exclusion'`, `'targeting'` or the experiment's status. */
+  reason?: string;
 }
 
 export interface FlagEvaluateResponse {
   key: string;
   enabled: boolean;
   config?: unknown | null;
+  /**
+   * The value served to this user: the on value when `enabled`, else the off
+   * value. Absent on servers without flag values, and when the flag's stored
+   * value cannot be served.
+   */
+  value?: unknown;
+  /** `boolean` | `string` | `number` | `json`; absent on servers without flag values. */
+  value_type?: string;
 }
 
 export interface BatchResponse {

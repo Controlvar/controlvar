@@ -53,11 +53,22 @@ export interface CreatedUser {
   updated_at: string;
 }
 
+/** One resource and the actions held on it: the API's `PermissionGrant`. */
+export interface PermissionGrant {
+  resource: string;
+  actions: string[];
+}
+
+/** A custom role as `GET /api/v1/rbac/roles` returns it (`CustomRoleResponse`). */
 export interface CustomRole {
+  id: string;
   name: string;
-  description: string;
-  permissions: string[];
+  description: string | null;
+  is_system_role: boolean;
+  permissions: PermissionGrant[];
   created_at: string;
+  /** How many users have this role. */
+  user_count: number;
 }
 
 export interface AuditLog {

@@ -73,6 +73,13 @@ text = "Its variance is each arm's residual variance over its size, so the more 
 by = ["test:backend/tests/unit/services/test_cuped_metric_result.py::test_s3_effect_equals_ols_and_se_matches_hc2"]
 
 [[unit]]
+text = "Each residual variance is a sample variance, divided by the arm's users minus 1."
+by = [
+    "journey:experiment-results#cuped-returning-users",
+    "journey:experiment-results#cuped-new-users",
+]
+
+[[unit]]
 text = "What counts as history, per user:"
 by = ["exempt:baseline"]
 
@@ -104,8 +111,8 @@ text = "Send history before you start the experiment."
 by = ["test:backend/tests/integration/services/test_cuped_covariate_window.py::test_receive_guard_stored_after_assignment_is_not_history"]
 
 [[unit]]
-text = "History backfilled after the start is ignored."
-by = ["exempt:baseline"]
+text = "History the server receives after a user was assigned is ignored for that user."
+by = ["test:backend/tests/integration/services/test_cuped_covariate_window.py::test_receive_guard_stored_after_assignment_is_not_history"]
 
 [[unit]]
 text = "Sending pre-experiment history"
@@ -148,16 +155,26 @@ text = "Events during the experiment still need the experiment's key, as they al
 by = ["test:backend/tests/integration/api/test_tracking_untagged_events.py::test_an_untagged_event_after_assignment_counts_nowhere"]
 
 [[unit]]
-text = "The SDKs' track() without a key sends one event for each experiment and flag cached for the user, and those tagged events count as history for a later experiment."
+text = "The SDKs' track() without a key sends one event for each experiment and flag that SDK answered for the user (in the last 24 hours for the JavaScript, Python and React SDKs, while the answer is cached for the others), and those tagged events count as history for a later experiment."
 by = [
-    "test:sdk/js/__tests__/client.test.ts",
+    "test:sdk/js/__tests__/client.test.ts::sends an untagged purchase made 301 s after the assignment to the experiment",
+    "test:sdk/js/__tests__/client.test.ts::does not send to a key answered more than 24 hours ago: the event goes once with no key",
     "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_fans_out_to_cached_assignment_and_flag",
+    "test:sdk/python/tests/test_client.py::TestLateConversions::test_a_purchase_301_seconds_after_the_assignment_reaches_the_experiment",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::sends an untagged purchase made 301 s after the assignment to the experiment",
+    "test:sdk/go/client_test.go::TestClient_Track_WithoutKey_FansOutToCachedEntries",
     "test:backend/tests/integration/services/test_cuped_covariate_window.py::test_w5_a_fanned_out_copy_counts_once",
 ]
 
 [[unit]]
-text = "An SDK user with nothing cached sends no history, which is usual before a user's first assignment."
-by = ["test:sdk/js/__tests__/client.test.ts"]
+text = "With nothing to attribute it to, the JavaScript, Python and React SDKs send the event once with no key, which stores it as history; the other SDKs send nothing then, which is usual before a user's first assignment."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::sends the event once to /api/v1/tracking/track with no key when nothing is attributed to the user",
+    "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_nothing_attributed_sends_the_event_once_to_track_with_no_key",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::sends the event once to /api/v1/tracking/track with no key and resolves when nothing is attributed to the user",
+    "test:backend/tests/integration/api/test_cuped_history_sent_by_tracking.py::test_history_is_matched_by_exact_id_and_dated_in_utc",
+    "test:sdk/go/client_test.go::TestClient_Track_WithoutKey_NothingCached_SendsNothing",
+]
 
 [[unit]]
 text = "Each result's covariate_coverage_pct shows how many users had history."
@@ -200,8 +217,14 @@ text = "Choosing the method"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "The method is part of the experiment, in its variance_reduction_config, set when you create it (POST /api/v1/experiments/) or change it (PUT /api/v1/experiments/{id}):"
-by = ["docex:docs/api/cuped.md#200"]
+text = "The method is part of the experiment, in its variance_reduction_config, set when you create it (POST /api/v1/experiments/) or while it is a draft (PUT /api/v1/experiments/{id}); once it has left draft it cannot be changed (see Permissions):"
+by = [
+    "docex:docs/api/cuped.md#\"covariate_lookback_days\": 7",
+    "journey:experiment-results#cuped-experiment",
+    "journey:experiment-results#cuped-new-users-on",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_draft_takes_each_analysis_setting",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_superuser_cannot_change_an_analysis_setting_once_out_of_draft",
+]
 
 [[unit]]
 text = "Field | Type | Default | Description"
@@ -230,8 +253,9 @@ by = [
 ]
 
 [[unit]]
-text = "winsorization_percentile | float | 99.0 | The percentile above which values are clipped, 50–100"
+text = "winsorization_percentile | float | 99.0 | Reserved: stored and validated (50–100), but no results view clips values with it. A mean metric's numbers are the unclipped ones"
 by = [
+    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_winsorization_in_the_stored_config_changes_no_number",
     "test:backend/tests/unit/schemas/test_variance_reduction_schemas.py::TestVarianceReductionConfig::test_default_winsorization_percentile",
     "test:backend/tests/unit/schemas/test_variance_reduction_schemas.py::TestVarianceReductionConfig::test_winsorization_percentile_min_50",
     "test:backend/tests/unit/schemas/test_variance_reduction_schemas.py::TestVarianceReductionConfig::test_winsorization_percentile_max_100",
@@ -253,20 +277,45 @@ text = "cuped_plus is currently computed as cuped: the response's top-level meth
 by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_em6_cuped_plus_is_computed_as_cuped"]
 
 [[unit]]
-text = "winsorization clips values above a percentile, which only means something for a mean metric (revenue, say)."
-by = ["exempt:baseline"]
+text = "winsorization is accepted and stored, but nothing clips values: a revenue metric's /results numbers are the same as with none, a whale included."
+by = [
+    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_winsorization_in_the_stored_config_changes_no_number",
+    "test:backend/tests/integration/api/test_cuped_results_api.py::test_winsorization_on_a_revenue_metric_is_listed_as_not_a_proportion_metric",
+]
 
 [[unit]]
-text = "This view does not apply it: a conversion metric is listed with unavailable_reason: \"winsorization_needs_mean_metric\"."
+text = "A conversion metric is listed with unavailable_reason: \"winsorization_needs_mean_metric\"."
 by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_winsorization_on_a_conversion_metric_is_a_reason_not_zeroed"]
 
 [[unit]]
-text = "This sets the demo experiment's method to cuped with a 7-day lookback:"
-by = ["exempt:baseline"]
+text = "To limit a whale's effect today, cap or filter the value before you send the event."
+by = ["exempt:advice"]
 
 [[unit]]
-text = "It prints 200."
-by = ["exempt:baseline"]
+text = "The demo data creates checkout_button_color with the method cuped and a 7-day lookback."
+by = [
+    "test:backend/tests/unit/scripts/test_seed_demo_history.py::test_checkout_button_color_is_created_with_cuped_and_a_7_day_lookback",
+    "docex:docs/api/cuped.md#\"covariate_lookback_days\": 7",
+]
+
+[[unit]]
+text = "This reads the setting the experiment stores:"
+by = ["docex:docs/api/cuped.md#\"covariate_lookback_days\": 7"]
+
+[[unit]]
+text = "It prints \"method\": \"cuped\" and \"covariate_lookback_days\": 7, with the other two fields at their defaults."
+by = [
+    "docex:docs/api/cuped.md#\"covariate_lookback_days\": 7",
+    "test:backend/tests/unit/scripts/test_seed_demo_history.py::test_checkout_button_color_is_created_with_cuped_and_a_7_day_lookback",
+]
+
+[[unit]]
+text = "A stack whose demo data an earlier release seeded may print null: start it once with SEED_FORCE=true, which runs the demo seed again and sets a missing setting, or seed a fresh database."
+by = [
+    "test:backend/tests/unit/scripts/test_seed_demo_history.py::test_a_stack_seeded_before_gets_the_setting_only_where_it_is_null",
+    "test:backend/tests/unit/scripts/test_seed_demo_history.py::test_every_run_of_the_seed_backfills_after_the_experiments",
+    "test:backend/tests/unit/scripts/test_entrypoint_seed_force_and_workers.py::test_a_recorded_seed_is_skipped_and_seed_force_applies_it_again",
+]
 
 [[unit]]
 text = "API Reference"
@@ -293,10 +342,12 @@ text = "Like the main results, the view is fixed-horizon: do not stop an experim
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Any logged-in user can read it; an experiment that doesn't exist answers 404."
+text = "A user who may view the experiment can read it; without that permission it answers 403, and an experiment that doesn't exist answers 404."
 by = [
     "test:backend/tests/integration/api/test_cuped_results_api.py::test_not_found_answers_404",
     "test:backend/tests/unit/api/test_cuped_api.py::TestCupedApiEndpoint::test_cuped_endpoint_requires_authentication",
+    "test:backend/tests/integration/api/test_experiment_data_read_rule.py::test_every_shipped_role_keeps_its_answer_on_each_route",
+    "test:backend/tests/integration/api/test_experiment_data_read_rule.py::test_no_base_role_is_refused_on_results_routes",
 ]
 
 [[unit]]
@@ -511,21 +562,42 @@ text = "Permissions"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Any logged-in user can read the results."
-by = ["test:backend/tests/unit/api/test_cuped_api.py::TestCupedApiEndpoint::test_cuped_endpoint_requires_authentication"]
+text = "Anyone who may view the experiment can read the results."
+by = [
+    "test:backend/tests/integration/api/test_experiment_data_read_rule.py::test_every_shipped_role_keeps_its_answer_on_each_route",
+    "test:backend/tests/integration/api/test_experiment_data_read_rule.py::test_no_base_role_is_refused_on_results_routes",
+]
 
 [[unit]]
-text = "Changing an experiment's variance_reduction_config is a change to the experiment, decided by role and by the experiment's state, not by who created it."
-by = ["exempt:baseline"]
+text = "Changing an experiment's variance_reduction_config is a change to the experiment, decided by permission and by the experiment's state, not by who created it."
+by = [
+    "test:backend/tests/integration/api/test_experiment_access_by_role.py",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]
 
 [[unit]]
-text = "ANALYST and VIEWER cannot change any experiment: the PUT above answers 403 with \"You don't have permission to update experiments\"."
-by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py"]
+text = "Set it when you create the experiment, or with PUT /api/v1/experiments/{id} while the experiment is a draft."
+by = [
+    "journey:experiment-results#cuped-experiment",
+    "journey:experiment-results#cuped-new-users-on",
+    "test:backend/tests/integration/api/test_experiment_access_by_role.py::test_status_by_route_and_caller",
+]
 
 [[unit]]
-text = "ADMIN and DEVELOPER may change experiments, but only a superuser may change one that is no longer a draft, and the demo experiment is running: for a DEVELOPER (or an ADMIN who is not a superuser) the PUT above answers 400 with \"Cannot update experiments in active status\"."
-by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py"]
+text = "ADMIN and DEVELOPER may change experiments, and in the full profile so may anyone whose custom role or direct grant gives experiment (update); for anyone else that PUT answers 403 with \"You don't have permission to update experiments\"."
+by = [
+    "test:backend/tests/integration/api/test_experiment_access_by_role.py",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+]
 
 [[unit]]
-text = "The demo's admin@demo.com is a superuser, which is why it gets 200."
-by = ["docex:docs/api/cuped.md#200"]
+text = "Once the experiment has left draft, nobody can change it, a superuser included, even to the value it already has: on an active experiment the PUT answers 400 with \"Cannot update variance_reduction_config for experiments in active status\" for a superuser and \"Cannot update experiments in active status\" for anyone else who may change experiments."
+by = [
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_superuser_cannot_change_an_analysis_setting_once_out_of_draft",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_sending_back_the_stored_value_is_refused_too",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_developer_meets_the_refusal_of_every_change_outside_draft_first",
+]
+
+[[unit]]
+text = "To use another method, clone the experiment (POST /api/v1/experiments/{id}/clone): the copy is a new experiment, a draft, and takes it."
+by = ["test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_clone_of_a_running_experiment_takes_the_settings_as_a_draft"]

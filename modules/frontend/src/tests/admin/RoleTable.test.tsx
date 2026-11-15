@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { RoleTable } from '@modules/components/admin/roles/RoleTable';
 import { RbacService } from '@modules/rbac';
 import { CustomRole } from '@/types/admin';
+import { makeRole } from './rbacFixtures';
 
 jest.mock('@modules/rbac');
 
@@ -10,18 +11,23 @@ const mockListRoles = RbacService.listRoles as jest.Mock;
 const mockDeleteRole = RbacService.deleteRole as jest.Mock;
 
 const mockRoles: CustomRole[] = [
-  {
+  makeRole({
+    id: 'r1',
     name: 'developer-role',
     description: 'A developer role',
-    permissions: ['experiments:read', 'experiments:create', 'feature_flags:read'],
-    created_at: '2024-01-01T00:00:00Z',
-  },
-  {
+    permissions: [
+      { resource: 'experiment', actions: ['read', 'create'] },
+      { resource: 'feature_flag', actions: ['read'] },
+    ],
+    user_count: 4,
+  }),
+  makeRole({
+    id: 'r2',
     name: 'analyst-role',
     description: 'An analyst role',
-    permissions: ['experiments:read', 'feature_flags:read'],
-    created_at: '2024-01-02T00:00:00Z',
-  },
+    permissions: [{ resource: 'audit_log', actions: ['read'] }],
+    user_count: 0,
+  }),
 ];
 
 beforeEach(() => {
@@ -57,13 +63,21 @@ describe('RoleTable', () => {
     });
   });
 
-  it('shows permissions count per role', async () => {
+  it('shows each role\'s permissions as text, and how many users have it (#891)', async () => {
     mockListRoles.mockResolvedValue(mockRoles);
     render(<RoleTable onEditRole={jest.fn()} />);
-    await waitFor(() => {
-      expect(screen.getByText('3 permissions')).toBeInTheDocument();
-      expect(screen.getByText('2 permissions')).toBeInTheDocument();
-    });
+    expect(await screen.findByText('experiment: read, create · feature_flag: read')).toBeInTheDocument();
+    expect(screen.getByText('audit_log: read')).toBeInTheDocument();
+    const row = screen.getByText('developer-role').closest('tr')!;
+    expect(row).toHaveTextContent('4');
+  });
+
+  it('names Edit and Delete by the role', async () => {
+    mockListRoles.mockResolvedValue(mockRoles);
+    render(<RoleTable onEditRole={jest.fn()} />);
+    await screen.findByText('developer-role');
+    expect(screen.getByRole('button', { name: 'Edit developer-role' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Delete analyst-role' })).toBeInTheDocument();
   });
 
   it('clicking edit button calls onEditRole callback', async () => {
@@ -89,6 +103,24 @@ describe('RoleTable', () => {
     const deleteButtons = screen.getAllByTestId('delete-role-button');
     fireEvent.click(deleteButtons[0]);
     expect(window.confirm).toHaveBeenCalled();
+    expect(mockDeleteRole).not.toHaveBeenCalled();
+  });
+
+  // Check #47: the confirmation says who loses the role's permissions (#891).
+  it.each([
+    [0, 'Delete the role "data-scientist"? No user has it. This cannot be undone.'],
+    [1, 'Delete the role "data-scientist"? The 1 user who has it loses its permissions at once. This cannot be undone.'],
+    [
+      3,
+      'Delete the role "data-scientist"? The 3 users who have it lose its permissions at once. This cannot be undone.',
+    ],
+  ])('the delete confirmation for a role with %i users says who is affected', async (userCount, text) => {
+    (window.confirm as jest.Mock).mockReturnValue(false);
+    mockListRoles.mockResolvedValue([makeRole({ name: 'data-scientist', user_count: userCount })]);
+    render(<RoleTable onEditRole={jest.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete data-scientist' }));
+    expect(window.confirm).toHaveBeenCalledTimes(1);
+    expect(window.confirm).toHaveBeenCalledWith(text);
     expect(mockDeleteRole).not.toHaveBeenCalled();
   });
 

@@ -21,7 +21,7 @@ Common uses: gradual rollouts, kill switches, beta programs, maintenance mode.
 
 ### Several Experiences
 
-A flag is on or off for each user: it carries no variants or values. To serve one of several experiences, run a multivariate experiment instead. Each of its variants carries a `configuration`, which `POST /api/v1/tracking/assign` returns.
+A flag serves two values: on or off, or a string, a number or a JSON value with an off value. To split users among three or more experiences, or to measure which one does better, run a multivariate experiment instead. Each of its variants carries a `configuration`, which `POST /api/v1/tracking/assign` returns.
 
 ### Why Use Feature Flags
 
@@ -61,6 +61,8 @@ Statistical significance tells you whether a difference between control and trea
 
 A result is statistically significant when p < your chosen alpha threshold (usually 0.05).
 
+On zero-inflated, right-skewed revenue with a lopsided split, these rates did not hold at α = 0.05: A/A experiments (both variants the same) recommended shipping a variant that was no better more often than alpha says. See [Limitations](limitations.md#experiments-and-results) for what was measured.
+
 **Important**: statistical significance does not tell you the effect is large or meaningful. Always check effect size alongside p-value.
 
 ---
@@ -89,14 +91,18 @@ A metric is the measurable outcome you use to evaluate whether a variant is bett
 | Type | Description | Example |
 |------|-------------|---------|
 | **Conversion** | Binary: did the event happen or not? | Clicked button, completed checkout, signed up |
+| **Revenue** | The amount on each user's events, as revenue per user | Order total sent as the `value` of `purchase` |
+| **Count** | How many times each user sends the event, as events per user | Articles read: one `article_read` event each |
+| **Duration** | Time each user spends, added up, as duration per user | Seconds watched sent as the `value` of `watch_session` |
+| **Custom** | A number each user's events add up to, as value per user | Points sent as the `value` of `points_earned` |
 
-A metric can also be created with the type `revenue`, `count` or `duration`, but the results analyse every metric as a conversion: whether each user sent the metric's event, not the event's value. See [Limitations](limitations.md).
+A conversion metric is analysed as the share of assigned users who sent its event. A revenue, count, duration or custom metric is analysed as its mean per assigned user, compared with Welch's t-test: for a count metric each user's value is the number of the metric's events they sent, whatever their `value`; for a revenue, duration or custom metric it is the total of those events' `value`; a user with none counts as 0. So a duration metric is time spent per assigned user, not the time one event takes. See [Limitations](limitations.md).
 
 ### Primary vs Secondary Metrics
 
 Each experiment should have exactly one **primary metric** — the north star for your ship/no-ship decision. All other metrics are **secondary** and used to check for unexpected side effects.
 
-Example: primary = checkout completion rate; secondary = cart abandonment rate, average order value, customer support contacts.
+Example: primary = checkout completion rate; secondary = cart abandonment rate, revenue per user, customer support contacts.
 
 ### Guardrail Metrics
 
@@ -114,7 +120,7 @@ User bucketing is the process of assigning each user to a variant. The platform 
 
 The assignment is computed as a deterministic hash of `experiment_key + user_id`. This means:
 
-- The same user always gets the same variant for a given experiment (sticky assignment)
+- The same `user_id` always gets the same variant for a given experiment (sticky assignment). A person known by two ids, such as a visitor who signs in, is two users: see [Limitations](limitations.md).
 - The API stores each assignment, and a user who already has one gets it back unchanged, even if the weights have changed since
 - Sticky assignment survives server restarts, cache clears, and SDK reinitializations
 
@@ -182,6 +188,7 @@ This would target enterprise users in the US or Canada who have had their accoun
 | `app_version` | semver | Target specific app versions |
 | `device_type` | string | Mobile vs desktop |
 | `email` | string | Target internal users by domain |
+| `tags` | array | A list of labels, such as beta or staff |
 
 ---
 
@@ -210,7 +217,7 @@ Your SDK client is initialized with an API key, which is stored in the database 
 |------|-----------|
 | **A/B test** | Experiment comparing two variants (control and treatment) |
 | **A/B/n test** | Experiment comparing more than two variants |
-| **Alpha (α)** | The significance threshold; probability of a false positive you are willing to accept (typically 0.05) |
+| **Alpha (α)** | The significance threshold; probability of a false positive you are willing to accept (typically 0.05). On zero-inflated, right-skewed revenue with a lopsided split, false positives were measured more often than α: see [Limitations](limitations.md#experiments-and-results) |
 | **Bucketing** | The process of assigning users to variants |
 | **Confidence interval** | Range of values within which the true effect size likely falls |
 | **Control** | The baseline variant; typically the existing experience |

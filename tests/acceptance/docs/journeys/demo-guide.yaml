@@ -5,7 +5,7 @@
 # The demo-local stack runs the script and the stop command itself
 # (docs_runner/stacks.py): the start must print the "Ready!" box, every address
 # the box lists must answer, and the stop must leave no port answering and
-# demo/.pids, demo/.logs and demo/.demo_api_key gone. It runs on a CI runner
+# demo/.pids and demo/.logs gone. It runs on a CI runner
 # only, in the demo job of docs-journeys.yml.
 #
 # The guide's quoted results are compared with the seed's output and nothing
@@ -126,7 +126,7 @@ steps:
           - button "Powered by Controlvar"
     fail: ShopLab does not answer at the address the guide gives, or has no Controlvar panel
   - id: streampulse-address
-    doc: scene-0b-streampulse-feature-flags-on-mobile-5-min
+    doc: scene-0b-streampulse-device-targeting-web-sdk-5-min
     do:
       open: http://localhost:3300
     expect:
@@ -135,7 +135,7 @@ steps:
         - heading "StreamPulse" [level=1]
     fail: StreamPulse does not answer at the address the guide gives
   - id: premium-iphone
-    doc: scene-0b-streampulse-feature-flags-on-mobile-5-min
+    doc: scene-0b-streampulse-device-targeting-web-sdk-5-min
     do:
       click:
         role: radio
@@ -145,7 +145,7 @@ steps:
         - radio "iPhone 15 · iOS 17.4 · US · premium" [checked]
     fail: the guide's iPhone preset cannot be picked
   - id: search-tab
-    doc: scene-0b-streampulse-feature-flags-on-mobile-5-min
+    doc: scene-0b-streampulse-device-targeting-web-sdk-5-min
     do:
       click:
         role: tab
@@ -165,7 +165,7 @@ steps:
                   - text: "on: matched a targeting rule on"
     fail: the Search tab does not show AI search ✨ for the iPhone 15 · iOS 17.4 · US · premium device, or the panel does not say a targeting rule turned streampulse_ai_search on
   - id: pixel
-    doc: scene-0b-streampulse-feature-flags-on-mobile-5-min
+    doc: scene-0b-streampulse-device-targeting-web-sdk-5-min
     do:
       click:
         role: radio
@@ -177,7 +177,7 @@ steps:
         - radio "Pixel 7 · Android 14 · DE · free" [checked]
     fail: the guide's Pixel preset cannot be picked
   - id: keyword-search
-    doc: scene-0b-streampulse-feature-flags-on-mobile-5-min
+    doc: scene-0b-streampulse-device-targeting-web-sdk-5-min
     do:
       click:
         role: tab
@@ -570,8 +570,6 @@ steps:
           name: 7.34%
         - role: cell
           name: 8.44%
-        - role: cell
-          name: +15.0%
       cells:
         - row: new_copy
           column: p-value
@@ -580,9 +578,17 @@ steps:
           oracle:
             name: fisher_exact_p
             args: {control_users: 25000, control_converted: 1836, treatment_users: 25000, treatment_converted: 2111}
+      # The treatment's row reads the +15.0% lift the guide quotes with its direction word. Matched as part of the
+      # row, not as the whole cell's name: since #1538 the change cell also carries its interval lines, and since
+      # #1904 the effect size and the variant's own interval sit between the rate and the change.
       aria: |
         - main:
           - heading "Homepage Hero Copy Test" [level=2]
+          - tabpanel:
+            - region "Metric comparison":
+              - table:
+                - rowgroup:
+                  - row /new_copy 25,000 8\.44% 0\.04 \(negligible\) 8\.10% to 8\.79% \+15\.0% · better/
     fail: the results page does not show the seed's rates and lift that Scene 3 quotes, or a p-value below 0.001
   - id: sequential-tab
     doc: scene-3-statistical-results-5-min

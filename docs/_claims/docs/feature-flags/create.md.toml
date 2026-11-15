@@ -32,10 +32,11 @@ text = "On your own deployment, use its URL wherever this page says localhost:80
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "A user account with the ADMIN or DEVELOPER role."
+text = "A user account that may create and change flags: one with the ADMIN or DEVELOPER role, or in the full profile one whose custom role or direct grant gives feature_flag (create) and feature_flag (update)."
 by = [
     "test:backend/tests/integration/api/test_flag_contract.py::test_post_checks_permission_before_the_body",
     "test:backend/tests/smoke/test_flag_change_routes_guarded.py::test_the_inventory_is_exact",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
 ]
 
 [[unit]]
@@ -49,7 +50,8 @@ by = [
 text = "An API key can't do them (the API answers 401)."
 by = [
     "test:backend/tests/integration/api/test_flag_guide_behaviour.py::test_an_api_key_does_not_create_change_or_turn_on_a_flag",
-    "test:backend/tests/unit/api/test_api_key_is_not_a_sign_in.py::test_a_management_route_refuses_a_request_that_carries_only_an_api_key",
+    "test:backend/tests/unit/api/test_api_key_is_not_a_sign_in.py::test_a_route_outside_the_sdk_and_mcp_read_sets_refuses_a_request_that_carries_only_an_api_key",
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_scoped_key_is_refused_by_the_routes_that_change_things",
 ]
 
 [[unit]]
@@ -134,6 +136,116 @@ by = [
 [[unit]]
 text = "Description | What the flag controls, and when it should be removed. | Redesigned single-page checkout experience"
 by = ["exempt:baseline"]
+
+[[unit]]
+text = "Optional: serve a value instead of on or off"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Under Values, the Type is Boolean unless you choose another: the flag is on or off, and your code reads whether it is on."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::is a group of four radios named Type, Boolean selected, each with its hint as its description",
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::sends exactly the body a flag had before values: no value_type, on_value or off_value",
+    "journey:feature-flag-create#value-new-flag",
+]
+
+[[unit]]
+text = "Choose String, Number or JSON to serve a value instead, and two fields appear:"
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::String: two text fields with their hints, and the two strings sent with value_type string",
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::Number: plain text fields (no type=number, no inputmode), required, sent as numbers",
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::JSON: monospace text areas that leave spelling alone, sent parsed",
+    "journey:feature-flag-create#value-type",
+]
+
+[[unit]]
+text = "Field | What it holds"
+by = ["exempt:label"]
+
+[[unit]]
+text = "On value | What users the flag is on for get: users who match a targeting rule, and the rollout percentage of everyone else."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::String: two text fields with their hints, and the two strings sent with value_type string",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_evaluation_serves_on_exactly_when_enabled_and_off_otherwise",
+    "journey:feature-flag-create#value-users",
+]
+
+[[unit]]
+text = "Off value | What everyone else gets, and what everyone gets while the flag is off."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::String: two text fields with their hints, and the two strings sent with value_type string",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_evaluation_serves_on_exactly_when_enabled_and_off_otherwise",
+    "journey:feature-flag-create#value-users",
+    "journey:feature-flag-create#value-off-users",
+]
+
+[[unit]]
+text = "A string may be empty."
+by = ["test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::String: an empty string is a value"]
+
+[[unit]]
+text = "A number is written as in JSON, such as 10, -3 or 2.5."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::Number: text that is not a number gets the example; focus moves to it",
+    "test:frontend/src/tests/utils/flagValues.test.ts::a number: %j reads %p",
+    "test:frontend/src/tests/utils/flagValues.test.ts::a number: %j is refused with the example",
+]
+
+[[unit]]
+text = "A JSON value is an object or an array, such as {\"color\": \"blue\"}."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::JSON: monospace text areas that leave spelling alone, sent parsed",
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::JSON: empty, and a single value, each in its own words; focus on the first",
+]
+
+[[unit]]
+text = "The two values must differ."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::equal values are refused at Off value in the API's words (3 and 3.0 are one number)",
+    "test:frontend/src/tests/pages/feature-flag-values-detail.test.tsx::a value made equal to the other one is refused at its field, and nothing is sent (EMF-5)",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_the_api_and_the_database_check_agree_on_equality",
+]
+
+[[unit]]
+text = "If a value can't be used, the reason is shown under its field and the flag is not created."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::JSON that does not parse: \"Not valid JSON:\" under the field, linked and focused, nothing sent",
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::is shown under the field it names, verbatim, and focused; not in the general alert",
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::values_equal from the API is shown at Off value, the field it names",
+]
+
+[[unit]]
+text = "The type can't be changed after the flag is created; the two values can, on the flag's page."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-detail.test.tsx::comes before Targeting Rules, shows the type as text, and offers no way to change it",
+    "test:frontend/src/tests/pages/feature-flag-values-detail.test.tsx::a changed value is sent alone, never with value_type, and the field then shows what was saved",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_value_type_is_read_only",
+]
+
+[[unit]]
+text = "A new flag starts off, so everyone gets its off value until you turn it on."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::String: two text fields with their hints, and the two strings sent with value_type string",
+    "journey:feature-flag-create#value-create",
+    "journey:feature-flag-create#value-off-users-before",
+]
+
+[[unit]]
+text = "Its page names its type beside the status, and reads Everyone gets the off value while it is off and Rules and rollout decide who gets the on value while it is on."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-detail.test.tsx::names the type after the status, and says who gets which value; the switch is unchanged",
+    "journey:feature-flag-create#value-create",
+    "journey:feature-flag-create#value-turn-on",
+    "journey:feature-flag-create#value-turn-off",
+]
+
+[[unit]]
+text = "Every application that evaluates the flag can read both values, so don't put secrets in them."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Serve a value creates the same kind of flag with the API."
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Step 3: Add targeting rules (optional)"
@@ -242,18 +354,23 @@ by = [
 
 [[unit]]
 text = "100% | Everyone"
-by = ["journey:feature-flag-rollout#users-at-hundred"]
+by = ["test:backend/tests/integration/services/test_feature_flag_evaluation.py::TestFeatureFlagEvaluationService::test_active_flag_at_100pct_evaluates_to_true"]
 
 [[unit]]
 text = "Each user always lands on the same side of the percentage."
 by = [
     "test:backend/tests/unit/core/test_consistent_hash.py::test_every_golden_vector_matches",
     "journey:feature-flag-create#rollout-users",
+    "test:backend/tests/unit/ground_truth/test_flag_rollout_use_cases.py::test_a_user_keeps_their_side_as_the_rollout_moves",
 ]
 
 [[unit]]
 text = "Raising it adds users, and takes none away."
 by = ["test:backend/tests/integration/api/test_flag_guide_behaviour.py::test_raising_the_rollout_adds_users_and_takes_none_away"]
+
+[[unit]]
+text = "Lowering it takes users away and adds none, and returning to an earlier percentage gives back the same users."
+by = ["test:backend/tests/unit/ground_truth/test_flag_rollout_use_cases.py::test_a_user_keeps_their_side_as_the_rollout_moves"]
 
 [[unit]]
 text = "Step 5: Create the flag, then turn it on"
@@ -277,6 +394,14 @@ by = [
 [[unit]]
 text = "The same switch turns it off again."
 by = ["exempt:baseline"]
+
+[[unit]]
+text = "Clients serve the change within their cache lifetime, 5 minutes by default, the next time they ask for the flag: see Turning a Flag Off."
+by = [
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_every_sdk_but_the_edge_sdk_keeps_an_answer_five_minutes_and_the_edge_sdk_one",
+    "test:sdk/js/__tests__/client.test.ts::caches a success for 300000 ms by default",
+    "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_cache_expires_after_ttl",
+]
 
 [[unit]]
 text = "The dashboard's On/Off is the API's is_active (true/false), reported beside it as status (\"active\"/\"inactive\")."
@@ -372,12 +497,26 @@ text = "targeting_rules;"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "default_value: what the flag serves when it is off."
-by = ["exempt:baseline"]
+text = "value_type: boolean (the default), string, number or json (see Serve a value);"
+by = [
+    "test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestValueFields::test_the_request_schemas_publish_the_four_types",
+    "test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestValueFields::test_a_create_without_value_fields_is_a_boolean_flag",
+]
 
 [[unit]]
-text = "Only false is accepted for now, and it is the default; true answers 422;"
-by = ["test:backend/tests/integration/api/test_flag_contract.py::test_default_value_true_is_422"]
+text = "on_value and off_value: what a string, number or json flag serves;"
+by = ["test:backend/tests/integration/api/test_flag_values_api.py::test_a_value_flag_is_created_and_its_values_changed"]
+
+[[unit]]
+text = "default_value: deprecated, off_value replaces it."
+by = ["test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestDefaultValue::test_a_value_flag_sent_default_value_true_is_told_about_off_value"]
+
+[[unit]]
+text = "Only false is accepted, for every flag, and it is the default; true answers 422;"
+by = [
+    "test:backend/tests/integration/api/test_flag_contract.py::test_default_value_true_is_422",
+    "test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestDefaultValue::test_a_value_flag_sent_default_value_true_is_told_about_off_value",
+]
 
 [[unit]]
 text = "tags."
@@ -391,10 +530,11 @@ by = [
 ]
 
 [[unit]]
-text = "null is refused for key, name, is_active, rollout_percentage and default_value."
+text = "null is refused for key, name, is_active, rollout_percentage, default_value, value_type, on_value and off_value."
 by = [
     "test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestRequestModels::test_explicit_null_is_refused",
     "test:backend/tests/integration/api/test_flag_contract.py::test_put_null_on_a_not_null_field_is_422",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_a_create_outside_the_contract_is_422_and_stores_nothing",
 ]
 
 [[unit]]
@@ -405,10 +545,12 @@ by = [
 ]
 
 [[unit]]
-text = "The fields a response carries but no request writes (id, owner_id, created_at, updated_at and status) are accepted and ignored, so a GET body can be sent back unchanged unless its targeting_rules are ones PUT now refuses (422); omitting the field still works (see Add targeting rules)."
+text = "The fields a response carries but no request writes (id, owner_id, created_at, updated_at and status, and a list item's stale and stale_reasons) are accepted and ignored, so a GET body can be sent back unchanged unless its targeting_rules are ones PUT now refuses (422); omitting the field still works (see Add targeting rules)."
 by = [
     "test:backend/tests/integration/api/test_flag_contract.py::test_read_only_fields_in_a_put_are_ignored",
     "test:backend/tests/integration/api/test_flag_contract.py::test_every_response_can_be_put_back_unchanged",
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_a_list_item_sent_back_is_accepted_and_its_stale_fields_ignored",
+    "test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestReadOnlySet::test_a_list_item_validates_as_both_request_models",
 ]
 
 [[unit]]
@@ -497,10 +639,23 @@ by = [
 ]
 
 [[unit]]
-text = "a value the operator cannot use (\"abc\" for greater_than, \"not-a-version\" for semver_gte), a regex pattern RE2 refuses, and a list operator with more than 1,000 values;"
+text = "a value the operator cannot use (\"abc\" for greater_than, \"not-a-version\" for semver_gte), a regex pattern RE2 refuses, and a list operator with more than 1,000 values; a before or after value that cannot be read as a date, an array_length value that cannot be read as a whole number (or between without whole-number min and max), a native gt, gte, lt or lte value that cannot be read as a number, a geo_distance radius that is missing, below 0 or not a number, and a comparison on a dashboard geo_within_radius rule, which the dashboard shape does not read; a between whose bounds are not two numbers or two dates, a dashboard time_window the engine cannot read, and a geo number, or a dashboard number comparison, too large for a floating-point number;"
 by = [
     "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_refused",
     "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_list_operators_keep_their_limit",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_every_value_is_refused_or_can_match",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_a_value_is_refused_with_fixed_text",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_a_dashboard_geo_comparison_is_refused",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_a_dashboard_window_the_engine_cannot_read_is_refused",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_flag_create_refuses_the_word",
+]
+
+[[unit]]
+text = "in the native shape, a time_window the engine cannot read: it needs days, start_time with end_time, or start_date with end_date, and needs no start or end;"
+by = [
+    "test:backend/tests/unit/core/test_time_window_without_start_end.py::test_an_unreadable_window_is_refused_with_the_reason",
+    "test:backend/tests/unit/core/test_time_window_without_start_end.py::test_every_readable_window_is_accepted_and_evaluated",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_flag_create_refuses_the_word",
 ]
 
 [[unit]]
@@ -777,8 +932,80 @@ text = "Archived flags"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "An archived flag is retired: it is never served, and nothing turns it back on by accident."
-by = ["exempt:baseline"]
+text = "An archived flag is retired: every evaluation answers it as off (enabled: false, reason: \"inactive\", and its off value, which a value method returns instead of your default), in local evaluation too, and nothing turns it back on by accident."
+by = [
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_evaluation_serves_on_exactly_when_enabled_and_off_otherwise",
+    "test:backend/tests/unit/services/test_sdk_ruleset.py::test_an_inactive_value_flag_carries_its_type_and_off_value",
+    "test:sdk/python/tests/test_evaluator.py::test_every_must_local_case_is_answered_locally",
+    "test:sdk/js/__tests__/evaluator.test.ts::every must_local case is answered locally",
+]
+
+[[unit]]
+text = "Deleting a flag"
+by = ["exempt:label"]
+
+[[unit]]
+text = "DELETE /api/v1/feature-flags/$FLAG_ID removes a flag for good; it cannot be undone."
+by = [
+    "test:backend/tests/integration/api/test_feature_flags_api.py::TestFeatureFlagsDelete::test_delete_feature_flag_returns_204",
+    "test:backend/tests/integration/api/test_feature_flags_api.py::TestFeatureFlagsDelete::test_deleted_flag_not_found_by_id",
+]
+
+[[unit]]
+text = "While any code may still ask for the flag, archive it instead."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "After a delete:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "As of v0.42.0, evaluating its key answers 404."
+by = ["exempt:intent"]
+tag = "X"
+
+[[unit]]
+text = "Each SDK answers it as it does for any failure: see its page (JavaScript, React, React Native, Python, Go, Java, Ruby, PHP, .NET, Elixir, iOS, Android, Flutter, Edge)."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "A client keeps an answer it cached until the cache expires, 5 minutes by default."
+by = [
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_cache_lifetime_is_the_number_the_page_states",
+]
+
+[[unit]]
+text = "Its rollout schedules and their stages, its safety configuration and its rollback records are deleted with it."
+by = [
+    "test:backend/tests/integration/api/test_flag_delete_and_recreate.py::test_a_deleted_flag_leaves_nothing_behind_and_its_key_starts_clean",
+]
+
+[[unit]]
+text = "Its events are kept, with feature_flag_id null."
+by = [
+    "test:backend/tests/integration/api/test_flag_delete_keeps_events.py::test_deleting_a_flag_keeps_its_events_untagged",
+]
+
+[[unit]]
+text = "The audit log records the delete as feature_flag_delete."
+by = [
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_delete",
+]
+
+[[unit]]
+text = "Only a role that may delete flags can do it (ADMIN, DEVELOPER, or in the full profile a custom role with feature_flag (delete)); anyone else gets 403."
+by = [
+    "test:backend/tests/unit/core/test_feature_flag_access_rule.py::test_the_shipped_table_on_someone_elses_flag",
+    "test:backend/tests/smoke/test_flag_change_routes_guarded.py::test_the_inventory_is_exact",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+]
+
+[[unit]]
+text = "In the dashboard, Delete on the flag's page asks you to type its key first."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-detail.test.tsx::no DELETE before the typed key equals flag.key and Delete is pressed; Escape and Cancel send nothing",
+    "test:frontend/src/tests/pages/feature-flag-detail.test.tsx::ADMIN and DEVELOPER see Delete; ANALYST and VIEWER see none and the role note",
+]
 
 [[unit]]
 text = "Every request that would turn it on (PUT with \"is_active\": true, /activate, /enable, /toggle, and bulk enable) answers 400 with"
@@ -811,8 +1038,28 @@ text = "A flag is archived with POST /api/v1/feature-flags/bulk-toggle and \"act
 by = ["test:backend/tests/integration/api/test_bulk_toggle_api.py"]
 
 [[unit]]
-text = "The dashboard has no archive or unarchive action yet."
-by = ["test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::neither page offers archive or unarchive for an %s flag"]
+text = "In the dashboard, anyone with permission to change feature flags (the ADMIN and DEVELOPER roles have it) archives a flag with Archive on its page, which asks you to confirm, and brings it back with Unarchive there."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::ADMIN and DEVELOPER see Archive on an %s flag and Unarchive on an archived one",
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::ANALYST and VIEWER see no archive control and the role note",
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::no bulk-toggle call before Archive is confirmed in the dialog",
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::Unarchive asks nothing, sends one POST /unarchive, and the flag reads Off with its switch back",
+]
+
+[[unit]]
+text = "An archived flag reads Archived, with no on/off switch on either page: in its place each page says to unarchive it first, and the flag's page links to this section."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::reads Archived on its page, with no switch, and says to unarchive it before turning it on",
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::reads Archived in the list, with no switch in its row and a note to unarchive it before turning it on",
+]
+
+[[unit]]
+text = "The flag list has an Archived filter."
+by = ["test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::the list filters archived flags, asking the API for status ARCHIVED"]
+
+[[unit]]
+text = "Stale Flags lists the flags that look ready to archive."
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Create an API key"
@@ -825,6 +1072,101 @@ by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test
 [[unit]]
 text = "The key is shown only once, and this saves it in $KEY:"
 by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_returns_plaintext_once"]
+
+[[unit]]
+text = "Serve a value"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A flag can serve a string, a number or a JSON value instead of on or off."
+by = [
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_a_value_flag_is_created_and_its_values_changed",
+    "docex:docs/feature-flags/create.md#\"on_value\": \"Complete purchase\"",
+]
+
+[[unit]]
+text = "Its value_type is set when it is created, and it has two values: on_value, what the users it is on for get, and off_value, what everyone else gets, and everyone while the flag is off."
+by = [
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_value_type_is_read_only",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_evaluation_serves_on_exactly_when_enabled_and_off_otherwise",
+]
+
+[[unit]]
+text = "This creates a string flag for a checkout button's label, on for enterprise-plan users, and turns it on:"
+by = ["docex:docs/feature-flags/create.md#\"off_value\": \"Buy now\""]
+
+[[unit]]
+text = "A user on the enterprise plan matches the rule, so the flag is on for them and they get the on value:"
+by = ["docex:docs/feature-flags/create.md#\"value\": \"Complete purchase\""]
+
+[[unit]]
+text = "A user on the free plan matches no rule, and the rollout percentage is 0, so they get the off value:"
+by = ["docex:docs/feature-flags/create.md#{\"enabled\":false,\"value\":\"Buy now\",\"reason\":\"rollout\"}"]
+
+[[unit]]
+text = "What the API checks."
+by = ["exempt:label"]
+
+[[unit]]
+text = "A string flag's two values are strings (an empty string is allowed), a number flag's are numbers (not true or false), and a json flag's are JSON objects or arrays."
+by = [
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_a_create_outside_the_contract_is_422_and_stores_nothing",
+    "test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestValueFields::test_a_value_flag_with_two_values_of_its_type_is_accepted",
+]
+
+[[unit]]
+text = "A create sends both, and they must differ: 3 and 3.0 are the same number."
+by = [
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_a_create_outside_the_contract_is_422_and_stores_nothing",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_the_api_and_the_database_check_agree_on_equality",
+]
+
+[[unit]]
+text = "Each value is at most 8,192 bytes as compact JSON and 10 levels deep, every number in it is finite and from -9007199254740991 to 9007199254740991, and no string in it holds a NUL or an unpaired surrogate character."
+by = [
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_the_hostile_battery_is_422_on_create_never_500",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_each_limit_itself_is_accepted_and_stored_as_sent",
+]
+
+[[unit]]
+text = "A value outside these answers 422 at that field, and the message names the field, never the value."
+by = [
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_the_hostile_battery_is_422_on_create_never_500",
+    "test:backend/tests/unit/core/test_flag_values.py::test_no_message_repeats_the_value",
+]
+
+[[unit]]
+text = "This number flag is given text:"
+by = ["docex:docs/feature-flags/create.md#\"msg\":\"on_value must be a number, because value_type is number\""]
+
+[[unit]]
+text = "value_type cannot change once the flag exists: an update may send it back unchanged, and any other value answers 422 with \"type\": \"read_only\"."
+by = ["test:backend/tests/integration/api/test_flag_values_api.py::test_value_type_is_read_only"]
+
+[[unit]]
+text = "An update may send either value on its own; it is checked against the flag's type, and the two values as they will be stored must still differ."
+by = [
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_a_partial_put_is_checked_on_the_pair_as_it_will_be_stored",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_an_update_outside_the_contract_is_422_and_changes_nothing",
+]
+
+[[unit]]
+text = "A boolean flag's on_value is true and its off_value is false: a request may send those back, so a GET body still round-trips, and any other value answers 422."
+by = [
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_a_boolean_flags_get_body_put_back_is_200_and_stores_no_value",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_an_update_outside_the_contract_is_422_and_changes_nothing",
+]
+
+[[unit]]
+text = "default_value is deprecated and accepts only false, for every flag; read off_value."
+by = [
+    "test:backend/tests/integration/api/test_flag_contract.py::test_default_value_true_is_422",
+    "test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestDefaultValue::test_a_value_flag_sent_default_value_true_is_told_about_off_value",
+]
+
+[[unit]]
+text = "Every application that evaluates the flag can read both of its values, so do not put secrets in them."
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Flag Key Naming Conventions"
@@ -846,16 +1188,15 @@ text = "When a Flag Evaluates to Off"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "A flag is on or off for each user."
-by = ["exempt:baseline"]
+text = "Every flag serves two values."
+by = ["test:backend/tests/unit/api/test_documented_limits.py::test_a_boolean_flag_serves_false_when_off_and_a_value_flag_its_off_value"]
 
 [[unit]]
-text = "Its default_value, what it serves when it is off, is false for every flag for now."
-by = ["test:backend/tests/integration/api/test_flag_contract.py::test_default_value_true_is_422"]
-
-[[unit]]
-text = "Evaluation returns enabled: false when:"
-by = ["exempt:baseline"]
+text = "Evaluation returns enabled: false, and value set to the flag's off_value (false for a boolean flag), when:"
+by = [
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_evaluation_serves_on_exactly_when_enabled_and_off_otherwise",
+    "test:backend/tests/integration/api/test_flag_contract.py::test_evaluation_is_unchanged_an_inactive_flag_is_off",
+]
 
 [[unit]]
 text = "the flag is off (reason: \"inactive\"), which includes a flag that a safety rollback to 0% turned off (see Safety Monitoring);"
@@ -893,6 +1234,10 @@ by = [
 [[unit]]
 text = "So a flag your code can't reach behaves as off."
 by = ["exempt:baseline"]
+
+[[unit]]
+text = "How soon each client serves a change: Turning a Flag Off."
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Evaluating the Flag from Your Application"
@@ -952,6 +1297,10 @@ text = "evaluates every active flag the same way and returns {\"flag-key\": true
 by = ["test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestUserFlagsWithContext::test_context_query_param"]
 
 [[unit]]
+text = "A value flag answers true when the user gets its on value."
+by = ["test:backend/tests/integration/api/test_flag_values_api.py::test_the_bulk_route_answers_true_or_false_for_a_value_flag"]
+
+[[unit]]
 text = "Reporting client-side errors"
 by = ["exempt:baseline"]
 
@@ -963,10 +1312,11 @@ by = [
 ]
 
 [[unit]]
-text = "The errors your applications see behind a flag (crashes, failed requests) count toward it when they are reported with a server-side key: an API key with the sdk:ruleset scope, created by a user who can change feature flags (ADMIN, DEVELOPER or a superuser)."
+text = "The errors your applications see behind a flag (crashes, failed requests) count toward it when they are reported with a server-side key: an API key with the sdk:ruleset scope, created by a user who can change feature flags (ADMIN, DEVELOPER, a superuser, or in the full profile anyone whose custom role or direct grant gives feature_flag (update))."
 by = [
     "test:backend/tests/integration/api/test_error_report_source.py::test_a_report_sent_with_a_server_side_key_rolls_back",
     "test:backend/tests/integration/api/test_error_report_source.py::test_a_scoped_key_whose_owner_can_no_longer_change_flags_does_not_count",
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
 ]
 
 [[unit]]
@@ -990,6 +1340,21 @@ by = [
     "test:backend/tests/integration/api/test_error_report_source.py::test_a_report_sent_with_a_key_without_the_scope_does_not_roll_back",
     "test:backend/tests/integration/api/test_error_report_source.py::test_the_stored_source_follows_the_presented_key",
     "test:backend/tests/integration/api/test_error_report_source.py::test_the_check_endpoint_shows_the_reports_it_does_not_count",
+]
+
+[[unit]]
+text = "A server that uses the JavaScript or Python SDK sends the same request with reportError or report_error (see Reporting errors)."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs one report to /api/v1/tracking/errors with the server field names and resolves true on 201",
+    "test:sdk/python/tests/test_client.py::TestReportError::test_posts_one_report_with_the_server_field_names_and_returns_true_on_201",
+]
+
+[[unit]]
+text = "Their true means the report was stored (201); whether it counts depends on the key, as above."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::resolves false on a 2xx that is not 201: true means stored, and only 201 says so",
+    "test:sdk/python/tests/test_client.py::TestReportError::test_returns_false_on_a_2xx_that_is_not_201",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_the_stored_source_follows_the_presented_key",
 ]
 
 [[unit]]

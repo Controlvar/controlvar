@@ -5,6 +5,32 @@ export interface SdkConfig {
   timeoutMs?: number;
   /** TTL for the per-user flag/assignment caches (default 300 000 ms). */
   cacheTtlMs?: number;
+  /**
+   * Called once each time the server enrols the user in an experiment
+   * (`POST /api/v1/tracking/assign` answers `assigned: true`) and the answer
+   * did not come from the client's cache: the moment the server records the
+   * exposure. Not called for a cached answer, a request another caller
+   * already started, an `assigned: false` answer, an answer without
+   * `assigned`, a failed call or a flag, and never from a Provider rendered
+   * on the server (`useExperiment` assigns in an effect); a `ServerClient`
+   * calls its own for the assignments it makes, wherever it runs. What it throws, and a rejection of
+   * a Promise it returns, is dropped: the answer is unchanged. `null` or
+   * `undefined` sets none; any other value that is not a function is refused
+   * with `onExposure must be a function`.
+   */
+  onExposure?: ((exposure: Exposure) => void) | null;
+}
+
+/**
+ * What `onExposure` receives: a new object for each call, holding only these
+ * four values (not the user's attributes, not the variant's configuration).
+ */
+export interface Exposure {
+  readonly experimentKey: string;
+  readonly userId: string;
+  /** `null` when the server sends none. */
+  readonly variantId: string | null;
+  readonly variantName: string;
 }
 
 export interface UserContext {
@@ -40,6 +66,19 @@ export interface FeatureFlagEvaluation {
    * the server did not send one.
    */
   reason?: string;
+  /**
+   * The value the server served the user (`value` in its answer): the flag's on value when it is
+   * on for them, its off value otherwise; for a boolean flag, `isEnabled` itself. `undefined`
+   * while loading, on error, or when the server sent none (a server without flag values, or one
+   * that cannot serve the flag's stored value). It is the cached answer's own value, shared by
+   * every reader of this evaluation; `useFlagValue` reads it by type and returns a copy.
+   */
+  value?: unknown;
+  /**
+   * The type the server says the flag serves (`value_type` in its answer): `'boolean'`,
+   * `'string'`, `'number'` or `'json'`. `undefined` when it sent none.
+   */
+  valueType?: string;
 }
 
 /**
@@ -66,8 +105,9 @@ export interface ExperimentAssignment {
   assigned?: boolean;
   /**
    * Why the server decided as it did — `'assigned'`, `'holdout'`,
-   * `'mutual_exclusion'` or `'targeting'`. `undefined` while loading, on
-   * error, or when the server did not send one.
+   * `'mutual_exclusion'` or `'targeting'`, or the status of an experiment that
+   * is not ACTIVE (`'draft'`, `'paused'`, `'completed'` or `'archived'`).
+   * `undefined` while loading, on error, or when the server did not send one.
    */
   reason?: string;
 }
@@ -94,6 +134,27 @@ export interface FeatureFlagEvaluateResponse {
   config: unknown | null;
   /** `targeting_rule` | `rollout` | `inactive` | `error`; absent on older servers. */
   reason?: string;
+  /**
+   * The value served to this user: the on value when `enabled`, else the off value. Absent on
+   * servers without flag values, and when the flag's stored value cannot be served.
+   */
+  value?: unknown;
+  /** `boolean` | `string` | `number` | `json`; absent on servers without flag values. */
+  value_type?: string;
+}
+
+/**
+ * Answers the server already has for one user, to pass to
+ * `ExperimentationProvider` as `bootstrap`: what `ServerClient.bootstrap()`
+ * returns. Plain JSON, keyed by the flag and experiment keys asked for. The
+ * Provider uses it only when `userId` is its `user.userId`.
+ */
+export interface ExperimentationBootstrap {
+  userId: string;
+  /** Flag key -> the body of `GET /api/v1/feature-flags/evaluate/{key}` for this user. */
+  flags?: Record<string, FeatureFlagEvaluateResponse>;
+  /** Experiment key -> the body of `POST /api/v1/tracking/assign` for this user. */
+  experiments?: Record<string, ExperimentAssignResponse>;
 }
 
 /** `POST /api/v1/tracking/assign` */
@@ -106,6 +167,10 @@ export interface ExperimentAssignResponse {
   configuration?: Record<string, unknown> | null;
   /** `false` when the user was not enrolled (control returned); absent on older servers. */
   assigned?: boolean;
-  /** `assigned` | `holdout` | `mutual_exclusion` | `targeting`; absent on older servers. */
+  /**
+   * `assigned` | `holdout` | `mutual_exclusion` | `targeting`, or the status of an
+   * experiment that is not ACTIVE (`draft` | `paused` | `completed` | `archived`);
+   * absent on older servers.
+   */
   reason?: string;
 }

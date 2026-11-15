@@ -23,8 +23,8 @@ in the graph):
 * the three core tables, and the full profile's on-demand counters table with
   its index by experiment;
 * what prod keeps, by name, when its stacks are destroyed;
-* the monitoring stack's two dashboards, one of whose widgets graphs API
-  Gateway metrics in an app with no API Gateway (#424);
+* the monitoring stack's two dashboards, neither of which graphs API Gateway
+  metrics in an app with no API Gateway (#424);
 * the split-URL CloudFront construct ships with the modules and nothing
   builds it.
 """
@@ -366,7 +366,7 @@ def test_what_prod_keeps_when_its_stacks_are_destroyed(synths):
 
 @pytest.mark.regression
 @pytest.mark.parametrize("env", ENVIRONMENTS)
-def test_the_two_dashboards_and_a_widget_nothing_publishes_to(synths, env):
+def test_the_two_dashboards_graph_no_api_gateway(synths, env):
     monitoring = synths[env].templates[f"experimentation-monitoring-{env}"]
     dashboards = {
         r["Properties"]["DashboardName"]: json.dumps(r["Properties"]["DashboardBody"])
@@ -376,9 +376,11 @@ def test_the_two_dashboards_and_a_widget_nothing_publishes_to(synths, env):
         f"experimentation-application-metrics-{env}",
         f"experimentation-platform-{env}",
     ]
-    # #424: the platform dashboard graphs API Gateway's metrics, and no stack
-    # creates an API Gateway, so nothing publishes them.
-    assert "AWS/ApiGateway" in dashboards[f"experimentation-platform-{env}"]
+    # #424: the platform dashboard graphed API Gateway's metrics, and no stack
+    # creates an API Gateway, so nothing publishes them. Neither dashboard
+    # graphs them now; test_dashboards.py holds every widget to a publisher.
+    for name, body in dashboards.items():
+        assert "AWS/ApiGateway" not in body, name
     kinds = {
         r["Type"]
         for template in synths[env].templates.values()

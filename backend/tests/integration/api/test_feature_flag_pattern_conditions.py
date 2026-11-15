@@ -103,6 +103,8 @@ def test_refused_pattern_disables_the_flag(admin_client, db_session, make_patter
     assert resp.json() == {
         "key": flag.key,
         "enabled": False,
+        "value": False,
+        "value_type": "boolean",
         "config": None,
         "reason": "error",
     }

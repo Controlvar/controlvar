@@ -52,8 +52,11 @@ structural expectation (``url``, ``status``, ``visible``, ``text``,
 it, and the step then needs a structural expectation and no ``aria``. A step
 with ``snapshot: false`` keeps no screenshot and no ARIA snapshot, whether it
 passes or fails. ``aria`` is Playwright's ARIA snapshot template: it must parse
-as a YAML list. ``api``, ``ref``, ``crawl`` and ``keep`` steps take no
-snapshot. ``fail`` says what failure looks like; a step without it is refused.
+as a YAML list. ``aria_one_of`` takes its place on a screen that shows one of
+several answers the API may give (the arm a bandit gave a new visitor): two to
+four templates, each pairing what the page shows for one answer, and the
+screen must match one of them. ``api``, ``ref``, ``crawl`` and ``keep`` steps
+take no snapshot. ``fail`` says what failure looks like; a step without it is refused.
 Names, labels, options, ``text``, ``goto``, ``open`` and ``search`` are one
 line each.
 
@@ -140,19 +143,48 @@ What an API answers can be kept for later steps and checked against an oracle
   users through ``GET /api/v1/feature-flags/evaluate/{key}`` with an API key:
   every answer must give the ``reason`` the step names, and with ``reason:
   rollout`` a user gets the flag exactly when the documented rollout hash puts
-  them below ``rollout`` percent. Its check is the action itself.
+  them below ``rollout`` percent. With ``on_value`` and ``off_value`` (a flag
+  that serves values, #1497), every answer's ``value`` must also be the on
+  value when the user gets the flag and the off value otherwise. Its check is
+  the action itself.
 * ``traffic`` (compose-dev only) sends an experiment a population the journey
   chooses: per variant, how many users are assigned and how many of them send
   the metric's event, through the tracking API with an API key. Its check is
   the action itself: every user assigned the variant the documented hash
-  gives, every event accepted.
+  gives, every event accepted. With ``value: {mode: ramp, base: <number>,
+  step: <number>, modulo: <whole number, at least 1>}`` each converting user's
+  event carries a ``value``, never a random one: the ``i``-th converting user
+  of a variant (``i`` = 0, 1, 2, ..., counted in each variant on its own, in
+  the order the users were chosen) sends ``base + step * (i mod modulo)``.
+  ``{mode: ramp, base: 10, step: 1, modulo: 7}`` sends 10, 11, 12, 13, 14, 15,
+  16, 10, 11, ... (``TrafficValue``). Without ``value``, no event carries one.
+  With ``history: {days_before: <1 to 30>, converted: {<variant>: <count>}}``
+  some users are returning users: before any user is assigned, the first
+  ``count`` users chosen for each variant named send the step's event once,
+  with no experiment key and dated ``days_before`` days before it is sent,
+  which is how ``api/cuped.md`` says to send pre-experiment history. The first
+  users chosen are also the first to convert, so with 80 returning users and
+  40 converting ones, the 40 are among the 80 (``TrafficHistory``). Without
+  ``history``, no user sends anything before it is assigned.
 * ``expect.computed`` on an api step: the number at each JSON path equals an
   oracle's within a relative tolerance ``rel`` (``rel: 0``, exactly).
   ``expect.cells`` on a screen step: the cell of a table's column, in the row
-  that has a cell reading ``row``, shows an oracle's number at the precision
-  it is shown. ``expect.number`` does the same for the one element of a role
+  that has a cell reading ``row`` (and, with ``also``, a cell reading
+  ``also``), shows an oracle's number at the precision it is shown. ``expect.number`` does the same for the one element of a role
   and name, reading its text again until it agrees or stops changing
   (``checks.settle``).
+* ``expect.delta`` on an api step: ``{<dotted path>: {since: <saved name>,
+  by: <whole number>}}``, the number at each JSON path is exactly the number
+  an earlier api step saved under that name plus ``by`` (``by: 0``, the same
+  number). A cell of ``expect.cells`` may give ``delta`` instead of
+  ``oracle``: the cell shows that number. A count read before an action and
+  again after it, one more in the arm the action counts in and none more in
+  the other, is checked this way, whatever the count was before.
+* ``visitor`` (a journey field, demo-local only): ShopLab's visitor id, put
+  into the storefront's localStorage before the journey's first page
+  (``values.storage_state``), so the storefront's visitor is the one the
+  journey chose. It is a UUIDv4 chosen offline with ``values.choose_visitor``
+  and outside the demo's global holdout (the loader refuses one inside it).
 * ``expect.after`` on an api step: ``{<dotted path>: <saved name>}``, the time
   at each JSON path is later than the time an earlier step saved under that
   name (both ISO 8601, read on the stack's own clock; one written without a
@@ -223,6 +255,7 @@ itself: no ``expect``, no screen. The steps after it hold the stack it leaves.
 from __future__ import annotations
 
 import datetime
+import math
 import re
 from typing import Annotated, Any, Dict, List, Literal, Optional, Sequence, Tuple, Union
 
@@ -242,6 +275,7 @@ from pydantic import (
 
 from docs_runner.redaction import credential_key, credential_path
 from docs_runner.sdk import required_placeholders
+from docs_runner.values import is_uuid_v4
 
 STACKS = (
     "compose-dev",
@@ -287,6 +321,9 @@ Countable = Literal["events"]
 RELAUNCH_STACKS = ("compose-demo",)
 #: How a ``relaunch`` step starts the stack again: as the recovery note says.
 Relaunch = Literal["recovery"]
+#: The stacks a journey's ``visitor`` is seeded on: the one demo/setup-local.sh
+#: starts, whose ShopLab storefront and demo holdout the visitor is chosen for.
+VISITOR_STACKS = ("demo-local",)
 Profile = Literal["core", "full"]
 
 #: Who an ``api`` step calls as: nobody, or one of the four role accounts the
@@ -388,12 +425,14 @@ GUIDE_PATTERN = r"^[^/\s][^\s]*\.(?:md|tsx)$"
 SCREEN_ACTIONS = ("goto", "open", "click", "fill", "select")
 #: The actions in the browser; each but ``keep`` keeps its screen as a screenshot.
 BROWSER_ACTIONS = (*SCREEN_ACTIONS, "search", "keep")
+#: A screen step's ARIA snapshot: one template, or one of several.
+ARIA_EXPECTS = ("aria", "aria_one_of")
 #: What a step on a screen may expect, and what an ``api`` step may.
-BROWSER_EXPECTS = ("url", "status", "visible", "text", "number", "cells", "aria")
+BROWSER_EXPECTS = ("url", "status", "visible", "text", "number", "cells", *ARIA_EXPECTS)
 #: A screen step's structural expectations: all but the ARIA snapshot.
-STRUCTURAL_EXPECTS = tuple(name for name in BROWSER_EXPECTS if name != "aria")
+STRUCTURAL_EXPECTS = tuple(name for name in BROWSER_EXPECTS if name not in ARIA_EXPECTS)
 #: What an api step may expect of its answer; ``after`` compares times in it.
-API_ANSWER_EXPECTS = ("status", "json", "computed")
+API_ANSWER_EXPECTS = ("status", "json", "computed", "delta")
 API_EXPECTS = (*API_ANSWER_EXPECTS, "after")
 SEARCH_EXPECTS = ("found",)
 #: What a ``run`` or ``finish`` step may expect: how its block ended.
@@ -544,6 +583,75 @@ class Population(_Strict):
         return self
 
 
+class TrafficValue(_Strict):
+    """The ``value`` each converting user's event carries (``traffic.ramp_values``).
+
+    Deterministic, so an oracle recomputes every value from the journey alone.
+    The ``i``-th converting user of a variant (``i`` = 0, 1, 2, ..., counted in
+    each variant on its own, in the order ``traffic.choose`` chose the users)
+    sends::
+
+        base + step * (i mod modulo)
+
+    ``{mode: ramp, base: 10, step: 1, modulo: 7}`` sends 10, 11, 12, 13, 14,
+    15, 16, 10, 11, ...; a variant whose first 9 users convert sends those nine
+    values, 112 in all. ``base`` and ``step`` are numbers (whole or decimal,
+    finite; not true or false, not text); ``modulo`` is a whole number of at
+    least 1; ``ramp`` is the one mode.
+    """
+
+    mode: Literal["ramp"]
+    base: Union[StrictInt, StrictFloat]
+    step: Union[StrictInt, StrictFloat]
+    modulo: StrictInt = Field(ge=1)
+
+    @field_validator("base", "step", mode="before")
+    @classmethod
+    def _a_number(cls, value: Any) -> Any:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"must be a number, not {value!r}")
+        try:
+            finite = math.isfinite(value)
+        except OverflowError:
+            # A whole number too large for a double: isfinite cannot convert it.
+            raise ValueError(
+                "must be a number a double can hold, not a whole number of"
+                f" {len(str(abs(value)))} digits"
+            ) from None
+        if not finite:
+            raise ValueError(f"must be a number, not {value!r}")
+        return value
+
+
+#: How many users of a variant a history names: none or more.
+HistoryCount = Annotated[StrictInt, Field(ge=0)]
+
+
+class TrafficHistory(_Strict):
+    """Events from before the experiment, for its returning users (``traffic.send``).
+
+    Before any user of the step is assigned, the first ``count`` users chosen
+    for each variant named in ``converted`` send the step's event once, with
+    no experiment key and no flag key, dated ``days_before`` days before the
+    moment the step sends it. That is how ``api/cuped.md`` ("Sending
+    pre-experiment history") says to send history: such an event counts in no
+    experiment's results, only as CUPED history, and only if the server
+    received it before the user was assigned. ``{days_before: 3, converted:
+    {Control: 80, Treatment: 48}}`` makes the first 80 Control users and the
+    first 48 Treatment users returning users; a variant not named has none.
+    The first users chosen are also the first to convert, so with 80
+    returning users and 40 converting ones in a variant, every converting user
+    is a returning one, and with 48 returning and 56 converting, every
+    returning user converts. ``days_before`` is a whole number from 1 to 30
+    (the experiment's ``covariate_lookback_days`` must be more than it for
+    the history to count); a count is a whole number of at least 0 and at
+    most the variant's ``assigned``.
+    """
+
+    days_before: StrictInt = Field(ge=1, le=30)
+    converted: Dict[OneLine, HistoryCount] = Field(min_length=1)
+
+
 class Traffic(_Strict):
     """A chosen population sent through the tracking API (``traffic.py``)."""
 
@@ -558,6 +666,34 @@ class Traffic(_Strict):
     #: The user ids are ``<users>-00001``, ``<users>-00002``, ...
     users: StrictStr = Field(pattern=SLUG_PATTERN)
     variants: Dict[OneLine, Population] = Field(min_length=1)
+    #: The value each converting user's event carries; none without it.
+    value: Optional[TrafficValue] = None
+    #: The returning users' events from before the experiment; none without it.
+    history: Optional[TrafficHistory] = None
+
+    @model_validator(mode="after")
+    def _history_of_the_steps_own_users(self) -> "Traffic":
+        if self.history is None:
+            return self
+        for variant, count in self.history.converted.items():
+            if variant not in self.variants:
+                raise ValueError(
+                    f"history names {variant!r}, which is not one of the step's"
+                    f" variants ({', '.join(self.variants)})"
+                )
+            assigned = self.variants[variant].assigned
+            if count > assigned:
+                raise ValueError(
+                    f"history gives {variant} {count} returning users, more than"
+                    f" the {assigned} it assigns"
+                )
+        return self
+
+
+#: A flag's value as the evaluate route answers it: a string, a number, or a
+#: JSON object or array (#1497). Not a boolean: a boolean flag's value is its
+#: ``enabled``, which the step already checks.
+FlagValue = Union[StrictStr, StrictInt, StrictFloat, List[Any], Dict[StrictStr, Any]]
 
 
 class Evaluations(_Strict):
@@ -567,6 +703,11 @@ class Evaluations(_Strict):
     the flag exactly when the documented rollout hash puts them below
     ``rollout`` percent), ``targeting_rule`` (every user gets it) or
     ``inactive`` (no user gets it).
+
+    ``on_value`` and ``off_value``, given together, are a value flag's two
+    values (#1497): every answer's ``value`` must then be the on value when
+    the user gets the flag and the off value when not. Left out, ``value`` is
+    not read.
     """
 
     flag: OneLine
@@ -578,12 +719,22 @@ class Evaluations(_Strict):
     ] = None
     reason: Literal["rollout", "targeting_rule", "inactive"]
     rollout: Optional[StrictInt] = Field(default=None, ge=0, le=100)
+    on_value: Optional[FlagValue] = None
+    off_value: Optional[FlagValue] = None
 
     @model_validator(mode="after")
     def _rollout_iff_reason_rollout(self) -> "Evaluations":
         if (self.reason == "rollout") != (self.rollout is not None):
             raise ValueError(
                 "rollout is the percentage for reason: rollout, and only for it"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _both_values_or_neither(self) -> "Evaluations":
+        if (self.on_value is None) != (self.off_value is None):
+            raise ValueError(
+                "on_value and off_value are a flag's two values: give both, or neither"
             )
         return self
 
@@ -812,16 +963,45 @@ class Computed(_Strict):
     rel: StrictFloat = Field(ge=0, le=0.01)
 
 
+class Delta(_Strict):
+    """A number exactly ``by`` more than the number an earlier api step saved
+    as ``since`` (``by: 0``: the same number; ``by: -1``: one fewer)."""
+
+    since: Name
+    by: StrictInt
+
+
 class Cell(_Quoted):
-    """A table cell shows an oracle's number, at the precision it shows.
+    """A table cell shows an oracle's number, or a saved number moved by
+    ``delta``, at the precision it shows.
 
     The cell is the one under the column headed ``column``, in the one row
-    that has a cell reading exactly ``row`` (a variant's name, say).
+    that has a cell reading exactly ``row`` (a variant's name, say) and, with
+    ``also``, a cell reading exactly ``also`` too: the one row of a table that
+    lists each variant once per metric is the variant's row of one metric.
     """
 
     row: OneLine
     column: OneLine
-    oracle: Oracle
+    #: A second cell of the same row, read exactly as ``row`` is.
+    also: Optional[OneLine] = None
+    oracle: Optional[Oracle] = None
+    delta: Optional[Delta] = None
+
+    @model_validator(mode="after")
+    def _oracle_or_delta(self) -> "Cell":
+        if (self.oracle is None) == (self.delta is None):
+            raise ValueError(
+                "a cell shows exactly one of an oracle's number (oracle) or a saved"
+                " number moved by delta"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _also_another_cell(self) -> "Cell":
+        if self.also is not None and self.also == self.row:
+            raise ValueError("also names the row's cell again; give another cell")
+        return self
 
 
 class Poll(_Strict):
@@ -851,12 +1031,18 @@ class Expect(_Strict):
     text: Optional[OneLine] = None
     json_: Optional[Dict[str, Any]] = Field(default=None, alias="json", min_length=1)
     computed: Optional[Dict[StrictStr, Computed]] = Field(default=None, min_length=1)
+    #: The number at each JSON path is a saved number moved by an exact amount.
+    delta: Optional[Dict[JsonPath, Delta]] = Field(default=None, min_length=1)
     #: The time at each JSON path is later than the time saved under the name.
     after: Optional[Dict[JsonPath, Name]] = Field(default=None, min_length=1)
     number: Optional[NumberExpect] = None
     cells: Optional[List[Cell]] = Field(default=None, min_length=1)
     found: Optional[StrictStr] = Field(default=None, pattern=r"^/\S*$")
     aria: Optional[StrictStr] = Field(default=None, min_length=1)
+    #: Or one of these, each pairing what the screen shows for one answer.
+    aria_one_of: Optional[List[StrictStr]] = Field(
+        default=None, min_length=2, max_length=4
+    )
     #: A ``run`` or ``finish`` step: the status its block must end with.
     exit: Optional[StrictInt] = Field(default=None, ge=0, le=255)
     #: And lines its output must hold, each word for word.
@@ -866,22 +1052,25 @@ class Expect(_Strict):
     def _something(self) -> "Expect":
         if not self.given():
             raise ValueError("expect names nothing to check")
+        if self.aria is not None and self.aria_one_of is not None:
+            raise ValueError("give aria or aria_one_of, not both")
         return self
 
-    @field_validator("aria")
+    @field_validator("aria", "aria_one_of")
     @classmethod
-    def _aria_parses(cls, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return value
-        try:
-            nodes = yaml.safe_load(value)
-        except yaml.YAMLError:
-            nodes = None
-        if not isinstance(nodes, list) or not nodes:
-            raise ValueError(
-                "aria must be an ARIA snapshot template: a non-empty YAML list of"
-                ' nodes, such as - heading "Title" [level=1]'
-            )
+    def _aria_parses(cls, value: Any) -> Any:
+        for template in [value] if isinstance(value, str) else value or []:
+            try:
+                nodes = yaml.safe_load(template)
+            except yaml.YAMLError:
+                nodes = None
+            if not isinstance(nodes, list) or not nodes:
+                raise ValueError(
+                    "aria must be an ARIA snapshot template: a non-empty YAML list of"
+                    ' nodes, such as - heading "Title" [level=1]'
+                )
+        if isinstance(value, list) and len(set(value)) < len(value):
+            raise ValueError("aria_one_of gives one template twice")
         return value
 
     def given(self) -> List[str]:
@@ -971,7 +1160,20 @@ class Journey(_Strict):
     )
     #: The launch walkthroughs this journey records, each a segment of its steps.
     recordings: List[Recording] = Field(default_factory=list)
+    #: demo-local only: ShopLab's visitor, seeded before the first page.
+    visitor: Optional[StrictStr] = None
     steps: List[Step] = Field(min_length=1)
+
+    @field_validator("visitor")
+    @classmethod
+    def _visitor_is_a_uuid_v4(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and not is_uuid_v4(value):
+            raise ValueError(
+                "not a UUIDv4 in lower case, as the storefront makes them: it"
+                " drops any other id and makes up its own"
+                " (demo/shoplab/src/lib/visitor.ts)"
+            )
+        return value
 
     @model_validator(mode="after")
     def _unique_step_ids(self) -> "Journey":

@@ -34,12 +34,25 @@ type flagReport struct {
 	Enabled bool `json:"enabled"`
 }
 
+type exposurePayload struct {
+	ExperimentKey string `json:"experiment_key"`
+	VariantName   string `json:"variant_name"`
+	VariantID     string `json:"variant_id"`
+	UserID        string `json:"user_id"`
+}
+
+type exposureReport struct {
+	Calls   int              `json:"calls"`
+	Payload *exposurePayload `json:"payload"`
+}
+
 type report struct {
-	SDK    string       `json:"sdk"`
-	Assign assignReport `json:"assign"`
-	Flag   flagReport   `json:"flag"`
-	Track  okReport     `json:"track"`
-	Fanout okReport     `json:"fanout"`
+	SDK      string         `json:"sdk"`
+	Assign   assignReport   `json:"assign"`
+	Flag     flagReport     `json:"flag"`
+	Track    okReport       `json:"track"`
+	Fanout   okReport       `json:"fanout"`
+	Exposure exposureReport `json:"exposure"`
 }
 
 func env(key, fallback string) string {
@@ -74,8 +87,9 @@ func main() {
 	flagKey := env("CONTRACT_FLAG_KEY", "sdk_contract_flag")
 	userID := env("CONTRACT_USER_ID", randomUserID())
 
-	newClient := func() exp.Client {
-		c, err := exp.New(exp.WithBaseURL(baseURL), exp.WithAPIKey(apiKey), exp.WithTimeout(10*time.Second))
+	newClient := func(opts ...exp.Option) exp.Client {
+		base := []exp.Option{exp.WithBaseURL(baseURL), exp.WithAPIKey(apiKey), exp.WithTimeout(10 * time.Second)}
+		c, err := exp.New(append(base, opts...)...)
 		if err != nil {
 			fail("new client: %v", err)
 		}
@@ -143,12 +157,54 @@ func main() {
 		fail("track batch: %v", err)
 	}
 
+	// 5. The exposure hook (#1499): a NEW client with WithOnExposure assigns the
+	//    same user twice. The server records an exposure for the first request
+	//    (assigned: true) and the second answer comes from the cache, so the
+	//    function is called once. The runner checks the count, the experiment
+	//    key and the variant; the user ID is checked here, the one place that
+	//    knows it. The function runs on this goroutine, inside GetAssignment.
+	var exposures []exp.Exposure
+	hooked := newClient(exp.WithOnExposure(func(_ context.Context, e exp.Exposure) {
+		exposures = append(exposures, e)
+	}))
+	for i := 1; i <= 2; i++ {
+		if _, err := hooked.GetAssignment(ctx, experimentKey, user); err != nil {
+			fail("assign #%d with WithOnExposure: %v", i, err)
+		}
+	}
+	hooked.Close()
+	for _, e := range exposures {
+		if e.UserID != userID {
+			fail("onExposure received user %q, expected %q", e.UserID, userID)
+		}
+	}
+
+	// 5b. A function that panics: the client recovers, and the answer is the
+	//     same variant with no error.
+	panicking := newClient(exp.WithOnExposure(func(context.Context, exp.Exposure) { panic("hook boom") }))
+	fromPanicking, err := panicking.GetAssignment(ctx, experimentKey, user)
+	panicking.Close()
+	if err != nil {
+		fail("the client whose onExposure panics: %v", err)
+	}
+	if fromPanicking.VariantName != first.VariantName {
+		fail("the client whose onExposure panics answered %q, not %q", fromPanicking.VariantName, first.VariantName)
+	}
+
+	exposure := exposureReport{Calls: len(exposures)}
+	if len(exposures) > 0 {
+		e := exposures[0]
+		exposure.Payload = &exposurePayload{
+			ExperimentKey: e.ExperimentKey, VariantName: e.VariantName, VariantID: e.VariantID, UserID: e.UserID,
+		}
+	}
 	out, err := json.Marshal(report{
-		SDK:    "go",
-		Assign: assignReport{VariantName: first.VariantName, IsControl: first.IsControl, Sticky: sticky},
-		Flag:   flagReport{Enabled: flag.Enabled},
-		Track:  okReport{OK: true},
-		Fanout: okReport{OK: true},
+		SDK:      "go",
+		Assign:   assignReport{VariantName: first.VariantName, IsControl: first.IsControl, Sticky: sticky},
+		Flag:     flagReport{Enabled: flag.Enabled},
+		Track:    okReport{OK: true},
+		Fanout:   okReport{OK: true},
+		Exposure: exposure,
 	})
 	if err != nil {
 		fail("encode report: %v", err)

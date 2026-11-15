@@ -1,6 +1,18 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AdminService } from '@/services/admin';
+import { DEFAULT_REQUEST_TIMEOUT_MS, isApiError } from '@/services/api';
 import { AdminUser, ROLE_COLORS, USER_ROLE_LABELS, UserListResponse } from '@/types/admin';
+
+/**
+ * A delete that timed out may still have been carried out, so it is not
+ * reported as "Couldn't delete" (#1040).
+ */
+export function deleteTimedOutMessage(username: string): string {
+  return (
+    `The API did not answer within ${DEFAULT_REQUEST_TIMEOUT_MS / 1000} seconds, so "${username}" ` +
+    'may or may not have been deleted. Reload the list and check before you try again.'
+  );
+}
 
 /** Rows per page. The API's `limit` maximum is 100. */
 export const USER_PAGE_SIZE = 50;
@@ -11,6 +23,12 @@ const SEARCH_DEBOUNCE_MS = 300;
 export interface UserTableProps {
   /** Opens the Edit dialog for a row. Without it the row has no Edit button. */
   onEdit?: (user: AdminUser) => void;
+  /**
+   * Opens the user's effective permissions. Without it the row has no
+   * Permissions button (the core profile, which has no rbac routes). The
+   * button is passed so focus can go back to it when the dialog closes.
+   */
+  onPermissions?: (user: AdminUser, trigger: HTMLButtonElement) => void;
   /**
    * Bump to reload the list. The current page and search term are kept, so an
    * edit does not send the administrator back to the first page.
@@ -26,6 +44,7 @@ export interface UserTableProps {
 
 export function UserTable({
   onEdit,
+  onPermissions,
   reloadToken: externalReloadToken = 0,
   focusUserId = null,
   onFocusHandled,
@@ -119,7 +138,11 @@ export function UserTable({
     try {
       await AdminService.deleteUser(user.id);
     } catch (err) {
-      setDeleteError(`Couldn't delete ${user.username}: ${(err as Error).message}`);
+      setDeleteError(
+        isApiError(err) && err.timedOut
+          ? deleteTimedOutMessage(user.username)
+          : `Couldn't delete ${user.username}: ${(err as Error).message}`,
+      );
       return;
     }
     // Deleting the only row on a later page would leave that page empty;
@@ -264,6 +287,17 @@ export function UserTable({
                           className="text-blue-700 hover:text-blue-900 text-sm font-medium"
                         >
                           Edit
+                        </button>
+                      )}
+                      {onPermissions && (
+                        <button
+                          type="button"
+                          data-testid={`permissions-user-${user.id}`}
+                          aria-label={`Permissions for ${user.username}`}
+                          onClick={(e) => onPermissions(user, e.currentTarget)}
+                          className="text-blue-700 hover:text-blue-900 text-sm font-medium"
+                        >
+                          Permissions
                         </button>
                       )}
                       <button

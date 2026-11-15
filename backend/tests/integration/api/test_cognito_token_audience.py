@@ -24,7 +24,7 @@ from typing import Iterator, NamedTuple
 import boto3
 import pytest
 from fastapi.testclient import TestClient
-from moto import mock_cognitoidp
+from moto import mock_aws
 from sqlalchemy import func
 
 from backend.app.api import deps
@@ -65,7 +65,10 @@ def _create_user(idp, pool_id: str, username: str, email: str, groups=()) -> Non
     idp.admin_create_user(
         UserPoolId=pool_id,
         Username=username,
-        UserAttributes=[{"Name": "email", "Value": email}],
+        UserAttributes=[
+            {"Name": "email", "Value": email},
+            {"Name": "email_verified", "Value": "true"},
+        ],
         TemporaryPassword="Tmp-pass1!",
         MessageAction="SUPPRESS",
     )
@@ -139,7 +142,7 @@ def pools(db_session, monkeypatch) -> Iterator[Pools]:
     app.dependency_overrides[deps.get_db] = override_get_db
     app.dependency_overrides[session_get_db] = override_get_db
     try:
-        with mock_cognitoidp():
+        with mock_aws():
             idp = boto3.client("cognito-idp", region_name=REGION)
             ours = idp.create_user_pool(PoolName="ours")["UserPool"]["Id"]
             other = idp.create_user_pool(PoolName="other")["UserPool"]["Id"]

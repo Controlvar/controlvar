@@ -11,11 +11,18 @@ ones before it.
 each provider your variants use. Steps 1, 2 and 6 need no key, and only they are commands
 to run here.
 
+On the stack from the Quick Start, put each key (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
+`GEMINI_API_KEY`) in the `.env` file next to `docker-compose.yml`, then run
+`docker compose up -d --wait` again, which re-creates the API container with it.
+[Supported providers](overview.md#supported-providers-and-models) says what each key
+turns on.
+
 ---
 
 ## 1. Create an Experiment
 
-Log in first. Creating and starting an experiment takes the DEVELOPER or ADMIN role:
+Log in first. Creating and starting an experiment takes permission to create and change
+experiments, such as the DEVELOPER or ADMIN role:
 
 ```{.bash exec}
 TOKEN=$(curl -s -X POST localhost:8000/api/v1/auth/login \
@@ -254,11 +261,12 @@ It prints `"ACTIVE"`.
 
 ## Permissions
 
-| Action | Required Role |
-|--------|--------------|
-| Create / Start / Pause experiment | DEVELOPER or ADMIN |
-| Add / update variants | DEVELOPER or ADMIN |
+| Action | Needs |
+|--------|-------|
+| Create experiment | `experiment (create)` (DEVELOPER or ADMIN, or in the full profile a custom role or direct grant) |
+| Start / Pause experiment | `experiment (update)` (DEVELOPER or ADMIN, or in the full profile a custom role or direct grant) |
+| Add / update variants | `experiment (update)` (DEVELOPER or ADMIN, or in the full profile a custom role or direct grant) |
 | Get completion | Any authenticated user (READ) |
-| Submit evaluation | DEVELOPER or ADMIN |
+| Submit evaluation | `experiment (update)` (DEVELOPER or ADMIN, or in the full profile a custom role or direct grant) |
 | Get results | Any authenticated user (READ) |
-| Run LLM-as-judge | DEVELOPER or ADMIN |
+| Run LLM-as-judge | `experiment (update)` (DEVELOPER or ADMIN, or in the full profile a custom role or direct grant) |

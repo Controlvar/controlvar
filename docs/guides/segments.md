@@ -18,7 +18,9 @@ demo data.
 
 ## Sign in
 
-Changing a segment takes the ADMIN or DEVELOPER role. Sign in as the demo administrator:
+Changing a segment takes the experiment permissions, which the ADMIN and DEVELOPER roles have;
+in the full profile a custom role or direct grant can give them too. Sign in as the demo
+administrator:
 
 ```{.bash exec}
 TOKEN=$(curl -s -X POST localhost:8000/api/v1/auth/login \
@@ -181,6 +183,8 @@ gets the control variant with `assigned: false` and `reason: "targeting"`.
 - **The server decides membership.** For an ID list, the user is the `user_id` the flag or the
   assignment is evaluated for; a `user_id` (or anything else) in the context you send does not
   make a user a member.
+- **A key in a browser or a mobile app answers for any user id.** A key used in a browser or a mobile app is visible to the people who use the app, and it answers for whichever user id it is sent: what that id is served, whether it is in a segment, and which experiments it is assigned to.
+  Where that matters, use user ids that do not identify a person (not email addresses), in ID lists too, and read assignments from your server.
 - **At most 10 segments per ruleset**, one per condition; put several conditions in an `OR`
   group to match any of them.
 - **Saving rules that name a segment that is unknown, inactive or archived answers `422`.** If
@@ -197,7 +201,9 @@ The full rule is in the
 
 A segment that a flag or an experiment still uses cannot be archived or made inactive: it
 answers `409` and lists them. A flag counts until it is archived, and an experiment until it is
-completed or archived, because until then its rules can still be evaluated.
+completed or archived, because until then its rules can still be evaluated. An experiment that
+balances its split within the segment uses it the same way
+([Balance within saved segments](balance-within-groups.md#balance-within-saved-segments)).
 
 ```{.bash exec}
 curl -s -X DELETE localhost:8000/api/v1/segments/$SEGMENT \
@@ -217,7 +223,7 @@ archive the flag, then archive the segment.
 | IDs per request | 1 to 10,000 |
 | Characters per ID | 1 to 255 |
 | IDs per segment | 1,000,000 |
-| Who can change members | ADMIN and DEVELOPER (ANALYST and VIEWER get `403`) |
+| Who can change members | Users who may change experiments: ADMIN and DEVELOPER, and in the full profile anyone whose custom role or direct grant gives `experiment (update)`; anyone else gets `403` |
 | Segments per targeting ruleset | 10 |
 
 A request body is at most 5 MiB (5,242,880 bytes); a larger one is answered `413`. 10,000 IDs

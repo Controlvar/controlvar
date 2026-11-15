@@ -113,6 +113,7 @@ The browser returns to `<dashboard>/login?sso_error=<code>` and the sign-in page
 | `sso_failed` | anything else, including a provider that is not supported yet |
 | `sso_rate_limited` | the dashboard's own code: the exchange was rate-limited |
 | `sso_unreachable` | the dashboard's own code: the API could not be reached |
+| `sso_timed_out` | the dashboard's own code: the sign-in request got no answer within its deadline (30 seconds); the page says "Sign-in did not finish: the API did not answer within 30 seconds. Try again in a moment." |
 
 For `sso_failed`, `sso_account` and `sso_email` the page shows a Request ID when the API sent one; search the API log for it. A refusal in the callback is logged at WARNING with its `sso_error`, status, detail and request ID, and an unexpected error at ERROR with its traceback. The API log writes the callback's query values (the provider's `code` and `state`, and anything else it sends) as `[redacted]`.
 
@@ -211,6 +212,8 @@ curl -X POST https://app.example.com/api/v1/auth/sso/configs \
 ```
 
 The response carries the configuration's `id`: the ACS URL to register is `https://app.example.com/api/v1/auth/sso/saml/<id>/acs`.
+
+A SAML configuration's `sso_url` must be `https` when it is saved: creating one, or an update that sets `sso_url` or `provider_type`, with another scheme is answered 400 `SAML single sign-on URL must use https; check this SSO configuration's sso_url`, in every environment except `test`. An update that sends neither, such as one that changes only `org_name` or `is_active`, is not checked, so a configuration stored earlier with an `http` URL can still be renamed or switched off.
 
 ### OIDC Configuration
 
@@ -398,6 +401,10 @@ SAML_SP_ACS_URL=https://app.example.com/api/v1/auth/sso/saml/3f1c2b9e-0000-4000-
 
 - An Okta configuration's `sso_url` is `http://`. Use the `https` URL of the authorization server.
 - Creating or updating an Okta configuration with an `sso_url` that is not `https` is answered 400 with this message.
+
+### "SAML single sign-on URL must use https; check this SSO configuration's sso_url"
+
+- Creating or updating a SAML configuration with an `sso_url` that is not `https` is answered 400 with this message. Use the https single sign-on URL your IdP gives.
 
 ### "OIDC ID token was not accepted (iss)"
 

@@ -8,6 +8,7 @@ manage feature flags for gradual rollouts and A/B testing.
 
 import json
 import logging
+from datetime import datetime
 from typing import Annotated, Any, Dict, Optional
 from uuid import UUID
 
@@ -27,12 +28,18 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.enum_filters import enum_filter
+from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.query_params import MAX_OFFSET, describe_as_int64
+from backend.app.api.read_scope import get_current_reader
 from backend.app.api.segment_rules import refuse_unusable_segments
+from backend.app.core.config import settings
 from backend.app.core.context_limits import (
     CONTEXT_TOO_DEEP,
     check_context,
     check_context_text,
 )
+from backend.app.core.flag_values import flag_value_type, served_value
 from backend.app.core.logger import unexpected_failure
 from backend.app.core.metrics import record_flag_evaluation
 from backend.app.core.permissions import (
@@ -56,6 +63,7 @@ from backend.app.schemas.audit_log import ToggleRequest, ToggleResponse
 from backend.app.schemas.feature_flag import (
     STATUS_READ_ONLY,
     FeatureFlagCreate,
+    FeatureFlagListItem,
     FeatureFlagListResponse,
     FeatureFlagRead,
     FeatureFlagUpdate,
@@ -71,15 +79,31 @@ from backend.app.services.audit_service import (
 from backend.app.services.feature_flag_service import (
     FeatureFlagService,
     FlagStatusReadOnly,
+    FlagValuesRefused,
     FlagVerb,
     transition,
 )
+from backend.app.services.stale_flags import stale_clock, stale_reasons
 
 # Setup logger
 logger = logging.getLogger(__name__)
 
 #: Postgres error code for a unique constraint violation.
 _UNIQUE_VIOLATION = "23505"
+
+#: The list's ``status`` filter values, as the flag responses spell them (#955).
+FLAG_STATUS_SPELLINGS = ("active", "inactive", "archived")
+
+FLAG_STATUS_FILTER_DESCRIPTION = (
+    "Only flags with this status: `active`, `inactive` or `archived`, in any "
+    "case. Any other value answers 422; an empty value means no filter."
+)
+
+#: The list's ``stale`` filter (#1808).
+FLAG_STALE_FILTER_DESCRIPTION = (
+    "true returns only stale flags, false the rest; omit for all. Archived "
+    "flags are never stale."
+)
 
 
 def _flag_key_taken_detail(key: str) -> str:
@@ -136,6 +160,21 @@ def _status_read_only() -> RequestValidationError:
     )
 
 
+def _values_refused(refused: FlagValuesRefused) -> RequestValidationError:
+    """The 422 for an update whose ``value_type`` or values do not fit (#1497).
+
+    The same shape as every other request validation error: each refusal at
+    ``["body", <field>]`` with its fixed ``type`` and ``msg``, which name the
+    field and never the value.
+    """
+    return RequestValidationError(
+        [
+            {"type": error.type, "loc": ("body", field), "msg": error.message()}
+            for field, error in refused.errors
+        ]
+    )
+
+
 def _archived_refusal() -> HTTPException:
     """The 400 for a request that would turn an archived flag on (#631).
 
@@ -170,6 +209,7 @@ async def _skip_cache_ignored(skip_cache: bool = False) -> None:
 
 # Create router with tag for documentation grouping
 router = APIRouter(
+    route_class=OffLoopRoute,
     tags=["Feature Flags"],
     responses={
         status.HTTP_401_UNAUTHORIZED: {
@@ -234,21 +274,33 @@ router = APIRouter(
 async def list_feature_flags(
     *,
     db: Session = Depends(deps.get_db),
-    skip: int = 0,
-    limit: int = 100,
+    # The database's own limit, and no smaller cap: limit=0 stays 200 (#1001).
+    skip: int = Query(0, ge=0, le=MAX_OFFSET, json_schema_extra=describe_as_int64),
+    limit: int = Query(100, ge=0, le=MAX_OFFSET, json_schema_extra=describe_as_int64),
     # `status` in the URL only: a Python parameter called `status` hid the
     # `fastapi.status` module in this body, so reaching the 403 below raised
     # AttributeError and answered 500.
-    status_filter: Optional[str] = Query(None, alias="status"),
+    status_filter: Optional[str] = Query(
+        None, alias="status", description=FLAG_STATUS_FILTER_DESCRIPTION
+    ),
     search: Optional[str] = None,
-    current_user=Depends(deps.get_current_active_user),
+    stale: Optional[bool] = Query(None, description=FLAG_STALE_FILTER_DESCRIPTION),
+    # The time the flags are classified at (#1808); tests override it.
+    now: datetime = Depends(stale_clock),
+    # A sign-in, or an API key with the mcp:read scope (read_scope.py).
+    current_user=Depends(get_current_reader),
 ) -> FeatureFlagListResponse:
     """
     Retrieve feature flags.
     - **skip**: Number of feature flags to skip in pagination
     - **limit**: Maximum number of feature flags to return
-    - **status**: Filter by status (ACTIVE, INACTIVE)
+    - **status**: Filter by status (`active`, `inactive`, `archived`; any case)
     - **search**: Filter by name or key
+    - **stale**: `true` for only the stale flags, `false` for the rest
+
+    Each item says whether the flag looks ready to remove (`stale`) and why
+    (`stale_reasons`); `stale_days` and `evaluations_seen` say what that was
+    decided with. Listing changes no flag.
     """
     # Check if user has permission to list feature flags
     if not check_permission(current_user, ResourceType.FEATURE_FLAG, Action.LIST):
@@ -256,6 +308,12 @@ async def list_feature_flags(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You don't have permission to list feature flags",
         )
+
+    # After the permission check (#955): a caller who may not list is told
+    # nothing about the enum. The member goes to the query, never the text.
+    status_member = enum_filter(
+        status_filter, FeatureFlagStatus, "status", FLAG_STATUS_SPELLINGS
+    )
 
     # Everyone the LIST check above admitted sees the whole platform.
     #
@@ -269,20 +327,33 @@ async def list_feature_flags(
     # All four roles carry Action.LIST on feature flags, a deployment is single
     # tenant (founder, 2026-09-21), and tenant isolation belongs to the
     # workspaces module rather than to row ownership. See #83.
-    feature_flags_data = crud_feature_flag.get_multi(
-        db, skip=skip, limit=limit, status=status_filter, search=search
-    )
-    total = crud_feature_flag.count(db, status=status_filter, search=search)
+    days = settings.STALE_FLAG_DAYS
+    if stale is None:
+        # The page as before; only its flags are classified.
+        flags = crud_feature_flag.get_multi(
+            db, skip=skip, limit=limit, status=status_member, search=search
+        )
+        total = crud_feature_flag.count(db, status=status_member, search=search)
+        reasons, evaluations_seen = stale_reasons(db, flags, now=now, days=days)
+    else:
+        # Every matching flag is classified, so the filter comes before the
+        # page: `total` counts the filtered flags, in the list's order.
+        matching = crud_feature_flag.get_multi(
+            db, skip=0, limit=None, status=status_member, search=search
+        )
+        reasons, evaluations_seen = stale_reasons(db, matching, now=now, days=days)
+        kept = [flag for flag in matching if bool(reasons[flag.id]) is stale]
+        total = len(kept)
+        flags = kept[skip : skip + limit]
 
-    # Create response with pagination
-    response = FeatureFlagListResponse(
-        items=[FeatureFlagRead.model_validate(flag) for flag in feature_flags_data],
+    return FeatureFlagListResponse(
+        items=[FeatureFlagListItem.of(flag, reasons[flag.id]) for flag in flags],
         total=total,
         skip=skip,
         limit=limit,
+        stale_days=days,
+        evaluations_seen=evaluations_seen,
     )
-
-    return response
 
 
 @router.post(
@@ -320,6 +391,8 @@ async def create_feature_flag(
     - Optional description
     - Optional targeting rules for specific user segments
     - Optional rollout percentage
+    - Optional `value_type` (`boolean` when left out) and, for a `string`,
+      `number` or `json` flag, its `on_value` and `off_value`
 
     The flag is created off (INACTIVE) unless the request sends
     `is_active: true`. A field the API does not read answers 422. The read-only
@@ -327,6 +400,8 @@ async def create_feature_flag(
     `status`) are accepted and ignored, except that a `status` must be the one
     the flag is created with. `targeting_rules` the flag evaluator would not
     apply as written answer 422, with the place and the reason in the message.
+    A value that does not fit `value_type` or its limits answers 422 at that
+    field, with a message that names the field and never the value.
 
     Returns:
         FeatureFlagRead: The newly created feature flag
@@ -378,7 +453,11 @@ async def create_feature_flag(
             outcome=AuditOutcome.SUCCESS,
             resource_id=str(created.id),
             actor_id=str(current_user.id) if current_user else None,
-            new_value={"key": created.key, "name": created.name},
+            new_value={
+                "key": created.key,
+                "name": created.name,
+                "value_type": created.value_type,
+            },
         )
         # log() only flushes, and the create above has already committed, so
         # without this the record is rolled back when the session closes.
@@ -386,7 +465,8 @@ async def create_feature_flag(
     except Exception as audit_error:
         db.rollback()
         logger.warning(
-            f"Compliance audit logging failed for feature_flag create: {audit_error}"
+            "Compliance audit logging failed for feature_flag create (%s)",
+            type(audit_error).__name__,
         )
 
     # The flag is committed above; a failed audit write does not undo it.
@@ -485,13 +565,18 @@ async def update_feature_flag(
       400, and nothing is changed: unarchive it first
     - Targeting rules
     - Rollout percentage
+    - `on_value` and `off_value`, for a `string`, `number` or `json` flag
 
     A field the API does not read answers 422, and so does an explicit null on
-    `key`, `name`, `is_active`, `rollout_percentage` or `default_value`. The
-    read-only fields of a flag response (`id`, `owner_id`, `created_at`,
-    `updated_at`, `status`) are accepted and ignored, so a GET body can be sent
-    back unchanged unless its `targeting_rules` are ones PUT now refuses (422);
-    omitting the field still works. A `status` must equal the flag's.
+    `key`, `name`, `is_active`, `rollout_percentage`, `default_value`,
+    `value_type`, `on_value` or `off_value`. The read-only fields of a flag
+    response (`id`, `owner_id`, `created_at`, `updated_at`, `status`) are
+    accepted and ignored, so a GET body can be sent back unchanged unless its
+    `targeting_rules` are ones PUT now refuses (422); omitting the field still
+    works. A `status` must equal the flag's, and a `value_type` the flag's type
+    (422 `read_only` otherwise). A value is checked against the flag's type,
+    and the two values as they will be stored must differ; a boolean flag's
+    `on_value: true` and `off_value: false` are accepted and change nothing.
 
     `targeting_rules` the flag evaluator would not apply as written answer 422,
     with the place and the reason in the message. Stored rules are not
@@ -509,8 +594,14 @@ async def update_feature_flag(
     # Create feature flag service
     feature_flag_service = FeatureFlagService(db)
 
-    # Get feature flag
-    flag = db.query(FeatureFlag).filter(FeatureFlag.id == flag_id).first()
+    # Get feature flag. An update that sends a value locks the row until it
+    # commits: its values are checked against the stored pair (EMF-5), so the
+    # stored pair must be the committed one, and a concurrent update of the
+    # same flag waits instead of storing an equal pair (#1514 review R2).
+    query = db.query(FeatureFlag).filter(FeatureFlag.id == flag_id)
+    if feature_flag_in.model_fields_set & {"on_value", "off_value"}:
+        query = query.with_for_update()
+    flag = query.first()
     if not flag:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Feature flag not found"
@@ -542,6 +633,7 @@ async def update_feature_flag(
         "name": flag.name,
         "status": str(flag.status),
         "rollout_percentage": flag.rollout_percentage,
+        "value_type": flag_value_type(flag),
     }
     before_audit = audit_snapshot(EntityType.FEATURE_FLAG, flag)
 
@@ -554,6 +646,8 @@ async def update_feature_flag(
         updated_row = feature_flag_service.update_feature_flag(flag, feature_flag_in)
     except FlagStatusReadOnly:
         raise _status_read_only() from None
+    except FlagValuesRefused as refused:
+        raise _values_refused(refused) from None
     except ArchivedFlagError:
         raise _archived_refusal() from None
     except IntegrityError as e:
@@ -573,6 +667,7 @@ async def update_feature_flag(
             "name": updated_flag.name,
             "status": updated_flag.status,
             "rollout_percentage": updated_flag.rollout_percentage,
+            "value_type": updated_flag.value_type,
         }
         audit = AuditLogService(db)
         audit.log(
@@ -590,7 +685,8 @@ async def update_feature_flag(
     except Exception as audit_error:
         db.rollback()
         logger.warning(
-            f"Compliance audit logging failed for feature_flag update: {audit_error}"
+            "Compliance audit logging failed for feature_flag update (%s)",
+            type(audit_error).__name__,
         )
 
     old_value, new_value = audit_changes(
@@ -656,8 +752,10 @@ async def delete_feature_flag(
     """
     Delete a feature flag.
 
-    This endpoint deletes an existing feature flag. Access is by role:
-    ADMIN and DEVELOPER may delete any flag; ANALYST and VIEWER may not.
+    This endpoint deletes an existing feature flag. Access is by permission,
+    not ownership: ADMIN and DEVELOPER may delete any flag, and in the full
+    profile so may anyone whose custom role or direct grant gives
+    feature_flag (delete); anyone else gets 403.
 
     Deleting a feature flag has the following effects:
     - The feature flag and its related data are permanently removed, except
@@ -721,7 +819,8 @@ async def delete_feature_flag(
     except Exception as audit_error:
         db.rollback()
         logger.warning(
-            f"Compliance audit logging failed for feature_flag delete: {audit_error}"
+            "Compliance audit logging failed for feature_flag delete (%s)",
+            type(audit_error).__name__,
         )
 
     AuditService.record_after_commit(
@@ -903,8 +1002,9 @@ async def unarchive_feature_flag(
 
     A flag that is not archived is returned unchanged.
 
-    **Permissions**: ADMIN and DEVELOPER may unarchive any flag; ANALYST and
-    VIEWER may not.
+    **Permissions**: ADMIN and DEVELOPER may unarchive any flag, and in the full
+    profile so may anyone whose custom role or direct grant gives
+    feature_flag (update); anyone else gets 403.
 
     Returns:
         FeatureFlagRead: The feature flag
@@ -1012,6 +1112,26 @@ class FlagEvaluationRequest(BaseModel):
     )
 
 
+def evaluation_answer(
+    flag_key: str, db_flag: Any, evaluation: Dict[str, Any]
+) -> Dict[str, Any]:
+    """The body the evaluate endpoints send for *evaluation* of *db_flag*.
+
+    Pure: no database, no metric. ``backend/scripts/generate_value_vectors.py``
+    builds the served half of ``tests/sdk-contract/value-vectors.json`` with it,
+    so the bodies the SDKs' typed getters are tested against are this
+    function's (#1810).
+    """
+    answer: Dict[str, Any] = {"key": flag_key, "enabled": evaluation["enabled"]}
+    servable, value = served_value(db_flag, evaluation["enabled"])
+    if servable:
+        answer["value"] = value
+    answer["value_type"] = flag_value_type(db_flag)
+    answer["config"] = None
+    answer["reason"] = evaluation["reason"]
+    return answer
+
+
 def _evaluate_flag_by_key(
     db: Session, flag_key: str, user_id: str, context: Optional[Dict[str, Any]]
 ) -> Dict[str, Any]:
@@ -1021,6 +1141,14 @@ def _evaluate_flag_by_key(
     archived, ...) evaluates to ``enabled: false`` with ``reason: "inactive"``
     rather than 404: the client should treat it as "off", not as an error.
     Only an unknown key is a 404.
+
+    ``value`` is what the flag serves this user (#1497): its ``on_value`` when
+    ``enabled``, its ``off_value`` otherwise, so every way a flag is off --
+    inactive, archived, no match, outside the percentage, ``reason: "error"``
+    -- serves the off value; a boolean flag's ``value`` is ``enabled``. A
+    stored value outside the value rules is answered with no ``value`` key
+    (``flag_values.served_value``). ``config`` is always ``None``: the value
+    travels in ``value``, never in ``config``.
     """
     db_flag = db.query(FeatureFlag).filter(FeatureFlag.key == flag_key).first()
     if not db_flag:
@@ -1032,15 +1160,7 @@ def _evaluate_flag_by_key(
     feature_flag_service = FeatureFlagService(db)
     evaluation = feature_flag_service.evaluate_flag_detailed(db_flag, user_id, context)
     record_flag_evaluation(flag_key, "enabled" if evaluation["enabled"] else "disabled")
-
-    # ``config`` has always been ``None`` here (the flag dict has no ``value``);
-    # kept for backwards compatibility with existing SDKs.
-    return {
-        "key": flag_key,
-        "enabled": evaluation["enabled"],
-        "config": None,
-        "reason": evaluation["reason"],
-    }
+    return evaluation_answer(flag_key, db_flag, evaluation)
 
 
 @router.get(
@@ -1074,10 +1194,13 @@ async def evaluate_feature_flag(
     **Authentication**: Requires a valid API key in the X-API-Key header.
 
     Returns:
-        ``{"key", "enabled", "config", "reason"}`` where ``reason`` is one of
-        ``targeting_rule`` (a rule matched and its rollout % decided),
-        ``rollout`` (the global rollout % decided), ``inactive`` (the flag exists
-        but is not ACTIVE: ``enabled`` is false) or ``error``. ``config`` is
+        ``{"key", "enabled", "value", "value_type", "config", "reason"}``
+        where ``reason`` is one of ``targeting_rule`` (a rule matched and its
+        rollout % decided), ``rollout`` (the global rollout % decided),
+        ``inactive`` (the flag exists but is not ACTIVE: ``enabled`` is false)
+        or ``error``. ``value`` is the flag's ``on_value`` when ``enabled`` is
+        true and its ``off_value`` otherwise (for a boolean flag, ``value``
+        equals ``enabled``); ``value_type`` is the flag's type. ``config`` is
         always null.
 
     Raises:
@@ -1118,7 +1241,11 @@ async def evaluate_feature_flag_post(
     in the request body instead of the query string.
 
     Body: ``{"user_id": "...", "context": {...}}``. Returns the same
-    ``{"key", "enabled", "config", "reason"}`` payload as the GET variant.
+    ``{"key", "enabled", "value", "value_type", "config", "reason"}`` payload
+    as the GET variant: ``value`` is the flag's ``on_value`` when ``enabled``
+    is true and its ``off_value`` otherwise (for a boolean flag, ``value``
+    equals ``enabled``); ``value_type`` is the flag's type. ``config`` is
+    always null.
 
     **Authentication**: Requires a valid API key in the X-API-Key header.
 
@@ -1209,12 +1336,14 @@ async def toggle_feature_flag(
     The toggle operation includes:
     - Status change (ACTIVE ↔ INACTIVE). An archived flag would be turned on,
       so it answers 400 and stays archived: unarchive it first
-    - Complete audit logging with user information and optional reason
+    - One audit entry with user information and optional reason; a failed
+      audit write does not fail the request
     - Response with new status and audit log ID
 
     **Authentication**: Requires valid user authentication.
-    **Permissions**: ADMIN and DEVELOPER may toggle any flag; ANALYST and
-    VIEWER may not.
+    **Permissions**: ADMIN and DEVELOPER may toggle any flag, and in the full
+    profile so may anyone whose custom role or direct grant gives
+    feature_flag (update); anyone else gets 403.
 
     Returns:
         ToggleResponse: Updated feature flag details with audit log ID
@@ -1322,10 +1451,14 @@ async def enable_feature_flag(
 
     This endpoint explicitly enables a feature flag. An archived flag answers
     400 and stays archived: unarchive it first.
-    Includes complete audit logging with user information and optional reason.
+    Writes one audit entry with user information and optional reason, also
+    when the flag already has that status; a failed audit write does not fail
+    the request.
 
     **Authentication**: Requires valid user authentication.
-    **Permissions**: User must own the feature flag or be a superuser.
+    **Permissions**: Needs the feature_flag (update) permission, which ADMIN
+    and DEVELOPER hold; in the full profile a custom role or direct grant can
+    add it, and a superuser always has it. Anyone else gets 403.
 
     Returns:
         ToggleResponse: Updated feature flag details with audit log ID
@@ -1417,10 +1550,14 @@ async def disable_feature_flag(
 
     This endpoint explicitly disables a feature flag. An archived flag is
     already off: it answers 200 and stays archived.
-    Includes complete audit logging with user information and optional reason.
+    Writes one audit entry with user information and optional reason, also
+    when the flag already has that status; a failed audit write does not fail
+    the request.
 
     **Authentication**: Requires valid user authentication.
-    **Permissions**: User must own the feature flag or be a superuser.
+    **Permissions**: Needs the feature_flag (update) permission, which ADMIN
+    and DEVELOPER hold; in the full profile a custom role or direct grant can
+    add it, and a superuser always has it. Anyone else gets 403.
 
     Returns:
         ToggleResponse: Updated feature flag details with audit log ID

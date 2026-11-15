@@ -3,9 +3,11 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"regexp"
 	"strings"
 	"sync"
@@ -17,6 +19,11 @@ import (
 type fakeAPI struct {
 	mu   sync.Mutex
 	seen []seenRequest
+	// assignUser, when set, is the user_id every /assign answer names.
+	assignUser string
+	// noAssigned leaves "assigned" out of the /assign answer, as a server
+	// from before the field does.
+	noAssigned bool
 }
 
 type seenRequest struct {
@@ -39,6 +46,14 @@ func (f *fakeAPI) RoundTrip(req *http.Request) (*http.Response, error) {
 		answer = map[string]interface{}{
 			"experiment_key": body["experiment_key"], "user_id": body["user_id"], "variant_id": "v-1",
 			"variant_name": "control", "is_control": true, "configuration": nil,
+			"assigned": true, "reason": "assigned",
+		}
+		if f.assignUser != "" {
+			answer["user_id"] = f.assignUser
+		}
+		if f.noAssigned {
+			delete(answer, "assigned")
+			delete(answer, "reason")
 		}
 	case strings.HasPrefix(req.URL.Path, "/api/v1/feature-flags/evaluate/"):
 		answer = map[string]interface{}{"key": strings.TrimPrefix(req.URL.Path, "/api/v1/feature-flags/evaluate/"), "enabled": true, "config": nil}
@@ -57,10 +72,15 @@ func (f *fakeAPI) RoundTrip(req *http.Request) (*http.Response, error) {
 // default transport, and returns what it printed and what it sent.
 func run(t *testing.T, env map[string]string) (string, []seenRequest) {
 	t.Helper()
+	return runWith(t, env, &fakeAPI{})
+}
+
+// runWith is run with the fake API given.
+func runWith(t *testing.T, env map[string]string, api *fakeAPI) (string, []seenRequest) {
+	t.Helper()
 	for _, name := range []string{"CONTROLVAR_API_URL", "CONTROLVAR_API_KEY", "EXPERIMENTLY_API_URL", "EXPERIMENTLY_API_KEY", "CONTRACT_EXPERIMENT_KEY", "CONTRACT_FLAG_KEY", "CONTRACT_USER_ID"} {
 		t.Setenv(name, env[name])
 	}
-	api := &fakeAPI{}
 	saved := http.DefaultTransport
 	http.DefaultTransport = api
 	t.Cleanup(func() { http.DefaultTransport = saved })
@@ -125,6 +145,10 @@ func TestContractSmoke_AssignsThreeTimesEvaluatesTracksAndBatches(t *testing.T) 
 		"POST /api/v1/tracking/track",
 		"POST /api/v1/tracking/batch",
 		"POST /api/v1/tracking/batch",
+		// A new client with WithOnExposure, twice (the second from its cache),
+		// then a client whose function panics.
+		"POST /api/v1/tracking/assign",
+		"POST /api/v1/tracking/assign",
 	}
 	if strings.Join(calls, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("requests:\n%s\nwant:\n%s", strings.Join(calls, "\n"), strings.Join(want, "\n"))
@@ -141,6 +165,45 @@ func TestContractSmoke_AssignsThreeTimesEvaluatesTracksAndBatches(t *testing.T) 
 	}
 	if report["sdk"] != "go" || report["assign"].(map[string]interface{})["sticky"] != true {
 		t.Errorf("report %v", report)
+	}
+	exposure, _ := json.Marshal(report["exposure"])
+	wantExposure := `{"calls":1,"payload":{"experiment_key":"exp_a","user_id":"user-a","variant_id":"v-1","variant_name":"control"}}`
+	if string(exposure) != wantExposure {
+		t.Errorf("exposure %s, want %s", exposure, wantExposure)
+	}
+}
+
+// Against a server that does not send "assigned", the function is not
+// called, and the smoke says so (calls 0, no payload) for the runner to
+// refuse, instead of failing on its own.
+func TestContractSmoke_ReportsNoCallWithoutAssigned(t *testing.T) {
+	printed, _ := runWith(t, map[string]string{"CONTROLVAR_API_KEY": "k", "CONTRACT_USER_ID": "user-a"}, &fakeAPI{noAssigned: true})
+	var report map[string]interface{}
+	if err := json.Unmarshal([]byte(printed), &report); err != nil {
+		t.Fatalf("printed %q: %v", printed, err)
+	}
+	exposure, _ := json.Marshal(report["exposure"])
+	if string(exposure) != `{"calls":0,"payload":null}` {
+		t.Errorf("exposure %s", exposure)
+	}
+}
+
+// The runner does not know the smoke's user, so the smoke checks the user ID
+// the function received, and exits 1 naming it when it is not the smoke's.
+func TestContractSmoke_ExitsWhenTheFunctionGetsAnotherUser(t *testing.T) {
+	if os.Getenv("CONTRACT_SMOKE_CHILD") == "1" {
+		runWith(t, map[string]string{"CONTROLVAR_API_KEY": "k", "CONTRACT_USER_ID": "user-a"}, &fakeAPI{assignUser: "someone-else"})
+		return // main returned: the parent sees exit 0 and fails
+	}
+	cmd := exec.Command(os.Args[0], "-test.run=^TestContractSmoke_ExitsWhenTheFunctionGetsAnotherUser$")
+	cmd.Env = append(os.Environ(), "CONTRACT_SMOKE_CHILD=1")
+	out, err := cmd.CombinedOutput()
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) || exit.ExitCode() != 1 {
+		t.Fatalf("the smoke exited with %v, want exit status 1; output:\n%s", err, out)
+	}
+	if want := `contract_smoke: onExposure received user "someone-else", expected "user-a"`; !strings.Contains(string(out), want) {
+		t.Fatalf("output does not say %q:\n%s", want, out)
 	}
 }
 

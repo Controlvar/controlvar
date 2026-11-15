@@ -83,6 +83,19 @@ class Synth:
                     )
         return False
 
+    def cache_nodes(self, group: str) -> object:
+        """The NumCacheClusters of the synth's replication group of that id; None when
+        the synth makes no such group."""
+        for t in self.templates.values():
+            for r in t.get("Resources", {}).values():
+                props = r.get("Properties", {})
+                if (
+                    r["Type"] == "AWS::ElastiCache::ReplicationGroup"
+                    and props.get("ReplicationGroupId") == group
+                ):
+                    return props.get("NumCacheClusters")
+        return None
+
     def containers(self, family: str) -> set[str]:
         return {
             c["Name"]
@@ -142,6 +155,7 @@ WHERE = {
     "NAMES_ALARM_TOPIC": ("AWS::SNS::Topic", "TopicName"),
     "NAMES_DB_SECRET": ("AWS::SecretsManager::Secret", "Name"),
     "NAMES_CONTAINER_INSIGHTS_LOG_GROUP": "insights",
+    "NAMES_REDIS_GROUP": "cache",
     "NAMES_BACKEND_CONTAINER": "containers",
     "NAMES_JWT_SECRET": "text",
     "NAMES_PASSWORD_SECRET": "text",
@@ -197,6 +211,16 @@ def missing(defined: dict[str, list[str]], synth: Synth) -> list[str]:
                 ok = value == (
                     f"/aws/ecs/containerinsights/{defined['NAMES_CLUSTER'][0]}/performance"
                 ) and synth.container_insights(defined["NAMES_CLUSTER"][0])
+            elif where == "cache":
+                # The group's id, and its one node: uninstall keeps only the automatic
+                # backups of <group>-001 (lib/sweep.sh), so a second node's would be
+                # left unexplained.
+                nodes = synth.cache_nodes(value)
+                ok = nodes is not None
+                if ok and nodes != 1:
+                    problems.append(
+                        f"{name}: the synth's group {value!r} has NumCacheClusters {nodes!r}, not 1"
+                    )
             else:
                 ok = value in synth.values(*where)
             if not ok:
@@ -273,6 +297,32 @@ def test_a_renamed_family_is_named(synth):
         "NAMES_MIGRATE_FAMILY: the synth makes no 'experimentation-migrate-staging'"
         in problems
     ), problems
+
+
+@pytest.mark.parametrize("plant", ["renamed", "two-nodes"])
+def test_a_cache_group_that_moves_from_the_name_is_named(synth, plant):
+    """The check's own failure, on a test synth whose cache group is renamed, or has a
+    second node (whose backups uninstall would not keep)."""
+    group = names()["NAMES_REDIS_GROUP"][0]
+    assert synth.cache_nodes(group) == 1, synth.cache_nodes(group)
+    planted = Synth("\n".join(synth.printed), synth.assembly)
+    planted.templates = json.loads(json.dumps(synth.templates))
+    for template in planted.templates.values():
+        for resource in template.get("Resources", {}).values():
+            if resource["Type"] == "AWS::ElastiCache::ReplicationGroup":
+                if plant == "renamed":
+                    resource["Properties"]["ReplicationGroupId"] = (
+                        "experimentation-cache-staging-redis"
+                    )
+                else:
+                    resource["Properties"]["NumCacheClusters"] = 2
+    planted.text = json.dumps(planted.templates)
+    problems = missing(names(), planted)
+    said = {
+        "renamed": f"NAMES_REDIS_GROUP: the synth makes no {group!r}",
+        "two-nodes": f"NAMES_REDIS_GROUP: the synth's group {group!r} has NumCacheClusters 2, not 1",
+    }[plant]
+    assert problems == [said], problems
 
 
 # --- A6: the target check on the real assembly ----------------------------------------------

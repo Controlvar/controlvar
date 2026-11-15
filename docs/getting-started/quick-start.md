@@ -60,6 +60,18 @@ curl -s -o /dev/null -w '%{http_code}\n' localhost:8000/api/v1/experiments/
 
 The first prints `"healthy"`. The second prints `401`, because the API requires a login.
 
+Some features stay off until they have a key: `WAREHOUSE_CREDENTIALS_KEYS` turns on
+warehouse analysis (the `full` profile), and `OPENAI_API_KEY` and `GEMINI_API_KEY` turn
+on the OpenAI and Gemini variants in LLM experiments. `ANTHROPIC_API_KEY` turns on
+Anthropic variants in LLM experiments and also Claude calls in `POST /api/v1/ai/design`
+and `POST /api/v1/ai/interpret/{experiment_id}` (limited to 10 requests a minute);
+without it those two routes answer from built-in templates.
+A key set to an empty value is the same as a key that is not set, and both compose files
+pass these keys empty by default. Put each key in the `.env` file next to the compose
+file: a key exported in another terminal does not reach the container, and one exported
+in the terminal that runs `docker compose up` does. If your shell exports
+`ANTHROPIC_API_KEY`, `docker compose up` passes it to the API.
+
 ---
 
 ## Step 2: Log in
@@ -140,7 +152,8 @@ curl -s -X POST localhost:8000/api/v1/tracking/assign \
 <!-- expect: "assigned": true -->
 
 The response carries `variant_name`, `variant_id`, `is_control`, `configuration`, and
-`assigned` with a `reason` (`assigned`, `holdout`, `mutual_exclusion` or `targeting`).
+`assigned` with a `reason` (`assigned`, `holdout`, `mutual_exclusion` or `targeting`, or the
+status of an experiment that is not ACTIVE).
 Assignments are sticky: the same `user_id` always gets the same variant.
 
 ```{.bash exec}
@@ -191,7 +204,7 @@ The second command turns it on for 10% of users and prints `"active"`. The third
 evaluates it for `user-2` and prints `"enabled": true` with `"reason": "rollout"`:
 `user-2` is inside the 10%, `user-123` is not, and a user always gets the same answer.
 
-Evaluation returns `{key, enabled, config, reason}`. An inactive flag evaluates to
+Evaluation returns `{key, enabled, value, value_type, config, reason}`. An inactive flag evaluates to
 `enabled: false` with reason `inactive`; only an unknown key is a 404.
 
 ---
@@ -237,6 +250,9 @@ without the seeds and the apps answer 401, run the same command once: it applies
 missing seeds to the existing database, with no `down -v`. The
 [demo guide](https://github.com/Controlvar/controlvar/blob/main/demo/DEMO_GUIDE.md)
 walks through what to look at, and how to run the apps outside Docker.
+
+[Guided examples](../guides/guided-examples.md) takes you through the apps one step at a
+time, with what you will see at each step, on the stack `./demo/setup-local.sh` starts.
 
 ---
 

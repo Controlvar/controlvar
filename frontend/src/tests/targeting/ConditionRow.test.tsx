@@ -2,6 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ConditionRow } from '@/components/targeting/ConditionRow';
 import { TargetingCondition } from '@/types/targeting';
+import { FLAG_OPERATOR_OPTIONS, OperatorOptions } from '@/utils/targeting';
 
 const defaultCondition: TargetingCondition = {
   id: 'cond-1',
@@ -226,6 +227,63 @@ describe('ConditionRow', () => {
     // A datalist element should be present for autocomplete
     const datalist = document.querySelector('datalist');
     expect(datalist).toBeInTheDocument();
+  });
+
+  describe('picking an attribute whose suggested type is a version (#1775)', () => {
+    const pick = (condition: TargetingCondition, attribute: string, operatorOptions?: OperatorOptions) => {
+      const onChange = jest.fn();
+      const { unmount } = render(
+        <ConditionRow condition={condition} onChange={onChange} onRemove={jest.fn()} operatorOptions={operatorOptions} />,
+      );
+      fireEvent.change(screen.getByTestId('condition-attribute'), { target: { value: attribute } });
+      unmount();
+      return onChange.mock.calls[0][0] as TargetingCondition;
+    };
+    const versionCondition: TargetingCondition = { id: 'cond-v', attribute: 'app_version', operator: 'semver_eq', value: '2.3.0' };
+
+    it.each([
+      ['experiment', undefined],
+      ['flag', FLAG_OPERATOR_OPTIONS],
+    ])('picking App Version on a new condition selects version equals, as app.version did (%s page)', (_page, options) => {
+      expect(pick(emptyCondition, 'app_version', options).operator).toBe('semver_eq');
+      expect(pick(emptyCondition, 'app.version', options).operator).toBe('semver_eq');
+    });
+
+    it('keeps a version operator already chosen', () => {
+      const chosen: TargetingCondition = { ...versionCondition, attribute: 'app.version', operator: 'semver_gte' };
+      expect(pick(chosen, 'app_version').operator).toBe('semver_gte');
+    });
+
+    it('picking a text attribute after it behaves as before: the first text operator, or a version operator the page offers there', () => {
+      expect(pick(versionCondition, 'user.country')).toEqual({ ...versionCondition, attribute: 'user.country', operator: 'equals' });
+      expect(pick(versionCondition, 'device_type').operator).toBe('equals');
+      expect(pick(versionCondition, 'os_version', FLAG_OPERATOR_OPTIONS).operator).toBe('semver_eq');
+    });
+
+    it('keeps the operator for attributes that are not versions', () => {
+      expect(pick(emptyCondition, 'device_type').operator).toBe('equals');
+      expect(pick(emptyCondition, 'account_age_days').operator).toBe('equals');
+      expect(pick({ ...emptyCondition, operator: 'contains' }, 'account_age_days').operator).toBe('contains');
+      expect(pick(emptyCondition, 'os_version', FLAG_OPERATOR_OPTIONS).operator).toBe('equals');
+    });
+  });
+
+  it('suggests the names the docs tell an app to send, not the former ones (#1775)', () => {
+    render(<ConditionRow condition={emptyCondition} onChange={jest.fn()} onRemove={jest.fn()} />);
+    const offered = Array.from(document.querySelectorAll('datalist option')).map((o) => o.getAttribute('value'));
+    expect(offered).toEqual([
+      'user.country',
+      'user.plan',
+      'account_age_days',
+      'user.email',
+      'device_type',
+      'app_version',
+      'user.tags',
+      'segment',
+    ]);
+    for (const former of ['device.type', 'app.version', 'user.age', 'session.new_user']) {
+      expect(offered).not.toContain(former);
+    }
   });
 
   it('disables all inputs when readOnly is true', () => {

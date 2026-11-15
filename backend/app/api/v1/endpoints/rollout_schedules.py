@@ -9,9 +9,13 @@ from typing import Any, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi.exceptions import RequestValidationError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.query_params import MAX_OFFSET, describe_as_int64
 from backend.app.core.logging import get_logger
 from backend.app.core.permissions import Action, can_act_on_feature_flag
 from backend.app.models.audit_log import ActionType, EntityType
@@ -23,6 +27,7 @@ from backend.app.models.rollout_schedule import (
 )
 from backend.app.models.user import User
 from backend.app.schemas.rollout_schedule import (
+    END_DATE_AFTER_START,
     RolloutScheduleCreate,
     RolloutScheduleListResponse,
     RolloutScheduleResponse,
@@ -36,11 +41,42 @@ from backend.app.services.audit_service import (
     audit_changes,
     audit_snapshot,
 )
-from backend.app.services.rollout_service import RolloutService
+from backend.app.services.rollout_service import RolloutRuleConflict, RolloutService
 
 logger = get_logger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
+
+#: The database's rule that a schedule's end is after its start (#962).
+SCHEDULE_DATES_CONSTRAINT = "check_rollout_schedule_dates"
+
+
+def _violated_constraint(error: IntegrityError) -> Optional[str]:
+    """The name of the constraint the database refused the write on, or None.
+
+    psycopg2 reports it as ``diag.constraint_name``; a NOT NULL violation, for
+    one, names none. Matched by name only, never by the message's text.
+    """
+    diag = getattr(error.orig, "diag", None)
+    return getattr(diag, "constraint_name", None)
+
+
+def _schedule_dates_refused() -> RequestValidationError:
+    """The 422 for a schedule whose end would not be after its start.
+
+    The same ``type``, ``loc`` and ``msg`` as the request model's own refusal,
+    for the case only the database can judge: a PUT that sends one date,
+    compared with the stored other one. Nothing in it comes from the request.
+    """
+    return RequestValidationError(
+        [
+            {
+                "type": "value_error",
+                "loc": ("body",),
+                "msg": f"Value error, {END_DATE_AFTER_START}",
+            }
+        ]
+    )
 
 
 def _require_update_on_flag(
@@ -140,8 +176,22 @@ def create_rollout_schedule(
         )
         _record_rollout(db, current_user, flag.id, before, "created")
         return schedule
+    except RolloutRuleConflict as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except IntegrityError as e:
+        if _violated_constraint(e) == SCHEDULE_DATES_CONSTRAINT:
+            db.rollback()
+            raise _schedule_dates_refused() from None
+        # Every other constraint keeps the answer and the log line of the
+        # ``except Exception`` below. Not a bare ``raise``: an exception
+        # leaving this handler does not reach that one.
+        logger.error(f"Error creating rollout schedule: {e!s}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while creating the rollout schedule",
+        )
     except Exception as e:
         logger.error(f"Error creating rollout schedule: {e!s}")
         raise HTTPException(
@@ -161,10 +211,19 @@ def get_rollout_schedules(
     feature_flag_id: Optional[UUID] = Query(
         None, description="Filter by feature flag ID"
     ),
-    status: Optional[RolloutScheduleStatus] = Query(
-        None, description="Filter by status"
+    # `status` in the URL only: a Python parameter called `status` hid the
+    # `fastapi.status` module in this body, so the `except` below raised
+    # AttributeError instead of its 500.
+    status_filter: Optional[RolloutScheduleStatus] = Query(
+        None, alias="status", description="Filter by status"
     ),
-    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    skip: int = Query(
+        0,
+        ge=0,
+        le=MAX_OFFSET,
+        description="Number of records to skip",
+        json_schema_extra=describe_as_int64,
+    ),
     limit: int = Query(
         100, ge=1, le=1000, description="Maximum number of records to return"
     ),
@@ -181,7 +240,7 @@ def get_rollout_schedules(
             db=db,
             feature_flag_id=feature_flag_id,
             owner_id=None,  # Don't filter by owner - allow viewing all schedules
-            status=status,
+            status=status_filter,
             skip=skip,
             limit=limit,
         )
@@ -238,8 +297,10 @@ def update_rollout_schedule(
     """
     Update an existing rollout schedule.
 
-    This endpoint allows updating the properties of a rollout schedule,
-    including its stages and status transitions.
+    This endpoint updates the properties of a rollout schedule. It does not
+    take `stages`: a request that contains it answers 422. Add a stage with
+    `POST /api/v1/rollout-schedules/{schedule_id}/stages` and change one with
+    `PUT /api/v1/rollout-schedules/stages/{stage_id}`.
     """
     flag = _require_update_on_flag(db, current_user, schedule_id=schedule_id)
     before = audit_snapshot(EntityType.FEATURE_FLAG, flag)
@@ -256,8 +317,24 @@ def update_rollout_schedule(
         _record_rollout(db, current_user, flag.id, before, "updated")
 
         return schedule
+    except RolloutRuleConflict as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except HTTPException:
+        raise  # this route's own 404: not an unexpected failure
+    except IntegrityError as e:
+        if _violated_constraint(e) == SCHEDULE_DATES_CONSTRAINT:
+            db.rollback()
+            raise _schedule_dates_refused() from None
+        # Every other constraint keeps the answer and the log line of the
+        # ``except Exception`` below. Not a bare ``raise``: an exception
+        # leaving this handler does not reach that one.
+        logger.error(f"Error updating rollout schedule: {e!s}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while updating the rollout schedule",
+        )
     except Exception as e:
         logger.error(f"Error updating rollout schedule: {e!s}")
         raise HTTPException(
@@ -337,8 +414,12 @@ def activate_rollout_schedule(
         _record_rollout(db, current_user, flag.id, before, "activated")
 
         return schedule
+    except RolloutRuleConflict as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except HTTPException:
+        raise  # this route's own 404: not an unexpected failure
     except Exception as e:
         logger.error(f"Error activating rollout schedule: {e!s}")
         raise HTTPException(
@@ -463,8 +544,12 @@ def add_rollout_stage(
         _record_rollout(db, current_user, flag.id, before, "stage added")
 
         return stage
+    except RolloutRuleConflict as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except HTTPException:
+        raise  # this route's own 404: not an unexpected failure
     except Exception as e:
         logger.error(f"Error adding rollout stage: {e!s}")
         raise HTTPException(
@@ -504,8 +589,12 @@ def update_rollout_stage(
         _record_rollout(db, current_user, flag.id, before, "stage updated")
 
         return stage
+    except RolloutRuleConflict as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except HTTPException:
+        raise  # this route's own 404: not an unexpected failure
     except Exception as e:
         logger.error(f"Error updating rollout stage: {e!s}")
         raise HTTPException(
@@ -583,8 +672,12 @@ def manually_advance_stage(
         _record_rollout(db, current_user, flag.id, before, "stage advanced")
 
         return stage
+    except RolloutRuleConflict as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except HTTPException:
+        raise  # this route's own 404: not an unexpected failure
     except Exception as e:
         logger.error(f"Error advancing rollout stage: {e!s}")
         raise HTTPException(

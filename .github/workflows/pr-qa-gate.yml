@@ -147,9 +147,11 @@ jobs:
       # only bash and jq, and they live outside backend/tests/unit so that
       # core-build, which runs that directory, does not take their minutes.
       # On this full checkout nothing under any of these directories skips.
-      # The SMTP certificate tests must also run.
+      # The SMTP certificate tests must also run, and so must the ground-truth
+      # library's gates (backend/tests/unit/ground_truth, #1544): a skipped
+      # cross-check would pass the library's answers unchecked.
       - name: No required test was skipped
-        run: python3 scripts/check_junit_skips.py unit-junit.xml backend/tests/unit/infrastructure backend/tests/unit/stats_validation backend/tests/realistic backend/tests/unit/showcase backend/tests/unit/docs backend/tests/installer_sweeps backend/tests/unit/services/test_email_notifier_tls
+        run: python3 scripts/check_junit_skips.py unit-junit.xml backend/tests/unit/infrastructure backend/tests/unit/stats_validation backend/tests/realistic backend/tests/unit/showcase backend/tests/unit/docs backend/tests/installer_sweeps backend/tests/unit/services/test_email_notifier_tls backend/tests/unit/ground_truth
 
       # The Lambda functions (event processor, flag evaluation) and their
       # shared package carry tests of their own (240 collected) that ran
@@ -222,8 +224,13 @@ jobs:
       # The warehouse tests must all RUN: a skip there (a missing duckdb or
       # sqlglot turned into a skip, say) would leave the SQL semantics, the
       # identifier gate, the runner and the routes unchecked under a green job.
-      - name: No warehouse test was skipped
-        run: python3 scripts/check_junit_skips.py module-junit.xml modules/backend/tests/unit/warehouse modules/backend/tests/integration/warehouse
+      # So must the split URL routing tests (#393): the exact per-visitor
+      # counts and the reference integration's contract are there, and the
+      # CloudFront router's harness and its edge app's synth. And so must the
+      # tests that custom roles and direct grants take effect (#891): each
+      # pair through real sign-in, revocation, server keys, no escalation.
+      - name: No warehouse, split URL or RBAC enforcement test was skipped
+        run: python3 scripts/check_junit_skips.py module-junit.xml modules/backend/tests/unit/warehouse modules/backend/tests/integration/warehouse modules/backend/tests/integration/split_url modules/backend/tests/unit/split_url_router modules/backend/tests/integration/rbac
 
   base-requirements-only:
     needs: changes
@@ -436,6 +443,30 @@ jobs:
           rm -rf .next out
           npm run build:marketing
           node scripts/check-site-media.mjs out
+          node --test scripts/site-head.test.mjs scripts/site-pages.test.mjs
+
+      # The export above in a real browser (#1459): phone width, axe and Tab
+      # focus on its four pages (tests/e2e/marketing-site.site.spec.ts).
+      - name: Cache the Playwright browser
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+
+      - name: Install chromium only
+        run: cd frontend && npx playwright install --with-deps chromium
+
+      - name: The public site in a browser (phone width, axe, Tab focus)
+        run: cd frontend && npx playwright test --project=site
+
+      # #1545, V112: the `launch` project runs Chromium with
+      # tests/e2e/launch.ts's override, which keeps third-party storage
+      # partitioning and paint holding on (Playwright's default launch turns
+      # both off). Its fixture fails when the running browser's command line
+      # disables either; its canary pair frames the export above from port
+      # 4100 under the same site and under another. No other step runs it.
+      - name: "Browser launch: storage partitioning and paint holding on"
+        run: cd frontend && npx playwright test --project=launch
 
   # Each SDK's OWN exported hash function against golden-vectors.json: the
   # Python SDK's source, the JS and edge packages as built, the React Native
@@ -481,7 +512,9 @@ jobs:
         run: python tests/sdk-contract/hash_contract.py --list
 
       # pyproject.toml adds --cov flags; only pytest is installed here, so clear addopts.
-      - name: The comparison rejects a wrong answer (hash_contract.py self-tests)
+      # Also the published local evaluators (test_published_ruleset.py, #1497):
+      # downloaded from npm and PyPI, run under node and python; no skip.
+      - name: The comparison rejects a wrong answer; the published evaluators accept the ruleset
         run: python -m pytest tests/sdk-contract -v -o addopts=""
 
       - name: Python SDK hash (sdk/python)
@@ -512,8 +545,8 @@ jobs:
   #
   # The pytest sessions are core-only, and deliberately: `--profile full`
   # leaves the tree exactly as the checkout is, so its unit / integration /
-  # smoke / module / Lambda / golden-vector sessions would re-run, in a
-  # 60-minute job, what unit-tests, integration-tests.yml, smoke-tests,
+  # smoke / module / Lambda / golden-vector sessions would re-run, in an
+  # hour-long job, what unit-tests, integration-tests.yml, smoke-tests,
   # module-tests and sdk-contracts already ran on that same tree in minutes.
   # `--profile core` runs them because there they run against a DIFFERENT
   # tree -- one with modules/ deleted -- which nothing else exercises.
@@ -532,11 +565,21 @@ jobs:
   # the reason and, in core-build only, the tests that pin docs/ content --
   # which is why a docs-only pull request still starts both jobs and their
   # Postgres service.
+  #
+  # Both jobs have 120 minutes. On 2026-11-03 core-build's passing runs took
+  # up to about 75.5 minutes (median 63, p95 75 on the day) and four runs were
+  # cancelled at the old 75-minute limit, one 3 s after its script printed OK.
+  # The time grows with the test count (about 1.8 minutes a day over the ten
+  # days to 11-03) and GitHub's runners vary up to 1.6x in speed for the same
+  # commit, so 120 is headroom for a few weeks, not room for more tests.
+  # full-build takes a few minutes and has the same limit only because the
+  # two jobs are kept alike. Running the slowest sessions in parallel shards
+  # (#869) is the fix for the time itself.
   core-build:
     needs: changes
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     services:
       postgres:
         image: postgres:16
@@ -626,6 +669,8 @@ jobs:
           backend/tests/unit/db/test_alembic_plan.py
           modules/backend/tests/unit/services/test_sso_docs_messages.py
           backend/tests/unit/showcase/test_showcase_quoted_docs.py
+          backend/tests/unit/ground_truth/test_contract_citations.py
+          backend/tests/unit/showcase/test_site_walkthroughs.py
 
       # On a docs-only change this is where the docs tests run, Unit Tests
       # being skipped, so a docs test that skipped would read as a pass on
@@ -706,7 +751,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     services:
       postgres:
         image: postgres:16
@@ -1394,6 +1439,13 @@ jobs:
           grep -qF "cannot start: 1 setting needs attention." url.log
           refuse_text "user:pw@" url.log
 
+          # A FORWARDED_ALLOW_IPS entry that matches no proxy (an address
+          # written with a mask): one line, naming the entry and both fixes.
+          expect_refusal experimently-api:full fwd.log "${good[@]}" \
+            -e FORWARDED_ALLOW_IPS=172.18.0.3/16
+          grep -qxF "  - FORWARDED_ALLOW_IPS entry 1 ('172.18.0.3/16') is an address with a mask, which matches no proxy. Write the network, 172.18.0.0/16, or the address alone, 172.18.0.3." fwd.log
+          grep -qF "cannot start: 1 setting needs attention." fwd.log
+
           # No environment named at all: one line.
           expect_refusal experimently-api:full noenv.log
           grep -qxF "[preflight] ENVIRONMENT is not set. This image requires it: set ENVIRONMENT=production (or staging; development only for a local trial)." noenv.log
@@ -1416,7 +1468,7 @@ jobs:
           # definitions set instead of ENVIRONMENT.
           docker run --rm -e APP_ENV=dev -e WAIT_FOR_DB=false -e RUN_MIGRATIONS=false \
             experimently-api:core true
-          rm -f full.log core.log url.log noenv.log testenv.log testing.log
+          rm -f full.log core.log url.log fwd.log noenv.log testenv.log testing.log
           echo "start-up check: every refusal fired, and a good set starts"
 
       # The entrypoint's OpenSSL fallback (#1265) reaches a process started
@@ -1484,6 +1536,24 @@ jobs:
           grep -qF "created the first administrator admin@demo.com (role ADMIN)" api-first.log \
             || { cat api-first.log; echo "::error::no first-administrator line"; exit 1; }
 
+      # The API's start line says which proxies it believes: loopback and the
+      # network this container is attached to, read from /proc
+      # (backend/app/core/proxy_trust.py). The whole line, so the WARNING form
+      # (/proc could not be read) or an empty network list fails here.
+      - name: The API names the proxies it believes
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.yml logs --no-color --no-log-prefix api >api-start.log
+          if ! grep -qE "^\[entrypoint\] trusted proxies: 127\.0\.0\.1 ::1; this container's networks: [0-9a-f.:/]+( [0-9a-f.:/]+)*; FORWARDED_ALLOW_IPS: \(none\)$" api-start.log; then
+            grep -F 'trusted proxies' api-start.log || true
+            echo "::error::the API's start line does not name the network its container is attached to"
+            exit 1
+          fi
+          if grep -qF "[entrypoint] WARNING" api-start.log; then
+            echo "::error::the API could not read its networks from /proc"
+            exit 1
+          fi
+
       - name: API readiness and auth gate
         run: |
           curl -sf localhost:8000/health/ready -o ready.json
@@ -1548,7 +1618,9 @@ jobs:
       # back 200 with the stub's text. The placeholder keys are set on the
       # re-created api container by the override file only; no job in this
       # repository sets a real LLM key, so nothing here can reach a provider.
-      # The ALB step below re-creates the api again without them. smoke.sh
+      # The ALB step below re-creates the api again with the keys empty
+      # (docker-compose.yml passes them as ${NAME:-}, and an empty key is the
+      # same as none) and without the base URLs. smoke.sh
       # refuses to run without CI=true, which Actions sets for every step and
       # nothing in this job overrides, so a local run cannot repoint a
       # developer's stack by accident.

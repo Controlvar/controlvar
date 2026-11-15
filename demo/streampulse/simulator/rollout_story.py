@@ -10,9 +10,13 @@ backend as ``setup-local.sh`` starts it.  ``--token`` uses a bearer token you al
   1  Internal + 5%      show the flag at 5% with the ``employee equals true`` rule
   2  25%                advance the rollout schedule to stage 2 → flag at 25%
   3  Incident           run traffic.py --incident android12 for 90 s, then the safety check;
-                        while the check is still healthy, run it again (at most 5 rounds)
-  4  Rollback           wait for the safety scheduler to roll back to 5% (or roll back by hand
-                        when automatic rollbacks are off); the rollback pauses the schedule
+                        while the check is still healthy, run it again (at most 5 rounds); with
+                        automatic rollbacks on, the incident goes on until the flag is rolled
+                        back (still at most 5 rounds in all)
+  4  Rollback           wait for the safety monitor to roll back to 5%, printing the error rate
+                        and each of its passes; roll back by hand only after two of its passes ran
+                        without a rollback, or when none runs for 6 minutes (and at once when
+                        automatic rollbacks are off); the rollback pauses the schedule
   5  Fix shipped        add ``app_version semver_gte 3.2.1 → 100%`` next to the employee rule
   6  50%                resume the paused schedule and advance to stage 3 (after the
                         15-minute error window has cleared)
@@ -37,6 +41,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, TextIO
 
@@ -56,8 +61,17 @@ INCIDENT_RATE = 6
 INCIDENT_DURATION_S = 90
 # The steady traffic setup-local.sh runs beside the story dilutes the crashes, so one round
 # may leave the flag healthy: step 3 runs the incident again, up to this many rounds in all.
+# Once the incident stops the same traffic dilutes the error rate, which can fall back under
+# 5% between two passes of the safety monitor, so with automatic rollbacks on the rounds go
+# on until the flag is rolled back, within the same number of rounds.
 INCIDENT_ROUNDS = 5
-ROLLBACK_WAIT_S = 6 * 60  # the safety scheduler runs every SAFETY_CHECK_INTERVAL_MINUTES (1 in the demo)
+# Step 4 rolls back by hand only after this many passes of the safety monitor have run
+# without a rollback: passes that started after the newest one the server had recorded when
+# the step began, read from its run history and compared on the server's clock.
+MONITOR_PASSES = 2
+# ... or when no pass of the monitor completes for this long (it is not running). It runs
+# every SAFETY_CHECK_INTERVAL_MINUTES (1 in the demo).
+ROLLBACK_WAIT_S = 6 * 60
 POLL_INTERVAL_S = 10
 SAFETY_WINDOW_MIN = 15  # error_rate is computed over the last 15 minutes of evaluations
 HEALTHY_WAIT_S = (SAFETY_WINDOW_MIN + 1) * 60
@@ -201,6 +215,11 @@ class StoryClient:
     def rollback(self, flag_id: str, percentage: int, reason: str) -> dict[str, Any]:
         return self.request("POST", f"/safety/feature-flags/{flag_id}/rollback", params={"percentage": percentage, "reason": reason}) or {}
 
+    def safety_passes(self, limit: int = 20) -> list[dict[str, Any]]:
+        """The safety monitor's recorded passes, newest first. A pass is recorded when it has
+        finished, after any rollback it made; ``started_at`` is on the server's clock."""
+        return self.request("GET", "/scheduler/safety/history", params={"limit": limit}) or []
+
 
 # --------------------------------------------------------------------------------------
 # Story context + helpers
@@ -224,6 +243,9 @@ class Story:
     rollback_wait: float = ROLLBACK_WAIT_S
     healthy_wait: float = HEALTHY_WAIT_S
     poll_interval: float = POLL_INTERVAL_S
+    monitor_passes: int = MONITOR_PASSES
+    # Who a rollback by hand is made as: the email the story signed in with ("" with --token).
+    actor: str = ""
     _flag_id: str | None = field(default=None, init=False)
 
     # --- output ---
@@ -335,17 +357,77 @@ class Story:
             self.say(f"  Completed stage {order} '{stage.get('name')}' — the schedule is finished")
         return self.client.schedule_for_flag(self.flag_id)
 
-    def wait_for_rollout(self, target: int, timeout: float) -> bool:
-        deadline = self.clock() + timeout
+    # --- the safety monitor's passes, on the server's clock ---
+    def newest_pass(self) -> datetime | None:
+        """When the newest pass the server has recorded started (None when it has none)."""
+        starts = [pass_started(record) for record in self.client.safety_passes()]
+        return max((s for s in starts if s is not None), default=None)
+
+    def passes_since(self, since: datetime | None) -> list[dict[str, Any]]:
+        """The recorded passes that started after *since* (every one when None), oldest first."""
+        found = []
+        for record in self.client.safety_passes():
+            started = pass_started(record)
+            if started is not None and (since is None or started > since):
+                found.append((started, record))
+        return [record for _, record in sorted(found, key=lambda pair: pair[0])]
+
+    def who(self) -> str:
+        return self.actor or "the user of --token"
+
+    def wait_for_the_monitor(self, target: int) -> bool:
+        """Wait for the safety monitor to roll the flag back to *target*; False when the story
+        should roll back by hand.
+
+        The bound is counted in the monitor's passes, not in seconds: a pass counts when it
+        started after the newest pass the server had recorded when this step began, both on the
+        server's clock. The story rolls back by hand once ``monitor_passes`` such passes have run
+        and the flag is still above its target, or when no new pass completes for
+        ``rollback_wait`` seconds (the monitor is not running).
+        """
+        since = self.newest_pass()
+        self.say(f"  Automatic rollbacks are ON: waiting for the safety monitor to roll the flag back to {target}%.")
+        self.say(
+            "  Its passes come from the server's run history; the newest before this step started at "
+            f"{since.isoformat() if since else '(none recorded)'} (server clock). The story rolls back by hand only after "
+            f"{self.monitor_passes} newer passes ran without a rollback, or if no pass runs for {int(self.rollback_wait)}s."
+        )
+        printed: set[tuple[Any, Any]] = set()
+        deadline = self.clock() + self.rollback_wait
         while True:
-            flag = self.flag()
-            pct = int(flag.get("rollout_percentage") or 0)
+            # The history first, then the flag: a pass is recorded only once it has finished,
+            # so the flag read after it shows any rollback that pass made.
+            passes = self.passes_since(since)
+            pct = int(self.flag().get("rollout_percentage") or 0)
             if pct == target:
+                self.say(f"  The safety monitor rolled the flag back to {target}%.")
                 return True
+            for record in passes:
+                key = (record.get("id"), record.get("started_at"))
+                if key not in printed:
+                    printed.add(key)
+                    deadline = self.clock() + self.rollback_wait
+                    self.say(f"    monitor pass {len(printed)}: started {record.get('started_at')}, {record.get('status')}")
+            rate = error_rate(self.client.safety_check(self.flag_id))
+            if len(passes) >= self.monitor_passes:
+                self.say(
+                    f"  The safety monitor did not roll back: {len(passes)} of its passes ran since step 4 began and the flag is "
+                    f"still at {pct}% (error rate now {100 * rate:.1f}%). Rolling back by hand as {self.who()}; the audit log "
+                    f"will name {self.who()}, not system:safety-monitor."
+                )
+                return False
             remaining = deadline - self.clock()
             if remaining <= 0:
+                self.say(
+                    f"  No pass of the safety monitor completed for {int(self.rollback_wait)}s (is the backend running with "
+                    f"SAFETY_CHECK_INTERVAL_MINUTES=1?). Rolling back by hand as {self.who()}; the audit log will name "
+                    f"{self.who()}, not system:safety-monitor."
+                )
                 return False
-            self.say(f"    … rollout still {pct}% (waiting up to {int(remaining)}s more)")
+            self.say(
+                f"    … rollout still {pct}%, error rate {100 * rate:.1f}% (critical 5%); {len(passes)} of "
+                f"{self.monitor_passes} monitor passes since step 4 began (by hand if none runs in {int(remaining)}s)"
+            )
             self.sleep(min(self.poll_interval, max(remaining, 0)))
 
     def wait_for_healthy(self, timeout: float) -> bool:
@@ -438,7 +520,15 @@ class Story:
         self.say("  The simulator reports the crashes the way the StreamPulse server would forward them, with its server-side key.")
         if pct < 25:
             self.say("  (note: below 25% the crash share is too small to cross the 5% critical threshold — run step 2 first)")
-        check: dict[str, Any] = {}
+        # With automatic rollbacks on, the incident does not stop because the check went
+        # critical: once it stops, the steady traffic dilutes the error rate, which can fall
+        # back under 5% before the safety monitor's next pass reads it. It goes on until the
+        # flag is at its rollback target, within the same number of rounds.
+        target = int(self.client.safety_config(self.flag_id).get("rollback_percentage") or 0)
+        until_rolled_back = bool(self.client.safety_settings().get("enable_automatic_rollbacks")) and pct > target
+        since = self.newest_pass() if until_rolled_back else None
+        critical = rolled_back = False
+        current = pct
         for round_ in range(1, self.incident_rounds + 1):
             rc = self.run_incident_traffic()
             if rc != 0:
@@ -448,17 +538,42 @@ class Story:
                 )
             self.say("")
             check = self.print_safety()
-            if not check.get("is_healthy"):
+            if not check.get("is_healthy") and not critical:
+                critical = True
+                self.say("  error_rate is above the 5% critical threshold — the flag is now CRITICAL.")
+            if until_rolled_back:
+                # The history first, then the flag (see wait_for_the_monitor).
+                passes = self.passes_since(since)
+                if passes:
+                    since = pass_started(passes[-1])
+                    self.say(
+                        "  The safety monitor's passes since the last reading (started, server clock): "
+                        + ", ".join(f"{p.get('started_at')} {p.get('status')}" for p in passes)
+                    )
+                else:
+                    self.say("  The safety monitor recorded no pass since the last reading.")
+                current = int(self.flag().get("rollout_percentage") or 0)
+                if current == target:
+                    rolled_back = True
+                    self.say(f"  Player v2 is rolled back to {target}%, so the incident stops (step 4 shows the rollback).")
+                    break
+            elif critical:
                 break
             if round_ < self.incident_rounds:
-                self.say(
-                    f"  Still healthy: the steady traffic dilutes the crashes. Running the incident again "
-                    f"(round {round_ + 1} of at most {self.incident_rounds}):"
-                )
-        if check.get("is_healthy"):
+                if critical:
+                    self.say(
+                        f"  The incident continues until the safety monitor rolls Player v2 back "
+                        f"(round {round_ + 1} of at most {self.incident_rounds}):"
+                    )
+                else:
+                    self.say(
+                        f"  Still healthy: the steady traffic dilutes the crashes. Running the incident again "
+                        f"(round {round_ + 1} of at most {self.incident_rounds}):"
+                    )
+        if not critical and not rolled_back:
             self.say(f"  The check is still healthy after {self.incident_rounds} rounds; re-run step 3.")
-        else:
-            self.say("  error_rate is above the 5% critical threshold — the flag is now CRITICAL.")
+        elif until_rolled_back and not rolled_back:
+            self.say(f"  After {self.incident_rounds} rounds Player v2 is still at {current}%: step 4 waits for the safety monitor.")
         self.look_at(
             f"dashboard safety page: {self.dashboard_url}/admin/safety (Player v2 error rate in the red)",
             f"dashboard flag page: {self.flag_page()}",
@@ -483,11 +598,7 @@ class Story:
         settings = self.client.safety_settings()
         rolled = False
         if settings.get("enable_automatic_rollbacks"):
-            self.say(f"  Automatic rollbacks are ON: waiting for the safety scheduler to roll the flag back to {target}% "
-                     f"(it runs every SAFETY_CHECK_INTERVAL_MINUTES; up to {int(self.rollback_wait)}s)…")
-            rolled = self.wait_for_rollout(target, self.rollback_wait)
-            if not rolled:
-                self.say("  The scheduler did not act in time (is the backend running with SAFETY_CHECK_INTERVAL_MINUTES=1?); rolling back by hand.")
+            rolled = self.wait_for_the_monitor(target)
         else:
             self.say("  Automatic rollbacks are OFF in the global safety settings: rolling back by hand.")
         if not rolled:
@@ -606,6 +717,22 @@ def stage_status(stage: dict[str, Any]) -> str:
     return str(stage.get("status", "")).lower()
 
 
+def pass_started(record: Any) -> datetime | None:
+    """A recorded pass's ``started_at`` as an aware datetime (None when it has none)."""
+    raw = record.get("started_at") if isinstance(record, dict) else None
+    if not isinstance(raw, str) or not raw:
+        return None
+    try:
+        started = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return started if started.tzinfo else started.replace(tzinfo=timezone.utc)
+
+
+def error_rate(check: dict[str, Any]) -> float:
+    return next((float(m.get("current_value") or 0) for m in check.get("metrics", []) if m.get("name") == "error_rate"), 0.0)
+
+
 def describe_condition(condition: dict[str, Any]) -> str:
     return f"{condition.get('attribute')} {condition.get('operator')} {json.dumps(condition.get('value'))}"
 
@@ -640,7 +767,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pace", type=float, default=15.0, help="seconds to pause between steps with --auto")
     parser.add_argument("--incident-rate", type=float, default=INCIDENT_RATE, help="sessions per second for the step-3 incident traffic")
     parser.add_argument("--incident-duration", type=float, default=INCIDENT_DURATION_S, help="seconds of incident traffic in step 3")
-    parser.add_argument("--rollback-wait", type=float, default=ROLLBACK_WAIT_S, help="seconds step 4 waits for the safety scheduler before rolling back by hand")
+    parser.add_argument(
+        "--rollback-wait",
+        type=float,
+        default=ROLLBACK_WAIT_S,
+        help=f"step 4 rolls back by hand after {MONITOR_PASSES} passes of the safety monitor without a rollback, "
+        "or after this many seconds without a pass",
+    )
     parser.add_argument("--no-wait", action="store_true", help="step 6: do not wait for the error window to clear")
     return parser
 
@@ -682,6 +815,7 @@ def main(
         incident_duration=args.incident_duration,
         rollback_wait=args.rollback_wait,
         healthy_wait=0.0 if args.no_wait else HEALTHY_WAIT_S,
+        actor="" if args.token else args.email,
     )
     steps = list(range(1, 8)) if args.auto else [args.step]
     try:

@@ -124,3 +124,60 @@ by = [
 [[unit]]
 text = "Dependency Injection says which dependencies are async, and so which ones a test awaits."
 by = ["exempt:navigation"]
+
+[[unit]]
+text = "Replaying traffic through the API"
+by = ["exempt:label"]
+
+[[unit]]
+text = "tests/ground_truth/test_replay.py sends seeded, realistic traffic through the public tracking API to a running Controlvar: four experiments, whose users are assigned in batches and one at a time and send conversions, repeat purchases and revenue."
+by = [
+    "test:backend/tests/unit/ground_truth/test_replay_gates.py::test_the_scenarios_are_section_3_4_s",
+    "test:backend/tests/unit/ground_truth/test_driver.py::test_a_plan_is_sent_and_its_ledger_reads_back",
+]
+
+[[unit]]
+text = "It then checks GET /api/v1/results/{experiment_id} against what the documented event contract and an independent reference compute from the server's own answers."
+by = [
+    "test:backend/tests/unit/ground_truth/test_replay_gates.py::test_a_correct_server_passes_every_gate",
+    "test:backend/tests/unit/ground_truth/test_driver.py::test_the_results_are_read_past_the_cache",
+]
+
+[[unit]]
+text = "The Ground-truth Replay workflow runs it on a pull request that changes code the replay exercises, or one labelled e2e (adding the label starts nothing by itself: it takes effect on the next push or a dispatch); the nightly QA suite runs it with four times the users."
+by = [
+    "test:backend/tests/unit/ground_truth/test_replay_workflow.py::test_adding_the_e2e_label_starts_nothing_by_itself",
+    "test:backend/tests/unit/ground_truth/test_replay_workflow.py::test_g7_every_file_the_api_imports_is_in_the_filter",
+    "test:backend/tests/unit/ground_truth/test_replay_workflow.py::test_the_decide_job_pins_paths_filter_and_reads_the_e2e_label",
+    "test:backend/tests/unit/ground_truth/test_replay_workflow.py::test_the_nightly_job_runs_it_and_a_red_night_files_the_issue",
+    "test:backend/tests/unit/ground_truth/test_replay_gates.py::test_the_scale_is_pr_or_nightly",
+]
+
+[[unit]]
+text = "It is not a required check."
+by = ["test:backend/tests/unit/ground_truth/test_replay_workflow.py::test_it_is_never_a_required_check"]
+
+[[unit]]
+text = "To run one scenario against an API you started with ENVIRONMENT=development on an empty database:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Each run prints its seed at the start, in the GitHub step summary and in every failure message, with this command filled in."
+by = [
+    "test:backend/tests/unit/ground_truth/test_replay_gates.py::test_the_suite_prints_its_seed_first_and_g6_reads_the_tree",
+    "test:backend/tests/unit/ground_truth/test_replay_gates.py::test_the_step_summary_carries_the_seed_and_counts_only",
+    "test:backend/tests/unit/ground_truth/test_replay_gates.py::test_a_failure_names_the_scenario_seed_values_tolerance_and_the_command",
+    "test:backend/tests/unit/ground_truth/test_replay_gates.py::test_g6_names_the_seed_and_the_command",
+    "test:backend/tests/unit/ground_truth/test_replay_gates.py::test_a_refused_sign_in_or_key_fails_with_the_seed_and_the_command",
+]
+
+[[unit]]
+text = "Without GROUND_TRUTH_SEED a run picks a new seed."
+by = ["test:backend/tests/unit/ground_truth/test_replay_gates.py::test_the_seed_is_given_or_new"]
+
+[[unit]]
+text = "The run signs in as the first administrator the bootstrap creates on an empty development database; GROUND_TRUTH_ADMIN_EMAIL and GROUND_TRUTH_ADMIN_PASSWORD name another, and CONTROLVAR_API_URL another address than http://127.0.0.1:8000."
+by = [
+    "test:backend/tests/unit/ground_truth/test_replay_gates.py::test_the_run_signs_in_as_the_development_first_administrator",
+    "test:backend/tests/unit/ground_truth/test_replay_gates.py::test_the_api_address",
+]

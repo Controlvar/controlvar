@@ -5,6 +5,7 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { TOKEN_STORAGE_KEY, UserMe } from '@/services/api';
 import { routeKind } from '@/utils/routes';
 import { isMarketingSite } from '@/utils/site-mode';
+import { claimText, metaDescriptions } from './helpers/claimText';
 
 // The platform build unless a block says otherwise: the claims sweeps below
 // render both builds.
@@ -130,9 +131,12 @@ describe('HomePage (/)', () => {
    * with them -- nothing links the two, so keep them in step by hand and treat
    * the leak guard as the authority. This is the fast feedback, not the gate.
    *
-   * Matched against `container.textContent`, not `queryByText`: the latter sees
-   * only one element's direct text children, so a claim split across nested
-   * elements is invisible to it, and this page has fragmented paragraphs.
+   * Matched against `claimText()` (tests/pages/helpers/claimText.ts): the
+   * container's `textContent` -- not `queryByText`, which sees only one
+   * element's direct text children, so a claim split across nested elements
+   * is invisible to it, and this page has fragmented paragraphs -- plus every
+   * `alt`, `aria-label` and `title`, and the meta description. An uptime
+   * figure in an `alt` passed the text-only sweep (#1459, QA 1f).
    */
   const forbidden: Array<[string[], string]> = [
     [['SOC', '2'], 'a compliance certification nobody has audited'],
@@ -158,8 +162,10 @@ describe('HomePage (/)', () => {
    *
    * The fragments are concatenated, not joined with whitespace, so each entry
    * is exactly the regular expression it reads as once put together; they are
-   * split only so the old wording never appears in this file. The meta
-   * description is not in `textContent`; the marketing build grep covers it.
+   * split only so the old wording never appears in this file. Like
+   * `forbidden`, matched against `claimText()`, so the meta description (the
+   * link preview's og:description in the marketing build) and attribute text
+   * are swept too; no grep of the marketing build's HTML sweeps them.
    */
   const retired: Array<[string[], string]> = [
     [['AW', 'S-\\w'], 'the AWS name is not a hyphenated adjective'],
@@ -193,12 +199,21 @@ describe('HomePage (/)', () => {
   ])('%s', (_build, marketing) => {
     beforeEach(() => mode.mockReturnValue(marketing));
 
-    const text = () =>
+    const page = () =>
       render(
         <AuthProvider>
           <HomePage />
         </AuthProvider>,
-      ).container.textContent ?? '';
+      ).container;
+    const text = () => claimText(page());
+
+    it('sweeps the meta description too, so the sweeps below read it', () => {
+      const container = page();
+      const descriptions = metaDescriptions(container);
+      expect(descriptions).toHaveLength(1);
+      expect(descriptions[0].length).toBeGreaterThan(50);
+      expect(claimText(container)).toContain(descriptions[0]);
+    });
 
     it.each(forbidden)('makes no claim matching %s (%s)', (parts) => {
       expect(text()).not.toMatch(new RegExp((parts as string[]).join('\\s+'), 'i'));
@@ -213,6 +228,7 @@ describe('HomePage (/)', () => {
     });
 
     it('renders the marketing section only in the marketing build', () => {
+      // The walkthroughs teaser, and the header and footer links to the /walkthroughs page.
       expect(text().includes('Walkthroughs')).toBe(marketing);
     });
   });
@@ -247,9 +263,12 @@ describe('_app routeKind', () => {
     expect(routeKind('/sso/complete')).toBe('bare');
   });
 
-  it('keeps docs, the power calculator, the privacy page and error pages open', () => {
+  it('keeps docs, the books, the walkthroughs, the power calculator, the privacy page and error pages open', () => {
     expect(routeKind('/docs')).toBe('open');
     expect(routeKind('/docs/[...slug]')).toBe('open');
+    // The marketing build's own pages (site design 2026-11-11): in the shell, no session.
+    expect(routeKind('/books')).toBe('open');
+    expect(routeKind('/walkthroughs')).toBe('open');
     expect(routeKind('/power-calculator')).toBe('open');
     expect(routeKind('/privacy')).toBe('open');
     expect(routeKind('/404')).toBe('open');
@@ -262,5 +281,9 @@ describe('_app routeKind', () => {
     expect(routeKind('/admin/users')).toBe('protected');
     expect(routeKind('/results/[id]')).toBe('protected');
     expect(routeKind('/workspaces/[id]/members')).toBe('protected');
+    // #1455: the exclusion-group and global-holdout pages need a session (RequireAuth).
+    expect(routeKind('/experiments/exclusion-groups')).toBe('protected');
+    expect(routeKind('/experiments/exclusion-groups/[id]')).toBe('protected');
+    expect(routeKind('/experiments/holdouts')).toBe('protected');
   });
 });

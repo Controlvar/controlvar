@@ -7,13 +7,19 @@
 // consistent hash is still exported as ConsistentHash for parity checks.
 package experimentation
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // User represents the user a flag or experiment is evaluated for.
 type User struct {
 	// ID is the stable identifier the server uses for bucketing.
 	ID string `json:"id"`
-	// Attributes are sent as the assignment "context" (used by targeting rules).
+	// Attributes are sent as "context" on assignment and on flag evaluation,
+	// where targeting rules match them. They must encode as JSON: a NaN or
+	// infinite number, a channel or a func makes either call fail without
+	// sending anything.
 	Attributes map[string]interface{} `json:"attributes,omitempty"`
 }
 
@@ -28,6 +34,17 @@ type EvalResult struct {
 	// holds the JSON object if the server ever sends one, and is nil for null
 	// or a non-object value.
 	Config map[string]any `json:"config,omitempty"`
+	// Value is what the flag serves this user, as the server sent it: the
+	// flag's on value when Enabled is true, its off value otherwise. For a
+	// boolean flag it is true or false, the same as Enabled. It is nil when
+	// the server sent no value: a server without flag values, or a failed
+	// evaluation. Read it with StringValue, NumberValue or DecodeValue.
+	// EvaluateFlag returns a new copy on every call, so changing it changes
+	// nothing the client has cached.
+	Value json.RawMessage `json:"value,omitempty"`
+	// ValueType is the flag's type: "boolean", "string", "number" or "json".
+	// It is "" when the server sent none.
+	ValueType string `json:"value_type,omitempty"`
 }
 
 // Assignment is the variant the server assigned a user to
@@ -43,6 +60,20 @@ type Assignment struct {
 	// Configuration is the variant's configuration JSON from the experiment
 	// definition, or nil.
 	Configuration map[string]any `json:"configuration,omitempty"`
+}
+
+// Exposure is what the function given to WithOnExposure receives: one
+// experiment exposure the server recorded. Its fields are the Assignment's
+// first four, in the same order. Each call gets an Exposure of its own.
+type Exposure struct {
+	// ExperimentKey is the experiment's key.
+	ExperimentKey string
+	// UserID is the user's ID.
+	UserID string
+	// VariantID is the variant UUID, or "" when the server sent none.
+	VariantID string
+	// VariantName is the variant's name, e.g. "control" or "treatment".
+	VariantName string
 }
 
 // TrackEvent is an analytics event recorded with Client.Track / Client.TrackBatch.

@@ -5,21 +5,61 @@ This module defines Pydantic models for tracking-related data structures.
 These models are used for experiment assignment and event tracking.
 """
 
+import math
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 
 from pydantic import (
     UUID4,
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     Field,
+    StringConstraints,
     ValidationError,
+    ValidationInfo,
     field_validator,
     model_validator,
 )
 from pydantic_core import InitErrorDetails, PydanticCustomError
 
+from backend.app.core.context_limits import compact_size, nested_deeper_than
+from backend.app.core.finite_json import (
+    FINITE_NUMBER_MESSAGE,
+    FINITE_NUMBER_TYPE,
+    first_non_finite,
+)
 from backend.app.schemas.storable_text import StorableTextModel
+
+#: The longest ``event_id`` an event may carry (#1543).
+EVENT_ID_MAX_LENGTH = 255
+
+
+def _no_event_id_when_empty(value: Any) -> Any:
+    """``""`` means no ``event_id``, as ``null`` and an absent field do."""
+    return None if value == "" else value
+
+
+#: The ``event_id`` an event sent to ``/tracking/track``, ``/tracking/batch``
+#: or ``/tracking/events`` may carry (#1543). A JSON string of at most 255
+#: characters, compared exactly (case-sensitive, not trimmed). ``""`` becomes
+#: ``None``. Anything else -- a number, a longer string, and (through
+#: ``StorableTextModel``) NUL or a lone surrogate -- is refused with 422.
+EventId = Annotated[
+    # The length is the string's own constraint, so it never meets the None
+    # that "" becomes.
+    Optional[Annotated[str, StringConstraints(max_length=EVENT_ID_MAX_LENGTH)]],
+    BeforeValidator(_no_event_id_when_empty),
+    Field(
+        description=(
+            "Names one occurrence of the event. An event sent again with the "
+            "same event_id, user, experiment, flag and event name is stored "
+            "once: the later one is answered as a duplicate and writes nothing. "
+            "At most 255 characters, compared exactly; an empty string or null "
+            "means none."
+        ),
+    ),
+]
 
 
 class EventFields(BaseModel):
@@ -48,16 +88,119 @@ class EventFields(BaseModel):
 
     @field_validator("properties", "metadata", mode="before")
     @classmethod
-    def parse_json_string(cls, v: Any) -> Any:
-        """Accept a JSON-encoded string for the free-form attribute fields."""
+    def parse_json_string(cls, v: Any, info: ValidationInfo) -> Any:
+        """Accept a JSON-encoded string for the free-form attribute fields.
+
+        The decoded value is held to the rule a JSON request body is held to
+        (#1630, ``backend/app/core/finite_json.py``): NaN, an infinity or a
+        number too large for a double is refused with ``finite_number`` at
+        its place inside the field.
+        """
         if isinstance(v, str):
             import json
 
             try:
-                return json.loads(v) if v.strip() else None
+                decoded = json.loads(v) if v.strip() else None
             except json.JSONDecodeError as exc:
                 raise ValueError(f"must be a JSON object: {exc}") from exc
+            except RecursionError:
+                # Nested past the parser's own limit: far past the depth
+                # limit, so the same refusal as any other over-deep value.
+                raise ValueError(
+                    f"{info.field_name} must not be nested more than "
+                    f"{EVENT_METADATA_MAX_DEPTH} levels deep"
+                ) from None
+            path = first_non_finite(decoded)
+            if path is not None:
+                raise ValidationError.from_exception_data(
+                    cls.__name__,
+                    [
+                        InitErrorDetails(
+                            type=PydanticCustomError(
+                                FINITE_NUMBER_TYPE, FINITE_NUMBER_MESSAGE
+                            ),
+                            loc=path,
+                            input=None,
+                        )
+                    ],
+                )
+            return decoded
         return v
+
+
+#: The deepest an event's ``metadata`` / ``properties`` may nest (#1685). Every
+#: JSON object and array is a level, the attribute object itself the first, so
+#: ``{"a": {"b": 1}}`` is 2 levels. Far above any real attribute set, and far
+#: below the ~255 levels at which building the response overflowed the
+#: serialiser after the event was already stored.
+EVENT_METADATA_MAX_DEPTH = 64
+
+#: The largest an event's ``metadata`` / ``properties`` may be (#1085), in
+#: bytes of compact JSON (no spaces, characters not escaped) in UTF-8:
+#: ``context_limits.compact_size``, measured on the value as parsed (a
+#: JSON-encoded string after it is decoded) and only after the depth check has
+#: passed. Each field is held to it on its own. A constant, not a setting, as
+#: ``context_limits.MAX_CONTEXT_BYTES`` is.
+EVENT_METADATA_MAX_BYTES = 16384
+
+
+class BoundedEventMetadata(BaseModel):
+    """Refuses ``metadata`` / ``properties`` nested deeper than
+    ``EVENT_METADATA_MAX_DEPTH`` levels or larger than
+    ``EVENT_METADATA_MAX_BYTES`` bytes. Depth is checked first.
+
+    For the schemas an event is built from before it is stored (``EventCreate``
+    and ``UntaggedEventCreate``), so the refusal comes before any write. The
+    message names the field and the limit, never the value.
+    """
+
+    @field_validator("properties", "metadata", mode="after", check_fields=False)
+    @classmethod
+    def _refuse_deep_metadata(cls, value: Any, info: ValidationInfo) -> Any:
+        if nested_deeper_than(value, EVENT_METADATA_MAX_DEPTH):
+            raise ValueError(
+                f"{info.field_name} must not be nested more than "
+                f"{EVENT_METADATA_MAX_DEPTH} levels deep"
+            )
+        if value is not None and compact_size(value) > EVENT_METADATA_MAX_BYTES:
+            raise ValueError(
+                f"{info.field_name} must not be larger than "
+                f"{EVENT_METADATA_MAX_BYTES} bytes"
+            )
+        return value
+
+
+#: The largest size an event ``value`` may have (#1630): an event's value must
+#: be between -1e12 and 1e12, both included. One constant, read wherever an
+#: event value is bounded (``backend/app/services/analysis_service.py``
+#: imports it).
+VALUE_BOUND: float = 1e12
+
+#: The message for a value outside that range, or not a finite number.
+VALUE_BOUND_MESSAGE = "value must be a finite number between -1e12 and 1e12"
+
+
+class BoundedEventValue(BaseModel):
+    """Refuses an event ``value`` that is not a finite number between -1e12
+    and 1e12 (``VALUE_BOUND``, both included). ``null`` and an absent value
+    are accepted.
+
+    For the schemas an event is built from before it is stored (``EventCreate``
+    and ``UntaggedEventCreate``), so the refusal comes before any write:
+    ``/tracking/track`` and ``/tracking/events`` answer 422, and
+    ``/tracking/batch`` reports that entry in ``errors`` and stores the others.
+    Not on ``EventFields``, because ``EventResponse`` inherits it. The message
+    names the field and the range, never the value.
+    """
+
+    @field_validator("value", mode="after", check_fields=False)
+    @classmethod
+    def _refuse_unbounded_value(cls, value: Optional[float]) -> Optional[float]:
+        if value is not None and not (
+            math.isfinite(value) and abs(value) <= VALUE_BOUND
+        ):
+            raise ValueError(VALUE_BOUND_MESSAGE)
+        return value
 
 
 class EventBase(EventFields):
@@ -71,11 +214,17 @@ class EventBase(EventFields):
         return self
 
 
-class EventCreate(StorableTextModel, EventBase):
+class EventCreate(
+    StorableTextModel, BoundedEventMetadata, BoundedEventValue, EventBase
+):
     """Model for creating a new event."""
 
+    event_id: EventId = None
 
-class UntaggedEventCreate(StorableTextModel, EventFields):
+
+class UntaggedEventCreate(
+    StorableTextModel, BoundedEventMetadata, BoundedEventValue, EventFields
+):
     """An event that names no experiment and no flag (#217).
 
     ``/tracking/track`` and ``/tracking/batch`` build this one when the
@@ -84,13 +233,33 @@ class UntaggedEventCreate(StorableTextModel, EventFields):
     still refuses an event with neither id.
     """
 
+    event_id: EventId = None
+
 
 class EventResponse(EventFields):
-    """Model for event responses."""
+    """An event as stored.
 
+    For an event already stored with the same event_id, user, experiment, flag
+    and event name, duplicate is true, id is the stored event's, and every other
+    field is this request's or this request's time.
+    """
+
+    # For a duplicate (#1543), nothing but ``id`` may come from the stored row:
+    # tracking._event_response builds every other field from this request.
     id: str
     created_at: datetime
     updated_at: datetime
+    duplicate: bool = Field(
+        False,
+        description=(
+            "True when an event with the same event_id, user, experiment, flag "
+            "and event name was already stored: nothing was written, and id is "
+            "the stored event's."
+        ),
+    )
+    event_id: Optional[str] = Field(
+        None, description="The event_id this request sent, or null."
+    )
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -206,9 +375,10 @@ class VariantAssignmentResponse(BaseModel):
     """Response for POST /tracking/assign: the variant a user was assigned to.
 
     Users that are not eligible (global holdout, mutual exclusion group or
-    targeting rules) still get HTTP 200 with the experiment's control variant
-    so SDKs render the default experience; ``assigned`` is ``False`` and
-    ``reason`` says why.  No assignment or exposure is recorded for them.
+    targeting rules), and every user of an experiment that is not ACTIVE,
+    still get HTTP 200 with the experiment's control variant so SDKs render
+    the default experience; ``assigned`` is ``False`` and ``reason`` says
+    why.  No assignment and no view event is recorded for them.
     """
 
     experiment_key: str
@@ -223,7 +393,11 @@ class VariantAssignmentResponse(BaseModel):
     )
     reason: str = Field(
         "assigned",
-        description="assigned | holdout | mutual_exclusion | targeting",
+        description=(
+            "assigned | holdout | mutual_exclusion | targeting, or the status "
+            "of an experiment that is not ACTIVE: draft | paused | completed "
+            "| archived"
+        ),
     )
 
     model_config = ConfigDict(
@@ -401,6 +575,7 @@ class EventRequest(StorableTextModel):
     value: Optional[float] = None
     metadata: Optional[Dict[str, Any]] = None
     timestamp: Optional[datetime] = None
+    event_id: EventId = None
 
     # Both keys are optional (#217). With neither, the endpoint stores the
     # event as history; a key that is given but not found answers 404.
@@ -458,8 +633,19 @@ class EventBatchRequest(BaseModel):
 class EventBatchResponse(BaseModel):
     """Model for batch event tracking response."""
 
-    success_count: int = Field(..., description="Number of events successfully tracked")
+    success_count: int = Field(
+        ...,
+        description="Number of events stored, or already stored (see duplicate_count)",
+    )
     failure_count: int = Field(..., description="Number of events that failed to track")
+    duplicate_count: int = Field(
+        ...,
+        description=(
+            "Number of events already stored: an earlier one had the same "
+            "event_id, user, experiment, flag and event name. Each is counted "
+            "in success_count too, and nothing was written for it."
+        ),
+    )
     errors: Optional[List[Dict[str, Any]]] = Field(
         None, description="Details of failed events"
     )
@@ -469,6 +655,7 @@ class EventBatchResponse(BaseModel):
             "example": {
                 "success_count": 1,
                 "failure_count": 1,
+                "duplicate_count": 0,
                 "errors": [
                     {
                         "index": 1,

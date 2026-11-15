@@ -189,6 +189,50 @@ class TestListSegments:
 
         assert seg_id in list_all_segment_ids(admin_client)
 
+    @pytest.mark.regression
+    def test_paging_is_a_stable_total_order(self, admin_client, db_session):
+        """#272: paging by limit/offset shows every segment exactly once.
+
+        Seven segments share one created_at, and are then rewritten in
+        descending id order so the heap order disagrees with (created_at, id):
+        without an ORDER BY the list follows the heap, and with created_at
+        alone the ties are broken by the heap. Only the total order passes.
+        """
+        from sqlalchemy import text
+
+        from backend.app.models.segment import Segment
+
+        mine = [
+            _create_segment(admin_client, f"Paging Segment {i}")["id"] for i in range(7)
+        ]
+        same_time = "2030-01-01 00:00:00"
+        for seg_id in sorted(mine, reverse=True):
+            db_session.query(Segment).filter(Segment.id == seg_id).update(
+                {Segment.created_at: text(f"'{same_time}'")},
+                synchronize_session=False,
+            )
+            db_session.commit()
+
+        def one_pass() -> list:
+            ids = []
+            for offset in range(0, 1000, 3):
+                response = admin_client.get(
+                    "/api/v1/segments", params={"limit": 3, "offset": offset}
+                )
+                assert response.status_code == 200, response.text
+                page = [item["id"] for item in response.json()]
+                ids.extend(page)
+                if len(page) < 3:
+                    return ids
+            raise AssertionError("the segment list never ended")
+
+        first = one_pass()
+        assert len(first) == len(set(first)), "a segment appeared on two pages"
+        assert set(mine) <= set(first), "a segment was skipped"
+        assert one_pass() == first, "the order changed between two passes"
+        in_tie = [i for i in first if i in set(mine)]
+        assert in_tie == sorted(mine), "ties are not broken by id"
+
     def test_filter_by_status_active(self, admin_client):
         """Filtering by status=active returns only active segments."""
         _create_segment(admin_client, "Active Filter Segment")
@@ -713,7 +757,11 @@ class TestPreviewAudience:
     """POST /api/v1/segments/{id}/preview"""
 
     def test_preview_returns_200_with_estimate_structure(self, admin_client):
-        """Preview endpoint returns 200 with estimated_percentage, sample_size, matched."""
+        """Preview endpoint returns 200 with the nine fields of the estimate.
+
+        The exposures it reads are whatever earlier tests left, so only the
+        shape is checked here; test_segment_preview_exposures.py checks values.
+        """
         seg = _create_segment(admin_client, "Preview Segment")
 
         payload = {
@@ -726,12 +774,25 @@ class TestPreviewAudience:
         assert response.status_code == 200, response.text
 
         data = response.json()
-        assert "estimated_percentage" in data
-        assert "sample_size" in data
-        assert "matched" in data
-        assert isinstance(data["estimated_percentage"], (int, float))
+        assert set(data) == {
+            "estimated_percentage",
+            "sample_size",
+            "matched",
+            "source",
+            "window_days",
+            "sampled_since",
+            "ended_by",
+            "users_without_context",
+            "reason",
+        }
+        if data["reason"] is None:
+            assert isinstance(data["estimated_percentage"], (int, float))
+        else:
+            assert data["estimated_percentage"] is None
         assert isinstance(data["sample_size"], int)
         assert isinstance(data["matched"], int)
+        assert data["source"] == "exposure_metadata"
+        assert data["window_days"] == 30
 
     def test_preview_for_nonexistent_segment_returns_404(self, admin_client):
         """Preview endpoint returns 404 when segment does not exist."""
@@ -787,9 +848,10 @@ class TestPreviewAudience:
         assert response.status_code == 200, response.text
 
         data = response.json()
-        assert data["estimated_percentage"] >= 0
+        assert data["estimated_percentage"] is None or data["estimated_percentage"] >= 0
         assert data["sample_size"] >= 0
         assert data["matched"] >= 0
+        assert data["users_without_context"] >= 0
 
     @pytest.mark.regression
     def test_preview_refuses_eleven_match_regex_conditions(self, admin_client):

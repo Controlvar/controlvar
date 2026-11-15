@@ -150,7 +150,8 @@ def sandbox(tmp_path: pathlib.Path) -> tuple[pathlib.Path, dict[str, str]]:
     )
     # docker: a manifest read fails like GHCR for a ref listed as unpublished
     # or never published (any ref not under ghcr.io/example/old); an image
-    # inspect answers an ID made of the ref.
+    # inspect answers an ID made of the ref, and so does the kind node's
+    # crictl (through docker exec), with a different prefix.
     _stub(
         bindir,
         "docker",
@@ -167,6 +168,8 @@ def sandbox(tmp_path: pathlib.Path) -> tuple[pathlib.Path, dict[str, str]]:
                 fi
                 printf '{"schemaVersion": 2}\\n' ;;
             "image inspect") printf 'id:%s\\n' "$ref" ;;
+            "exec chart-kind-control-plane")
+                printf '{"status": {"id": "node:%s", "repoDigests": []}}\\n' "$ref" ;;
         esac
         """,
     )
@@ -257,7 +260,11 @@ def test_upgrade_previous_pulls_loads_and_installs_under_the_tags_names(sandbox)
         do_upgrade_previous
         """
     result, log = _run(
-        _harness("pull_anonymously", "do_upgrade_previous", extra=fakes), tmp, env
+        _harness(
+            "pull_anonymously", "node_image_id", "do_upgrade_previous", extra=fakes
+        ),
+        tmp,
+        env,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert f"docker pull {OLD_API}:core-0.17.0" in log
@@ -278,6 +285,8 @@ def test_upgrade_previous_pulls_loads_and_installs_under_the_tags_names(sandbox)
         f"web=id:{OLD_WEB}:core-0.17.0-previous",
         f"api_repo={OLD_API}",
         f"web_repo={OLD_WEB}",
+        f"api_node=node:{OLD_API}:core-0.17.0-previous",
+        f"web_node=node:{OLD_WEB}:core-0.17.0-previous",
     ]
     assert f"assert_images chart-kind-previous {work}/images-previous.txt" in log
 
@@ -403,8 +412,11 @@ def test_assert_images_expects_the_repositories_the_images_were_loaded_under(
 ):
     tmp, env = sandbox
     images = tmp / "images.txt"
+    # The pods are compared with the node's IDs (api_node/web_node), not the
+    # host's (test_chart_kind_node_image_id.py).
     images.write_text(
-        f"api=id:a\nweb=id:w\napi_repo={OLD_API}\nweb_repo={OLD_WEB}\n",
+        f"api=host:a\nweb=host:w\napi_repo={OLD_API}\nweb_repo={OLD_WEB}\n"
+        "api_node=id:a\nweb_node=id:w\n",
         encoding="utf-8",
     )
     (tmp / "pods").write_text(running + "\n", encoding="utf-8")

@@ -100,6 +100,7 @@ the same pull request, and its name starts with its kind.
 | `docs-run-green.tmpl`, `docs-run-red.tmpl` | the docs journeys | the top of the run's step summary |
 | `docs-guide-pass.tmpl`, `docs-guide-fail.tmpl`, `docs-guide-partial.tmpl` | the docs journeys | the top of each guide's report; pass or partial is also the comment that closes the guide's issue |
 | `docs-journey-issue.tmpl` | the docs journeys | one issue per failing guide (rules below); its body is `docs-guide-fail.tmpl`, and a comment when the failing step changes |
+| `docs-journeys-alarm-issue.tmpl` | the docs journeys | one issue when a run's report did not decide for every guide (rules below); its body is also each comment on it |
 | `docs-defect-issue.tmpl` | the docs journeys | one issue per measured docs defect (rules below) |
 
 Each output says what it is in its first two lines. Its first line carries its
@@ -153,10 +154,36 @@ pins them.
    some steps not run, comments the guide's report header from that run
    (`docs-guide-pass.tmpl` or `docs-guide-partial.tmpl`) and closes the issue.
 4. A run that wrote no verdicts (the journeys did not start), or in which the
-   guide did not run, counts as neither a failure nor a pass.
+   guide did not run, counts as neither a failure nor a pass. A run whose
+   verdicts are there but cannot be downloaded or read is not passed over:
+   the report stops (exit 1) and names that run, and the alarm below is
+   raised.
 5. Only a scheduled run on `main` posts. Any other run (a dispatch, a release
    run, a run on another branch) prints in its log what a scheduled run with
    its results would post, and posts nothing.
+
+## The docs journeys' alarm
+
+`docs-journeys.yml`'s `report-alarm` job follows these rules;
+`scripts/docs_journeys_report.py alarm` applies them, and
+`backend/tests/unit/scripts/test_docs_journeys_report.py` and
+`test_docs_journeys_workflow.py` pin them.
+
+1. A run is healthy only when its report job succeeded and both the journeys
+   job and the demo job wrote verdicts. Anything else (the report job failed,
+   was cancelled or did not run, or a job wrote no verdicts) means the report
+   did not decide for every guide, so a failing guide may have no issue.
+2. One alarm issue, labelled `docs-journey-failure`, opened from
+   `docs-journeys-alarm-issue.tmpl` by the first scheduled run that is not
+   healthy. It is found by its exact title and the workflow's own author,
+   never by the label alone, so the alarm never comments on or closes a
+   guide's issue.
+3. While it is open, each scheduled run that is not healthy comments the
+   issue's body, rendered for that run.
+4. The first healthy scheduled run closes it, without a comment.
+5. Only a scheduled run on `main` opens, comments on or closes it. Any other
+   run prints in its log what a scheduled run would do. A run cancelled as a
+   whole runs no alarm.
 
 ## The API fuzzing issue
 
@@ -212,7 +239,7 @@ time it needs one, the way `nightly-qa.yml` creates `nightly-failure`
 |---|---|---|---|
 | `synthetic-failure` | `B60205` | Synthetic check failed | `synthetic-issue.tmpl` |
 | `fuzz-failure` | `B60205` | API fuzzing failed | `fuzz-issue.tmpl` |
-| `docs-journey-failure` | `B60205` | Docs journey failed | `docs-journey-issue.tmpl` |
+| `docs-journey-failure` | `B60205` | Docs journey failed | `docs-journey-issue.tmpl`, `docs-journeys-alarm-issue.tmpl` |
 | `qa-agent` | `5319E7` | Filed by automated QA after reproduction | `docs-defect-issue.tmpl`, and public bugs filed from QA findings |
 
 `documentation`, `launch-blocking` and `post-launch` already exist. No

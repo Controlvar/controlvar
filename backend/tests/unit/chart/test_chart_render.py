@@ -546,6 +546,143 @@ def test_cors_origins_reach_the_api_as_one_list():
     assert config["CORS_ORIGINS"] == "https://shop.example.com,http://localhost:3100"
 
 
+# ---------------------------------------------------------------------------
+# sign-in: auth.provider, the Cognito keys and AWS_REGION (#708)
+# ---------------------------------------------------------------------------
+
+#: Every value a Cognito install sets, as `--set` paths.
+COGNITO_VALUES = {
+    "auth.provider": "cognito",
+    "auth.cognito.userPoolId": "us-west-2_abcDEF123",
+    "auth.cognito.clientId": "1example23456789abcdefghij",
+    "auth.cognito.domain": "controlvar-test.auth.us-west-2.amazoncognito.com",
+    "awsRegion": "us-west-2",
+}
+
+#: The variable each of those values renders as.
+COGNITO_ENVIRONMENT = {
+    "AUTH_PROVIDER": "cognito",
+    "COGNITO_USER_POOL_ID": "us-west-2_abcDEF123",
+    "COGNITO_CLIENT_ID": "1example23456789abcdefghij",
+    "COGNITO_DOMAIN": "controlvar-test.auth.us-west-2.amazoncognito.com",
+    "AWS_REGION": "us-west-2",
+}
+
+
+@pytest.mark.regression
+def test_sign_in_is_local_and_no_cognito_setting_is_rendered_by_default(docs):
+    config = one(docs, "ConfigMap", f"{FULLNAME}-config")["data"]
+    assert config["AUTH_PROVIDER"] == "local"
+    rendered = sorted((set(COGNITO_ENVIRONMENT) - {"AUTH_PROVIDER"}) & set(config))
+    assert rendered == [], f"the default render sets {rendered}"
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("container_name", ["api", "migrate"])
+def test_cognito_values_reach_both_api_containers(container_name):
+    environment = api_environment(
+        render("core", *_sets(COGNITO_VALUES)), container_name
+    )
+    assert {k: environment.get(k) for k in COGNITO_ENVIRONMENT} == COGNITO_ENVIRONMENT
+
+
+def test_a_region_alone_is_rendered_and_sign_in_stays_local():
+    docs = render("core", "--set-string", "awsRegion=eu-central-1")
+    config = one(docs, "ConfigMap", f"{FULLNAME}-config")["data"]
+    assert (config["AUTH_PROVIDER"], config["AWS_REGION"]) == ("local", "eu-central-1")
+    assert not {k for k in config if k.startswith("COGNITO_")}, sorted(config)
+
+
+@pytest.mark.parametrize("container_name", ["api", "migrate"])
+def test_cognito_values_satisfy_the_production_settings_validators(
+    container_name, tmp_path
+):
+    """The application starts in production on what the chart renders for
+    Cognito, COGNITO_DOMAIN's validator included."""
+    docs = render("core", *_sets(COGNITO_VALUES))
+    environment = _environment_for_settings(docs, container_name)
+    script = (
+        _CORE_SETTINGS
+        + "assert config.settings.AUTH_PROVIDER == 'cognito'\n"
+        + f"assert config.settings.COGNITO_DOMAIN == {COGNITO_ENVIRONMENT['COGNITO_DOMAIN']!r}\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=tmp_path,
+        env={
+            "PATH": os.environ.get("PATH", ""),
+            "HOME": str(tmp_path),
+            "PYTHONPATH": str(REPO_ROOT),
+            **environment,
+        },
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        f"the chart gives the {container_name} container {sorted(environment)} for "
+        f"Cognito, and the application refuses to start with it:\n{result.stderr[-3000:]}"
+    )
+
+
+#: The chart's default for api.forwardedAllowIps (values.yaml).
+FORWARDED_ALLOW_IPS_DEFAULT = "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+
+
+@pytest.mark.regression
+def test_the_proxies_the_api_believes_default_to_the_private_ranges():
+    """Always rendered, into the ConfigMap both API containers read: the image
+    alone believes only loopback and the pod's own network, and an ingress
+    controller on another node is on neither."""
+    docs = render("core")
+    for name in ("api", "migrate"):
+        environment = api_environment(docs, name)
+        assert environment.get("FORWARDED_ALLOW_IPS") == FORWARDED_ALLOW_IPS_DEFAULT, (
+            name,
+            environment.get("FORWARDED_ALLOW_IPS"),
+        )
+
+
+@pytest.mark.regression
+def test_a_set_value_is_rendered_exactly():
+    docs = render("core", "--set-string", "api.forwardedAllowIps=10.244.0.0/16")
+    config = one(docs, "ConfigMap", f"{FULLNAME}-config")["data"]
+    assert config["FORWARDED_ALLOW_IPS"] == "10.244.0.0/16"
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "setting",
+    [
+        ("--set-string", "api.forwardedAllowIps="),
+        ("--set-string", "api.forwardedAllowIps=   "),
+        ("--set", "api.forwardedAllowIps=null"),
+    ],
+    ids=["empty", "blank", "null"],
+)
+def test_an_empty_value_is_refused_by_the_template_too(setting):
+    error = refused("core", "--skip-schema-validation", *setting)
+    assert "api.forwardedAllowIps is empty" in error, (
+        f"expected the chart to refuse an empty api.forwardedAllowIps:\n{error}"
+    )
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("how", ["--set", "values file"])
+def test_a_null_value_is_refused_by_the_schema(how, tmp_path):
+    """Helm drops a key whose value is null before it checks the schema, so
+    `minLength` never sees it; the `api` object requires the key, and the
+    chart's own default always supplies it."""
+    if how == "--set":
+        args = ("--set", "api.forwardedAllowIps=null")
+    else:
+        values = tmp_path / "null.yaml"
+        values.write_text("api:\n  forwardedAllowIps: ~\n", encoding="utf-8")
+        args = ("-f", str(values))
+    error = refused("core", *args)
+    assert "values don't meet the specifications of the schema" in error, error
+    assert "forwardedAllowIps" in error, error
+
+
 @pytest.mark.parametrize(
     "url", ["http://10.0.0.5", "https://controlvar.example.com:8443", "http://[::1]"]
 )
@@ -679,6 +816,11 @@ REFUSALS = [
         "/secrets/secretKey",
     ),
     ("zero API replicas", {"api.replicaCount": 0}, "/api/replicaCount"),
+    (
+        "empty forwardedAllowIps",
+        {"api.forwardedAllowIps": ""},
+        "/api/forwardedAllowIps",
+    ),
     ("zero web replicas", {"web.replicaCount": 0}, "/web/replicaCount"),
     ("floating tag", {"image.tag": "core"}, "/image/tag"),
     ("latest tag", {"image.tag": "latest"}, "/image/tag"),
@@ -707,6 +849,30 @@ REFUSALS = [
         "/postgresql/sslMode",
     ),
     ("digest not sha256", {"image.api.digest": "md5:abc"}, "/image/api/digest"),
+    ("auth provider typo", {"auth.provider": "cognitoo"}, "/auth/provider"),
+    ("unknown auth key", {"auth.providr": "local"}, "'providr' not allowed"),
+    (
+        "cognito without a user pool",
+        {**COGNITO_VALUES, "auth.cognito.userPoolId": ""},
+        "/auth/cognito/userPoolId",
+    ),
+    (
+        "cognito without an app client",
+        {**COGNITO_VALUES, "auth.cognito.clientId": ""},
+        "/auth/cognito/clientId",
+    ),
+    ("cognito without a region", {**COGNITO_VALUES, "awsRegion": ""}, "/awsRegion"),
+    (
+        "Hosted UI domain with a scheme",
+        {"auth.cognito.domain": "https://x.auth.us-west-2.amazoncognito.com"},
+        "/auth/cognito/domain",
+    ),
+    (
+        "bare Hosted UI domain prefix",
+        {"auth.cognito.domain": "controlvar-prod"},
+        "/auth/cognito/domain",
+    ),
+    ("region typo", {"awsRegion": "us-west2"}, "/awsRegion"),
 ]
 
 

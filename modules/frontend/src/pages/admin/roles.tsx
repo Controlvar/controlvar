@@ -6,6 +6,7 @@ import { RoleTable } from '@modules/components/admin/roles/RoleTable';
 import { CreateRoleModal } from '@modules/components/admin/roles/CreateRoleModal';
 import { CustomRole } from '@/types/admin';
 import { withAdminGuard } from '@/components/admin/withAdminGuard';
+import { docsUrl } from '@/services/docs';
 
 export function RoleManagementPage() {
   const [modalOpen, setModalOpen] = useState(false);
@@ -41,14 +42,17 @@ export function RoleManagementPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Role Management</h1>
-            <p className="text-sm text-slate-500 mt-1">
-              Create and manage custom roles with granular permissions.
+            <p data-testid="roles-subtitle" className="text-sm text-slate-600 mt-1">
+              {"Define roles that add permissions to a user's built-in role."}
             </p>
-            {/* No permission check reads custom roles or direct grants yet (#891). */}
+            {/* Custom roles and direct grants take effect (#891): the checks read them. */}
             <p data-testid="roles-access-note" className="text-sm text-slate-700 mt-1">
-              {
-                "Custom roles and direct permission grants are recorded, but they do not change what anyone can do yet: each user's built-in role decides."
-              }
+              A custom role adds its permissions to the built-in role of everyone who has it, from their
+              next request, and never takes one away. Assign roles and grant permissions to a user through{' '}
+              <a href={docsUrl('api/rbac')} className="text-blue-700 underline hover:text-blue-900">
+                the RBAC API
+              </a>
+              .
             </p>
           </div>
           <button
@@ -81,7 +85,7 @@ export default withAdminGuard(
     module: MODULES.RBAC,
     description:
       'Define roles beyond the four built-in ones and grant permissions directly to a user. ' +
-      "Both are recorded, but they do not change what anyone can do yet: each user's built-in role decides.",
+      "Both add to what the user's built-in role allows.",
   }),
   { requiredRole: 'ADMIN' },
 );

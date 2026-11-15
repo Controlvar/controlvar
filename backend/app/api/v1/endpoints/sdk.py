@@ -7,8 +7,8 @@ its rules are described in :mod:`backend.app.services.sdk_ruleset`.
 
 Authentication is an ``X-API-Key`` that carries the ``sdk:ruleset`` scope; any
 other valid key gets 403. The ruleset holds the values written into targeting
-rules, so a key with this scope belongs on a server, never in a browser or a
-mobile app.
+rules, and the values string, number and json flags serve, so a key with this
+scope belongs on a server, never in a browser or a mobile app.
 
 Each response carries ``ETag: "<version>"``. A poll that sends the ETag back in
 ``If-None-Match`` gets ``304 Not Modified`` with no body while nothing that
@@ -25,14 +25,16 @@ from typing import Any, List, Literal, Optional
 from fastapi import APIRouter, Depends, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session, load_only
+from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.sdk_scope import require_sdk_ruleset_key
 from backend.app.models.api_key import APIKey
 from backend.app.models.feature_flag import FeatureFlag
 from backend.app.services.sdk_ruleset import build_ruleset, canonical_json
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 #: If-None-Match entries read at most (a poll sends one).
 MAX_IF_NONE_MATCH_ENTRIES = 32
@@ -90,7 +92,11 @@ class SdkRulesetDefaultRule(BaseModel):
 
 
 class SdkRulesetFlag(BaseModel):
-    """One flag. Inactive flags carry only ``key`` and ``active``."""
+    """One flag. Inactive flags carry only ``key`` and ``active``, plus
+    ``value_type`` and ``off_value`` for a string, number or json flag. The
+    exception is a flag whose stored values cannot be served: it is a remote
+    entry whatever its status, so turning it off reaches a local SDK through
+    the SDK's cache of the server's answer (up to 300 s by default)."""
 
     key: str
     active: bool
@@ -98,12 +104,37 @@ class SdkRulesetFlag(BaseModel):
         None,
         description=(
             "local: the SDK may evaluate this flag; remote: it asks the server "
-            "(no rules are included)"
+            "(no rules or values are included)"
         ),
     )
     rollout_percentage: Optional[int] = None
     rules: Optional[List[SdkRulesetRule]] = None
     default_rule: Optional[SdkRulesetDefaultRule] = None
+    value_type: Optional[str] = Field(
+        None,
+        description=(
+            "What the flag serves: string, number, or json (an object or an "
+            "array). Present on the local and inactive entries of such a flag; "
+            "absent for a boolean flag, which serves true to the users it is on "
+            "for and false to everyone else. An SDK that does not know the type "
+            "asks the server for that flag's value."
+        ),
+    )
+    on_value: Optional[Any] = Field(
+        None,
+        description=(
+            "What a user the flag is on for gets: a user who matches a rule and "
+            "falls inside its percentage, or matches no rule and falls inside "
+            "rollout_percentage. Of value_type; on local entries only."
+        ),
+    )
+    off_value: Optional[Any] = Field(
+        None,
+        description=(
+            "What everyone else gets, and what everyone gets while the flag is "
+            "off. Of value_type; on local and inactive entries."
+        ),
+    )
 
 
 class SdkRuleset(BaseModel):
@@ -171,7 +202,7 @@ def if_none_match_hits(header: Optional[str], version: str) -> bool:
     },
     openapi_extra={"x-stability": "beta"},
 )
-def get_ruleset(
+async def get_ruleset(
     request: Request,
     db: Session = Depends(deps.get_db),
     api_key: APIKey = Depends(require_sdk_ruleset_key),
@@ -182,7 +213,8 @@ def get_ruleset(
 
     **Authentication**: an `X-API-Key` whose scopes include `sdk:ruleset`. A
     valid key without it gets 403. The ruleset contains the values written in
-    targeting rules: keep such a key on a server.
+    targeting rules, and the values string, number and json flags serve: keep
+    such a key on a server.
 
     **Caching**: the response carries `ETag`. Send it back in `If-None-Match`
     and an unchanged ruleset answers 304 with no body.
@@ -190,29 +222,49 @@ def get_ruleset(
     A flag the SDK may evaluate itself is `"evaluation": "local"` and carries
     its rollout percentage and rules; `"remote"` means ask
     `GET /api/v1/feature-flags/evaluate/{key}`; an inactive flag is
-    `{"key", "active": false}`.
+    `{"key", "active": false}`. A string, number or json flag also carries
+    `value_type` and its two values: `on_value` and `off_value` on a local
+    entry, `off_value` on an inactive one. A remote entry carries no value.
+    A flag whose stored values cannot be served is a remote entry whatever its
+    status, so switching it off reaches a local SDK only when its cached
+    answer from the server expires (up to 300 s by default in the 0.1.1 and
+    0.2.0 SDKs); `getAllFlags` always asks the server.
     """
-    flags = (
-        db.query(FeatureFlag)
-        .options(
-            load_only(
-                FeatureFlag.key,
-                FeatureFlag.status,
-                FeatureFlag.rollout_percentage,
-                FeatureFlag.targeting_rules,
+    db.close()
+    return await run_in_threadpool(_ruleset_response, request, db)
+
+
+def _ruleset_response(request: Request, db: Session) -> Response:
+    """The ruleset response for *request*, read on *db*; closes *db*."""
+    try:
+        # Every column the builder reads, loaded by this one query: a column
+        # left out would be loaded by one more query per flag (PF-2).
+        flags = (
+            db.query(FeatureFlag)
+            .options(
+                load_only(
+                    FeatureFlag.key,
+                    FeatureFlag.status,
+                    FeatureFlag.rollout_percentage,
+                    FeatureFlag.targeting_rules,
+                    FeatureFlag.value_type,
+                    FeatureFlag.on_value,
+                    FeatureFlag.off_value,
+                )
             )
+            .all()
         )
-        .all()
-    )
-    ruleset = build_ruleset(flags)
-    headers = {
-        "ETag": f'"{ruleset["version"]}"',
-        "Cache-Control": "private, no-cache",
-    }
-    if if_none_match_hits(request.headers.get("if-none-match"), ruleset["version"]):
-        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=headers)
-    return Response(
-        content=canonical_json(ruleset),
-        media_type="application/json",
-        headers=headers,
-    )
+        ruleset = build_ruleset(flags)
+        headers = {
+            "ETag": f'"{ruleset["version"]}"',
+            "Cache-Control": "private, no-cache",
+        }
+        if if_none_match_hits(request.headers.get("if-none-match"), ruleset["version"]):
+            return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=headers)
+        return Response(
+            content=canonical_json(ruleset),
+            media_type="application/json",
+            headers=headers,
+        )
+    finally:
+        db.close()

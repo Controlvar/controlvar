@@ -29,6 +29,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.api.deps import get_current_user, get_db
+from backend.app.api.read_scope import get_current_reader
 from backend.app.api.v1.endpoints import results as results_endpoints
 from backend.app.main import app
 from backend.app.models.user import User
@@ -168,12 +169,17 @@ def harness(monkeypatch: pytest.MonkeyPatch) -> Iterator[_Harness]:
         return user
 
     app.dependency_overrides[get_current_user] = override_get_current_user
+    # The alias takes its user from get_current_reader (a sign-in, or an
+    # mcp:read key), which calls get_current_user as a plain function, so the
+    # override above does not reach it.
+    app.dependency_overrides[get_current_reader] = override_get_current_user
     h.client = TestClient(app)
     try:
         yield h
     finally:
         app.dependency_overrides.pop(get_db, None)
         app.dependency_overrides.pop(get_current_user, None)
+        app.dependency_overrides.pop(get_current_reader, None)
 
 
 def _purchase_a(body: Dict[str, Any]) -> Dict[str, Any]:

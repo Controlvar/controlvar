@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional
 
 from backend.app.core.config import settings as app_settings
 from backend.app.core.logging import get_logger
-from backend.app.core.scheduler_tick import run_locked_tick
+from backend.app.core.scheduler_tick import run_in_worker, run_locked_tick
 from backend.app.db.session import SessionLocal
 from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
 from backend.app.models.safety import RollbackTriggerType
@@ -103,8 +103,9 @@ class SafetyScheduler:
         while self.is_running:
             try:
                 # One tick under the advisory lock; records the run and
-                # skips when another replica holds the lock.
-                await run_locked_tick(SCHEDULER_NAME, self.check_feature_flags_safety)
+                # skips when another replica holds the lock. The check itself
+                # runs in a worker thread (#1690).
+                await run_locked_tick(SCHEDULER_NAME, self._check_off_loop)
 
                 # Wait for the next interval
                 await asyncio.sleep(self.interval_minutes * 60)
@@ -114,6 +115,37 @@ class SafetyScheduler:
                 logger.error(f"Error in safety scheduler: {e!s}")
                 # Wait a bit before trying again
                 await asyncio.sleep(60)
+
+    async def _check_off_loop(self) -> Dict[str, int]:
+        """
+        Run :meth:`check_feature_flags_safety` in a worker thread (#1690).
+
+        The check is synchronous SQLAlchemy, a few queries per ACTIVE flag,
+        behind ``async def``s that never suspend. On the event loop it stopped
+        the API answering anything for its whole run, every 5 minutes
+        (measured locally: 0.3-0.6 s at 100 ACTIVE flags, about 3 s at
+        1,000). Here it runs unchanged in one worker thread, on a private
+        event loop and with its own session, and the API's loop awaits the
+        result. The rollback alerts it sends go with it.
+
+        The coroutine is created inside the thread. ``asyncio.to_thread`` on
+        the coroutine function would only create it, never run it: the tick
+        would be recorded as a success that checked nothing.
+
+        The body must not await anything bound to the API's event loop, and
+        nothing would report it if it did: on the private loop a harmless
+        await simply runs, and the process-wide Redis pool in
+        ``backend.app.api.deps`` (created on first use) would be created
+        there, on a loop that closes when the tick ends, and then reused by
+        every API request after it, whose cache errors are swallowed. The
+        body awaits nothing of the kind today. ``test_safety_tick_off_loop.py``
+        runs it with the cache on and fails if it ever suspends or asks for
+        the Redis pool.
+        """
+        return await run_in_worker(
+            lambda: asyncio.run(self.check_feature_flags_safety()),
+            label=f"{SCHEDULER_NAME} check",
+        )
 
     async def check_feature_flags_safety(self) -> Dict[str, int]:
         """

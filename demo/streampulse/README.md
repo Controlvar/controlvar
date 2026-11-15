@@ -1,4 +1,4 @@
-# StreamPulse — mobile feature-flag demo for Controlvar
+# StreamPulse — device-targeting demo for Controlvar (web SDK)
 
 StreamPulse is a web page that renders a phone. Pick a simulated device (OS, OS version, app
 version, region, tier, employee) and the phone shows, screen by screen, which feature flags and
@@ -10,6 +10,14 @@ on the way.
 It exercises the feature-flag path of the platform: targeting rules with device context, gradual
 rollout schedules, safety monitoring + auto-rollback, kill switches, mutual exclusion groups, the
 global holdout and Bayesian A/B analysis. No audio, no images, no external fonts or CDNs.
+
+The phone is drawn in the browser and uses the React SDK, which sends the device's attributes with
+every flag evaluation. The native iOS, Android and Flutter SDKs do not send attributes
+on flag evaluation yet ([#438](https://github.com/Controlvar/controlvar/issues/438)), so a rule like
+the Search tab's would not match from them. The React Native SDK sends them, as the React SDK does.
+
+[Guided examples](https://docs.controlvar.com/guides/guided-examples/#device) walks the Search
+tab's rule one step at a time, with what you will see at each step.
 
 ## Screens ↔ platform features
 
@@ -25,7 +33,9 @@ global holdout and Bayesian A/B analysis. No audio, no images, no external fonts
 | Every screen | all of the above | — | **Global holdout** `streampulse-holdout` (2 %): held-out devices see control everywhere with the reason `holdout` |
 
 Every tracked event is sent with an explicit `experimentKey` / `featureFlagKey` (see the table);
-`screen_view {screen}` has no key and is fanned out by the SDK to everything cached for the device.
+`screen_view {screen}` has no key and is fanned out by the SDK to every experiment and flag it
+answered for the device since the page was loaded (up to 24 hours; "Refresh now" clears only the
+cache, so it keeps them).
 
 The right-hand side has two panels:
 
@@ -36,10 +46,13 @@ The right-hand side has two panels:
   drops the SDK caches and re-fetches everything. Otherwise the SDK keeps each answer for 5 s
   (`cacheTtlMs: 5000`) and asks again the next time a screen needs it.
 - **Powered by Controlvar** — per flag: on/off + the server `reason` (`targeting_rule`,
-  `rollout`, `inactive`, `error`) spelled out; per experiment: the variant and whether the device
-  was actually enrolled (`assigned: false` → "in global holdout streampulse-holdout", "excluded:
-  mutual exclusion group streampulse-profile", "excluded: targeting rules"); the last 8 events;
-  links to the dashboard; **Refresh now** (clears the SDK cache and re-evaluates).
+  `rollout`, `inactive`, `error`) spelled out; per experiment, once its screen has assigned it:
+  the variant and whether the device was actually enrolled (`assigned: false` → "in global
+  holdout streampulse-holdout", "excluded: mutual exclusion group streampulse-profile",
+  "excluded: targeting rules"); the last 8 events; links to the dashboard; **Refresh now**
+  (clears the SDK cache and re-evaluates). The panel assigns no experiment itself, because an
+  assignment records that the device saw the experiment: until its screen opens, an experiment
+  reads `not assigned yet` and names that screen.
 
 The **Rollout story** button opens a drawer with the 7-step narrative, the command that drives it,
 and a live readout of `streampulse_player_v2` for the current device.
@@ -128,8 +141,8 @@ Other scripts: `npm test` (jest + Testing Library, SDK mocked), `npm run lint`,
 The React SDK is consumed straight from `../../sdk/react/src` (tsconfig `paths` + webpack alias +
 `experimental.externalDir`), so SDK changes show up without a build step. `react` and `react-dom`
 are aliased to this app's copies to avoid the duplicate-React "Invalid hook call" trap. StreamPulse
-uses `useFeatureFlag(...).reason` and `useExperiment(...).assigned` / `.reason` (React SDK ≥ 1.1.0
-with the `assigned`/`reason` fields).
+uses `useFeatureFlag(...).reason` and `useExperiment(...).assigned` / `.reason` (React SDK 0.1.0
+or later, with the `assigned`/`reason` fields).
 
 ## Demo script — what to show
 
@@ -169,7 +182,7 @@ Keep `traffic.py` running in a terminal throughout so the numbers move.
    *Subscribe*. Dashboard → Admin → Audit log: the seed wrote create, change and start entries
    for this experiment, in the form the platform writes them; every later change is logged too.
 8. **Global holdout**. Type a custom device id such as `sp-holdout-15` (bucket 1 under the demo
-   holdout's salt) and *Apply device*: every experiment reads `in global holdout streampulse-holdout (control
+   holdout's salt) and *Apply device*: every experiment whose screen you open reads `in global holdout streampulse-holdout (control
    shown)` and no exposure is recorded. The preset ids are chosen to be outside the holdout.
    The API records each device first seen while the holdout is active; the seed writes no such
    records, so a comparison of held-out devices with the rest needs real traffic first (the
@@ -182,14 +195,14 @@ per-experiment), so it can differ after `--reset`; the holdout bucket does not.
 
 | Symptom | Cause / fix |
 |---|---|
-| Yellow banner "NEXT_PUBLIC_CONTROLVAR_API_KEY is not set"; panel shows `error: API error: 401` everywhere | The key is missing or wrong. Run `python backend/scripts/seed_streampulse.py` (it rewrites `.env.local` and `.api_key`), then restart `npm run dev` — Next reads env vars at startup. |
+| Yellow banner "NEXT_PUBLIC_CONTROLVAR_API_KEY is not set"; panel shows `error: API error: 401` for every flag, and every experiment stays `not assigned yet` | The key is missing or wrong. Run `python backend/scripts/seed_streampulse.py` (it rewrites `.env.local` and `.api_key`), then restart `npm run dev` — Next reads env vars at startup. |
 | **401** in the network tab although `.env.local` has a key | The key was revoked or belongs to another environment/database. Re-seed. |
-| **404** on `/tracking/assign` or `/feature-flags/evaluate/streampulse_...` | The StreamPulse experiments are not seeded or not ACTIVE, or the flags are not seeded (`--reset` removes both; a flag that is not ACTIVE answers `enabled: false`, not a 404). Run the seed script. |
+| **404** on `/tracking/assign` or `/feature-flags/evaluate/streampulse_...` | The StreamPulse experiments or flags are not seeded (`--reset` removes both). A paused or completed experiment answers its control variant with `assigned: false`, and a flag that is not ACTIVE answers `enabled: false`: neither is a 404. Run the seed script. |
 | Browser console: **CORS** error from `localhost:3300` | Port 3300 is not in the backend's CORS allow-list. The development defaults (`DEFAULT_CORS_ORIGINS` in `backend/app/core/config.py`) include it; if you set `CORS_ORIGINS` or `BACKEND_CORS_ORIGINS` yourself, add `http://localhost:3300` and restart the API. Against a staging or production API, add it to that API's `CORS_ORIGINS`: those allow no other origin by default. |
-| Every flag `off`, every experiment `error`, nothing loads | Backend not running on `NEXT_PUBLIC_CONTROLVAR_API_URL`. Start it from the repository root: `ENVIRONMENT=development uvicorn backend.app.main:app --reload`. |
+| Every flag `off`, every experiment `not assigned yet`, nothing loads | Backend not running on `NEXT_PUBLIC_CONTROLVAR_API_URL`. Start it from the repository root: `ENVIRONMENT=development uvicorn backend.app.main:app --reload`. |
 | AI search never turns on | The rule needs `os = iOS`, `os_version ≥ 17.0.0`, `region = US`, `tier = premium` and the flag's own rollout is 0 %. Check the custom fields; the panel reason tells you whether a rule matched. |
 | Player v2 does not change after the story rolls back / advances | The app does not poll: it asks for the decisions when you pick a device or press *Refresh now*, so press *Refresh now*. If the schedulers are involved (auto-rollback, time-based stages), they run every `SAFETY_CHECK_INTERVAL_MINUTES` / `ROLLOUT_CHECK_INTERVAL_MINUTES` (default 5 / 15) — set both to `1` in the backend `.env` for the demo (`setup-local.sh` sets both to `1` unless they are already set). |
-| A preset shows "in global holdout streampulse-holdout" for every experiment | That id hashes into the 2 % holdout. The shipped preset ids do not; if you changed one, pick another id (or use it to demonstrate the holdout). |
+| A preset shows "in global holdout streampulse-holdout" for every experiment you open | That id hashes into the 2 % holdout. The shipped preset ids do not; if you changed one, pick another id (or use it to demonstrate the holdout). |
 | "Invalid hook call" in the browser | Two React copies. `next.config.js` aliases `react`/`react-dom` to this app's `node_modules`; run `npm install` inside `demo/streampulse`. |
 | Running with `docker compose --profile demo`: **401** everywhere, and the simulator log says `no /data/demo/streampulse/.api_key` | The streampulse seed did not run. Run `SEED=demo,shoplab,streampulse docker compose --profile demo up -d --wait`: it applies the missing seeds to the existing database (no `down -v`). |
 | Simulator exits with code 2 / 3 / 4 | 2 = API key rejected or missing, or `--incident` without the server key in `demo/streampulse/.api_key_server` (run the seed), 3 = catalogue not seeded (404), 4 = backend unreachable. |

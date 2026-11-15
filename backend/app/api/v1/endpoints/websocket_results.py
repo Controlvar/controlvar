@@ -17,7 +17,9 @@ WebSocket protocol:
          written to every access log on the path, prefer 1 or 2.
     The token is validated exactly like an HTTP request (local JWT or
     Cognito); the dev-auth bypass applies too.  An invalid/missing token
-    closes the socket with code 4401 after the handshake.
+    closes the socket with code 4401 after the handshake, and a caller who
+    may not view the experiment (the rule of GET /api/v1/experiments/{id})
+    with code 4403.
   - Server sends an initial snapshot on connection
   - Server sends a fresh snapshot every RESULTS_STREAM_INTERVAL_SECONDS seconds
     (a Settings field, default 30), whatever the client sends in between
@@ -40,20 +42,22 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from sqlalchemy.orm import Session
-from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.config import settings
 from backend.app.services.results_streaming_service import ResultsStreamingService
 from backend.app.services.websocket_manager import ConnectionManager
 
 logger = logging.getLogger(__name__)
 
-# Application-defined close code for a failed WebSocket authentication
-# (4000-4999 is the private-use range of RFC 6455).
+# Application-defined close codes (4000-4999 is the private-use range of
+# RFC 6455): a failed WebSocket authentication, and an authenticated caller
+# who may not view experiments.
 WS_CLOSE_UNAUTHORIZED = 4401
+WS_CLOSE_FORBIDDEN = 4403
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 # Module-level singleton so all requests share the same ConnectionManager state.
 manager = ConnectionManager()
@@ -101,47 +105,63 @@ def _accepted_subprotocol(websocket: WebSocket) -> Optional[str]:
     )
 
 
-def _authenticate_websocket(
-    websocket: WebSocket, token: Optional[str], db: Session
-) -> bool:
+def _admit_websocket(
+    websocket: WebSocket,
+    token: Optional[str] = Query(
+        None, description="Access token (alternative to the bearer header)"
+    ),
+    db: Session = Depends(deps.get_db),
+) -> Optional[int]:
     """
-    Run the HTTP authentication chain for a WebSocket handshake.
+    Run the HTTP authentication chain and the experiment read rule for a
+    WebSocket handshake.
 
-    Returns True when the caller is an active user.  With the dev-auth bypass
-    on, every connection is accepted without touching the database (the
-    bypass user is synthetic, exactly as for HTTP requests).
+    Returns None when the caller is admitted, else the close code: 4401 for a
+    missing, invalid or inactive caller, 4403 for one who may not view
+    experiments (the rule of GET /api/v1/experiments/{id}). A dependency of
+    the route, so FastAPI runs it before the handler, as it does a plain
+    ``def`` dependency of an HTTP route. With the dev-auth bypass on, every
+    caller is admitted without touching the database (the bypass user is
+    synthetic, exactly as for HTTP requests).
     """
     if deps.dev_auth_bypass_active():
-        return True
+        return None
     bearer = _extract_ws_token(websocket, token)
     if not bearer:
-        return False
+        return WS_CLOSE_UNAUTHORIZED
     try:
         user = deps.get_current_user(token=bearer, db=db)
-        deps.get_current_active_user(user)
-        return True
+        deps.require_active_user(user)
     except HTTPException as exc:
         logger.info("WebSocket auth rejected (%s): %s", exc.status_code, exc.detail)
-        return False
+        return WS_CLOSE_UNAUTHORIZED
     except Exception as exc:  # DB down, etc. — fail closed
         logger.warning("WebSocket auth error: %s", exc)
-        return False
+        return WS_CLOSE_UNAUTHORIZED
+    try:
+        deps.get_experiment_read_access(None, user)
+    except HTTPException as exc:
+        logger.info("WebSocket read refused (%s): %s", exc.status_code, exc.detail)
+        return WS_CLOSE_FORBIDDEN
+    except Exception as exc:  # fail closed
+        logger.warning("WebSocket read check error: %s", exc)
+        return WS_CLOSE_UNAUTHORIZED
+    return None
 
 
 @router.websocket("/ws/experiments/{experiment_id}/results")
 async def stream_results(
     websocket: WebSocket,
     experiment_id: str,
-    token: Optional[str] = Query(
-        None, description="Access token (alternative to the bearer header)"
-    ),
+    refusal: Optional[int] = Depends(_admit_websocket),
     db: Session = Depends(deps.get_db),
 ) -> None:
     """
     Stream live experiment results over WebSocket.
 
     Authenticates via ``?token=`` or a bearer header (close code 4401 when
-    invalid), then sends an initial snapshot, then a fresh one every
+    invalid) and admits a caller who may view the experiment (close code 4403
+    otherwise), then sends an initial snapshot, then a fresh one every
     ``settings.RESULTS_STREAM_INTERVAL_SECONDS`` seconds on a schedule that
     client messages do not move. Also responds to client messages:
       {"action": "ping"} -> {"event": "pong"}
@@ -149,13 +169,13 @@ async def stream_results(
     """
     from backend.app.db.session import SessionLocal
 
-    # Sync SQLAlchemy work runs in the threadpool, like a sync HTTP dependency.
     subprotocol = _accepted_subprotocol(websocket)
-    if not await run_in_threadpool(_authenticate_websocket, websocket, token, db):
+    if refusal is not None:
         # Accept first so the client receives the application close code
         # (closing before accept surfaces as a bare HTTP 403 handshake error).
         await websocket.accept(subprotocol=subprotocol)
-        await websocket.close(code=WS_CLOSE_UNAUTHORIZED, reason="Unauthorized")
+        reason = "Forbidden" if refusal == WS_CLOSE_FORBIDDEN else "Unauthorized"
+        await websocket.close(code=refusal, reason=reason)
         return
     # The session was only needed for authentication; release its connection
     # now rather than holding it for the lifetime of the socket.

@@ -8,10 +8,9 @@ from uuid import UUID
 
 import numpy as np
 from scipy import stats
-from sqlalchemy import func, text
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
-from backend.app.core.database_config import get_schema_name
 from backend.app.core.stats_engine import ENGINE_VERSION, as_of_bucket, derive_seed
 from backend.app.models.assignment import Assignment
 from backend.app.models.event import Event
@@ -23,26 +22,35 @@ from backend.app.schemas.bayesian import (
     BayesianResultsResponse,
     BayesianVariantResult,
 )
+
+# The event value bound is the event schemas' constant, so the two cannot
+# drift apart.
+from backend.app.schemas.tracking import VALUE_BOUND
 from backend.app.services.analysis_settings import resolve_analysis_settings
 from backend.app.services.bayesian_service import DEFAULT_N_SAMPLES, BayesianService
 from backend.app.services.event_matching import (
-    CONVERSION_SQL_PREDICATE,
-    CONVERTING_USERS_JOIN,
-    CONVERTING_USERS_SQL,
+    _assigned_pairs,
+    conversion_event_filter,
     count_converting_users,
     count_converting_users_any,
     first_conversion_times,
 )
+from backend.app.services.segment_breakdown import segment_rows
 from backend.app.services.srm_service import (
     recommendation_under_srm,
     sample_ratio_check,
 )
 from backend.app.services.sufficient_stats_analysis import (
+    EVENT_COUNT_METRIC_TYPES,
+    MEAN_METRIC_TYPES,
     BinomialVariant,
     adjusted_p_values,
     binomial_metric_result,
     binomial_variant_results,
     effect_size_label,
+    metric_lower_is_better,
+    metric_type_name,
+    per_user_mean_metric_result,
 )
 
 logger = logging.getLogger(__name__)
@@ -142,22 +150,31 @@ class AnalysisService:
 
         # Return formatted results
         # Schema-shaped results for the analytics API (schemas/results.py).
+        # A revenue, count, duration or custom metric (MEAN_METRIC_TYPES) is
+        # its mean per assigned user; a conversion metric is the share of
+        # users who converted.
         alpha = 1.0 - confidence_level
         metrics = [
-            binomial_metric_result(
-                [
-                    (
-                        BinomialVariant(
-                            v["variant_id"], v["variant_name"], v["is_control"]
-                        ),
-                        v["sample_size"],
-                        v["conversions"],
-                    )
-                    for v in raw["variant_results"]
-                ],
-                alpha,
-                correction_method,
-                metric=metric,
+            (
+                self._per_user_mean_result(
+                    experiment, metric, raw, alpha, correction_method
+                )
+                if metric_type_name(metric) in MEAN_METRIC_TYPES
+                else binomial_metric_result(
+                    [
+                        (
+                            BinomialVariant(
+                                v["variant_id"], v["variant_name"], v["is_control"]
+                            ),
+                            v["sample_size"],
+                            v["conversions"],
+                        )
+                        for v in raw["variant_results"]
+                    ],
+                    alpha,
+                    correction_method,
+                    metric=metric,
+                )
             )
             for metric, raw in zip(metric_definitions, metrics_results)
         ]
@@ -213,6 +230,114 @@ class AnalysisService:
     # these names stay for the callers and tests that use them.
     _adjusted_p_values = staticmethod(adjusted_p_values)
 
+    def _per_user_mean_result(
+        self,
+        experiment: Experiment,
+        metric: Metric,
+        raw: Dict[str, Any],
+        alpha: float,
+        correction_method: str,
+    ) -> Dict[str, Any]:
+        """A revenue, count, duration or custom metric's result: its mean
+        value per assigned user.
+
+        ``raw`` is the metric's ``calculate_metric_results`` output, which has
+        each variant's assigned users and converting users; each user's value
+        is read here.  A count metric's is the number of the metric's events
+        the user sent, whatever their value (``event_counts``); a revenue,
+        duration or custom metric's is the total of those events' value
+        (``value_totals``).
+        """
+        read = (
+            self.event_counts
+            if metric_type_name(metric) in EVENT_COUNT_METRIC_TYPES
+            else self.value_totals
+        )
+        return per_user_mean_metric_result(
+            [
+                (
+                    BinomialVariant(
+                        v["variant_id"], v["variant_name"], v["is_control"]
+                    ),
+                    v["sample_size"],
+                    v["conversions"],
+                    read(experiment.id, v["variant_id"], metric.event_name),
+                )
+                for v in raw["variant_results"]
+            ],
+            alpha,
+            correction_method,
+            metric=metric,
+        )
+
+    def event_counts(
+        self, experiment_id: Any, variant_id: Any, event_name: Optional[str]
+    ) -> List[float]:
+        """The number of the metric's events of each user of ``variant_id``
+        who sent one.
+
+        The events counted are the ones ``count_converting_users`` counts for
+        the metric: matching ``conversion_event_filter(event_name)``, tagged
+        with ``variant_id``, from a user assigned to that variant
+        (``_assigned_pairs``; no SQL join, as there).  Every such event counts
+        1, whatever its value: none, 0, negative, not finite or beyond
+        ``VALUE_BOUND``.  ``value`` is not read, so there is deliberately no
+        value predicate here (the one ``value_totals`` has would make a user
+        whose events carry no value 0).  A stored event counts each time it
+        was stored.  A user with no such event is not listed, so their value
+        is 0.
+        """
+        rows = (
+            self.db.query(Event.user_id, func.count(Event.id))
+            .filter(
+                Event.experiment_id == experiment_id,
+                Event.variant_id == variant_id,
+                conversion_event_filter(event_name),
+            )
+            .group_by(Event.user_id)
+            .all()
+        )
+        pairs = _assigned_pairs(
+            self.db, experiment_id, (str(user_id) for user_id, _ in rows)
+        )
+        variant = str(variant_id)
+        return [
+            float(count) for user_id, count in rows if (variant, str(user_id)) in pairs
+        ]
+
+    def value_totals(
+        self, experiment_id: Any, variant_id: Any, event_name: Optional[str]
+    ) -> List[float]:
+        """The value total of each user of ``variant_id`` who has one.
+
+        The events counted are the ones ``count_converting_users`` counts for
+        the metric: matching ``conversion_event_filter(event_name)``, tagged
+        with ``variant_id``, from a user assigned to that variant
+        (``_assigned_pairs``; no SQL join, as there).  An event's value counts
+        when ``abs(value) <= VALUE_BOUND``: an event with no value, or a value
+        that is not finite or is beyond the bound, adds nothing to its user's
+        total, and the user still counts as a converting user.  A user whose
+        every event is like that has no total here, so their value is 0.
+        """
+        rows = (
+            self.db.query(Event.user_id, func.sum(Event.value))
+            .filter(
+                Event.experiment_id == experiment_id,
+                Event.variant_id == variant_id,
+                conversion_event_filter(event_name),
+                func.abs(Event.value) <= VALUE_BOUND,
+            )
+            .group_by(Event.user_id)
+            .all()
+        )
+        pairs = _assigned_pairs(
+            self.db, experiment_id, (str(user_id) for user_id, _ in rows)
+        )
+        variant = str(variant_id)
+        return [
+            float(total) for user_id, total in rows if (variant, str(user_id)) in pairs
+        ]
+
     @staticmethod
     def _sample_size_adequate(
         experiment: Experiment, metrics_results: List[Dict[str, Any]]
@@ -245,6 +370,14 @@ class AnalysisService:
         variant has reached the primary metric's minimum sample size; before
         that the result is reported but the recommendation stays
         CONTINUE_TESTING (early peeks inflate false positives).
+
+        The primary metric's ``lower_is_better`` decides the direction: the
+        winner is the metric result's ``winning_variant_id`` (already
+        direction-aware), and KEEP_CONTROL means every treatment is
+        significantly worse in that direction, read from the absolute
+        difference where the relative change is None.  For a lower-is-better
+        metric the reason gives the improvement as a positive figure and says
+        that lower is better; the higher-is-better sentences are unchanged.
         """
         if not metrics:
             return {
@@ -254,6 +387,7 @@ class AnalysisService:
                 "recommendation_reason": "No metrics are defined for this experiment yet.",
             }
         primary = next((m for m in metrics if m["is_primary"]), metrics[0])
+        lower_is_better = primary.get("lower_is_better", False) is True
         winner_id = primary["winning_variant_id"]
         if winner_id:
             winner = next(
@@ -265,12 +399,25 @@ class AnalysisService:
                 if winner["adjusted_p_value"] is not None
                 else winner["p_value"]
             )
-            reason = (
-                f"{winner['variant_name']} shows "
-                f"{pct:.1f}% improvement on {primary['metric_name']} (p={p:.4f})."
-                if pct is not None and p is not None
-                else f"{winner['variant_name']} is significantly better on {primary['metric_name']}."
-            )
+            if lower_is_better:
+                # The figure is the fall, so it is positive in the good
+                # direction; never "-20.0% improvement".
+                reason = (
+                    f"{winner['variant_name']} shows "
+                    f"{abs(pct):.1f}% improvement on {primary['metric_name']} "
+                    f"(p={p:.4f}): it fell by {abs(pct):.1f}%, and lower is "
+                    "better for this metric."
+                    if pct is not None and p is not None
+                    else f"{winner['variant_name']} is significantly better on "
+                    f"{primary['metric_name']}, where lower is better."
+                )
+            else:
+                reason = (
+                    f"{winner['variant_name']} shows "
+                    f"{pct:.1f}% improvement on {primary['metric_name']} (p={p:.4f})."
+                    if pct is not None and p is not None
+                    else f"{winner['variant_name']} is significantly better on {primary['metric_name']}."
+                )
             if not sample_size_adequate:
                 return {
                     "has_winner": True,
@@ -288,8 +435,20 @@ class AnalysisService:
                 "recommendation_reason": reason,
             }
         treatments = [v for v in primary["variants"] if not v["is_control"]]
+        # "Worse" is the signed change against the metric's direction: the
+        # relative change, or where that is None (a control with no
+        # conversions, or a mean of 0) the absolute difference, which has the
+        # same sign.  Without it, a treatment significantly worse than such a
+        # control read as "no significant difference" (engine 1.11.0).
+        worse_sign = 1 if lower_is_better else -1
+
+        def signed_change(v: Dict[str, Any]) -> float:
+            if v["relative_improvement_pct"] is not None:
+                return v["relative_improvement_pct"]
+            return v.get("absolute_difference") or 0
+
         if treatments and all(
-            v["is_significant"] and (v["relative_improvement_pct"] or 0) < 0
+            v["is_significant"] and signed_change(v) * worse_sign > 0
             for v in treatments
         ):
             return {
@@ -297,7 +456,10 @@ class AnalysisService:
                 "winning_variant_id": None,
                 "recommendation": "KEEP_CONTROL",
                 "recommendation_reason": (
-                    f"Every treatment is significantly worse than control on {primary['metric_name']}."
+                    f"Every treatment is significantly worse than control on "
+                    f"{primary['metric_name']}, where lower is better."
+                    if lower_is_better
+                    else f"Every treatment is significantly worse than control on {primary['metric_name']}."
                 ),
             }
         total = sum(v["sample_size"] for v in primary["variants"])
@@ -392,7 +554,9 @@ class AnalysisService:
             "variant_results": results,
             "total_conversions": sum(conversions.values()),
             "has_significant_results": any(r["is_significant"] for r in results),
-            "best_variant": self._find_best_variant(results),
+            "best_variant": self._find_best_variant(
+                results, lower_is_better=metric_lower_is_better(metric)
+            ),
         }
 
     def calculate_experiment_summary(self, experiment: Experiment) -> Dict[str, Any]:
@@ -599,13 +763,18 @@ class AnalysisService:
         return results
 
     def _find_best_variant(
-        self, variant_results: List[Dict[str, Any]]
+        self,
+        variant_results: List[Dict[str, Any]],
+        lower_is_better: bool = False,
     ) -> Optional[Dict[str, Any]]:
         """
         Find the best performing variant from a list of variant results.
 
         Args:
             variant_results: List of variant result dictionaries
+            lower_is_better: the metric's direction; when true the best is
+                the significant variant with the lowest rate below the
+                control's, otherwise the highest above it.
 
         Returns:
             Dictionary containing best variant info or None if no clear winner
@@ -615,20 +784,26 @@ class AnalysisService:
         if not control:
             return None
 
-        # Find variants with significant improvement over control
+        # Find variants with significant improvement over control, in the
+        # metric's direction
         significant_variants = [
             v
             for v in variant_results
             if not v["is_control"]
             and v["is_significant"]
-            and v["relative_improvement"] > 0
+            and (
+                v["relative_improvement"] < 0
+                if lower_is_better
+                else v["relative_improvement"] > 0
+            )
         ]
 
         if not significant_variants:
             return None
 
-        # Find variant with highest conversion rate
-        best_variant = max(significant_variants, key=lambda v: v["conversion_rate"])
+        # The best rate: the lowest when lower is better, else the highest
+        pick = min if lower_is_better else max
+        best_variant = pick(significant_variants, key=lambda v: v["conversion_rate"])
 
         return {
             "variant_id": best_variant["variant_id"],
@@ -650,14 +825,20 @@ class AnalysisService:
             and getattr(experiment, "bayesian_config", None)
         )
 
+    @staticmethod
+    def _bayesian_primary_metric(experiment: Experiment) -> Optional[Metric]:
+        """The metric the Bayesian analysis reads: the primary, else the first."""
+        definitions = list(getattr(experiment, "metric_definitions", None) or [])
+        return next(
+            (m for m in definitions if m.is_primary),
+            definitions[0] if definitions else None,
+        )
+
     def _bayesian_observations(
         self, experiment: Experiment
     ) -> Dict[str, Dict[str, int]]:
         """Per-variant ``{conversions, total}`` for the primary metric."""
-        primary_metric = next(
-            (m for m in experiment.metric_definitions if m.is_primary),
-            experiment.metric_definitions[0] if experiment.metric_definitions else None,
-        )
+        primary_metric = self._bayesian_primary_metric(experiment)
         metrics_data: Dict[str, Dict[str, int]] = {}
         for variant in experiment.variants:
             vid = str(variant.id)
@@ -757,8 +938,15 @@ class AnalysisService:
         # → byte-identical Monte Carlo draws.
         seed = derive_seed(experiment.id, as_of_bucket(as_of), n_samples)
 
-        # Run full Bayesian analysis
-        analysis = service.analyze(variant_observations, n_samples=n_samples, seed=seed)
+        # Run full Bayesian analysis, in the primary metric's direction
+        analysis = service.analyze(
+            variant_observations,
+            n_samples=n_samples,
+            seed=seed,
+            lower_is_better=metric_lower_is_better(
+                self._bayesian_primary_metric(experiment)
+            ),
+        )
 
         posteriors = analysis["posteriors"]
         credible_intervals = analysis["credible_intervals"]
@@ -1027,6 +1215,12 @@ class AnalysisService:
         """
         Get experiment results segmented by a specific property.
 
+        The rows come from ``segment_breakdown.segment_rows``, as in
+        ``/results?breakdown=``: every assigned user in exactly one segment
+        (``unknown`` and ``other`` included), with each metric's converting
+        users, so per variant and metric the rows add up to the headline.
+        Each variant's ``conversion_rate`` is a percentage; no test is run.
+
         Args:
             experiment_id: ID of the experiment
             segment_by: Property to segment results by (e.g., 'country', 'device')
@@ -1059,35 +1253,13 @@ class AnalysisService:
         if not metrics:
             return {"segments": []}
 
-        # Get segment values from event metadata.
-        # `schema` comes from get_schema_name(), which only ever returns one of
-        # two literal identifiers; all request-derived values are bound params.
-        schema = get_schema_name()
-        segment_values_query = text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
-            f"""
-            SELECT DISTINCT jsonb_extract_path_text(event_metadata, :segment_key) as segment_value
-            FROM {schema}.events
-            WHERE experiment_id = :experiment_id
-            AND event_metadata ? :segment_key
-            AND jsonb_extract_path_text(event_metadata, :segment_key) IS NOT NULL
-            AND jsonb_extract_path_text(event_metadata, :segment_key) != ''
-        """  # nosec B608 - schema is a fixed config identifier, not user input
+        rows = segment_rows(
+            self.db, experiment.id, segment_by, [m.event_name for m in metrics]
         )
 
-        segment_values_result = self.db.execute(
-            segment_values_query,
-            {"segment_key": segment_by, "experiment_id": str(experiment_id)},
-        )
-
-        segment_values = [row[0] for row in segment_values_result]
-
-        if not segment_values:
-            return {"segments": []}
-
-        # Process each segment
         segments = []
-        for segment_value in segment_values:
-            segment_result = {"segment_value": segment_value, "metrics": []}
+        for row in rows:
+            segment_result = {"segment_value": row.value, "metrics": []}
 
             for metric in metrics:
                 metric_result = {
@@ -1097,59 +1269,9 @@ class AnalysisService:
                 }
 
                 for variant in experiment.variants:
-                    # Get assignments count for this variant in this segment
-                    # This is an approximation - ideally would track segment with the assignment
-                    segment_assignments_query = text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
-                        f"""
-                        SELECT COUNT(DISTINCT a.user_id)
-                        FROM {schema}.assignments a
-                        JOIN {schema}.events e ON a.user_id = e.user_id AND a.experiment_id = e.experiment_id
-                        WHERE a.experiment_id = :experiment_id
-                        AND a.variant_id = :variant_id
-                        AND e.event_metadata ? :segment_key
-                        AND jsonb_extract_path_text(e.event_metadata, :segment_key) = :segment_value
-                    """  # nosec B608 - schema is a fixed config identifier, not user input
-                    )
-
-                    assignments = (
-                        self.db.execute(
-                            segment_assignments_query,
-                            {
-                                "experiment_id": str(experiment_id),
-                                "variant_id": str(variant.id),
-                                "segment_key": segment_by,
-                                "segment_value": segment_value,
-                            },
-                        ).scalar()
-                        or 0
-                    )
-
-                    # Get conversions for this variant and segment
-                    segment_conversions_query = text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
-                        f"""
-                        SELECT {CONVERTING_USERS_SQL}
-                        FROM {schema}.events e
-                        JOIN {schema}.assignments a ON {CONVERTING_USERS_JOIN}
-                        WHERE e.experiment_id = :experiment_id
-                        AND e.variant_id = :variant_id
-                        AND {CONVERSION_SQL_PREDICATE}
-                        AND e.event_metadata ? :segment_key
-                        AND jsonb_extract_path_text(e.event_metadata, :segment_key) = :segment_value
-                    """  # nosec B608 - schema is a fixed config identifier, not user input
-                    )
-
-                    conversions = (
-                        self.db.execute(
-                            segment_conversions_query,
-                            {
-                                "experiment_id": str(experiment_id),
-                                "variant_id": str(variant.id),
-                                "event_name": metric.event_name,
-                                "segment_key": segment_by,
-                                "segment_value": segment_value,
-                            },
-                        ).scalar()
-                        or 0
+                    assignments = row.users.get(str(variant.id), 0)
+                    conversions = row.converters[metric.event_name].get(
+                        str(variant.id), 0
                     )
 
                     # Calculate conversion rate

@@ -14,13 +14,17 @@ import pytest
 import re2
 
 from backend.app.core import pattern_match
+from backend.app.core.flag_values import (
+    MAX_SAFE_INTEGER,
+    MAX_VALUE_BYTES,
+    MAX_VALUE_DEPTH,
+)
 from backend.app.models import register_core_models
 from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
 from backend.app.schemas.targeting_rule import Condition, OperatorType
 from backend.app.services import sdk_ruleset
 from backend.app.services.sdk_ruleset import (
     LOCAL_OPERATORS,
-    MAX_SAFE_INTEGER,
     build_flag_entry,
     build_ruleset,
     condition_is_local,
@@ -289,6 +293,144 @@ def test_presence_conditions_ship_a_null_value():
     entry = build_flag_entry(_flag(rules=_native(_c("a", "is_null", "ignored"))))
     condition = entry["rules"][0]["match"]["conditions"][0]
     assert condition == {"attribute": "a", "operator": "is_null", "value": None}
+
+
+# ---------------------------------------------------------------------------
+# Values (#1497)
+# ---------------------------------------------------------------------------
+
+PAIRS = {
+    "string": ("Buy now", "Purchase"),
+    "number": (10, 2.5),
+    "json": ({"color": "blue", "sizes": [1, 2]}, ["fallback"]),
+}
+
+
+def _valued(value_type, **kwargs):
+    on_value, off_value = PAIRS[value_type]
+    return _flag(
+        value_type=value_type, on_value=on_value, off_value=off_value, **kwargs
+    )
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("value_type", sorted(PAIRS))
+def test_a_local_value_flag_carries_its_type_and_both_values(value_type):
+    entry = build_flag_entry(_valued(value_type, rules=_native(_c("a", "eq", "x"))))
+    on_value, off_value = PAIRS[value_type]
+    assert entry["evaluation"] == "local"
+    assert (entry["value_type"], entry["on_value"], entry["off_value"]) == (
+        value_type,
+        on_value,
+        off_value,
+    )
+    assert set(entry) == ENTRY_KEYS | {"value_type", "on_value", "off_value"}
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "status", [FeatureFlagStatus.INACTIVE, FeatureFlagStatus.ARCHIVED, "INACTIVE"]
+)
+@pytest.mark.parametrize("value_type", sorted(PAIRS))
+def test_an_inactive_value_flag_carries_its_type_and_off_value(value_type, status):
+    flag = _valued(value_type, rules=_native(_c("a", "eq", "x")), status=status)
+    assert build_flag_entry(flag) == {
+        "key": "flag",
+        "active": False,
+        "value_type": value_type,
+        "off_value": PAIRS[value_type][1],
+    }
+
+
+@pytest.mark.parametrize("value_type", sorted(PAIRS))
+def test_a_remote_value_flag_carries_no_value(value_type):
+    rules = _native(_c("v", "semantic_version", "1.0.0") | {"additional_value": "gte"})
+    entry = build_flag_entry(_valued(value_type, rules=rules))
+    assert entry == {"key": "flag", "active": True, "evaluation": "remote"}
+
+
+@pytest.mark.parametrize(
+    "status", [FeatureFlagStatus.ACTIVE, FeatureFlagStatus.INACTIVE]
+)
+def test_a_boolean_flag_entry_has_no_value_field(status):
+    """The bytes a deployment with no value flags served before #1497."""
+    for flag in (_flag(status=status), _flag(status=status, value_type="boolean")):
+        entry = build_flag_entry(flag)
+        assert not {"value_type", "on_value", "off_value"} & set(entry), entry
+
+
+def _nested(levels):
+    value = 1
+    for _ in range(levels):
+        value = [value]
+    return value
+
+
+#: Stored rows outside the value rules (PF-1 (b)): only a direct database
+#: write, or a release with wider limits, leaves one.
+UNSERVABLE = [
+    ("number", 10**400, 1),
+    ("number", 1, 2**60),
+    ("json", {"a": "x" * (MAX_VALUE_BYTES + 1)}, []),
+    ("json", _nested(MAX_VALUE_DEPTH + 1), []),
+    ("date", "2026-01-01", "2026-01-02"),
+]
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "status", [FeatureFlagStatus.ACTIVE, FeatureFlagStatus.ARCHIVED]
+)
+@pytest.mark.parametrize(
+    "value_type, on_value, off_value",
+    UNSERVABLE,
+    ids=["1e400", "2^60", "too-large", "too-deep", "unknown-type"],
+)
+def test_a_flag_whose_stored_value_breaks_the_rules_is_remote(
+    value_type, on_value, off_value, status
+):
+    """PF-1 (b): the same value rules as the evaluate route; the SDK asks the
+    server, and none of the values reaches the document."""
+    flag = _flag(
+        rules=_native(_c("a", "eq", "x")),
+        status=status,
+        value_type=value_type,
+        on_value=on_value,
+        off_value=off_value,
+    )
+    ruleset = build_ruleset([flag])
+    assert ruleset["flags"] == [{"key": "flag", "active": True, "evaluation": "remote"}]
+    text = sdk_ruleset.canonical_json(ruleset)
+    for value in (on_value, off_value):
+        form = sdk_ruleset.canonical_json(value)
+        assert len(form) < 5 or form not in text, form[:40]
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"on_value": "Pay"},
+        {"off_value": "Pay"},
+        {"value_type": "json", "on_value": ["a"], "off_value": ["b"]},
+    ],
+    ids=["on_value", "off_value", "value_type"],
+)
+def test_the_version_moves_with_a_value(change):
+    """B6: a 304 never keeps an old value."""
+    base = {"key": "a", "rules": _native(_c("x", "eq", "1")), "rollout": 10}
+    before = _flag(**base, value_type="string", on_value="Buy", off_value="Skip")
+    after = _flag(
+        **base,
+        **{"value_type": "string", "on_value": "Buy", "off_value": "Skip", **change},
+    )
+    assert _ruleset_version(before) != _ruleset_version(after)
+
+
+def test_an_inactive_flags_off_value_moves_the_version():
+    base = {"key": "a", "status": FeatureFlagStatus.INACTIVE, "value_type": "number"}
+    assert _ruleset_version(_flag(**base, on_value=1, off_value=2)) != _ruleset_version(
+        _flag(**base, on_value=1, off_value=3)
+    )
 
 
 # ---------------------------------------------------------------------------

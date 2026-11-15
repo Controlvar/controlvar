@@ -13,7 +13,7 @@ jest.mock('@/services/admin', () => ({
 }));
 
 // The page reads the signed-in user to choose its layout. These tests run on
-// the plain (non-superuser) layout as an ANALYST, who reads every entry; who
+// the plain (non-superuser) layout as an ANALYST, who reads other users' entries too; who
 // opens the page, and the superuser layout, are in AuditLogAccess.test.tsx.
 jest.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({

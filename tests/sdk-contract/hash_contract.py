@@ -105,6 +105,8 @@ RUNNER_CWD = {"go": HARNESS / "go"}
 NOT_RUN: dict[str, str] = {
     "react": "exports no hash function (flags and assignments are server-decided); "
     "nothing to check",
+    "mcp": "the MCP server hashes nothing: it asks the API, which evaluates every flag; "
+    "nothing to check",
     "android": "NOT RUN: compiling the Kotlin source needs Maven and the Kotlin "
     "compiler, which this job does not install; the SDK's own HashCompatibilityTest "
     "runs in sdk-unit-tests.yml's android job (nightly, and when sdk/android changes)",

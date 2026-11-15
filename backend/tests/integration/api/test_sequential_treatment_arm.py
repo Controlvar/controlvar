@@ -62,6 +62,12 @@ REWRITE_ROW = text(
     "INSERT INTO variants SELECT * FROM moved"
 )
 BARE_ORDER = text("SELECT name FROM variants WHERE experiment_id = :id")
+#: The heap order itself: what every plan returns for rows with equal keys
+#: (a sequential scan reads the heap in order, and an index scan on
+#: ``experiment_id`` returns equal keys in heap-TID order).
+CTID_ORDER = text("SELECT name FROM variants WHERE experiment_id = :id ORDER BY ctid")
+#: Writes of the layout before giving up and letting the precondition fail.
+LAYOUT_ATTEMPTS = 10
 
 
 @pytest.fixture
@@ -91,24 +97,41 @@ def make_three_arm_experiment(db_session, make_experiment):
             "inserted_later": ("control", "treatment-b", "treatment"),
             "rewritten_later": CREATION_ORDER,
         }[layout]
+        # The whole layout is written in ONE transaction, on one connection.
+        # A new tuple goes into the connection's current target page, and
+        # into that page's lowest unused line pointer, so each later INSERT
+        # of the transaction lands after the earlier ones.  Across commits
+        # it does not: a new connection asks the free space map for a page,
+        # and a ``variants`` heap with free space from earlier tests (rows
+        # deleted, then vacuumed) hands back an earlier page (#1678).  The
+        # one case left is a page that fills up mid-layout, so the physical
+        # (ctid) order is read back and the layout is written again, a
+        # bounded number of times, until it is what the layout promises.
         variants = {}
-        for name in insertion:
-            is_control, _users, _converted = ARMS[name]
-            variant = Variant(
-                experiment_id=experiment.id,
-                name=name,
-                is_control=is_control,
-                traffic_allocation=34 if is_control else 33,
-                created_at=stamps[name],
-                updated_at=stamps[name],
+        for _attempt in range(LAYOUT_ATTEMPTS):
+            variants = {}
+            for name in insertion:
+                is_control, _users, _converted = ARMS[name]
+                variant = Variant(
+                    experiment_id=experiment.id,
+                    name=name,
+                    is_control=is_control,
+                    traffic_allocation=34 if is_control else 33,
+                    created_at=stamps[name],
+                    updated_at=stamps[name],
+                )
+                db_session.add(variant)
+                db_session.flush()  # one INSERT per row, in this order
+                variants[name] = variant
+            if layout == "rewritten_later":
+                db_session.execute(REWRITE_ROW, {"id": variants["treatment"].id})
+            by_ctid = (
+                db_session.execute(CTID_ORDER, {"id": experiment.id}).scalars().all()
             )
-            db_session.add(variant)
-            db_session.flush()  # one INSERT per row, in this order
-            variants[name] = variant
+            if by_ctid == PHYSICAL_ORDER:
+                break
+            db_session.rollback()
         db_session.commit()
-        if layout == "rewritten_later":
-            db_session.execute(REWRITE_ROW, {"id": variants["treatment"].id})
-            db_session.commit()
         bare = db_session.execute(BARE_ORDER, {"id": experiment.id}).scalars().all()
         assert bare == PHYSICAL_ORDER, (
             f"precondition: the bare query returned {bare}; the layout {layout!r} "

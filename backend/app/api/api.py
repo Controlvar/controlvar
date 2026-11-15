@@ -7,6 +7,7 @@ and applying appropriate prefixes and tags.
 
 from fastapi import APIRouter
 
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.v1.endpoints import (
     admin,
     ai_design,
@@ -42,7 +43,9 @@ from backend.app.api.v1.endpoints import (
     sdk,
     segments,
     tracking,
+    tracking_visual,
     users,
+    visual_preview_links,
     websocket_results,
 )
 
@@ -69,7 +72,16 @@ def register_core_routers(router: APIRouter) -> APIRouter:
     router.include_router(
         experiments.router, prefix="/experiments", tags=["Experiments"]
     )
+    # #1545: a visual experiment's preview links, made and revoked on the
+    # dashboard (needs experiment update).
+    router.include_router(
+        visual_preview_links.router, prefix="/experiments", tags=["Experiments"]
+    )
     router.include_router(tracking.router, prefix="/tracking", tags=["Tracking"])
+    # #1545: the visual editor's browser script asks which changes and goals a
+    # visitor gets (POST /tracking/visual) and opens a preview link
+    # (POST /tracking/visual/preview); an API key with no scopes.
+    router.include_router(tracking_visual.router, prefix="/tracking", tags=["Tracking"])
     # Error reports (POST /tracking/errors, /tracking/errors/batch) feed feature flag
     # safety monitoring; same prefix and API-key auth as event tracking. Only reports
     # sent with an sdk:ruleset key count toward automatic rollback.
@@ -125,7 +137,7 @@ def register_core_routers(router: APIRouter) -> APIRouter:
     )
     # Issue #23: AI-Powered Experiment Design & Recommendations
     router.include_router(ai_design.router, prefix="/ai", tags=["AI Design"])
-    # Issue #23: MCP (Model Context Protocol) server for AI agent access
+    # Issue #23: the tool list of the MCP server (sdk/mcp), which is not this API
     router.include_router(mcp.router, prefix="/mcp", tags=["MCP"])
     # Issue #27: guided experiment builder (draft-and-submit API; no dashboard UI)
     router.include_router(
@@ -177,7 +189,7 @@ def build_v1_router() -> APIRouter:
     load had already reported success.
     """
     load_modules()
-    router = APIRouter()
+    router = APIRouter(route_class=OffLoopRoute)
     register_core_routers(router)
     mount_module_routers(router)
     return router
@@ -187,7 +199,7 @@ def build_v1_router() -> APIRouter:
 api_router_v1 = build_v1_router()
 
 # Main API router that includes versioned routers
-api_router = APIRouter()
+api_router = APIRouter(route_class=OffLoopRoute)
 api_router.include_router(api_router_v1)
 
 # Documentation configuration
@@ -301,7 +313,7 @@ CORE_TAGS_METADATA = [
     },
     {
         "name": "MCP",
-        "description": "Model Context Protocol server — exposes platform APIs to AI coding assistants and agents",
+        "description": "The tool list of the Controlvar MCP server, which runs on your computer and calls this API",
     },
     {
         "name": "Experiment Wizard",

@@ -1,6 +1,10 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import axe from 'axe-core';
+// The rollback dialog makes `#__next` inert and portals beside it, so every
+// render is mounted the way Next mounts the page (#369).
+import { APP_ROOT_ID, renderInAppRoot as render } from '@/tests/helpers/renderInAppRoot';
 import { SafetyDashboard, SAFETY_CHECK_CONCURRENCY } from '@/pages/admin/safety';
 import { AdminService } from '@/services/admin';
 import { ApiError } from '@/services/api';
@@ -274,7 +278,7 @@ describe('SafetyDashboard', () => {
     await openRollbackModalForSecondFlag();
     expect(screen.getByTestId('rollback-modal-effect')).toHaveTextContent(
       'The flag will be turned off for every user, including users matched by a targeting ' +
-        "rule. They get the flag's default value. Its rollout schedule is paused. To serve " +
+        "rule. They get the flag's off value. Its rollout schedule is paused. To serve " +
         "it again, turn it on from the flag's page.",
     );
     expect(screen.getByTestId('rollback-modal')).not.toHaveTextContent(/stays active/i);
@@ -345,7 +349,8 @@ describe('SafetyDashboard rollback dialog: keyboard and screen reader (#629)', (
     await openRollbackModalForSecondFlag();
     const dialog = screen.getByTestId('rollback-modal');
     expect(dialog).toContainElement(document.activeElement as HTMLElement);
-    expect(screen.getByTestId('rollback-reason-input')).toHaveFocus();
+    // A destructive confirm opens on Cancel (#369); before, on the reason field.
+    expect(screen.getByTestId('rollback-cancel-button')).toHaveFocus();
   });
 
   it('closes on Escape without rolling back', async () => {
@@ -367,7 +372,7 @@ describe('SafetyDashboard rollback dialog: keyboard and screen reader (#629)', (
 
     trigger.focus();
     fireEvent.click(trigger);
-    expect(screen.getByTestId('rollback-reason-input')).toHaveFocus();
+    expect(screen.getByTestId('rollback-cancel-button')).toHaveFocus();
     fireEvent.click(screen.getByTestId('rollback-cancel-button'));
     expect(screen.queryByTestId('rollback-modal')).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
@@ -447,8 +452,95 @@ describe('SafetyDashboard rollback dialog: keyboard and screen reader (#629)', (
   it('says automatic rollbacks are not listed under the session table', async () => {
     render(<SafetyDashboard />);
     expect(await screen.findByTestId('rollback-history-automatic-note')).toHaveTextContent(
-      'Automatic rollbacks are not listed here yet.',
+      'Automatic rollbacks are not listed here. Find them in the Audit Log under Safety rollback.',
     );
+  });
+});
+
+describe('SafetyDashboard rollback dialog on the shared Dialog (#369)', () => {
+  const appRoot = () => document.getElementById(APP_ROOT_ID) as HTMLElement;
+  const EFFECT =
+    'The flag will be turned off for every user, including users matched by a targeting rule. ' +
+    "They get the flag's off value. Its rollout schedule is paused. To serve it again, turn " +
+    "it on from the flag's page.";
+
+  it('opens as a modal dialog named "Confirm Rollback" and described by what the rollback does', async () => {
+    await openRollbackModalForSecondFlag();
+    const dialog = screen.getByRole('dialog', { name: 'Confirm Rollback' });
+    expect(dialog).toBe(screen.getByTestId('rollback-modal'));
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    // The description is the two sentences above the reason field, and nothing else.
+    const description = document.getElementById(dialog.getAttribute('aria-describedby') ?? '');
+    expect(description).toContainElement(screen.getByTestId('rollback-modal-flag-name'));
+    expect(description).toContainElement(screen.getByTestId('rollback-modal-effect'));
+    expect(description).not.toContainElement(screen.getByTestId('rollback-reason-input'));
+    expect(dialog).toHaveAccessibleDescription(expect.stringContaining('You are about to roll back flag Payments redesign'));
+    expect(dialog).toHaveAccessibleDescription(expect.stringContaining(EFFECT));
+  });
+
+  it('the page behind it is inert while it is open, and not after', async () => {
+    await openRollbackModalForSecondFlag();
+    expect(appRoot()).toHaveAttribute('inert');
+    expect(appRoot().contains(screen.getByTestId('rollback-modal'))).toBe(false);
+    fireEvent.click(screen.getByTestId('rollback-cancel-button'));
+    expect(appRoot()).not.toHaveAttribute('inert');
+  });
+
+  it('opens on Cancel, not on the reason field or Confirm Rollback', async () => {
+    await openRollbackModalForSecondFlag();
+    expect(screen.getByTestId('rollback-cancel-button')).toHaveFocus();
+  });
+
+  it('Escape, dispatched on document or pressed in the dialog, closes it without rolling back; focus returns to Roll back', async () => {
+    const user = userEvent.setup();
+    const { trigger } = await openRollbackModalForSecondFlag();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByTestId('rollback-modal')).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+
+    trigger.focus();
+    fireEvent.click(trigger);
+    await user.click(screen.getByTestId('rollback-reason-input'));
+    await user.keyboard('{Escape}');
+    expect(screen.queryByTestId('rollback-modal')).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+    expect(mockRollbackFlag).not.toHaveBeenCalled();
+  });
+
+  it('Tab and Shift+Tab stay inside the dialog', async () => {
+    const user = userEvent.setup();
+    await openRollbackModalForSecondFlag();
+    const reason = screen.getByTestId('rollback-reason-input');
+    const cancel = screen.getByTestId('rollback-cancel-button');
+    const confirm = screen.getByTestId('rollback-confirm-button');
+    expect(cancel).toHaveFocus();
+    await user.tab();
+    expect(confirm).toHaveFocus();
+    await user.tab();
+    expect(reason).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(confirm).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(cancel).toHaveFocus();
+  });
+
+  it('while the rollback is in flight, Escape still closes it, as Cancel does, and does not roll back again', async () => {
+    mockRollbackFlag.mockReturnValue(new Promise(() => undefined));
+    await openRollbackModalForSecondFlag();
+    fireEvent.click(screen.getByTestId('rollback-confirm-button'));
+    expect(screen.getByTestId('rollback-confirm-button')).toBeDisabled();
+    expect(screen.getByTestId('rollback-cancel-button')).toBeEnabled();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByTestId('rollback-modal')).not.toBeInTheDocument();
+    expect(mockRollbackFlag).toHaveBeenCalledTimes(1);
+  });
+
+  it('a refused rollback is an alert inside the dialog, which stays open', async () => {
+    mockRollbackFlag.mockRejectedValue(new Error('Not enough permissions'));
+    await openRollbackModalForSecondFlag();
+    fireEvent.click(screen.getByTestId('rollback-confirm-button'));
+    const dialog = screen.getByRole('dialog', { name: 'Confirm Rollback' });
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Not enough permissions');
   });
 });
 
@@ -468,15 +560,33 @@ describe('SafetyDashboard accessibility (axe-core in jsdom; colour contrast is n
     expect(await violations(container)).toStrictEqual([]);
   });
 
+  // These two scanned `container` before #369. The dialog now portals to
+  // document.body, outside it, so that scan would pass while checking nothing:
+  // they scan the dialog itself, and a clean scan must show the rule that
+  // checks its name ran on it.
+  async function dialogScan() {
+    const dialog = screen.getByRole('dialog');
+    expect(document.body).toContainElement(dialog);
+    const result = await axe.run(dialog, axeOptions);
+    return {
+      violations: result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(', ')}`),
+      passes: result.passes.map((p) => p.id),
+    };
+  }
+
   it('has no axe violations with the rollback dialog open', async () => {
-    const { container } = await openRollbackModalForSecondFlag();
-    expect(await violations(container)).toStrictEqual([]);
+    await openRollbackModalForSecondFlag();
+    const { violations: found, passes } = await dialogScan();
+    expect(found).toStrictEqual([]);
+    expect(passes).toContain('aria-dialog-name');
   });
 
   it('has no axe violations after a rollback succeeds', async () => {
-    const { container } = await openRollbackModalForSecondFlag();
+    await openRollbackModalForSecondFlag();
     fireEvent.click(screen.getByTestId('rollback-confirm-button'));
     await screen.findByTestId('rollback-success-message');
-    expect(await violations(container)).toStrictEqual([]);
+    const { violations: found, passes } = await dialogScan();
+    expect(found).toStrictEqual([]);
+    expect(passes).toContain('aria-dialog-name');
   });
 });

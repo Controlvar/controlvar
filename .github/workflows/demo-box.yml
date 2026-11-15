@@ -1,0 +1,544 @@
+name: Demo box
+
+# Boots the read-only demo's recipe (deploy/demo/) the way the box does, with
+# THIS change's core images: deploy/compose/compose.yml plus
+# deploy/demo/compose.demo.yml, the seed service, lockdown.sql, ShopLab and
+# StreamPulse built from this checkout, and Caddy in front (local certificates
+# instead of Let's Encrypt; the same Caddyfile). Every request the checks send
+# goes through Caddy on 127.0.0.1, as the box's own checks do. Then it runs
+# the nightly reset twice, with a sentinel flag and API key made in between.
+#
+# The API images are this change's builds, retagged to the published names the
+# production file resolves to, as compose-production.yml does; nothing is
+# pushed. Each step asserts one property and says which in its name. The step
+# "Demo mode is on and writes are refused" is the first that needs demo mode
+# in the API image, so a build without it stops there.
+#
+# Not a required check: it is path-filtered. The same triggers as Compose
+# Production, plus the recipe, the storefront sources it builds and this file;
+# nightly; and by hand (at a release tag, to check the release the box will
+# run). A red run opens no issue.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - backend/**
+      - frontend/**
+      - deploy/compose/**
+      - deploy/demo/**
+      - demo/**
+      - sdk/react/**
+      - VERSION
+      - .github/workflows/demo-box.yml
+  push:
+    branches: [main]
+    paths:
+      - backend/**
+      - frontend/**
+      - deploy/compose/**
+      - deploy/demo/**
+      - demo/**
+      - sdk/react/**
+      - VERSION
+      - .github/workflows/demo-box.yml
+  # 05:05 UTC: after Compose Production (04:30).
+  schedule:
+    - cron: '5 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Keyed on the pull request NUMBER, as compose-production.yml is (#75).
+  group: demo-box-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  demo-box:
+    name: Demo box
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      DOCKER_BUILDKIT: "1"
+      DEMO_HOST: demo.controlvar.com
+      CADDY_IMAGE: caddy:2.11.7-alpine
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # lib.sh's settings. The box keeps the recipe and the release in two
+      # checkouts; so does this job: the recipe is this checkout, the release
+      # a copy of it, so a path that resolves from the wrong one fails here.
+      # Then the generated .env, a state directory, and the Caddy CA the probe
+      # trusts here (on the box the certificates are real).
+      - name: Copy the checkout as the release checkout
+        run: |
+          set -euo pipefail
+          {
+            echo "DEMO_RELEASE=$RUNNER_TEMP/release"
+            echo "DEMO_ENV_FILE=$GITHUB_WORKSPACE/deploy/demo/.env"
+            echo "DEMO_STATE_DIR=$RUNNER_TEMP/demo-state"
+            echo "DEMO_PROBE_CAFILE=$RUNNER_TEMP/caddy-root.crt"
+          } >> "$GITHUB_ENV"
+          cp -a "$GITHUB_WORKSPACE" "$RUNNER_TEMP/release"
+          test -f "$RUNNER_TEMP/release/deploy/compose/compose.yml"
+
+      - name: Generate the demo .env, twice
+        run: |
+          set -euo pipefail
+          ./deploy/demo/generate-env.sh
+          before=$(sha256sum "$DEMO_ENV_FILE")
+          if ./deploy/demo/generate-env.sh 2>second.err; then
+            echo "::error::deploy/demo/generate-env.sh overwrote an existing .env"
+            exit 1
+          fi
+          grep -q "not overwriting" second.err
+          test "$(sha256sum "$DEMO_ENV_FILE")" = "$before"
+          test "$(stat -c %a "$DEMO_ENV_FILE")" = "600"
+          for line in DEMO_ACCOUNT_EMAIL=viewer@demo.com \
+              "ALLOWED_HOSTS=${DEMO_HOST},api" \
+              "CORS_ORIGINS=https://shoplab.${DEMO_HOST},https://streampulse.${DEMO_HOST}" \
+              SDK_RATE_LIMIT_PER_MINUTE=120; do
+            if ! grep -qxF -- "$line" "$DEMO_ENV_FILE"; then
+              echo "::error::the demo .env has no line '$line'"
+              exit 1
+            fi
+          done
+          echo "ok  .env written once, private, with the demo settings"
+
+      # Before Buildx: compose builds these with the engine's own builder,
+      # which loads the images where `up` finds them.
+      - name: Build ShopLab and StreamPulse from this checkout
+        run: |
+          set -euo pipefail
+          . deploy/demo/lib.sh
+          dc config --format json > demo-config.json
+          for app in shoplab streampulse; do
+            context=$(jq -er --arg s "$app" '.services[$s].build.context' demo-config.json)
+            if [ "$context" != "$DEMO_RELEASE" ]; then
+              echo "::error::$app builds from $context, not the release checkout $DEMO_RELEASE"
+              exit 1
+            fi
+            source=$(jq -er --arg s "${app}-simulator" '.services[$s].volumes[0].source' demo-config.json)
+            if [ "$source" != "$DEMO_RELEASE/demo/$app/simulator" ]; then
+              echo "::error::${app}-simulator mounts $source, not the release checkout's simulator"
+              exit 1
+            fi
+          done
+          dc build shoplab streampulse
+          # NEXT_PUBLIC_* are baked in at build: the bundles must carry the
+          # demo origin (the API, and the dashboard the panels link to).
+          for app in shoplab streampulse; do
+            if ! docker run --rm --entrypoint grep "controlvar-demo-${app}:local" \
+                -rqF "https://${DEMO_HOST}" .next/static; then
+              echo "::error::the $app bundle does not carry https://${DEMO_HOST}"
+              exit 1
+            fi
+          done
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # The UTC date, passed to the image builds as OS_PACKAGES_REFRESHED (see
+      # compose-production.yml).
+      - name: OS package refresh date
+        id: os-packages
+        run: printf 'date=%s\n' "$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      # Compose Production's builds, reading Docker Smoke's cache.
+      - name: Build API image (core)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: backend/Dockerfile
+          target: core
+          build-args: |
+            OS_PACKAGES_REFRESHED=${{ steps.os-packages.outputs.date }}
+          load: true
+          tags: demo-box-api:core
+          cache-from: type=gha,scope=api
+
+      - name: Build dashboard image (core)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: frontend/Dockerfile
+          # No profile argument: the Dockerfile's default is core.
+          build-args: |
+            OS_PACKAGES_REFRESHED=${{ steps.os-packages.outputs.date }}
+          load: true
+          tags: demo-box-web:core
+          cache-from: type=gha,scope=web
+
+      - name: Retag to the names the production file resolves
+        run: |
+          set -euo pipefail
+          . deploy/demo/lib.sh
+          demo_base_compose config --format json > base-config.json
+          api_image=$(jq -er .services.api.image base-config.json)
+          web_image=$(jq -er .services.web.image base-config.json)
+          docker tag demo-box-api:core "$api_image"
+          docker tag demo-box-web:core "$web_image"
+          echo "api: $api_image"
+          echo "web: $web_image"
+
+      - name: Pull postgres, redis and the simulators' image
+        run: |
+          set -euo pipefail
+          . deploy/demo/lib.sh
+          dc pull postgres redis shoplab-simulator streampulse-simulator
+
+      # docker stats every 3 s from here to the end, for the memory step.
+      - name: Start sampling memory
+        run: |
+          set -euo pipefail
+          nohup bash -c 'while :; do docker stats --no-stream --format "{{.Name}} {{.MemUsage}}" || true; echo "--"; sleep 3; done' \
+            > "$RUNNER_TEMP/stats.log" 2>/dev/null &
+          echo "$!" > "$RUNNER_TEMP/sampler.pid"
+
+      # The box's /etc/caddy/Caddyfile is one `import` line; here the import
+      # sits under global options that swap Let's Encrypt for Caddy's own CA.
+      - name: Start Caddy with the recipe's Caddyfile
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/caddy"
+          printf '{\n\tlocal_certs\n\tskip_install_trust\n}\nimport /etc/caddy/demo.Caddyfile\n' \
+            > "$RUNNER_TEMP/caddy/Caddyfile"
+          mounts=(-v "$RUNNER_TEMP/caddy/Caddyfile:/etc/caddy/Caddyfile:ro"
+                  -v "$GITHUB_WORKSPACE/deploy/demo/Caddyfile:/etc/caddy/demo.Caddyfile:ro")
+          docker run --rm "${mounts[@]}" "$CADDY_IMAGE" \
+            caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+          docker run -d --name demo-caddy --network host "${mounts[@]}" "$CADDY_IMAGE"
+          for _ in $(seq 1 30); do
+            if docker exec demo-caddy test -s /data/caddy/pki/authorities/local/root.crt; then
+              break
+            fi
+            sleep 1
+          done
+          docker exec demo-caddy cat /data/caddy/pki/authorities/local/root.crt > "$DEMO_PROBE_CAFILE"
+          test -s "$DEMO_PROBE_CAFILE"
+          echo "ok  Caddy is serving the three demo hosts"
+
+      # lib.sh's demo_rebuild, the code reset.sh runs: down -v, postgres and
+      # redis, the seed service, lockdown.sql, then the rest of the stack.
+      - name: First boot (seed, lockdown, start)
+        run: |
+          set -euo pipefail
+          . deploy/demo/lib.sh
+          demo_rebuild
+
+      - name: Seeded counts are exact
+        run: |
+          set -euo pipefail
+          . deploy/demo/lib.sh
+          # shellcheck disable=SC2016 # expanded by the inner shell, on purpose
+          dc exec -T postgres sh -c 'psql -X -q -A -t -F " " -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f -' \
+            > "$RUNNER_TEMP/counts-first.txt" <<'SQL'
+          SET search_path TO experimentation;
+          SELECT 'users', count(*) FROM users;
+          SELECT 'can_sign_in', string_agg(email, ',' ORDER BY email) FROM users WHERE hashed_password IS DISTINCT FROM '!';
+          SELECT 'experiments', count(*) FROM experiments;
+          SELECT 'feature_flags', count(*) FROM feature_flags;
+          SELECT 'api_keys', string_agg(name, ',' ORDER BY name) FROM api_keys;
+          SELECT 'seeds', string_agg(name, ',' ORDER BY name) FROM seed_markers;
+          SQL
+          cat > expected-counts.txt <<'EOF'
+          users 5
+          can_sign_in viewer@demo.com
+          experiments 12
+          feature_flags 8
+          api_keys shoplab-storefront,streampulse-app,streampulse-server
+          seeds demo,shoplab,streampulse
+          EOF
+          if ! diff expected-counts.txt "$RUNNER_TEMP/counts-first.txt"; then
+            echo "::error::the seeded database is not the expected one (diff above: expected, then found)"
+            exit 1
+          fi
+          echo "ok  seeded exactly; only the demo account can sign in"
+
+      - name: The published passwords and FIRST_SUPERUSER are refused
+        run: |
+          set -euo pipefail
+          . deploy/demo/lib.sh
+          demo_probe passwords superuser
+
+      - name: The demo account signs in as a viewer
+        run: |
+          set -euo pipefail
+          . deploy/demo/lib.sh
+          demo_probe signin
+
+      # The storefront and simulator keys belong to admin@demo.com: lockdown
+      # must leave that account active, or every SDK call answers 401.
+      - name: The storefront keys assign and evaluate
+        run: |
+          set -euo pipefail
+          . deploy/demo/lib.sh
+          demo_probe sdk
+
+      # `home`: / on the demo host redirects to /login (Caddy's redir).
+      - name: Health, the redirect to sign-in and both storefronts, through Caddy
+        run: |
+          set -euo pipefail
+          . deploy/demo/lib.sh
+          demo_probe health home storefronts
+
+      # The rehearsal allow-list, on each of the three sites: an address other
+      # than this host's gets 403 (a container on Docker's bridge reaching
+      # Caddy through the gateway). A tracking body over 16 KB gets 413, and
+      # the per-user flag list 404, both from Caddy.
+      - name: Caddy refuses other addresses, oversized tracking bodies and the per-user flag list
+        run: |
+          set -euo pipefail
+          . deploy/demo/lib.sh
+          api_image=$(demo_api_image)
+          for host in "${DEMO_HOST}" "shoplab.${DEMO_HOST}" "streampulse.${DEMO_HOST}"; do
+            code=$(docker run --rm --add-host "${host}:host-gateway" --entrypoint curl "$api_image" \
+              -sk -o /dev/null -w '%{http_code}' "https://${host}/login")
+            if [ "$code" != "403" ]; then
+              echo "::error::an address outside DEMO_ALLOW_FROM got $code from ${host}, expected 403"
+              exit 1
+            fi
+            echo "ok  ${host}, outside the allow-list: 403"
+          done
+          key=$(sed -n 's/^SHOPLAB_API_KEY=//p' "$DEMO_ENV_FILE")
+          echo "::add-mask::$key"
+          head -c 20000 /dev/zero | tr '\0' 'a' > big.body
+          code=$(curl -sS -o /dev/null -w '%{http_code}' \
+            --resolve "${DEMO_HOST}:443:127.0.0.1" --cacert "$DEMO_PROBE_CAFILE" \
+            -H 'Content-Type: application/json' -H "X-API-Key: $key" \
+            --data-binary @big.body "https://${DEMO_HOST}/api/v1/tracking/batch")
+          if [ "$code" != "413" ]; then
+            echo "::error::a 20,000-byte tracking body got $code, expected 413"
+            exit 1
+          fi
+          echo "ok  tracking body over 16 KB: 413"
+          code=$(curl -sS -o /dev/null -w '%{http_code}' \
+            --resolve "${DEMO_HOST}:443:127.0.0.1" --cacert "$DEMO_PROBE_CAFILE" \
+            -H "X-API-Key: $key" "https://${DEMO_HOST}/api/v1/feature-flags/user/probe")
+          if [ "$code" != "404" ]; then
+            echo "::error::/api/v1/feature-flags/user/* got $code, expected 404"
+            exit 1
+          fi
+          echo "ok  /api/v1/feature-flags/user/*: 404"
+
+      # DEMO_MODE is not tied to ENVIRONMENT, and development accepts a weak
+      # SECRET_KEY: the serving API must run with ENVIRONMENT=production, and
+      # only the one-off seed service in development. From the configuration
+      # compose runs, from the running container, and from /health, whose
+      # body hides the environment only in production (the probe's `health`).
+      - name: The API serves in production; only the seed runs in development
+        run: |
+          set -euo pipefail
+          . deploy/demo/lib.sh
+          dc --profile seed config --format json > profile-config.json
+          jq -e '.services.api.environment.ENVIRONMENT == "production"' profile-config.json
+          jq -e '.services.api.environment.DEMO_MODE == "true"' profile-config.json
+          jq -e '[.services | to_entries[] | select(.value.environment.ENVIRONMENT == "development") | .key] == ["seed"]' profile-config.json
+          docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(dc ps -q api)" > api-env.txt
+          grep -qx 'ENVIRONMENT=production' api-env.txt
+          grep -qx 'DEMO_MODE=true' api-env.txt
+          demo_probe health
+          echo "ok  the API runs in production with DEMO_MODE=true; the seed alone in development"
+
+      - name: Every container rotates its json-file log
+        run: |
+          set -euo pipefail
+          . deploy/demo/lib.sh
+          dc ps -q > container-ids.txt
+          : > log-config.txt
+          while read -r id; do
+            docker inspect -f '{{.Name}} {{.HostConfig.LogConfig.Type}} {{index .HostConfig.LogConfig.Config "max-size"}} {{index .HostConfig.LogConfig.Config "max-file"}}' "$id" >> log-config.txt
+          done < container-ids.txt
+          cat log-config.txt
+          test "$(wc -l < log-config.txt)" -eq 8
+          if grep -v ' json-file 10m 3$' log-config.txt; then
+            echo "::error::a container above does not rotate its log (json-file, 10m, 3)"
+            exit 1
+          fi
+          echo "ok  8 containers, json-file 10m x 3"
+
+      - name: Demo mode is on and writes are refused
+        run: |
+          set -euo pipefail
+          . deploy/demo/lib.sh
+          demo_probe config refusal anonymous
+
+      # reset.sh in full, with a watcher on a dashboard page (/login: / always
+      # redirects) and the API through Caddy while it runs: while web is down
+      # both must answer the rebuild page, HTML for the page and JSON with a
+      # `detail` for the API, each with Retry-After.
+      - name: Reset (1 of 2) serves the rebuild page while it runs
+        run: |
+          set -euo pipefail
+          watch_dir="$RUNNER_TEMP/watch"
+          mkdir -p "$watch_dir"
+          # shellcheck disable=SC2016 # expanded by the inner shell, on purpose
+          nohup bash -c '
+            while :; do
+              for path in /login /api/v1/auth/config; do
+                name=$(printf %s "$path" | tr -c "a-z0-9\n" _)
+                out=$(curl -s -D "$0/h$name" -o "$0/b$name" -w "%{http_code} %{content_type}" \
+                  --resolve "${DEMO_HOST}:443:127.0.0.1" --cacert "$DEMO_PROBE_CAFILE" \
+                  "https://${DEMO_HOST}${path}" || echo "000 -")
+                echo "$path $out" >> "$0/codes.txt"
+                case "$out" in 503*) cp "$0/h$name" "$0/h503$name"; cp "$0/b$name" "$0/b503$name" ;; esac
+              done
+              sleep 2
+            done' "$watch_dir" > /dev/null 2>&1 &
+          watcher=$!
+          rc=0
+          ./deploy/demo/reset.sh || rc=$?
+          kill "$watcher"
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::reset.sh exited $rc"
+            exit 1
+          fi
+          sort "$watch_dir/codes.txt" | uniq -c
+          grep -q '^/login 503 text/html' "$watch_dir/codes.txt"
+          grep -q '^/api/v1/auth/config 503 application/json' "$watch_dir/codes.txt"
+          grep -q 'The demo is being rebuilt' "$watch_dir/b503_login"
+          jq -e '.detail | test("being rebuilt")' "$watch_dir/b503_api_v1_auth_config"
+          grep -qi '^retry-after: 300' "$watch_dir/h503_login"
+          grep -qi '^retry-after: 300' "$watch_dir/h503_api_v1_auth_config"
+          echo "ok  reset passed; the rebuild page answered HTML and JSON while it ran"
+
+      # Made the way an operator would, with psql on the box: a flag copied
+      # from a seeded one, and an API key for admin@demo.com. Both work before
+      # the next reset; after it, neither may exist.
+      - name: Make a sentinel flag and API key
+        run: |
+          set -euo pipefail
+          . deploy/demo/lib.sh
+          sentinel_key="eptk_$(openssl rand -hex 16)"
+          echo "::add-mask::$sentinel_key"
+          echo "SENTINEL_KEY=$sentinel_key" >> "$GITHUB_ENV"
+          hash=$(printf '%s' "$sentinel_key" | sha256sum | cut -d' ' -f1)
+          # shellcheck disable=SC2016 # expanded by the inner shell, on purpose
+          dc exec -T postgres sh -c 'psql -X -q -v ON_ERROR_STOP=1 -v key_hash="$0" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f -' "$hash" <<'SQL'
+          SET search_path TO experimentation;
+          CREATE TEMP TABLE f AS SELECT * FROM feature_flags WHERE key = 'beta_features';
+          UPDATE f SET id = gen_random_uuid(), key = 'reset_sentinel', name = 'reset sentinel';
+          INSERT INTO feature_flags SELECT * FROM f;
+          CREATE TEMP TABLE k AS SELECT * FROM api_keys WHERE name = 'shoplab-storefront';
+          UPDATE k SET id = gen_random_uuid(), name = 'reset-sentinel', key = :'key_hash';
+          INSERT INTO api_keys SELECT * FROM k;
+          SQL
+          code=$(curl -sS -o /dev/null -w '%{http_code}' \
+            --resolve "${DEMO_HOST}:443:127.0.0.1" --cacert "$DEMO_PROBE_CAFILE" \
+            -H "X-API-Key: $sentinel_key" \
+            "https://${DEMO_HOST}/api/v1/feature-flags/evaluate/reset_sentinel?user_id=sentinel")
+          if [ "$code" != "200" ]; then
+            echo "::error::the sentinel flag and key answered $code before the reset, expected 200"
+            exit 1
+          fi
+          echo "ok  sentinel flag and key work"
+
+      - name: Reset (2 of 2)
+        run: ./deploy/demo/reset.sh
+
+      - name: The reset removed the sentinel and restored the seed
+        run: |
+          set -euo pipefail
+          . deploy/demo/lib.sh
+          # shellcheck disable=SC2016 # expanded by the inner shell, on purpose
+          left=$(printf "SELECT count(*) FROM experimentation.feature_flags WHERE key = 'reset_sentinel';\n" |
+            dc exec -T postgres sh -c 'psql -X -q -A -t -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f -')
+          if [ "$left" != "0" ]; then
+            echo "::error::the sentinel flag is still there after the reset"
+            exit 1
+          fi
+          code=$(curl -sS -o /dev/null -w '%{http_code}' \
+            --resolve "${DEMO_HOST}:443:127.0.0.1" --cacert "$DEMO_PROBE_CAFILE" \
+            -H "X-API-Key: $SENTINEL_KEY" \
+            "https://${DEMO_HOST}/api/v1/feature-flags/evaluate/shoplab_new_search?user_id=sentinel")
+          if [ "$code" != "401" ]; then
+            echo "::error::the sentinel API key answered $code after the reset, expected 401"
+            exit 1
+          fi
+          # shellcheck disable=SC2016 # expanded by the inner shell, on purpose
+          dc exec -T postgres sh -c 'psql -X -q -A -t -F " " -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f -' \
+            > counts-after.txt <<'SQL'
+          SET search_path TO experimentation;
+          SELECT 'users', count(*) FROM users;
+          SELECT 'can_sign_in', string_agg(email, ',' ORDER BY email) FROM users WHERE hashed_password IS DISTINCT FROM '!';
+          SELECT 'experiments', count(*) FROM experiments;
+          SELECT 'feature_flags', count(*) FROM feature_flags;
+          SELECT 'api_keys', string_agg(name, ',' ORDER BY name) FROM api_keys;
+          SELECT 'seeds', string_agg(name, ',' ORDER BY name) FROM seed_markers;
+          SQL
+          if ! diff "$RUNNER_TEMP/counts-first.txt" counts-after.txt; then
+            echo "::error::the database after two resets differs from the first boot's (diff above)"
+            exit 1
+          fi
+          echo "ok  sentinel gone, its key 401, the seed as it was"
+
+      # traffic.py retries a 429 twice and prints `HTTP 429` only when the
+      # third answer is a 429 too: what this proves is that no simulator was
+      # refused three times in a row, not that it was never refused.
+      - name: The simulators run and are never refused three times in a row
+        run: |
+          set -euo pipefail
+          . deploy/demo/lib.sh
+          dc ps --status running --services > running.txt
+          grep -qx shoplab-simulator running.txt
+          grep -qx streampulse-simulator running.txt
+          dc logs --no-color shoplab-simulator streampulse-simulator > simulators.log
+          if grep -n 'HTTP 429' simulators.log; then
+            echo "::error::a simulator got three 429s in a row (lines above)"
+            exit 1
+          fi
+          echo "ok  both simulators running, never three 429s in a row"
+
+      # A capacity, not a timing: the largest total of the demo's containers'
+      # memory in any sample since the stack first started. The box has 4 GB.
+      - name: Peak memory under 3.5 GiB
+        run: |
+          set -euo pipefail
+          kill "$(cat "$RUNNER_TEMP/sampler.pid")"
+          python3 - "$RUNNER_TEMP/stats.log" <<'PY'
+          import re
+          import sys
+
+          units = {"B": 1, "KiB": 2**10, "kB": 1e3, "MiB": 2**20, "MB": 1e6, "GiB": 2**30, "GB": 1e9}
+          totals, current, peak_lines, lines = [], 0.0, [], []
+          for line in open(sys.argv[1], encoding="utf-8"):
+              line = line.strip()
+              if line == "--":
+                  totals.append((current, lines))
+                  current, lines = 0.0, []
+                  continue
+              m = re.match(r"(controlvar-demo-\S+) ([0-9.]+)([A-Za-z]+) /", line)
+              if m:
+                  current += float(m.group(2)) * units[m.group(3)]
+                  lines.append(line)
+          samples = [t for t in totals if t[1]]
+          if len(samples) < 20:
+              sys.exit(f"only {len(samples)} samples of the demo's containers; the sampler did not run")
+          peak, at = max(samples, key=lambda t: t[0])
+          print(f"{len(samples)} samples; peak {peak / 2**30:.2f} GiB:")
+          print("\n".join(at))
+          if peak >= 3.5 * 2**30:
+              sys.exit(f"peak memory {peak / 2**30:.2f} GiB is not under 3.5 GiB")
+          PY
+
+      - name: Container logs (on failure)
+        if: failure()
+        run: |
+          . deploy/demo/lib.sh
+          dc ps -a || true
+          dc logs --no-color --tail=200 || true
+          docker logs --tail=100 demo-caddy || true
+
+      - name: Tear down
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/sampler.pid" ]; then kill "$(cat "$RUNNER_TEMP/sampler.pid")" 2>/dev/null || true; fi
+          docker rm -f demo-caddy || true
+          if [ -f "$DEMO_ENV_FILE" ]; then
+            . deploy/demo/lib.sh
+            dc down -v --remove-orphans || true
+          fi

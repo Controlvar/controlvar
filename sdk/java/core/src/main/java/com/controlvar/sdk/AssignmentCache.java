@@ -37,7 +37,7 @@ public class AssignmentCache<V> {
      *
      * @param maxSize maximum number of entries before LRU eviction kicks in (must be >= 1)
      * @param ttlMs   time-to-live for entries in milliseconds (must be > 0)
-     * @throws IllegalArgumentException if maxSize <= 0 or ttlMs <= 0
+     * @throws IllegalArgumentException if {@code maxSize <= 0} or {@code ttlMs <= 0}
      */
     public AssignmentCache(int maxSize, long ttlMs) {
         if (maxSize <= 0) throw new IllegalArgumentException("maxSize must be positive");
@@ -61,6 +61,24 @@ public class AssignmentCache<V> {
      */
     public synchronized void put(String key, V value) {
         cache.put(key, new CacheEntry<>(value, System.currentTimeMillis() + ttlMs));
+    }
+
+    /**
+     * Stores a value exactly as {@link #put(String, Object)} does, and reports, in the same locked
+     * step, whether the key held no live entry before: true when it was absent or expired,
+     * false when an unexpired entry was replaced. Expiry is judged as {@link #get(String)}
+     * judges it. Two threads that store the same key one after the other therefore get true
+     * and then false, which is how the client calls its exposure listener once per stored
+     * answer.
+     *
+     * @param key   cache key
+     * @param value the value to cache (non-null)
+     * @return true when the key held no unexpired entry
+     */
+    synchronized boolean fill(String key, V value) {
+        long now = System.currentTimeMillis();
+        CacheEntry<V> previous = cache.put(key, new CacheEntry<>(value, now + ttlMs));
+        return previous == null || now > previous.expiresAt;
     }
 
     /**

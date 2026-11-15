@@ -1,0 +1,17 @@
+{
+  "about": "A #1204 refusal as the dashboard renders it. `rules` hold a distance unit the evaluator does not know; the rule editor cannot produce them (it offers neither geo_within_radius nor time_window, and shows such stored rules read-only), but an API client can send them. `msg` is the API's 422 item's msg for them at loc [\"body\", \"targeting_rules\"] (segments: [\"body\", \"rules\"]), checked against the API by backend/tests/unit/core/test_targeting_vocabulary.py and backend/tests/integration/api/test_targeting_vocabulary_refused.py; `shown` is the line the flag, experiment and segment pages render for that msg, checked by the frontend tests that import this file.",
+  "rules": {
+    "logical_operator": "AND",
+    "groups": [
+      {
+        "logical_operator": "AND",
+        "conditions": [
+          { "attribute": "country", "operator": "equals", "value": "US" },
+          { "attribute": "location", "operator": "geo_within_radius", "value": "37.7749,-122.4194,15,furlong" }
+        ]
+      }
+    ]
+  },
+  "msg": "Value error, groups[0].conditions[1].value: unknown distance unit; use km, mi or m, or leave it out for km",
+  "shown": "Group 1, Condition 2: unknown distance unit; use km, mi or m, or leave it out for km"
+}

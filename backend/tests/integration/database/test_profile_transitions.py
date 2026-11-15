@@ -58,11 +58,16 @@ BRANCH_POINT = "a7b8c9d0e1f2"
 #: `alembic revision` would move what "the heads" means mid-test.
 #: `backend/tests/unit/db/test_alembic_plan.py` is where these are pinned
 #: against the files, with the whole apply order.
-CORE_HEAD = "4c2c09a2b3e8"
+CORE_HEAD = "t1812_user_totp"
 #: The modules branch's HEAD.  Every use below means "the modules revision a
 #: full database at head records" -- none means the branch's first revision,
-#: ``modules_0001_rbac``, which stopped being the head in #312.
-MODULES_HEAD = "modules_0002_warehouse_analysis"
+#: ``modules_0001_rbac``, which stopped being the head in #312, nor its
+#: second, ``modules_0002_warehouse_analysis``, which stopped being the head
+#: when ``modules_0003_lower_is_better`` was added (#1386), nor that third
+#: one, which stopped being the head when ``modules_0004_rbac_activation`` was
+#: added (#891), nor that fourth one, which stopped being the head when
+#: ``modules_0005_redshift`` was added (#826).
+MODULES_HEAD = "modules_0005_redshift"
 CORE_HEADS = {CORE_HEAD}
 FULL_HEADS = {CORE_HEAD, MODULES_HEAD}
 
@@ -417,7 +422,8 @@ def test_a_core_build_does_not_pretend_to_downgrade_or_stamp(
     result = tree_profiles.alembic(core_tree, scratch_schema, *argv)
 
     assert result.returncode != 0, result.stdout[-2000:]
-    assert MODULES_HEAD in result.stderr
+    # The documented answer: alembic's own, naming the modules revision.
+    assert f"Can't locate revision identified by '{MODULES_HEAD}'" in result.stderr
     assert _rows(test_db, scratch_schema) == before
     assert _tables(test_db, scratch_schema) == tables_before
 

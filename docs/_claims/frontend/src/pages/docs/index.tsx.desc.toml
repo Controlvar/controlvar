@@ -69,11 +69,15 @@ text = "Thompson Sampling, UCB1, Epsilon-Greedy (create a bandit through the API
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Full profile: store split URL experiments and preview the URL a user id hashes to. The edge router does not split traffic yet."
+text = "Full profile: give each variant its own URL. Your server or edge, or on AWS an optional CloudFront router, asks Controlvar where to send each visitor, and conversions count for the variant they saw."
 by = ["mechanism:docs-hub"]
 
 [[unit]]
 text = "Keep users out of conflicting experiments, and a share of new users out of every experiment"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Give each group of users the same split as the whole experiment, set through the API (beta)"
 by = ["mechanism:docs-hub"]
 
 [[unit]]
@@ -93,7 +97,7 @@ text = "Compare GPT-4o with Claude 3.5 Sonnet (steps 3–5 need provider API key
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Client libraries for web, mobile and server. The JavaScript SDK is on npm and the Python SDK is on PyPI."
+text = "Client libraries for web, mobile and server. The JavaScript, React, React Native, Python, Java and .NET SDKs and the OpenFeature providers are on npm, PyPI, Maven Central or NuGet."
 by = ["mechanism:docs-hub"]
 
 [[unit]]
@@ -133,7 +137,7 @@ text = "useFlag and useExperiment hooks, Provider, AsyncStorage offline support.
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Describes the API's tools for AI assistants."
+text = "Connect Claude Code, Claude Desktop or Cursor to your instance: read flags and experiment results."
 by = ["mechanism:docs-hub"]
 
 [[unit]]
@@ -153,7 +157,7 @@ text = "For PHP 8.1+, installed with Composer; it needs only ext-curl and ext-js
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Targets netstandard2.1 and net6.0; System.Text.Json and HttpClient, no other dependencies."
+text = "Targets net8.0 and netstandard2.1; System.Text.Json and HttpClient, no other dependencies."
 by = ["mechanism:docs-hub"]
 
 [[unit]]
@@ -229,7 +233,7 @@ text = "Who changed what through the API; no API edits or deletes an entry"
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Admin, Developer, Analyst and Viewer decide what a user can do; custom roles (full profile) are stored but not applied yet"
+text = "Admin, Developer, Analyst and Viewer decide what a user can do; in the full profile, custom roles and direct grants add to them"
 by = ["mechanism:docs-hub"]
 
 [[unit]]

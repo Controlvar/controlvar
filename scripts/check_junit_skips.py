@@ -52,7 +52,10 @@ def check(report: Path, directories: list[str]) -> list[str]:
     cases = list(root.iter("testcase"))
     for directory in directories:
         prefix = _prefix(directory)
-        scoped = [c for c in cases if _dotted(c).startswith(prefix)]
+        # Under --junit-prefix pytest writes a file skipped at collection with
+        # classname == the prefix itself (no trailing dot), so compare with the
+        # dot appended.
+        scoped = [c for c in cases if (_dotted(c) + ".").startswith(prefix)]
         if not scoped:
             problems.append(
                 f"no test under {directory} is in {report}, so its zero-skip "

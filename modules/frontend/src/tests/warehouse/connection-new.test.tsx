@@ -3,13 +3,19 @@
  * chosen; the BigQuery key is sent in the body and kept nowhere after a save.
  */
 import React from 'react';
+import axe from 'axe-core';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ModulesProvider } from '@/contexts/ModulesContext';
 import type { UserMe } from '@/services/api';
 import NewConnectionPage from '@modules/pages/warehouse/connections/new';
 import { warehouseService } from '@modules/services/warehouse';
-import { KEY_NOT_SERVICE_ACCOUNT, SNOWFLAKE_ROLE_REFUSED } from '@modules/components/warehouse/validation';
+import {
+  KEY_NOT_SERVICE_ACCOUNT,
+  REDSHIFT_DB_USER_HELP,
+  ROLE_ARN_HELP,
+  SNOWFLAKE_ROLE_REFUSED,
+} from '@modules/components/warehouse/validation';
 import {
   KEY_SENTINEL,
   SERVICE_ACCOUNT_JSON,
@@ -130,6 +136,9 @@ describe('connectors that are not available', () => {
     const athena = screen.getByRole('radio', { name: 'Amazon Athena' });
     expect(athena).toBeDisabled();
     expect(athena).toHaveAccessibleDescription('Not yet available');
+    const redshift = screen.getByRole('radio', { name: 'Amazon Redshift' });
+    expect(redshift).toBeDisabled();
+    expect(redshift).toHaveAccessibleDescription('Not yet available');
     const snowflake = screen.getByRole('radio', { name: 'Snowflake' });
     expect(snowflake).toBeEnabled();
     fireEvent.click(snowflake);
@@ -347,7 +356,148 @@ describe('Amazon Athena (with the connector enabled)', () => {
   });
 });
 
+const REDSHIFT_ROLE = 'arn:aws:iam::123456789012:role/controlvar-warehouse/controlvar-reader';
+
+async function chooseRedshift() {
+  svc.listConnectors.mockResolvedValue(connectors({ redshift: true }));
+  renderPage();
+  expect(await screen.findByRole('radio', { name: 'Amazon Redshift' })).toBeChecked();
+  type(/^Name/, 'Redshift prod');
+  type(/^Region/, 'eu-west-1');
+  type(/^Role ARN/, REDSHIFT_ROLE);
+  // Serverless is the default shape, so "Database" is the only field that starts so.
+  type(/^Database/, 'dev');
+}
+
+function save() {
+  fireEvent.click(screen.getByRole('button', { name: 'Save connection' }));
+}
+
+describe('Amazon Redshift (with the connector enabled)', () => {
+  it('has a time limit and no byte limit, and is saved first and tested afterwards', async () => {
+    await chooseRedshift();
+    expect(screen.queryByLabelText(/^Most data a query may read/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/^Query time limit/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Test connection' })).not.toBeInTheDocument();
+    expect(screen.getByText(/Saving generates the external ID your role's trust policy must require/)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/password|secret|external id|endpoint/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/^Role ARN/)).toHaveAccessibleDescription(
+      'The role Controlvar assumes in your account, under the IAM path /controlvar-warehouse/. Its trust policy must require the external ID generated when you save.',
+    );
+  });
+
+  it('sends a Serverless body with the workgroup only', async () => {
+    svc.createConnection.mockResolvedValue({ ...connection({ warehouse_type: 'redshift' }), public_key: null });
+    await chooseRedshift();
+    expect(screen.getByRole('radio', { name: 'Serverless workgroup' })).toBeChecked();
+    expect(screen.queryByLabelText(/^Cluster identifier/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Database user/)).not.toBeInTheDocument();
+    type(/^Workgroup/, 'analytics');
+    save();
+    await waitFor(() => expect(svc.createConnection).toHaveBeenCalledTimes(1));
+    expect(svc.createConnection.mock.calls[0][0]).toEqual({
+      warehouse_type: 'redshift',
+      name: 'Redshift prod',
+      region: 'eu-west-1',
+      role_arn: REDSHIFT_ROLE,
+      workgroup_name: 'analytics',
+      database: 'dev',
+      query_timeout_seconds: 300,
+      max_runs_per_day: 20,
+    });
+  });
+
+  it('the radios clear the other shape, so a body never carries both', async () => {
+    svc.createConnection.mockResolvedValue({ ...connection({ warehouse_type: 'redshift' }), public_key: null });
+    await chooseRedshift();
+    type(/^Workgroup/, 'analytics');
+    fireEvent.click(screen.getByRole('radio', { name: 'Provisioned cluster' }));
+    expect(screen.queryByLabelText(/^Workgroup/)).not.toBeInTheDocument();
+    type(/^Cluster identifier/, 'prod-cluster-1');
+    type(/^Database user/, 'controlvar_reader');
+    save();
+    await waitFor(() => expect(svc.createConnection).toHaveBeenCalledTimes(1));
+    const provisioned = svc.createConnection.mock.calls[0][0];
+    expect(provisioned).toEqual({
+      warehouse_type: 'redshift',
+      name: 'Redshift prod',
+      region: 'eu-west-1',
+      role_arn: REDSHIFT_ROLE,
+      cluster_identifier: 'prod-cluster-1',
+      db_user: 'controlvar_reader',
+      database: 'dev',
+      query_timeout_seconds: 300,
+      max_runs_per_day: 20,
+    });
+
+    // Back to Serverless: the workgroup typed before is gone, and so are the cluster's fields.
+    fireEvent.click(screen.getByRole('radio', { name: 'Serverless workgroup' }));
+    expect(screen.getByLabelText(/^Workgroup/)).toHaveValue('');
+    fireEvent.click(screen.getByRole('radio', { name: 'Provisioned cluster' }));
+    expect(screen.getByLabelText(/^Cluster identifier/)).toHaveValue('');
+    expect(screen.getByLabelText(/^Database user/)).toHaveValue('');
+    fireEvent.click(screen.getByRole('radio', { name: 'Serverless workgroup' }));
+    type(/^Workgroup/, 'other-wg');
+    save();
+    await waitFor(() => expect(svc.createConnection).toHaveBeenCalledTimes(2));
+    const serverless = svc.createConnection.mock.calls[1][0];
+    expect(serverless).toMatchObject({ workgroup_name: 'other-wg' });
+    expect(serverless).not.toHaveProperty('cluster_identifier');
+    expect(serverless).not.toHaveProperty('db_user');
+    expect(serverless).not.toHaveProperty('max_bytes_per_query');
+  });
+
+  it('refuses a role outside /controlvar-warehouse/ and a bad database user before sending anything', async () => {
+    await chooseRedshift();
+    type(/^Role ARN/, 'arn:aws:iam::123456789012:role/controlvar-reader');
+    fireEvent.click(screen.getByRole('radio', { name: 'Provisioned cluster' }));
+    type(/^Cluster identifier/, 'prod-cluster-1');
+    type(/^Database user/, 'Reader');
+    save();
+    const role = screen.getByLabelText(/^Role ARN/);
+    expect(role).toHaveAttribute('aria-invalid', 'true');
+    expect(role).toHaveAccessibleDescription(expect.stringContaining(ROLE_ARN_HELP));
+    expect(role).toHaveFocus();
+    expect(screen.getByLabelText(/^Database user/)).toHaveAccessibleDescription(expect.stringContaining(REDSHIFT_DB_USER_HELP));
+    expect(svc.createConnection).not.toHaveBeenCalled();
+  });
+
+  it('puts the shape radios in a fieldset with a legend', async () => {
+    await chooseRedshift();
+    const group = screen.getByRole('group', { name: 'Redshift deployment' });
+    expect(group).toContainElement(screen.getByRole('radio', { name: 'Serverless workgroup' }));
+    expect(group).toContainElement(screen.getByRole('radio', { name: 'Provisioned cluster' }));
+  });
+});
+
+/** axe-core over the rendered form; colour contrast is not computed in jsdom. */
+async function axeViolations(container: HTMLElement): Promise<string[]> {
+  const result = await axe.run(container, { rules: { 'color-contrast': { enabled: false } } });
+  return result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`);
+}
+
 describe('accessibility of the form', () => {
+  it('as shipped, with Amazon Athena and Amazon Redshift not yet available, has no axe violations', async () => {
+    const { container } = renderPage();
+    await screen.findByTestId('warehouse-connection-form');
+    for (const name of ['Amazon Athena', 'Amazon Redshift']) {
+      expect(screen.getByRole('radio', { name })).toHaveAccessibleDescription('Not yet available');
+    }
+    expect(await axeViolations(container)).toEqual([]);
+  });
+
+  it.each(['Serverless workgroup', 'Provisioned cluster'])(
+    'the Amazon Redshift form (%s) has no axe violations',
+    async (shape) => {
+      svc.listConnectors.mockResolvedValue(connectors({ redshift: true }));
+      const { container } = renderPage();
+      await screen.findByTestId('warehouse-connection-form');
+      fireEvent.click(screen.getByRole('radio', { name: shape }));
+      expect(screen.getByRole('group', { name: 'Redshift deployment' })).toBeInTheDocument();
+      expect(await axeViolations(container)).toEqual([]);
+    },
+  );
+
   it('labels every field and ties help text to it', async () => {
     renderPage();
     await screen.findByTestId('warehouse-connection-form');

@@ -524,7 +524,9 @@ def test_the_refusal_comes_after_the_migration_and_before_the_deployment():
     assert "scripts/refuse_migrating_api_revision.py" in step["run"]
     assert step["env"]["TASK_DEFINITION"] == "${{ steps.api-td.outputs.arn }}"
     assert _position("migrate") < _position("api-td") < _position("api-td-check")
-    assert _position("api-td-check") + 1 == _position("codedeploy")
+    # Then only the FORWARDED_ALLOW_IPS read-back, then the deployment.
+    assert _position("api-td-check") + 1 == _position("api-td-proxy-check")
+    assert _position("api-td-proxy-check") + 1 == _position("codedeploy")
 
 
 # --- what the run says when CodeDeploy stops the deployment for an alarm ---------------------

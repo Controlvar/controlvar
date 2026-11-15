@@ -1062,6 +1062,54 @@ def _fault(
     return None
 
 
+#: How many times stop_dead lists the session again: each pass kills what the last one
+#: found; a pass that finds nothing left ends it.
+STOP_DEAD_PASSES = 50
+
+
+def stop_dead(session: int) -> None:
+    """The computer stopping dead, from inside one call of a fake: a SIGKILL to every live
+    process of ``session`` (the installer, started as a session's leader, and every
+    process group it started with job control: its long children, and theirs) but this
+    one, whose work AWS has done and which still writes its call to the log and the state.
+
+    The installer's leader alone is not the computer: a child it started in a group of
+    its own (lib/record.sh's cv_bg) outlives a SIGKILL to the leader, and goes on
+    calling the fakes beside whatever the test runs next. The migration task's script,
+    stopped dead at its run-task, went on to read the task and its log; each call
+    re-made the record's home/.aws/cli/cache, between the uninstall's removing the
+    record's home/ and making it again, and the uninstall refused.
+
+    The session is listed again until a pass finds no process left, so that a child
+    forked between a listing and its kill is caught by the next; a zombie is already
+    stopped."""
+    import signal
+    import subprocess
+
+    me = os.getpid()
+    for _ in range(STOP_DEAD_PASSES):
+        listing = subprocess.run(
+            ["ps", "-A", "-o", "pid=,stat="], capture_output=True, text=True
+        ).stdout
+        found = []
+        for line in listing.splitlines():
+            words = line.split()
+            if len(words) < 2 or words[1].startswith("Z") or int(words[0]) == me:
+                continue
+            try:
+                if os.getsid(int(words[0])) == session:
+                    found.append(int(words[0]))
+            except OSError:  # gone since the listing, or not ours to ask about
+                continue
+        if not found:
+            return
+        for pid in found:
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except OSError:
+                continue
+
+
 def effects(
     state: dict, service: str, name: str | None, argv: list[str] | tuple
 ) -> None:
@@ -1069,9 +1117,10 @@ def effects(
     or a sign-in to end mid-run (``state["effects"]``, each matched as a fault is, once):
     ``age_seconds`` sets a file's time that far back; ``drop_key`` removes a key from a JSON
     file (a token cache that loses its refresh token); ``kill_session`` is the computer
-    stopping dead (a SIGKILL to the installer, the session's leader) once this call has
-    done its work and before the installer reads its answer, so that nothing the
-    installer writes after the call exists. ``nth`` picks the nth matching call."""
+    stopping dead once this call has done its work and before the installer reads its
+    answer (stop_dead: a SIGKILL to every process of the installer's session but this
+    call), so that nothing the installer or a child of its writes after the call exists.
+    ``nth`` picks the nth matching call."""
     for effect in state.get("effects", []):
         if effect.get("done"):
             continue
@@ -1084,7 +1133,6 @@ def effects(
         if effect.get("nth", effect["seen"]) != effect["seen"]:
             continue
         if effect.get("kill_session"):
-            import signal
             import subprocess
 
             effect["done"] = True
@@ -1096,7 +1144,7 @@ def effects(
             ).stdout
             # Only ever the installer, started in a session of its own (InstallWorld).
             if "controlvar-aws" in command:
-                os.kill(leader, signal.SIGKILL)
+                stop_dead(leader)
             continue
         if "drop" in effect:
             # Something gone from the account just after this call answered (another

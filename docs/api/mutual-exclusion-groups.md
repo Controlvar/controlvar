@@ -21,6 +21,14 @@ It prints `"ADMIN"`.
 
 ## Mutual Exclusion Groups
 
+In the dashboard, a user who may create experiments (ADMIN, DEVELOPER, and in the full profile
+anyone whose custom role or direct grant gives `experiment (create)`) opens Exclusion groups from
+the Experiments page: it lists the groups and creates one. A group's page adds and removes its
+experiments, renames the group and changes its share of traffic, shown as a percent: 50% is a
+`traffic_allocation` of 0.5. It offers draft, active and paused experiments that are in no group,
+and none for an archived group.
+Archiving and unarchiving a group there needs the ADMIN role.
+
 ### How It Works
 
 Traffic is partitioned using consistent hashing on user ID. Each group has a `traffic_allocation` (0.0–1.0) that defines the fraction of users eligible for experiments within the group. Users are assigned to at most one experiment within the group.
@@ -50,7 +58,9 @@ requests for the same new user are in flight, both can succeed.
 
 ### POST /api/v1/mutual-exclusion-groups
 
-Create a new mutual exclusion group. Requires DEVELOPER or ADMIN role. This saves the new
+Create a new mutual exclusion group. Requires permission to create experiments: DEVELOPER or
+ADMIN, or in the full profile a custom role or direct grant giving `experiment (create)`. This
+saves the new
 group's id in `$GROUP_ID`:
 
 ```{.bash exec}
@@ -149,7 +159,9 @@ It prints the member experiments' `id`, `name` and `status`:
 
 ### PUT /api/v1/mutual-exclusion-groups/{group_id}
 
-Update group name, description, or traffic allocation. Requires DEVELOPER or ADMIN role.
+Update group name, description, or traffic allocation. Requires permission to create
+experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving
+`experiment (create)`.
 
 Changing `status` (`"archived"` or `"active"`) requires ADMIN role, as archiving with `DELETE`
 does; a DEVELOPER gets `403`. Sending the group's current `status` back, as a form that sends every
@@ -173,6 +185,14 @@ experiment is kept.
 ---
 
 ## Global Holdout
+
+In the dashboard, Global holdouts on the Experiments page shows the active holdout to a user who
+may create experiments (ADMIN, DEVELOPER, and in the full profile anyone whose custom role or
+direct grant gives `experiment (create)`), and reads a holdout's results (beta) for one event
+name. An ADMIN also sees every
+holdout there, and creates, edits, activates and ends them; a new holdout's size starts at 5% in
+the dashboard. The page does not offer a new size once a holdout has been active, nor Activate for
+one that has ended.
 
 A global holdout keeps a percentage of new users out of **all** experiments platform-wide. New users in the holdout are not assigned to any experiment: `POST /api/v1/tracking/assign` answers with the control variant. Users who already had an assignment when the holdout was activated keep it.
 
@@ -315,8 +335,8 @@ curl -s "localhost:8000/api/v1/holdout/$HOLDOUT_ID/results?metric=purchase" \
 
 | Action | Minimum Role |
 |--------|-------------|
-| List groups / view holdout | DEVELOPER |
+| List groups / view holdout | DEVELOPER, or in the full profile a custom role or direct grant of `experiment (create)` |
 | Read holdout results | VIEWER |
-| Create / update groups (name, description, traffic allocation) | DEVELOPER |
-| Add/remove experiments from groups | DEVELOPER |
+| Create / update groups (name, description, traffic allocation) | DEVELOPER, or in the full profile a custom role or direct grant of `experiment (create)` |
+| Add/remove experiments from groups | DEVELOPER, or in the full profile a custom role or direct grant of `experiment (create)` |
 | Archive or unarchive groups (`DELETE`, or `status` on `PUT`) / list, create and update holdouts | ADMIN |

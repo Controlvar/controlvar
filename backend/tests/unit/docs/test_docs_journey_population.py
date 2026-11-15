@@ -741,10 +741,19 @@ def test_the_flag_bucket_is_the_documented_md5_mod_100():
 class FakeFlags:
     """The evaluate route, bucketing by the documented rollout hash."""
 
-    def __init__(self, rollout: int, *, state: str = "on", wrong: Optional[str] = None):
+    def __init__(
+        self,
+        rollout: int,
+        *,
+        state: str = "on",
+        wrong: Optional[str] = None,
+        values: Optional[Tuple[Any, Any]] = None,
+    ):
         self.rollout = rollout
         self.state = state
         self.wrong = wrong
+        #: A value flag's (on_value, off_value): each answer carries ``value``.
+        self.values = values
         self.paths: List[str] = []
 
     def __call__(self, method: str, path: str, body: Optional[Dict[str, Any]]):
@@ -752,13 +761,18 @@ class FakeFlags:
         self.paths.append(path)
         user = path.split("user_id=", 1)[1].split("&", 1)[0]
         if self.state == "off":
-            return 200, {"enabled": False, "reason": "inactive"}
+            return 200, self._valued({"enabled": False, "reason": "inactive"})
         if self.state == "rule":
-            return 200, {"enabled": True, "reason": "targeting_rule"}
+            return 200, self._valued({"enabled": True, "reason": "targeting_rule"})
         enabled = traffic.flag_bucket(user, "f") < self.rollout
         if user == self.wrong:
             enabled = not enabled
-        return 200, {"enabled": enabled, "reason": "rollout"}
+        return 200, self._valued({"enabled": enabled, "reason": "rollout"})
+
+    def _valued(self, answer: Dict[str, Any]) -> Dict[str, Any]:
+        if self.values is not None:
+            answer["value"] = self.values[0] if answer["enabled"] else self.values[1]
+        return answer
 
 
 USERS = [traffic.user_id("u", n) for n in range(1, 201)]
@@ -811,6 +825,90 @@ def test_every_answer_must_give_the_reason_named(state, reason, rollout, problem
     assert len(outcome.problems) == problems
 
 
+# A value flag's evaluations (#1497): each answer's value, on and off.
+LABELS = ("Complete purchase", "Buy now")
+
+
+@pytest.mark.parametrize(
+    "state, reason, rollout",
+    [
+        ("on", "rollout", 10),
+        ("off", "inactive", None),
+        ("rule", "targeting_rule", None),
+    ],
+)
+def test_a_value_flag_answered_as_documented_has_no_problem(state, reason, rollout):
+    outcome = traffic.evaluate(
+        FakeFlags(10, state=state, values=LABELS),
+        flag_key="f",
+        users=USERS,
+        reason=reason,
+        rollout=rollout,
+        values=LABELS,
+    )
+    assert outcome.problems == []
+    assert outcome.variants["f"]["evaluated"] == 200
+
+
+def test_a_form_that_swapped_the_two_values_fails_every_user():
+    """C8's planted defect: the on value stored as the off value and back."""
+    outcome = traffic.evaluate(
+        FakeFlags(10, values=LABELS[::-1]),
+        flag_key="f",
+        users=USERS,
+        reason="rollout",
+        rollout=10,
+        values=LABELS,
+    )
+    assert len(outcome.problems) == traffic.PROBLEMS_KEPT
+    assert "expected the" in outcome.problems[0]
+    assert (
+        "value 'Complete purchase'" in outcome.problems[0]
+        or "value 'Buy now'" in (outcome.problems[0])
+    )
+
+
+def test_an_answer_without_a_value_fails_a_value_step_and_passes_one_without():
+    outcome = traffic.evaluate(
+        FakeFlags(10, state="off"),
+        flag_key="f",
+        users=USERS[:3],
+        reason="inactive",
+        rollout=None,
+        values=LABELS,
+    )
+    assert outcome.problems == [
+        f"{user}: value no value; expected the off value 'Buy now'"
+        for user in USERS[:3]
+    ]
+    unchecked = traffic.evaluate(
+        FakeFlags(10, state="off"),
+        flag_key="f",
+        users=USERS[:3],
+        reason="inactive",
+        rollout=None,
+    )
+    assert unchecked.problems == []
+
+
+@pytest.mark.parametrize(
+    "answered, expected, same",
+    [
+        ("Buy now", "Buy now", True),
+        (10, 10.0, True),
+        ({"a": [1, {"b": "c"}]}, {"a": [1, {"b": "c"}]}, True),
+        (True, 1, False),
+        (1, True, False),
+        ([1, 2], [2, 1], False),
+        ({"a": 1}, {"a": 1, "b": 2}, False),
+        ("10", 10, False),
+        (None, "Buy now", False),
+    ],
+)
+def test_a_value_is_compared_as_json(answered, expected, same):
+    assert traffic.same_value(answered, expected) is same
+
+
 def _evaluations_step(**changes: Any) -> Dict[str, Any]:
     step = {
         "id": "users",
@@ -845,6 +943,21 @@ def test_a_journey_with_evaluations_loads(tmp_path):
     )
 
 
+def test_a_value_flags_evaluations_load_and_say_which_value_each_user_gets(tmp_path):
+    data = _with(
+        lambda d: d["steps"].insert(
+            2, _evaluations_step(on_value="Complete purchase", off_value="Buy now")
+        )
+    )
+    step = _load(tmp_path, data).steps[2]
+    assert (step.do.evaluations.on_value, step.do.evaluations.off_value) == LABELS
+    assert checks.describe_expect(step) == (
+        "exactly the users the documented rollout hash puts below 10% get the flag,"
+        ' each with reason rollout; each user who gets it gets the on value "Complete'
+        ' purchase", and each other user the off value "Buy now"'
+    )
+
+
 @pytest.mark.parametrize(
     "change, expected",
     [
@@ -864,6 +977,18 @@ def test_a_journey_with_evaluations_loads(tmp_path):
             lambda d: d["steps"].insert(0, _evaluations_step()),
             "step 1 (users): 'sdk-key' is used before any step saves it",
             id="evaluations-before-the-key-is-saved",
+        ),
+        pytest.param(
+            lambda d: d["steps"].insert(2, _evaluations_step(on_value="Buy now")),
+            "on_value and off_value are a flag's two values: give both, or neither",
+            id="an-on-value-without-an-off-value",
+        ),
+        pytest.param(
+            lambda d: d["steps"].insert(
+                2, _evaluations_step(on_value=True, off_value=False)
+            ),
+            "on_value",
+            id="a-boolean-value-a-boolean-flag-answers-in-enabled",
         ),
         pytest.param(
             lambda d: (
@@ -1045,6 +1170,40 @@ def _contradicted(rule: Dict[str, Any], steps: List[Dict[str, Any]]) -> List[str
         if (matched is not None) != (plan["reason"] == "targeting_rule"):
             found.append(step["id"])
     return found
+
+
+def test_the_flag_journeys_value_steps_check_the_values_its_form_typed():
+    """C8 (#1497): the string flag's evaluations expect exactly the two values
+    the journey types into On value and Off value, while it is off, on at its
+    rollout and off again; so a form that swapped them fails the journey."""
+    data = yaml.safe_load(
+        (RUNNER_ROOT / "journeys" / "feature-flag-create.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    typed = {
+        step["do"]["fill"]["label"]: step["do"]["fill"]["value"]
+        for step in data["steps"]
+        if (step.get("do") or {}).get("fill", {}).get("label")
+        in ("On value", "Off value")
+    }
+    assert typed == {"On value": "Complete purchase", "Off value": "Buy now"}
+    plans = [
+        step["do"]["evaluations"]
+        for step in data["steps"]
+        if (step.get("do") or {}).get("evaluations", {}).get("flag")
+        == "docs_journey_label"
+    ]
+    assert [(p["reason"], p.get("rollout")) for p in plans] == [
+        ("inactive", None),
+        ("rollout", 10),
+        ("inactive", None),
+    ]
+    for plan in plans:
+        assert (plan["on_value"], plan["off_value"]) == (
+            typed["On value"],
+            typed["Off value"],
+        )
 
 
 def test_the_flag_journeys_evaluations_hold_both_conditions_of_its_rule():

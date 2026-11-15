@@ -77,7 +77,7 @@ by = [
 ]
 
 [[unit]]
-text = "Evaluate a flag | GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=<url-encoded JSON, optional> | — | {key, enabled, config, reason}"
+text = "Evaluate a flag | GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=<url-encoded JSON, optional> | — | {key, enabled, value, value_type, config, reason}"
 by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
     "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_no_context_keeps_existing_behaviour",
@@ -88,15 +88,19 @@ text = "All flags for a user | GET /api/v1/feature-flags/user/{user_id} | — | 
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
-text = "Track one event | POST /api/v1/tracking/track | {event_type, event_name?, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?} | stored event"
+text = "Track one event | POST /api/v1/tracking/track | {event_type, event_name?, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?, event_id?} | stored event, with duplicate and event_id"
 by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
     "test:backend/tests/integration/api/test_tracking_api.py::TestTrack::test_tracks_event_with_assigned_variant",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r1_a_purchase_sent_again_with_its_event_id_is_stored_and_counted_once",
 ]
 
 [[unit]]
-text = "Track up to 100 events | POST /api/v1/tracking/batch | {events: [...]} | {success_count, failure_count, errors}"
-by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+text = "Track up to 100 events | POST /api/v1/tracking/batch | {events: [...]} | {success_count, failure_count, duplicate_count, errors}"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r2_the_same_item_twice_in_one_batch_is_stored_once",
+]
 
 [[unit]]
 text = "A user's assignments | GET /api/v1/tracking/assignments/{user_id} | — | list"
@@ -127,10 +131,28 @@ by = [
 ]
 
 [[unit]]
+text = "On /tracking/track, /tracking/batch and /tracking/events an event's metadata may be at most 16,384 bytes as compact JSON in UTF-8 and nest at most 64 levels (Event limits): over either limit, /track and /events answer 422 and /batch reports the entry in errors."
+by = [
+    "test:backend/tests/unit/schemas/test_event_metadata_size.py::test_the_limit_counts_bytes_not_characters",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_metadata_within_the_limit_is_stored_as_sent",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_metadata_over_the_limit_is_refused_and_nothing_is_stored",
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_over_deep_metadata_is_refused_and_nothing_is_stored",
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_metadata_at_the_limit_is_stored",
+]
+
+[[unit]]
 text = "An assign call for a user who is not eligible (global holdout, mutual exclusion group or targeting rules) still answers 200 with the control variant, assigned: false and reason set to holdout, mutual_exclusion or targeting; nothing is recorded for that user."
 by = [
     "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_holdout_users_get_control_and_are_not_recorded",
     "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_reason_order_is_holdout_then_mutual_exclusion_then_targeting",
+]
+
+[[unit]]
+text = "An experiment that is not ACTIVE answers every user the same way, with reason set to its status (draft, paused, completed or archived)."
+by = [
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_each_status_answers_an_enrolled_and_a_new_user",
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_an_answer_for_an_experiment_that_is_not_running_records_nothing",
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_the_reasons_are_exactly_the_four_statuses_that_are_not_active",
 ]
 
 [[unit]]
@@ -144,6 +166,13 @@ by = [
 [[unit]]
 text = "Conversions are matched to experiment metrics by event_name (exposures excluded), whatever event_type an SDK sends."
 by = ["test:backend/tests/integration/services/test_conversion_event_matching.py::TestConversionEventFilter::test_matches_both_producer_shapes_and_excludes_exposures"]
+
+[[unit]]
+text = "An event sent again is stored again unless it carries an event_id; see How events count."
+by = [
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r1_a_purchase_sent_again_with_its_event_id_is_stored_and_counted_once",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r8_without_an_event_id_two_identical_purchases_are_both_stored",
+]
 
 [[unit]]
 text = "Full request/response examples: Tracking Endpoints."
@@ -201,8 +230,10 @@ by = [
 ]
 
 [[unit]]
-text = "The JavaScript, Python and React SDKs send it on both calls; each SDK's page says what that SDK sends."
+text = "The JavaScript, Python, React and Go SDKs send it on both calls; each SDK's page says what that SDK sends."
 by = [
+    "test:sdk/go/client_test.go::TestClient_GetAssignment_RequestAndMapping",
+    "test:sdk/go/context_test.go::TestEvaluateFlag_SendsAttributesAsCompactJSONContext",
     "test:sdk/js/__tests__/client.test.ts::sends {experiment_key, user_id, context: attributes} as the JSON body",
     "test:sdk/js/__tests__/client.test.ts::appends context=<url-encoded JSON of user.attributes> when the user has attributes",
     "test:sdk/python/tests/test_client.py::TestGetAssignment::test_sends_post_with_context",
@@ -216,17 +247,20 @@ text = "SDK status"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Every SDK uses the contract above: the server decides assignment and flag evaluation, results are cached per user + key, and track fans out to the user's cached assignments and flags when no key is given."
+text = "Every SDK uses the contract above: the server decides assignment and flag evaluation, results are cached per user + key, and track fans out to the user's assignments and flags when no key is given: those answered in the last 24 hours in the JavaScript, Python and React SDKs, the cached ones in the others."
 by = [
     "test:backend/tests/unit/scripts/test_run_live_contract.py::test_a_smoke_must_report_a_sticky_assignment_an_enabled_flag_and_both_tracks",
     "test:backend/tests/unit/scripts/test_run_live_contract.py::test_each_sdk_runs_its_own_contract_smoke",
     "test:sdk/js/__tests__/client.test.ts::POSTs /api/v1/tracking/batch with one entry per assignment plus one per evaluated flag",
+    "test:sdk/js/__tests__/client.test.ts::sends an untagged purchase made 301 s after the assignment to the experiment",
     "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_fans_out_to_cached_assignment_and_flag",
+    "test:sdk/python/tests/test_client.py::TestLateConversions::test_a_purchase_301_seconds_after_the_assignment_reaches_the_experiment",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::sends an untagged purchase made 301 s after the assignment to the experiment",
     "test:sdk/go/client_test.go::TestClient_Track_WithoutKey_FansOutToCachedEntries",
 ]
 
 [[unit]]
-text = "The cached assignments include answers with \"assigned\": false (a user the global holdout kept out, for example): holdout results count those users' events like everyone else's."
+text = "They include answers with \"assigned\": false (a user the global holdout kept out, for example): holdout results count those users' events like everyone else's."
 by = [
     "test:sdk/js/__tests__/client.test.ts::fans out to an assignment the global holdout answered (assigned: false)",
     "test:backend/tests/integration/api/test_holdout_results.py::TestUntagged::test_an_untagged_event_counts_like_a_tagged_one",
@@ -249,6 +283,10 @@ by = [
     "test:sdk/js/__tests__/evaluator.test.ts::is not the cross-SDK consistentHash",
     "test:sdk/python/tests/test_evaluator.py::test_the_bucket_is_not_consistent_hash",
 ]
+
+[[unit]]
+text = "How long a cached answer keeps a flag change from your users, SDK by SDK: Turning a Flag Off."
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "\"Verified live\" means the SDK's contract_smoke entry point passed tests/sdk-contract/live/run_live_contract.py against a running backend (see tests/sdk-contract/README.md); the SDK Live Contract CI job repeats this on every pull request, with --strict, for python, openfeature-python, js, openfeature, edge, react, react-native, go, java, android, ruby, php and dotnet (the sdks: list of the job in pr-qa-gate.yml)."
@@ -335,6 +373,10 @@ text = "Elixir | sdk/elixir | ExUnit | not yet (unit tests run in the nightly ti
 by = ["mechanism:sdk-guide-status"]
 
 [[unit]]
+text = "MCP server (not an SDK) | sdk/mcp | jest | no: it is not an SDK, and has no contract smoke | sdk/mcp/README.md"
+by = ["mechanism:sdk-guide-status", "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_sdk_mcp_is_the_mcp_server_and_not_an_sdk"]
+
+[[unit]]
 text = "Rows marked \"not yet\" have a contract_smoke entry point that no CI job runs against a live backend; their unit tests run in the nightly tier and on pull requests that touch them."
 by = ["mechanism:sdk-guide-status"]
 
@@ -365,7 +407,7 @@ by = ["exempt:label"]
 count = 3
 
 [[unit]]
-text = "The controlvar package is on PyPI (0.1.1, beta):"
+text = "The controlvar package is on PyPI (0.3.0, beta):"
 by = [
     "mechanism:sdk-doc-versions",
     "journey:sdk-python#quick-start-user-on",
@@ -396,11 +438,13 @@ by = ["exempt:label"]
 count = 3
 
 [[unit]]
-text = "get_assignment(experiment_key, user_id, user_attributes=None) | Assignment(experiment_key, user_id, variant_id, variant_name, is_control, configuration) | raises ExperimentationError(status, body) (404 when the experiment is not ACTIVE)"
+text = "get_assignment(experiment_key, user_id, user_attributes=None) | Assignment(experiment_key, user_id, variant_id, variant_name, is_control, configuration) | raises ExperimentationError(status, body) (404 when no experiment has the key, or for a draft with no control variant); an experiment that is not ACTIVE returns its control variant"
 by = [
     "test:sdk/python/tests/test_client.py::TestGetAssignment::test_maps_response",
     "test:sdk/python/tests/test_client.py::TestGetAssignment::test_404_raises_with_status_and_body",
-    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_inactive_experiment_returns_404",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_a_draft_with_no_control_variant_returns_404",
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_each_status_answers_an_enrolled_and_a_new_user",
+    "test:sdk/python/tests/test_client.py::TestGetAssignment::test_carries_assigned_false_and_reason_for_an_unenrolled_user",
 ]
 
 [[unit]]
@@ -508,7 +552,7 @@ text = "For React apps use the React SDK instead."
 by = ["exempt:advice"]
 
 [[unit]]
-text = "The @controlvar/js-sdk package is on npm (0.1.1, beta):"
+text = "The @controlvar/js-sdk package is on npm (0.3.0, beta):"
 by = [
     "mechanism:sdk-doc-versions",
     "journey:sdk-javascript#quick-start-user-on",
@@ -519,7 +563,7 @@ text = "To work on the SDK itself, build it from a clone of this repository inst
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "npm pack writes controlvar-js-sdk-0.1.1.tgz:"
+text = "npm pack writes controlvar-js-sdk-0.3.0.tgz:"
 by = ["mechanism:sdk-doc-versions"]
 
 [[unit]]
@@ -530,7 +574,7 @@ by = ["exempt:instruction"]
 text = "getAssignment(experimentKey, user) | Promise<Assignment> (experimentKey, userId, variantId, variantName, isControl, configuration) | rejects with ExperimentationError (status, code)"
 by = [
     "test:sdk/js/__tests__/client.test.ts::maps the server response to an Assignment",
-    "test:sdk/js/__tests__/client.test.ts::throws ExperimentationError with status 404 when the experiment is not ACTIVE",
+    "test:sdk/js/__tests__/client.test.ts::throws ExperimentationError with status 404 when no experiment has the key",
 ]
 
 [[unit]]
@@ -545,7 +589,7 @@ text = "evaluateFlag(flagKey, user) | Promise<FlagEvaluation> (key, enabled, con
 by = [
     "test:sdk/js/__tests__/client.test.ts::maps {key, enabled, config}",
     "test:sdk/js/__tests__/client.test.ts::appends context=<url-encoded JSON of user.attributes> when the user has attributes",
-    "test:sdk/js/__tests__/client.test.ts::throws ExperimentationError with status 404 when the flag is not ACTIVE",
+    "test:sdk/js/__tests__/client.test.ts::throws ExperimentationError with status 404 when no flag has the key",
 ]
 
 [[unit]]
@@ -587,6 +631,10 @@ by = [
     "test:sdk/js/__tests__/client.test.ts::getEvaluatedFlags returns cached flag keys for the user only",
     "test:sdk/js/__tests__/client.test.ts::clearCache empties both caches",
 ]
+
+[[unit]]
+text = "getCachedFlags(userId) | FlagEvaluation[]: cached, unexpired evaluations; with local evaluation each carries source ('local' or 'server') | —"
+by = ["test:sdk/js/__tests__/local.test.ts::getCachedFlags returns the user's unexpired cached evaluations, each with its source"]
 
 [[unit]]
 text = "consistentHash(userId, flagKey), md5Hex(...) (module exports) | compatibility hash utilities | —"
@@ -638,21 +686,28 @@ text = "Full reference: Java SDK."
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "Install it from a clone of this repository: mvn install in sdk/java builds both modules and installs them into your local ~/.m2, where the dependency below resolves."
+text = "The Java SDK and its Spring Boot starter are on Maven Central:"
+by = ["mechanism:registry-availability"]
+
+[[unit]]
+text = "To work on the SDK itself, install it from a clone of this repository instead: ./mvnw install in sdk/java builds both modules and installs them into your local ~/.m2, where the dependency above resolves."
 by = ["test:backend/tests/smoke/test_sdk_java_modules.py::test_the_build_has_a_core_module_and_a_spring_boot_starter"]
 
 [[unit]]
-text = "getExperimentAssignment(user, experimentKey) | ExperimentAssignment (getExperimentKey, getUserId, getVariantId, getVariantName, isControl, getConfiguration) | throws ExperimentationException (unchecked; 404 when not ACTIVE, network errors)"
+text = "getExperimentAssignment(user, experimentKey) | ExperimentAssignment (getExperimentKey, getUserId, getVariantId, getVariantName, isControl, getConfiguration) | throws ExperimentationException (unchecked; 404 when no experiment has the key or a draft has no control variant, network errors); an experiment that is not ACTIVE returns its control variant"
 by = [
     "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::sends POST /api/v1/tracking/assign with experiment_key, user_id and context",
-    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::throws ExperimentationException(404) when the experiment is not ACTIVE, and does not cache it",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::throws ExperimentationException(404) when no experiment has the key, and does not cache it",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_unknown_key_returns_404",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_a_draft_with_no_control_variant_returns_404",
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_each_status_answers_an_enrolled_and_a_new_user",
 ]
 
 [[unit]]
 text = "evaluateFeatureFlag(user, flagKey) | FlagEvaluation (getKey, isEnabled, getConfig, getConfigMap) | throws ExperimentationException"
 by = [
     "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::sends GET /api/v1/feature-flags/evaluate/{key}?user_id= with the key and user encoded",
-    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::throws ExperimentationException(404) when the flag is unknown or not ACTIVE",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::throws ExperimentationException(404) when the flag key is unknown",
 ]
 
 [[unit]]

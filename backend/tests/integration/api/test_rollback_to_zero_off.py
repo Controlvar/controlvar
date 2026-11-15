@@ -27,6 +27,8 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import json
+import random
+import sys
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -75,6 +77,12 @@ _spec = importlib.util.spec_from_file_location(
 sdk_evaluator = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(sdk_evaluator)
 
+#: O-FLAG, the ground-truth library's flag bucket (standard library only).
+_LIBRARY_ROOT = _REPO / "tests" / "ground_truth"
+if str(_LIBRARY_ROOT) not in sys.path:
+    sys.path.insert(0, str(_LIBRARY_ROOT))
+
+from ground_truth.hashing import flag_bucket as oracle_flag_bucket
 
 # ---------------------------------------------------------------------------
 # Rules, in the two stored shapes the evaluators read
@@ -615,6 +623,182 @@ def test_p9_a_partial_automatic_rollback_is_written_once(db_session, session_fac
     stored = _stored(db_session, flag)
     assert (stored.status, stored.rollout_percentage) == (FeatureFlagStatus.ACTIVE, 5)
     assert len(_records(db_session, flag)) == 1
+
+
+# ---------------------------------------------------------------------------
+# P12: an automatic partial rollback, against an independent oracle (UC-G11-5)
+# ---------------------------------------------------------------------------
+
+P12_USERS = [f"g115-{i:04d}" for i in range(2000)]
+_P12_RNG = random.Random(11005)
+P12_COUNTRY = {u: _P12_RNG.choice(("US",) * 3 + ("FR",) * 2) for u in P12_USERS}
+SAFETY_MONITOR = "system:safety-monitor"
+
+# O-FLAG's counts for these 2,000 ids and these two flag keys. If the oracle
+# or the sample moves, these move, and the test says so instead of passing
+# over a sample that tests nothing.
+P12_MATCHED = 1186
+P12_UNMATCHED = 814
+P12_MATCHED_ON = 352  # bucket < 30
+P12_MATCHED_BETWEEN = 223  # 10 <= bucket < 30: the users a global-only cut must keep
+P12_UNMATCHED_ON_BEFORE = 313  # bucket < 40
+P12_UNMATCHED_ON_AFTER = 82  # bucket < 10
+P12_UNMATCHED_TURNED_OFF = 231
+
+
+def _p12_schedule(db_session, flag, status) -> RolloutSchedule:
+    row = RolloutSchedule(
+        name=f"{PREFIX}{status.value}-{uuid.uuid4().hex[:6]}",
+        feature_flag_id=flag.id,
+        status=status,
+        max_percentage=100,
+        min_stage_duration=0,
+    )
+    db_session.add(row)
+    db_session.commit()
+    db_session.refresh(row)
+    return row
+
+
+def _p12_statuses(db_session, schedules: dict) -> dict:
+    db_session.expire_all()
+    return {
+        name: db_session.get(RolloutSchedule, row.id).status
+        for name, row in schedules.items()
+    }
+
+
+def _p12_served(session_factory, key: str) -> dict[str, tuple[bool, str]]:
+    """The server's answer for every id, each with its own country."""
+    session = session_factory()
+    try:
+        row = session.query(FeatureFlag).filter(FeatureFlag.key == key).one()
+        service = FeatureFlagService(session)
+        out = {}
+        for user in P12_USERS:
+            answer = service.evaluate_flag_detailed(
+                row, user, {"country": P12_COUNTRY[user]}
+            )
+            out[user] = (answer["enabled"], answer["reason"])
+        return out
+    finally:
+        session.close()
+
+
+def _p12_expected(key: str, global_percentage: int, rule_percentage: int) -> dict:
+    """O-FLAG: a matched user is bucketed by the rule's own percentage, any
+    other user by the flag's global percentage."""
+    out = {}
+    for user in P12_USERS:
+        bucket = oracle_flag_bucket(user, key)
+        if P12_COUNTRY[user] == "US":
+            out[user] = (bucket < rule_percentage, "targeting_rule")
+        else:
+            out[user] = (bucket < global_percentage, "rollout")
+    return out
+
+
+def _p12_diff(answered: dict, expected: dict, key: str) -> str:
+    wrong = [u for u in P12_USERS if answered[u] != expected[u]]
+    first = [
+        (u, P12_COUNTRY[u], oracle_flag_bucket(u, key), answered[u], expected[u])
+        for u in wrong[:10]
+    ]
+    return f"{len(wrong)}/{len(P12_USERS)} answers differ from O-FLAG; first: {first}"
+
+
+@pytest.mark.usefixtures("automatic_rollbacks")
+def test_p12_an_automatic_partial_rollback_keeps_rule_users_and_pauses_only_the_active_schedule(
+    db_session, session_factory
+):
+    flag = _flag(db_session, "uc-g11-5", 40, _native_rule(30))
+    other = _flag(db_session, "uc-g11-5-other", 50, None)
+    # The shared schema's defaults must never roll the bystander back.
+    db_session.add(
+        FeatureFlagSafetyConfig(feature_flag_id=other.id, enabled=False, metrics=None)
+    )
+    db_session.commit()
+    # Written directly: this test does not test the API's one-ACTIVE-per-flag rule.
+    schedules = {
+        status.name: _p12_schedule(db_session, flag, status)
+        for status in (
+            RolloutScheduleStatus.ACTIVE,
+            RolloutScheduleStatus.DRAFT,
+            RolloutScheduleStatus.PAUSED,
+            RolloutScheduleStatus.COMPLETED,
+            RolloutScheduleStatus.CANCELLED,
+        )
+    }
+    bystander = {
+        "OTHER_ACTIVE": _p12_schedule(db_session, other, RolloutScheduleStatus.ACTIVE)
+    }
+    statuses_before = _p12_statuses(db_session, {**schedules, **bystander})
+    _unhealthy(db_session, flag, rollback_percentage=10)
+
+    # The sample is what it is claimed to be.
+    matched = [u for u in P12_USERS if P12_COUNTRY[u] == "US"]
+    unmatched = [u for u in P12_USERS if P12_COUNTRY[u] != "US"]
+    bucket = {u: oracle_flag_bucket(u, flag.key) for u in P12_USERS}
+    assert (len(matched), len(unmatched)) == (P12_MATCHED, P12_UNMATCHED)
+    assert sum(bucket[u] < 30 for u in matched) == P12_MATCHED_ON
+    assert sum(10 <= bucket[u] < 30 for u in matched) == P12_MATCHED_BETWEEN
+    assert sum(bucket[u] < 40 for u in unmatched) == P12_UNMATCHED_ON_BEFORE
+    assert sum(bucket[u] < 10 for u in unmatched) == P12_UNMATCHED_ON_AFTER
+    assert sum(10 <= bucket[u] < 40 for u in unmatched) == P12_UNMATCHED_TURNED_OFF
+    assert len(set(bucket.values())) == 100
+
+    # 1. Before the tick the server answers as O-FLAG does.
+    before = _p12_served(session_factory, flag.key)
+    expected_before = _p12_expected(flag.key, 40, 30)
+    assert before == expected_before, _p12_diff(before, expected_before, flag.key)
+    matched_before = {u: before[u] for u in matched}
+
+    # 2. One tick of the real monitor.
+    tick = _safety_tick(session_factory)
+    assert tick["metadata"]["rollbacks"] >= 1, tick
+
+    # 3. F: ACTIVE at 10%, rules as written. G: unchanged.
+    stored = _stored(db_session, flag)
+    assert (stored.status, stored.rollout_percentage) == (FeatureFlagStatus.ACTIVE, 10)
+    assert stored.targeting_rules == _native_rule(30)
+    stored_other = _stored(db_session, other)
+    assert (stored_other.status, stored_other.rollout_percentage) == (
+        FeatureFlagStatus.ACTIVE,
+        50,
+    )
+
+    # 4. One automatic record on F, none on G.
+    (record,) = _records(db_session, flag)
+    assert record.trigger_type == "automatic"
+    assert (record.previous_percentage, record.target_percentage) == (40, 10)
+    assert _records(db_session, other) == []
+
+    # 5. Only F's ACTIVE schedule was paused.
+    expected_statuses = {**statuses_before, "ACTIVE": RolloutScheduleStatus.PAUSED}
+    assert _p12_statuses(db_session, {**schedules, **bystander}) == expected_statuses
+
+    # 6. ALL of F's audit rows: exactly one, by the monitor, naming the pause.
+    db_session.expire_all()
+    audit = db_session.query(AuditLog).filter(AuditLog.entity_id == flag.id).all()
+    assert [(row.action_type, row.user_email, row.user_id) for row in audit] == [
+        ("safety_rollback", SAFETY_MONITOR, None)
+    ]
+    new_value = json.loads(audit[0].new_value)
+    assert new_value["paused_schedules"] == [str(schedules["ACTIVE"].id)]
+    assert new_value["deactivated"] is False
+    assert (new_value["previous_percentage"], new_value["new_percentage"]) == (40, 10)
+
+    # 7. Afterwards: matched users unchanged, the rest at the new 10%.
+    after = _p12_served(session_factory, flag.key)
+    expected_after = _p12_expected(flag.key, 10, 30)
+    assert after == expected_after, _p12_diff(after, expected_after, flag.key)
+    assert {u: after[u] for u in matched} == matched_before
+    assert sum(after[u][0] for u in matched) == P12_MATCHED_ON
+    assert sum(after[u][0] for u in unmatched) == P12_UNMATCHED_ON_AFTER
+    assert (
+        sum(before[u][0] for u in unmatched) - sum(after[u][0] for u in unmatched)
+        == P12_UNMATCHED_TURNED_OFF
+    )
 
 
 # ---------------------------------------------------------------------------

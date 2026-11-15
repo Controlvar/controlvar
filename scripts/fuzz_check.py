@@ -760,6 +760,25 @@ def summary_values(
     return "fuzz-red.tmpl", values
 
 
+def quiet_entries_text(verdict: Verdict, pass_name: str) -> str:
+    """The known entries that answered no 5xx, one ``METHOD path (pass)`` per
+    line, for the step summary and the job log only.
+
+    The labels are operations of the public API document, and the entries are
+    already public in ``tests/fuzz/known-5xx.toml``; the text is not part of
+    ``values.json``, so the issue the report posts is unchanged. Empty when
+    no entry went quiet.
+    """
+    labels = sorted({label for label, _ in verdict.known_quiet})
+    if not labels:
+        return ""
+    lines = "".join(
+        f"- {label} ({pass_name})\n".encode("ascii", "backslashreplace").decode()
+        for label in labels
+    )
+    return f"\nKnown entries with no 5xx in this run:\n\n{lines}"
+
+
 def details(verdict: Verdict) -> Dict[str, Any]:
     """Which operations and requests, for the local reproduction directory only."""
     v = verdict
@@ -966,7 +985,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 verdict, args.pass_name, date, args.sha, args.seed, args.run_link
             )
         if args.summary is not None:
-            args.summary.write_text(_render(template, values), encoding="ascii")
+            args.summary.write_text(
+                _render(template, values) + quiet_entries_text(verdict, args.pass_name),
+                encoding="ascii",
+            )
         if args.values is not None:
             # For fuzz.yml's issue: the same values, which qa_render checks
             # again before anything is posted.

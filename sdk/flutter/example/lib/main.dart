@@ -85,7 +85,7 @@ class _HomePageState extends State<HomePage> {
       _status = 'Fetching experiment assignment…';
     });
 
-    // getAssignment never throws: `null` means the experiment is not ACTIVE
+    // getAssignment never throws: `null` means no experiment has the key
     // or the API was unreachable with nothing cached.
     final assignment = await widget.client.getAssignment(
       'checkout-experiment',

@@ -51,12 +51,29 @@ In a storyboard whose end state counts an experiment's users, every app with
 a visitor key (``config.APP_VISITOR_KEY``) declares its visitors, from its
 first scene: no page of it loads under an id the storyboard does not name.
 
-Two steps work a form control the way a person would be seen to: ``choose``
+Video 4's incident adds three steps to that closed list (S4 of plan v2.2),
+each once and in this order after the StreamPulse seed: ``story: 2``, the
+demo's own rollout script, its step 2 only; ``crashes``, the tool's fixed
+crash sender, started right after a safety run completes; and, on the card
+after B9 (a dashboard scene filmed before the monitor's next run),
+``wait_for_rollback``, which waits for the safety monitor to roll the flag
+back by itself. That card says the gap the cut hides, measured
+(``{rollback_minutes}``, nowhere else), and the end state's ``rollback`` names
+what gate 10/4 holds the platform and the page to. A dashboard scene may open
+a flag's page by the flag's name (``flag_of``), its id looked up off camera.
+
+Three steps work a form control the way a person would be seen to: ``choose``
 changes a native <select> to one of its options without opening it (a
 screencast never draws a native list, so an open one would film a select
-changing by itself; C9), and ``slide`` moves a range input to a value on its
+changing by itself; C9), ``slide`` moves a range input to a value on its
 own steps (the power calculator's are 0.05 apart), the drawn cursor on its
-thumb.
+thumb, and ``date`` sets a ``datetime-local`` input, its picker never opened
+(as ``choose``), to a day a few days after the take at a fixed time of day,
+in the browser's zone: the page computes the value, so the take is right on
+any day it is filmed, and its reading keeps the value, its instant and how
+the page draws it. A storyboard with a ``date`` step pins the browser's
+``time_zone`` and ``locale``, so the take is the same on any machine; one
+without names neither, and its browser is as it always was.
 
 A scene that films a credential the product shows (the invite dialog's
 one-time password) names it under ``masks``, a closed list: the capture hides
@@ -71,9 +88,17 @@ holding a template (``{``) or anything but plain text, a ``type`` of a
 credential into a step not marked secret, an on-camera step that opens the API
 keys page, a locator naming nothing, a scene with no beats, a code line that
 names a host and port, traffic finished before it starts, a ``choose`` or
-``slide`` in ``before`` (cut, so never seen), a flag's end state naming a
-segment the setup does not make or a reading no beat records, and a narration
-``narration.board_problems`` refuses (every problem at once). Caption text
+``slide`` in ``before`` (cut, so never seen), a ``date`` anywhere but a beat's
+steps, ``days_ahead`` outside 1 to 7, ``at`` other than 06:00 to 21:59, a
+``date`` reading named twice or as another beat's ``record``, a ``date`` on a
+storyboard that does not pin its ``time_zone`` and ``locale``, a zone the
+zone database does not know, a flag's end state naming a
+segment the setup does not make or a reading no beat records (or both a
+segment and a rule, or neither; values that do not fit their type or are
+equal; an answer its reason does not give, ``FlagEnd``), an incident step
+other than ``story: 2`` or out of order, or ``{rollback_minutes}`` anywhere but
+the card after the wait, and a narration ``narration.board_problems`` refuses
+(every problem at once). Caption text
 never comes from the page or the run: ``compile_cues`` is a pure function of
 the file, so the cue list is the same on every run (gate 13a).
 """
@@ -81,12 +106,21 @@ the file, so the cue list is the same on every run (gate 13a).
 from __future__ import annotations
 
 import json
+import math
 import re
+import zoneinfo
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Mapping, Optional, Tuple, Union
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    model_serializer,
+    model_validator,
+)
 
 from showcase import contract
 from showcase.capture import config
@@ -150,6 +184,21 @@ class Type(_Strict):
     secret: bool = False
     #: Empty the field first (it holds a default the storyboard replaces).
     clear: bool = False
+    #: Select the field's text, then type over it, as a person replaces a value.
+    #: For a number box: emptied first (``clear``), it can draw "034" for 34.
+    select: bool = False
+
+    @model_validator(mode="after")
+    def _one_way_to_replace(self) -> "Type":
+        if self.select and self.clear:
+            raise ValueError(
+                "a type step replaces a value one way: select or clear, not both"
+            )
+        if self.select and self.secret:
+            raise ValueError(
+                "a secret field starts empty: there is nothing to select in it"
+            )
+        return self
 
 
 class Look(_Strict):
@@ -199,14 +248,37 @@ class Slide(_Strict):
     value: float = Field(ge=0, le=100_000)
 
 
-Step = Union[Click, Move, Type, Look, ScrollTo, WaitFor, Choose, Slide]
+#: A ``date`` step's time of day, "HH:MM": 06:00 to 21:59, clear of midnight
+#: and of the night hours a change of daylight saving time skips or repeats.
+DATE_AT = r"^(?:0[6-9]|1[0-9]|2[01]):[0-5][0-9]$"
+#: The name a ``date`` step keeps its reading under.
+READING_NAME = r"^[a-z][a-z0-9-]{0,40}$"
+
+
+class Date(_Strict):
+    """A ``datetime-local`` input set to the day ``days_ahead`` days after the
+    page's own today, at ``at``, in the browser's zone (the storyboard's
+    ``time_zone``), its picker never opened (C9, as ``choose``).
+
+    The cursor goes to the field and presses it; the page computes the value
+    and the field is filled with it; gate 12 reads it back (``gates.date_as_set``).
+    ``record`` keeps the value, its instant (``toISOString``) and how the page
+    draws it (``toLocaleString``)."""
+
+    date: Locator
+    days_ahead: int = Field(ge=1, le=7)
+    at: str = Field(pattern=DATE_AT)
+    record: str = Field(pattern=READING_NAME)
+
+
+Step = Union[Click, Move, Type, Look, ScrollTo, WaitFor, Choose, Slide, Date]
 #: The steps that enter data. In a cut (a beat's ``before``) what they enter is
 #: entered off camera, so the scene states off-camera setup (D84,
 #: ``required_departures``). A click is not one: video 2 clicks its Live tab in
-#: a cut, the cursor on the tab before it. The load refuses a choose or a slide
-#: in a cut outright (``parse``), so today the row is met by a type; the other
-#: two are in it for the day that refusal is lifted.
-ENTERS_DATA = (Type, Choose, Slide)
+#: a cut, the cursor on the tab before it. The load refuses a choose, a slide
+#: or a date in a cut outright (``parse``), so today the row is met by a type;
+#: the other three are in it for the day that refusal is lifted.
+ENTERS_DATA = (Type, Choose, Slide, Date)
 
 
 class Claim(_Strict):
@@ -296,6 +368,11 @@ class Card(_Strict):
         return [self.label, *body, self.note]
 
 
+def card_texts(card: Optional[Card]) -> List[str]:
+    """Everything a card draws (``Card.drawn_text``), or nothing for no card."""
+    return [] if card is None else [text for text in card.drawn_text() if text]
+
+
 App = Literal["dashboard", "shoplab", "streampulse"]
 
 
@@ -344,8 +421,88 @@ class Visitor(_Strict):
         return self
 
 
+class Story(_Strict):
+    """Off camera: the StreamPulse demo's own rollout script, its step 2 only
+    (``rollout_story.py --step 2``: the Player v2 schedule's stage 2, 25%),
+    run from the recorded tree against the tool's stack (S4 of plan v2.2).
+    Any other step is refused at load: step 3 sends incident traffic of its
+    own, and step 4 rolls the flag back by hand when the monitor is late. The
+    video's incident is the tool's own fixed sender (``Crashes``)."""
+
+    story: Literal[2]
+
+
+class CrashPlan(_Strict):
+    """How many times Android 12 devices ask for the flag, and how many crashes
+    they report. Each crashing device runs one loop (``config.CRASH_LOOP``: it
+    asks for the flag and crashes, again and again) as one of
+    ``config.CRASH_DEVICES``; every other ask is a device that does not crash."""
+
+    evaluations: int = Field(ge=1, le=1000)
+    reports: int = Field(ge=1, le=200)
+
+    @model_validator(mode="after")
+    def _loops(self) -> "CrashPlan":
+        if self.reports % config.CRASH_LOOP:
+            raise ValueError(
+                f"crash reports come {config.CRASH_LOOP} a crashing device;"
+                f" {self.reports} is not a whole number of devices"
+            )
+        if self.reports // config.CRASH_LOOP > len(config.CRASH_DEVICES):
+            raise ValueError(
+                f"{self.reports} crash reports need more than the"
+                f" {len(config.CRASH_DEVICES)} crashing devices the tool has"
+            )
+        if self.evaluations < self.reports:
+            raise ValueError(
+                f"each crash follows an ask for the flag: {self.evaluations} asks"
+                f" cannot carry {self.reports} crashes"
+            )
+        return self
+
+
+class Crashes(_Strict):
+    """Off camera: the tool's fixed crash sender (S4, T156 C15). Simulated
+    Android 12 devices ask for ``config.CRASH_FLAG`` through the API with the
+    app's key, and report their crashes with the StreamPulse server key, held
+    in this process only. It starts right after a safety run completes (B9's
+    anchor), and every answer must be 2xx."""
+
+    crashes: CrashPlan
+
+
+class RollbackWait(_Strict):
+    """What ``wait_for_rollback`` waits for: the safety monitor's own rollback
+    of *flag* to *percentage*, within *within_s* seconds."""
+
+    flag: str = Field(pattern=r"^[a-z0-9][a-z0-9_]{0,63}$")
+    percentage: int = Field(ge=0, le=100)
+    within_s: int = Field(ge=30, le=600)
+
+
+class WaitForRollback(_Strict):
+    """Off camera: wait for the safety monitor to roll the flag back by itself.
+    The tool reads the flag and its audit log; nothing ever asks for a
+    rollback (``POST .../rollback``)."""
+
+    wait_for_rollback: RollbackWait
+
+
 #: What may run off camera before a scene: a closed list.
-OffCamera = Union[SeedApp, Visitor]
+OffCamera = Union[SeedApp, Visitor, Story, Crashes, WaitForRollback]
+#: Video 4's incident, off camera, by each step's name in the storyboard.
+INCIDENT_KINDS: Dict[type, str] = {
+    Story: "story",
+    Crashes: "crashes",
+    WaitForRollback: "wait_for_rollback",
+}
+#: In the card right after ``wait_for_rollback``, and nowhere else: the gap the
+#: cut hides, measured on the wall clock from B9's last frame (S5 of plan v2.2).
+ROLLBACK_MINUTES = "{rollback_minutes}"
+#: In a card that finishes the traffic: how long it took, measured (run.py).
+TRAFFIC_MINUTES = "{traffic_minutes}"
+#: The measured values a card may name, each filled in by the run.
+MEASURED = (TRAFFIC_MINUTES, ROLLBACK_MINUTES)
 
 #: A departure from a new user's path (D84), each stated on screen where it
 #: happens: users the tool simulates, a scheduler interval shortened, a time
@@ -392,6 +549,9 @@ class Scene(_Strict):
     open: Optional[str] = Field(default=None, pattern=r"^/[A-Za-z0-9/_?=&.-]*$")
     #: Open this experiment's results page; the id is looked up off camera.
     results_of: Optional[str] = None
+    #: Open this feature flag's page, by the flag's name; the id is looked up
+    #: off camera, as ``results_of`` does.
+    flag_of: Optional[str] = Field(default=None, min_length=1, max_length=128)
     card: Optional[Card] = None
     #: Sign in as the demo admin off camera before the scene.
     signed_in: bool = False
@@ -404,10 +564,11 @@ class Scene(_Strict):
 
     @model_validator(mode="after")
     def _page_or_card(self) -> "Scene":
-        if sum(x is not None for x in (self.open, self.results_of, self.card)) != 1:
+        openers = (self.open, self.results_of, self.flag_of, self.card)
+        if sum(x is not None for x in openers) != 1:
             raise ValueError(
-                "a scene opens a page, opens an experiment's results or draws a card:"
-                " exactly one, not both"
+                "a scene opens a page, opens an experiment's results or a flag's"
+                " page, or draws a card: exactly one, not both"
             )
         if self.app != "dashboard" and (
             self.open is None or self.signed_in or self.warm_results
@@ -500,22 +661,274 @@ FlagAction = Literal[
 ]
 
 
+#: The value types a flag may have (backend/app/core/flag_values.py
+#: ``VALUE_TYPES`` and boolean; frontend/src/utils/flagValues.ts ``VALUE_TYPES``).
+FlagValueType = Literal["boolean", "string", "number", "json"]
+#: Why the API answered a user as it did (the evaluate route's ``reason``), for
+#: the reasons an answer may declare: never ``error``.
+AnswerReason = Literal["targeting_rule", "rollout", "inactive"]
+
+
+def values_equal(a: Any, b: Any) -> bool:
+    """Whether PostgreSQL's ``jsonb`` ``=`` holds two JSON values equal, as the
+    API's ``values_equal`` does (backend/app/core/flag_values.py; a unit test
+    keeps the two equal): numbers as numbers (``3`` equals ``3.0``), a boolean
+    never a number, strings exactly, objects by the same keys and equal values,
+    arrays by the same length and equal items in order. Iterative."""
+
+    def number(value: Any) -> bool:
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+    stack = [(a, b)]
+    while stack:
+        x, y = stack.pop()
+        if isinstance(x, bool) or isinstance(y, bool):
+            if not (isinstance(x, bool) and isinstance(y, bool) and x is y):
+                return False
+        elif number(x) or number(y):
+            if not (number(x) and number(y) and x == y):
+                return False
+        elif isinstance(x, str) or isinstance(y, str):
+            if not (isinstance(x, str) and isinstance(y, str) and x == y):
+                return False
+        elif isinstance(x, dict) or isinstance(y, dict):
+            if (
+                not (isinstance(x, dict) and isinstance(y, dict))
+                or x.keys() != y.keys()
+            ):
+                return False
+            stack.extend((x[key], y[key]) for key in x)
+        elif isinstance(x, list) or isinstance(y, list):
+            if not (isinstance(x, list) and isinstance(y, list)) or len(x) != len(y):
+                return False
+            stack.extend(zip(x, y))
+        elif not (x is None and y is None):
+            return False
+    return True
+
+
+def value_fits(value_type: str, value: Any) -> bool:
+    """*value* is one a *value_type* flag can serve: a string; a finite number
+    (never a boolean); an object or an array; or, for a boolean flag, a boolean."""
+    if value_type == "string":
+        return isinstance(value, str)
+    if value_type == "number":
+        return (
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and math.isfinite(value)
+        )
+    if value_type == "json":
+        return isinstance(value, (dict, list))
+    return isinstance(value, bool)
+
+
+class FlagAnswer(_Strict):
+    """What the API answers one user for the flag after the last frame: the
+    value it serves them and why (``GET /feature-flags/evaluate/{key}``)."""
+
+    user: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$")
+    #: The attributes the user is evaluated with, as an app sends them.
+    context: Dict[str, Any] = Field(default_factory=dict)
+    value: Any
+    reason: AnswerReason
+
+
 class FlagEnd(_Strict):
     """Gate 10 for a flag the video made: it exists once, with its key, its one
-    rule naming the setup's segment, at the rollout and status the video left
-    it, and the audit log holds the video's changes to it, each by the
-    signed-in user, as the page showed them."""
+    rule (naming the setup's segment, or the declared ``rule``), at the rollout
+    and status the video left it, and the audit log holds the video's changes
+    to it, each by the signed-in user, as the page showed them.
+
+    A flag that serves a value declares its ``value_type``, ``on_value`` and
+    ``off_value`` (all three, or none), and may declare ``answers``: what the
+    API answers given users after the last frame. Each answer's value follows
+    from its declared reason (``targeting_rule``: the on value; ``inactive``:
+    the off value; ``rollout``: the off value at 0% and the on value at 100%),
+    and one that would depend on the user's bucket (``rollout`` at 1-99%) is
+    refused, as is a reason the flag's status cannot give. Nothing here
+    matches a rule: the reason is the author's, and the API is the judge.
+
+    A field left unset is not read and not compared (gate 10), and is left out
+    of the end state's dump, so a flag declared before values existed (video 3)
+    is judged and recorded exactly as it was."""
 
     name: str
     key: str
     #: The segment the flag's only rule (``is in segment``) names.
-    segment: str
+    segment: Optional[str] = None
     rollout_percentage: int = Field(ge=0, le=100)
     status: Literal["active", "inactive"]
     #: The audit entries on the flag, oldest first: all of them, exactly.
     audit: List[FlagAction] = Field(min_length=1)
     #: The ``record`` name of the audit log's rows as the page showed them.
+    shown: Optional[str] = None
+    value_type: Optional[FlagValueType] = None
+    on_value: Any = None
+    off_value: Any = None
+    #: The flag's only rule, one condition as the targeting builder sends it
+    #: (less its ids), instead of a segment.
+    rule: Optional["DesignCondition"] = None
+    answers: List[FlagAnswer] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _one_rule_and_its_values(self) -> "FlagEnd":
+        if (self.segment is None) == (self.rule is None):
+            raise ValueError(
+                "a flag's one rule names a segment or is a rule: exactly one of"
+                " segment and rule"
+            )
+        declared = [
+            name
+            for name in ("value_type", "on_value", "off_value")
+            if getattr(self, name) is not None
+        ]
+        if declared and len(declared) != 3:
+            raise ValueError(
+                "a flag's values are declared together: value_type, on_value and"
+                f" off_value, not only {declared}"
+            )
+        if self.value_type is not None:
+            for field in ("on_value", "off_value"):
+                value = getattr(self, field)
+                if not value_fits(self.value_type, value):
+                    raise ValueError(
+                        f"{field} {value!r} is not a value a {self.value_type} flag"
+                        " serves"
+                    )
+            if self.value_type == "boolean" and (
+                self.on_value is not True or self.off_value is not False
+            ):
+                raise ValueError(
+                    "a boolean flag serves true when on and false when off"
+                )
+            if values_equal(self.on_value, self.off_value):
+                raise ValueError(
+                    f"on_value equals off_value ({self.on_value!r}): the two values"
+                    " differ, or turning the flag off changes nothing"
+                )
+        if self.answers and self.value_type is None:
+            raise ValueError(
+                "answers compare the values the flag serves: declare value_type,"
+                " on_value and off_value"
+            )
+        for answer in self.answers:
+            served = self._served(answer)
+            if not values_equal(answer.value, served):
+                raise ValueError(
+                    f"the answer for {answer.user} {answer.context} says"
+                    f" {answer.value!r}; its reason {answer.reason} serves"
+                    f" {served!r}"
+                )
+        return self
+
+    def _served(self, answer: FlagAnswer) -> Any:
+        """The value *answer*'s reason serves, or ValueError when the flag's
+        status cannot give that reason or the value would depend on the bucket."""
+        where = f"the answer for {answer.user} {answer.context}"
+        if (answer.reason == "inactive") != (self.status == "inactive"):
+            raise ValueError(
+                f"{where} gives the reason {answer.reason}, which a flag left"
+                f" {self.status} never gives"
+            )
+        if answer.reason == "targeting_rule":
+            return self.on_value
+        if answer.reason == "inactive":
+            return self.off_value
+        if self.rollout_percentage == 0:
+            return self.off_value
+        if self.rollout_percentage == 100:
+            return self.on_value
+        raise ValueError(
+            f"{where} gives the reason rollout at {self.rollout_percentage}%: its"
+            " value would depend on the user's bucket"
+        )
+
+    @model_serializer(mode="wrap")
+    def _unset_left_out(self, handler: Any) -> Dict[str, Any]:
+        """The dump without the fields left unset: a flag declared before values
+        existed records exactly what it did (gate 10's ``storyboard`` number)."""
+        data = handler(self)
+        for name in ("segment", "shown", "value_type", "on_value", "off_value", "rule"):
+            if data.get(name) is None:
+                data.pop(name, None)
+        if not data.get("answers"):
+            data.pop("answers", None)
+        return data
+
+
+#: The audit action types a rolled-back flag's end state may name.
+RollbackAction = Literal[
+    "feature_flag_update", "toggle_enable", "toggle_disable", "safety_rollback"
+]
+
+
+class Agreement(_Strict):
+    """Gate 10/4 at one beat's start, after the rollback (plan v2 C1): the app's
+    panel row for the flag, its phone and the API's answer for the device, read
+    off camera with the app's key and the context the app sends, all say the
+    same: on or off (``enabled``)."""
+
+    scene: str
+    beat: int = Field(ge=1)
+    #: The StreamPulse device the app is filmed as (``config.STREAMPULSE_DEVICES``).
+    device: str
+    #: The ``record`` names of the panel's reason for the flag, and of the phone's screen.
+    panel: str
+    phone: str
+    enabled: bool
+
+
+class KillSwitch(_Strict):
+    """A flag the video switches off on camera: its exact audit entries."""
+
+    name: str
+    key: str
+    audit: List[FlagAction] = Field(min_length=1)
+
+
+class RollbackEnd(_Strict):
+    """Gate 10/4 (S8a of plan v2.2): the safety monitor rolled the flag back by
+    itself, and every reading of it agrees.
+
+    * the flag is at ``percentage``, still active, and its schedule is paused;
+    * its audit entries, oldest first, are exactly ``audit``, every one by the
+      signed-in user but the last, one ``safety_rollback`` by the safety
+      monitor (``system:safety-monitor``), an automatic one;
+    * the API's log holds that one rollback, automatic, and no POST asked for
+      a rollback, from the page or from the tool;
+    * the page drew it: the safety badge at B9, the schedule's badge and the
+      rollout after the rollback, the audit log's top row and the rollback's
+      reason, and the agreement at ``agree``;
+    * the kill switch the video turned off is off, with its exact entries.
+    """
+
+    name: str
+    key: str
+    percentage: int = Field(ge=0, le=100)
+    status: Literal["active"]
+    schedule: Literal["paused"]
+    audit: List[RollbackAction] = Field(min_length=1)
+    #: The ``record`` names of what the page drew: the audit log's rows and the
+    #: rollback's details, the safety badge at B9, and the schedule's badge and
+    #: the rollout percentage after the rollback.
     shown: str
+    reason: str
+    unhealthy: str
+    paused: str
+    rolled_back: str
+    agree: Agreement
+    kill_switch: KillSwitch
+
+    @model_validator(mode="after")
+    def _one_rollback_last(self) -> "RollbackEnd":
+        if self.audit.count("safety_rollback") != 1 or self.audit[-1] != (
+            "safety_rollback"
+        ):
+            raise ValueError(
+                "a rolled-back flag's audit ends in one safety_rollback, and holds no other"
+            )
+        return self
 
 
 class Calculation(_Strict):
@@ -555,6 +968,260 @@ class Team(_Strict):
     shown: str
 
 
+#: The most a variant's configuration may be in the guided setup, in UTF-8
+#: bytes (frontend/src/components/experiments/new/formState.ts
+#: ``CONFIGURATION_MAX_BYTES``; a unit test keeps them equal). It is the
+#: dashboard's own limit: the API accepts larger ones.
+CONFIGURATION_MAX_BYTES = 16_384
+
+#: The confidence levels and corrections the guided setup offers
+#: (frontend/src/components/results/shared/analysisSettings.ts
+#: ``CONFIDENCE_OPTIONS`` and ``CORRECTION_OPTIONS``; a unit test keeps them
+#: equal): a storyboard cannot claim a setting the dashboard cannot make.
+CONFIDENCE_OPTIONS: Tuple[float, ...] = (0.9, 0.95, 0.99)
+CORRECTION_OPTIONS: Tuple[str, ...] = ("benjamini_hochberg", "bonferroni", "none")
+
+#: The operators the targeting builder offers (frontend/src/types/targeting.ts
+#: ``OperatorType``; a unit test keeps them equal), less the two segment
+#: operators: a segment condition's value is an id made at run time, which a
+#: design end state cannot declare.
+BUILDER_OPERATORS: Tuple[str, ...] = (
+    "equals",
+    "not_equals",
+    "contains",
+    "not_contains",
+    "starts_with",
+    "ends_with",
+    "greater_than",
+    "less_than",
+    "greater_than_or_equal",
+    "less_than_or_equal",
+    "in",
+    "not_in",
+    "regex",
+    "is_null",
+    "is_not_null",
+    "semver_eq",
+    "semver_gt",
+    "semver_lt",
+    "semver_gte",
+    "semver_lte",
+    "geo_within_radius",
+    "time_window",
+    "array_contains",
+    "array_intersects",
+)
+SEGMENT_OPERATORS: Tuple[str, ...] = ("in_segment", "not_in_segment")
+#: The operators whose row has no value box: the builder sends ``null``.
+NO_VALUE_OPERATORS: Tuple[str, ...] = ("is_null", "is_not_null")
+
+#: What a design end state may compare with a recorded reading: the Review
+#: step's rows, and the experiment page's analysis and Bayesian rows.
+DesignReading = Literal[
+    "review_variants",
+    "review_metrics",
+    "review_targeting",
+    "review_analysis",
+    "detail_analysis",
+    "detail_bayesian",
+    "detail_sequential",
+    "detail_start",
+    "detail_group",
+    "detail_holdout",
+    "detail_note",
+]
+#: The readings that compare what the video set on the draft's own pages, each
+#: with the end state's field it needs.
+DESIGN_SET_READINGS: Dict[str, str] = {
+    "detail_start": "scheduled_start",
+    "detail_group": "group",
+    "detail_holdout": "holdout",
+}
+
+
+class DesignVariant(_Strict):
+    """A variant of the experiment the video designs, as the wizard saves it."""
+
+    name: str = Field(min_length=1, max_length=100)
+    allocation: int = Field(ge=0, le=100)
+    control: bool = False
+    #: Its JSON configuration; absent means none was typed.
+    configuration: Optional[Dict[str, Any]] = None
+
+    @model_validator(mode="after")
+    def _configuration_fits(self) -> "DesignVariant":
+        if self.configuration is not None:
+            # The compact form is the least a person could type: over the
+            # limit in it, the wizard refuses it in every form.
+            text = json.dumps(self.configuration, separators=(",", ":"))
+            size = len(text.encode("utf-8"))
+            if size > CONFIGURATION_MAX_BYTES:
+                raise ValueError(
+                    f"variant {self.name!r}'s configuration is {size} bytes; the"
+                    f" guided setup takes at most {CONFIGURATION_MAX_BYTES}"
+                )
+        return self
+
+
+class DesignMetric(_Strict):
+    """A metric of the experiment the video designs, as the wizard saves it."""
+
+    name: str = Field(min_length=1, max_length=100)
+    event: str = Field(min_length=1)
+    type: Literal["conversion", "revenue", "count", "duration", "custom"]
+    primary: bool = False
+    #: The minimum detectable effect typed on the Estimate step: the wizard
+    #: saves it on the primary metric only. Absent when none was typed.
+    mde: Optional[float] = Field(default=None, gt=0, lt=1)
+    lower_is_better: bool = False
+
+    @model_validator(mode="after")
+    def _effect_on_primary(self) -> "DesignMetric":
+        if self.mde is not None and not self.primary:
+            raise ValueError(
+                f"metric {self.name!r} has an mde, and is not the primary metric:"
+                " the wizard saves the typed effect on the primary only"
+            )
+        return self
+
+
+class DesignCondition(_Strict):
+    """One condition of a targeting rule, as the builder sends it (less its id)."""
+
+    attribute: str = Field(min_length=1)
+    operator: str
+    value: Any = None
+
+    @model_validator(mode="after")
+    def _offered(self) -> "DesignCondition":
+        if self.operator in SEGMENT_OPERATORS:
+            raise ValueError(
+                f"operator {self.operator!r}: a segment's id is made at run time,"
+                " so a design end state does not declare one"
+            )
+        if self.operator not in BUILDER_OPERATORS:
+            raise ValueError(
+                f"operator {self.operator!r} is not one the targeting builder offers"
+            )
+        if self.operator in NO_VALUE_OPERATORS:
+            if self.value is not None:
+                raise ValueError(
+                    f"operator {self.operator!r} has no value box: the builder"
+                    f" sends null, not {self.value!r}"
+                )
+        elif not isinstance(self.value, str):
+            raise ValueError(
+                f"the builder sends the value box's text, a string, not {self.value!r}"
+            )
+        return self
+
+
+#: A flag's ``rule`` is one condition as the builder sends it (above FlagEnd's
+#: class, which names it before it is defined).
+FlagEnd.model_rebuild()
+
+
+class DesignGroup(_Strict):
+    logical_operator: Literal["AND", "OR"]
+    conditions: List[DesignCondition] = Field(min_length=1)
+
+
+class DesignTargeting(_Strict):
+    """Who can join, as the builder sends it, without the ids it adds to each
+    group and condition (they are made in the browser)."""
+
+    logical_operator: Literal["AND", "OR"]
+    groups: List[DesignGroup] = Field(min_length=1)
+
+
+class DesignAnalysis(_Strict):
+    confidence: float
+    correction: str
+    bayesian: bool
+    #: Sequential testing (beta), ticked on the Estimate step (#1463).
+    sequential: bool = False
+
+    @model_validator(mode="after")
+    def _offered(self) -> "DesignAnalysis":
+        if self.confidence not in CONFIDENCE_OPTIONS:
+            raise ValueError(
+                f"confidence {self.confidence} is not one the guided setup offers"
+                f" {list(CONFIDENCE_OPTIONS)}"
+            )
+        if self.correction not in CORRECTION_OPTIONS:
+            raise ValueError(
+                f"correction {self.correction!r} is not one the guided setup"
+                f" offers {list(CORRECTION_OPTIONS)}"
+            )
+        return self
+
+
+class DesignHoldout(_Strict):
+    """The global holdout the video makes and activates on its own page."""
+
+    name: str = Field(min_length=1, max_length=200)
+    #: The dashboard's range for a new holdout (HoldoutForm: 1 to 20).
+    percentage: int = Field(ge=1, le=20)
+
+
+class DesignEnd(_Strict):
+    """Gate 10 for an experiment the video designs and leaves a draft
+    (``gates.design_end``): it exists once, exactly as declared, with nothing
+    guided setup cannot set, and the readings named in ``shown`` said what was
+    saved, in the product's words. What the video then sets on the draft's own
+    pages is declared too (``gates.eligibility_end``): its start (the reading
+    of the ``date`` step named ``scheduled_start``), the setup's exclusion
+    group it joins (``group``), and the global holdout it makes and activates
+    (``holdout``). Absent, each is held untouched as before."""
+
+    name: str = Field(min_length=1, max_length=100)
+    key: str = Field(min_length=1)
+    status: Literal["draft"]
+    type: Literal["a_b", "mv"]
+    #: Every variant, in the order the wizard holds them.
+    variants: List[DesignVariant] = Field(min_length=2)
+    #: Every metric, in the order the wizard holds them.
+    metrics: List[DesignMetric] = Field(min_length=1)
+    #: Absent: everyone can join.
+    targeting: Optional[DesignTargeting] = None
+    analysis: DesignAnalysis
+    #: Each reading compared, by the ``record`` name of the beat that read it.
+    shown: Dict[DesignReading, str] = Field(min_length=1)
+    #: The ``date`` step's reading the draft's start was set with.
+    scheduled_start: Optional[str] = Field(default=None, pattern=READING_NAME)
+    #: The setup's exclusion group the draft is added to, by its name.
+    group: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    holdout: Optional[DesignHoldout] = None
+
+    @model_validator(mode="after")
+    def _as_the_wizard_saves(self) -> "DesignEnd":
+        names = [variant.name for variant in self.variants]
+        if len(set(names)) != len(names):
+            raise ValueError(f"a variant name repeats: {names}")
+        total = sum(variant.allocation for variant in self.variants)
+        if total != 100:
+            raise ValueError(f"the variants' allocations add up to {total}, not 100")
+        controls = [variant.name for variant in self.variants if variant.control]
+        if len(controls) != 1:
+            raise ValueError(f"exactly one variant is the control, not {controls}")
+        names = [metric.name for metric in self.metrics]
+        if len(set(names)) != len(names):
+            raise ValueError(f"a metric name repeats: {names}")
+        primary = [metric.name for metric in self.metrics if metric.primary]
+        if len(primary) != 1:
+            raise ValueError(f"exactly one metric is primary, not {primary}")
+        if not any(kind.startswith("review_") for kind in self.shown):
+            raise ValueError(
+                "a design end state compares at least one Review row (review_*)"
+            )
+        for kind, needs in DESIGN_SET_READINGS.items():
+            if kind in self.shown and getattr(self, needs) is None:
+                raise ValueError(
+                    f"the design end state compares {kind}, and declares no {needs}"
+                )
+        return self
+
+
 class EndState(_Strict):
     """Gate 10: what is true after the last scene, checked through the API."""
 
@@ -567,6 +1234,10 @@ class EndState(_Strict):
     calculations: List[Calculation] = Field(default_factory=list)
     #: The teammates the video invited (their one-time passwords masked).
     team: Optional[Team] = None
+    #: An experiment the video designed and left a draft.
+    design: Optional[DesignEnd] = None
+    #: A flag the safety monitor rolled back by itself (video 4).
+    rollback: Optional[RollbackEnd] = None
 
     @model_validator(mode="after")
     def _something(self) -> "EndState":
@@ -576,10 +1247,18 @@ class EndState(_Strict):
             and self.flag is None
             and not self.calculations
             and self.team is None
+            and self.design is None
+            and self.rollback is None
         ):
             raise ValueError(
                 "an end state names experiments_listed, an experiment, a flag,"
-                " calculations or a team"
+                " calculations or a team, or a design, or a rollback"
+            )
+        if self.design is not None and (
+            self.experiment is not None or self.flag is not None
+        ):
+            raise ValueError(
+                "a design end state stands alone: not with an experiment or a flag"
             )
         return self
 
@@ -592,11 +1271,28 @@ class SegmentSetup(_Strict):
     rules: Dict[str, Any]
 
 
+class GroupSetup(_Strict):
+    """A mutual exclusion group, made through ``POST
+    /api/v1/mutual-exclusion-groups``, and the seeded experiments then added
+    to it, each by its name (its id looked up off camera)."""
+
+    name: str = Field(min_length=1, max_length=200)
+    traffic_allocation: float = Field(gt=0, le=1)
+    experiments: List[str] = Field(min_length=1)
+
+
 class Setup(_Strict):
     """What the video uses but does not film being made, made through the API
     off camera, after gate 14 (the seed's counts) and before the first scene."""
 
-    segments: List[SegmentSetup] = Field(min_length=1)
+    segments: List[SegmentSetup] = Field(default_factory=list)
+    exclusion_groups: List[GroupSetup] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _something(self) -> "Setup":
+        if not self.segments and not self.exclusion_groups:
+            raise ValueError("a setup makes at least one segment or exclusion group")
+        return self
 
 
 class Traffic(_Strict):
@@ -631,7 +1327,61 @@ class Storyboard(_Strict):
     never_show: List[str] = Field(default_factory=list)
     traffic: Optional[Traffic] = None
     setup: Optional[Setup] = None
+    #: The browser's zone (an IANA name) and locale (``en-US``), pinned for a
+    #: storyboard that draws times: both or neither. Neither: the browser takes
+    #: the machine's, as it always has.
+    time_zone: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    locale: Optional[str] = Field(default=None, pattern=r"^[a-z]{2,3}-[A-Z]{2}$")
     scenes: List[Scene] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _dates_and_their_zone(self) -> "Storyboard":
+        """The browser's ``time_zone`` and ``locale``, both or neither, the zone
+        one the zone database knows; and each ``date`` step's reading named
+        once, never as a beat's ``record``, on a storyboard that pins both."""
+        if (self.time_zone is None) != (self.locale is None):
+            raise ValueError(
+                "a storyboard pins the browser's time_zone and locale together,"
+                " or neither"
+            )
+        if self.time_zone is not None:
+            try:
+                zoneinfo.ZoneInfo(self.time_zone)
+            except (zoneinfo.ZoneInfoNotFoundError, ValueError):
+                raise ValueError(
+                    f"time_zone {self.time_zone!r} is not a zone the zone database knows"
+                ) from None
+        recorded = [name for s in self.scenes for b in s.beats for name in b.record]
+        dated = [
+            step.record
+            for scene in self.scenes
+            for beat in scene.beats
+            for step in beat.steps
+            if isinstance(step, Date)
+        ]
+        for name in dated:
+            if name in recorded or dated.count(name) > 1:
+                raise ValueError(f"the date step's reading {name!r} is named twice")
+        if dated and self.time_zone is None:
+            raise ValueError(
+                "a storyboard with a date step pins the browser's time_zone and"
+                " locale, so the take is the same on any machine"
+            )
+        design = self.end_state.design
+        if design is not None and design.scheduled_start is not None:
+            if design.scheduled_start not in dated:
+                raise ValueError(
+                    f"the design's end state starts at the reading"
+                    f" {design.scheduled_start!r}, which no date step records"
+                )
+        if design is not None and design.group is not None:
+            groups = [g.name for g in self.setup.exclusion_groups] if self.setup else []
+            if design.group not in groups:
+                raise ValueError(
+                    f"the design's end state puts it in {design.group!r}, which the"
+                    " setup does not make"
+                )
+        return self
 
     @model_validator(mode="after")
     def _traffic_in_order(self) -> "Storyboard":
@@ -671,14 +1421,27 @@ class Storyboard(_Strict):
         flag = self.end_state.flag
         if flag is not None:
             made = [s.name for s in self.setup.segments] if self.setup else []
-            if flag.segment not in made:
+            if flag.segment is not None and flag.segment not in made:
                 raise ValueError(
                     f"the flag's rule names {flag.segment!r}, which the setup does not make"
                 )
-            if flag.shown not in recorded:
+            if flag.shown is not None and flag.shown not in recorded:
                 raise ValueError(
                     f"the flag's end state compares {flag.shown!r}, which no beat records"
                 )
+        design = self.end_state.design
+        if design is not None:
+            if self.traffic is not None:
+                raise ValueError(
+                    "a designed experiment is left a draft: its storyboard sends no"
+                    " traffic"
+                )
+            for kind, name in design.shown.items():
+                if name not in recorded:
+                    raise ValueError(
+                        f"the design's end state compares {kind} with {name!r},"
+                        " which no beat records"
+                    )
         return self
 
     @model_validator(mode="after")
@@ -708,6 +1471,135 @@ class Storyboard(_Strict):
                 f"the video invites {len(emails)} teammates, and no scene masks"
                 f" {config.INVITE_PASSWORD_TESTID}: each one-time password would be"
                 " filmed (masks)"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _incident_in_order(self) -> "Storyboard":
+        """Video 4's incident (S4, S5, S8a of plan v2.2), refused at load unless
+        it is whole and in order: the StreamPulse seed, then ``story: 2``, then
+        ``crashes``, then at least one scene (the last of them B9: a dashboard
+        page, filmed before the monitor's next run), then ``wait_for_rollback``
+        on a card that says the gap it hides (``{rollback_minutes}``), each
+        once, with the rollback's end state for that flag and percentage, and
+        every reading that end state names recorded where it is true."""
+        found: Dict[str, int] = {}
+        #: Each step's place, scene and then its place in the scene's list.
+        placed: Dict[str, Tuple[int, int]] = {}
+        seeded: Optional[Tuple[int, int]] = None
+        for index, scene in enumerate(self.scenes):
+            for position, item in enumerate(scene.off_camera):
+                if isinstance(item, SeedApp) and item.seed == "streampulse":
+                    seeded = (index, position)
+                kind = INCIDENT_KINDS.get(type(item))
+                if kind is None:
+                    continue
+                if kind in found:
+                    raise ValueError(f"{kind} runs twice")
+                found[kind] = index
+                placed[kind] = (index, position)
+        wait_at = found.get("wait_for_rollback")
+        for index, scene in enumerate(self.scenes):
+            if index != wait_at and ROLLBACK_MINUTES in " ".join(
+                card_texts(scene.card)
+            ):
+                raise ValueError(
+                    f"scene {scene.id} names {ROLLBACK_MINUTES}: only the card"
+                    " right after wait_for_rollback says the gap the cut hides"
+                )
+        end = self.end_state.rollback
+        if not found and end is None:
+            return self
+        if sorted(found) != sorted(INCIDENT_KINDS.values()) or end is None:
+            raise ValueError(
+                "the incident is story, crashes, wait_for_rollback and the"
+                f" rollback's end state, each once; this storyboard has"
+                f" {sorted(found) or 'none of them'}"
+                f"{'' if end is not None else ' and no rollback end state'}"
+            )
+        if (
+            seeded is None
+            or not seeded < placed["story"]
+            or not found["story"] < found["crashes"] < wait_at - 1
+        ):
+            raise ValueError(
+                "off camera, the StreamPulse seed runs first, then story: 2, then"
+                " crashes, then at least one scene before wait_for_rollback"
+                " (B9, filmed before the monitor acts)"
+            )
+        b9 = self.scenes[wait_at - 1]
+        if b9.app != "dashboard" or b9.card is not None:
+            raise ValueError(
+                f"scene {b9.id} is B9, the scene before wait_for_rollback: it is"
+                " a dashboard page that shows the flag's safety check"
+            )
+        wait = next(
+            item.wait_for_rollback
+            for item in self.scenes[wait_at].off_camera
+            if isinstance(item, WaitForRollback)
+        )
+        if wait.flag != config.CRASH_FLAG or end.key != config.CRASH_FLAG:
+            raise ValueError(
+                f"the crashes are sent against {config.CRASH_FLAG}: the wait and the"
+                f" end state name it, not {wait.flag} and {end.key}"
+            )
+        if wait.percentage != end.percentage:
+            raise ValueError(
+                f"the wait is for {wait.percentage}%; the end state says"
+                f" {end.percentage}%"
+            )
+        card = self.scenes[wait_at].card
+        if card is None or ROLLBACK_MINUTES not in " ".join(card_texts(card)):
+            raise ValueError(
+                f"scene {self.scenes[wait_at].id} follows wait_for_rollback: it is"
+                f" a card that says the measured gap the cut hides ({ROLLBACK_MINUTES})"
+            )
+        where: Dict[str, int] = {}
+        for index, scene in enumerate(self.scenes):
+            for beat in scene.beats:
+                for name in beat.record:
+                    where.setdefault(name, index)
+        for name, after in (
+            (end.unhealthy, None),
+            (end.paused, wait_at),
+            (end.rolled_back, wait_at),
+            (end.shown, wait_at),
+            (end.reason, wait_at),
+        ):
+            if name not in where:
+                raise ValueError(
+                    f"the rollback's end state compares {name!r}, which no beat records"
+                )
+            if after is None and where[name] != wait_at - 1:
+                raise ValueError(
+                    f"{name!r} is read in B9 ({b9.id}), before the monitor acts"
+                )
+            if after is not None and where[name] <= after:
+                raise ValueError(
+                    f"{name!r} is read after the rollback, not before"
+                    f" {self.scenes[after].id}"
+                )
+        agree = end.agree
+        scene = next((s for s in self.scenes if s.id == agree.scene), None)
+        if scene is None or not 1 <= agree.beat <= len(scene.beats):
+            raise ValueError(
+                f"the agreement is read at scene {agree.scene} beat {agree.beat},"
+                " which the storyboard does not have"
+            )
+        if self.scenes.index(scene) <= wait_at or scene.app != "streampulse":
+            raise ValueError(
+                f"the agreement is read in StreamPulse after the rollback, not in"
+                f" {scene.id}"
+            )
+        recorded = scene.beats[agree.beat - 1].record
+        if agree.panel not in recorded or agree.phone not in recorded:
+            raise ValueError(
+                f"scene {scene.id} beat {agree.beat} records the panel's"
+                f" {agree.panel!r} and the phone's {agree.phone!r} at its start"
+            )
+        if agree.device not in config.STREAMPULSE_DEVICES:
+            raise ValueError(
+                f"{agree.device} is not a StreamPulse device the tool knows"
             )
         return self
 
@@ -791,6 +1683,7 @@ _STEP_KEYS = {
     "url": WaitFor,
     "choose": Choose,
     "slide": Slide,
+    "date": Date,
 }
 
 
@@ -858,6 +1751,11 @@ def parse(data: Any, *, source: str = "storyboard") -> Storyboard:
                 raise StoryboardError(
                     f"{where}: a choose or slide in before is cut from the video"
                 )
+            if any(isinstance(step, Date) for step in [*beat.before, *beat.exit]):
+                raise StoryboardError(
+                    f"{where}: a date is set in the beat's steps, on camera, never"
+                    " in before or exit"
+                )
     # G1 and G3, the narration's rules (the voice step runs them again).
     from showcase.capture import narration
 
@@ -900,6 +1798,7 @@ def _locators(step: Any) -> List[Locator]:
         "wait_for",
         "choose",
         "slide",
+        "date",
     ):
         value = getattr(step, key, None)
         if isinstance(value, Locator):
@@ -966,6 +1865,13 @@ def required_departures(board: Storyboard) -> List[Tuple[str, str]]:
       off camera (its card says how many, measured: ``{traffic_minutes}``);
     * ``masked value``: a scene that masks a credential the product draws
       (``masks``; S7 of plan v2.2): the tool replaces what the page draws.
+
+    Off camera (``off_camera``, S7 of plan v2.2), each step by what it is: an
+    app's seed, a visitor and ``story`` (the demo's rollout script, run by the
+    tool) are off-camera setup; ``crashes`` is simulated traffic, the devices'
+    crashes the tool sends; ``wait_for_rollback`` is a time skip, on the card it
+    runs before, which says how long the cut hides. A shortened scheduler
+    interval is stated as its override's statement (``overrides``).
     """
     needed: List[Tuple[str, str]] = []
     running = False
@@ -978,8 +1884,9 @@ def required_departures(board: Storyboard) -> List[Tuple[str, str]]:
             for beat in scene.beats
             for step in beat.before
         )
+        steps = [OFF_CAMERA_KINDS[type(item)] for item in scene.off_camera]
         if (
-            scene.off_camera
+            "off-camera setup" in steps
             or (index == 0 and board.setup is not None)
             or signs_in
             or scene.warm_results
@@ -988,14 +1895,43 @@ def required_departures(board: Storyboard) -> List[Tuple[str, str]]:
             needed.append((scene.id, "off-camera setup"))
         if scene.traffic in ("start", "run"):
             running = True
-        if running:
+        if running or "simulated traffic" in steps:
             needed.append((scene.id, "simulated traffic"))
-        if scene.traffic in ("finish", "run"):
+        if scene.traffic in ("finish", "run") or "time skip" in steps:
             needed.append((scene.id, "time skip"))
+        if scene.traffic in ("finish", "run"):
             running = False
         if scene.masks:
             needed.append((scene.id, "masked value"))
     return needed
+
+
+#: What each off-camera step is, as a departure from a new user's path (D84;
+#: S7 of plan v2.2). A closed table: a step with no row here cannot load.
+OFF_CAMERA_KINDS: Dict[type, str] = {
+    SeedApp: "off-camera setup",
+    Visitor: "off-camera setup",
+    Story: "off-camera setup",
+    Crashes: "simulated traffic",
+    WaitForRollback: "time skip",
+}
+
+
+def incident_at(board: Storyboard) -> Dict[str, int]:
+    """Where video 4's incident steps run: each one's scene index, by name."""
+    found: Dict[str, int] = {}
+    for index, scene in enumerate(board.scenes):
+        for item in scene.off_camera:
+            kind = INCIDENT_KINDS.get(type(item))
+            if kind is not None:
+                found[kind] = index
+    return found
+
+
+def b9_scene(board: Storyboard) -> Optional[Scene]:
+    """B9: the scene right before ``wait_for_rollback``'s, or None."""
+    wait_at = incident_at(board).get("wait_for_rollback")
+    return None if wait_at is None else board.scenes[wait_at - 1]
 
 
 #: EM condition 6 of T166 (S2 of plan v2.2): a storyboard that records a demo
@@ -1119,7 +2055,8 @@ def step_ms(step: Any) -> int:
         ms = step.ms
     elif isinstance(step, ScrollTo):
         ms = config.SCROLL_MS
-    elif isinstance(step, Choose):
+    elif isinstance(step, (Choose, Date)):
+        # A date is filled as a choose is chosen: pressed, set, held to settle.
         ms = (
             config.POINTER_MS
             + config.POINTER_REST_MS

@@ -10,7 +10,9 @@ parameter, which may carry a literal ``Infinity``) and ``POST``
 ``/api/v1/feature-flags/evaluate/{flag_key}``, with a key without any scope,
 for the eleven operators in dashboard-shape and native rules, and one
 legacy-list rule. Keys are created through ``POST /api/v1/api-keys`` and
-``deps.get_api_key`` is not replaced.
+``deps.get_api_key`` is not replaced. A ``POST`` body holding ``Infinity`` or
+``-Infinity`` answers 422 ``finite_number`` instead, as every JSON body does
+(#1630); the ``GET`` parameter is not a JSON body and is evaluated as before.
 """
 
 import json
@@ -70,6 +72,10 @@ def _native(operator, value, additional=None):
 #: year the C library cannot hold).
 NUMBERS = frozenset({0, 1, 2})
 DATES = frozenset({0, 1, 2, 3, 4, 5, 7})
+#: The two infinities. A ``POST`` body holding one answers 422 before the
+#: route (#1630, every JSON body); the ``GET`` parameter is evaluated as
+#: before, so the two methods differ here on purpose.
+INFINITIES = frozenset({3, 4})
 
 #: name -> (stored rules, the CONTEXTS that are out of range for them)
 RULES = {
@@ -179,7 +185,18 @@ def test_an_out_of_range_value_answers_off_with_reason_error(
             content='{"user_id": "u1", "context": ' + raw + "}",
             headers={**headers, "content-type": "application/json"},
         )
-        for method, resp in (("GET", got), ("POST", posted)):
+        answers = [("GET", got), ("POST", posted)]
+        if index in INFINITIES:
+            assert posted.status_code == 422, (raw, posted.text[:200])
+            assert posted.json()["detail"] == [
+                {
+                    "type": "finite_number",
+                    "loc": ["body", "context", "v"],
+                    "msg": "Input should be a finite number",
+                }
+            ]
+            answers = [("GET", got)]
+        for method, resp in answers:
             assert resp.status_code == 200, (method, raw[:20], resp.text[:200])
             body = resp.json()
             if index in out_of_range:

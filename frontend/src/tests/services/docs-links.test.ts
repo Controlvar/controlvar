@@ -86,4 +86,27 @@ describe('every docsUrl() link addresses a real page', () => {
       .map(({ page, file }) => `${file}: docsUrl('${page}') -> ${targetFor(page).slice(REPO_ROOT.length + 1)}`);
     expect(missing).toEqual([]);
   });
+
+  // The scan above reads only a single-quoted literal page. A call built from
+  // a variable, a template or double quotes is a link it never sees: three
+  // such calls passed it (#1459, PE 6). So every call must be one literal
+  // page, followed by `,` (an anchor) or `)`. A list of links is a map of
+  // literal calls (content/sdks.ts's SDK_GUIDES, components/homepage/Quote.tsx).
+  it('reads every docsUrl() call, so none is a link this test cannot check', () => {
+    const unseen: string[] = [];
+    for (const file of files) {
+      if (file.endsWith(join('services', 'docs.ts'))) continue;
+      const text = readFileSync(file, 'utf8');
+      const call = /docsUrl\(/g;
+      let m: RegExpExecArray | null;
+      while ((m = call.exec(text)) !== null) {
+        const literal = /^docsUrl\(\s*'[^']*'\s*[,)]/;
+        if (!literal.test(text.slice(m.index))) {
+          const line = text.slice(0, m.index).split('\n').length;
+          unseen.push(`${file.slice(REPO_ROOT.length + 1)}:${line}: ${text.slice(m.index, m.index + 60).split('\n')[0]}`);
+        }
+      }
+    }
+    expect(unseen).toEqual([]);
+  });
 });

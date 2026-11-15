@@ -2,12 +2,28 @@
 
 > **Open-source A/B testing and feature flags that you run yourself.**
 
+**Website:** [controlvar.com](https://controlvar.com) · **Documentation:** [docs.controlvar.com](https://docs.controlvar.com)
+
+![The power calculator: the baseline conversion rate, the minimum detectable effect, the sample size each variant needs, and a power curve.](frontend/public/screens/power-calculator-2268c898864d.webp)
+
+Watch the [walkthrough videos](https://controlvar.com/walkthroughs) on controlvar.com.
+
 The core, the optional modules and the dashboard are Apache-2.0; the client SDKs under `sdk/`
 are MIT. Controlvar is pre-1.0: see the
 [releases](https://github.com/Controlvar/controlvar/releases).
 Controlvar was called Experimently before 0.35.0;
 [Upgrading to Controlvar](docs/self-hosting/upgrading-to-controlvar.md) says what
 that changes for an install you already run.
+
+---
+
+## Try the live demo
+
+A read-only copy runs at <https://demo.controlvar.com>: the dashboard as a viewer, with ShopLab and
+StreamPulse sending it simulated traffic. Creating and changing things is turned off there, and
+everything is rebuilt every night at 08:00 UTC. To create experiments, run it on your machine
+(below).
+[The live demo](docs/getting-started/live-demo.md) says what is turned off there, and why.
 
 ---
 
@@ -20,7 +36,24 @@ git clone https://github.com/Controlvar/controlvar.git
 cd controlvar
 ```
 
-Then start the stack from the repository root:
+### On the published images
+
+Start the released images from `deploy/compose/`; nothing is built:
+
+```{.bash skip reason="server: pulls the published images and starts them as a stack of their own"}
+cd deploy/compose
+./generate-env.sh
+docker compose up -d --wait
+```
+
+Open **http://localhost:8080** and sign in as **admin@example.com** with the
+`FIRST_SUPERUSER_PASSWORD` that `generate-env.sh` wrote to `deploy/compose/.env`.
+This stack has no demo data and no demo account. Its settings are in
+[deploy/compose/README.md](deploy/compose/README.md).
+
+### Built from source, with the demo data
+
+Start the stack from the repository root:
 
 ```{.bash exec timeout=1200}
 docker compose up -d --wait
@@ -63,11 +96,13 @@ a customer app would. `./demo/setup-local.sh` starts everything.
 
 - **ShopLab** (`demo/shoplab`, http://localhost:3200): an e-commerce storefront running an A/B test,
   a multi-armed bandit, a multivariate test, a CUPED checkout test and a gradual-rollout flag.
-- **StreamPulse** (`demo/streampulse`, http://localhost:3300): a simulated mobile app with a device
-  picker, targeting by OS version/region/tier, a kill switch, mutual exclusion and a scripted rollout
-  story in which a crash spike triggers an automatic safety rollback.
+- **StreamPulse** (`demo/streampulse`, http://localhost:3300): a phone drawn in a web page with the
+  React SDK, with a device picker, targeting by OS version/region/tier, a kill switch, mutual
+  exclusion and a scripted rollout story in which a crash spike triggers an automatic safety
+  rollback.
 
-Walkthrough: [demo/DEMO_GUIDE.md](demo/DEMO_GUIDE.md).
+Walkthrough: [demo/DEMO_GUIDE.md](demo/DEMO_GUIDE.md). Step by step, with what you will see at each
+step: [Guided examples](docs/guides/guided-examples.md).
 
 ---
 
@@ -92,15 +127,16 @@ Walkthrough: [demo/DEMO_GUIDE.md](demo/DEMO_GUIDE.md).
 - **Real-time Metrics**: Error rate, latency, custom metrics tracking
 - **Auto-Rollback**: Automatic rollback on threshold violations
 - **Configurable Thresholds**: Per-feature flag safety configuration
-- **Complete Audit Trail**: All rollbacks logged with reasoning
+- **Rollback History**: every rollback, automatic or manual, is stored with its reason; it also appears in the flag's audit history, unless that entry could not be written
 
 ---
 
 ## What it does not do (yet)
 
-- A flag is on or off for each user: it carries no variants or values. To serve one of several
-  experiences, run a multivariate experiment.
-- Every metric is analysed as a conversion: whether each user sent the metric's event.
+- A flag serves two values, its on value and its off value; no rule or rollout splits users
+  among three or more. For three or more experiences, run a multivariate experiment.
+- A revenue, count, duration or custom metric's sequential, Bayesian, sample-size, breakdown and
+  daily views are of the share of users who sent its event.
 - Variant weights must add up to exactly 100%; there is no separate experiment-level traffic
   allocation.
 - One deployment is one environment: run staging and production as separate deployments, each
@@ -139,9 +175,21 @@ tracking against a live API in CI (the SDK Live Contract job of `pr-qa-gate.yml`
 | JavaScript | `npm install @controlvar/js-sdk` |
 | Python | `pip install controlvar` |
 | Go | `go get github.com/controlvar/controlvar/sdk/go` |
+| React | `npm install @controlvar/react-sdk` |
+| React Native | `npm install @controlvar/react-native-sdk` |
+| OpenFeature (Node) | `npm install @controlvar/openfeature-provider @openfeature/server-sdk` |
+| OpenFeature (Python) | `pip install controlvar-openfeature` |
+| Java | `com.controlvar:controlvar-sdk` (Maven Central) |
+| .NET | `dotnet add package Controlvar.SDK` |
 
 Every other SDK installs from a clone of this repository. The [SDK guide](docs/sdk-guide.md) says
 how, and what CI runs for each one.
+
+The Controlvar MCP server is not an SDK. An AI assistant such as Claude Code starts it on your
+computer to read your instance's feature flags, experiments and results with your API key, and it
+changes no flag or experiment. The `@controlvar/mcp-server` package is on npm.
+[The MCP Server and the AI Endpoints](docs/mcp-server.md) has the command that adds it to Claude
+Code, and the settings for Claude Desktop and Cursor. Its source is [`sdk/mcp`](sdk/mcp/).
 
 ---
 
@@ -150,6 +198,9 @@ how, and what CI runs for each one.
 - [Documentation home](docs/README.md)
 - [Architecture overview](docs/getting-started/architecture.md)
 - [Targeting rules](docs/feature-flags/create.md): operators, attribute aliases and examples
+- [The Controlvar books](https://github.com/amarkanday/controlvar-books): engineering, programming and the craft of
+  shipping software, taught through this codebase, for newcomers to a language or framework, engineers who already
+  code, and contributors (CC BY 4.0)
 
 ---
 
@@ -180,8 +231,8 @@ the core through the registration hooks in `backend/app/core/`:
 
 | Module | What it adds |
 |---|---|
-| `workspaces` | Group users into teams, with workspace roles and email invites. Grouping only: access to experiments and flags is by platform role |
-| `rbac` | Roles beyond the built-in four, and permissions granted directly to a user. Both are recorded, but they do not change what anyone can do yet: each user's built-in role decides ([#891](https://github.com/Controlvar/controlvar/issues/891)) |
+| `workspaces` | Group users into teams, with workspace roles and email invites. Grouping only: workspace roles play no part in access to experiments and flags |
+| `rbac` | Roles beyond the built-in four, and permissions granted directly to a user, optionally until a date. Both add to what the user's built-in role allows |
 | `sso` | OIDC identity providers with just-in-time provisioning and role mapping. SAML 2.0 sign-in is not available yet; use OIDC |
 | `hipaa` | PHI encryption, PHI access records stamped with a six-year retention (nothing deletes them), BAA records |
 | `compliance` | SOC 2 / ISO 27001 reports, signed audit exports |
@@ -189,7 +240,7 @@ the core through the registration hooks in `backend/app/core/`:
 | `integrations` | Jira, Salesforce and GitHub |
 | `counters` | Routes to increment and read assignment and conversion counters in DynamoDB; assignment and tracking do not write them |
 | `etl` | Glue crawlers, Athena partitions and scheduled jobs |
-| `split_url` | Server-side URL splitting at the edge. The edge router has no configuration source in this release, so it does not split traffic yet; experiments, their URL configuration and the preview work ([#393](https://github.com/Controlvar/controlvar/issues/393)) |
+| `split_url` | Split URL experiments: each variant is its own URL. Your server or edge asks the API where to send each visitor (on AWS an optional CloudFront router can). The AWS installer installs the core profile, so it does not include them |
 
 `GET /api/v1/modules` reports the running profile and the installed modules — ask it first, rather
 than inferring the profile from a status code. A core deployment is the repository with `modules/`
@@ -221,3 +272,5 @@ public issues. Contributions are accepted under the DCO — see [CONTRIBUTING.md
 
 [CONTRIBUTING.md](CONTRIBUTING.md) covers the development setup, the test suites and the
 core/modules boundary.
+
+[ROADMAP.md](ROADMAP.md) says what is planned Now, Next and Later, and how to influence it.

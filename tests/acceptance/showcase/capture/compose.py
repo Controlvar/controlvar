@@ -323,8 +323,16 @@ class Docker:
             timeout=timeout,
         )
 
-    def out(self, name: str, argv: Sequence[str], *, private: bool = False) -> str:
-        """The command's standard output, into this process only."""
+    def out(
+        self,
+        name: str,
+        argv: Sequence[str],
+        *,
+        private: bool = False,
+        merged: bool = False,
+    ) -> str:
+        """The command's standard output, into this process only (*merged*:
+        its standard error too, and neither logged: ``Children.capture``)."""
         status, stdout = self.children.capture(
             name,
             list(argv),
@@ -333,6 +341,7 @@ class Docker:
             log=self.logs / f"{name}.log",
             kind="compose",
             private=private,
+            merged=merged,
         )
         if status != 0:
             raise StackError(f"{name} exited {status}; see {self.logs / name}.log")
@@ -700,6 +709,21 @@ class QuickstartStack:
             "read-key", self._compose("exec", "-T", "api", "cat", path), private=True
         )
         return key_text(text, Path(path).name)
+
+    def api_log(self) -> str:
+        """The API container's log (``docker compose logs api``), into this
+        process only, never into the run's own log (PE 7 of T178 14): the
+        caller keeps the lines it matched, and writes anything else only through
+        the redactor, the StreamPulse server key registered first. Both of the
+        command's streams (``merged``): compose may write what the container
+        wrote to its standard error to its own, which the log would otherwise
+        get."""
+        return self.docker.out(
+            "api-log",
+            self._compose("logs", "--no-color", "api"),
+            private=True,
+            merged=True,
+        )
 
     def start_app(self, app: str) -> None:
         tree = self.apps[app]

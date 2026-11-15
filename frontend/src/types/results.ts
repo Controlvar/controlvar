@@ -28,6 +28,55 @@ export interface DimensionalBreakdownResponse {
   segments: SegmentBreakdown[];
 }
 
+/** Why a balanced experiment's estimate over its groups is null (#448). */
+export type BalancedGroupsNoEstimateReason = 'mean_metric' | 'sequential_testing' | 'too_few_users';
+
+/** `BalancedGroupsEstimate`: one treatment against the control, over every group. */
+export interface BalancedGroupsEstimate {
+  variant_id: string;
+  variant_name: string;
+  /** A difference of shares (0.02 is 2 percentage points); null when the treatment has no users. */
+  absolute_difference: number | null;
+  /** At the response's confidence_level, not adjusted; null when standard_error is 0 or null. */
+  absolute_difference_ci: [number, number] | null;
+  standard_error: number | null;
+  relative_improvement_pct: number | null;
+  /** Null when standard_error is 0 or null, never 0.0. */
+  p_value: number | null;
+  /** Corrected across the treatments; null with no correction. */
+  adjusted_p_value: number | null;
+  /** Not a verdict: the experiment's results carry its decision. */
+  is_significant: boolean;
+}
+
+/** `MergedGroup`: a group with too few users, counted in the estimate with a larger one. */
+export interface MergedGroup {
+  group: string;
+  into: string;
+}
+
+/**
+ * `GET /results/{id}/balanced-groups` (beta, #448): an experiment that
+ * balances its split within groups, by the group each user was balanced in
+ * when they were assigned, and one estimate over the groups.
+ */
+export interface BalancedGroupsResponse {
+  experiment_id: string;
+  confidence_level: number;
+  correction_method: CorrectionMethod;
+  /** One row per stored group: the breakdown's rows, `other` and `unknown` last. */
+  groups: DimensionalBreakdownResponse;
+  /** One entry per treatment; null with `reason`. */
+  overall: BalancedGroupsEstimate[] | null;
+  reason: BalancedGroupsNoEstimateReason | null;
+  merged_groups: MergedGroup[];
+  /** Users split without balancing, those whose row stored no group included. */
+  users_outside_blocks: number;
+  /** The share in `unknown` of the users whose group was stored; null when none was. */
+  unknown_share: number | null;
+  engine_version: string;
+}
+
 export type RecommendationAction =
   | 'SHIP_VARIANT'
   | 'KEEP_CONTROL'
@@ -71,13 +120,70 @@ export interface VariantResult {
   power: number | null;
   /** The test behind p_value; null for the control variant. */
   statistical_test_used?: StatisticalTestUsed | null;
+  /**
+   * This variant's mean minus the control's, in the unit of `mean`: for a
+   * metric analysed as a proportion a difference of shares (0.012 is 1.2
+   * percentage points), for one analysed as a mean a difference per assigned
+   * user. Null for the control; for a proportion when either variant has no
+   * users; for a mean when either has fewer than 2. Absent from a server
+   * older than the field, and null for every proportion from a server older
+   * than #1496.
+   */
+  absolute_difference?: number | null;
+  /**
+   * The interval of `absolute_difference` at the response's
+   * confidence_level, not adjusted for multiple comparisons. Null when
+   * `absolute_difference` is, and for a mean when neither variant's per-user
+   * values vary.
+   */
+  absolute_difference_ci?: [number, number] | null;
+  /**
+   * The interval of `relative_improvement_pct`, in percent, at the
+   * response's confidence_level and not adjusted (#1496). A proportion's
+   * lower end is never below -100%; it is null when the control has no
+   * conversions. A mean's is also null when the control's mean is 0, or when
+   * its mean plus or minus its margin reaches 0. Absent from a server older
+   * than the field.
+   */
+  relative_improvement_pct_ci?: [number, number] | null;
+  /**
+   * `absolute_difference` times this variant's `sample_size`: converting
+   * users for a proportion, the total of the users' values (or, for a count,
+   * events) for a mean. A plain number, never projected. Null for the control
+   * and when `absolute_difference` is. Absent from a server older than #1496:
+   * the table then has no Impact column.
+   */
+  incremental_impact?: number | null;
+  /** `absolute_difference_ci` times `sample_size`, not adjusted; null when it is. */
+  incremental_impact_ci?: [number, number] | null;
 }
+
+/**
+ * How a metric's variants are compared (backend MetricResult.analysis):
+ * 'mean' is a revenue, count, duration or custom metric's value per assigned
+ * user (for a count, its number of events; otherwise its events' total
+ * value), by Welch's t-test; 'proportion' is a conversion metric's share of
+ * users who sent the metric's event.
+ */
+export type MetricAnalysis = 'proportion' | 'mean';
 
 export interface MetricResult {
   metric_id: string;
   metric_name: string;
   metric_type: 'conversion' | 'revenue' | 'count' | 'duration' | 'custom';
   is_primary: boolean;
+  /**
+   * True when a decrease is the good direction for this metric. The winner,
+   * the recommendation and the table's better/worse read it. Absent from a
+   * server older than the field.
+   */
+  lower_is_better?: boolean;
+  /**
+   * How the variants were compared. Absent from a server older than the
+   * field: read the variants' `statistical_test_used` then
+   * (`analysedAsMean`).
+   */
+  analysis?: MetricAnalysis;
   variants: VariantResult[];
 }
 

@@ -360,10 +360,11 @@ curl -X POST \
 Leave `scopes` out when step 1 printed none. A server SDK that evaluates flags locally uses a key
 with the `sdk:ruleset` scope: its replacement needs the same scope, because
 `GET /api/v1/sdk/ruleset` answers 403 to a key without it. Only users who can change feature
-flags (ADMIN, DEVELOPER, or a superuser) can create a key with that scope; for any other owner the
-API answers 403 and creates nothing, so someone with one of those roles creates the key, and
-it is theirs. An owner with a superuser account can instead use **Admin → API Keys** (the admin
-area is for superusers) and tick **Server-side local evaluation (sdk:ruleset)**.
+flags (ADMIN, DEVELOPER, a superuser, or in the full profile anyone whose custom role or direct
+grant gives `feature_flag (update)`) can create a key with that scope; for any other owner the
+API answers 403 and creates nothing, so someone who can creates the key, and it is theirs. An
+owner with a superuser account can instead use **Admin → API Keys** (the admin area is for
+superusers) and tick **Server-side local evaluation (sdk:ruleset)**.
 
 Step 3: Put the new key where the service that used the old one reads it (a secrets manager or
 that service's deployment settings, not Slack or email), and remove the old key from wherever it

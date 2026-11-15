@@ -50,6 +50,17 @@ by = [
 ]
 
 [[unit]]
+text = "When the primary metric is a revenue, count, duration or custom metric, conversion_rate is empty: /results reports that metric's mean as a value per assigned user, not a rate."
+by = [
+    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_the_export_leaves_the_rate_empty_for_a_revenue_primary",
+    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_a_revenue_metric_is_analysed_per_assigned_user",
+]
+
+[[unit]]
+text = "conversions is still the number of users who sent the metric's event, and p_value is the p-value of Welch's t-test that /results reports."
+by = ["test:backend/tests/integration/api/test_revenue_per_user_results.py::test_the_export_leaves_the_rate_empty_for_a_revenue_primary"]
+
+[[unit]]
 text = "p_value is the unadjusted p-value, while is_significant is decided on the corrected one."
 by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_p_value_is_unadjusted_and_significance_is_decided_on_the_corrected_one"]
 
@@ -60,10 +71,6 @@ by = ["exempt:baseline"]
 [[unit]]
 text = "The export has no adjusted p-value column; /results reports it as adjusted_p_value."
 by = ["exempt:baseline"]
-
-[[unit]]
-text = "Empty in this release: experiments_with_winners in the overview is 0 (#244)."
-by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_overview_fields"]
 
 [[unit]]
 text = "Run the commands on this page in one terminal, in order, against the stack from the Quick Start."
@@ -305,8 +312,11 @@ text = "conversions | integer | Number of assigned users with at least one conve
 by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,variant_id,variant_name,is_control,assignments,conversions,conversion_rate,p_value,is_significant,relative_improvement_pct"]
 
 [[unit]]
-text = "conversion_rate | float | Conversion rate [0, 1] (mean in /results)"
-by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,variant_id,variant_name,is_control,assignments,conversions,conversion_rate,p_value,is_significant,relative_improvement_pct"]
+text = "conversion_rate | float | Conversion rate [0, 1] (mean in /results); empty when the primary metric is a revenue, count, duration or custom metric"
+by = [
+    "docex:docs/api/data-export.md#experiment_id,experiment_name,variant_id,variant_name,is_control,assignments,conversions,conversion_rate,p_value,is_significant,relative_improvement_pct",
+    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_the_export_leaves_the_rate_empty_for_a_revenue_primary",
+]
 
 [[unit]]
 text = "p_value | float | Unadjusted p-value against control; empty for the control"
@@ -468,12 +478,29 @@ text = "total_events | integer | Total tracking events"
 by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_overview_fields"]
 
 [[unit]]
-text = "experiments_with_winners | integer | Counts saved reports that have a summary; nothing saves one in this release, so it is 0"
-by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_overview_fields"]
+text = "experiments_with_winners | integer | Experiments created in the period that are significant on their primary metric now, whatever the recommendation and whatever the status: the same test that fills the winner_variant column of the experiment export. An experiment counts even when its recommendation is still CONTINUE_TESTING (below the minimum sample) or INCONCLUSIVE (a sample ratio mismatch), and a draft, paused or archived experiment counts if its analysis finds a winner. Computed on every call, so it costs as much as GET /export/experiments for the same period. Narrow start_date and end_date to make the call faster."
+by = [
+    "test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_overview_fields",
+    "test:backend/tests/unit/services/test_export_overview_winners.py::test_the_count_is_the_export_winner_column_for_the_same_period",
+    "test:backend/tests/unit/services/test_export_overview_winners.py::test_each_analysis_is_the_call_the_export_makes",
+    "test:backend/tests/unit/services/test_export_overview_winners.py::test_one_analysis_per_experiment_and_none_for_an_empty_period",
+    "test:backend/tests/integration/api/test_export_overview_winners.py::test_the_overview_counts_a_completed_experiment_with_a_winner",
+]
 
 [[unit]]
 text = "average_experiment_duration_days | float | Average duration (days) of completed experiments, or null"
 by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_overview_fields"]
+
+[[unit]]
+text = "An experiment whose results cannot be computed, for example because it has no control variant, is not counted."
+by = ["test:backend/tests/unit/services/test_export_overview_winners.py::test_an_experiment_whose_results_cannot_be_computed_is_not_counted"]
+
+[[unit]]
+text = "Any other error in an analysis fails the overview with 500; it never reports 0 in its place."
+by = [
+    "test:backend/tests/unit/services/test_export_overview_winners.py::test_an_analysis_error_fails_the_overview",
+    "test:backend/tests/unit/services/test_export_overview_winners.py::test_an_analysis_error_answers_500_and_never_0",
+]
 
 [[unit]]
 text = "On the Quick Start's demo data it prints three experiments, two of them active and one completed."
@@ -507,6 +534,13 @@ text = "An id that no experiment has answers 404, and one that is not a UUID ans
 by = [
     "test:backend/tests/integration/api/test_export_api.py::TestExperimentReport::test_unknown_experiment_is_404",
     "test:backend/tests/integration/api/test_export_api.py::TestExperimentReport::test_non_uuid_id_is_422",
+]
+
+[[unit]]
+text = "Download CSV on an experiment's results page in the dashboard sends one request to this path with format=csv and saves the response unchanged."
+by = [
+    "test:frontend/src/tests/pages/results-export-csv.test.tsx::one click is exactly one GET of /api/v1/export/reports/experiments/{id}?format=csv",
+    "test:frontend/src/tests/pages/results-export-csv.test.tsx::saves the response body byte for byte, as results-{id}.csv",
 ]
 
 [[unit]]

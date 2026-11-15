@@ -97,11 +97,11 @@ from backend.app.core.schema_cache import clear_schema_cache
 clear_schema_cache()
 ```
 
-**DynamoDB mocking (moto 4.2.2 — use `mock_dynamodb`, not `mock_aws`):**
+**AWS mocking (moto 5 — `mock_aws` covers every service; the per-service decorators are gone):**
 ```python
-from moto import mock_dynamodb
+from moto import mock_aws
 
-@mock_dynamodb
+@mock_aws
 def test_something():
     ...
 ```

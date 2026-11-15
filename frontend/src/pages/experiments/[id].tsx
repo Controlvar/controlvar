@@ -8,8 +8,14 @@ import { TargetingSection } from '@/components/experiments/TargetingSection';
 import { ApiKeyRouteHint } from '@/components/experiments/ApiKeyRouteHint';
 import WarehouseAnalysisSection from '@modules/components/warehouse/runs/WarehouseAnalysisSection';
 import { useAuth } from '@/contexts/AuthContext';
+import { EligibilityUser, useExperimentEligibility } from '@/hooks/useExperimentEligibility';
+import { useSegmentList } from '@/hooks/useSegmentList';
+import { BALANCE_RESULTS_LINK, balanceSummary } from '@/components/experiments/new/balanceWithin';
 import { isApiError } from '@/services/api';
+import { docsUrl } from '@/services/docs';
 import { ExperimentsService } from '@/services/experiments';
+import { MutualExclusionGroup } from '@/types/eligibility';
+import { holdoutLabel } from '@/utils/holdouts';
 import {
   Experiment,
   ExperimentStatus,
@@ -22,6 +28,10 @@ import {
   experimentTypeLabel,
 } from '@/types/experiments';
 import { canChangeExperiment } from '@/utils/experimentPermissions';
+import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
+import { useDemoMode } from '@/contexts/AuthConfigContext';
+import { DemoNote } from '@/components/DemoNote';
+import { DEMO_EXPERIMENTS_ACTION } from '@/utils/demoMode';
 import { correctionName, formatConfidence } from '@/components/results/shared/analysisSettings';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
@@ -81,6 +91,179 @@ export function algorithmLabel(optimizationType: string | null | undefined): str
 }
 
 /**
+ * The header's "Balance" row: what the split is balanced within ("within
+ * Platform (ios, android, web)", or the segments by name) or "off". Read-only:
+ * a draft changes it in "Edit variants and metrics", and it is fixed once the
+ * experiment has started. Saved segments are loaded only when it lists some.
+ * Once there are results, a balanced experiment's row links to its balanced
+ * groups on Results › Breakdowns (`resultsHref`).
+ */
+function BalanceRow({ setting, resultsHref }: { setting: Experiment['balance_within']; resultsHref?: string }) {
+  const segmentList = useSegmentList(Boolean(setting?.segments?.length));
+  const names =
+    segmentList.state === 'ready' ? new Map(segmentList.segments.map((s) => [s.id, s.name] as const)) : null;
+  return (
+    <div className="flex items-center gap-1.5">
+      <dt className="text-slate-500">Balance</dt>
+      <dd data-testid="experiment-balance">{balanceSummary(setting ?? null, names)}</dd>
+      {setting && resultsHref && (
+        <dd>
+          <Link href={resultsHref} className={NOTE_LINK} data-testid="experiment-balance-results">
+            {BALANCE_RESULTS_LINK}
+          </Link>
+        </dd>
+      )}
+    </div>
+  );
+}
+
+/** The header's term for an experiment's start or end date. */
+export type ScheduleTerm = 'Starts' | 'Started' | 'Start date' | 'Ends' | 'Ended' | 'End date';
+
+/**
+ * How the header names an experiment's start or end date (#1443), and whether
+ * that date has come without the experiment starting or ending ("due").
+ *
+ * The status decides first, never the browser's clock, so a clock that is
+ * wrong can never write "Started" or "Ended":
+ *
+ * - start: active, paused or completed → "Started"; archived → "Start date";
+ *   anything else (a draft) → "Starts".
+ * - end: completed → "Ended"; archived → "End date"; anything else → "Ends".
+ *
+ * An archived experiment gets the neutral terms because the API archives a
+ * draft too, so archived does not mean it ever started (plan-1449 C1). Only
+ * "Starts" and "Ends" can be due: the date is at or before `nowMs`, the
+ * scheduler's own `<=`, which starts a draft and ends an active experiment on
+ * its next pass and never ends a paused one. A value that is not a time is
+ * never due. The value is the API's, so it is read with `parseApiTimestamp`:
+ * one without a zone is UTC (#1134).
+ *
+ * The caller passes the clock. Nothing re-renders the page on a timer; any
+ * re-render reads the clock again.
+ */
+export function scheduleLabel(
+  which: 'start' | 'end',
+  value: string,
+  status: string,
+  nowMs: number,
+): { term: ScheduleTerm; due: boolean } {
+  if (status === 'archived') {
+    return { term: which === 'start' ? 'Start date' : 'End date', due: false };
+  }
+  const happened =
+    which === 'start'
+      ? status === 'active' || status === 'paused' || status === 'completed'
+      : status === 'completed';
+  if (happened) return { term: which === 'start' ? 'Started' : 'Ended', due: false };
+  return {
+    term: which === 'start' ? 'Starts' : 'Ends',
+    due: parseApiTimestamp(value).getTime() <= nowMs,
+  };
+}
+
+const DUE_NOTE: Record<'start' | 'end', string> = {
+  start: ' (due, not started yet)',
+  end: ' (due, not ended yet)',
+};
+
+/**
+ * The words of the "Exclusion group" and "Global holdout" rows (#1449). Fixed
+ * copy: nothing the server sends in an error is shown, nor the group's
+ * description or its experiments, nor the holdout's id.
+ */
+export const ELIGIBILITY_COPY = {
+  loading: 'Loading…',
+  groupNone: 'None',
+  groupArchived: ' (archived; it no longer applies)',
+  groupRefused: 'In a group. Seeing its name needs permission to create experiments, which the ADMIN and DEVELOPER roles have.',
+  groupError: 'In a group. Its name could not be loaded; reload the page to try again.',
+  holdoutNone: 'None active',
+  holdoutRefused: 'Seeing this needs permission to create experiments, which the ADMIN and DEVELOPER roles have.',
+  holdoutError: 'Could not be loaded; reload the page to try again.',
+} as const;
+
+/** An exclusion group as its row shows it: the name, marked when archived. */
+export function groupLabel(group: MutualExclusionGroup): string {
+  return group.status === 'archived' ? `${group.name}${ELIGIBILITY_COPY.groupArchived}` : group.name;
+}
+
+/**
+ * The header's "Exclusion group" and "Global holdout" items. A component of
+ * its own so that its reads start only once the experiment has loaded (the
+ * page renders the header only then), and in this file so that the header's
+ * term pin (a11y/grey-text-contrast.test.ts) reads its dt's too.
+ *
+ * Each state has its own test id; `experiment-exclusion-group` and
+ * `experiment-holdout`, the capability table's witnesses, mark only the
+ * answered state, never loading, refused or error.
+ */
+function EligibilityRows({
+  groupId,
+  user,
+}: {
+  groupId: string | null | undefined;
+  user: EligibilityUser | null;
+}) {
+  const { group, holdout } = useExperimentEligibility(groupId, user);
+  return (
+    <>
+      <div className="flex items-baseline gap-1.5">
+        <dt className="text-slate-500">Exclusion group</dt>
+        {group.kind === 'absent' && <dd data-testid="experiment-exclusion-group">{ELIGIBILITY_COPY.groupNone}</dd>}
+        {group.kind === 'present' && (
+          <dd data-testid="experiment-exclusion-group">
+            {/* Membership is changed on the group's page (#1455, PLAN C5). */}
+            <Link href={`/experiments/exclusion-groups/${groupId}`} className={NOTE_LINK}>
+              {groupLabel(group.value)}
+            </Link>
+          </dd>
+        )}
+        {group.kind === 'loading' && (
+          <dd data-testid="experiment-exclusion-group-loading">{ELIGIBILITY_COPY.loading}</dd>
+        )}
+        {group.kind === 'refused' && (
+          <dd data-testid="experiment-exclusion-group-refused">{ELIGIBILITY_COPY.groupRefused}</dd>
+        )}
+        {group.kind === 'error' && (
+          <dd data-testid="experiment-exclusion-group-error">{ELIGIBILITY_COPY.groupError}</dd>
+        )}
+      </div>
+      <div className="flex items-baseline gap-1.5">
+        <dt className="text-slate-500">Global holdout</dt>
+        {/* Created, activated and ended on the global-holdout page (#1455). */}
+        {holdout.kind === 'absent' && (
+          <dd data-testid="experiment-holdout">
+            <Link href="/experiments/holdouts" className={NOTE_LINK}>
+              {ELIGIBILITY_COPY.holdoutNone}
+            </Link>
+          </dd>
+        )}
+        {holdout.kind === 'present' && (
+          <dd data-testid="experiment-holdout">
+            <Link href="/experiments/holdouts" className={NOTE_LINK}>
+              {holdoutLabel(holdout.value)}
+            </Link>
+          </dd>
+        )}
+        {holdout.kind === 'loading' && (
+          <dd data-testid="experiment-holdout-loading">{ELIGIBILITY_COPY.loading}</dd>
+        )}
+        {holdout.kind === 'refused' && (
+          <dd data-testid="experiment-holdout-refused">{ELIGIBILITY_COPY.holdoutRefused}</dd>
+        )}
+        {holdout.kind === 'error' && (
+          <dd data-testid="experiment-holdout-error">{ELIGIBILITY_COPY.holdoutError}</dd>
+        )}
+      </div>
+    </>
+  );
+}
+
+/** A link in the note under the header: always underlined, never on hover only (WCAG 1.4.1). */
+const NOTE_LINK = 'text-blue-700 underline';
+
+/**
  * A variant's configuration as the page shows it: indented JSON, rendered as
  * text (never as markup), or null when the variant has none.
  */
@@ -108,6 +291,9 @@ export function keepOwnerName(previous: Experiment | null, updated: Experiment):
 export default function ExperimentDetailPage() {
   const router = useRouter();
   const { user } = useAuth();
+  const { effective, loading: permissionsLoading } = useEffectivePermissions();
+  // A read-only demo shows the demo note in place of the role note.
+  const demo = useDemoMode();
   const rawId = router.query.id;
   const id = typeof rawId === 'string' ? rawId : undefined;
 
@@ -118,6 +304,9 @@ export default function ExperimentDetailPage() {
   const [confirming, setConfirming] = useState<LifecycleAction | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // While "Edit variants and metrics" is open its form stands in for the
+  // read-only Variants and Metrics cards. The form exists on a draft only.
+  const [designOpen, setDesignOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -199,7 +388,7 @@ export default function ExperimentDetailPage() {
       <div className="flex-1 bg-slate-50 flex items-center justify-center">
         <PageTitle title={notFound ? 'Experiment not found' : 'Experiment'} />
         <div className="text-center max-w-md px-4" data-testid={notFound ? 'experiment-not-found' : 'experiment-error'}>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-600 mb-2">
             {notFound ? '404' : 'Error'}
           </p>
           <p className="text-slate-800 text-lg mb-2">
@@ -230,18 +419,30 @@ export default function ExperimentDetailPage() {
 
   const status = experiment.status;
   const statusActions = ACTIONS_BY_STATUS[status] ?? [];
-  const mayChange = canChangeExperiment(user);
-  // Offer only what the API would accept: a role without EXPERIMENT UPDATE is
-  // refused every lifecycle change, including on an experiment it owns.
+  const mayChange = canChangeExperiment(user, effective);
+  // Not refused yet: the effective map may still add EXPERIMENT UPDATE (#891).
+  // Until it answers the page shows neither the buttons nor the note.
+  const mayChangePending = !mayChange && permissionsLoading;
+  // Offer only what the API would accept: a user without EXPERIMENT UPDATE
+  // (by role, custom role or direct grant) is refused every lifecycle change,
+  // including on an experiment they own.
   const actions = mayChange ? statusActions : [];
   // A null owner (the creator's account was removed) is nobody, so it is
   // never you.
   const isOwner =
     user !== null && experiment.owner_id !== null && user.id === experiment.owner_id;
   const resultsAvailable = status !== 'draft';
-  const showRoleNote = !mayChange && statusActions.length > 0;
+  const showRoleNote = !mayChange && !mayChangePending && statusActions.length > 0;
   const primaryMetric = experiment.metrics.find((m) => m.is_primary) ?? experiment.metrics[0];
   const algorithm = algorithmLabel(experiment.optimization_type);
+  // Read at render, after the experiment has loaded in the browser (#1443).
+  const nowMs = Date.now();
+  const startLabel = experiment.start_date
+    ? scheduleLabel('start', experiment.start_date, status, nowMs)
+    : null;
+  const endLabel = experiment.end_date
+    ? scheduleLabel('end', experiment.end_date, status, nowMs)
+    : null;
 
   return (
     <div className="flex-1 bg-slate-50" data-testid="experiment-detail">
@@ -269,9 +470,10 @@ export default function ExperimentDetailPage() {
                   {experimentStatusLabel(status)}
                 </span>
               </div>
+              {/* Every dt is slate-500 (4.76:1 on white), never slate-400 (2.56:1): a11y/grey-text-contrast.test.ts. */}
               <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-slate-600">
                 <div className="flex items-center gap-1.5">
-                  <dt className="text-slate-400">Key</dt>
+                  <dt className="text-slate-500">Key</dt>
                   {/* The Copy button sits inside the dd: a dl may hold only dt and dd groups. */}
                   <dd className="flex items-center gap-1.5">
                     <span className="font-mono text-slate-800" data-testid="experiment-key">
@@ -290,12 +492,12 @@ export default function ExperimentDetailPage() {
                   </dd>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <dt className="text-slate-400">Type</dt>
+                  <dt className="text-slate-500">Type</dt>
                   <dd data-testid="experiment-type">{experimentTypeLabel(experiment.experiment_type)}</dd>
                 </div>
                 {experiment.correction_method && typeof experiment.confidence_level === 'number' && (
                   <div className="flex items-center gap-1.5">
-                    <dt className="text-slate-400">Analysis</dt>
+                    <dt className="text-slate-500">Analysis</dt>
                     <dd data-testid="experiment-analysis">
                       {formatConfidence(experiment.confidence_level)} confidence ·{' '}
                       {experiment.correction_method === 'none'
@@ -306,18 +508,32 @@ export default function ExperimentDetailPage() {
                 )}
                 {typeof experiment.bayesian_enabled === 'boolean' && (
                   <div className="flex items-center gap-1.5">
-                    <dt className="text-slate-400">Bayesian analysis</dt>
+                    <dt className="text-slate-500">Bayesian analysis</dt>
                     <dd data-testid="experiment-bayesian">{experiment.bayesian_enabled ? 'On' : 'Off'}</dd>
+                  </div>
+                )}
+                {typeof experiment.sequential_testing_enabled === 'boolean' && (
+                  <div className="flex items-center gap-1.5">
+                    <dt className="text-slate-500">Sequential testing (beta)</dt>
+                    <dd data-testid="experiment-sequential">
+                      {experiment.sequential_testing_enabled ? 'On' : 'Off'}
+                    </dd>
                   </div>
                 )}
                 {algorithm && (
                   <div className="flex items-center gap-1.5">
-                    <dt className="text-slate-400">Traffic algorithm</dt>
+                    <dt className="text-slate-500">Traffic algorithm</dt>
                     <dd data-testid="experiment-algorithm">{algorithm}</dd>
                   </div>
                 )}
+                {experiment.balance_within !== undefined && (
+                  <BalanceRow
+                    setting={experiment.balance_within}
+                    resultsHref={resultsAvailable ? `/results/${experiment.id}?tab=breakdowns` : undefined}
+                  />
+                )}
                 <div className="flex items-center gap-1.5">
-                  <dt className="text-slate-400">Owner</dt>
+                  <dt className="text-slate-500">Owner</dt>
                   <dd data-testid="experiment-owner" title={experiment.owner_id ?? undefined}>
                     {isOwner
                       ? `You (${user?.email ?? user?.username})`
@@ -326,22 +542,50 @@ export default function ExperimentDetailPage() {
                   </dd>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <dt className="text-slate-400">Created</dt>
+                  <dt className="text-slate-500">Created</dt>
                   <dd>{formatDate(experiment.created_at)}</dd>
                 </div>
-                {experiment.start_date && (
+                {startLabel && (
                   <div className="flex items-center gap-1.5">
-                    <dt className="text-slate-400">Started</dt>
-                    <dd>{formatDate(experiment.start_date)}</dd>
+                    <dt className="text-slate-500">{startLabel.term}</dt>
+                    <dd data-testid="experiment-start-date">
+                      {formatDate(experiment.start_date)}
+                      {startLabel.due && DUE_NOTE.start}
+                    </dd>
                   </div>
                 )}
-                {experiment.end_date && (
+                {endLabel && (
                   <div className="flex items-center gap-1.5">
-                    <dt className="text-slate-400">Ended</dt>
-                    <dd>{formatDate(experiment.end_date)}</dd>
+                    <dt className="text-slate-500">{endLabel.term}</dt>
+                    <dd data-testid="experiment-end-date">
+                      {formatDate(experiment.end_date)}
+                      {endLabel.due && DUE_NOTE.end}
+                    </dd>
                   </div>
                 )}
+                <EligibilityRows groupId={experiment.mutual_exclusion_group_id} user={user} />
               </dl>
+              <p className="mt-2 text-xs text-slate-600" data-testid="experiment-api-settings-note">
+                Set through the API, not on this page:{' '}
+                <a
+                  href={docsUrl('guides/user-guide', 'pausing-and-stopping')}
+                  className={NOTE_LINK}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  a paused experiment&apos;s resume
+                </a>
+                ,{' '}
+                <a
+                  href={docsUrl('api/sequential-testing', 'turning-it-on')}
+                  className={NOTE_LINK}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  turning sequential testing on or off after creation
+                </a>
+                .
+              </p>
             </div>
 
             {/* Actions */}
@@ -372,7 +616,7 @@ export default function ExperimentDetailPage() {
                 </Link>
               ) : (
                 <span
-                  className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-100 text-slate-400 cursor-not-allowed"
+                  className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 cursor-not-allowed"
                   title="Results are available once the experiment has started"
                   data-testid="view-results-disabled"
                 >
@@ -382,11 +626,12 @@ export default function ExperimentDetailPage() {
             </div>
           </div>
 
-          {showRoleNote && (
+          {demo && <DemoNote action={DEMO_EXPERIMENTS_ACTION} className="mt-4 text-sm text-slate-700" />}
+          {showRoleNote && !demo && (
             <p className="mt-4 text-sm text-slate-700" data-testid="experiment-role-note">
               {isOwner
-                ? 'You own this experiment, but starting, pausing, completing and archiving it requires the ADMIN or DEVELOPER role; '
-                : 'Starting, pausing, completing and archiving an experiment requires the ADMIN or DEVELOPER role; '}
+                ? 'You own this experiment, but starting, pausing, completing and archiving it needs permission to change experiments, which the ADMIN and DEVELOPER roles have; '
+                : 'Starting, pausing, completing and archiving an experiment needs permission to change experiments, which the ADMIN and DEVELOPER roles have; '}
               you are {user?.role || 'signed in without a role'}.{' '}
               {resultsAvailable
                 ? 'You can read its results.'
@@ -433,13 +678,18 @@ export default function ExperimentDetailPage() {
             </div>
           )}
 
-          <ExperimentManageSection experiment={experiment} user={user} onSaved={onSaved} />
+          <ExperimentManageSection
+            experiment={experiment}
+            user={user}
+            onSaved={onSaved}
+            onDesignOpenChange={setDesignOpen}
+          />
 
           {(experiment.description || experiment.hypothesis) && (
             <div className="mt-5 pt-5 border-t border-slate-100 grid gap-4 sm:grid-cols-2">
               {experiment.description && (
                 <div>
-                  <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
                     Description
                   </h2>
                   <p className="text-sm text-slate-700 whitespace-pre-line" data-testid="experiment-description">
@@ -449,7 +699,7 @@ export default function ExperimentDetailPage() {
               )}
               {experiment.hypothesis && (
                 <div>
-                  <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
                     Hypothesis
                   </h2>
                   <p className="text-sm text-slate-700 whitespace-pre-line" data-testid="experiment-hypothesis">
@@ -461,111 +711,114 @@ export default function ExperimentDetailPage() {
           )}
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-5">
-          {/* Variants */}
-          <section className="lg:col-span-3 bg-white rounded-lg border border-slate-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-              <h2 className="text-base font-semibold text-slate-800">Variants</h2>
-              <span className="text-xs text-slate-500">{experiment.variants.length} total</span>
-            </div>
-            {experiment.variants.length === 0 ? (
-              <p className="px-5 py-6 text-sm text-slate-500">No variants defined.</p>
-            ) : (
-              <table className="w-full text-sm" data-testid="variants-table">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    <th scope="col" className="text-left px-5 py-2.5 text-slate-600 font-medium">Name</th>
-                    <th scope="col" className="text-right px-5 py-2.5 text-slate-600 font-medium">Allocation</th>
-                    <th scope="col" className="text-left px-5 py-2.5 text-slate-600 font-medium">Role</th>
-                    <th scope="col" className="text-left px-5 py-2.5 text-slate-600 font-medium">Configuration</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {experiment.variants.map((variant, index) => {
-                    const configuration = formatConfiguration(variant.configuration);
-                    return (
-                      <tr key={variant.id} data-testid="variant-row">
-                        <td className="px-5 py-3">
-                          <div className="font-medium text-slate-800">{variant.name}</div>
-                          {variant.description && (
-                            <div className="text-xs text-slate-400 mt-0.5">{variant.description}</div>
-                          )}
-                        </td>
-                        <td className="px-5 py-3 text-right text-slate-700 tabular-nums">
-                          {variant.traffic_allocation}%
-                        </td>
-                        <td className="px-5 py-3">
-                          {variant.is_control ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                              Control
-                            </span>
-                          ) : (
-                            <span className="text-xs text-slate-400">Treatment</span>
-                          )}
-                        </td>
-                        <td className="px-5 py-3 align-top">
-                          {configuration === null ? (
-                            <span className="text-slate-400" data-testid={`variant-configuration-none-${index}`}>
-                              <span aria-hidden="true">—</span>
-                              <span className="sr-only">None</span>
-                            </span>
-                          ) : (
-                            // Text only: React escapes it, so a configuration holding markup shows as written.
-                            <pre
-                              tabIndex={0}
-                              className="max-h-40 max-w-xs overflow-auto whitespace-pre-wrap break-all rounded bg-slate-50 p-2 font-mono text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                              data-testid={`variant-configuration-view-${index}`}
-                            >
-                              {configuration}
-                            </pre>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </section>
+        {!(designOpen && status === 'draft') && (
+          <div className="grid gap-6 lg:grid-cols-5" data-testid="experiment-design-cards">
+            {/* Variants */}
+            <section className="lg:col-span-3 bg-white rounded-lg border border-slate-200 overflow-x-auto">
+              <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+                <h2 className="text-base font-semibold text-slate-800">Variants</h2>
+                <span className="text-xs text-slate-500">{experiment.variants.length} total</span>
+              </div>
+              {experiment.variants.length === 0 ? (
+                <p className="px-5 py-6 text-sm text-slate-500">No variants defined.</p>
+              ) : (
+                <table className="w-full text-sm" data-testid="variants-table">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      <th scope="col" className="text-left px-5 py-2.5 text-slate-600 font-medium">Name</th>
+                      <th scope="col" className="text-right px-5 py-2.5 text-slate-600 font-medium">Allocation</th>
+                      <th scope="col" className="text-left px-5 py-2.5 text-slate-600 font-medium">Role</th>
+                      <th scope="col" className="text-left px-5 py-2.5 text-slate-600 font-medium">Configuration</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {experiment.variants.map((variant, index) => {
+                      const configuration = formatConfiguration(variant.configuration);
+                      return (
+                        <tr key={variant.id} data-testid="variant-row">
+                          <td className="px-5 py-3">
+                            <div className="font-medium text-slate-800">{variant.name}</div>
+                            {variant.description && (
+                              <div className="text-xs text-slate-500 mt-0.5">{variant.description}</div>
+                            )}
+                          </td>
+                          <td className="px-5 py-3 text-right text-slate-700 tabular-nums">
+                            {variant.traffic_allocation}%
+                          </td>
+                          <td className="px-5 py-3">
+                            {variant.is_control ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                Control
+                              </span>
+                            ) : (
+                              <span className="text-xs text-slate-500">Treatment</span>
+                            )}
+                          </td>
+                          <td className="px-5 py-3 align-top">
+                            {configuration === null ? (
+                              <span className="text-slate-500" data-testid={`variant-configuration-none-${index}`}>
+                                <span aria-hidden="true">—</span>
+                                <span className="sr-only">None</span>
+                              </span>
+                            ) : (
+                              // Text only: React escapes it, so a configuration holding markup shows as written.
+                              <pre
+                                tabIndex={0}
+                                className="max-h-40 max-w-xs overflow-auto whitespace-pre-wrap break-all rounded bg-slate-50 p-2 font-mono text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                                data-testid={`variant-configuration-view-${index}`}
+                              >
+                                {configuration}
+                              </pre>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </section>
 
-          {/* Metrics */}
-          <section className="lg:col-span-2 bg-white rounded-lg border border-slate-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-              <h2 className="text-base font-semibold text-slate-800">Metrics</h2>
-              <span className="text-xs text-slate-500">{experiment.metrics.length} total</span>
-            </div>
-            {experiment.metrics.length === 0 ? (
-              <p className="px-5 py-6 text-sm text-slate-500" data-testid="metrics-empty">
-                No metrics defined. Results need at least one metric.
-              </p>
-            ) : (
-              <ul className="divide-y divide-slate-100" data-testid="metrics-list">
-                {experiment.metrics.map((metric) => (
-                  <li key={metric.id} className="px-5 py-3" data-testid="metric-row">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium text-slate-800">{metric.name}</span>
-                      {metric.is_primary && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          Primary
+            {/* Metrics */}
+            <section className="lg:col-span-2 bg-white rounded-lg border border-slate-200 overflow-x-auto">
+              <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+                <h2 className="text-base font-semibold text-slate-800">Metrics</h2>
+                <span className="text-xs text-slate-500">{experiment.metrics.length} total</span>
+              </div>
+              {experiment.metrics.length === 0 ? (
+                <p className="px-5 py-6 text-sm text-slate-500" data-testid="metrics-empty">
+                  No metrics defined. Results need at least one metric.
+                </p>
+              ) : (
+                <ul className="divide-y divide-slate-100" data-testid="metrics-list">
+                  {experiment.metrics.map((metric) => (
+                    <li key={metric.id} className="px-5 py-3" data-testid="metric-row">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium text-slate-800">{metric.name}</span>
+                        {metric.is_primary && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            Primary
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap gap-x-3">
+                        <span>
+                          event <code className="font-mono text-slate-700">{metric.event_name}</code>
                         </span>
-                      )}
-                    </div>
-                    <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap gap-x-3">
-                      <span>
-                        event <code className="font-mono text-slate-700">{metric.event_name}</code>
-                      </span>
-                      <span>{METRIC_TYPE_LABELS[metric.metric_type as MetricType] ?? metric.metric_type}</span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        </div>
+                        <span>{METRIC_TYPE_LABELS[metric.metric_type as MetricType] ?? metric.metric_type}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </div>
+        )}
 
         <TargetingSection
           experiment={experiment}
           mayChange={mayChange}
+          mayChangePending={mayChangePending}
           role={user?.role}
           onPause={() => onActionClick('pause')}
           pauseBusy={pendingAction === 'pause'}

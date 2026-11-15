@@ -6,6 +6,8 @@ SDK. It exists to *show* the platform: open the storefront, click around, watch 
 "Powered by Controlvar" panel, then open the dashboard and see the same visitor, the
 same variants and the same events turn into statistics.
 
+[Guided examples](https://docs.controlvar.com/guides/guided-examples/) walks the hero banner test, a pause and the free-shipping flag one step at a time, with what you will see at each step.
+
 Nothing is for sale. There are no images, no external fonts and no CDNs — just twelve
 made-up products with gradient artwork.
 
@@ -20,16 +22,19 @@ made-up products with gradient artwork.
 | **Search** `/search` | `shoplab_new_search` flag — exact name match vs. fuzzy engine with highlights | **Feature-flag gradual rollout** (10% → 50% → 100%), safety config, flag-attributed events |
 | Header (every page) | `shoplab_free_shipping_banner` flag | **Kill switch**: turn the banner off in the dashboard, reload the storefront |
 
-The bottom-right **Powered by Controlvar** panel shows the visitor id, the variant for each
-of the four experiments, both flags, the last 8 tracked events, a "New visitor" button
-(new id + reload → fresh assignments) and a link to the dashboard.
+The bottom-right **Powered by Controlvar** panel shows the visitor id, each experiment's variant
+once a page has assigned it, both flags, the last 8 tracked events, a "New visitor" button
+(new id + reload → fresh assignments) and a link to the dashboard. The panel assigns no
+experiment itself, because an assignment records that the visitor saw the experiment: until the
+page that uses it opens, an experiment reads `not assigned yet` and names that page.
 
 Event vocabulary (all `event_type == event_name`):
 `page_view {page}` · `hero_cta_click` · `product_click {product_id, position, sort}` ·
 `add_to_cart` value = unit price `{product_id, quantity, button}` · `begin_checkout` value = cart total
 `{items, flow}` · `purchase` value = order total `{items, flow, order_id}` · `search {query, results, engine}`
 (attached to the `shoplab_new_search` flag). Events without an explicit key are fanned out by the
-SDK to every experiment the visitor has been assigned to in the session.
+SDK to every experiment the visitor has been assigned to since the page was loaded (up to 24 hours),
+so an order placed long after the checkout page assigned the visitor still counts.
 
 ## Running it
 
@@ -98,6 +103,19 @@ source venv/bin/activate
 python demo/shoplab/simulator/traffic.py --rate 3 --duration 600
 ```
 
+`demo/setup-local.sh` starts one that runs until stopped and writes its process id to
+`demo/.pids/shoplab-simulator.pid`; from the repository root, this stops it, but only if the
+process with that id is still the simulator, and prints its line only once the process has gone,
+so the numbers hold still while you check an order of your own:
+
+```{.bash skip reason="demo: runs the demo applications (Stream F)"}
+pid="$(cat demo/.pids/shoplab-simulator.pid)" &&
+  ps -o args= -p "$pid" | grep -qF demo/shoplab/simulator/traffic.py &&
+  kill "$pid" &&
+  while kill -0 "$pid" 2>/dev/null; do sleep 1; done &&
+  printf 'ShopLab simulator stopped\n'
+```
+
 To print one visitor's planned events without touching the network:
 
 ```{.bash skip reason="demo: runs the demo applications (Stream F)"}
@@ -107,10 +125,11 @@ python demo/shoplab/simulator/traffic.py --dry-run --seed 1
 Its other options are `--api-url`, `--api-key` (default: the contents of
 `demo/shoplab/.api_key`) and `--max-visitors`; `--help` describes them all.
 
-Each visitor is assigned to the four experiments (`POST /tracking/assign`, context = persona
-attributes), has both flags evaluated, then walks the funnel with the spec's true conversion
-rates (hero CTA 12% vs 15%; sort click 22/19/28%; add-to-cart 8.0/8.5/10.5/9.5%; purchase after
-checkout 62% vs 68%, lognormal order value with median $85; search click 35% with the new engine
+Each visitor has both flags evaluated, then is assigned to the hero banner, product sort and buy
+button experiments as its visit starts, and to the checkout flow only if it begins checkout
+(`POST /tracking/assign`, context = persona attributes). It walks the funnel with the spec's
+true conversion rates (hero CTA 12% vs 15%; sort click 22/19/28%; add-to-cart 8.0/8.5/10.5/9.5%;
+purchase after checkout 62% vs 68%, lognormal order value with median $85; search click 35% with the new engine
 vs 25% without). Three personas scale intent — casual 60%, shopper 30%, power 10% — calibrated so
 the population rates equal the spec. Events go out via `POST /tracking/batch` (≤100 per call) with
 an explicit `experiment_key` for every assigned experiment and `feature_flag_key` for search.
@@ -133,9 +152,10 @@ source venv/bin/activate && python -m pytest demo/shoplab/simulator/test_traffic
    weights** panel shows each variant's share of new visitors, drifting toward `ml_personalized`
    (true click rate 28% vs 22% / 19%). Press **Refresh** to see the latest weights; the panel does
    not update by itself, and the dashboard has no chart of past weights. Then go to `/products`
-   and note "Sorted by Recommended for you".
+   and note the sort the page names: it follows the visitor's arm, and "Recommended for you" is
+   `ml_personalized`'s, the arm the weights favour.
 3. **Buy button** (`shoplab_pdp_buy_button`): four cells. `orange_buy_now` wins on add-to-cart;
-   show the multivariate breakdown and the sequential-testing status. On a product page, switch
+   show the multivariate breakdown. On a product page, switch
    visitors to see colour and text change.
 4. **Checkout flow** (`shoplab_checkout_flow`): open Results. Its primary metric is the `purchase`
    conversion, and its secondary the revenue metric *Order value*. There is no CUPED toggle in the dashboard.
@@ -154,11 +174,11 @@ source venv/bin/activate && python -m pytest demo/shoplab/simulator/test_traffic
 
 | Symptom | Cause / fix |
 |---|---|
-| Panel shows `error` for every experiment; network tab shows **401** | Wrong or missing `NEXT_PUBLIC_CONTROLVAR_API_KEY`. Re-run the seed script (it rewrites `.env.local` and `.api_key`), then restart `npm run dev` (env vars are read at startup). |
-| **404** on `/tracking/assign` or `/feature-flags/evaluate/...` | The ShopLab experiments are not seeded or not ACTIVE, or the flags are not seeded (a flag that is not ACTIVE answers `enabled: false`, not a 404). Run the seed script. |
+| Every experiment in the panel stays `not assigned yet` and both flags read `off`; network tab shows **401** | Wrong or missing `NEXT_PUBLIC_CONTROLVAR_API_KEY`. Re-run the seed script (it rewrites `.env.local` and `.api_key`), then restart `npm run dev` (env vars are read at startup). |
+| **404** on `/tracking/assign` or `/feature-flags/evaluate/...` | The ShopLab experiments or flags are not seeded. A paused or completed experiment answers its control variant with `assigned: false`, and a flag that is not ACTIVE answers `enabled: false`: neither is a 404. Run the seed script. |
 | Browser console: **CORS** error from `localhost:3200` | Port 3200 is not in the backend's CORS allow-list. The development defaults (`DEFAULT_CORS_ORIGINS` in `backend/app/core/config.py`) include it; if you set `CORS_ORIGINS` or `BACKEND_CORS_ORIGINS` yourself, add `http://localhost:3200` and restart the API. Against a staging or production API, add it to that API's `CORS_ORIGINS`: those allow no other origin by default. |
 | Every visitor is `control` and nothing loads | Backend not running on `NEXT_PUBLIC_CONTROLVAR_API_URL`. Start it from the repository root: `ENVIRONMENT=development uvicorn backend.app.main:app --reload`. |
 | "Invalid hook call" in the browser | Two React copies. `next.config.js` aliases `react`/`react-dom` to this app's `node_modules`; make sure you ran `npm install` inside `demo/shoplab`. |
 | Running with `docker compose --profile demo`: **401** everywhere, and the simulator log says `no /data/demo/shoplab/.api_key` | The shoplab seed did not run. Run `SEED=demo,shoplab,streampulse docker compose --profile demo up -d --wait`: it applies the missing seeds to the existing database (no `down -v`). |
 | Simulator exits with code 2 / 3 / 4 | 2 = API key rejected or missing, 3 = experiments not seeded (404), 4 = backend unreachable. |
-| `npm run typecheck` fails inside `sdk/react/src` | The app is written against React SDK v1.1.0's surface (`useExperiment`, `useTrackEvent`, `ExperimentAssignment.configuration`, ...). Make sure `sdk/react` is on that version. |
+| `npm run typecheck` fails inside `sdk/react/src` | The app is written against React SDK 0.1.0's surface (`useExperiment`, `useTrackEvent`, `ExperimentAssignment.configuration`, ...). Make sure `sdk/react` is on that version. |

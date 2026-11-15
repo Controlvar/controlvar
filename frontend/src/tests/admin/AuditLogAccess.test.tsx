@@ -2,7 +2,9 @@
  * Who opens the Audit Log page, and what each of them is shown (#915).
  *
  * The audit list and export routes answer every signed-in role, narrowed to
- * the caller's own entries for DEVELOPER and VIEWER, so the page admits all
+ * the caller's own entries for anyone who may not read the audit log (by
+ * role, DEVELOPER and VIEWER, unless a custom role or grant gives
+ * `audit_log: read`), so the page admits all
  * four roles. A superuser keeps the admin layout and its sidebar; everyone
  * else gets a plain page with no link to a superuser-only page.
  *
@@ -227,7 +229,7 @@ describe('Audit Log page access (#915)', () => {
     },
   );
 
-  it('mirrors can_read_all_audit_logs: superuser, then ADMIN and ANALYST', () => {
+  it('mirrors can_read_all_audit_logs: superuser, then ADMIN and ANALYST, then a grant of audit_log (read)', () => {
     for (const role of NON_SUPERUSER_ROLES) {
       expect(readsAllAuditLogs({ role, is_superuser: true })).toBe(true);
     }
@@ -235,6 +237,8 @@ describe('Audit Log page access (#915)', () => {
     expect(readsAllAuditLogs({ role: 'ANALYST', is_superuser: false })).toBe(true);
     expect(readsAllAuditLogs({ role: 'DEVELOPER', is_superuser: false })).toBe(false);
     expect(readsAllAuditLogs({ role: 'VIEWER', is_superuser: false })).toBe(false);
+    expect(readsAllAuditLogs({ role: 'VIEWER', is_superuser: false }, { audit_log: ['read'] })).toBe(true);
+    expect(readsAllAuditLogs({ role: 'DEVELOPER', is_superuser: false }, { experiment: ['read'] })).toBe(false);
   });
 
   // V5 and V6

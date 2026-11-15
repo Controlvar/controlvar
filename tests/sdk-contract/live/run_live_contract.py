@@ -6,7 +6,25 @@ Runs every SDK's ``contract_smoke`` entry point against a running backend and
 checks that each one reports a sticky assignment, a flag evaluation and
 successful event tracking. This is the test that proves an SDK actually talks
 to the endpoints the backend serves (the golden-vector tests only cover
-hashing).
+hashing). An SDK listed in ``EVENT_ID_SDKS`` must also send one event twice
+with one event_id, and the runner requires the database to hold one row for it.
+An SDK listed in ``EXPOSURE_SDKS`` must also report what its
+exposure hook received, and no other SDK may report it. An SDK listed in
+``ATTRIBUTE_SDKS`` must also report how it evaluated the seed's
+``sdk_contract_targeted`` flag (0% rollout, one rule ``plan`` equals ``pro`` at
+100%) with ``{"plan": "pro"}`` and ``{"plan": "free"}``: on with the server's
+reason ``targeting_rule``, and off. No other SDK may report it. An SDK listed
+in ``VALUE_SDKS`` must also report what its typed getters returned for the
+seed's string, number and json flags, each on at 100%: exactly their on
+values. No other SDK may report them.
+
+After the react row, the React SDK's bootstrap runs for one new user
+(``BOOTSTRAP_SMOKE``): the documented ``ServerClient.bootstrap()`` call and a
+server render with it, then the one assignment the page's hook sends after
+hydration. The runner reads the database after each step and requires exactly
+one exposure row after the first and one more after the second, and requires
+that the bootstrap example on docs/sdk/react.md has the live bootstrap's
+fields.
 
 Before the SDKs, it checks the local-evaluation ruleset endpoint
 (``GET /api/v1/sdk/ruleset``) once: the seed's plain key gets 403, its
@@ -26,6 +44,16 @@ computed over the local traffic. It then reports one error itself with the
 seed's unscoped key and requires that it is stored but not counted
 (``error_count`` +0, ``uncounted_error_count`` +1).
 
+Last, each release in ``PUBLISHED_LOCAL`` -- the published JavaScript and
+Python 0.2.0, fetched from npm and PyPI and verified by digest through
+``tests/sdk-contract/published_sdks.py`` -- runs in local mode against this
+server (#1497, G3): it loads the ruleset and answers each of the seed's value
+flags (string, number and json) locally as on; the runner turns those flags
+off through the API, as a DEVELOPER; within one refresh each answers
+``inactive``, still locally; the runner turns them back on. A release that
+cannot read the ruleset the server sends would answer from the server, or
+keep answering on.
+
 Prerequisites
     1. A backend at ``$CONTROLVAR_API_URL`` (default http://localhost:8000)
        seeded with ``python backend/scripts/seed_sdk_contract.py`` (creates the
@@ -44,13 +72,18 @@ Usage
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
+import queue
 import shutil
 import subprocess
 import sys
+import tempfile
+import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -104,7 +137,131 @@ LOCAL_MANIFEST: dict[str, tuple[str, tuple[str, ...]]] = {
     "js": ("cd sdk/js && npm run build --silent && node examples/local_eval_smoke.mjs", ("node", "npm")),
 }
 
+#: Published releases with a local evaluator, run against this server (#1497,
+#: G3): sdk name -> the version pinned in tests/sdk-contract/published-sdks.json.
+#: Each runs after LOCAL_MANIFEST, under the name "<sdk> <version> (published,
+#: local)", when its sdk is selected.
+PUBLISHED_LOCAL: dict[str, str] = {"python": "0.2.0", "js": "0.2.0"}
+#: The seed's value flags (backend/scripts/seed_sdk_contract.py VALUE_FLAGS).
+VALUE_FLAG_KEYS = ("sdk_contract_value_string", "sdk_contract_value_number", "sdk_contract_value_json")
+#: Who turns them off and on: the seed's DEVELOPER (a non-superuser role that
+#: can change any flag, D11), signing in through the API.
+TOGGLE_USER = ("dev@demo.com", "Demo1234!")
+#: 0.2.0's shortest refresh interval; the change must arrive within the wait.
+PUBLISHED_REFRESH_SECONDS = 5
+PUBLISHED_WAIT_SECONDS = 30
+PUBLISHED_ON = {"enabled": True, "reason": "rollout", "source": "local"}
+PUBLISHED_OFF = {"enabled": False, "reason": "inactive", "source": "local"}
+SDK_CONTRACT_DIR = Path(__file__).resolve().parents[1]
+
 EXPECTED_VARIANTS = {"control", "treatment"}
+
+# The SDKs whose contract smoke must report its exposure hook (#1499). A listed
+# SDK's smoke is to build a NEW client with a hook, assign the contract
+# experiment twice with no clear in between, and report
+#   "exposure": {"calls": <n>, "payload": {"experiment_key", "variant_name",
+#                                          "variant_id", "user_id"}}
+# validate() requires exactly one call, for the contract experiment and the
+# variant the smoke was assigned. It does not check the user id: only the smoke
+# knows the user it made, so that check is the smoke's. The check runs both
+# ways: a listed SDK whose smoke reports no "exposure" fails, and so does an
+# unlisted SDK whose smoke reports one. The pull request that gives an SDK the
+# hook is to add its line here.
+EXPOSURE_SDKS: frozenset[str] = frozenset(
+    [
+        # One line per SDK, in the form "js",
+        "js",
+        "python",
+        "go",
+        "java",
+        "react",
+        "react-native",
+        "dotnet",
+    ]
+)
+
+# The SDKs whose contract smoke must report that the user's attributes reach
+# flag evaluation (#1520). A listed SDK's smoke is to evaluate the seed's
+# targeted flag (CONTRACT_TARGETED_FLAG_KEY, default sdk_contract_targeted: 0%
+# rollout, one rule plan equals pro at 100%) for one user with the attributes
+# {"plan": "pro"}, then, with nothing cached, {"plan": "free"}, and report
+#   "targeted": {"pro": <enabled>, "free": <enabled>,
+#                "reason": <the server's reason for the pro answer>}
+# validate() requires {"pro": true, "free": false, "reason": "targeting_rule"}:
+# an SDK that drops the attributes gets pro off, with the reason "rollout". The
+# check runs both ways, as EXPOSURE_SDKS does: a listed SDK whose smoke reports
+# no "targeted" fails, and so does an unlisted SDK whose smoke reports one. CI
+# runs every listed SDK with --strict, so a missing toolchain fails rather than
+# skips (backend/tests/unit/scripts/test_run_live_contract.py pins both).
+ATTRIBUTE_SDKS: frozenset[str] = frozenset(
+    [
+        # One line per SDK, in the form "js",
+        "js",
+        "react-native",
+        "java",
+        "dotnet",
+    ]
+)
+TARGETED_FLAG_KEY = "sdk_contract_targeted"
+
+# The SDKs whose contract smoke must report what its typed getters return
+# (#1810). A listed SDK's smoke is to read the seed's three value flags
+# (VALUE_FLAG_KEYS, each on at 100% while the SDK rows run) with its string,
+# number and json getters, each given a default that is not a flag value, and
+# report
+#   "values": {"string": <returned>, "number": <returned>, "json": <returned>}
+# validate() requires VALUE_EXPECTED, the seed's on values: an SDK that reads
+# the off value, or falls back to its default, fails. A number is compared as
+# a number (10.0 is 10; true and "10" are not). The check runs both ways, as
+# EXPOSURE_SDKS does. The pull request that gives an SDK typed getters is to
+# add its line here and its report to the smoke.
+VALUE_SDKS: frozenset[str] = frozenset(
+    [
+        # One line per SDK, in the form "js",
+        "js",
+        "react",
+        "react-native",
+        "java",
+        "dotnet",
+    ]
+)
+#: The seed's on values (backend/scripts/seed_sdk_contract.py VALUE_FLAGS).
+VALUE_EXPECTED = {"string": "on-copy", "number": 10, "json": {"color": "blue"}}
+
+# The React SDK's bootstrap (#1518), run after the react row (which builds
+# sdk/react/dist) for one new user, in two steps: "server" is the documented
+# ``ServerClient.bootstrap()`` call and the page's server render with it,
+# "client" what the page's ``useExperiment`` sends once after hydration. The
+# runner counts the exposure rows the server stored for (user, experiment)
+# after each step: exactly BOOTSTRAP_SERVER_EXPOSURES after the server step
+# (one assignment of a new user), exactly one more after the client step (the
+# hook's own assignment). It also requires that the JSON example of a
+# bootstrap on docs/sdk/react.md has the same fields as the bootstrap the live
+# server just produced, and prints that bootstrap: the example is regenerated
+# from this line when the server's response bodies change.
+BOOTSTRAP_SMOKE = "cd sdk/react && node examples/bootstrap_smoke.mjs"
+BOOTSTRAP_SERVER_EXPOSURES = 1
+BOOTSTRAP_CLIENT_EXPOSURES = 1
+REACT_PAGE = REPO_ROOT / "docs" / "sdk" / "react.md"
+
+# The SDKs whose contract smoke must prove an event sent twice with the same
+# event_id is stored once (#1543, case C4). A listed SDK's smoke sends one keyed
+# event twice with one fixed id and reports
+#   "event_id": {"user_id": <user>, "event_name": <name>, "id": <the id>, "sends": 2}
+# validate() checks the shape; run_one() then counts the ``events`` rows for
+# that user and event name in the database and requires exactly 1 (an SDK that
+# makes a fresh id per send leaves 2). The check runs both ways, as
+# EXPOSURE_SDKS does: a listed SDK whose smoke reports no "event_id" fails, and
+# so does an unlisted one that reports it. The pull request that gives an SDK an
+# event id option is to add its line here and its report to the smoke.
+EVENT_ID_SDKS: frozenset[str] = frozenset(
+    [
+        # One line per SDK, in the form "js",
+        "java",
+        "js",
+        "python",
+    ]
+)
 
 
 def backend_healthy(api_url: str) -> bool:
@@ -115,7 +272,7 @@ def backend_healthy(api_url: str) -> bool:
         return False
 
 
-def validate(sdk: str, payload: dict) -> list[str]:
+def validate(sdk: str, payload: dict, experiment_key: str = "sdk_contract_ab") -> list[str]:
     problems: list[str] = []
     if payload.get("sdk") != sdk:
         problems.append(f"sdk field is {payload.get('sdk')!r}, expected {sdk!r}")
@@ -133,6 +290,120 @@ def validate(sdk: str, payload: dict) -> list[str]:
         problems.append("track failed")
     if (payload.get("fanout") or {}).get("ok") is not True:
         problems.append("fan-out track failed")
+    problems.extend(_exposure_problems(sdk, payload, experiment_key))
+    problems.extend(_targeting_problems(sdk, payload))
+    problems.extend(_event_id_problems(sdk, payload))
+    problems.extend(_value_problems(sdk, payload))
+    return problems
+
+
+def _value_problems(sdk: str, payload: dict) -> list[str]:
+    """What is wrong with the smoke's ``values`` report (see ``VALUE_SDKS``)."""
+    if sdk not in VALUE_SDKS:
+        return [f"values reported but {sdk} is not in VALUE_SDKS"] if "values" in payload else []
+    values = payload.get("values")
+    if not isinstance(values, dict):
+        return [f"values missing ({sdk} is in VALUE_SDKS)"]
+    problems: list[str] = []
+    for kind, expected in VALUE_EXPECTED.items():
+        got = values.get(kind)
+        if kind == "number":
+            # Any JSON number (an SDK that reads numbers as doubles may report 10.0);
+            # never a bool or text.
+            same = type(got) in (int, float) and got == expected
+        else:
+            same = type(got) is type(expected) and got == expected
+        if not same:
+            problems.append(f"values.{kind}={got!r} (expected {expected!r}, the seed's on value)")
+    return problems
+
+
+def _event_id_problems(sdk: str, payload: dict) -> list[str]:
+    """What is wrong with the smoke's ``event_id`` report (see ``EVENT_ID_SDKS``)."""
+    if sdk not in EVENT_ID_SDKS:
+        return [f"event_id reported but {sdk} is not in EVENT_ID_SDKS"] if "event_id" in payload else []
+    report = payload.get("event_id")
+    if not isinstance(report, dict):
+        return [f"event_id missing ({sdk} is in EVENT_ID_SDKS)"]
+    problems: list[str] = []
+    for field in ("user_id", "event_name", "id"):
+        value = report.get(field)
+        if not isinstance(value, str) or not value:
+            problems.append(f"event_id.{field}={value!r} (expected a non-empty string)")
+    sends = report.get("sends")
+    if type(sends) is not int or sends != 2:  # JSON true and 2.0 are not a count of 2
+        problems.append(f"event_id.sends={sends!r} (the same event is to be sent twice)")
+    return problems
+
+
+def _event_rows(user_id: str, event_name: str) -> int:
+    """How many ``events`` rows the server holds for *user_id* and *event_name*."""
+    sys.path.insert(0, str(REPO_ROOT))
+    from backend.app.db.session import SessionLocal
+    from backend.app.models import register_core_models
+    from backend.app.models.event import Event
+
+    register_core_models()
+    db = SessionLocal()
+    try:
+        return db.query(Event).filter(Event.user_id == user_id, Event.event_type == event_name).count()
+    finally:
+        db.close()
+
+
+def _stored_once_problems(sdk: str, payload: dict) -> list[str]:
+    """The database half of C4: the one event sent twice is one row."""
+    if sdk not in EVENT_ID_SDKS:
+        return []
+    report = payload["event_id"]
+    try:
+        rows = _event_rows(report["user_id"], report["event_name"])
+    except Exception as exc:  # the backend package or its database is not reachable
+        return [f"cannot count the stored events: {exc}"]
+    if rows != 1:
+        return [
+            f"the event sent twice with event_id {report['id']!r} left {rows} stored row(s) "
+            f"for user {report['user_id']!r}, expected 1"
+        ]
+    return []
+
+
+def _targeting_problems(sdk: str, payload: dict) -> list[str]:
+    """What is wrong with the smoke's ``targeted`` report (see ``ATTRIBUTE_SDKS``)."""
+    if sdk not in ATTRIBUTE_SDKS:
+        return [f"targeted reported but {sdk} is not in ATTRIBUTE_SDKS"] if "targeted" in payload else []
+    targeted = payload.get("targeted")
+    if not isinstance(targeted, dict):
+        return [f"targeted missing ({sdk} is in ATTRIBUTE_SDKS)"]
+    problems: list[str] = []
+    if targeted.get("pro") is not True:
+        problems.append(f"targeted.pro={targeted.get('pro')!r} (seeded rule plan=pro)")
+    if targeted.get("free") is not False:
+        problems.append(f"targeted.free={targeted.get('free')!r} (seeded rollout 0)")
+    if targeted.get("reason") != "targeting_rule":
+        problems.append(f"targeted.reason={targeted.get('reason')!r} (expected 'targeting_rule' for plan=pro)")
+    return problems
+
+
+def _exposure_problems(sdk: str, payload: dict, experiment_key: str) -> list[str]:
+    """What is wrong with the smoke's ``exposure`` report (see ``EXPOSURE_SDKS``)."""
+    if sdk not in EXPOSURE_SDKS:
+        return [f"exposure reported but {sdk} is not in EXPOSURE_SDKS"] if "exposure" in payload else []
+    exposure = payload.get("exposure")
+    if not isinstance(exposure, dict):
+        return [f"exposure missing ({sdk} is in EXPOSURE_SDKS)"]
+    problems: list[str] = []
+    calls = exposure.get("calls")
+    if type(calls) is not int or calls != 1:  # JSON true and 1.0 are not a count of 1
+        problems.append(f"exposure.calls={calls!r} (two assigns on one client; expected 1)")
+    received = exposure.get("payload") if isinstance(exposure.get("payload"), dict) else {}
+    if received.get("experiment_key") != experiment_key:
+        found = received.get("experiment_key")
+        problems.append(f"exposure.payload.experiment_key={found!r}, expected {experiment_key!r}")
+    assigned = (payload.get("assign") or {}).get("variant_name")
+    if received.get("variant_name") != assigned:
+        found = received.get("variant_name")
+        problems.append(f"exposure.payload.variant_name={found!r} != assign.variant_name={assigned!r}")
     return problems
 
 
@@ -222,6 +493,140 @@ def _flag_counters(flag_key: str) -> dict[str, int]:
         db.close()
 
 
+def _exposure_rows(user_id: str, experiment_key: str) -> int:
+    """The exposure events the server stored for *user_id* in *experiment_key*."""
+    sys.path.insert(0, str(REPO_ROOT))
+    from backend.app.db.session import SessionLocal
+    from backend.app.models import register_core_models
+    from backend.app.models.event import Event
+    from backend.app.models.experiment import Experiment
+    from backend.app.services.event_matching import EXPOSURE_EVENT_TYPES
+
+    register_core_models()
+    db = SessionLocal()
+    try:
+        experiment = db.query(Experiment).filter(Experiment.key == experiment_key).first()
+        if experiment is None:
+            raise RuntimeError(f"experiment {experiment_key!r} is not in the database")
+        return int(
+            db.query(Event)
+            .filter(
+                Event.user_id == user_id,
+                Event.experiment_id == experiment.id,
+                Event.event_type.in_(EXPOSURE_EVENT_TYPES),
+            )
+            .count()
+        )
+    finally:
+        db.close()
+
+
+def documented_bootstrap(page_text: str) -> dict | None:
+    """The JSON example of a bootstrap on the React page: the first ``json``
+    fence whose object has ``userId``, ``flags`` and ``experiments``."""
+    for block in page_text.split("```json\n")[1:]:
+        try:
+            value = json.loads(block.split("\n```", 1)[0])
+        except ValueError:
+            continue
+        if isinstance(value, dict) and {"userId", "flags", "experiments"} <= set(value):
+            return value
+    return None
+
+
+def _entry_fields(entries: object) -> list[list[str]]:
+    """The sorted field names of each entry of a bootstrap's ``flags`` or ``experiments``."""
+    if not isinstance(entries, dict):
+        return []
+    return [sorted(entry) for entry in entries.values() if isinstance(entry, dict)]
+
+
+def bootstrap_problems(
+    server: dict,
+    client: dict,
+    counts: tuple[int, int],
+    user_id: str,
+    flag_key: str,
+    experiment_key: str,
+    documented: dict | None,
+) -> list[str]:
+    """What is wrong with a bootstrap run: the two steps' reports, the exposure
+    rows counted after each (*counts*), and the page's JSON example."""
+    problems: list[str] = []
+    bootstrap = server.get("bootstrap") if isinstance(server.get("bootstrap"), dict) else {}
+    if server.get("step") != "server" or bootstrap.get("userId") != user_id:
+        problems.append(f"the server step reported {server.get('step')!r} for {bootstrap.get('userId')!r}")
+    flag = (bootstrap.get("flags") or {}).get(flag_key)
+    if not isinstance(flag, dict) or flag.get("enabled") is not True:
+        problems.append(f"bootstrap.flags[{flag_key!r}] is {flag!r} (seeded flag is 100% on)")
+    assigned = (bootstrap.get("experiments") or {}).get(experiment_key)
+    if not isinstance(assigned, dict) or assigned.get("variant_name") not in EXPECTED_VARIANTS:
+        problems.append(f"bootstrap.experiments[{experiment_key!r}] is {assigned!r}")
+    if server.get("requests_during_render") != 0:
+        problems.append(f"the server render made {server.get('requests_during_render')!r} request(s), expected 0")
+    after_server, after_client = counts
+    if after_server != BOOTSTRAP_SERVER_EXPOSURES:
+        problems.append(
+            f"exposure rows after the server step: {after_server}, expected {BOOTSTRAP_SERVER_EXPOSURES}"
+        )
+    if after_client - after_server != BOOTSTRAP_CLIENT_EXPOSURES:
+        problems.append(
+            f"exposure rows added by the client step: {after_client - after_server},"
+            f" expected {BOOTSTRAP_CLIENT_EXPOSURES}"
+        )
+    if isinstance(assigned, dict) and client.get("variant_name") != assigned.get("variant_name"):
+        problems.append(
+            f"the client step was assigned {client.get('variant_name')!r},"
+            f" the bootstrap {assigned.get('variant_name')!r} (assignment is sticky)"
+        )
+    if documented is None:
+        problems.append(f"{REACT_PAGE.relative_to(REPO_ROOT)} has no JSON example of a bootstrap")
+    else:
+        for part in ("flags", "experiments"):
+            live_fields, doc_fields = _entry_fields(bootstrap.get(part)), _entry_fields(documented.get(part))
+            if not live_fields or any(fields != live_fields[0] for fields in doc_fields + live_fields):
+                problems.append(
+                    f"the page's example {part} entries have the fields {doc_fields},"
+                    f" the live server's {live_fields}: regenerate the example from the bootstrap printed here"
+                )
+        if sorted(documented) != sorted(bootstrap):
+            problems.append(f"the page's example has the keys {sorted(documented)}, the live one {sorted(bootstrap)}")
+    return problems
+
+
+def run_react_bootstrap(env: dict[str, str], timeout: int) -> tuple[str, str]:
+    """The React SDK's bootstrap, judged by what the server recorded (see BOOTSTRAP_SMOKE)."""
+    import uuid
+
+    user_id = f"bootstrap-{uuid.uuid4()}"
+    experiment_key, flag_key = env["CONTRACT_EXPERIMENT_KEY"], env["CONTRACT_FLAG_KEY"]
+    reports: dict[str, dict] = {}
+    counts: list[int] = []
+    for step in ("server", "client"):
+        status, detail, payload = _run_command(
+            BOOTSTRAP_SMOKE, dict(env, CONTRACT_USER_ID=user_id, CONTRACT_BOOTSTRAP_STEP=step), timeout
+        )
+        if status != "PASS":
+            return status, f"{step} step: {detail}"
+        reports[step] = payload
+        try:
+            counts.append(_exposure_rows(user_id, experiment_key))
+        except Exception as exc:  # the backend package or its database is not reachable
+            return "FAIL", f"cannot read the database for the exposure rows: {exc}"
+    documented = documented_bootstrap(REACT_PAGE.read_text(encoding="utf-8"))
+    problems = bootstrap_problems(
+        reports["server"], reports["client"], (counts[0], counts[1]), user_id, flag_key, experiment_key, documented
+    )
+    live = json.dumps(reports["server"].get("bootstrap"), sort_keys=True)
+    if problems:
+        return "FAIL", "; ".join(problems) + f"; live bootstrap: {live}"
+    return (
+        "PASS",
+        f"exposure rows {counts[0]} after the server render, +{counts[1] - counts[0]} after hydration;"
+        f" the page's example has the live fields; live bootstrap: {live}",
+    )
+
+
 def run_local(sdk: str, command: str, env: dict[str, str], timeout: int, flag_key: str) -> tuple[str, str]:
     """An SDK's local-evaluation smoke, judged by what the server recorded."""
     try:
@@ -302,6 +707,178 @@ def _report_error(api_url: str, key: str, flag_key: str, sdk: str) -> int:
         return exc.code
 
 
+def _published_sdks():
+    """tests/sdk-contract/published_sdks.py, imported by path (stdlib only)."""
+    spec = importlib.util.spec_from_file_location("published_sdks", SDK_CONTRACT_DIR / "published_sdks.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules.setdefault("published_sdks", module)  # dataclasses look their module up here
+    spec.loader.exec_module(module)
+    return module
+
+
+def _api(api_url: str, method: str, path: str, token: str = "", body: dict | None = None) -> tuple[int, object]:
+    """One API call with a user's bearer token; (status, parsed JSON body or None)."""
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    data = json.dumps(body).encode("utf-8") if body is not None else None
+    request = urllib.request.Request(f"{api_url}{path}", data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(request, timeout=10) as resp:  # noqa: S310
+            status, payload = resp.status, resp.read()
+    except urllib.error.HTTPError as exc:
+        status, payload = exc.code, exc.read()
+    try:
+        return status, json.loads(payload) if payload else None
+    except ValueError:
+        return status, None
+
+
+def _sign_in(api_url: str) -> str:
+    email, password = TOGGLE_USER
+    status, body = _api(api_url, "POST", "/api/v1/auth/login", body={"email": email, "password": password})
+    if status != 200 or not isinstance(body, dict) or not body.get("access_token"):
+        raise RuntimeError(f"POST /api/v1/auth/login as {email} answered {status}")
+    return str(body["access_token"])
+
+
+def _flag_ids(api_url: str, token: str, keys: tuple[str, ...]) -> dict[str, str]:
+    ids = {}
+    for key in keys:
+        status, body = _api(api_url, "GET", f"/api/v1/feature-flags/?search={urllib.parse.quote(key)}", token)
+        items = body.get("items", []) if isinstance(body, dict) else []
+        found = [item["id"] for item in items if item.get("key") == key]
+        if status != 200 or len(found) != 1:
+            raise RuntimeError(f"flag {key!r} is not in GET /api/v1/feature-flags/ ({status}); run the seed")
+        ids[key] = found[0]
+    return ids
+
+
+def _turn(api_url: str, token: str, ids: dict[str, str], on: bool) -> None:
+    action = "activate" if on else "deactivate"
+    for key, flag_id in ids.items():
+        status, _ = _api(api_url, "POST", f"/api/v1/feature-flags/{flag_id}/{action}", token)
+        if status != 200:
+            raise RuntimeError(f"POST /api/v1/feature-flags/{{id}}/{action} for {key!r} answered {status}")
+
+
+def _published_harness(language: str, root: Path, config: dict) -> list[str]:
+    argument = json.dumps(config)
+    if language == "js":
+        return [shutil.which("node") or "node", str(SDK_CONTRACT_DIR / "harness" / "published_js_live.cjs"), str(root), argument]
+    # -I -S: only the verified extraction on sys.path (see published_python_live.py).
+    return [sys.executable, "-I", "-S", str(SDK_CONTRACT_DIR / "harness" / "published_python_live.py"), str(root), argument]
+
+
+def _shown(answers: dict) -> str:
+    return ", ".join(f"{key}: {json.dumps(answer, sort_keys=True)}" for key, answer in sorted(answers.items()))
+
+
+def run_published_local(sdk: str, version: str, api_url: str, local_key: str, timeout: int) -> tuple[str, str]:
+    """A published release's own client, in local mode, against this server (G3).
+
+    It must load the server's ruleset (its version is the one the route serves)
+    and answer every value flag locally as on; after the runner turns them off
+    through the API it must answer each ``inactive``, locally, within
+    PUBLISHED_WAIT_SECONDS. The flags are turned back on whatever happens.
+    """
+    try:
+        ps = _published_sdks()
+        (artefact,) = [a for a in ps.load_pins() if a.language == sdk and a.version == version]
+    except Exception as exc:  # a missing or ambiguous pin is a failure of this row
+        return "FAIL", f"no single pin for {sdk} {version} in published-sdks.json: {exc}"
+    work = Path(tempfile.mkdtemp(prefix=f"live-published-{sdk}-"))
+    process = None
+    token, ids, turned_off = "", {}, False
+    try:
+        extraction = work / "artefact"
+        root = ps.extract(artefact, ps.fetch(artefact, work / "cache"), extraction)
+        (work / "cwd").mkdir()
+        config = {
+            "api_url": api_url,
+            "api_key": local_key,
+            "flags": list(VALUE_FLAG_KEYS),
+            "user_id": f"published-{sdk}-{version}",
+            "refresh_seconds": PUBLISHED_REFRESH_SECONDS,
+            "ready_seconds": 30,
+            "wait_seconds": PUBLISHED_WAIT_SECONDS,
+        }
+        process = subprocess.Popen(
+            _published_harness(artefact.language, root, config),
+            cwd=work / "cwd",
+            env={"PATH": os.environ.get("PATH", ""), "LANG": "C.UTF-8"},
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        lines: "queue.Queue[str]" = queue.Queue()
+        threading.Thread(target=lambda: [lines.put(line) for line in process.stdout], daemon=True).start()
+
+        def report(phase: str) -> dict:
+            try:
+                line = lines.get(timeout=timeout)
+            except queue.Empty:
+                raise RuntimeError(f"no '{phase}' report within {timeout}s") from None
+            payload = json.loads(line)
+            if payload.get("phase") != phase:
+                raise RuntimeError(f"expected the '{phase}' report, got {line[:200]}")
+            return payload
+
+        loaded = report("loaded")
+        module = ps.check_identity(artefact, extraction, loaded)
+        _status, headers, _body = _ruleset_request(api_url, local_key)
+        served = headers.get("etag", "").strip('"')
+        problems = []
+        if not loaded["ready"].get("ok") or loaded["status"].get("version") != served:
+            problems.append(
+                f"it did not load the ruleset the server serves ({served}): ready {loaded['ready']}, "
+                f"version {loaded['status'].get('version')!r}"
+            )
+        if any(answer != PUBLISHED_ON for answer in loaded["answers"].values()):
+            problems.append(f"before the change it answered {_shown(loaded['answers'])}; expected each {PUBLISHED_ON}")
+        if problems:
+            return "FAIL", "; ".join(problems + loaded.get("errors", [])[:3])
+
+        token = _sign_in(api_url)
+        ids = _flag_ids(api_url, token, VALUE_FLAG_KEYS)
+        turned_off = True
+        _turn(api_url, token, ids, on=False)
+        process.stdin.write("turned off\n")
+        process.stdin.flush()
+        after = report("after")
+        if any(answer != PUBLISHED_OFF for answer in after["answers"].values()):
+            return "FAIL", (
+                f"answer unchanged after the flags were turned off: after {after['seconds']:.1f}s it answered "
+                f"{_shown(after['answers'])}; expected each {PUBLISHED_OFF}"
+            )
+        return "PASS", (
+            f"{artefact.digest[:19]}... at {module}: loaded ruleset {served[:12]}, the {len(ids)} value flags "
+            f"answered locally; turned off through the API, each answered inactive locally after "
+            f"{after['seconds']:.1f}s"
+        )
+    except Exception as exc:  # the row fails and says why; the next row still runs
+        stderr = ""
+        if process is not None and process.poll() is not None and process.stderr is not None:
+            stderr = process.stderr.read()[-300:]
+        return "FAIL", f"{type(exc).__name__}: {exc} {stderr}".strip()
+    finally:
+        if turned_off:
+            try:
+                _turn(api_url, token, ids, on=True)
+            except Exception as exc:  # reported; the next run's seed turns them back on too
+                print(f"could not turn the value flags back on: {exc}", file=sys.stderr)
+        if process is not None:
+            if process.poll() is None:
+                try:
+                    process.stdin.close()
+                    process.wait(timeout=15)
+                except Exception:
+                    process.kill()
+            process.wait()
+        shutil.rmtree(work, ignore_errors=True)
+
+
 def _run_command(command: str, env: dict[str, str], timeout: int) -> tuple[str, str, dict]:
     """Run a smoke command; (status, detail, the JSON object on its last stdout line)."""
     started = time.time()
@@ -338,7 +915,9 @@ def run_one(sdk: str, command: str, env: dict[str, str], timeout: int) -> tuple[
     status, detail, payload = _run_command(command, env, timeout)
     if status != "PASS":
         return status, detail
-    problems = validate(sdk, payload)
+    problems = validate(sdk, payload, env["CONTRACT_EXPERIMENT_KEY"])
+    if not problems:
+        problems = _stored_once_problems(sdk, payload)
     if problems:
         return "FAIL", "; ".join(problems)
     return "PASS", f"{payload['assign']['variant_name']} in {detail}"
@@ -384,6 +963,7 @@ def main() -> int:
     )
     env.setdefault("CONTRACT_EXPERIMENT_KEY", "sdk_contract_ab")
     env.setdefault("CONTRACT_FLAG_KEY", "sdk_contract_flag")
+    env.setdefault("CONTRACT_TARGETED_FLAG_KEY", TARGETED_FLAG_KEY)
 
     selected = args.sdk or list(MANIFEST)
     unknown = [s for s in selected if s not in MANIFEST]
@@ -414,6 +994,12 @@ def main() -> int:
         status, detail = run_one(sdk, command, env, args.timeout)
         results.append((sdk, status, detail))
         print(f"{status:4} {sdk:<20} {detail}", flush=True)
+        if sdk == "react":
+            # After the react row, which built sdk/react/dist (#1518).
+            name = "react (bootstrap)"
+            status, detail = run_react_bootstrap(env, args.timeout)
+            results.append((name, status, detail))
+            print(f"{status:4} {name:<20} {detail}", flush=True)
 
     # Local evaluation, after every SDK above (its errors count against the shared flag).
     for sdk in [s for s in selected if s in LOCAL_MANIFEST]:
@@ -428,6 +1014,22 @@ def main() -> int:
             continue
         local_env = dict(env, CONTROLVAR_LOCAL_API_KEY=local_key, EXPERIMENTLY_LOCAL_API_KEY=DECOY_KEY)
         status, detail = run_local(sdk, command, local_env, args.timeout, env["CONTRACT_FLAG_KEY"])
+        results.append((name, status, detail))
+        print(f"{status:4} {name:<20} {detail}", flush=True)
+
+    # The published releases, last (they turn the seed's value flags off and on).
+    for sdk in [s for s in selected if s in PUBLISHED_LOCAL]:
+        version = PUBLISHED_LOCAL[sdk]
+        name = f"{sdk} {version} (published, local)"
+        tools = ("node",) if sdk == "js" else ()
+        missing = [t for t in tools if shutil.which(t) is None]
+        if missing:
+            results.append((name, "FAIL" if args.strict else "SKIP", f"missing toolchain: {', '.join(missing)}"))
+            continue
+        if not local_key:
+            results.append((name, "FAIL" if args.strict else "SKIP", "no sdk:ruleset key"))
+            continue
+        status, detail = run_published_local(sdk, version, args.api_url, local_key, args.timeout)
         results.append((name, status, detail))
         print(f"{status:4} {name:<20} {detail}", flush=True)
 

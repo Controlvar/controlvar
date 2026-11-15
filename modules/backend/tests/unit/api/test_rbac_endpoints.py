@@ -324,14 +324,16 @@ class TestEffectivePermissions:
 class TestGrantRevokePermission:
     def test_grant_permission_returns_201(self, admin_client):
         client, _, _ = admin_client
+        # The body names the path's user: another id is refused with 400 (#1789).
+        user_id = uuid4()
         with patch("modules.backend.app.api.v1.endpoints.rbac.RBACService") as mock_svc:
             mock_svc.grant_direct_permission.return_value = MagicMock()
             response = client.post(
-                f"/api/v1/rbac/users/{uuid4()}/grant",
+                f"/api/v1/rbac/users/{user_id}/grant",
                 json={
-                    "user_id": str(uuid4()),
-                    "resource": "report",
-                    "actions": ["read"],
+                    "user_id": str(user_id),
+                    "resource": "experiment",
+                    "actions": ["update"],
                 },
             )
         assert response.status_code == 201
@@ -341,9 +343,30 @@ class TestGrantRevokePermission:
         client, _, _ = viewer_client
         response = client.post(
             f"/api/v1/rbac/users/{uuid4()}/grant",
-            json={"user_id": str(uuid4()), "resource": "report", "actions": ["read"]},
+            json={
+                "user_id": str(uuid4()),
+                "resource": "experiment",
+                "actions": ["update"],
+            },
         )
         assert response.status_code == 403
+
+    def test_a_pair_no_role_or_grant_may_hold_is_refused_first(self, admin_client):
+        """Validation runs before the route: 422, and the service is not
+        called (#891)."""
+        client, _, _ = admin_client
+        with patch("modules.backend.app.api.v1.endpoints.rbac.RBACService") as mock_svc:
+            response = client.post(
+                f"/api/v1/rbac/users/{uuid4()}/grant",
+                json={
+                    "user_id": str(uuid4()),
+                    "resource": "report",
+                    "actions": ["read"],
+                },
+            )
+        assert response.status_code == 422
+        assert response.json()["detail"][0]["type"] == "not_grantable"
+        mock_svc.grant_direct_permission.assert_not_called()
 
     def test_revoke_permission_returns_200(self, admin_client):
         client, _, _ = admin_client

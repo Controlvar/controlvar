@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from backend.app.api import deps
 from backend.app.api.deps import CacheControl
+from backend.app.api.read_scope import get_current_reader
 from backend.app.main import app
 from backend.app.models.user import User, UserRole
 
@@ -166,6 +167,8 @@ def admin_client(db_session: Session, admin_user: User, monkeypatch) -> TestClie
     app.dependency_overrides[deps.get_current_active_user] = (
         override_get_current_active_user
     )
+    # The read routes that also take an mcp:read key (read_scope.py).
+    app.dependency_overrides[get_current_reader] = override_get_current_active_user
     app.dependency_overrides[deps.get_current_superuser] = (
         override_get_current_superuser
     )

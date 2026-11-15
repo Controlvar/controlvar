@@ -212,6 +212,28 @@ It prints `2500`, one line per customer.
 - **One chunk at a time.** Chunks sent in parallel share the 60-a-minute limit and the API's
   database connections with every other request.
 
+## Balance each segment of the list
+
+If the experiment [balances its split within groups](balance-within-groups.md), send each
+customer's value of its attribute in their `context`, for example their tier, at the top level.
+Each tier then gets the experiment's split among its own customers, across every chunk and
+together with the users assigned one at a time: within a tier, each variant's count is never
+more than a few customers from its share, for the customers balanced in the blocks. A customer
+split without balancing is outside that: one the server split while it was busy balancing other
+users at that moment keeps their group and is counted in the `experiment_balance_fallback_total`
+metric, and one an older server version assigned has no group. The same list sent in another
+order can split differently; each customer keeps the variant they got.
+
+To count each tier's customers in each variant, join the request's tiers to the answer:
+
+```{.bash skip reason="fragment: BODY is a chunk sent with context.tier, RESULT its answer"}
+jq -n --argjson body "$BODY" --argjson answer "$RESULT" '
+  ($body.users | map({key: .user_id, value: .context.tier}) | from_entries) as $tier
+  | $answer.variants as $v
+  | [$answer.assignments[] | select(.assigned) | {tier: $tier[.user_id], variant: $v[.variant_id].name}]
+  | group_by([.tier, .variant]) | map({tier: .[0].tier, variant: .[0].variant, customers: length})'
+```
+
 ## What counts in results
 
 Every enrolled user counts in the experiment's results from the moment they are assigned,

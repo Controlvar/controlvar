@@ -21,6 +21,7 @@ does, and for the same reason: caplog would miss DEBUG records once
 
 from __future__ import annotations
 
+import asyncio
 import traceback
 from types import SimpleNamespace
 from typing import List, Tuple
@@ -229,7 +230,8 @@ def _run_batch_failing_with(monkeypatch, exc):
     for variant in exp.variants:
         variant.configuration = {}
     db = MagicMock()
-    db.query.return_value.filter.return_value.first.return_value = exp
+    # The route's query leaves out the visual columns with options (#1545).
+    db.query.return_value.options.return_value.filter.return_value.first.return_value = exp
 
     class FailingService:
         def __init__(self, _db):
@@ -244,8 +246,10 @@ def _run_batch_failing_with(monkeypatch, exc):
         users=[{"user_id": "first-user"}, {"user_id": USER, "context": {"e": USER}}],
     )
     with pytest.raises(HTTPException) as caught:
-        tracking.assign_users_to_experiment_batch(
-            request=request, db=db, api_key=MagicMock()
+        asyncio.run(
+            tracking.assign_users_to_experiment_batch(
+                request=request, db=db, api_key=MagicMock()
+            )
         )
     return caught.value
 

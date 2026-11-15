@@ -115,6 +115,9 @@ export function SourceForm({ mode, kind, connections, source, connectionId, onSa
     return out;
   });
   const [metricType, setMetricType] = useState<MetricType>(source?.metric_type ?? 'proportion');
+  // An edit starts from the stored direction: the PUT replaces the whole
+  // definition, so starting unticked would set a marked source back to false.
+  const [lowerIsBetter, setLowerIsBetter] = useState(source?.lower_is_better === true);
   const [windowHours, setWindowHours] = useState(String(source?.conversion_window_hours ?? 168));
   const [cap, setCap] = useState(source?.cap_value != null ? String(source.cap_value) : '');
   const [filters, setFilters] = useState<FilterRow[]>(() => rowsFrom(source?.filters));
@@ -220,6 +223,10 @@ export function SourceForm({ mode, kind, connections, source, connectionId, onSa
       metric_type: metricType,
       conversion_window_hours: Number(windowHours),
       ...(metricType === 'mean' && cap.trim() ? { cap_value: Number(cap) } : {}),
+      // Sent only when ticked: the API reads a missing key as false, and an
+      // API older than the field refuses the key, so an unticked save still
+      // works against one during a deploy.
+      ...(lowerIsBetter ? { lower_is_better: true } : {}),
     };
   };
 
@@ -363,6 +370,29 @@ export function SourceForm({ mode, kind, connections, source, connectionId, onSa
             </div>
           ))}
         </fieldset>
+      )}
+
+      {kind === 'metric' && (
+        <div className="flex items-start gap-2">
+          <input
+            id="wh-src-lower-is-better"
+            type="checkbox"
+            checked={lowerIsBetter}
+            aria-describedby="wh-src-lower-is-better-help"
+            onChange={(e) => setLowerIsBetter(e.target.checked)}
+            className="mt-1"
+          />
+          <div>
+            <label htmlFor="wh-src-lower-is-better" className="text-sm text-slate-900">
+              Lower is better
+            </label>
+            <p id="wh-src-lower-is-better-help" className="text-xs text-slate-600">
+              For a metric where a fall is the improvement, such as an error rate or churn: an analysis then
+              calls a significant fall better and a significant rise worse. Analyses already started keep the
+              direction they used.
+            </p>
+          </div>
+        </div>
       )}
 
       <fieldset className="space-y-4 rounded-md border border-slate-200 p-4">

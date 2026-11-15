@@ -5,15 +5,16 @@ Run by the live contract (tests/sdk-contract/live/run_live_contract.py), which c
 side of it: that these evaluations made no evaluate call, and that the counts sent on close()
 are the safety monitor's denominator for the errors reported afterwards.
 
-The errors are reported with the same sdk:ruleset key, the way a server forwards them: only
-reports sent with a server-side key count toward a flag's error rate and automatic rollback.
+The errors are reported with ``client.report_error()`` and the same sdk:ruleset key, the way a
+server forwards them: only reports sent with a server-side key count toward a flag's error rate
+and automatic rollback.
 
 Run from the repository root (no install needed):
 
     CONTROLVAR_LOCAL_API_KEY=<sdk:ruleset key> python sdk/python/examples/local_eval_smoke.py
 
 Env: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_LOCAL_API_KEY (a key
-with the sdk:ruleset scope, required; also used for POST /api/v1/tracking/errors;
+with the sdk:ruleset scope, required; also the key report_error sends;
 the former names EXPERIMENTLY_API_URL / EXPERIMENTLY_LOCAL_API_KEY are read when these are unset),
 CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_USER_ID (default local-smoke-<uuid>),
 LOCAL_EVALUATIONS (default 40), LOCAL_ERRORS (default 2).
@@ -27,8 +28,6 @@ from __future__ import annotations
 import json
 import os
 import sys
-import urllib.error
-import urllib.request
 import uuid
 from pathlib import Path
 from typing import List, NoReturn
@@ -87,27 +86,14 @@ def main() -> None:
     # Errors against the same flag, reported with the server-side key: the safety monitor
     # divides these by the counts above.
     for i in range(errors_to_post):
-        body = json.dumps(
-            {
-                "feature_flag_key": flag_key,
-                "user_id": user_id,
-                "error_type": "local_smoke",
-                "message": f"local-evaluation smoke error {i + 1}",
-            }
-        ).encode("utf-8")
-        request = urllib.request.Request(
-            f"{api_url}/api/v1/tracking/errors",
-            data=body,
-            headers={"X-API-Key": local_key, "Content-Type": "application/json"},
-            method="POST",
+        stored = client.report_error(
+            "local_smoke",
+            f"local-evaluation smoke error {i + 1}",
+            feature_flag_key=flag_key,
+            user_id=user_id,
         )
-        try:
-            with urllib.request.urlopen(request, timeout=10) as response:  # noqa: S310
-                status = response.status
-        except urllib.error.HTTPError as exc:
-            status = exc.code
-        if status != 201:
-            fail(f"POST /api/v1/tracking/errors answered {status}")
+        if not stored:
+            fail(f"report_error {i + 1} was not stored (its warning above says why)")
 
     print(
         json.dumps(

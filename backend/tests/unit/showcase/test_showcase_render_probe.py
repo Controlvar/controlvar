@@ -13,6 +13,7 @@ import copy
 
 import pytest
 from showcase import contract
+from showcase.capture import config
 from showcase.render import encode, probe
 
 pytestmark = [pytest.mark.unit]
@@ -48,7 +49,7 @@ def planted(change):
 
 def test_the_good_answer_passes():
     assert probe.format_problems(GOOD, FRAMES)[0] == []
-    assert probe.length_problems(GOOD, "v.mp4", FRAMES)[0] == []
+    assert probe.length_problems(GOOD, "v", FRAMES)[0] == []
 
 
 @pytest.mark.parametrize(
@@ -111,15 +112,40 @@ def test_gate_2_refuses_each_planted_format_defect(change, message):
 
 def test_gate_1_refuses_a_short_video():
     info = planted(lambda i: i["format"].update(duration="40.000000"))
-    problems, numbers = probe.length_problems(info, "01-getting-started.mp4", 1200)
+    problems, numbers = probe.length_problems(info, "01-getting-started", 1200)
     assert problems == ["01-getting-started.mp4 is 40.0 s; a showcase is 55-90 s"]
     assert numbers["duration_s"] == 40.0
 
 
 def test_gate_1_refuses_a_file_longer_or_shorter_than_its_frames():
     info = planted(lambda i: i["format"].update(duration="58.000000"))
-    problems, _ = probe.length_problems(info, "v.mp4", FRAMES)
+    problems, _ = probe.length_problems(info, "v", FRAMES)
     assert problems == ["v.mp4 is 58.000 s; its 1710 frames make 57.000 s"]
+
+
+def lasting(seconds: int):
+    """A good answer for a file of *seconds*, and its frame count."""
+    info = planted(lambda i: i["format"].update(duration=f"{seconds}.000000"))
+    return info, seconds * contract.FPS
+
+
+@pytest.mark.parametrize("slug", list(config.VIDEOS))
+def test_gate_1_holds_each_video_to_its_own_cap(slug):
+    """130 s: video 9's length, over every other video's 90 s."""
+    info, frames = lasting(130)
+    problems, _ = probe.length_problems(info, slug, frames)
+    if slug == "09-design-in-depth":
+        assert problems == []
+    else:
+        assert problems == [f"{slug}.mp4 is 130.0 s; a showcase is 55-90 s"]
+
+
+def test_gate_1_refuses_video_9_over_its_150_s():
+    info, frames = lasting(151)
+    problems, _ = probe.length_problems(info, "09-design-in-depth", frames)
+    assert problems == ["09-design-in-depth.mp4 is 151.0 s; a showcase is 55-150 s"]
+    info, frames = lasting(150)
+    assert probe.length_problems(info, "09-design-in-depth", frames)[0] == []
 
 
 def box(kind: bytes, payload: bytes = b"") -> bytes:

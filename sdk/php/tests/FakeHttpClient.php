@@ -13,7 +13,7 @@ use Controlvar\SdkConfig;
  *
  * Responses are queued per "METHOD path". When several are queued for the same
  * route they are consumed in order and the last one is repeated. A route without
- * a stub answers 404 (ApiException), mirroring "experiment/flag not ACTIVE".
+ * a stub answers 404 (ApiException), mirroring an unknown experiment or flag key.
  *
  * Usable from PHPUnit and from test_standalone.php (no autoloader needed).
  */

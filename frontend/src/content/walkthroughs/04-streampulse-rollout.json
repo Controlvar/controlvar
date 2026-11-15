@@ -1,0 +1,60 @@
+{
+  "slug": "04-streampulse-rollout",
+  "mp4": "04-streampulse-rollout-c4e1a9f03e2a.mp4",
+  "items": [
+    { "on_screen": ["Controlvar", "Roll out to devices, roll back by itself", "A/B testing and feature flags you run yourself."] },
+    { "on_screen": ["Seeded off camera: this iPhone on iOS 17.4 gets AI search."] },
+    { "said": ["In the StreamPulse demo, this iPhone on iOS 17.4 gets AI search."] },
+    { "on_screen": ["A Pixel 7 on Android 14 gets keyword search."] },
+    { "said": ["A Pixel 7 on Android 14 gets keyword search."] },
+    { "on_screen": ["Signed in off camera: the rule lives in the dashboard."] },
+    { "said": ["In the dashboard, the rule is iOS 17 or later, US, premium."] },
+    { "on_screen": ["Kill switch: Recommendations v2 off, no app release."] },
+    { "said": ["A kill switch: turn Recommendations v2 off, with no app release."] },
+    { "on_screen": ["In the app, the feed is back to Classic."] },
+    { "said": ["In the app, the home feed is back to Classic."] },
+    { "on_screen": ["Off camera, the demo's script moved it to 25%."] },
+    { "said": ["In the dashboard, Player v2 is now at its 25% stage."] },
+    { "on_screen": ["In the app, this Galaxy S10 on Android 12 gets Player v2."] },
+    { "said": ["In the app, this Galaxy S10 on Android 12 gets Player v2."] },
+    {
+      "on_screen": [
+        "Off camera",
+        "Player v2 crashes on Android 12",
+        "Simulated by the tool: Android 12 devices ask for Player v2 200 times and report 40 crashes. The demo apps run from their own build in this recording."
+      ]
+    },
+    { "on_screen": ["Simulated: Player v2 crashes on Android 12."] },
+    { "said": ["Simulated: Android 12 devices crash in Player v2."] },
+    { "on_screen": ["In the dashboard, the error rate passes its limit."] },
+    { "said": ["In the dashboard, the error rate passes its limit: Unhealthy."] },
+    {
+      "on_screen": [
+        "Off camera",
+        "1 minute later",
+        "Waited off camera; the time above is measured. The safety monitor checks every minute in this demo (default: every 5 minutes)."
+      ]
+    },
+    { "on_screen": ["The safety monitor checks every minute here."] },
+    { "said": ["The safety monitor checks every minute here."] },
+    { "on_screen": ["By itself, the monitor paused the rollout schedule."] },
+    { "said": ["By itself, the monitor paused the schedule."] },
+    { "on_screen": ["And it rolled Player v2 back to 5%."] },
+    { "said": ["And rolled Player v2 back to 5%."] },
+    { "on_screen": ["In the app, pick the Galaxy S10 again and refresh."] },
+    { "said": ["Back in the app: the Galaxy S10, then Refresh now."] },
+    { "on_screen": ["Now it gets the classic player."] },
+    { "said": ["Now this Android 12 phone gets the classic player."] },
+    { "on_screen": ["The audit log: the safety monitor did it, and why."] },
+    { "said": ["The dashboard's audit log shows the safety monitor did it, and why."] },
+    {
+      "on_screen": [
+        "Controlvar",
+        "Open source, Apache-2.0, runs on your own infrastructure",
+        "controlvar.com",
+        "github.com/Controlvar/controlvar",
+        "Recorded on Controlvar v0.36.0, a local stack with demo data"
+      ]
+    }
+  ]
+}

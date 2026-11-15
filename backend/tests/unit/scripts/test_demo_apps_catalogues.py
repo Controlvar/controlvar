@@ -3,9 +3,11 @@
 ``demo/shoplab/README.md`` and ``demo/streampulse/README.md`` describe what
 each seed makes, where it writes the app's key, how much history it backfills,
 the rates the ShopLab traffic simulator walks its funnel at, and that neither
-app loads an image, a font or anything from a CDN. Each test holds one of those
-facts against the seed's catalogue, the simulator's constants or the app's
-files, so a change that makes one false fails here.
+app loads an image, a font or anything from a CDN; and no line of the
+repository README or the demos calls a demo a mobile app without saying "web
+SDK". Each test holds one of those facts against the seed's catalogue, the
+simulator's constants or the app's files, so a change that makes one false
+fails here.
 
 The simulator is loaded from its file (it is standard library only); nothing
 reaches a database or the network.
@@ -16,6 +18,7 @@ from __future__ import annotations
 import ast
 import importlib.util
 import json
+import os
 import re
 import subprocess
 import sys
@@ -282,10 +285,13 @@ def _app_presets() -> list:
     return found
 
 
-def test_the_streampulse_simulator_has_each_app_preset_with_an_id_of_its_own():
-    """PRESET_DEVICES: one device for each of the app's five presets, with the
-    preset's OS, OS version, region, tier, employee flag and model, under an id
-    of its own (``preset-...``)."""
+@pytest.mark.regression
+def test_the_streampulse_simulator_presets_are_the_apps_devices():
+    """PRESET_DEVICES is the app's five presets, device for device: the same id
+    and every attribute, app_version included. Flags and experiments bucket by
+    the id and target the attributes, so the simulator's start-up probe shows
+    what the app's device panel shows. Its presets had ids of their own
+    (``preset-...``) and an iPhone 15 on app 3.2.0, against the app's 3.2.1."""
     spec = importlib.util.spec_from_file_location(
         "_catalogue_streampulse_devices", STREAMPULSE_SIMULATOR / "devices.py"
     )
@@ -297,28 +303,20 @@ def test_the_streampulse_simulator_has_each_app_preset_with_an_id_of_its_own():
         sys.modules.pop(spec.name, None)
     app = _app_presets()
     assert len(app) == 5, app
-
-    def shape(os, os_version, region, tier, employee, model):
-        return (os, os_version, region, tier, employee, model)
-
-    simulator = sorted(
-        shape(d.os, d.os_version, d.region, d.tier, d.employee, d.device_model)
-        for d in devices.PRESET_DEVICES
+    fields = (
+        "device_id",
+        "os",
+        "os_version",
+        "app_version",
+        "region",
+        "tier",
+        "employee",
+        "device_model",
     )
-    assert simulator == sorted(
-        shape(
-            p["os"],
-            p["os_version"],
-            p["region"],
-            p["tier"],
-            p["employee"],
-            p["device_model"],
-        )
-        for p in app
-    )
-    ids = [d.device_id for d in devices.PRESET_DEVICES]
-    assert all(i.startswith("preset-") for i in ids), ids
-    assert not set(ids) & {p["device_id"] for p in app}
+    simulator = [
+        tuple(d.attributes()[name] for name in fields) for d in devices.PRESET_DEVICES
+    ]
+    assert simulator == [tuple(p[name] for name in fields) for p in app]
 
 
 def test_the_simulator_runs_until_stopped_and_takes_the_documented_options(traffic):
@@ -381,6 +379,56 @@ def test_the_app_loads_no_image_font_audio_or_cdn(app):
         text = path.read_text(encoding="utf-8")
         assert not _LOADS.search(text), path
         assert not _EXTERNAL.search(text), path
+
+
+#: A line that calls a demo a mobile app or a mobile demo ("a simulated mobile
+#: app", "mobile feature-flag demo"), or says "on mobile". StreamPulse is a web
+#: page on the React SDK, and the native SDKs send no attributes on flag
+#: evaluation yet (#438), so such a line also says "web SDK".
+_MOBILE_CLAIM = re.compile(
+    r"\bmobile(?:[ -]\w{1,40}){0,2}[ -](?:apps?|demos?)\b|\bon mobile\b", re.I
+)
+_CLAIM_FILES = {".md", ".ts", ".tsx", ".js", ".json", ".py", ".sh", ".yaml", ".yml"}
+
+
+def _readme_and_demo_files():
+    yield REPO_ROOT / "README.md"
+    for top, dirs, names in os.walk(REPO_ROOT / "demo"):
+        dirs[:] = sorted(d for d in dirs if d not in {"node_modules", ".next"})
+        for name in sorted(names):
+            path = Path(top) / name
+            if path.suffix in _CLAIM_FILES and name != "package-lock.json":
+                yield path
+
+
+@pytest.mark.regression
+def test_no_line_calls_a_demo_a_mobile_app_without_saying_web_sdk():
+    for old in (
+        "a simulated mobile app",
+        "a demo mobile streaming app",
+        "mobile feature-flag demo",
+        "feature flags on mobile",
+    ):
+        assert _MOBILE_CLAIM.search(old), old
+    files = list(_readme_and_demo_files())
+    scanned = {p.relative_to(REPO_ROOT).as_posix() for p in files}
+    assert {
+        "README.md",
+        "demo/DEMO_GUIDE.md",
+        "demo/streampulse/README.md",
+        "demo/streampulse/package.json",
+        "demo/streampulse/src/components/StreamPulseApp.tsx",
+        "demo/streampulse/src/pages/_app.tsx",
+    } <= scanned, "the scan missed a file it must read"
+    found = [
+        f"{path.relative_to(REPO_ROOT).as_posix()}:{number}: {line.strip()}"
+        for path in files
+        for number, line in enumerate(
+            path.read_text(encoding="utf-8").splitlines(), start=1
+        )
+        if _MOBILE_CLAIM.search(line) and "web SDK" not in line
+    ]
+    assert found == []
 
 
 def _package(app: str) -> Dict[str, Any]:
@@ -455,11 +503,13 @@ def test_each_app_defaults_to_the_local_api_and_dashboard(app):
     assert "process.env[" not in env
 
 
-def test_the_react_sdk_is_1_1_0_with_the_hooks_the_apps_use():
+def test_the_react_sdk_is_0_1_0_with_the_hooks_the_apps_use():
+    """The version both demo READMEs name: 0.1.0, its first release. The
+    manifest said 1.1.0 before then, a version never published."""
     package = json.loads(
         (REPO_ROOT / "sdk" / "react" / "package.json").read_text(encoding="utf-8")
     )
-    assert package["version"] == "1.1.0"
+    assert package["version"] == "0.1.0"
     index = (REPO_ROOT / "sdk" / "react" / "src" / "index.ts").read_text(
         encoding="utf-8"
     )

@@ -33,6 +33,7 @@ by = ["exempt:label"]
 [[unit]]
 text = "From this directory:"
 by = ["exempt:instruction"]
+count = 2
 
 [[unit]]
 text = "generate-env.sh writes .env beside compose.yml with a generated SECRET_KEY, POSTGRES_PASSWORD, FIRST_SUPERUSER_PASSWORD and AUDIT_HMAC_KEY, readable by your user only."
@@ -197,8 +198,84 @@ text = "POSTGRES_SERVER | an external PostgreSQL instead of the bundled one; the
 by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_api_does_not_wait_on_the_bundled_database"]
 
 [[unit]]
+text = "AUTH_PROVIDER | how people sign in: local (the default), with accounts kept by the API, or cognito, with an Amazon Cognito user pool"
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestSignIn::test_local_unless_env_says_otherwise",
+    "test:backend/tests/unit/core/test_documented_defaults.py::test_sign_in_is_local_by_default",
+]
+
+[[unit]]
+text = "COGNITO_USER_POOL_ID, COGNITO_CLIENT_ID, COGNITO_DOMAIN | with AUTH_PROVIDER=cognito: the user pool, its app client, and its Hosted UI's domain name, <prefix>.auth.<region>.amazoncognito.com; empty by default"
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestSignIn::test_each_cognito_setting_is_passed_empty_by_default",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestSignIn::test_exactly_these_cognito_settings_and_no_aws_credentials",
+    "test:backend/tests/unit/core/test_cognito_hosted_ui_settings.py::test_a_domain_name_is_accepted",
+    "workflow:compose-production.yml",
+]
+
+[[unit]]
+text = "AWS_REGION | the user pool's region: us-east-1 by default"
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestSignIn::test_the_region_defaults_to_the_apis_own"]
+
+[[unit]]
+text = "WAREHOUSE_CREDENTIALS_KEYS | turns on warehouse analysis in the full profile: Fernet keys, comma-separated, newest first, that encrypt the warehouse credentials the API stores; while it is empty, storing or using a credential answers 503 credentials_unavailable"
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestFeatureKeys::test_the_api_is_passed_the_key_empty_by_default",
+    "test:modules/backend/tests/unit/core/test_credential_crypto.py::TestTheSetting::test_an_empty_value_from_the_environment_reads_as_not_set",
+    "test:modules/backend/tests/integration/warehouse/test_connections_api.py",
+]
+
+[[unit]]
+text = "ANTHROPIC_API_KEY | turns on Anthropic variants in LLM experiments and also Claude calls in POST /api/v1/ai/design and POST /api/v1/ai/interpret/{experiment_id} (limited to 10 requests a minute); without it those two routes answer from built-in templates"
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestFeatureKeys::test_the_api_is_passed_the_key_empty_by_default",
+    "test:backend/tests/unit/services/test_llm_provider_wiring.py::test_anthropic_variants_go_to_the_gateway_anthropic_base_url_names",
+    "test:backend/tests/unit/services/test_ai_design_service.py",
+    "test:backend/tests/unit/middleware/test_ai_rate_limits.py::test_design_has_its_own_limit_of_ten_a_minute",
+    "test:backend/tests/unit/middleware/test_ai_rate_limits.py::test_interpretations_share_ten_a_minute_whatever_the_id",
+]
+
+[[unit]]
+text = "OPENAI_API_KEY | turns on OpenAI variants in LLM experiments"
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestFeatureKeys::test_the_api_is_passed_the_key_empty_by_default",
+    "test:backend/tests/unit/services/test_llm_provider_wiring.py::test_openai_variants_use_the_key_and_gateway_the_openai_sdk_reads",
+]
+
+[[unit]]
+text = "GEMINI_API_KEY | turns on Gemini (google) variants in LLM experiments"
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestFeatureKeys::test_the_api_is_passed_the_key_empty_by_default",
+    "test:backend/tests/integration/api/test_llm_experiments_api.py::TestGeminiComplete::test_success_returns_the_completion",
+]
+
+[[unit]]
 text = "Run an external PostgreSQL server with its TimeZone set to UTC."
 by = ["exempt:instruction"]
+
+[[unit]]
+text = "The last four settings are optional."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestFeatureKeys::test_the_api_is_passed_the_key_empty_by_default",
+    "workflow:compose-production.yml",
+]
+
+[[unit]]
+text = "A key set to an empty value is the same as a key that is not set, and both compose files pass these keys empty by default."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestFeatureKeys::test_the_api_is_passed_the_key_empty_by_default",
+    "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_api_is_passed_each_feature_key_empty_by_default",
+    "test:backend/tests/unit/infrastructure/test_compose_feature_keys.py::test_an_empty_warehouse_key_list_is_not_an_error",
+    "test:modules/backend/tests/unit/core/test_credential_crypto.py::TestTheSetting::test_an_empty_value_from_the_environment_reads_as_not_set",
+    "test:backend/tests/unit/infrastructure/test_compose_feature_keys.py::test_the_anthropic_sdk_reads_an_empty_key_as_none",
+    "test:backend/tests/unit/infrastructure/test_compose_feature_keys.py::test_the_openai_sdk_refuses_an_empty_key_as_it_refuses_none",
+    "test:backend/tests/unit/infrastructure/test_compose_feature_keys.py::test_the_gemini_provider_refuses_an_empty_key_before_sending",
+    "test:backend/tests/unit/infrastructure/test_compose_feature_keys.py::test_ai_design_uses_its_templates_with_an_empty_key",
+]
+
+[[unit]]
+text = "Put each key in the .env file next to the compose file: a key exported in another terminal does not reach the container, and one exported in the terminal that runs docker compose up does."
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "The image lines name the images of this file's own release, ghcr.io/controlvar/controlvar:<profile>-X.Y.Z and ghcr.io/controlvar/controlvar-web:<profile>-X.Y.Z."
@@ -207,6 +284,375 @@ by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestSh
 [[unit]]
 text = "Releases, images and verification shows how to check what you pulled."
 by = ["exempt:navigation"]
+
+[[unit]]
+text = "Back up and restore"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A backup is two files, taken together: a dump of the database and your .env."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_dump_is_custom_format_and_the_restore_reads_it",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_env_file_is_restored_beside_compose_yml",
+]
+
+[[unit]]
+text = "Keep both outside the Docker volumes, on another machine if you can, and keep them private: .env holds the secrets."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Every command below names the Compose project, experimently-selfhost, which is the name: in compose.yml, and none of them deletes a volume."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_every_compose_command_names_the_stacks_project",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_project_in_the_prose_is_the_composes",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_nothing_in_the_section_deletes_a_volume",
+]
+
+[[unit]]
+text = "Back up"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The dump is made inside the postgres service with the user and database that service was started with (the defaults in compose.yml, unless you set POSTGRES_USER and POSTGRES_DB), and written to the file you redirect it to on the host."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_exec_runs_in_the_postgres_service_without_a_terminal",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_tools_read_the_database_user_and_name_the_service_has",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_dump_is_custom_format_and_the_restore_reads_it",
+]
+
+[[unit]]
+text = ".env has to travel with the dump."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_generated_env_says_its_secrets_cannot_be_regenerated"]
+
+[[unit]]
+text = "generate-env.sh writes a note at the top of it that its secrets cannot be regenerated."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_generated_env_says_its_secrets_cannot_be_regenerated"]
+
+[[unit]]
+text = "SECRET_KEY signs the sign-in tokens, and AUDIT_HMAC_KEY signs the audit records of the full profile: run generate-env.sh again on a new host and it makes different keys."
+by = [
+    "test:backend/tests/unit/core/test_jwt_secret_rotation.py::test_a_token_signed_with_the_old_secret_is_refused_after_the_rotation",
+    "test:modules/backend/tests/unit/services/test_audit_signing_service.py::TestAuditSigningServiceInstantiation::test_service_reads_key_from_settings",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_generated_env_says_its_secrets_cannot_be_regenerated",
+]
+
+[[unit]]
+text = "Redis needs no backup."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_redis_is_optional_and_persists",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRedisRateLimiter::test_falls_back_when_redis_unavailable",
+]
+
+[[unit]]
+text = "In this stack it holds the rate-limit counters and response caches, which the API rebuilds, and the API runs without it (REDIS_REQUIRED is false)."
+by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRedisRateLimiter::test_uses_redis_when_available",
+    "test:backend/tests/unit/api/test_admin_stats_cache.py::test_admin_stats_cache_miss_writes_the_cache",
+    "test:backend/tests/unit/api/test_admin_stats_cache.py::test_clear_cache_scans_the_namespaces_the_app_actually_writes",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_redis_is_optional_and_persists",
+]
+
+[[unit]]
+text = "It writes an append-only file to its own volume, so a restart keeps its data."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_redis_persists",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_redis_is_optional_and_persists",
+]
+
+[[unit]]
+text = "Restore"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Restore into a fresh stack of the same image tag the dump came from: the same release, because the database records the revision it was migrated to, and the same profile."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_images_are_the_published_ones_at_this_version",
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_release_refuses_a_database_a_newer_release_migrated",
+]
+
+[[unit]]
+text = "An older image refuses to start on a database a newer release migrated (see Database migrations), so restore first, then upgrade as Upgrade shows."
+by = ["test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_release_refuses_a_database_a_newer_release_migrated"]
+
+[[unit]]
+text = "On the new host, put that release's compose.yml and the saved .env in one directory, and do not run generate-env.sh."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_env_file_is_restored_beside_compose_yml",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestGenerator::test_a_second_run_refuses_and_leaves_the_file_alone",
+]
+
+[[unit]]
+text = "Do not run the commands below in the directory of a stack that is running: the first replaces its .env, and the restore loads into whatever database its postgres service holds."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_restore_warns_before_the_block_about_a_running_stack",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_env_file_is_restored_beside_compose_yml",
+]
+
+[[unit]]
+text = "Then:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Only PostgreSQL is started first, so the database it creates is still empty when the dump is loaded: the API creates the schema on its first start."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_postgres_alone_is_started_first_and_nothing_waits_on_it",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_api_creates_the_schema_when_it_starts",
+    "test:backend/tests/integration/database/test_bootstrap_concurrency.py::test_concurrent_bootstraps_on_a_fresh_schema_do_not_race",
+]
+
+[[unit]]
+text = "When the API then starts it finds the restored schema and the restored users, and creates neither a schema nor a first administrator."
+by = [
+    "test:backend/tests/integration/database/test_bootstrap_concurrency.py::test_the_bootstrap_says_whether_it_created_the_first_administrator",
+    "test:backend/tests/integration/database/test_bootstrap_concurrency.py::test_a_long_password_setting_does_not_stop_a_database_that_has_users",
+]
+
+[[unit]]
+text = "To restore on the host that runs the stack, stop it with docker compose -p experimently-selfhost stop, which keeps its volumes, and restore under another project name: the same commands with a different -p start with empty volumes."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_project_in_the_prose_is_the_composes",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_volumes_take_their_names_from_the_project",
+]
+
+[[unit]]
+text = "Upgrade"
+by = ["exempt:label"]
+
+[[unit]]
+text = "These steps move a running stack to a newer release and keep its database."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::test_compose_upgrade_keeps_the_postgres_volume",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_no_block_deletes_a_volume_or_runs_the_generator",
+    "workflow:compose-production.yml",
+]
+
+[[unit]]
+text = "Run them from this directory of the clone you installed from."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Every docker compose command names the project, experimently-selfhost, and none of them runs docker compose down -v or generate-env.sh, or deletes a volume."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_every_compose_command_names_the_stacks_project",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_no_block_deletes_a_volume_or_runs_the_generator",
+    "workflow:compose-production.yml",
+]
+
+[[unit]]
+text = "They read two shell variables, which you set first in the shell you run them in:"
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_the_blocks_read_only_the_variables_the_section_declares",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestWorkflow::test_every_block_runs_under_env_i_with_only_the_declared_variables",
+    "workflow:compose-production.yml",
+]
+
+[[unit]]
+text = "Variable | Meaning"
+by = ["exempt:label"]
+
+[[unit]]
+text = "RELEASE | the tag of the release you upgrade to, such as v0.44.0"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "PUBLIC_BASE_URL | the PUBLIC_BASE_URL in your .env, such as https://controlvar.example.com"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "1. Read the release notes"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Read the release notes of every release after yours, up to RELEASE, for a setting the new release requires."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "2. Back up"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Take a backup as Back up shows, then check that the dump reads back whole:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "pg_restore reads the whole dump and writes it nowhere, and fails on a dump that is cut short."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Do not go on until it succeeds."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "3. Get the files"
+by = ["exempt:label"]
+
+[[unit]]
+text = "First note the release you run now, which a rollback in step 7 goes back to: the version that step 6's curl prints, with a v in front, such as v0.43.2."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_the_release_to_roll_back_to_is_noted_before_the_files_change"]
+
+[[unit]]
+text = "Then get the new release's files:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "This checks out the repository at the release, compose.yml included."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Your .env is not in git, so it stays as it was."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_the_env_file_is_not_in_git"]
+
+[[unit]]
+text = "Git says the checkout is a detached HEAD, which is what checking out a tag gives."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "If compose.yml was edited by hand, git refuses the checkout and changes nothing."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_images_are_the_published_ones_at_this_version"]
+
+[[unit]]
+text = "An install made by copying the files rather than cloning the repository takes compose.yml and .env.example from deploy/compose/ at the release's tag instead."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "4. Check the settings"
+by = ["exempt:label"]
+
+[[unit]]
+text = "It prints nothing when .env has every setting the release's compose.yml requires, and otherwise names a missing one: add it to .env and run the command again."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestApiEnvironment::test_a_required_setting_has_no_default",
+    "workflow:compose-production.yml",
+]
+
+[[unit]]
+text = "It starts and stops nothing, so the old release keeps serving meanwhile."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "5. Upgrade"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Pull the release's images:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "PostgreSQL and Redis are pulled as well: compose.yml names postgres:16-alpine and redis:7-alpine, which follow the newest 16 and 7 images."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_images_are_the_published_ones_at_this_version"]
+
+[[unit]]
+text = "Then start the release:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The API migrates the database when it starts, before it serves, and --wait-timeout 600 is the ten minutes its health check allows for that."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_api_creates_the_schema_when_it_starts",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_the_wait_is_as_long_as_the_api_health_check",
+    "workflow:compose-production.yml",
+]
+
+[[unit]]
+text = "If up fails while docker compose -p experimently-selfhost logs api still shows the migration running, restart nothing: wait until step 6's ps shows the API healthy, as Database migrations says of a long migration, then run the up command again."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "It leaves the API as it is and starts the dashboard, which waits for a healthy API."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_after_a_slow_migration_a_second_up_starts_the_dashboard"]
+
+[[unit]]
+text = "6. Verify"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Check that each of the four services is listed and healthy, and that the API's version is RELEASE without its v."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_the_verify_step_counts_every_service",
+    "workflow:compose-production.yml",
+]
+
+[[unit]]
+text = "Then sign in at PUBLIC_BASE_URL and open an experiment you made before the upgrade."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The upgrade is done when all three hold."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "7. Roll back"
+by = ["exempt:label"]
+
+[[unit]]
+text = "When step 5 or step 6 fails, go back to the release you noted in step 3."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Roll back in place first, and restore the backup only if the old release refuses the database."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Before you roll back, read the API's log, which tells you whether to expect that refusal:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The API logs running database bootstrap each time it starts."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_the_log_check_reads_the_line_every_start_writes",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestWorkflow::test_restart_is_waited_for_by_the_bootstrap_line",
+    "workflow:compose-production.yml",
+]
+
+[[unit]]
+text = "Alembic logs a Running upgrade line as it starts each migration."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "No Running upgrade line: the new release migrated nothing, and the old release starts on the database as before."
+by = [
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_after_the_newer_release_downgrades_the_database_the_older_one_starts",
+    "workflow:compose-production.yml",
+]
+
+[[unit]]
+text = "A Running upgrade line: expect the old release to refuse the database."
+by = [
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_release_refuses_a_database_a_newer_release_migrated",
+    "workflow:compose-production.yml",
+]
+
+[[unit]]
+text = "It does not when the migration failed: a migration that fails is undone with every other migration of that start."
+by = ["mechanism:email-lower-one-transaction"]
+
+[[unit]]
+text = "No running database bootstrap line: the command read no log of this stack."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_the_log_check_reads_the_line_every_start_writes"]
+
+[[unit]]
+text = "Check the directory and the project name before you go on."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Then, whatever the log showed, roll back in place: run the commands of steps 3 and 5 again with RELEASE set to the release you noted."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "If docker compose -p experimently-selfhost logs api then shows this database was migrated by a newer Controlvar release, the old release refuses the database and has changed nothing in it."
+by = [
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_release_refuses_a_database_a_newer_release_migrated",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_the_rollback_restores_only_on_the_refusal_bootstrap_prints",
+    "workflow:compose-production.yml",
+]
+
+[[unit]]
+text = "Restore the backup into a fresh stack of the old release, as Restore shows, or take another way back from An Older Image Against a Newer Database."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A restore loses anything written since the backup."
+by = ["exempt:advice"]
 
 [[unit]]
 text = "What CI runs"
@@ -240,4 +686,116 @@ by = [
     "workflow:compose-production.yml",
     "test:backend/tests/unit/infrastructure/test_production_compose.py::TestWorkflow::test_it_rehearses_in_the_compose_topology",
     "test:backend/tests/unit/infrastructure/test_production_compose.py::TestWorkflow::test_it_refuses_the_demo_login_and_checks_only_the_dashboard_publishes",
+]
+
+[[unit]]
+text = "The same workflow's compose-upgrade job runs every command block of this page, taken from the page as it is written, on those pull requests, every night, and when it is started by hand."
+by = [
+    "workflow:compose-production.yml",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestWorkflow::test_the_upgrade_job_runs_every_block_of_the_page",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestWorkflow::test_the_upgrade_job_runs_on_pull_requests_nightly_and_by_hand",
+]
+
+[[unit]]
+text = "It installs the previous release from a clone at its tag with the commands of Run it, which pull that release's published images, and adds an experiment and a feature flag."
+by = [
+    "workflow:compose-production.yml",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestWorkflow::test_the_upgrade_starts_from_a_clone_at_the_previous_release",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestWorkflow::test_nothing_logs_in_to_a_registry",
+]
+
+[[unit]]
+text = "Then it follows Upgrade with the change's images under the published names, and checks that the experiment and the flag are still there, that the first administrator signs in with the password in .env, and that the API applied each migration the change adds once."
+by = [
+    "workflow:compose-production.yml",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestWorkflow::test_the_upgrade_job_runs_its_phases_in_order",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestWorkflow::test_the_upgrade_job_builds_what_the_other_job_builds",
+]
+
+[[unit]]
+text = "Last, it rolls back in place, removes the stack and its volumes, and restores the backup into the previous release."
+by = [
+    "workflow:compose-production.yml",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestWorkflow::test_it_rolls_back_in_place_before_it_restores",
+]
+
+[[unit]]
+text = "It rehearses one step, from the previous release to the change, in the core profile on Linux: the full profile and longer jumps are not rehearsed."
+by = [
+    "workflow:compose-production.yml",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestWorkflow::test_the_upgrade_job_is_one_step_of_the_core_profile_on_linux",
+]
+
+[[unit]]
+text = "FORWARDED_ALLOW_IPS | a TLS proxy on another machine whose X-Forwarded-For the API should believe; empty for a proxy on this host that connects to 127.0.0.1 (see Users' addresses)"
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestForwardedAllowIps::test_the_api_is_passed_the_setting_empty_by_default",
+    "test:backend/tests/unit/infrastructure/test_proxy_trust.py::test_compose_believes_web_and_the_gateway_and_no_lan_client",
+]
+
+[[unit]]
+text = "Users' addresses"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The API counts its rate limits per user address and writes that address on its access lines."
+by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestGetClientIp::test_it_uses_the_resolved_client_and_not_the_header",
+    "test:backend/tests/unit/core/test_aws_settings_and_clients.py::test_each_request_reaches_the_access_log_with_its_path_and_status",
+]
+
+[[unit]]
+text = "Behind your TLS reverse proxy it reads the address from the X-Forwarded-For header, so set your proxy to send it; in nginx that is proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;."
+by = [
+    "test:backend/tests/unit/infrastructure/test_proxy_headers_trust.py::TestTheEntrypoint::test_it_still_reads_proxy_headers_at_all",
+    "test:backend/tests/unit/infrastructure/test_proxy_headers_trust.py::test_every_location_that_proxies_to_the_api_appends_x_forwarded_for",
+]
+
+[[unit]]
+text = "The API believes that header from the dashboard container and from a TLS proxy on this host that connects to 127.0.0.1, as above, and from the proxies in FORWARDED_ALLOW_IPS: IP addresses and networks, separated by commas."
+by = [
+    "test:backend/tests/unit/infrastructure/test_proxy_trust.py::test_compose_believes_web_and_the_gateway_and_no_lan_client",
+    "test:backend/tests/unit/infrastructure/test_proxy_trust.py::test_entries_add_to_the_own_networks_and_each_appears_once",
+]
+
+[[unit]]
+text = "Leave it empty for a proxy on this host that connects to 127.0.0.1."
+by = ["test:backend/tests/unit/infrastructure/test_proxy_trust.py::test_compose_believes_web_and_the_gateway_and_no_lan_client"]
+
+[[unit]]
+text = "For a proxy on another machine, put its address in .env, such as FORWARDED_ALLOW_IPS=192.0.2.10 for a proxy at 192.0.2.10, and run docker compose up -d."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestForwardedAllowIps::test_the_config_check_follows_it_through_compose",
+    "workflow:compose-production.yml",
+]
+
+[[unit]]
+text = "A proxy in a container on a Docker network of its own connects from that network: give the network's subnet, which docker network inspect shows."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Behind a TLS proxy, keep HTTP_BIND at 127.0.0.1, so that the proxy is the only way in."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Check it once people have used the dashboard:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Each line is an address and the number of API requests from it."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Your users' addresses mean it works."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "If every request comes from one private address, such as 172.18.0.1, the API sees a proxy instead of your users: either your TLS proxy sends no X-Forwarded-For, or it is on another machine (or connects to this host's network address rather than 127.0.0.1) and FORWARDED_ALLOW_IPS does not list it."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "docker compose logs web ends each line with the X-Forwarded-For the dashboard received, \"-\" when there was none, and docker compose logs api 2>&1 | grep 'trusted proxies' shows what the API believes."
+by = [
+    "test:backend/tests/unit/infrastructure/test_proxy_headers_trust.py::test_the_dashboard_access_log_ends_with_the_x_forwarded_for_it_received",
+    "test:backend/tests/unit/infrastructure/test_proxy_trust.py::test_the_start_up_line_says_what_is_believed",
 ]

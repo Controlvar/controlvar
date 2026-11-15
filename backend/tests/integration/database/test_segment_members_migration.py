@@ -43,10 +43,24 @@ pytestmark = [pytest.mark.integration]
 #: This revision, and the core revision it extends.
 REVISION = "37dcb2969766"
 PREVIOUS_CORE_HEAD = "d29a479daafe"
-#: The core head of this tree: ``4c2c09a2b3e8`` (#1206), the revision after
-#: this one.
-CORE_HEAD = "4c2c09a2b3e8"
-MODULES_HEAD = "modules_0002_warehouse_analysis"
+#: The core head of this tree: ``t1812_user_totp`` (#1812), after
+#: ``4955571d232c`` (#1545), ``c448_balance_within`` (#448), ``7b6b4b4fe246``
+#: (#1528), ``85dd4796bb8b`` (#1543), ``607c51a59bf5`` (#1497) and
+#: ``4c2c09a2b3e8`` (#1206), the revision after this one.
+CORE_HEAD = "t1812_user_totp"
+#: Tables that a later core revision's downgrade drops: a downgrade from the
+#: head to this test's target unapplies those revisions too.
+#: ``85dd4796bb8b`` (#1543) drops ``event_dedup_keys``; ``7b6b4b4fe246``
+#: (#1528) drops a column and no table; ``c448_balance_within`` (#448) drops
+#: ``balance_group_counters``; ``4955571d232c`` (#1545) drops ``visual_tokens``;
+#: ``t1812_user_totp`` (#1812) drops ``user_totp``.
+LATER_DOWNGRADE_TABLES = {
+    "event_dedup_keys",
+    "balance_group_counters",
+    "visual_tokens",
+    "user_totp",
+}
+MODULES_HEAD = "modules_0005_redshift"
 
 PREVIOUS_ROWS = {
     CORE: {PREVIOUS_CORE_HEAD},
@@ -349,7 +363,7 @@ def test_downgrade_when_empty_removes_exactly_what_it_added(
     assert _constraints(test_db, scratch_schema, "segments") == {
         name: d for name, d in segments.items() if name != CHECK
     }
-    assert _tables(test_db, scratch_schema) == tables - {TABLE}
+    assert _tables(test_db, scratch_schema) == tables - {TABLE} - LATER_DOWNGRADE_TABLES
 
 
 @pytest.mark.regression
@@ -368,7 +382,7 @@ def test_downgrade_with_the_override_runs(profile, test_db, scratch_schema, tmp_
     assert down.returncode == 0, down.stderr[-3000:]
     assert _rows(test_db, scratch_schema) == PREVIOUS_ROWS[profile]
     assert _kind_column(test_db, scratch_schema) is None
-    assert _tables(test_db, scratch_schema) == tables - {TABLE}
+    assert _tables(test_db, scratch_schema) == tables - {TABLE} - LATER_DOWNGRADE_TABLES
 
     # And the upgrade after it brings back an empty table, every segment rules.
     _upgrade(tree, scratch_schema)

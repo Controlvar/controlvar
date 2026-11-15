@@ -1,0 +1,479 @@
+document = "docs/sdk/exposure-hook.md"
+
+[[unit]]
+text = "Send exposures to your analytics tool"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Controlvar records an exposure each time it enrols a user in an experiment."
+by = [
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_native_targeting_rules_gate_new_users",
+    "test:backend/tests/integration/services/test_assignment_service_coverage.py::TestAssignUser::test_track_exposure_called_on_existing_assignment",
+]
+
+[[unit]]
+text = "The JavaScript, Python, Go, React, React Native, Java and .NET SDKs can also call a function of yours at that moment, the exposure hook, so you can send the exposure to Segment, Google Analytics 4, Amplitude, Mixpanel, RudderStack or your own warehouse."
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::is called once, with exactly the experiment key, user id, variant id and variant name, for an assigned: true answer",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_is_called_once_with_exactly_the_experiment_key_user_id_variant_id_and_variant_name",
+    "test:sdk/go/exposure_test.go::TestOnExposure_CalledOnceWithTheFourValues",
+    "test:sdk/react/src/__tests__/exposure.test.tsx::is called once for an assigned: true answer, with exactly the four values",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::is called once, with exactly the experiment key, user id, variant id and variant name, for an assigned: true answer",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExposureListenerTest.java::calledOnceWithTheFourValues",
+    "test:sdk/dotnet/tests/Controlvar.Tests/ExposureTests.cs::IsCalledOnceForAnAssignedTrueAnswerWithTheFourValues",
+]
+
+[[unit]]
+text = "Which SDKs have it"
+by = ["exempt:label"]
+
+[[unit]]
+text = "SDK | Set it with | Details"
+by = ["exempt:label"]
+
+[[unit]]
+text = "JavaScript | onExposure in new ExperimentationClient({ ... }) | Exposure hook"
+by = ["test:sdk/js/__tests__/exposure.test.ts::is called once, with exactly the experiment key, user id, variant id and variant name, for an assigned: true answer"]
+
+[[unit]]
+text = "Python | on_exposure= in ExperimentationClient(...) | Exposure hook"
+by = ["test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_is_called_once_with_exactly_the_experiment_key_user_id_variant_id_and_variant_name"]
+
+[[unit]]
+text = "Go | exp.WithOnExposure(fn) in exp.New(...) | Exposure hook"
+by = ["test:sdk/go/exposure_test.go::TestOnExposure_CalledOnceWithTheFourValues"]
+
+[[unit]]
+text = "React | onExposure in the config of ExperimentationProvider, and of ServerClient | Exposure hook"
+by = [
+    "test:sdk/react/src/__tests__/exposure.test.tsx::calls onExposure once when useExperiment mounts, with the four values",
+    "test:sdk/react/src/__tests__/exposure.test.tsx::calls its own onExposure once for two assignments of one user",
+]
+
+[[unit]]
+text = "React Native | onExposure in new ExperimentationClient({ ... }) | Exposure hook"
+by = ["test:sdk/react-native/__tests__/exposure.test.tsx::is called once, with exactly the experiment key, user id, variant id and variant name, for an assigned: true answer"]
+
+[[unit]]
+text = "Java | exposureListener(...) on SdkConfig.builder(...), or an ExposureListener bean with the Spring Boot starter | Exposure hook"
+by = [
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExposureListenerTest.java::calledOnceWithTheFourValues",
+    "test:sdk/java/spring-boot-starter/src/test/java/com/controlvar/sdk/spring/ExperimentationAutoConfigurationTest.java::oneExposureListenerBeanIsWired",
+]
+
+[[unit]]
+text = ".NET | OnExposure on SdkConfig | Exposure hook"
+by = ["test:sdk/dotnet/tests/Controlvar.Tests/ExposureTests.cs::IsCalledOnceForAnAssignedTrueAnswerWithTheFourValues"]
+
+[[unit]]
+text = "Each SDK's page describes its hook in full, and says whether that SDK is published yet."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "When it is called"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The server records one exposure for each assignment request it answers with assigned: true."
+by = [
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_native_targeting_rules_gate_new_users",
+    "test:backend/tests/integration/services/test_assignment_service_coverage.py::TestAssignUser::test_track_exposure_called_on_existing_assignment",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_holdout_users_get_control_and_are_not_recorded",
+]
+
+[[unit]]
+text = "The SDK calls the hook at most once for each such answer, when it stores the answer for a user and experiment that had no unexpired cached answer in that client."
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::a cached answer calls nothing: however often the answer is asked for, one request and one call",
+    "test:sdk/js/__tests__/exposure.test.ts::runs after the answer is stored and recorded: a key-less track() in the hook reaches the experiment",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_a_cached_answer_calls_nothing_however_often_the_answer_is_asked_for",
+    "test:sdk/python/tests/test_exposure.py::TestUserKeyCacheSetNew::test_true_for_an_empty_slot_false_for_a_live_one_and_true_for_an_expired_one",
+    "test:sdk/go/exposure_test.go::TestOnExposure_ACachedAnswerCallsNothing",
+    "test:sdk/go/exposure_internal_test.go::TestCache_FillReportsWhetherTheSlotWasEmpty",
+    "test:sdk/react/src/__tests__/exposure.test.tsx::is not called for a cached answer, however often it is asked for",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::a cached answer calls nothing: however often the answer is asked for, one request and one call",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::clearCache() while a request is in flight: the next call makes a second request, and only the answer stored first calls it",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExposureListenerTest.java::aCachedAnswerCallsNothing",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExposureListenerTest.java::reportsWhetherTheSlotHeldALiveEntry",
+    "test:sdk/dotnet/tests/Controlvar.Tests/ExposureTests.cs::IsNotCalledForACachedAnswerHoweverOftenItIsAskedFor",
+]
+
+[[unit]]
+text = "Within one cache lifetime (5 minutes by default), one client therefore calls it once per user and experiment, however often the answer is asked for."
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::is called once per user and experiment: another user or another experiment is another request and another call",
+    "test:sdk/js/__tests__/client.test.ts::caches a success for 300000 ms by default",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_is_called_once_per_user_and_experiment",
+    "test:sdk/python/tests/test_client.py::TestConstruction::test_defaults_and_trailing_slash",
+    "test:sdk/go/exposure_test.go::TestOnExposure_OncePerUserAndExperiment",
+    "test:sdk/react/src/__tests__/exposure.test.tsx::is called once per user and experiment",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::is called once per user and experiment: another user or another experiment is another request and another call",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::after the default cache lifetime of 5 minutes, with the default offlineFallback",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExposureListenerTest.java::oncePerUserAndExperiment",
+    "test:sdk/dotnet/tests/Controlvar.Tests/ExposureTests.cs::IsCalledOncePerUserAndExperiment",
+]
+
+[[unit]]
+text = "It is not called for:"
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::a cached answer calls nothing: however often the answer is asked for, one request and one call",
+    "test:sdk/js/__tests__/exposure.test.ts::a failed call calls nothing: %s",
+    "test:sdk/js/__tests__/exposure.test.ts::is not called for assigned: false (%s): the control answer comes back unchanged",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_a_failed_call_calls_nothing",
+    "test:sdk/go/exposure_test.go::TestOnExposure_AFailedCallCallsNothing",
+]
+
+[[unit]]
+text = "a cached answer;"
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::a cached answer calls nothing: however often the answer is asked for, one request and one call",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_a_cached_answer_calls_nothing_however_often_the_answer_is_asked_for",
+    "test:sdk/go/exposure_test.go::TestOnExposure_ACachedAnswerCallsNothing",
+    "test:sdk/react/src/__tests__/exposure.test.tsx::is not called for a cached answer, however often it is asked for",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::a cached answer calls nothing: however often the answer is asked for, one request and one call",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExposureListenerTest.java::aCachedAnswerCallsNothing",
+    "test:sdk/dotnet/tests/Controlvar.Tests/ExposureTests.cs::IsNotCalledForACachedAnswerHoweverOftenItIsAskedFor",
+]
+
+[[unit]]
+text = "the second of two calls for the same new user and experiment made at the same time;"
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::concurrent first calls share one request and make one call",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_concurrent_first_calls_each_send_a_request_and_make_one_call",
+    "test:sdk/go/exposure_test.go::TestOnExposure_ConcurrentFirstCalls_TwoRequestsOneCall",
+    "test:sdk/react/src/__tests__/exposure.test.tsx::is called once for concurrent first calls that share one request",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::concurrent first calls share one request and make one call",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExposureListenerTest.java::concurrentFirstCallsMakeTwoRequestsAndOneCall",
+    "test:sdk/dotnet/tests/Controlvar.Tests/ExposureTests.cs::ConcurrentFirstCallsMakeTwoRequestsAndOneCall",
+]
+
+[[unit]]
+text = "a call that fails;"
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::a failed call calls nothing: %s",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_a_failed_call_calls_nothing",
+    "test:sdk/go/exposure_test.go::TestOnExposure_AFailedCallCallsNothing",
+    "test:sdk/react/src/__tests__/exposure.test.tsx::is not called when the call fails (%s)",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::a failed call calls nothing: %s",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExposureListenerTest.java::aFailedCallCallsNothing",
+    "test:sdk/dotnet/tests/Controlvar.Tests/ExposureTests.cs::IsNotCalledWhenTheCallFails",
+]
+
+[[unit]]
+text = "an answer with assigned: false: a user in the global holdout, in another experiment of the same mutual exclusion group or outside the experiment's targeting, or an experiment that is not running, for which the server records no exposure;"
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::is not called for assigned: false (%s): the control answer comes back unchanged",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_is_not_called_for_assigned_false_and_the_control_answer_comes_back_unchanged",
+    "test:sdk/go/exposure_test.go::TestOnExposure_NotCalledForAssignedFalse",
+    "test:sdk/react/src/__tests__/exposure.test.tsx::is not called for an assigned: false answer (%s), and the answer is unchanged",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::is not called for assigned: false (%s): the control answer comes back unchanged",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExposureListenerTest.java::notCalledForAssignedFalse",
+    "test:sdk/dotnet/tests/Controlvar.Tests/ExposureTests.cs::IsNotCalledForAnAssignedFalseAnswerAndTheAnswerIsUnchanged",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_holdout_users_get_control_and_are_not_recorded",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_mutual_exclusion_assigns_each_user_to_exactly_one_experiment",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_native_targeting_rules_gate_new_users",
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_an_answer_for_an_experiment_that_is_not_running_records_nothing",
+]
+
+[[unit]]
+text = "a feature flag."
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::flags never call it: evaluateFlag, isFeatureEnabled, getAllFlags and the typed getters, in server mode",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_flags_never_call_it_in_server_mode",
+    "test:sdk/go/exposure_test.go::TestOnExposure_FlagsNeverCallIt",
+    "test:sdk/react/src/__tests__/exposure.test.tsx::is never called for a flag",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::flags never call it: evaluateFlag, isFeatureEnabled and getAllFlags",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExposureListenerTest.java::flagsNeverCallIt",
+    "test:sdk/dotnet/tests/Controlvar.Tests/ExposureTests.cs::IsNeverCalledForAFlag",
+]
+
+[[unit]]
+text = "React's server render makes no request and calls nothing; hydration in the browser then makes the one request and the one call."
+by = [
+    "test:sdk/react/src/__tests__/exposure.ssr.test.tsx::is not called, and the render makes no request",
+    "test:sdk/react/src/__tests__/exposure.test.tsx::calls it once after hydrating server markup",
+]
+
+[[unit]]
+text = "React's ServerClient.bootstrap() reads and fills no cache, so a ServerClient shared across requests calls its own hook on every bootstrap() call, once for each experiment the server enrols the user in (What the bootstrap records)."
+by = [
+    "test:sdk/react/src/__tests__/ServerClient.bootstrap.test.ts::reads no cache: a key the client answered before is asked again",
+    "test:sdk/react/src/__tests__/ServerClient.bootstrap.test.ts::fills no cache: the client asks again for a key bootstrap() answered",
+    "test:sdk/react/src/__tests__/bootstrap.test.tsx::ServerClient.bootstrap() assigns again on each call: it reads no cache",
+    "test:sdk/react/src/__tests__/bootstrap.test.tsx::ServerClient.bootstrap() assigns each experiment once and calls its onExposure once per assigned: true answer",
+]
+
+[[unit]]
+text = "It is called again, and the server records another exposure, whenever the SDK asks the server again: after the cache lifetime, after clearCache() (Java's invalidateCache too; Go has neither), after the answer is evicted from a full cache, and in every new client, such as each page load in a browser or each process or worker on a server; except that React Native, with its default offlineFallback, keeps the answer in AsyncStorage for the cache lifetime, so on one device neither clearCache() nor a new client calls it again until that stored answer expires, unless you set offlineFallback: false or call clearStorage()."
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::after the cache lifetime",
+    "test:sdk/js/__tests__/exposure.test.ts::after clearCache()",
+    "test:sdk/js/__tests__/exposure.test.ts::in a new client",
+    "test:sdk/python/tests/test_exposure.py::TestCalledAgainWhenTheClientAsksTheServerAgain::test_after_the_cache_lifetime",
+    "test:sdk/python/tests/test_exposure.py::TestCalledAgainWhenTheClientAsksTheServerAgain::test_after_clear_cache",
+    "test:sdk/python/tests/test_exposure.py::TestCalledAgainWhenTheClientAsksTheServerAgain::test_in_a_new_client",
+    "test:sdk/go/exposure_test.go::TestOnExposure_CalledAgainAfterTheCacheLifetime",
+    "test:sdk/go/exposure_test.go::TestOnExposure_CalledAgainAfterEviction",
+    "test:sdk/go/exposure_test.go::TestOnExposure_CalledAgainInANewClient",
+    "test:sdk/react/src/__tests__/exposure.test.tsx::after the cache lifetime (one millisecond past it, never at the boundary)",
+    "test:sdk/react/src/__tests__/exposure.test.tsx::after clearCache()",
+    "test:sdk/react/src/__tests__/exposure.test.tsx::in a new client",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExposureListenerTest.java::afterTheCacheLifetime",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExposureListenerTest.java::afterClearCache",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExposureListenerTest.java::afterInvalidateCache",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExposureListenerTest.java::afterEviction",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExposureListenerTest.java::inANewClient",
+    "test:sdk/dotnet/tests/Controlvar.Tests/ExposureTests.cs::IsCalledAgainAfterTheCacheLifetime",
+    "test:sdk/dotnet/tests/Controlvar.Tests/ExposureTests.cs::IsCalledAgainAfterClearCache",
+    "test:sdk/dotnet/tests/Controlvar.Tests/ExposureTests.cs::IsCalledAgainAfterEvictionFromAFullCache",
+    "test:sdk/dotnet/tests/Controlvar.Tests/ExposureTests.cs::IsCalledAgainInANewClient",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::after the cache lifetime (one millisecond past it, never at the boundary), when the stored answer has expired too",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::not after clearCache() with the default offlineFallback: the stored answer is served, with no request",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::not in a new client with the default offlineFallback: the stored answer is served, with no request",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::after clearCache() with offlineFallback false",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::in a new client with offlineFallback false",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::after clearCache() and clearStorage()",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::in a new client after clearStorage()",
+    "test:backend/tests/integration/services/test_assignment_service_coverage.py::TestAssignUser::test_track_exposure_called_on_existing_assignment",
+]
+
+[[unit]]
+text = "So your tool can receive several exposures for one user and experiment: count users, not events."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "It never receives an exposure Controlvar did not record."
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::is not called for assigned: false (%s): the control answer comes back unchanged",
+    "test:sdk/js/__tests__/exposure.test.ts::is not called when the answer has no assigned field (a server that does not send it)",
+    "test:sdk/js/__tests__/exposure.test.ts::a failed call calls nothing: %s",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_is_not_called_for_assigned_false_and_the_control_answer_comes_back_unchanged",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_a_failed_call_calls_nothing",
+    "test:sdk/go/exposure_test.go::TestOnExposure_NotCalledForAssignedFalse",
+    "test:sdk/go/exposure_test.go::TestOnExposure_AFailedCallCallsNothing",
+    "test:sdk/react/src/__tests__/exposure.test.tsx::is not called for an assigned: false answer (%s), and the answer is unchanged",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::is not called for assigned: false (%s): the control answer comes back unchanged",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExposureListenerTest.java::notCalledForAssignedFalse",
+    "test:sdk/dotnet/tests/Controlvar.Tests/ExposureTests.cs::IsNotCalledForAnAssignedFalseAnswerAndTheAnswerIsUnchanged",
+]
+
+[[unit]]
+text = "It can receive fewer: two calls for the same new user and experiment at the same time in Python, Go, Java or .NET each record one and call the hook once, and a request that times out after the server recorded it calls nothing."
+by = [
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_concurrent_first_calls_each_send_a_request_and_make_one_call",
+    "test:sdk/go/exposure_test.go::TestOnExposure_ConcurrentFirstCalls_TwoRequestsOneCall",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExposureListenerTest.java::concurrentFirstCallsMakeTwoRequestsAndOneCall",
+    "test:sdk/dotnet/tests/Controlvar.Tests/ExposureTests.cs::ConcurrentFirstCallsMakeTwoRequestsAndOneCall",
+    "test:backend/tests/integration/services/test_assignment_service_coverage.py::TestAssignUser::test_track_exposure_called_on_existing_assignment",
+    "test:sdk/js/__tests__/exposure.test.ts::a call that times out calls nothing, even if the server recorded the exposure",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_a_call_that_times_out_calls_nothing_even_if_the_server_recorded_the_exposure",
+    "test:sdk/go/exposure_test.go::TestOnExposure_ATimedOutCallCallsNothing",
+    "test:sdk/react/src/__tests__/exposure.test.tsx::is not called when the call times out",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::a call that times out calls nothing, even if the server recorded the exposure",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExposureListenerTest.java::aTimedOutCallCallsNothing",
+    "test:sdk/dotnet/tests/Controlvar.Tests/ExposureTests.cs::IsNotCalledWhenTheCallFails",
+]
+
+[[unit]]
+text = "It is called when your code asks for the assignment, whether or not you then show the variant, so ask for it where the variant is shown."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Keep it quick"
+by = ["exempt:label"]
+
+[[unit]]
+text = "It runs inside the call that asked for the assignment, after the answer is cached and before the call returns; in JavaScript, React and React Native, before that call's Promise resolves."
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::runs before getAssignment resolves",
+    "test:sdk/js/__tests__/exposure.test.ts::runs after the answer is stored and recorded: a key-less track() in the hook reaches the experiment",
+    "test:sdk/python/tests/test_exposure.py::TestTheClientAroundIt::test_runs_in_the_calling_thread_before_get_assignment_returns",
+    "test:sdk/python/tests/test_exposure.py::TestTheClientAroundIt::test_runs_after_the_answer_is_stored_and_recorded_a_key_less_track_in_the_hook_reaches_the_experiment",
+    "test:sdk/go/exposure_test.go::TestOnExposure_RunsOnTheCallersGoroutineBeforeGetAssignmentReturns",
+    "test:sdk/go/exposure_test.go::TestOnExposure_MayCallGetAssignmentForTheSameKey",
+    "test:sdk/react/src/__tests__/exposure.test.tsx::runs before assignExperiment resolves",
+    "test:sdk/react/src/__tests__/exposure.test.tsx::runs last: after the answer is cached and recorded for a key-less trackEvent",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::runs before getAssignment resolves",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::runs after the answer is stored: a key-less track() in the hook reaches the experiment",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExposureListenerTest.java::runsOnTheCallingThreadBeforeTheCallReturns",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExposureListenerTest.java::runsAfterTheAnswerIsCached",
+    "test:sdk/dotnet/tests/Controlvar.Tests/ExposureTests.cs::HoldsNoLockOfTheClientAndRunsInsideTheCall",
+    "test:sdk/dotnet/tests/Controlvar.Tests/ExposureTests.cs::RunsAfterTheAnswerIsCachedSoTheSameKeyIsAnsweredFromTheCache",
+]
+
+[[unit]]
+text = "Whatever your tool, a call that sends before it returns adds that request to the assignment, once per user and experiment per cache lifetime; put the exposure on your own queue, as the Python, Go, Java and .NET pages show."
+by = [
+    "test:sdk/python/tests/test_exposure.py::TestTheClientAroundIt::test_runs_in_the_calling_thread_before_get_assignment_returns",
+    "test:sdk/go/exposure_test.go::TestOnExposure_ABlockedFunctionHoldsUpOnlyItsOwnCall",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExposureListenerTest.java::runsOnTheCallingThreadBeforeTheCallReturns",
+    "test:sdk/dotnet/tests/Controlvar.Tests/ExposureTests.cs::HoldsNoLockOfTheClientAndRunsInsideTheCall",
+    "test:sdk/js/__tests__/exposure.test.ts::runs before getAssignment resolves",
+    "test:sdk/js/__tests__/exposure.test.ts::a cached answer calls nothing: however often the answer is asked for, one request and one call",
+]
+
+[[unit]]
+text = "If it throws (in Go, panics), the answer is unchanged, in every SDK."
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::changes nothing: getVariant returns the variant and getAssignment resolves",
+    "test:sdk/python/tests/test_exposure.py::TestAHookThatRaises::test_changes_nothing_get_variant_returns_the_variant_and_get_assignment_returns",
+    "test:sdk/go/exposure_test.go::TestOnExposure_APanicChangesNothing",
+    "test:sdk/react/src/__tests__/exposure.test.tsx::that throws leaves the answer unchanged and cached",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::changes nothing: getVariant returns the variant and getAssignment resolves to it",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExposureListenerTest.java::aThrowingListenerChangesNothing",
+    "test:sdk/dotnet/tests/Controlvar.Tests/ExposureTests.cs::AThrowingFunctionLeavesTheAnswerUnchangedAndCached",
+]
+
+[[unit]]
+text = "Examples"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Each example is a JavaScript function for the browser."
+by = ["exempt:example"]
+
+[[unit]]
+text = "It receives the Exposure of the JavaScript, React and React Native SDKs: experimentKey, userId, variantId (null when the server sends none) and variantName."
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::is called once, with exactly the experiment key, user id, variant id and variant name, for an assigned: true answer",
+    "test:sdk/js/__tests__/exposure.test.ts::passes variantId null when the server sends no variant_id",
+    "test:sdk/react/src/__tests__/exposure.test.tsx::is called once for an assigned: true answer, with exactly the four values",
+    "test:sdk/react/src/__tests__/exposure.test.tsx::passes a null variantId when the server sends none",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::is called once, with exactly the experiment key, user id, variant id and variant name, for an assigned: true answer",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::passes variantId null when the server sends no variant_id",
+]
+
+[[unit]]
+text = "Pass it as onExposure when you create the client: in the options of ExperimentationClient in the JavaScript and React Native SDKs, or in the config of React's ExperimentationProvider."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Each example assumes the tool's library is already loaded and set up with your account, as the tool's own documentation describes."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "The event and property names are examples: use the ones your team reports on."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "If your tool identifies people, identify each one with the user id you give Controlvar, so you can join the exposures to their other events."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Segment"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Google Analytics 4"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Amplitude"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Mixpanel"
+by = ["exempt:label"]
+
+[[unit]]
+text = "RudderStack"
+by = ["exempt:label"]
+
+[[unit]]
+text = "When nothing arrives"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Is the experiment running?"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A draft, paused, completed or archived experiment enrols nobody."
+by = [
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_an_answer_for_an_experiment_that_is_not_running_records_nothing",
+    "test:sdk/js/__tests__/exposure.test.ts::is not called for assigned: false (%s): the control answer comes back unchanged",
+]
+
+[[unit]]
+text = "Is the user enrolled?"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A user in the global holdout, in another experiment of the same mutual exclusion group, or outside the experiment's targeting is not."
+by = [
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_holdout_users_get_control_and_are_not_recorded",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_mutual_exclusion_assigns_each_user_to_exactly_one_experiment",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_native_targeting_rules_gate_new_users",
+]
+
+[[unit]]
+text = "Has this client already reported it?"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A cached answer, for 5 minutes by default, is not reported again."
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::a cached answer calls nothing: however often the answer is asked for, one request and one call",
+    "test:sdk/js/__tests__/client.test.ts::caches a success for 300000 ms by default",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_a_cached_answer_calls_nothing_however_often_the_answer_is_asked_for",
+    "test:sdk/python/tests/test_client.py::TestConstruction::test_defaults_and_trailing_slash",
+    "test:sdk/go/exposure_test.go::TestOnExposure_ACachedAnswerCallsNothing",
+    "test:sdk/react/src/__tests__/exposure.test.tsx::is not called for a cached answer, however often it is asked for",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::after the default cache lifetime of 5 minutes, with the default offlineFallback",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExposureListenerTest.java::aCachedAnswerCallsNothing",
+    "test:sdk/dotnet/tests/Controlvar.Tests/ExposureTests.cs::IsNotCalledForACachedAnswerHoweverOftenItIsAskedFor",
+]
+
+[[unit]]
+text = "In React Native, with the default offlineFallback, neither clearCache() nor a new client reports it again until the answer stored in AsyncStorage expires."
+by = [
+    "test:sdk/react-native/__tests__/exposure.test.tsx::not after clearCache() with the default offlineFallback: the stored answer is served, with no request",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::not in a new client with the default offlineFallback: the stored answer is served, with no request",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::after the cache lifetime (one millisecond past it, never at the boundary), when the stored answer has expired too",
+]
+
+[[unit]]
+text = "Is your function failing?"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "In React, Go, Java and .NET nothing reports it: catch and log inside it."
+by = [
+    "test:sdk/react/src/__tests__/exposure.test.tsx::is given the dropping report by the clients: this SDK reports the failure nowhere",
+    "test:sdk/go/exposure_test.go::TestOnExposure_APanicChangesNothing",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExposureListenerTest.java::aThrowingListenerChangesNothing",
+    "test:sdk/dotnet/tests/Controlvar.Tests/ExposureTests.cs::AThrowingFunctionLeavesTheAnswerUnchangedAndCached",
+]
+
+[[unit]]
+text = "In JavaScript and React Native, look at onError, with the operation 'exposure'; in Python, at on_error and the controlvar.client logger."
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::is reported to onError once, with the operation exposure and an ExperimentationError whose code is HOOK_ERROR and whose cause is what it threw",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::is reported to onError once, with the operation exposure and the Error it threw, never as a request failure",
+    "test:sdk/python/tests/test_exposure.py::TestAHookThatRaises::test_is_reported_to_on_error_once_with_exposure_and_an_experimentation_error_whose_code_is_hook_error",
+    "test:sdk/python/tests/test_exposure.py::TestAHookThatRaises::test_is_logged_at_error_with_its_traceback_on_the_controlvar_client_logger",
+]
+
+[[unit]]
+text = "In a test, does your faked /assign answer include \"assigned\": true?"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Without it, the hook is not called."
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::is not called when the answer has no assigned field (a server that does not send it)",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_is_not_called_when_assigned_is_missing_or_not_a_boolean",
+    "test:sdk/go/exposure_test.go::TestOnExposure_ServerWithoutAssigned_AnswersAndCallsNothing",
+    "test:sdk/react/src/__tests__/exposure.test.tsx::is not called when assigned is %s, and the answer is still returned",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::is not called when assigned is %s, and the answer is still returned",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExposureListenerTest.java::notCalledWhenAssignedIsNotTheLiteralTrue",
+    "test:sdk/dotnet/tests/Controlvar.Tests/ExposureTests.cs::IsNotCalledWhenAssignedIsNotTheLiteralTrueAndTheAnswerIsStillReturned",
+]
+
+[[unit]]
+text = "Is your SDK new enough?"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Use the JavaScript or Python SDK 0.3.0 or later, or the Go SDK v0.1.0 or later; for React, React Native, Java and .NET, see that SDK's page."
+by = ["exempt:instruction"]

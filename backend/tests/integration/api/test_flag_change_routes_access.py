@@ -306,3 +306,117 @@ def test_rollout_schedule_for_a_missing_flag_is_404(db_session, cleanup_override
         },
     )
     assert response.status_code == 404, response.text
+
+
+# ---------------------------------------------------------------------------
+# A grant of feature_flag (update) covers any flag (#891, check #32, D11)
+# ---------------------------------------------------------------------------
+# In the full profile a VIEWER holding a direct grant of feature_flag (update)
+# may change any flag -- their own, another user's, one with no owner -- on
+# every route above, exactly as a DEVELOPER may; the same VIEWER whose grant has
+# no activation time (recorded before custom roles took effect) may change none.
+# The grants are planted before the request and never change during it, so
+# make_client_for_user is acceptable here (and in this file only).
+
+GRANT_ACTORS = {"viewer+grant": True, "viewer+inactive grant": False}
+
+
+def _granted_viewer_and_flag(db_session, activated, ownership, status):
+    from sqlalchemy import text
+
+    user = _user(db_session, UserRole.VIEWER, False)
+    db_session.execute(
+        text(
+            "INSERT INTO direct_permission_grants (id, user_id, resource, actions, "
+            "is_active, activated_at, created_at, updated_at) VALUES (:id, :user, "
+            "'feature_flag', CAST('[\"update\"]' AS jsonb), true, "
+            + ("now()" if activated else "NULL")
+            + ", now(), now())"
+        ),
+        {"id": uuid.uuid4(), "user": user.id},
+    )
+    other = _user(db_session, UserRole.DEVELOPER, False)
+    owner_id = {"own": user.id, "other": other.id, "null": None}[ownership]
+    flag = FeatureFlag(
+        key=f"fc93-{uuid.uuid4().hex[:10]}",
+        name="fc93",
+        status=status,
+        owner_id=owner_id,
+        rollout_percentage=0,
+    )
+    db_session.add(flag)
+    db_session.commit()
+    db_session.refresh(flag)
+    return user, flag
+
+
+@pytest.fixture
+def _remove_grants(db_session):
+    yield
+    from sqlalchemy import text
+
+    db_session.rollback()
+    db_session.execute(
+        text(
+            "DELETE FROM direct_permission_grants WHERE user_id IN "
+            "(SELECT id FROM users WHERE username LIKE 'fc93_%')"
+        )
+    )
+    db_session.commit()
+
+
+GRANT_BULK_CASES = [
+    pytest.param(a, o, act, id=f"{a}-{o}-{act}")
+    for a in GRANT_ACTORS
+    for o in OWNERSHIP
+    for act in BULK_ACTIONS
+]
+
+
+@pytest.mark.modules
+@pytest.mark.parametrize("actor,ownership,action", GRANT_BULK_CASES)
+def test_bulk_toggle_follows_a_flag_update_grant(
+    db_session, cleanup_overrides, _remove_grants, actor, ownership, action
+):
+    start, end = BULK_ACTIONS[action]
+    user, flag = _granted_viewer_and_flag(
+        db_session, GRANT_ACTORS[actor], ownership, start
+    )
+    response = make_client_for_user(db_session, user).post(
+        "/api/v1/feature-flags/bulk-toggle",
+        json={"flag_ids": [str(flag.id)], "action": action},
+    )
+    assert response.status_code == 200, response.text
+    (result,) = response.json()["results"]
+    db_session.expire_all()
+    stored = db_session.query(FeatureFlag).filter(FeatureFlag.id == flag.id).one()
+    if GRANT_ACTORS[actor]:
+        assert result["success"] is True, f"{actor}, {ownership} owner: {result}"
+        assert stored.status == end
+    else:
+        assert result["success"] is False, result
+        assert stored.status == start
+
+
+GRANT_ROLLOUT_CASES = [
+    pytest.param(a, o, r, id=f"{a}-{o}-{r}")
+    for a in GRANT_ACTORS
+    for o in OWNERSHIP
+    for r in ROLLOUT_ROUTES
+]
+
+
+@pytest.mark.modules
+@pytest.mark.parametrize("actor,ownership,route", GRANT_ROLLOUT_CASES)
+def test_rollout_schedule_changes_follow_a_flag_update_grant(
+    db_session, cleanup_overrides, _remove_grants, actor, ownership, route
+):
+    user, flag = _granted_viewer_and_flag(
+        db_session, GRANT_ACTORS[actor], ownership, FeatureFlagStatus.INACTIVE
+    )
+    response, _ = _rollout_request(db_session, user, flag, route)
+    want = ROLLOUT_ROUTES[route][4] if GRANT_ACTORS[actor] else 403
+    assert response.status_code == want, (
+        f"{actor} {route} on a flag owned by {ownership}: want {want}, "
+        f"got {response.status_code}: {response.text}"
+    )

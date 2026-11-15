@@ -9,17 +9,48 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
-import { VariantResult } from '@/types/results';
-import { isFiniteNumber } from '@/components/results/shared/resultFormat';
+import { MetricAnalysis, MetricResult, VariantResult } from '@/types/results';
+import {
+  capitalised,
+  formatAmount,
+  isFiniteNumber,
+  meanLabelForType,
+} from '@/components/results/shared/resultFormat';
 
 interface ConversionChartProps {
   variants: VariantResult[];
+  /**
+   * How the metric was analysed (`analysedAsMean` on the metric): 'mean'
+   * plots each variant's value per user as a plain amount, 'proportion' (the
+   * default) its rate as a percentage.
+   */
+  analysis?: MetricAnalysis;
+  /**
+   * The metric's type, which names a mean: "Revenue per user", "Events per
+   * user", "Duration per user" or "Value per user".
+   */
+  metricType?: MetricResult['metric_type'];
+}
+
+/** What the chart says before the first value. */
+function emptyText(mean: boolean, metricType?: string): string {
+  if (!mean) return 'No conversions yet';
+  if (metricType === 'revenue') return 'No revenue yet';
+  if (metricType === 'count') return 'No events yet';
+  return 'No values yet';
 }
 
 const CONTROL_COLOR = '#3b82f6'; // blue-500
 const VARIANT_COLORS = ['#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
-export function ConversionChart({ variants }: ConversionChartProps) {
+export function ConversionChart({
+  variants,
+  analysis = 'proportion',
+  metricType,
+}: ConversionChartProps) {
+  const mean = analysis === 'mean';
+  const meanLabel = capitalised(meanLabelForType(metricType ?? ''));
+
   if (!variants.length) {
     return (
       <div className="flex items-center justify-center h-48 text-slate-500">
@@ -36,7 +67,7 @@ export function ConversionChart({ variants }: ConversionChartProps) {
         className="flex items-center justify-center h-48 text-slate-500"
         data-testid="conversion-chart-empty"
       >
-        No conversions yet
+        {emptyText(mean, metricType)}
       </div>
     );
   }
@@ -62,9 +93,18 @@ export function ConversionChart({ variants }: ConversionChartProps) {
         >
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="name" />
-          <YAxis tickFormatter={(v: number) => `${(v * 100).toFixed(1)}%`} />
+          {mean ? (
+            // A mean is an amount per user: plain numbers, no "%" and no currency.
+            <YAxis tickFormatter={(v: number) => formatAmount(v)} />
+          ) : (
+            <YAxis tickFormatter={(v: number) => `${(v * 100).toFixed(1)}%`} />
+          )}
           <Tooltip
-            formatter={(v) => [`${((v as number) * 100).toFixed(2)}%`, 'Rate']}
+            formatter={(v) =>
+              mean
+                ? [formatAmount(v as number), meanLabel]
+                : [`${((v as number) * 100).toFixed(2)}%`, 'Rate']
+            }
           />
           <Legend />
           {chartData.map((entry) => (

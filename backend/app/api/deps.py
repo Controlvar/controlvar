@@ -25,6 +25,7 @@ from backend.app.core.security import (
     hash_api_key,
     oauth2_scheme,
 )
+from backend.app.db import request_sessions
 from backend.app.db.session import SessionLocal
 from backend.app.models.api_key import APIKey
 from backend.app.models.experiment import Experiment, ExperimentStatus
@@ -100,14 +101,21 @@ async def get_db() -> Generator[Session, None, None]:
     """
     Get database session.
 
+    The session is registered as one of the request's sessions
+    (``backend.app.db.request_sessions``) until it is closed.
+
     Yields:
         Session: Database session
     """
     try:
         db = SessionLocal()
+        request_sessions.register(db)
         yield db
     finally:
-        db.close()
+        try:
+            db.close()
+        finally:
+            request_sessions.unregister(db)
 
 
 def get_token(request: Request) -> str:
@@ -295,9 +303,40 @@ def get_current_user(
         raise _credentials_exception()
 
 
-def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
+def require_active_user(user: User) -> User:
+    """
+    Return ``user`` if the account is active; 400 "Inactive user" otherwise.
+
+    The check behind :func:`get_current_active_user`, for code that resolves
+    the user itself rather than through ``Depends``:
+    ``read_scope.get_current_reader``, ``GET /api/v1/auth/me`` and the results
+    WebSocket. Call this, never the dependency: the dependency is ``async``, so
+    calling it as a plain function returns a coroutine and checks nothing.
+    """
+    if not user.is_active:
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return user
+
+
+def require_superuser(user: User) -> User:
+    """
+    Return ``user`` if it is a superuser; 403 "Not enough permissions"
+    otherwise. The check behind :func:`get_current_superuser`.
+    """
+    if not user.is_superuser:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    return user
+
+
+async def get_current_active_user(
+    current_user: User = Depends(get_current_user),
+) -> User:
     """
     Get the current active user.
+
+    ``async`` on purpose: it only reads the user ``get_current_user`` has
+    already loaded, so it runs on the event loop and opens no connection.
+    Code that is not a ``Depends`` calls :func:`require_active_user`.
 
     Args:
         current_user (User): Current user
@@ -308,16 +347,17 @@ def get_current_active_user(current_user: User = Depends(get_current_user)) -> U
     Raises:
         HTTPException: If the user is inactive
     """
-    if not current_user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
-    return current_user
+    return require_active_user(current_user)
 
 
-def get_current_superuser(
+async def get_current_superuser(
     current_user: User = Depends(get_current_active_user),
 ) -> User:
     """
     Get the current superuser.
+
+    ``async`` for the reason :func:`get_current_active_user` is; code that is
+    not a ``Depends`` calls :func:`require_superuser`.
 
     Args:
         current_user (User): Current active user
@@ -328,16 +368,16 @@ def get_current_superuser(
     Raises:
         HTTPException: If the user is not a superuser
     """
-    if not current_user.is_superuser:
-        raise HTTPException(status_code=403, detail="Not enough permissions")
-    return current_user
+    return require_superuser(current_user)
 
 
-def get_current_superuser_or_none(
+async def get_current_superuser_or_none(
     current_user: User = Depends(get_current_active_user),
 ) -> Optional[User]:
     """
     Get current superuser or None.
+
+    ``async`` for the reason :func:`get_current_active_user` is.
 
     Args:
         current_user: Current authenticated user
@@ -383,6 +423,64 @@ def get_experiment_read_access(
         )
 
     return experiment
+
+
+async def require_experiment_read(
+    current_user: User = Depends(get_current_active_user),
+) -> User:
+    """
+    Admit a caller who may read experiments, by the rule of
+    ``GET /api/v1/experiments/{id}``: a superuser, or a role, custom role or
+    grant holding READ on experiments.
+
+    A route dependency, so it runs before the handler: before the experiment
+    is looked up, the request body is validated or a cached answer is read.
+    ``get_experiment_read_access`` never reads its experiment argument, so
+    None is passed.
+
+    Raises:
+        HTTPException 403: If the caller does not hold READ on experiments
+    """
+    get_experiment_read_access(None, current_user)
+    return current_user
+
+
+async def require_experiment_list(
+    current_user: User = Depends(get_current_active_user),
+) -> User:
+    """
+    Admit a caller who may list experiments, as ``GET /api/v1/experiments/``
+    does: a superuser, or a role, custom role or grant holding LIST on
+    experiments.
+
+    Raises:
+        HTTPException 403: If the caller does not hold LIST on experiments
+    """
+    if not check_permission(current_user, ResourceType.EXPERIMENT, Action.LIST):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=get_permission_error_message(ResourceType.EXPERIMENT, Action.LIST),
+        )
+    return current_user
+
+
+async def require_feature_flag_list(
+    current_user: User = Depends(get_current_active_user),
+) -> User:
+    """
+    Admit a caller who may list feature flags, as ``GET /api/v1/feature-flags/``
+    does: a superuser, or a role, custom role or grant holding LIST on feature
+    flags.
+
+    Raises:
+        HTTPException 403: If the caller does not hold LIST on feature flags
+    """
+    if not check_permission(current_user, ResourceType.FEATURE_FLAG, Action.LIST):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=get_permission_error_message(ResourceType.FEATURE_FLAG, Action.LIST),
+        )
+    return current_user
 
 
 def get_experiment_change_access(

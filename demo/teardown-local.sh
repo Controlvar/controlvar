@@ -125,7 +125,6 @@ fi
 log "Cleaning up demo artifacts..."
 rm -rf "$DEMO_DIR/.pids"
 rm -rf "$DEMO_DIR/.logs"
-rm -f  "$DEMO_DIR/.demo_api_key"
 rm -f  "$DEMO_DIR/.demo_api_key_aws"
 ok "Cleanup complete."
 

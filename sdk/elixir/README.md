@@ -87,15 +87,22 @@ Controlvar.stop(client)
 | `clear_cache(client)` | `:ok` |
 | `stop(client)` | `:ok` (waits for in-flight track requests) |
 
-Error reasons: `{:auth_error, 401}`, `{:api_error, status, body}` (404 = an experiment unknown or not
-ACTIVE or an unknown flag key, 422 = validation, 429 = rate limited), `{:network_error, reason}`,
-`{:malformed_response, body}`.
+Error reasons: `{:auth_error, 401}`, `{:api_error, status, body}` (404 = an unknown experiment or
+flag key, or a draft experiment with no control variant; 422 = validation; 429 = rate limited),
+`{:network_error, reason}`, `{:malformed_response, body}`. An experiment that is not ACTIVE is not
+an error: it answers its control variant.
 
 **Track fan-out.** With `:experiment_key` and/or `:feature_flag_key` the SDK sends one
 `POST /api/v1/tracking/track`. Without a key it sends one `POST /api/v1/tracking/batch` with one
 entry per experiment the user was assigned to plus one per flag evaluated for the user through this
 client (from the cache). If nothing is cached, nothing is sent. `event_type` defaults to the event
 name; `properties` is sent as `metadata`.
+
+This SDK reads only the variant from an answer: an `assigned: false` answer (a user the
+experiment did not enrol, or an experiment that is not ACTIVE) is cached and returned as the
+control variant, and an event tracked without a key after the user's cache entries have expired
+(`:cache_ttl`, 300 seconds by default) is not sent, so pass `:experiment_key` on a conversion that
+can come later.
 
 ## Backend endpoints used
 
@@ -104,7 +111,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
 | `evaluate_flag`, `feature_enabled?` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
-| `get_assignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when the experiment is not ACTIVE |
+| `get_assignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp}` | ignored |
 | `track` without keys, `track_batch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | `{success_count, failure_count, errors}` |
 

@@ -14,6 +14,8 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.query_params import MAX_OFFSET, describe_as_int64
 from backend.app.api.v1.endpoints.users import (
     OWN_DEACTIVATION_REFUSED,
     OWN_ROLE_REFUSED,
@@ -44,7 +46,7 @@ from backend.app.services.audit_service import (
     role_value,
 )
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 
 #: The columns ``search`` matches, named one by one. Never build this list from
@@ -62,7 +64,7 @@ USER_SEARCH_COLUMNS = (
 async def list_users(
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_superuser),
-    skip: int = Query(0, ge=0),
+    skip: int = Query(0, ge=0, le=MAX_OFFSET, json_schema_extra=describe_as_int64),
     limit: int = Query(100, ge=1, le=100),
     search: Optional[str] = Query(
         None,

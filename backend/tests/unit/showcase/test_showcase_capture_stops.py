@@ -245,7 +245,9 @@ def test_capture_video_drops_the_frames_when_gate_6_refuses(tmp_path, monkeypatc
     monkeypatch.setattr(run, "_api", lambda *a, **k: {"access_token": "x" * 40})
     monkeypatch.setattr(run, "seed_counts", lambda *a: board.seed_counts.model_dump())
 
-    def record(board, stack, options, token, frames_dir, gates_, log, work, pacing):
+    def record(
+        board, stack, options, token, frames_dir, gates_, log, work, pacing, **setup
+    ):
         (frames_dir / "raw-000001.jpg").write_bytes(b"a kept value, drawn")
         raise director.CaptureFailed(
             "gate 6", "scene dashboard beat 3: a kept value is drawn; recording dropped"

@@ -141,7 +141,9 @@ defmodule Controlvar.Client do
 
   Returns `{:ok, %Assignment{experiment_key, variant_id, variant_name, is_control, configuration}}`,
   or `{:error, reason}` on a network/HTTP failure (including
-  `{:api_error, 404, _}` when the experiment is not ACTIVE). A cached
+  `{:api_error, 404, _}` when no experiment has the key or a draft has no
+  control variant). An experiment that is not ACTIVE answers `{:ok, _}` with
+  its control variant. A cached
   assignment, when present, is returned instead of calling the server.
   Failures are never cached.
   """

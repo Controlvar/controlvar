@@ -209,8 +209,9 @@ when (assignment.variantName) {
 
 Successful assignments are cached per user + experiment for `cacheTtlMs` (the second call makes
 no request) and persisted to the offline store. On failure the offline value is returned if one
-exists; otherwise `ServerException` (404 when the experiment is not ACTIVE, 401 bad key, 429
-rate limited) or `NetworkException` is thrown. Failures are never cached.
+exists; otherwise `ServerException` (404 when no experiment has the key, or for a draft with no
+control variant; 401 bad key; 429 rate limited) or `NetworkException` is thrown. Failures are
+never cached.
 
 ---
 
@@ -247,6 +248,12 @@ per flag evaluated for the user (from the in-memory cache). If nothing is cached
 sent. This is what makes a single `track("purchase")` count as a conversion for every experiment
 the user is in. Conversions are matched to metrics by **event name**.
 
+This SDK reads only the variant from an answer: an `assigned: false` answer (a user the
+experiment did not enrol, or an experiment that is not ACTIVE) is cached and returned as the
+control variant, and an event tracked without a key after the user's cache entries have expired
+(`cacheTtlMs`, 5 minutes by default) is not sent, so pass `experimentKey` on a conversion that
+can come later.
+
 ### `suspend fun trackBatch(events: List<TrackEvent>)`
 
 Sends `POST /api/v1/tracking/batch` with at most 100 events per request (longer lists are
@@ -278,7 +285,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
 | `evaluateFlag` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
-| `getAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when the experiment is not ACTIVE |
+| `getAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
 | `track` without keys, `trackBatch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored |
 
@@ -297,7 +304,7 @@ fails and no offline value exists; `track`/`trackBatch` never throw.
 | Class | When |
 |-------|------|
 | `ExperimentationException.NetworkException(message, cause)` | OkHttp IO failure or timeout |
-| `ExperimentationException.ServerException(statusCode, message)` | Non-2xx response: 401 bad key, 404 unknown/not ACTIVE (assignment), 422 invalid event, 429 rate limited; `message` carries the API's `detail` |
+| `ExperimentationException.ServerException(statusCode, message)` | Non-2xx response: 401 bad key, 404 on an assignment (no experiment has the key, or a draft with no control variant), 422 invalid event, 429 rate limited; `message` carries the API's `detail` |
 | `ExperimentationException.FlagNotFoundException(flagKey)` | `evaluateFlag` got a 404 and nothing is stored offline |
 | `ExperimentationException.InvalidConfigException(message)` | Reserved for configuration errors |
 

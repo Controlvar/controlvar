@@ -8,7 +8,8 @@ endpoints are under `/api/v1/safety`.
 
 ## What Safety Monitoring Does
 
-The safety monitor runs every 5 minutes by default (`SAFETY_CHECK_INTERVAL_MINUTES`). For every
+The safety monitor runs every 5 minutes by default (`SAFETY_CHECK_INTERVAL_MINUTES`). A rollback
+reaches clients as any change to the flag does: see [Turning a Flag Off](kill-switch.md). For every
 `ACTIVE` flag, whatever its `rollout_percentage` (a flag at 0% still serves the users its targeting
 rules match), it:
 
@@ -31,12 +32,15 @@ You can run the same check on demand with `GET /api/v1/safety/feature-flags/{fla
 A flag's error metrics, and so automatic rollback, count two kinds of error: flag evaluations that
 fail on the server, and error reports sent to `POST /api/v1/tracking/errors` or `/errors/batch` with
 a server-side key, an API key with the `sdk:ruleset` scope whose owner can change feature flags
-(ADMIN, DEVELOPER or a superuser). Error reports sent with any other key, such as the key in a
+(ADMIN, DEVELOPER, a superuser, or in the full profile anyone whose custom role or direct grant
+gives `feature_flag (update)`). Error reports sent with any other key, such as the key in a
 browser or mobile app, are stored and counted separately in the check
 (`details.uncounted_error_count`), but do not count toward the error rate or a rollback. The same
-goes for an `sdk:ruleset` key whose owner has since lost the role. To have app errors count, send
-them to your server and forward them from there with a server-side key; see
-[Reporting client-side errors](create.md#reporting-client-side-errors).
+goes for an `sdk:ruleset` key whose owner can no longer change feature flags. To have app errors
+count, send them to your server and forward them from there with a server-side key; see
+[Reporting client-side errors](create.md#reporting-client-side-errors). A server using the
+JavaScript or Python SDK sends one with `reportError` or `report_error`; `true` from either means
+the report was stored, not that it counts.
 
 `GET /api/v1/metrics/summary` counts errors by the same rule: its `error_rate` leaves out the
 reports that do not count, and its `uncounted_error_count` is the number of them in its period.
@@ -44,6 +48,18 @@ That `error_rate` still differs from the check's in three ways: it covers `start
 `end_date` (by default the 30 days before now), not the last 15 minutes; it divides by the
 aggregated flag evaluations (of its `period`, by default `day`), not the raw ones; and it is a
 percentage, not a fraction, which can exceed 100 when errors outnumber those evaluations.
+
+### What the error rate divides by
+
+`error_rate` divides the errors that count by every evaluation of the flag in the same 15-minute
+window, whichever API key asked for it, your app's own key included. Each
+`GET /api/v1/feature-flags/user/{user_id}` counts as one evaluation of every active flag.
+Evaluation counts that a server-side SDK reports after evaluating locally count too; see
+[Local evaluation](../sdk/local-evaluation.md#safety-monitoring-and-the-dashboard).
+
+`error_count` counts errors only, so it does not change with how often the flag is evaluated. To
+roll back on a number of errors whatever the traffic, set a `critical_threshold` on `error_count`,
+alone or beside `error_rate`.
 
 ---
 
@@ -339,7 +355,7 @@ A rollback, automatic or manual, does one of two things, depending on its target
   `rollout_percentage` becomes 0. Every user, including users matched by a targeting rule, gets
   `enabled: false` with `reason: "inactive"`, exactly as when the flag is turned off by hand (see
   [Creating Feature Flags](create.md#when-a-flag-evaluates-to-off)). The targeting rules are left
-  as written.
+  as written. For a string, number or json flag, every user then gets its off value.
 - **A rollback to 1–100% lowers only the global `rollout_percentage`.** A user who matches no
   targeting rule is bucketed by the new percentage. A user who matches a rule is bucketed by that
   rule's own `rollout_percentage` (100 unless the rule sets one), so the rollback does not change
@@ -348,7 +364,7 @@ A rollback, automatic or manual, does one of two things, depending on its target
 Either way, the flag's active rollout schedules are paused, so a later stage cannot raise the
 percentage again; they stay paused until you resume them.
 
-So the flag's default value is served to every user after a rollback to `0%`, and after a partial
+So the flag's off value is served to every user after a rollback to `0%`, and after a partial
 rollback to the users it removes, while users matched by a targeting rule keep their rule's
 percentage.
 
@@ -462,7 +478,10 @@ It prints `"status": "active"` and `"rollout_percentage": 5`.
 **Finally, resume the rollout schedule.** The rollback paused the flag's active schedule, and it
 stays paused until you resume it explicitly with `POST /api/v1/rollout-schedules/{schedule_id}/activate`
 (see [Rollout Schedules](rollouts.md#pausing-a-schedule)). The ids are in the rollback response's
-`details.paused_schedules`.
+`details.paused_schedules`. After an automatic rollback they are in the `safety_rollback` audit
+entry's `new_value.paused_schedules`. If that entry is missing, list the flag's paused schedules with
+`GET /api/v1/rollout-schedules/?feature_flag_id=$FLAG_ID&status=paused`; a schedule paused by hand is
+listed too.
 
 **Check the flag's thresholds.** A rollback does not change the flag's safety configuration: a
 flag with one of its own keeps its thresholds, and a flag without one is still checked against the

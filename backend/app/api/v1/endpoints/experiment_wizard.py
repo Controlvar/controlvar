@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.permissions import (
     Action,
     ResourceType,
@@ -42,6 +43,7 @@ from backend.app.services.experiment_wizard_service import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
+    route_class=OffLoopRoute,
     tags=["Experiment Wizard"],
     responses={
         status.HTTP_401_UNAUTHORIZED: {"description": "Authentication required"},

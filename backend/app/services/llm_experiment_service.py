@@ -79,17 +79,21 @@ class LLMExperimentService:
     def list_experiments(
         self,
         db: Session,
-        status: Optional[str] = None,
-        task_type: Optional[str] = None,
+        status: Optional[LLMExperimentStatus] = None,
+        task_type: Optional[LLMTaskType] = None,
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[List[LLMExperiment], int]:
-        """List LLM experiments with optional filters, returns (items, total)."""
+        """List LLM experiments with optional filters, returns (items, total).
+
+        The filters are members, never request text: the route turns the
+        query's text into a member, in any case, or answers 422 (#955).
+        """
         query = db.query(LLMExperiment)
-        if status:
-            query = query.filter(LLMExperiment.status == LLMExperimentStatus(status))
-        if task_type:
-            query = query.filter(LLMExperiment.task_type == LLMTaskType(task_type))
+        if status is not None:
+            query = query.filter(LLMExperiment.status == status)
+        if task_type is not None:
+            query = query.filter(LLMExperiment.task_type == task_type)
         total = query.count()
         items = (
             query.order_by(LLMExperiment.created_at.desc())

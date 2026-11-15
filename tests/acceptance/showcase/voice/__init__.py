@@ -14,8 +14,9 @@ storyboards it
    (G18), asks Polly (``polly``: the operator's ``AWS_PROFILE``, an exact
    environment, errors reported by class only) and stretches the answer to 90%
    pace once (``audio``: G9), then files it in the cache, never overwriting;
-4. measures every clip's loudness and true peak with the render's fixed gain
-   (G10) and projects each video's length from its clips against the cap.
+4. measures every clip's loudness and true peak with the gain the render will
+   give its video (``contract.voice_gain_db``: G10) and projects each video's
+   length from its clips against the cap.
 
 Exit status: 0 when every clip is in the cache and passes; 1 when a clip, a
 cache entry or a video is refused (each reason printed); 2 when the run is

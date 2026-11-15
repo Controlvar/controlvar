@@ -13,7 +13,7 @@ experiment in five steps:
 |------|--------------|
 | 1. Type | A/B Test or Multivariate |
 | 2. Details | Name, key, description, hypothesis, and the metrics (each with its own name), one of them primary |
-| 3. Variants | The variants, their traffic split (it must add up to exactly 100%), which one is the control, and optional targeting rules |
+| 3. Variants | The variants, their traffic split (it must add up to exactly 100%), which one is the control, whether to [balance the split within groups](balance-within-groups.md#in-the-dashboard), and optional targeting rules |
 | 4. Estimate | How results will be judged (the confidence level and the correction, saved with the experiment), then, optionally, the minimum detectable effect (saved with the experiment), how many users each variant needs and roughly how many days that takes |
 | 5. Review | Everything as it will be sent; **Create Experiment** creates it as a draft |
 
@@ -32,6 +32,11 @@ experiment in five steps:
   experiment as `confidence_level` and `correction_method`, and cannot be changed once
   it leaves draft. The single-page form has them in a collapsed **Analysis settings**
   section. The Review step shows them in its **Analysis** row.
+- Below them, **Also test the primary metric sequentially (beta)** turns on
+  [sequential testing](../api/sequential-testing.md#turning-it-on) for the new experiment;
+  it is off by default. Like those two, it cannot be changed once the experiment leaves
+  draft. The Review step's **Analysis** row then ends **Sequential testing
+  (beta) on**, as does the single-page form's **Analysis settings** summary.
 - The rest of the step is the estimate. Its **minimum detectable effect** is saved with
   the experiment, as the primary metric's `expected_effect` (10% is saved as `0.1`), and
   the results page's **Planned sample** plans the sample for it; leave it blank and the
@@ -41,14 +46,19 @@ experiment in five steps:
   Review step's **Sample size** row says what is saved, and the single-page form shows a
   saved effect read-only under the metrics.
 - The estimate calls the sample-size endpoint shown [below](#sample-size-guidance) at a significance of
-  1 − the confidence level, treats the minimum detectable effect as a *relative*
-  change (5% of a 12% baseline is 12.6%, not 17%), and assumes users are split evenly
-  between the variants. It makes no correction for comparing several variants with
-  the control, even when one is chosen above, so with three or more variants the
-  experiment needs more users than it says; the Power Calculator applies a Bonferroni
-  correction, so its number is higher.
-- Only ADMIN and DEVELOPER users (and superusers) can create experiments; anyone else
-  sees a note saying so instead of the form.
+  1 − the confidence level and with the correction chosen above, treats the minimum
+  detectable effect as a *relative* change (5% of a 12% baseline is 12.6%, not 17%), and
+  assumes users are split evenly between the variants. With three or more variants and
+  Bonferroni or Benjamini-Hochberg, each comparison with the control is planned at that
+  significance ÷ (variants − 1), as the results page's Sample Size tab plans it, and the
+  estimate says so under its number. With None it makes no correction, the same as the
+  results, and the Power Calculator, which applies a Bonferroni correction, gives a higher
+  number.
+- With **Balance the split within groups** on, the Review step's **Variants** row ends **Balance:
+  within** what you chose, such as `Platform (ios, android, web)`, or **Balance: off**.
+- Only users who may create experiments see the form: ADMIN and DEVELOPER users,
+  superusers, and in the full profile anyone whose custom role or direct grant gives
+  `experiment (create)`. Anyone else sees a note saying so instead.
 - If **Create Experiment** fails, you stay where you are with every answer kept, in
   either view. A key another experiment already has is named, with **Edit details** to
   change it. If your session has ended, sign in again in another tab, then press
@@ -297,6 +307,11 @@ unknown operator or a blank attribute. The error names the condition, for exampl
 `targeting_rules: Value error, groups[0].conditions[0].operator: unknown operator`,
 and no experiment is created.
 
+So does a draft whose metric names repeat, such as a guardrail metric that is also the
+primary metric: `errors` is `["metrics: duplicate metric name; each name may appear once
+per experiment (first seen at metrics[0], repeated at metrics[1])"]`, and no experiment is
+created.
+
 The experiment is an ordinary one. An `ab` draft gets two variants, `Control` and
 `Variant A`, at 50% each; its primary metric counts `checkout_completed`, and carries the
 draft's `mde` as its `expected_effect`, which the results page plans the sample for:
@@ -338,6 +353,12 @@ A `multivariate` draft gets three variants (33/33/34), and a `feature_flag_rollo
 gets a held-back control with `{"enabled": false}` and a treatment with `{"enabled": true}`,
 at 50% each. Review the experiment and start it when you're ready.
 
+The wizard does not set `balance_within`. To
+[balance the split within groups](balance-within-groups.md#in-the-dashboard), turn on **Balance
+the split within groups** in the draft's **Edit variants and metrics**, or send it with
+`PUT /api/v1/experiments/$EXP_ID`, before you start the experiment; a multivariate draft's
+33/33/34 split must first become one whose shares are multiples of 5, such as 40/30/30.
+
 ---
 
 ## Sample Size Guidance
@@ -359,8 +380,31 @@ curl -s -G localhost:8000/api/v1/experiments/analysis/sample-size \
 
 For a 12% baseline and a 5% relative change it needs `47036` users per variant, `94072` in
 all, at 80% power and 5% significance (two-sided). It also takes `statistical_power`,
-`significance_level`, `is_one_sided`, `variant_count`, and `daily_traffic` with
-`traffic_allocation` for a duration estimate.
+`significance_level`, `is_one_sided`, `variant_count` (2 to 100), `correction_method`, and
+`daily_traffic` (at most 1,000,000,000,000) with `traffic_allocation` for a duration estimate.
+
+With three or more variants, send the experiment's correction as `correction_method`: `none`
+(the default), `bonferroni` or `benjamini_hochberg`, the values an experiment's
+`correction_method` takes. With either correction, each of the `variant_count − 1`
+comparisons with the control is planned at `significance_level ÷ (variant_count − 1)`, as the
+results page's Sample Size tab does; Benjamini-Hochberg is planned at the same level as
+Bonferroni. Three variants at 5%:
+
+```{.bash exec}
+curl -s -G localhost:8000/api/v1/experiments/analysis/sample-size \
+  -H "Authorization: Bearer $TOKEN" \
+  --data-urlencode "baseline_rate=0.12" \
+  --data-urlencode "minimum_detectable_effect=0.05" \
+  --data-urlencode "variant_count=3" \
+  --data-urlencode "correction_method=benjamini_hochberg" | jq '{samples_per_variant, comparisons, alpha}'
+```
+<!-- expect: "samples_per_variant": 56961 -->
+<!-- expect: "comparisons": 2 -->
+<!-- expect: "alpha": 0.025 -->
+
+That is `56961` users per variant, where no correction needs `47036`. The answer also carries
+`correction_method`, `comparisons` and `alpha`, the significance each comparison is planned
+at; `significance_level` is still the `0.05` you sent.
 
 The calculation is the standard one for two proportions (Fleiss), the same one the results
 page's Sample Size tab uses: the variance is pooled under the null hypothesis and unpooled
@@ -372,8 +416,8 @@ n = [z_α/2 × √(2p̄(1−p̄)) + z_β × √(p₁(1−p₁) + p₂(1−p₂))
 
 Where `p₁` = baseline rate, `p₂` = baseline rate × (1 + MDE), `p̄` = (p₁ + p₂) / 2,
 `z_α/2` = 1.96 (two-tailed, α=0.05; a one-sided test uses `z_α` = 1.645), `z_β` = 0.842
-(80% power), and `n` is rounded up. It is per variant, with no correction for comparing more
-than two variants; the total is `n` times the number of variants. A baseline that the effect
+(80% power), and `n` is rounded up. It is per variant: with a correction, `α` is
+`significance_level ÷ (variant_count − 1)`. The total is `n` times the number of variants. A baseline that the effect
 would raise to 100% or more is refused with a 422.
 
 ---

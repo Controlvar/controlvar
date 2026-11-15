@@ -7,8 +7,12 @@
 import fs from 'fs';
 import path from 'path';
 import React from 'react';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import UsersPage from '@/pages/admin/users';
+// The edit dialog makes `#__next` inert and portals beside it, so the page is
+// mounted the way Next mounts it (#369).
+import { APP_ROOT_ID, renderInAppRoot as render } from '@/tests/helpers/renderInAppRoot';
+import { watchLiveRegions } from '@/tests/helpers/watchLiveRegions';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { FORBIDDEN_MESSAGE, NOT_FOUND_MESSAGE } from '@/components/admin/users/EditUserModal';
 import { TOKEN_STORAGE_KEY, serverErrorMessage, unreachableMessage } from '@/services/api';
@@ -296,6 +300,18 @@ describe('/admin/users editing a user', () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('edit-user-u-2')));
     const row = screen.getByText('bob').closest('tr') as HTMLElement;
     expect(row).toHaveTextContent('Analyst');
+  });
+
+  it('the save is announced after the page behind the dialog stops being inert (#369)', async () => {
+    await renderPage();
+    await openBobAndChooseAnalyst();
+    expect(document.getElementById(APP_ROOT_ID)).toHaveAttribute('inert');
+    const watch = watchLiveRegions();
+    await save();
+    await waitFor(() => expect(screen.getByTestId('user-save-status')).toHaveTextContent('Saved changes to bob.'));
+    watch.stop();
+    expect(document.getElementById(APP_ROOT_ID)).not.toHaveAttribute('inert');
+    expect(watch.changes).toEqual([{ text: 'Saved changes to bob.', underInert: false }]);
   });
 
   it.each<[string, FakeResponse | 'network', () => string]>([

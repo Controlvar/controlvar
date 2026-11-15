@@ -27,9 +27,14 @@ REPO_ROOT = HERE.parents[3]
 
 #: test node id count per module, as ``pytest --collect-only -q`` lists them.
 EXPECTED = {
+    "test_balanced_groups_estimate_rates.py": 8,
     "test_bayesian_stop_winner.py": 13,
     "test_collection_count.py": 2,
+    "test_false_winner_unequal_split.py": 3,
+    "test_golden_aa_family_wise_rate.py": 2,
     "test_golden_aa_significance_rate.py": 2,
+    "test_golden_hte_false_positive_rate.py": 18,
+    "test_golden_interval_coverage.py": 4,
     "test_golden_planted_lift.py": 3,
     "test_golden_srm.py": 4,
     "test_multiple_comparison_reference.py": 21,

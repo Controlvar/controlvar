@@ -25,9 +25,11 @@ must be a parameter of the enclosing function and never rebound there, or --
 ``rule.id`` is allowed only where ``rule`` is bound, in the enclosing
 function, solely as the loop variable of ``for rule in <x>.rules``.
 Only the once-helpers may take a ``reason`` parameter, and every call of them
-is checked: ``EVALUATION_NOTES.first(owner, reason)`` and
-``_note_rule_problem(operator, reason)`` take an allowed owner and a
-string-literal reason. The callers that pass ``owner`` pass an identifier they
+is checked: ``EVALUATION_NOTES.first(owner, reason)``,
+``_note_rule_problem(operator, reason)`` and ``check_time_window``'s
+``note(operator, reason)`` (``_note_rule_problem`` unless the write path
+passes one that logs nothing) take an allowed owner and a string-literal
+reason. The callers that pass ``owner`` pass an identifier they
 own (``flag:<key>``, ``experiment:<id>``).
 """
 
@@ -60,8 +62,9 @@ ALLOWED_NAMES = frozenset({"operator", "owner", "where", "reason", "rule_id"})
 ALLOWED_ATTRIBUTES = frozenset({("rule", "id"), ("OperatorType", "*")})
 
 #: Calls whose second positional argument is a once-key reason and must be a
-#: string literal, and whose first must be an allowed owner.
-ONCE_KEY_CALLS = frozenset({"first", "_note_rule_problem"})
+#: string literal, and whose first must be an allowed owner. ``note`` is
+#: ``check_time_window``'s reporter, ``_note_rule_problem`` by default (#1204).
+ONCE_KEY_CALLS = frozenset({"first", "_note_rule_problem", "note"})
 
 
 def _attribute_chain(node: ast.AST) -> Tuple[str, ...]:

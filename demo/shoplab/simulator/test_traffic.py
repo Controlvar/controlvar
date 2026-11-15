@@ -6,12 +6,17 @@ import json
 import random
 import sys
 import urllib.error
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+# The repository root, for the seed script the history test reads.
+REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.append(str(REPO_ROOT))
 
 import traffic  # noqa: E402
 
@@ -144,22 +149,44 @@ def test_conditional_funnel_rates_match_spec():
 
 def test_assignment_and_flag_calls_carry_context():
     client, _, plans = run_visitors(20)
-    assert len(client.assign_calls) == 20 * len(traffic.EXPERIMENT_KEYS)
+    reached_checkout = sum(p.outcomes["begin_checkout"] for p in plans)
+    # Three experiments per visitor, and the checkout flow for those who began checkout.
+    assert len(client.assign_calls) == 20 * 3 + reached_checkout
     assert len(client.evaluate_calls) == 20 * len(traffic.FLAG_KEYS)
     key, user_id, context = client.assign_calls[0]
     assert key in traffic.EXPERIMENT_KEYS
     assert set(context) == {"device", "country", "returning", "persona"}
     assert context["persona"] in {"casual", "shopper", "power"}
     assert plans[0].user_id == user_id
-    # sticky: the same user id was used for all four assign calls and both flag evaluations
-    assert {c[1] for c in client.assign_calls[:4]} == {user_id}
+    # sticky: the same user id was used for the visitor's assign calls and both flag evaluations
+    first = len(plans[0].assignments)
+    assert {c[1] for c in client.assign_calls[:first]} == {user_id}
     assert {c[1] for c in client.evaluate_calls[:2]} == {user_id}
+
+
+@pytest.mark.regression
+def test_each_experiment_is_assigned_where_the_storefront_assigns_it():
+    """Every visitor was assigned to all four experiments before the walk, so the
+    checkout flow counted visitors who never reached checkout. It is now assigned only
+    to those who begin checkout, as the checkout page does; the other three as the
+    visit starts, in the order the walk reaches them."""
+    client, _, plans = run_visitors(300, seed=3)
+    start = [traffic.HERO_KEY, traffic.PLP_KEY, traffic.PDP_KEY]
+    calls: dict[str, list[str]] = {}
+    for key, user_id, _ in client.assign_calls:
+        calls.setdefault(user_id, []).append(key)
+    for plan in plans:
+        expected = start + ([traffic.CHECKOUT_KEY] if plan.outcomes["begin_checkout"] else [])
+        assert calls[plan.user_id] == expected
+        assert list(plan.assignments) == expected
+    reached = sum(p.outcomes["begin_checkout"] for p in plans)
+    assert 0 < reached < len(plans) / 2
 
 
 def test_batch_payloads_have_the_right_keys():
     client, _, plans = run_visitors(300, seed=3)
     assert client.batches, "no batches sent"
-    required = {"event_type", "event_name", "user_id", "metadata", "timestamp"}
+    required = {"event_type", "event_name", "user_id", "metadata"}
     metadata_keys = {
         "page_view": {"page"},
         "hero_cta_click": {"variant", "media"},
@@ -181,7 +208,6 @@ def test_batch_payloads_have_the_right_keys():
             assert (e["event_name"] in valued) == ("value" in e), e
             if "value" in e:
                 assert e["value"] > 0
-            datetime.fromisoformat(e["timestamp"])  # parseable
             if "feature_flag_key" in e:
                 assert e["feature_flag_key"] == traffic.NEW_SEARCH_FLAG
                 assert e["event_name"] in ("search", "product_click")
@@ -192,14 +218,21 @@ def test_batch_payloads_have_the_right_keys():
             seen.add(e["event_name"])
     assert seen == set(metadata_keys), f"missing event types: {set(metadata_keys) - seen}"
 
-    # Fan-out: every experiment-attributed event is sent once per assigned experiment.
+    # Fan-out: every experiment-attributed event is sent once per experiment assigned so
+    # far, the copies one after another: the checkout flow only from the checkout page on.
     for plan in plans:
-        by_name = {}
+        copies = []
         for e in plan.events:
-            if "experiment_key" in e:
-                by_name.setdefault((e["event_name"], e["timestamp"]), set()).add(e["experiment_key"])
-        for keys in by_name.values():
-            assert keys == set(traffic.EXPERIMENT_KEYS)
+            if "experiment_key" not in e:
+                continue
+            body = {k: v for k, v in e.items() if k != "experiment_key"}
+            if not copies or copies[-1][0] != body or e["experiment_key"] in copies[-1][1]:
+                copies.append((body, []))
+            copies[-1][1].append(e["experiment_key"])
+        assert copies
+        for body, keys in copies:
+            at_checkout = body["event_name"] in ("begin_checkout", "purchase") or body["metadata"].get("page") == "checkout"
+            assert keys == [k for k in traffic.EXPERIMENT_KEYS if at_checkout or k != traffic.CHECKOUT_KEY], body
         # A purchase always follows a begin_checkout, which follows either add_to_cart or a hero click.
         names = [e["event_name"] for e in plan.events]
         if "purchase" in names:
@@ -227,7 +260,10 @@ def test_dry_run_prints_plan_without_network():
     lines = [ln for ln in text.splitlines() if ln and not ln.startswith("#")]
     events = [json.loads(ln) for ln in lines]
     assert events and events[0]["event_name"] == "page_view"
-    assert {e["experiment_key"] for e in events if "experiment_key" in e} == set(traffic.EXPERIMENT_KEYS)
+    prefix = "# assignments="
+    assigned = json.loads(next(ln for ln in text.splitlines() if ln.startswith(prefix))[len(prefix) :])
+    assert {traffic.HERO_KEY, traffic.PLP_KEY, traffic.PDP_KEY} <= set(assigned)
+    assert {e["experiment_key"] for e in events if "experiment_key" in e} == set(assigned)
 
     # Deterministic for a given seed.
     out2 = io.StringIO()
@@ -341,3 +377,95 @@ def test_api_client_request_shape_and_error_mapping(monkeypatch):
 
     with pytest.raises(ValueError):
         client.batch([{}] * 101)
+
+
+class ClockedClient(FakeClient):
+    """Notes the wall-clock time each batch is sent at, beside each event it carried."""
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.sent: list[tuple[datetime, dict]] = []
+
+    def batch(self, events: list[dict]) -> dict:
+        now = datetime.now(timezone.utc)
+        self.sent.extend((now, e) for e in events)
+        return super().batch(events)
+
+
+@pytest.mark.regression
+def test_no_event_is_dated_after_it_is_sent():
+    """The simulator dated each event 2-20 s after the one before, from the moment the visit
+    was planned, and sent them all at once, so they arrived dated up to minutes ahead (the
+    server keeps a client timestamp). It now sends none: the server dates each on receipt."""
+    rng = random.Random(4)
+    client, stats = ClockedClient(seed=5), traffic.Stats()
+    for _ in range(300):
+        traffic.run_visitor(client, rng, stats)
+    assert any(e["event_name"] == "purchase" for _, e in client.sent), "expected whole funnels"
+    ahead = [
+        (sent.isoformat(), e)
+        for sent, e in client.sent
+        if "timestamp" in e and datetime.fromisoformat(e["timestamp"]) > sent
+    ]
+    assert ahead == []
+    assert not [e for _, e in client.sent if "timestamp" in e]
+
+
+#: The checkout experiment's purchase rate per assigned user, history against live
+#: traffic: at most this far apart, per variant.
+HISTORY_TOL = 0.015
+#: Sample sizes. With 200,000 simulated visitors (about 13,000 reach checkout per arm)
+#: the gap stayed under 0.9 points on each of seeds 1-30; with 60,000, 3 of the 30 seeds
+#: went past 1.5 points from noise alone.
+LIVE_VISITORS = 200_000
+HISTORY_USERS = 40_000
+
+
+def history_checkout_rates(users: int) -> dict[str, float]:
+    """What the seed writes for the checkout experiment: purchases per assigned user,
+    drawn by its own history generator (backend/scripts/seed_shoplab.py) with the seed
+    it uses. No database: the generator only builds the event objects."""
+    from backend.scripts import seed_shoplab
+
+    spec = next(e for e in seed_shoplab.EXPERIMENTS if e["key"] == traffic.CHECKOUT_KEY)
+    variants = sorted(
+        (SimpleNamespace(name=v["name"], traffic_allocation=v["traffic_allocation"]) for v in spec["variants"]),
+        key=lambda v: v.name,
+    )
+    rng = random.Random(f"shoplab-history:{traffic.CHECKOUT_KEY}")
+    exposed_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    assigned: dict[str, int] = {}
+    bought: dict[str, int] = {}
+    for i in range(users):
+        variant = seed_shoplab._pick_variant(rng, variants)
+        events = seed_shoplab._funnel_events(traffic.CHECKOUT_KEY, variant.name, f"u{i}", None, None, exposed_at, rng)
+        assigned[variant.name] = assigned.get(variant.name, 0) + 1
+        bought[variant.name] = bought.get(variant.name, 0) + any(e.event_type == "purchase" for e in events)
+    return {name: bought[name] / n for name, n in assigned.items()}
+
+
+def live_checkout_rates(visitors: int, seed: int) -> dict[str, float]:
+    """What the simulator sends for the checkout experiment: visitors whose purchase
+    carries its key, per visitor assigned to it (Stats.rate, the server's count)."""
+    rng = random.Random(seed)
+    stats = traffic.Stats()
+    for _ in range(visitors):
+        persona = traffic.pick_persona(rng)
+        user_id = traffic.new_user_id(rng)
+        attributes = traffic.make_attributes(rng, persona)
+        variants, flags = traffic.offline_assignments(rng)
+        stats.record(traffic.simulate_visitor(rng, user_id, persona, attributes, variants.__getitem__, flags))
+    return {variant: stats.rate(traffic.CHECKOUT_KEY, variant) for variant in traffic.CHECKOUT_PURCHASE_RATE}
+
+
+@pytest.mark.regression
+def test_live_checkout_converts_like_the_seeded_history():
+    """The seeded history assigns the checkout experiment to visitors who begin checkout,
+    so about 62% / 68% of its users buy. The simulator assigned every visitor, so about
+    8% / 9% of its users bought, and the results page mixed the two populations. It now
+    assigns at begin_checkout, as the storefront's checkout page does."""
+    history = history_checkout_rates(HISTORY_USERS)
+    live = live_checkout_rates(LIVE_VISITORS, seed=1)
+    assert set(history) == set(live) == set(traffic.CHECKOUT_PURCHASE_RATE)
+    gaps = {variant: round(abs(live[variant] - history[variant]), 4) for variant in history}
+    assert all(gap <= HISTORY_TOL for gap in gaps.values()), (gaps, live, history)

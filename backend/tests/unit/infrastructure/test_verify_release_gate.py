@@ -54,6 +54,18 @@ jq = args[args.index("--jq") + 1] if "--jq" in args else None
 endpoint = next(a for a in args[1:] if not a.startswith("-") and a != jq)
 url = urlsplit(endpoint)
 query = {{k: v[0] for k, v in parse_qs(url.query).items()}}
+if "/actions/workflows/" in url.path:
+    # The workflow's own runs (queued/in progress), filtered by head_sha.
+    if os.environ.get("FAKE_GH_FAIL_WORKFLOW_RUNS"):
+        print("HTTP 403: Resource not accessible", file=sys.stderr)
+        sys.exit(1)
+    wruns = json.load(open(os.environ["FAKE_GH_WORKFLOW_RUNS"]))
+    wruns = [r for r in wruns if r["head_sha"] == query.get("head_sha")]
+    body = json.dumps({{"total_count": len(wruns), "workflow_runs": wruns}})
+    out = subprocess.run(["jq", "-r", jq], input=body, text=True,
+                         capture_output=True, check=True).stdout
+    sys.stdout.write(out)
+    sys.exit(0)
 runs = json.load(open(os.environ["FAKE_GH_RUNS"]))
 name = query.get("check_name")
 if name is not None:
@@ -107,15 +119,22 @@ def gate(tmp_path):
     fake.write_text(FAKE_GH.format(python=sys.executable))
     fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
 
-    def run(runs: list[dict], **extra_env: str):
+    def run(
+        runs: list[dict],
+        workflow_runs: list[dict] | None = None,
+        **extra_env: str,
+    ):
         runs_file = tmp_path / "runs.json"
         runs_file.write_text(json.dumps(runs))
+        workflow_runs_file = tmp_path / "workflow_runs.json"
+        workflow_runs_file.write_text(json.dumps(workflow_runs or []))
         log = tmp_path / "calls.log"
         log.write_text("")
         env = {
             **os.environ,
             "PATH": f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}",
             "FAKE_GH_RUNS": str(runs_file),
+            "FAKE_GH_WORKFLOW_RUNS": str(workflow_runs_file),
             "FAKE_GH_LOG": str(log),
             **extra_env,
         }
@@ -138,6 +157,13 @@ MISSING = (
 )
 
 
+COULD_NOT_TELL = (
+    f"{TAG} ({SHA[:7]}) has no Release Gate result, and the Release Gate "
+    "workflow runs for it could not be read, so it cannot be told whether one "
+    "is still running. Nothing was deployed; re-run this deploy in a few minutes."
+)
+
+
 def _failed(url: str) -> str:
     return (
         f"Release Gate failed on {TAG}: {url}. A failed release cannot be "
@@ -147,6 +173,59 @@ def _failed(url: str) -> str:
 
 def _running(url: str) -> str:
     return f"Release Gate is still running on {TAG}: {url}. Re-run when it finishes."
+
+
+def _workflow_run(status: str, sha: str = SHA, n: int = 7) -> dict:
+    return {
+        "status": status,
+        "head_sha": sha,
+        "html_url": f"https://github.com/{REPO}/actions/runs/{9000 + n}",
+    }
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("status", ["in_progress", "queued"])
+def test_no_summary_yet_but_the_push_run_is_working(gate, status):
+    """#1818: the summary check run appears only after the three gates finish.
+
+    While the push run is still working, the operator must be told to wait,
+    not to dispatch another Release Gate.
+    """
+    wf = _workflow_run(status)
+    code, out, calls = gate(_others(3), workflow_runs=[wf])
+    assert code == 1, out
+    assert _running(wf["html_url"]) in out
+    assert "gh workflow run" not in out
+    assert "no Release Gate result" not in out
+    # The second read asked about this commit, for this workflow.
+    wf_call = calls[-1]
+    assert any(
+        f"actions/workflows/release-gate.yml/runs?head_sha={SHA}" in a for a in wf_call
+    ), wf_call
+
+
+@pytest.mark.regression
+def test_no_summary_and_no_run_gives_the_dispatch_hint(gate):
+    """Only finished runs of other commits, or none: the hint is right."""
+    finished = _workflow_run("completed")
+    elsewhere = _workflow_run("in_progress", sha="f" * 40, n=8)
+    code, out, _ = gate(_others(3), workflow_runs=[finished, elsewhere])
+    assert code == 1, out
+    assert MISSING in out
+    assert "still running" not in out
+
+
+@pytest.mark.regression
+def test_no_summary_and_the_run_lookup_fails_still_refuses(gate):
+    """Could not tell: exit 1 (never a pass), and say so."""
+    code, out, _ = gate(
+        _others(3),
+        workflow_runs=[_workflow_run("in_progress")],
+        FAKE_GH_FAIL_WORKFLOW_RUNS="1",
+    )
+    assert code == 1, out
+    assert COULD_NOT_TELL in out
+    assert "gh workflow run" not in out
 
 
 @pytest.mark.regression

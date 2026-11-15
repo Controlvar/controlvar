@@ -10,7 +10,8 @@ What these pin, through the real routes and a real database:
 * ``targeting_rules`` is the one name for targeting; ``rules``, ``variants``,
   ``metrics`` and ``last_evaluated`` are gone from every response;
 * ``default_value`` is stored, returned and type-checked, and only ``false`` is
-  accepted (D40); evaluation is unchanged;
+  accepted (D40), for every flag; a boolean flag's evaluation is unchanged
+  (the value fields of #1497 are pinned in test_flag_values_api.py);
 * an explicit null on a NOT NULL field answers 422 (it was a 500, or a silent
   switch-off for ``is_active``);
 * ``is_active: false`` on an archived flag keeps it archived, and
@@ -53,11 +54,16 @@ READ_KEYS = {
     "rollout_percentage",
     "targeting_rules",
     "default_value",
+    "value_type",
+    "on_value",
+    "off_value",
     "tags",
     "owner_id",
     "created_at",
     "updated_at",
 }
+#: What a list item has besides (#1808).
+LIST_ITEM_KEYS = {"stale", "stale_reasons"}
 
 RULES = {
     "logical_operator": "OR",
@@ -89,6 +95,9 @@ def _snapshot(flag: FeatureFlag) -> dict:
         "rollout_percentage": flag.rollout_percentage,
         "targeting_rules": flag.targeting_rules,
         "default_value": flag.default_value,
+        "value_type": flag.value_type,
+        "on_value": flag.on_value,
+        "off_value": flag.off_value,
         "tags": flag.tags,
         "created_at": flag.created_at,
     }
@@ -234,7 +243,10 @@ def test_every_response_can_be_put_back_unchanged(
         admin_user.id if owned else None,
     )
     for name, body in surfaces:
-        assert set(body) == READ_KEYS, (name, set(body) ^ READ_KEYS)
+        # A list item also says whether the flag is stale (#1808); a request
+        # accepts those two fields and ignores them, like the read-only ones.
+        keys = READ_KEYS | LIST_ITEM_KEYS if name == "list_item" else READ_KEYS
+        assert set(body) == keys, (name, set(body) ^ keys)
         assert body["owner_id"] == (str(admin_user.id) if owned else None), name
         before = _snapshot(_row(db_session, flag.id))
 
@@ -620,7 +632,10 @@ def test_list_and_detail_report_the_stored_default_value(
 def test_evaluation_is_unchanged_an_inactive_flag_is_off(
     admin_client, db_session, make_feature_flag
 ):
-    """D40: the off-value is false exactly as before; evaluation never reads the column."""
+    """D40: a boolean flag's off-value is false exactly as before; evaluation
+    never reads the ``default_value`` column. Since #1497 the answer also
+    carries ``value`` (a boolean flag's is ``enabled``) and ``value_type``; a
+    value flag serves its ``off_value`` (test_flag_values_api.py)."""
     flag = make_feature_flag(status=FeatureFlagStatus.INACTIVE, rollout_percentage=100)
     assert _row(db_session, flag.id).default_value is False
 
@@ -632,6 +647,8 @@ def test_evaluation_is_unchanged_an_inactive_flag_is_off(
     assert response.json() == {
         "key": flag.key,
         "enabled": False,
+        "value": False,
+        "value_type": "boolean",
         "config": None,
         "reason": "inactive",
     }

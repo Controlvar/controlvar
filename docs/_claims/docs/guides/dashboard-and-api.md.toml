@@ -88,6 +88,22 @@ text = "See on the experiment page whether Bayesian analysis is on | Dashboard |
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
+text = "See on the experiment page whether sequential testing (beta) is on | Dashboard | Sequential testing"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "See on the experiment page its start and end dates | Dashboard | Running experiments"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "See on the experiment page its exclusion group | Dashboard | Mutual exclusion groups and global holdout"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "See on the experiment page whether a global holdout is active | Dashboard | Mutual exclusion groups and global holdout"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
 text = "Segments: list, create, and upload a list of user ids | Dashboard | Segments"
 by = ["mechanism:dashboard-and-api"]
 
@@ -97,6 +113,10 @@ by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
 text = "Bayesian results: chance to be best, expected loss and credible intervals | Dashboard | Bayesian analysis"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "Sequential results (beta): whether to stop, and the confidence sequence | Dashboard | Sequential testing"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
@@ -116,27 +136,35 @@ text = "Edit a draft experiment's name, description and hypothesis | Dashboard |
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Change a draft experiment's variants or metrics | API only | API endpoints"
+text = "Change a draft experiment's variants or metrics | Dashboard | API endpoints"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Schedule an experiment's start and end dates | API only | Running experiments"
+text = "Schedule a draft experiment's start and end dates | Dashboard | Running experiments"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Create or edit a rollout schedule and its stages | API only | Gradual rollouts"
+text = "Schedule a paused experiment's resume | API only | Running experiments"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Activate, pause or advance a rollout schedule | API only | Gradual rollouts"
+text = "Create or edit a rollout schedule and its stages | Dashboard | Gradual rollouts"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Delete a feature flag | API only | API endpoints"
+text = "Activate, pause, resume or cancel a rollout schedule, and advance a manual stage | Dashboard | Gradual rollouts"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Archive and unarchive a feature flag | API only | Running experiments"
+text = "Set a rollout schedule's own start and end dates, maximum percentage and minimum stage duration | Dashboard | Gradual rollouts"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "Delete a feature flag | Dashboard | Deleting a flag"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "Archive and unarchive a feature flag | Dashboard | Archived flags"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
@@ -148,11 +176,11 @@ text = "Set a bandit's weights by hand | API only | Multi-armed bandits"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Global holdouts: create, activate, and read their results (beta) | API only | Mutual exclusion groups and global holdout"
+text = "Global holdouts: create and activate; read their results (beta) | Dashboard | Mutual exclusion groups and global holdout"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Mutual exclusion groups | API only | Mutual exclusion groups and global holdout"
+text = "Mutual exclusion groups | Dashboard | Mutual exclusion groups and global holdout"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
@@ -168,17 +196,25 @@ text = "The interaction scan and the pair test (beta) | API only | Interaction d
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Download results as CSV | API only | Data export"
+text = "Download results as CSV | Dashboard | Exporting results"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "The effect size in the metric comparison table | API only | Running experiments"
+text = "The effect size in the metric comparison table | Dashboard | Running experiments"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Each variant's confidence interval on the results page | API only | Running experiments"
+text = "Each variant's confidence interval on the results page | Dashboard | Running experiments"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Bayesian priors, loss threshold and credible level | API only | Bayesian analysis"
+text = "Bayesian priors, loss threshold and credible level | Dashboard | Bayesian analysis"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "Turn on sequential testing (beta) when creating an experiment | Dashboard | Sequential testing"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "Turn sequential testing (beta) on or off for an existing draft, and set its alpha | API only | Sequential testing"
 by = ["mechanism:dashboard-and-api"]

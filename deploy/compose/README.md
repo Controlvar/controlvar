@@ -11,6 +11,7 @@ instead.
 
 From this directory:
 
+<!-- compose-upgrade: install -->
 ```bash
 ./generate-env.sh
 docker compose up -d --wait
@@ -22,6 +23,7 @@ docker compose logs api
 `AUDIT_HMAC_KEY`, readable by your user only. Give it the URL people will open
 and the first administrator's email:
 
+<!-- compose-upgrade: install-named -->
 ```bash
 PUBLIC_BASE_URL=https://controlvar.example.com \
 FIRST_SUPERUSER=you@example.com ./generate-env.sh
@@ -77,15 +79,277 @@ Compose refuses to start while a required one is unset or empty, and names it.
 | `EXPERIMENTLY_PROFILE` | `core` (the default) or `full` |
 | `AUDIT_HMAC_KEY` | needed by the `full` profile |
 | `HTTP_BIND`, `HTTP_PORT` | where the dashboard listens: `127.0.0.1` and `8080` by default |
+| `FORWARDED_ALLOW_IPS` | a TLS proxy on another machine whose `X-Forwarded-For` the API should believe; empty for a proxy on this host that connects to `127.0.0.1` (see [Users' addresses](#users-addresses)) |
 | `POSTGRES_SERVER` | an external PostgreSQL instead of the bundled one; then start only `docker compose up -d api web` |
+| `AUTH_PROVIDER` | how people sign in: `local` (the default), with accounts kept by the API, or `cognito`, with an Amazon Cognito user pool |
+| `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID`, `COGNITO_DOMAIN` | with `AUTH_PROVIDER=cognito`: the user pool, its app client, and its Hosted UI's domain name, `<prefix>.auth.<region>.amazoncognito.com`; empty by default |
+| `AWS_REGION` | the user pool's region: `us-east-1` by default |
+| `WAREHOUSE_CREDENTIALS_KEYS` | turns on warehouse analysis in the `full` profile: Fernet keys, comma-separated, newest first, that encrypt the warehouse credentials the API stores; while it is empty, storing or using a credential answers `503 credentials_unavailable` |
+| `ANTHROPIC_API_KEY` | turns on Anthropic variants in LLM experiments and also Claude calls in `POST /api/v1/ai/design` and `POST /api/v1/ai/interpret/{experiment_id}` (limited to 10 requests a minute); without it those two routes answer from built-in templates |
+| `OPENAI_API_KEY` | turns on OpenAI variants in LLM experiments |
+| `GEMINI_API_KEY` | turns on Gemini (`google`) variants in LLM experiments |
 
 Run an external PostgreSQL server with its `TimeZone` set to UTC.
+
+The last four settings are optional. A key set to an empty value is the same
+as a key that is not set, and both compose files pass these keys empty by
+default. Put each key in the `.env` file next to the compose file: a key
+exported in another terminal does not reach the container, and one exported in
+the terminal that runs `docker compose up` does.
 
 The image lines name the images of this file's own release,
 `ghcr.io/controlvar/controlvar:<profile>-X.Y.Z` and
 `ghcr.io/controlvar/controlvar-web:<profile>-X.Y.Z`.
 [Releases, images and verification](https://docs.controlvar.com/self-hosting/releases/)
 shows how to check what you pulled.
+
+## Users' addresses
+
+The API counts its rate limits per user address and writes that address on
+its access lines. Behind your TLS reverse proxy it reads the address from the
+`X-Forwarded-For` header, so set your proxy to send it; in nginx that is
+`proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`.
+
+The API believes that header from the dashboard container and from a TLS
+proxy on this host that connects to `127.0.0.1`, as above, and from the
+proxies in `FORWARDED_ALLOW_IPS`: IP addresses and networks, separated by
+commas. Leave it empty for a proxy on this host that connects to `127.0.0.1`.
+For a proxy on another machine, put its address in `.env`, such as
+`FORWARDED_ALLOW_IPS=192.0.2.10` for a proxy at `192.0.2.10`, and run
+`docker compose up -d`. A proxy in a container on a Docker network of its own
+connects from that network: give the network's subnet, which
+`docker network inspect` shows. Behind a TLS proxy, keep `HTTP_BIND` at
+`127.0.0.1`, so that the proxy is the only way in.
+
+Check it once people have used the dashboard:
+
+<!-- compose-upgrade: addresses -->
+```bash
+docker compose logs api 2>&1 | grep '"uvicorn.access"' | grep ' /api/' \
+  | sed -E 's/.*"event": "([^ ]*):[0-9]+ - .*/\1/' | sort | uniq -c | sort -rn | head
+```
+
+Each line is an address and the number of API requests from it. Your users'
+addresses mean it works. If every request comes from one private address,
+such as `172.18.0.1`, the API sees a proxy instead of your users: either your
+TLS proxy sends no `X-Forwarded-For`, or it is on another machine (or connects
+to this host's network address rather than `127.0.0.1`) and
+`FORWARDED_ALLOW_IPS` does not list it. `docker compose logs web` ends each
+line with the `X-Forwarded-For` the dashboard received, `"-"` when there was
+none, and `docker compose logs api 2>&1 | grep 'trusted proxies'` shows what
+the API believes.
+
+## Back up and restore
+
+A backup is two files, taken together: a dump of the database and your `.env`.
+Keep both outside the Docker volumes, on another machine if you can, and keep
+them private: `.env` holds the secrets.
+
+Every command below names the Compose project, `experimently-selfhost`, which
+is the `name:` in `compose.yml`, and none of them deletes a volume.
+
+### Back up
+
+From this directory:
+
+<!-- compose-upgrade: backup -->
+```bash
+mkdir -m 700 -p ~/controlvar-backups
+docker compose -p experimently-selfhost exec -T postgres \
+  sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' \
+  > ~/controlvar-backups/controlvar.dump
+cp .env ~/controlvar-backups/controlvar.env
+```
+
+The dump is made inside the `postgres` service with the user and database
+that service was started with (the defaults in `compose.yml`, unless you set
+`POSTGRES_USER` and `POSTGRES_DB`), and written to the file you redirect it to
+on the host.
+
+`.env` has to travel with the dump. `generate-env.sh` writes a note at the top
+of it that its secrets cannot be regenerated. `SECRET_KEY` signs the sign-in
+tokens, and `AUDIT_HMAC_KEY` signs the audit records of the `full` profile:
+run `generate-env.sh` again on a new host and it makes different keys.
+
+Redis needs no backup. In this stack it holds the rate-limit counters and
+response caches, which the API rebuilds, and the API runs without it
+(`REDIS_REQUIRED` is `false`). It writes an append-only file to its own
+volume, so a restart keeps its data.
+
+### Restore
+
+Restore into a fresh stack of the same image tag the dump came from: the same
+release, because the database records the revision it was migrated to, and
+the same profile. An older image refuses to start on a database a newer release
+migrated (see
+[Database migrations](https://docs.controlvar.com/self-hosting/migrations/)),
+so restore first, then upgrade as [Upgrade](#upgrade) shows.
+
+On the new host, put that release's `compose.yml` and the saved `.env` in one
+directory, and do not run `generate-env.sh`. Do not run the commands below in
+the directory of a stack that is running: the first replaces its `.env`, and
+the restore loads into whatever database its `postgres` service holds. Then:
+
+<!-- compose-upgrade: restore -->
+```bash
+cp ~/controlvar-backups/controlvar.env .env
+docker compose -p experimently-selfhost up -d --wait postgres
+docker compose -p experimently-selfhost exec -T postgres \
+  sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --exit-on-error' \
+  < ~/controlvar-backups/controlvar.dump
+docker compose -p experimently-selfhost up -d --wait
+```
+
+Only PostgreSQL is started first, so the database it creates is still empty
+when the dump is loaded: the API creates the schema on its first start.
+When the API then starts it finds the restored schema and the restored users,
+and creates neither a schema nor a first administrator.
+
+To restore on the host that runs the stack, stop it with
+`docker compose -p experimently-selfhost stop`, which keeps its volumes, and
+restore under another project name: the same commands with a different `-p`
+start with empty volumes.
+
+## Upgrade
+
+These steps move a running stack to a newer release and keep its database.
+Run them from this directory of the clone you installed from. Every
+`docker compose` command names the project, `experimently-selfhost`, and none
+of them runs `docker compose down -v` or `generate-env.sh`, or deletes a
+volume.
+
+They read two shell variables, which you set first in the shell you run them
+in:
+
+| Variable | Meaning |
+|---|---|
+| `RELEASE` | the tag of the release you upgrade to, such as `v0.44.0` |
+| `PUBLIC_BASE_URL` | the `PUBLIC_BASE_URL` in your `.env`, such as `https://controlvar.example.com` |
+
+### 1. Read the release notes
+
+Read the [release notes](https://github.com/Controlvar/controlvar/releases) of
+every release after yours, up to `RELEASE`, for a setting the new release
+requires.
+
+### 2. Back up
+
+Take a backup as [Back up](#back-up) shows, then check that the dump reads
+back whole:
+
+<!-- compose-upgrade: check-backup -->
+```bash
+docker compose -p experimently-selfhost exec -T postgres \
+  pg_restore -f /dev/null < ~/controlvar-backups/controlvar.dump
+```
+
+`pg_restore` reads the whole dump and writes it nowhere, and fails on a dump
+that is cut short. Do not go on until it succeeds.
+
+### 3. Get the files
+
+First note the release you run now, which a rollback in step 7 goes back to:
+the `version` that step 6's `curl` prints, with a `v` in front, such as
+`v0.43.2`. Then get the new release's files:
+
+<!-- compose-upgrade: get-files -->
+```bash
+git fetch --tags
+git checkout "$RELEASE"
+```
+
+This checks out the repository at the release, `compose.yml` included. Your
+`.env` is not in git, so it stays as it was. Git says the checkout is a
+detached HEAD, which is what checking out a tag gives. If `compose.yml` was
+edited by hand, git refuses the checkout and changes nothing. An install made
+by copying the files rather than cloning the repository takes `compose.yml`
+and `.env.example` from `deploy/compose/` at the release's tag instead.
+
+### 4. Check the settings
+
+<!-- compose-upgrade: check-settings -->
+```bash
+docker compose -p experimently-selfhost config --quiet
+```
+
+It prints nothing when `.env` has every setting the release's `compose.yml`
+requires, and otherwise names a missing one: add it to `.env` and run the
+command again. It starts and stops nothing, so the old release keeps serving
+meanwhile.
+
+### 5. Upgrade
+
+Pull the release's images:
+
+<!-- compose-upgrade: pull -->
+```bash
+docker compose -p experimently-selfhost pull
+```
+
+PostgreSQL and Redis are pulled as well: `compose.yml` names
+`postgres:16-alpine` and `redis:7-alpine`, which follow the newest 16 and 7
+images. Then start the release:
+
+<!-- compose-upgrade: upgrade -->
+```bash
+docker compose -p experimently-selfhost up -d --wait --wait-timeout 600
+```
+
+The API migrates the database when it starts, before it serves, and
+`--wait-timeout 600` is the ten minutes its health check allows for that. If
+`up` fails while `docker compose -p experimently-selfhost logs api` still
+shows the migration running, restart nothing: wait until step 6's `ps` shows
+the API `healthy`, as
+[Database migrations](https://docs.controlvar.com/self-hosting/migrations/)
+says of a long migration, then run the `up` command again. It leaves the API
+as it is and starts the dashboard, which waits for a healthy API.
+
+### 6. Verify
+
+<!-- compose-upgrade: verify -->
+```bash
+docker compose -p experimently-selfhost ps
+curl -fsS "$PUBLIC_BASE_URL/api/v1/modules"
+```
+
+Check that each of the four services is listed and `healthy`, and that the
+API's `version` is `RELEASE` without its `v`. Then sign in at
+`PUBLIC_BASE_URL` and open an experiment you made before the upgrade. The
+upgrade is done when all three hold.
+
+### 7. Roll back
+
+When step 5 or step 6 fails, go back to the release you noted in step 3. Roll
+back in place first, and restore the backup only if the old release refuses
+the database. Before you roll back, read the API's log, which tells you
+whether to expect that refusal:
+
+<!-- compose-upgrade: check-migrations -->
+```bash
+docker compose -p experimently-selfhost logs api 2>&1 \
+  | grep -e 'running database bootstrap' -e 'Running upgrade'
+```
+
+The API logs `running database bootstrap` each time it starts. Alembic logs a
+`Running upgrade` line as it starts each migration.
+
+- No `Running upgrade` line: the new release migrated nothing, and the old
+  release starts on the database as before.
+- A `Running upgrade` line: expect the old release to refuse the database.
+  It does not when the migration failed: a migration that fails is undone
+  with every other migration of that start.
+- No `running database bootstrap` line: the command read no log of this
+  stack. Check the directory and the project name before you go on.
+
+Then, whatever the log showed, roll back in place: run the commands of steps
+[3](#3-get-the-files) and [5](#5-upgrade) again with `RELEASE` set to the
+release you noted. If `docker compose -p experimently-selfhost logs api` then
+shows `this database was migrated by a newer Controlvar release`, the old
+release refuses the database and has changed nothing in it. Restore the backup
+into a fresh stack of the old release, as [Restore](#restore) shows, or take
+another way back from
+[An Older Image Against a Newer Database](https://docs.controlvar.com/self-hosting/migrations/#an-older-image-against-a-newer-database).
+A restore loses anything written since the backup.
 
 ## What CI runs
 
@@ -96,3 +360,17 @@ was. It starts the stack with `docker compose up -d --wait` and signs in as
 the first administrator through the dashboard's port. It checks that a request
 for another host name answers `400`, that the demo login answers `401`, and
 that PostgreSQL, Redis and the API publish no port.
+
+The same workflow's `compose-upgrade` job runs every command block of this
+page, taken from the page as it is written, on those pull requests, every
+night, and when it is started by hand. It installs the previous release from
+a clone at its tag with the commands of [Run it](#run-it), which pull that
+release's published images, and adds an experiment and a feature flag. Then it
+follows [Upgrade](#upgrade) with the change's images under the published
+names, and checks that the experiment and the flag are still there, that the
+first administrator signs in with the password in `.env`, and that the API
+applied each migration the change adds once. Last, it rolls back in place,
+removes the stack and its volumes, and restores the backup into the previous
+release. It rehearses one step, from the previous release to the change, in
+the core profile on Linux: the full profile and longer jumps are not
+rehearsed.

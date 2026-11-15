@@ -4,7 +4,10 @@
  * and stays open until the admin closes it.
  */
 import React from 'react';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+// The dialog makes `#__next` inert and portals beside it, so the page is
+// mounted the way Next mounts it (#369).
+import { renderInAppRoot as render } from '@/tests/helpers/renderInAppRoot';
 import { ModulesProvider } from '@/contexts/ModulesContext';
 import WorkspaceMembersPage from '@modules/pages/workspaces/[id]/members';
 import { workspaceService } from '@modules/services/workspaces';

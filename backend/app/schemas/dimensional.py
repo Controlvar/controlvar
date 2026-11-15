@@ -43,8 +43,9 @@ class SegmentVariantResult(BaseModel):
     p_value: Optional[float] = Field(
         None,
         description=(
-            "Two-tailed p-value from a two-proportion z-test vs. the control. "
-            "None for the control variant itself."
+            "Two-sided p-value of Fisher's exact test against the control, the "
+            "test the headline uses for a conversion rate. None for the control "
+            "variant itself."
         ),
     )
     is_significant: bool = Field(
@@ -112,8 +113,15 @@ class DimensionalBreakdownResponse(BaseModel):
     has_heterogeneous_effects: bool = Field(
         ...,
         description=(
-            "True when a chi-squared test detects significant heterogeneity "
-            "in treatment effects across segments."
+            "True when a test that the first treatment's difference from the "
+            "control, in percentage points, is the same in every tested segment "
+            "rejects at 1 minus the confidence level the results were computed "
+            "at. The first treatment is the non-control variant whose name "
+            "sorts first. A segment is tested only when, in both the control "
+            "and that treatment, its users times the pooled conversion rate, "
+            "and times one minus that rate, are each at least 10; with fewer "
+            "than two tested segments it is false. An exploratory signal, not "
+            "a confirmed finding."
         ),
     )
     hte_warning: Optional[str] = Field(
@@ -125,5 +133,8 @@ class DimensionalBreakdownResponse(BaseModel):
     )
     segments: List[SegmentBreakdown] = Field(
         ...,
-        description="Per-segment breakdown results, one entry per observed dimension value.",
+        description=(
+            "Per-segment results: the 20 values with the most users, then "
+            "`other` and `unknown`, each listed only when it has users."
+        ),
     )

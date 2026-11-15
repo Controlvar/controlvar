@@ -78,11 +78,16 @@ INVENTORY = {
     ("POST", f"{V1}/api-keys"): Audited(A.API_KEY_CREATE),
     ("DELETE", f"{V1}/api-keys/{{key_id}}"): Audited(A.API_KEY_REVOKE),
     # --- auth ----------------------------------------------------------------
+    # The Hosted UI's code exchange: a sign-in, recorded as POST /auth/token
+    # records one under Cognito, when the identity already has an account.
+    ("POST", f"{V1}/auth/cognito/exchange"): Audited(A.USER_LOGIN),
     ("POST", f"{V1}/auth/confirm"): COGNITO_ACCOUNT,
     ("POST", f"{V1}/auth/forgot-password"): COGNITO_ACCOUNT,
     ("POST", f"{V1}/auth/login"): Audited(A.USER_LOGIN),
     ("POST", f"{V1}/auth/logout"): NotAudited(
-        "local tokens are stateless: signing out changes nothing on the server"
+        "signing out is not on the audited event list: under local it changes "
+        "nothing on the server (the tokens are stateless); under Cognito it "
+        "asks Cognito to revoke the user's tokens, which changes no stored row"
     ),
     ("POST", f"{V1}/auth/refresh"): COGNITO_ACCOUNT,
     ("POST", f"{V1}/auth/reset-password"): COGNITO_ACCOUNT,
@@ -153,6 +158,13 @@ INVENTORY = {
     ("POST", f"{V1}/experiments/{{experiment_id}}/pause"): Audited(A.EXPERIMENT_PAUSE),
     ("PUT", f"{V1}/experiments/{{experiment_id}}/schedule"): EXP_UPDATE,
     ("POST", f"{V1}/experiments/{{experiment_id}}/start"): Audited(A.EXPERIMENT_START),
+    # #1545: a visual experiment's preview links.
+    ("POST", f"{V1}/experiments/{{experiment_id}}/visual/preview-links"): Audited(
+        A.EXPERIMENT_PREVIEW_LINK_CREATE
+    ),
+    ("DELETE", f"{V1}/experiments/{{experiment_id}}/visual/preview-links"): Audited(
+        A.EXPERIMENT_PREVIEW_LINKS_REVOKE
+    ),
     # --- experiment wizard ---------------------------------------------------
     ("POST", f"{V1}/wizard/drafts"): DRAFT,
     ("PUT", f"{V1}/wizard/drafts/{{draft_id}}/step"): DRAFT,
@@ -238,6 +250,9 @@ INVENTORY = {
     ("POST", f"{V1}/tracking/errors"): SDK,
     ("POST", f"{V1}/tracking/errors/batch"): SDK,
     ("POST", f"{V1}/tracking/evaluations"): SDK,
+    # #1545: the visual editor's browser script, with a key in the page.
+    ("POST", f"{V1}/tracking/visual"): SDK,
+    ("POST", f"{V1}/tracking/visual/preview"): READ_ONLY,
 }
 
 #: GET routes a reader could expect to be recorded, and why they are not.
@@ -288,7 +303,7 @@ def test_the_inventory_is_exact():
         f"unclassified: {sorted(found - set(INVENTORY))}; "
         f"gone: {sorted(set(INVENTORY) - found)}"
     )
-    assert len(INVENTORY) == 106
+    assert len(INVENTORY) == 111
 
 
 def test_every_mutating_route_is_under_backend_or_modules():

@@ -81,7 +81,7 @@ jobs:
   # ---------------------------------------------------------------------------
   verify:
     name: tag matches the tree
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
       version: ${{ steps.resolve.outputs.version }}
@@ -169,7 +169,7 @@ jobs:
   api-images:
     name: API image (${{ matrix.profile }})
     needs: verify
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     permissions:
       contents: read
@@ -468,7 +468,7 @@ jobs:
   web-images:
     name: dashboard image (${{ matrix.profile }})
     needs: verify
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
       contents: read
@@ -740,7 +740,7 @@ jobs:
     name: move :core and :full
     needs: [verify, api-images, web-images, publish, chart]
     if: needs.verify.outputs.prerelease == 'false'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -804,7 +804,7 @@ jobs:
   publish:
     name: GitHub release
     needs: [verify, api-images, web-images]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: write
@@ -947,7 +947,7 @@ jobs:
   chart:
     name: Helm chart
     needs: [verify, publish]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write

@@ -190,7 +190,7 @@ describe('who may create flags (#917)', () => {
     render(<NewFeatureFlagPage />);
 
     expect(screen.getByTestId('flag-new-role-note')).toHaveTextContent(
-      'Your role can view feature flags but not create them. Feature flags are created and changed by the ADMIN and DEVELOPER roles.',
+      'Your role can view feature flags but not create them. Feature flags are created and changed with the feature flag permissions, which the ADMIN and DEVELOPER roles have.',
     );
     expect(screen.getByRole('link', { name: 'Back to feature flags' })).toHaveAttribute('href', '/feature-flags');
     expect(screen.queryByTestId('submit-flag')).toBeNull();

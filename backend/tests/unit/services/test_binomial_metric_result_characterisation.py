@@ -73,7 +73,8 @@ _FIXTURES: Dict[str, _Fixture] = {
         },
     ),
     # The edges: a control with no conversions (relative improvement is
-    # infinite, reported as None) and a treatment with no units.
+    # infinite, reported as None) and a treatment with no units.  From engine
+    # 1.11.0 treatment B, significant against that control, is the winner.
     "edges": _Fixture(
         units={_TREATMENT_A: 0, _CONTROL: 500, _TREATMENT_B: 400},
         converted={
@@ -93,7 +94,16 @@ _FIXTURES: Dict[str, _Fixture] = {
 #: ``norm.ppf(1 - (1 - level) / 2)`` instead of a fixed 1.96 (which also moves
 #: the 95% intervals, in about the sixth significant digit), and the legacy
 #: ``is_significant`` is decided at ``1 - level`` instead of 0.05.  The rules
-#: are the fingerprints': never edit the hashes of a released version.
+#: are the fingerprints' (``test_engine_fingerprint.py``): an engine-changing
+#: PR bumps ``ENGINE_VERSION`` to the next minor and appends it to
+#: ``RELEASED_ENGINE_VERSIONS`` ("frozen on main") in the same change; a frozen
+#: version's entries are never edited, and no key is ever added under one.  A
+#: PR is engine-changing when, for the same database rows and request, it adds,
+#: removes or changes any number, decision (winner, recommendation, Bayesian
+#: decision, ``can_stop``) or allocation weight that a path stamping
+#: ``engine_version`` returns, caches or persists: results and its snapshots,
+#: Bayesian, CUPED, sequential, and the bandit's state, history and status.  A
+#: revert of an engine-changing PR bumps again.
 CHARACTERISATIONS: Dict[str, Dict[str, str]] = {
     "1.1.0": {
         "three_variants-0.95-none": "69488213db4a93d25b2ca00c0ed2f52674c24691fd8607c91ab567d5b07aed01",
@@ -126,6 +136,96 @@ CHARACTERISATIONS: Dict[str, Dict[str, str]] = {
         "three_variants-0.9-benjamini_hochberg": "9dc29fe6a32a100937e291cdb811fb7ab614c73cca809f13e89395655361331f",
         "edges-0.95-none": "8a393ac383215c05be91713bf0994289b03126f806ee3ff7b4ba27e4c1496e88",
         "edges-0.95-bonferroni": "d823df91499efad14663e562d09f0ef215926ca87b2746d9148846f1dcb66979",
+    },  # 1.5.0 (#1377): each metric result carries lower_is_better (False
+    # here); without it these are 1.4.0's (test_lower_is_better_fingerprint.py).
+    "1.5.0": {
+        "three_variants-0.95-none": "7a6ca24d92fe5ef7ef9ad1833f24a0b0c8cd7c0db0e6556e54af334ee56b2d83",
+        "three_variants-0.95-bonferroni": "69d361d903b23a6208356313627323fa088b87bf0e18eed42e8893043d94564b",
+        "three_variants-0.95-benjamini_hochberg": "1d8407308e95ab257fc526cde9d041d909590ba3984f1218472cccc9eb54b98e",
+        "three_variants-0.9-benjamini_hochberg": "ebb0ac8fb607cb07f9f815beaad98c1c63f5bf82a5e9ddd6b5568a575a294543",
+        "edges-0.95-none": "fac2456d1239a6cc1e837f0ef1b886fdb6642227aa23458721377f53559c9172",
+        "edges-0.95-bonferroni": "9d1452d5768d8b75a1260c3e9dca19e6926bee4f88f3305edb2a8944b0457cde",
+    },
+    # 1.6.0 (#1385) changes a lower-is-better bandit only; /results is as in
+    # 1.5.0.
+    "1.6.0": {
+        "three_variants-0.95-none": "7a6ca24d92fe5ef7ef9ad1833f24a0b0c8cd7c0db0e6556e54af334ee56b2d83",
+        "three_variants-0.95-bonferroni": "69d361d903b23a6208356313627323fa088b87bf0e18eed42e8893043d94564b",
+        "three_variants-0.95-benjamini_hochberg": "1d8407308e95ab257fc526cde9d041d909590ba3984f1218472cccc9eb54b98e",
+        "three_variants-0.9-benjamini_hochberg": "ebb0ac8fb607cb07f9f815beaad98c1c63f5bf82a5e9ddd6b5568a575a294543",
+        "edges-0.95-none": "fac2456d1239a6cc1e837f0ef1b886fdb6642227aa23458721377f53559c9172",
+        "edges-0.95-bonferroni": "9d1452d5768d8b75a1260c3e9dca19e6926bee4f88f3305edb2a8944b0457cde",
+    },
+    # 1.7.0 (#439) routes count, duration and custom to the mean; these
+    # conversion metrics are 1.6.0's.
+    "1.7.0": {
+        "three_variants-0.95-none": "7a6ca24d92fe5ef7ef9ad1833f24a0b0c8cd7c0db0e6556e54af334ee56b2d83",
+        "three_variants-0.95-bonferroni": "69d361d903b23a6208356313627323fa088b87bf0e18eed42e8893043d94564b",
+        "three_variants-0.95-benjamini_hochberg": "1d8407308e95ab257fc526cde9d041d909590ba3984f1218472cccc9eb54b98e",
+        "three_variants-0.9-benjamini_hochberg": "ebb0ac8fb607cb07f9f815beaad98c1c63f5bf82a5e9ddd6b5568a575a294543",
+        "edges-0.95-none": "fac2456d1239a6cc1e837f0ef1b886fdb6642227aa23458721377f53559c9172",
+        "edges-0.95-bonferroni": "9d1452d5768d8b75a1260c3e9dca19e6926bee4f88f3305edb2a8944b0457cde",
+    },
+    # 1.8.0 (#1496): each treatment carries its difference from the control,
+    # the intervals and the impact; without them every case is 1.7.0's
+    # (test_difference_intervals.py).
+    "1.8.0": {
+        "three_variants-0.95-none": "ece157050f50545868f0578cfaa695d25584f87c1546aa86f7d02e0f41516b53",
+        "three_variants-0.95-bonferroni": "d3a91b82c4a94008c415af63846df6245af4719997ea6dc4b0985f3a5dfa1b8b",
+        "three_variants-0.95-benjamini_hochberg": "dd080d66753fbe4a6a0a391d59a6e193370456310bc5bd88a2fb5bc0eb061e43",
+        "three_variants-0.9-benjamini_hochberg": "3fccfd274278e5811b851b2f097580678de0ad5d3d1e3ab6bea48425f86fa453",
+        "edges-0.95-none": "8d91d26793e6b0e468326346a25847140f33a5202775bde06efa79137c2cdf2e",
+        "edges-0.95-bonferroni": "74ba8e871adc4bfe9fac98ee425468da5bea6ced18f1a4e5f974bad37f20ee0e",
+    },
+    # 1.9.0 (#1776) changes the segment breakdown only: 1.8.0's.
+    "1.9.0": {
+        "three_variants-0.95-none": "ece157050f50545868f0578cfaa695d25584f87c1546aa86f7d02e0f41516b53",
+        "three_variants-0.95-bonferroni": "d3a91b82c4a94008c415af63846df6245af4719997ea6dc4b0985f3a5dfa1b8b",
+        "three_variants-0.95-benjamini_hochberg": "dd080d66753fbe4a6a0a391d59a6e193370456310bc5bd88a2fb5bc0eb061e43",
+        "three_variants-0.9-benjamini_hochberg": "3fccfd274278e5811b851b2f097580678de0ad5d3d1e3ab6bea48425f86fa453",
+        "edges-0.95-none": "8d91d26793e6b0e468326346a25847140f33a5202775bde06efa79137c2cdf2e",
+        "edges-0.95-bonferroni": "74ba8e871adc4bfe9fac98ee425468da5bea6ced18f1a4e5f974bad37f20ee0e",
+    },
+    # 1.10.0 (#448) adds the balanced-groups estimate only: 1.9.0's.
+    "1.10.0": {
+        "three_variants-0.95-none": "ece157050f50545868f0578cfaa695d25584f87c1546aa86f7d02e0f41516b53",
+        "three_variants-0.95-bonferroni": "d3a91b82c4a94008c415af63846df6245af4719997ea6dc4b0985f3a5dfa1b8b",
+        "three_variants-0.95-benjamini_hochberg": "dd080d66753fbe4a6a0a391d59a6e193370456310bc5bd88a2fb5bc0eb061e43",
+        "three_variants-0.9-benjamini_hochberg": "3fccfd274278e5811b851b2f097580678de0ad5d3d1e3ab6bea48425f86fa453",
+        "edges-0.95-none": "8d91d26793e6b0e468326346a25847140f33a5202775bde06efa79137c2cdf2e",
+        "edges-0.95-bonferroni": "74ba8e871adc4bfe9fac98ee425468da5bea6ced18f1a4e5f974bad37f20ee0e",
+    },
+    # 1.11.0: the edges-* cases move on purpose.  Their primary metric has a
+    # control with no conversions (0 of 500) and treatment B at 12 of 400,
+    # significant (p 5.4e-5; 1.1e-4 after Bonferroni).  Until 1.10.0 no
+    # winner was named there, because the winner read the sign of
+    # relative_improvement_pct, which is None against a rate of 0, and the
+    # summary said "No statistically significant difference".  From 1.11.0
+    # the side of the control is the sign of absolute_difference: treatment B
+    # is the metric's and the summary's winner, and the recommendation is
+    # CONTINUE_TESTING because treatment A has no users
+    # (test_zero_conversion_control_winner.py asserts those values).
+    # relative_improvement_pct stays None.  With the winner and the summary
+    # set back, each edges-* output hashes to its 1.10.0 entry, so nothing
+    # else moved.  The three_variants-* cases have no such control and are
+    # 1.10.0's.
+    "1.11.0": {
+        "three_variants-0.95-none": "ece157050f50545868f0578cfaa695d25584f87c1546aa86f7d02e0f41516b53",
+        "three_variants-0.95-bonferroni": "d3a91b82c4a94008c415af63846df6245af4719997ea6dc4b0985f3a5dfa1b8b",
+        "three_variants-0.95-benjamini_hochberg": "dd080d66753fbe4a6a0a391d59a6e193370456310bc5bd88a2fb5bc0eb061e43",
+        "three_variants-0.9-benjamini_hochberg": "3fccfd274278e5811b851b2f097580678de0ad5d3d1e3ab6bea48425f86fa453",
+        "edges-0.95-none": "ec0b2f6f4ce27a2ec9dbc540ef79d9c74ac423844d26e75a089a75a1ccb893ee",
+        "edges-0.95-bonferroni": "ebbbc649115fe1c97337c4afcbe04c6c8f80591c8b6a2654d90ee8d7eacba10d",
+    },
+    # 1.12.0 (#1969) changes the segment breakdown's heterogeneity flag only:
+    # 1.11.0's.
+    "1.12.0": {
+        "three_variants-0.95-none": "ece157050f50545868f0578cfaa695d25584f87c1546aa86f7d02e0f41516b53",
+        "three_variants-0.95-bonferroni": "d3a91b82c4a94008c415af63846df6245af4719997ea6dc4b0985f3a5dfa1b8b",
+        "three_variants-0.95-benjamini_hochberg": "dd080d66753fbe4a6a0a391d59a6e193370456310bc5bd88a2fb5bc0eb061e43",
+        "three_variants-0.9-benjamini_hochberg": "3fccfd274278e5811b851b2f097580678de0ad5d3d1e3ab6bea48425f86fa453",
+        "edges-0.95-none": "ec0b2f6f4ce27a2ec9dbc540ef79d9c74ac423844d26e75a089a75a1ccb893ee",
+        "edges-0.95-bonferroni": "ebbbc649115fe1c97337c4afcbe04c6c8f80591c8b6a2654d90ee8d7eacba10d",
     },
 }
 
@@ -195,6 +295,10 @@ class _FakeSession:
 
     def query(self, *_entities: Any) -> _FakeQuery:
         return _FakeQuery(self)
+
+    def close(self) -> None:
+        """``GET /experiments/{id}/results`` closes the request's session
+        before it computes, and again when it is done (#1738)."""
 
 
 def _experiment() -> SimpleNamespace:

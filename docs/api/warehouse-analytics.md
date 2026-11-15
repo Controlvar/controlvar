@@ -9,6 +9,7 @@
     Snowflake is available (see [Setting up Snowflake](#setting-up-snowflake)).
     BigQuery is available (see [Setting up BigQuery](#setting-up-bigquery)).
     Amazon Athena isn't available yet.
+    Amazon Redshift isn't available yet.
     `GET /api/v1/warehouse/analysis/connectors` says which are available on
     your deployment; creating a connection of any other type answers
     `422 connector_disabled`.
@@ -33,6 +34,29 @@ from what comes back. A metric is one of two types:
   the conversion window (0 for a unit with no event; a NULL value is ignored
   and counted), optionally capped per unit with `cap_value`, and compared with
   Welch's t-test. Each variant reports its mean and a confidence interval.
+
+A metric source can be marked lower is better (`lower_is_better`) for a metric
+where a fall is the improvement, such as an error rate or churn. A run then
+names a treatment the winner (`winning_variant_id`) only for a significant
+decrease, where without the setting only a significant increase wins. The
+p-values, the intervals and `relative_improvement_pct`, the signed change, are
+the same either way. The setting belongs to the source, not to an experiment's
+metrics, so a source has one direction in every experiment that analyses it.
+Each computed metric in a run's results carries the `lower_is_better` it was
+analysed with: the source's setting when the run started, which a later edit
+does not change.
+
+Every metric source stored before the setting existed reads `false`, which is
+how every earlier analysis read it. To change one, mark it, validate it again
+and start a new analysis; an analysis already run keeps its results. Undoing
+the migration that stores the setting deletes it from every source: see
+[Upgrading and migrations](../self-hosting/migrations.md#modules_0003_lower_is_better-gives-each-warehouse-metric-source-a-direction).
+
+A proportion metric's results also give each treatment its difference from
+the control with an interval, the interval of its relative change and its
+impact over its own units, as `/results` does on the same counts. A mean
+metric's results give none of these three; each treatment's p-value and
+relative change are reported as before.
 
 Every run reports its sample-ratio check against the variants' traffic
 allocation (skipped for multi-armed bandit experiments, whose split moves on
@@ -188,7 +212,7 @@ When a limit is reached the API answers:
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `WAREHOUSE_CREDENTIALS_KEYS` | unset | Fernet keys, comma-separated, newest first, that encrypt stored warehouse credentials. While unset, storing or using a credential answers `503 credentials_unavailable`. In staging and production a malformed value is refused when the API starts, and the full profile's modules do not load until it is fixed. |
+| `WAREHOUSE_CREDENTIALS_KEYS` | unset | Fernet keys, comma-separated, newest first, that encrypt stored warehouse credentials. While unset or empty, storing or using a credential answers `503 credentials_unavailable`. In staging and production a malformed value is refused when the API starts, and the full profile's modules do not load until it is fixed. |
 | `WAREHOUSE_MAX_QUERY_TIMEOUT_SECONDS` | 1800 | The highest `query_timeout_seconds` a connection may set. |
 | `WAREHOUSE_MAX_BYTES_PER_QUERY` | 214748364800 (200 GiB) | The highest byte limit a connection may set. |
 | `WAREHOUSE_MAX_RUNS_PER_DAY` | 200 | The highest `max_runs_per_day` a connection may set. |
@@ -200,6 +224,12 @@ A stored credential that none of the configured keys can open answers
 `needs_new_credentials`; an admin replaces it. Deleting a connection deletes
 its row and its credentials; its sources go with it, and its past analyses
 keep their results and the connection's name.
+
+Both compose files pass `WAREHOUSE_CREDENTIALS_KEYS` to the API, empty by
+default, and an empty value is the same as one that is not set. Put it in the
+`.env` file next to the compose file: a value exported in another terminal does
+not reach the container, and one exported in the terminal that runs
+`docker compose up` does.
 
 ## API
 
@@ -243,6 +273,20 @@ spaces and `_ . : @ / + -`; anything else is refused with 422, never escaped.
 A source must be validated before a preview or an analysis uses it, and
 editing it clears its validation.
 
+For a metric where a fall is better, add `"lower_is_better": true`. A PUT
+without `lower_is_better` sets it back to `false`, so send it on every PUT of a
+source marked lower is better. An assignment source has no direction: its
+`lower_is_better` is `null`, and a body that sends one is refused with 422.
+
+A source body refuses any field it does not know with 422
+(`extra_forbidden`). So during a deploy from a release without
+`lower_is_better`, while it serves both releases at once (the canary on AWS or
+a Helm rolling update), a request that sends `lower_is_better` and reaches an
+API task or pod still on that release is refused; retry once the deploy has
+finished. A dashboard opened before that deploy does not send
+`lower_is_better`, so saving a metric source from it can set the setting back
+to `false`: reload the dashboard after it.
+
 An analysis names the sources, and optionally the window and which warehouse
 variant label is which experiment variant (labels not listed are matched to a
 variant by its name):
@@ -268,6 +312,47 @@ its `note` says `Not computed: no variation`.
 
 Errors are `{"detail": {"code": ..., "message": ...}}`. A request that fails
 validation lists where and why, but never repeats the value you sent.
+
+## Troubleshooting
+
+The codes below are the whole set. A failed call answers with one as `code`,
+and a failed run reports one as its `error_code`. A metric that could not be computed can carry `fewer_than_2_units`, `no_units` or `join_key_mismatch` as its "Not computed" reason while the run itself succeeds. Status is the HTTP status of
+a route that answers with the code directly.
+
+| Code | Status | What it means | What to check |
+|---|---|---|---|
+| `credentials_unavailable` | 503 | `WAREHOUSE_CREDENTIALS_KEYS` is not set, so no stored credential can be used. | An operator sets it: see [For operators](#for-operators). |
+| `aws_identity_unavailable` | 503 | This deployment has no AWS identity to assume a connection's AWS role from. Not raised for Snowflake or BigQuery, which use no AWS role. | An operator runs the API with an AWS identity that may call `sts:AssumeRole` on the connection's role. |
+| `auth_failed` | 502 | The warehouse did not accept the connection's credentials. | Snowflake: the public key registered on the user is the one Controlvar shows, and the account identifier is right. BigQuery: the service account and its JSON key still exist. Then test the connection. |
+| `key_revoked` | 502 | BigQuery reports that the key's service account client was disabled or deleted. | Enable the service account or create a new JSON key, and paste it into the connection. Snowflake does not report this. |
+| `permission_denied` | 502 | The role may not run this query. | Snowflake: `USAGE` on the warehouse, database and schema, and `SELECT` on the table. BigQuery: BigQuery Job User on the billing project, and BigQuery Data Viewer on each dataset. |
+| `object_not_found` | 502 | A table, view or column the query names was not found. | The table is named in full, with each part as the warehouse stores it, and every mapped column exists. On Snowflake a table the role may not see is reported the same way. |
+| `not_a_select` | 502 | The statement was not a single `SELECT`, so it was not run. | Controlvar writes the SQL itself, so this is unexpected: report it. |
+| `bytes_limit` | 502 | The query would read more than the connection's bytes cap, by Controlvar's dry-run check or BigQuery's own limit, so it was not run. | Raise "Most data a query may read" (up to `WAREHOUSE_MAX_BYTES_PER_QUERY`), or point the source at a smaller or partitioned table. Snowflake has no byte limit. |
+| `time_limit` | 504 | The warehouse did not finish within `query_timeout_seconds`. | Raise it (up to `WAREHOUSE_MAX_QUERY_TIMEOUT_SECONDS`), or give the source a smaller table or a shorter window. |
+| `cancelled` | 502 | The warehouse cancelled the query. | Whether someone, or a resource monitor, cancelled it: see the warehouse's own query history. |
+| `workgroup_unsafe` | 502 | Not raised for Snowflake or BigQuery. | Nothing. |
+| `role_trust_unsafe` | 502 | The trust policy of a connection's AWS role admits this deployment without the connection's external ID, so the role is refused. Not raised for Snowflake or BigQuery, which use no AWS role. | The role's trust policy has a condition that requires `sts:ExternalId` to equal the external ID shown on the connection's page. |
+| `timezone_not_utc` | 502 | Snowflake reported a session time zone other than UTC, after Controlvar set it. The run is refused because times would be compared in another zone. | Start the analysis again; if it recurs, report it. BigQuery does not report this. |
+| `result_invalid` | 502 | The warehouse returned a result in a shape Controlvar does not accept, or one that was too large. | Start the analysis again; if it recurs, check that the source maps the columns you mean, and report it. |
+| `too_many_variant_values` | 502 | The variant column has more distinct values than allowed. | The assignment source's variant column holds a variant label, not an id that differs per unit. |
+| `join_key_mismatch` | 502 | The metric source has rows in the window, but none has the unit id of an exposed unit. | Both sources map the same identifier, with the same type and form. |
+| `no_units` | 502 | No exposed units were found in the window. | The experiment key in the assignment source, the window, and the source's filters. |
+| `fewer_than_2_units` | 502 | A variant has fewer than 2 units, so a mean cannot be compared. | Wait for more exposures, or widen the window. |
+| `abandoned` | 502 | The run stopped reporting progress and was marked as failed. | Start the analysis again. The run still counts toward the daily limit. |
+| `warehouse_busy` | 429 | This deployment is already running as many warehouse jobs as it allows. | Try again after the `Retry-After` seconds; see [Limits and cost](#limits-and-cost). |
+| `run_in_progress` | 409 | An analysis or preview on this connection has not finished. | Wait for it to finish, then start yours. |
+| `destination_not_allowed` | 502 | The warehouse address is not one this deployment connects to. | Snowflake: the account is the organisation-account identifier, not a locator or a URL. An address that resolves to a private network is refused. |
+| `redirect_refused` | 502 | The warehouse answered with a redirect, which Controlvar does not follow. | The account identifier or the location in the connection. |
+| `unreachable` | 502 | The warehouse could not be reached. | That the API can open an outbound HTTPS connection to the warehouse, and that its firewall or network policy allows the API's address. |
+| `unrecognised_warehouse_error` | 502 | The warehouse sent an error code that Controlvar has no entry for. | The vendor code, as described below. |
+| `internal` | 500 | Something went wrong on Controlvar's side while talking to the warehouse. | An operator reads the API's log, where a warehouse failure is logged with its code. |
+
+For `unrecognised_warehouse_error`, the message and the body's `vendor_code`
+give the warehouse's own code: for BigQuery the `reason` of the error, for
+Snowflake its error `code`. Look that code up in the warehouse's documentation,
+and find the statement in its query or job history. Controlvar never repeats
+the warehouse's own error text.
 
 ## If you ran an earlier full-profile release
 

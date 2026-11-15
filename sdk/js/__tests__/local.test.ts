@@ -16,7 +16,7 @@ import {
   REFUSED_RETRY_MS,
   RULESET_PATH,
 } from '../src/local';
-import type { ClientConfig, SwallowedOperation } from '../src/types';
+import type { ClientConfig, SwallowedOperation, UserContext } from '../src/types';
 import { isWellFormedString } from '../src/evaluator';
 import * as evaluatorModule from '../src/evaluator';
 
@@ -96,6 +96,7 @@ class FakeServer {
         return response(step);
       }
       if (url.includes(EVALUATIONS_PATH)) return response({ status: this.evaluationsStatus, body: { accepted: 0, errors: [] } });
+      if (url.includes('/tracking/errors')) return response({ status: 201, body: { id: 'err-1' } });
       if (url.includes('/feature-flags/evaluate/')) return response(this.evaluate(url));
       if (url.includes('/feature-flags/user/')) return response(this.userFlags(url));
       return response({ body: { success_count: 1, failure_count: 0, errors: [] } });
@@ -165,12 +166,24 @@ describe('the vectors through evaluateFlag', () => {
     const cases = vectors.cases.filter((c: { context: unknown }) => !hasNonFinite(c.context));
     expect(vectors.cases.length - cases.length).toBe(42);
 
+    // The flags this ruleset sends to the server are exactly its active "remote" ones, computed from
+    // the file so the list cannot drift without this failing.
+    const remoteKeys: string[] = vectors.ruleset.flags
+      .filter((f: { active?: boolean; evaluation?: string }) => f.active && f.evaluation === 'remote')
+      .map((f: { key: string }) => f.key)
+      .sort();
+    expect(remoteKeys).toHaveLength(45);
+    expect([...client.status().serverEvaluatedFlags].sort()).toEqual(remoteKeys);
+
     let expectedRemote = 0;
     const wrong: string[] = [];
     const unsendable: string[] = [];
     let localAnswers = 0;
     for (const testCase of cases) {
-      server.evaluate = () => ({ body: { key: testCase.flag, enabled: testCase.expected.enabled, config: null, reason: testCase.expected.reason } });
+      const value = 'expected_value' in testCase ? testCase.expected_value : testCase.expected.enabled;
+      server.evaluate = () => ({
+        body: { key: testCase.flag, enabled: testCase.expected.enabled, value, config: null, reason: testCase.expected.reason },
+      });
       if (!testCase.must_local) expectedRemote += 1;
       const before = server.requests('/feature-flags/evaluate/').length;
       let result;
@@ -192,8 +205,23 @@ describe('the vectors through evaluateFlag', () => {
       if (result.enabled !== testCase.expected.enabled || result.reason !== testCase.expected.reason) {
         wrong.push(`${testCase.id}: got ${result.enabled}/${result.reason}`);
       }
+      if (JSON.stringify(result.value) !== JSON.stringify(value)) {
+        wrong.push(`${testCase.id}: got value ${JSON.stringify(result.value)}, the server's is ${JSON.stringify(value)}`);
+      }
       if (result.source !== (remote ? 'server' : 'local') || remote !== (testCase.must_local ? 0 : 1)) {
         wrong.push(`${testCase.id}: must_local=${testCase.must_local} but ${remote} server calls, source ${result.source}`);
+      }
+      if (remote) {
+        // The request that reached the server carries the case's context: the decoded `context`
+        // parameter equals it, and is absent when the context is null or {}.
+        const calls = server.requests('/feature-flags/evaluate/');
+        const sent = new URL(calls[calls.length - 1].url).searchParams.get('context');
+        const empty = !testCase.context || Object.keys(testCase.context).length === 0;
+        if (empty) {
+          if (sent !== null) wrong.push(`${testCase.id}: context sent for an empty context: ${sent}`);
+        } else if (sent === null || JSON.stringify(JSON.parse(sent)) !== JSON.stringify(testCase.context)) {
+          wrong.push(`${testCase.id}: context sent ${sent}, expected ${JSON.stringify(testCase.context)}`);
+        }
       }
       client.clearCache();
     }
@@ -203,7 +231,7 @@ describe('the vectors through evaluateFlag', () => {
     expect(unsendable.filter(id => isWellFormedString(userIdOf(id)))).toEqual([]);
     expect(server.requests('/feature-flags/evaluate/')).toHaveLength(expectedRemote);
     // Every must_local case except the three whose context holds 10**400 (see above).
-    expect(localAnswers).toBe(1294 - 3);
+    expect(localAnswers).toBe(1333 - 3);
   });
 });
 
@@ -222,6 +250,8 @@ describe('answers', () => {
       enabled: true,
       config: null,
       reason: 'targeting_rule',
+      value: true,
+      valueType: 'boolean',
       source: 'local',
     });
     // Different attributes, same user, no clearCache(): the answer follows the attributes.
@@ -262,6 +292,26 @@ describe('answers', () => {
     expect(batch[0].body).toEqual({
       events: [{ event_type: 'page_view', event_name: 'page_view', user_id: 'user-1', feature_flag_key: 'us-only' }],
     });
+  });
+
+  test('reportError sends the report with the same key in local mode, before and after close()', async () => {
+    const server = new FakeServer(ok());
+    const { client, errors } = localClient(server);
+    track(client);
+    await client.ready();
+    const report = { errorType: 'crash', message: 'boom', featureFlagKey: 'us-only', userId: 'user-1' };
+    await expect(client.reportError(report)).resolves.toBe(true);
+    await client.close();
+    await expect(client.reportError(report)).resolves.toBe(true);
+
+    const sent = server.requests('/api/v1/tracking/errors');
+    expect(sent).toHaveLength(2);
+    for (const request of sent) {
+      expect(request.method).toBe('POST');
+      expect(request.headers['X-API-Key']).toBe('scoped-key');
+      expect(request.body).toEqual({ error_type: 'crash', message: 'boom', feature_flag_key: 'us-only', user_id: 'user-1' });
+    }
+    expect(errors).toEqual([]);
   });
 
   test('getAllFlags: every active flag locally, inactive omitted', async () => {
@@ -340,6 +390,157 @@ describe('answers', () => {
   });
 });
 
+// ─── Flag values ─────────────────────────────────────────────────────────────
+
+const US_RULE = {
+  id: 'us',
+  rollout_percentage: 100,
+  match: { op: 'and', conditions: [{ attribute: 'user.country', operator: 'eq', value: 'US' }], groups: [] },
+};
+const EVERYONE = { active: true, evaluation: 'local', rollout_percentage: 100, rules: [], default_rule: null };
+const THEME = { color: 'blue', sizes: [1, 2] };
+const VALUE_RULESET = {
+  ...RULESET,
+  version: 'v3',
+  flags: [
+    ...RULESET.flags,
+    {
+      key: 'label',
+      ...EVERYONE,
+      rollout_percentage: 0,
+      rules: [US_RULE],
+      value_type: 'string',
+      on_value: 'Complete purchase',
+      off_value: 'Buy now',
+    },
+    { key: 'limit', ...EVERYONE, value_type: 'number', on_value: 10, off_value: 2.5 },
+    { key: 'theme', ...EVERYONE, value_type: 'json', on_value: THEME, off_value: ['fallback'] },
+    { key: 'killed-label', active: false, value_type: 'string', off_value: 'Buy now' },
+    { key: 'remote-label', active: true, evaluation: 'remote' },
+    { key: 'remote-limit', active: true, evaluation: 'remote' },
+  ],
+};
+
+describe('flag values in local mode', () => {
+  test('the typed getters answer value flags from the ruleset, with no request', async () => {
+    const server = new FakeServer(ok(VALUE_RULESET, '"v3"'));
+    const { client, errors } = localClient(server);
+    track(client);
+    await client.ready();
+    const before = server.calls.length;
+    await expect(client.getStringValue('label', us, 'default')).resolves.toBe('Complete purchase');
+    await expect(client.getStringValue('label', fr, 'default')).resolves.toBe('Buy now');
+    await expect(client.getStringValue('killed-label', us, 'default')).resolves.toBe('Buy now');
+    await expect(client.getNumberValue('limit', us, 0)).resolves.toBe(10);
+    await expect(client.getJsonValue('theme', us, {})).resolves.toEqual(THEME);
+    await expect(client.evaluateFlag('label', fr)).resolves.toMatchObject({
+      enabled: false,
+      reason: 'rollout',
+      value: 'Buy now',
+      valueType: 'string',
+      source: 'local',
+    });
+    expect(server.calls.length).toBe(before);
+    expect(errors).toEqual([]);
+  });
+
+  test('a remote string flag and a remote number flag served off: the getters return the off value the server sends', async () => {
+    const server = new FakeServer(ok(VALUE_RULESET, '"v3"'));
+    server.evaluate = url =>
+      url.includes('/evaluate/remote-label?')
+        ? { body: { key: 'remote-label', enabled: false, value: 'off-copy', value_type: 'string', config: null, reason: 'rollout' } }
+        : { body: { key: 'remote-limit', enabled: false, value: 2.5, value_type: 'number', config: null, reason: 'rollout' } };
+    const { client, errors } = localClient(server);
+    track(client);
+    await client.ready();
+    await expect(client.getStringValue('remote-label', us, 'default')).resolves.toBe('off-copy');
+    await expect(client.getNumberValue('remote-limit', us, 99)).resolves.toBe(2.5);
+    await expect(client.evaluateFlag('remote-label', us)).resolves.toMatchObject({
+      enabled: false,
+      value: 'off-copy',
+      valueType: 'string',
+      source: 'server',
+    });
+    expect(server.requests('/feature-flags/evaluate/').map(c => c.url.split('?')[0].split('/').pop())).toEqual([
+      'remote-label',
+      'remote-limit',
+    ]);
+    expect(errors).toEqual([]);
+  });
+
+  test('a JSON value handed out is a copy: changing it changes neither the ruleset nor the next answer', async () => {
+    const server = new FakeServer(ok(VALUE_RULESET, '"v3"'));
+    const { client } = localClient(server);
+    track(client);
+    await client.ready();
+    const first = await client.getJsonValue<{ color: string; sizes: number[] }>('theme', { userId: 'a' }, { color: '', sizes: [] });
+    first.color = 'red';
+    first.sizes.push(3);
+    const evaluated = (await client.evaluateFlag('theme', { userId: 'b' })).value as { color: string };
+    evaluated.color = 'green';
+    const second = await client.getJsonValue('theme', { userId: 'c' }, {});
+    // Literals, not THEME: the fake server hands the SDK THEME itself, so a leak would change it too.
+    expect(second).toEqual({ color: 'blue', sizes: [1, 2] });
+    expect(second).not.toBe(first);
+    expect(VALUE_RULESET.flags.find(f => f.key === 'theme')).toMatchObject({ on_value: { color: 'blue', sizes: [1, 2] } });
+  });
+
+  test('turning a value flag off reaches the client at the next refresh: everyone gets the off value', async () => {
+    const killed = {
+      ...VALUE_RULESET,
+      version: 'v4',
+      flags: VALUE_RULESET.flags.map(f => (f.key === 'label' ? { key: 'label', active: false, value_type: 'string', off_value: 'Buy now' } : f)),
+    };
+    const server = new FakeServer(ok(VALUE_RULESET, '"v3"'), ok(killed, '"v4"'));
+    const { client } = localClient(server);
+    track(client);
+    await client.ready();
+    await expect(client.getStringValue('label', us, 'default')).resolves.toBe('Complete purchase');
+    await jest.advanceTimersByTimeAsync(DEFAULT_REFRESH_INTERVAL_MS);
+    expect(client.status().rulesetVersion).toBe('v4');
+    await expect(client.getStringValue('label', us, 'default')).resolves.toBe('Buy now');
+    await expect(client.evaluateFlag('label', us)).resolves.toMatchObject({ enabled: false, reason: 'inactive', source: 'local' });
+  });
+
+  test('an entry this SDK cannot read sends that flag to the server; the ruleset still loads and the rest stay local (Q12)', async () => {
+    const newer = {
+      ...RULESET,
+      version: 'v5',
+      flags: [
+        ...RULESET.flags,
+        { key: 'launch-date', ...EVERYONE, value_type: 'date', on_value: '2026-11-01', off_value: '2026-12-01' },
+        { key: 'next-gen', active: true, evaluation: 'local_v3' },
+        { key: 'mistyped', ...EVERYONE, value_type: 'number', on_value: '10', off_value: 2.5 },
+      ],
+    };
+    const server = new FakeServer(ok(newer, '"v5"'));
+    server.evaluate = url =>
+      url.includes('/evaluate/launch-date?')
+        ? { body: { key: 'launch-date', enabled: true, value: '2026-11-01', value_type: 'date', config: null, reason: 'rollout' } }
+        : { body: { key: 'x', enabled: true, value: true, value_type: 'boolean', config: null, reason: 'rollout' } };
+    server.userFlags = () => ({ body: { 'all-on': true, 'us-only': true, 'launch-date': true, 'next-gen': true, mistyped: true } });
+    const { client, errors } = localClient(server);
+    track(client);
+    await expect(client.ready()).resolves.toEqual({ ok: true, rulesetVersion: 'v5' });
+    expect(client.status().serverEvaluatedFlags).toEqual(['launch-date', 'mistyped', 'next-gen']);
+
+    await expect(client.evaluateFlag('all-on', us)).resolves.toMatchObject({ source: 'local' });
+    for (const key of ['launch-date', 'next-gen', 'mistyped']) {
+      await expect(client.evaluateFlag(key, us)).resolves.toMatchObject({ source: 'server' });
+    }
+    expect(server.requests('/feature-flags/evaluate/')).toHaveLength(3);
+    await client.getAllFlags('user-1', { country: 'US' });
+    expect(server.requests('/feature-flags/user/')).toHaveLength(1);
+    expect(errors).toEqual([]);
+
+    // The server's answer names a type this SDK has no getter for: the caller's default.
+    await expect(client.getStringValue('launch-date', us, 'soon')).resolves.toBe('soon');
+    expect(errors.map(e => [e.operation, e.error.code, e.error.message])).toEqual([
+      ['value', 'TYPE_MISMATCH', 'Flag "launch-date" serves a value of type "date"; getStringValue returned your default'],
+    ]);
+  });
+});
+
 // ─── The refresh failure table ───────────────────────────────────────────────
 
 describe('refresh failures', () => {
@@ -358,6 +559,21 @@ describe('refresh failures', () => {
     expect(client.status()).toMatchObject({ ready: true, rulesetVersion: 'v1', lastRefreshAt: loadedAt });
     expect(client.status().lastError?.status).toBe(503);
     await expect(client.evaluateFlag('us-only', us)).resolves.toMatchObject({ source: 'local', enabled: true });
+  });
+
+  // #1519: the kill-switch page says the last ruleset is served with no time limit unless
+  // maxStaleMs is set, so a flag turned off during an outage stays on until the API answers.
+  test('without maxStaleMs, a ruleset whose refreshes have failed for a day is still used', async () => {
+    const server = new FakeServer(ok(), { status: 503 }, new TypeError('fetch failed'));
+    const { client } = localClient(server);
+    track(client);
+    await client.ready();
+    const loadedAt = client.status().lastRefreshAt;
+    await jest.advanceTimersByTimeAsync(24 * 60 * 60 * 1000);
+    expect(server.requests(RULESET_PATH).length).toBeGreaterThan(100);
+    expect(client.status()).toMatchObject({ ready: true, rulesetVersion: 'v1', lastRefreshAt: loadedAt });
+    await expect(client.evaluateFlag('all-on', us)).resolves.toMatchObject({ source: 'local', enabled: true });
+    expect(server.requests('/feature-flags/evaluate/')).toHaveLength(0);
   });
 
   test('a network failure before the first load: ready() resolves ok: false, evaluations go to the server', async () => {
@@ -511,6 +727,145 @@ describe('refresh failures', () => {
     client.clearCache();
     await expect(client.evaluateFlag('all-on', us)).resolves.toMatchObject({ source: 'server' });
     expect(client.status().ready).toBe(false);
+  });
+});
+
+// ─── After local evaluation stops answering a pair ───────────────────────────
+//
+// #1709: a local answer is kept in the evaluation cache (for getEvaluatedFlags and the OpenFeature
+// provider), and a call that local evaluation no longer answered read that cache first, so it kept
+// the local answer, with no request, for up to cacheTtlMs. Each test answers a user and flag
+// locally, stops local evaluation from answering that pair, and expects the server's answer from
+// exactly one evaluate request. No test here calls clearCache(). The server answers off where the
+// ruleset answers on, so the answer shows which side gave it.
+
+describe('after local evaluation stops answering a pair', () => {
+  function serverOff(server: FakeServer, key = 'all-on'): FakeServer {
+    server.evaluate = () => ({ body: { key, enabled: false, config: null, reason: 'rollout' } });
+    return server;
+  }
+
+  async function answersLocally(client: ExperimentationClient, key = 'all-on', user: UserContext = us): Promise<void> {
+    await expect(client.evaluateFlag(key, user)).resolves.toMatchObject({ enabled: true, source: 'local' });
+  }
+
+  /** Two calls: the first asks the server, the second reuses the server's answer from the cache. */
+  async function asksTheServerOnce(client: ExperimentationClient, server: FakeServer, key = 'all-on', user: UserContext = us) {
+    for (let i = 0; i < 2; i++) {
+      await expect(client.evaluateFlag(key, user)).resolves.toMatchObject({ enabled: false, reason: 'rollout', source: 'server' });
+    }
+    const calls = server.requests('/feature-flags/evaluate/');
+    expect(calls.map(c => new URL(c.url).pathname)).toEqual([`/api/v1/feature-flags/evaluate/${key}`]);
+    return calls[0];
+  }
+
+  test.each([401, 403])('%i discards the ruleset: a pair answered locally goes to the server', async status => {
+    const server = serverOff(new FakeServer(ok(), { status, body: { detail: 'nope' } }));
+    const { client } = localClient(server);
+    track(client);
+    await client.ready();
+    await answersLocally(client);
+    await jest.advanceTimersByTimeAsync(DEFAULT_REFRESH_INTERVAL_MS);
+    expect(client.status().ready).toBe(false);
+    await asksTheServerOnce(client, server);
+  });
+
+  test.each([
+    ['a 404', { status: 404 }],
+    ['an unknown schema', ok({ ...RULESET, schema: 2 }, '"v9"')],
+    ['an unknown bucketing', ok({ ...RULESET, bucketing: 'md5-mod100-v2' }, '"v9"')],
+  ])('%s discards the ruleset: a pair answered locally goes to the server', async (_label, step) => {
+    const server = serverOff(new FakeServer(ok(), step as Step));
+    const { client } = localClient(server);
+    track(client);
+    await client.ready();
+    await answersLocally(client);
+    await jest.advanceTimersByTimeAsync(DEFAULT_REFRESH_INTERVAL_MS);
+    expect(client.status().ready).toBe(false);
+    await asksTheServerOnce(client, server);
+  });
+
+  test('past maxStaleMs, a pair answered locally goes to the server', async () => {
+    const server = serverOff(new FakeServer(ok(), { status: 503 }));
+    const { client } = localClient(server, { maxStaleMs: 45_000 });
+    track(client);
+    await client.ready();
+    await jest.advanceTimersByTimeAsync(40_000);
+    await answersLocally(client);
+    await jest.advanceTimersByTimeAsync(10_000);
+    expect(client.status().ready).toBe(false);
+    await asksTheServerOnce(client, server);
+  });
+
+  test('after close(), a pair answered locally goes to the server', async () => {
+    const server = serverOff(new FakeServer(ok()));
+    const { client } = localClient(server);
+    await client.ready();
+    await answersLocally(client);
+    await client.close();
+    await asksTheServerOnce(client, server);
+  });
+
+  test.each([
+    ['makes the flag remote', { key: 'all-on', active: true, evaluation: 'remote' }],
+    ['removes the flag', null],
+  ])('a new ruleset that %s: a pair answered locally goes to the server', async (_label, entry) => {
+    const flags = [...RULESET.flags.filter(f => f.key !== 'all-on'), ...(entry ? [entry] : [])];
+    const server = serverOff(new FakeServer(ok(), ok({ ...RULESET, version: 'v2', flags }, '"v2"')));
+    const { client } = localClient(server);
+    track(client);
+    await client.ready();
+    await answersLocally(client);
+    await jest.advanceTimersByTimeAsync(DEFAULT_REFRESH_INTERVAL_MS);
+    expect(client.status()).toMatchObject({ ready: true, rulesetVersion: 'v2' });
+    await asksTheServerOnce(client, server);
+  });
+
+  test('a call that defers after a local answer for the same pair goes to the server', async () => {
+    const server = serverOff(new FakeServer(ok()), 'us-only');
+    const { client } = localClient(server);
+    track(client);
+    await client.ready();
+    await answersLocally(client, 'us-only', us);
+    // A number against the rule's string: the SDK does not compare it, so this call defers.
+    const numeric = { userId: 'user-1', attributes: { country: 7 } };
+    const call = await asksTheServerOnce(client, server, 'us-only', numeric);
+    expect(new URL(call.url).searchParams.get('context')).toBe('{"country":7}');
+    // The ruleset still answers the attributes it can compare, with no request.
+    await answersLocally(client, 'us-only', us);
+    expect(server.requests('/feature-flags/evaluate/')).toHaveLength(1);
+  });
+});
+
+// ─── getCachedFlags ──────────────────────────────────────────────────────────
+//
+// #1714: the cached evaluations themselves, so a caller (the OpenFeature provider) can tell a
+// local entry, never reused, from a server one, which is.
+
+describe('getCachedFlags', () => {
+  test("getCachedFlags returns the user's unexpired cached evaluations, each with its source", async () => {
+    const server = new FakeServer(ok(RULESET_WITH_REMOTE, '"v2"'));
+    const { client } = localClient(server, { cacheTtlMs: 60_000 });
+    track(client);
+    await client.ready();
+    const t0 = Date.now();
+    const local = await client.evaluateFlag('us-only', us);
+    const remote = await client.evaluateFlag('semver', us);
+    await client.evaluateFlag('all-on', { userId: 'someone-else' });
+    const requests = server.calls.length;
+
+    expect(client.getCachedFlags('user-1')).toEqual([local, remote]);
+    expect(client.getCachedFlags('user-1').map(entry => [entry.key, entry.source])).toEqual([
+      ['us-only', 'local'],
+      ['semver', 'server'],
+    ]);
+    expect(client.getCachedFlags('nobody')).toEqual([]);
+    // Live for cacheTtlMs after it is set and expired from then on, with no call in between.
+    jest.setSystemTime(t0 + 59_999);
+    expect(client.getCachedFlags('user-1')).toHaveLength(2);
+    jest.setSystemTime(t0 + 60_000);
+    expect(client.getCachedFlags('user-1')).toEqual([]);
+    expect(server.calls.length).toBe(requests); // no network
   });
 });
 

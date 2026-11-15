@@ -410,3 +410,33 @@ def test_failed_audit_write_keeps_the_answer_and_the_change(
         f"{route}: the request's session was left unusable after the audit "
         f"write failed: {type(after_request[-1]).__name__}"
     )
+
+
+# --- the warning names the error's type, not its text --------------------------
+
+MARKER = "marker-not-for-logs"
+
+
+@pytest.mark.parametrize("route", list(ROUTES))
+def test_failed_audit_write_logs_the_error_type_only(
+    client, fresh, developer, monkeypatch, caplog, route
+):
+    def log(self, **kwargs):
+        raise RuntimeError(MARKER)
+
+    resource_id, _ = _setup(client, developer, route)
+    monkeypatch.setattr(AuditLogService, "log", log)
+
+    with caplog.at_level("WARNING"):
+        response, _, _ = _call(client, developer, route, resource_id)
+
+    assert response.status_code == ROUTES[route][2], response.text
+    records = [
+        r for r in caplog.records if "Compliance audit logging failed" in r.getMessage()
+    ]
+    assert len(records) == 1, [r.getMessage() for r in caplog.records]
+    record = records[0]
+    assert record.levelname == "WARNING"
+    assert "RuntimeError" in record.getMessage()
+    assert MARKER not in record.getMessage()
+    assert record.exc_info is None and MARKER not in (record.exc_text or "")

@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -300,7 +301,7 @@ class TestAuthDependencies:
 
         # Call function
         with pytest.raises(HTTPException) as excinfo:
-            deps.get_current_active_user(inactive_user)
+            asyncio.run(deps.get_current_active_user(inactive_user))
 
         # Verify
         assert excinfo.value.status_code == 400
@@ -318,7 +319,7 @@ class TestAuthDependencies:
 
         # Call function
         with pytest.raises(HTTPException) as excinfo:
-            deps.get_current_superuser(regular_user)
+            asyncio.run(deps.get_current_superuser(regular_user))
 
         # Verify
         assert excinfo.value.status_code == 403
@@ -682,7 +683,7 @@ class TestIntegrationDependencyInjection:
             assert current_user == mock_user
 
             # Step 2: Check if user is active
-            active_user = deps.get_current_active_user(current_user)
+            active_user = deps.require_active_user(current_user)
             assert active_user == current_user
 
             # Step 3: Get experiment with access check
@@ -732,7 +733,7 @@ class TestIntegrationDependencyInjection:
             user = deps.get_current_user("valid_token", mock_db)
 
             # Check if user is active
-            active_user = deps.get_current_active_user(user)
+            active_user = deps.require_active_user(user)
 
             # Get experiment with access check
             experiment = deps.get_experiment_read_access(mock_experiment, active_user)

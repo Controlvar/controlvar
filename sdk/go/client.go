@@ -1,6 +1,7 @@
 package experimentation
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -17,15 +18,24 @@ const batchLimit = 100
 // Implementations must be safe for concurrent use by multiple goroutines.
 type Client interface {
 	// EvaluateFlag evaluates a feature flag for the given user via
-	// GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=... The server
-	// decides; successful results are cached per user + key for the cache TTL.
-	// On failure it returns a disabled EvalResult together with the error.
+	// GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=...&context=...,
+	// where context is user.Attributes as JSON, sent only when there are any,
+	// so the flag's targeting rules can match them. The server decides;
+	// successful results are cached per user + key for the cache TTL, and the
+	// attributes are not part of that key. On failure it returns a disabled
+	// EvalResult together with the error; attributes that cannot be encoded as
+	// JSON are a failure that sends nothing.
+	// Each call returns an EvalResult of its own; a string, number or json
+	// flag's value is read with its StringValue, NumberValue or DecodeValue.
 	EvaluateFlag(ctx context.Context, flagKey string, user *User) (*EvalResult, error)
 
 	// GetAssignment assigns the user to an experiment variant via
 	// POST /api/v1/tracking/assign (sticky server-side; records the exposure).
 	// Successful assignments are cached per user + key for the cache TTL.
-	// On failure it returns (nil, err).
+	// On failure it returns (nil, err). When the server answers
+	// "assigned": true and no unexpired answer was cached, the function set
+	// with WithOnExposure is called before it returns; a cached answer calls
+	// nothing.
 	GetAssignment(ctx context.Context, experimentKey string, user *User) (*Assignment, error)
 
 	// Track records an analytics event. With ExperimentKey or FeatureFlagKey set
@@ -105,11 +115,14 @@ func New(opts ...Option) (Client, error) {
 }
 
 // evaluateResponse is the wire form of GET /api/v1/feature-flags/evaluate/{key}.
-// Config is kept raw because the server may return any JSON value.
+// Config and Value are kept raw because the server may return any JSON value.
+// A server without flag values sends neither value nor value_type.
 type evaluateResponse struct {
-	Key     string          `json:"key"`
-	Enabled bool            `json:"enabled"`
-	Config  json.RawMessage `json:"config"`
+	Key       string          `json:"key"`
+	Enabled   bool            `json:"enabled"`
+	Config    json.RawMessage `json:"config"`
+	Value     json.RawMessage `json:"value"`
+	ValueType string          `json:"value_type"`
 }
 
 // EvaluateFlag implements Client.
@@ -124,12 +137,19 @@ func (c *client) EvaluateFlag(ctx context.Context, flagKey string, user *User) (
 	key := cacheKey(cacheKindFlag, user.ID, flagKey)
 	if cached, ok := c.cache.Get(key); ok {
 		if cf, ok := cached.(*cachedFlag); ok {
-			return cf.result, nil
+			// Every caller gets its own copy: the cached result is shared.
+			return cf.result.clone(), nil
 		}
 	}
 
+	query, err := contextQuery(user.Attributes)
+	if err != nil {
+		// Nothing is sent and nothing is cached, as GetAssignment does with
+		// attributes it cannot encode.
+		return &EvalResult{Key: flagKey, Enabled: false}, fmt.Errorf("evaluate flag %q: %w", flagKey, err)
+	}
 	path := "/api/v1/feature-flags/evaluate/" + url.PathEscape(flagKey) +
-		"?user_id=" + url.QueryEscape(user.ID)
+		"?user_id=" + url.QueryEscape(user.ID) + query
 
 	var resp evaluateResponse
 	if err := c.http.Get(ctx, path, &resp); err != nil {
@@ -137,7 +157,7 @@ func (c *client) EvaluateFlag(ctx context.Context, flagKey string, user *User) (
 		return &EvalResult{Key: flagKey, Enabled: false}, fmt.Errorf("evaluate flag %q: %w", flagKey, err)
 	}
 
-	result := &EvalResult{Key: resp.Key, Enabled: resp.Enabled}
+	result := &EvalResult{Key: resp.Key, Enabled: resp.Enabled, ValueType: resp.ValueType}
 	if result.Key == "" {
 		result.Key = flagKey
 	}
@@ -147,9 +167,28 @@ func (c *client) EvaluateFlag(ctx context.Context, flagKey string, user *User) (
 			result.Config = cfg
 		}
 	}
+	if hasValue(resp.Value) {
+		result.Value = resp.Value
+	}
 
 	c.cache.Set(key, &cachedFlag{userID: user.ID, result: result})
-	return result, nil
+	return result.clone(), nil
+}
+
+// contextQuery is "&context=" and the attributes as compact JSON, URL-encoded:
+// what the JS and Python SDKs append to a flag evaluation. It is "" when there
+// are no attributes, so the URL is then the one sent without them. The
+// server's limits on a context are not checked here; a context over them is
+// the server's 422.
+func contextQuery(attributes map[string]interface{}) (string, error) {
+	if len(attributes) == 0 {
+		return "", nil
+	}
+	encoded, err := json.Marshal(attributes)
+	if err != nil {
+		return "", fmt.Errorf("marshal user attributes: %w", err)
+	}
+	return "&context=" + url.QueryEscape(string(encoded)), nil
 }
 
 // assignRequest is the body of POST /api/v1/tracking/assign.
@@ -157,6 +196,21 @@ type assignRequest struct {
 	ExperimentKey string                 `json:"experiment_key"`
 	UserID        string                 `json:"user_id"`
 	Context       map[string]interface{} `json:"context,omitempty"`
+}
+
+// assignAnswer is the wire form of POST /api/v1/tracking/assign's answer: the
+// Assignment, and "assigned", which only the exposure hook reads. "assigned"
+// is kept raw, so an answer without it, or with any value but true, decodes as
+// it did before and calls nothing.
+type assignAnswer struct {
+	Assignment
+	Assigned json.RawMessage `json:"assigned"`
+}
+
+// enrolled reports whether the server said "assigned": true, the one answer
+// for which it records an exposure.
+func (a *assignAnswer) enrolled() bool {
+	return bytes.Equal(bytes.TrimSpace(a.Assigned), []byte("true"))
 }
 
 // GetAssignment implements Client.
@@ -181,10 +235,11 @@ func (c *client) GetAssignment(ctx context.Context, experimentKey string, user *
 		Context:       user.Attributes,
 	}
 
-	var assignment Assignment
-	if err := c.http.Post(ctx, "/api/v1/tracking/assign", payload, &assignment); err != nil {
+	var answer assignAnswer
+	if err := c.http.Post(ctx, "/api/v1/tracking/assign", payload, &answer); err != nil {
 		return nil, fmt.Errorf("assign experiment %q: %w", experimentKey, err)
 	}
+	assignment := answer.Assignment
 	if assignment.ExperimentKey == "" {
 		assignment.ExperimentKey = experimentKey
 	}
@@ -192,8 +247,32 @@ func (c *client) GetAssignment(ctx context.Context, experimentKey string, user *
 		assignment.UserID = user.ID
 	}
 
-	c.cache.Set(key, &cachedAssignment{userID: user.ID, assignment: &assignment})
+	// Concurrent first calls each send a request and store their answer; only
+	// the one whose store finds no unexpired answer calls the hook.
+	filled := c.cache.fill(key, &cachedAssignment{userID: user.ID, assignment: &assignment})
+	// Last, once the answer is stored, with no lock held. The server recorded an
+	// exposure for this request only if it said "assigned": true.
+	if filled && answer.enrolled() {
+		c.exposed(ctx, &assignment)
+	}
 	return &assignment, nil
+}
+
+// exposed gives the function set with WithOnExposure a new Exposure holding
+// the assignment's four values, through the guard. The guard's error goes
+// nowhere: this SDK has no channel for the errors it swallows (no logger, no
+// error hook), so a function that panics looks like one that sends nothing.
+func (c *client) exposed(ctx context.Context, a *Assignment) {
+	hook := c.config.onExposure
+	if hook == nil {
+		return
+	}
+	_ = callExposureHook(ctx, hook.fn, Exposure{
+		ExperimentKey: a.ExperimentKey,
+		UserID:        a.UserID,
+		VariantID:     a.VariantID,
+		VariantName:   a.VariantName,
+	})
 }
 
 // Track implements Client.

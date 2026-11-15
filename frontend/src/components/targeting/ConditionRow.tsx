@@ -4,10 +4,11 @@ import {
   OperatorType,
   COMMON_ATTRIBUTES,
   OPERATOR_LABELS,
+  OPERATORS_BY_TYPE,
   SEGMENT_ATTRIBUTE,
   isSegmentOperator,
 } from '@/types/targeting';
-import { getOperatorsForAttribute, OperatorOptions } from '@/utils/targeting';
+import { getAttributeType, getOperatorsForAttribute, OperatorOptions } from '@/utils/targeting';
 import { SegmentPicker } from './SegmentPicker';
 
 interface ConditionRowProps {
@@ -46,10 +47,16 @@ export function ConditionRow({
   const handleAttributeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newAttribute = e.target.value;
     const newOperators = getOperatorsForAttribute(newAttribute, operatorOptions);
-    // If current operator is not in new operator list, reset to first available
-    const newOperator = newOperators.includes(condition.operator)
-      ? condition.operator
-      : newOperators[0];
+    // Keep the current operator if the new attribute offers it; otherwise
+    // reset to the first available. An attribute typed as a version
+    // (`app_version`) keeps only a version operator: it also offers the text
+    // ones, for rules saved before #1775, but starts on its first typed
+    // operator, `semver_eq`, as `app.version` did.
+    const versionAttribute = getAttributeType(newAttribute) === 'semver';
+    const keep =
+      newOperators.includes(condition.operator) &&
+      (!versionAttribute || OPERATORS_BY_TYPE['semver'].includes(condition.operator));
+    const newOperator = keep ? condition.operator : newOperators[0];
     // A segment id is not a text value, and text is not a segment id.
     const kindChanged = isSegmentOperator(newOperator) !== isSegmentOperator(condition.operator);
     onChange({

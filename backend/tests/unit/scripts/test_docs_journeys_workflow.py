@@ -48,7 +48,23 @@ pinned rather than reviewed once:
   condition; everything posted goes through ``--body-file`` from a rendered
   file, the issue title is the rendered title file's first line, and no script
   holds an expression, prints a file other than the summary or annotates with
-  non-literal text.
+  non-literal text;
+* the alarm job (``report-alarm``) waits for the three jobs and runs in every
+  run not cancelled as a whole (``!cancelled()``: a report that failed, was
+  cancelled or was skipped is what it is for); it holds only ``contents: read``
+  and ``issues: write``; it hands ``docs_journeys_report.py alarm`` the report
+  job's result and both jobs' ``verdicts`` outputs, each by the exact
+  reference written here (a misspelt one is an empty string and no error);
+  its one posting step has the report's name and condition and loops over the
+  alarm's own ``posts/``, and no other job posts; every ``needs.<job>`` reference
+  in the workflow names a job the referring job waits for, and an output that
+  job declares;
+* no job and no step carries ``continue-on-error``, whatever its value: a step
+  that fails under it leaves its job a ``success``, and the alarm reads the
+  report job's ``success`` as a report that decided;
+* the two posting steps, run under ``bash -e`` with a fake ``gh`` first on
+  ``PATH``, make exactly the ``gh`` calls each post asks for: the alarm closes
+  its issue without a comment, and an unknown action fails the step.
 
 Every rule is also planted against the real workflow below, so a rule that
 stops firing fails here.
@@ -57,9 +73,14 @@ stops firing fails here.
 from __future__ import annotations
 
 import copy
+import json
+import os
 import re
+import shutil
+import subprocess
+import sys
 from pathlib import Path
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pytest
 
@@ -82,6 +103,7 @@ JOB_PERMISSIONS = {
     "journeys": {"contents": "read", "deployments": "read"},
     "demo": {"contents": "read"},
     "report": {"contents": "read", "issues": "write", "actions": "read"},
+    "report-alarm": {"contents": "read", "issues": "write"},
 }
 #: The jobs that walk journeys, each with its walk step's name.
 WALKING_JOBS = {"journeys": "Walk the journeys", "demo": "Walk the demo journeys"}
@@ -201,6 +223,43 @@ VERDICTS_PATH = RUN_DIR + "/verdicts.json"
 VERDICTS_UPLOAD_IF = "always() && steps.verdicts.outputs.written == 'true'"
 POSTS = re.compile(
     r"\bgh\s+(?:issue|pr)\s+(?:create|comment|edit|close|reopen|review)\b"
+)
+ALARM_JOB = "report-alarm"
+#: Every run not cancelled as a whole: not success(), which would skip the
+#: alarm exactly when the report failed, was cancelled or was skipped.
+ALARM_IF = "${{ !cancelled() }}"
+ALARM_NEEDS = ["journeys", "demo", "report"]
+#: The alarm reads one listing, retried inside the script's budget like the
+#: report's reads (test_docs_journeys_report.py pins the budget against it).
+ALARM_TIMEOUT_MINUTES = 10
+ALARM_DECIDE = "Decide the alarm"
+#: Written out, not derived: a misspelt ``needs`` reference is an empty string
+#: on GitHub, and an empty value raises the alarm every night.
+ALARM_ENV = {
+    "GH_TOKEN": "${{ github.token }}",
+    "EVENT": "${{ github.event_name }}",
+    "REF": "${{ github.ref }}",
+    "REPORT_RESULT": "${{ needs.report.result }}",
+    "JOURNEYS_VERDICTS": "${{ needs.journeys.outputs.verdicts }}",
+    "DEMO_VERDICTS": "${{ needs.demo.outputs.verdicts }}",
+}
+ALARM_RUN = (
+    "python3 scripts/docs_journeys_report.py alarm"
+    ' --report-result "$REPORT_RESULT"'
+    ' --journeys-verdicts "$JOURNEYS_VERDICTS"'
+    ' --demo-verdicts "$DEMO_VERDICTS"'
+    ' --event "$EVENT" --ref "$REF" --out "$RUNNER_TEMP/docs-alarm"'
+)
+#: What the report and the alarm check out: the scripts and the templates.
+SPARSE_CHECKOUT = {
+    "persist-credentials": False,
+    "sparse-checkout": "scripts\n.github/qa-templates\n",
+}
+#: The jobs that post, each with the directory under $RUNNER_TEMP its decide
+#: step writes its posts to and its posting step loops over.
+POSTING_JOBS = {"report": "docs-issues", ALARM_JOB: "docs-alarm"}
+NEEDS_REFERENCE = re.compile(
+    r"\bneeds\.([A-Za-z0-9_-]+)\.(?:result\b|outputs\.([A-Za-z0-9_-]+))"
 )
 
 
@@ -328,6 +387,80 @@ def demo_problems(doc: Dict[Any, Any]) -> List[str]:
     return found
 
 
+def alarm_problems(doc: Dict[Any, Any]) -> List[str]:
+    """The alarm job's own rules, and the one posting step per posting job."""
+    found: List[str] = []
+    job = doc["jobs"].get(ALARM_JOB)
+    if job is None:
+        return [f"there is no {ALARM_JOB} job"]
+    if job.get("needs") != ALARM_NEEDS:
+        found.append(f"the alarm job does not wait for {ALARM_NEEDS}")
+    if _condition(job) != ALARM_IF:
+        found.append(
+            f"the alarm job does not run in every run not cancelled ({ALARM_IF})"
+        )
+    if job.get("timeout-minutes") != ALARM_TIMEOUT_MINUTES:
+        found.append(f"the alarm job has no timeout of {ALARM_TIMEOUT_MINUTES} minutes")
+    steps = _job_steps(doc, ALARM_JOB)
+    shape = [step.get("name") or step.get("uses") for step in steps]
+    if shape != ["actions/checkout@v7", ALARM_DECIDE, POST]:
+        found.append(f"the alarm job's steps are {shape}")
+    elif steps[0].get("with") != SPARSE_CHECKOUT:
+        found.append("the alarm job checks out more than the scripts and templates")
+    decide = _in_job(doc, ALARM_JOB, ALARM_DECIDE) or {}
+    if decide.get("env") != ALARM_ENV:
+        found.append(
+            "the alarm's environment is not the report job's result and both"
+            f" jobs' verdicts outputs, by their exact references: {decide.get('env')}"
+        )
+    if decide.get("run") != ALARM_RUN or "if" in decide:
+        found.append("the alarm is not decided by docs_journeys_report.py alarm")
+    for job_id, directory in POSTING_JOBS.items():
+        posting = [s for s in _job_steps(doc, job_id) if _posts(s)]
+        if len(posting) != 1:
+            found.append(f"{job_id} has {len(posting)} posting steps, not one")
+            continue
+        loop = f'for DIR in "$RUNNER_TEMP"/{directory}/posts/*/; do'
+        if loop not in _lines(posting[0]):
+            found.append(
+                f"{job_id}'s posting step does not loop over {directory}/posts"
+            )
+        writer = [s for s in _job_steps(doc, job_id) if "--out" in str(s.get("run"))]
+        if not writer or f'--out "$RUNNER_TEMP/{directory}"' not in writer[0]["run"]:
+            found.append(f"{job_id}'s posts are not written to {directory}")
+    for job_id, job_doc in doc["jobs"].items():
+        if job_id not in POSTING_JOBS and any(
+            _posts(s) for s in job_doc.get("steps") or []
+        ):
+            found.append(f"{job_id} posts, and is not a posting job")
+    return found
+
+
+def needs_problems(doc: Dict[Any, Any]) -> List[str]:
+    """Every ``needs.<job>.result`` or ``needs.<job>.outputs.<name>`` names a
+    job the referring job waits for, and an output that job declares. GitHub
+    gives a misspelt reference as an empty string, with no error."""
+    found: List[str] = []
+    jobs = doc["jobs"]
+    for job_id, job in jobs.items():
+        needs = job.get("needs") or []
+        needs = [needs] if isinstance(needs, str) else list(needs)
+        for match in NEEDS_REFERENCE.finditer(str(job)):
+            needed, output = match.group(1), match.group(2)
+            if needed not in needs:
+                found.append(
+                    f"{job_id} reads needs.{needed}, which it does not wait for"
+                )
+            elif output is not None and output not in (
+                jobs.get(needed, {}).get("outputs") or {}
+            ):
+                found.append(
+                    f"{job_id} reads needs.{needed}.outputs.{output}, which"
+                    f" {needed} does not declare"
+                )
+    return found
+
+
 def workflow_problems(doc: Dict[Any, Any], text: str) -> List[str]:
     found: List[str] = []
     on = triggers(doc)
@@ -368,11 +501,20 @@ def workflow_problems(doc: Dict[Any, Any], text: str) -> List[str]:
             found.append(f"{job_id}'s permissions are {job.get('permissions')}")
         if "environment" in job or "uses" in job or "secrets" in job:
             found.append(f"{job_id} is bound to an environment or calls a workflow")
+        # Any value, an expression included: the key is never written.
+        if "continue-on-error" in job:
+            found.append(f"{job_id} carries continue-on-error")
+        for index, step in enumerate(job.get("steps") or []):
+            if "continue-on-error" in step:
+                name = step.get("name") or step.get("uses") or f"step {index + 1}"
+                found.append(f"{job_id}: {name!r} carries continue-on-error")
     if _condition(jobs.get("report") or {}) != REPORT_IF:
         found.append("the report job does not run only after verdicts were written")
     if (jobs.get("report") or {}).get("needs") != ["journeys", "demo"]:
         found.append("the report job does not wait for the journeys and the demo")
     found.extend(demo_problems(doc))
+    found.extend(alarm_problems(doc))
+    found.extend(needs_problems(doc))
 
     install = _named(doc, "Install the runner and Chromium")
     if install is None or _lines(install) != INSTALL_LINES:
@@ -660,6 +802,23 @@ def _report_download(index, change):
             if "download-artifact" in str(s.get("uses") or "")
         ]
         change(doc["jobs"]["report"]["steps"], downloads[index])
+        return doc, text
+
+    return plant
+
+
+def _alarm_env(key, value):
+    def plant(doc, text):
+        step = _in_job(doc, ALARM_JOB, ALARM_DECIDE)
+        step["env"] = {**(step.get("env") or {}), key: value}
+        return doc, text
+
+    return plant
+
+
+def _alarm_step(name, change):
+    def plant(doc, text):
+        change(_in_job(doc, ALARM_JOB, name))
         return doc, text
 
     return plant
@@ -1200,6 +1359,166 @@ PLANTS: List[tuple] = [
         ),
         "non-literal",
     ),
+    (
+        "alarm-needs-misspelt",
+        _alarm_env("REPORT_RESULT", "${{ needs.reprot.result }}"),
+        "reads needs.reprot, which it does not wait for",
+    ),
+    (
+        "alarm-output-misspelt",
+        _alarm_env("DEMO_VERDICTS", "${{ needs.demo.outputs.verdict }}"),
+        "needs.demo.outputs.verdict, which demo does not declare",
+    ),
+    (
+        "alarm-reads-the-journeys-verdicts-twice",
+        _alarm_env("DEMO_VERDICTS", "${{ needs.journeys.outputs.verdicts }}"),
+        "the alarm's environment",
+    ),
+    (
+        "alarm-only-when-the-report-succeeded",
+        _set(["jobs", ALARM_JOB, "if"], "success()"),
+        "does not run in every run not cancelled",
+    ),
+    (
+        "alarm-condition-dropped",
+        lambda doc, text: (doc["jobs"][ALARM_JOB].pop("if") and doc, text),
+        "does not run in every run not cancelled",
+    ),
+    (
+        "alarm-does-not-wait-for-the-report",
+        _set(["jobs", ALARM_JOB, "needs"], ["journeys", "demo"]),
+        "reads needs.report, which it does not wait for",
+    ),
+    (
+        "alarm-without-a-timeout",
+        lambda doc, text: (doc["jobs"][ALARM_JOB].pop("timeout-minutes") and doc, text),
+        "the alarm job has no timeout",
+    ),
+    (
+        "alarm-may-write-contents",
+        _set(
+            ["jobs", ALARM_JOB, "permissions"], {"contents": "write", "issues": "write"}
+        ),
+        "report-alarm's permissions",
+    ),
+    (
+        "alarm-posts-on-any-run",
+        _alarm_step(
+            POST, lambda s: s.update({"if": "github.ref == 'refs/heads/main'"})
+        ),
+        "a step that posts is not the",
+    ),
+    (
+        "alarm-posts-the-reports-posts",
+        _alarm_step(
+            POST,
+            lambda s: s.update(
+                {"run": s["run"].replace("/docs-alarm/posts/", "/docs-issues/posts/")}
+            ),
+        ),
+        "report-alarm's posting step does not loop over docs-alarm/posts",
+    ),
+    (
+        "alarm-writes-elsewhere",
+        _alarm_step(
+            ALARM_DECIDE,
+            lambda s: s.update({"run": s["run"].replace("docs-alarm", "docs-issues")}),
+        ),
+        "report-alarm's posts are not written to docs-alarm",
+    ),
+    (
+        "alarm-decided-only-on-a-schedule",
+        _alarm_step(ALARM_DECIDE, lambda s: s.update({"if": POST_IF})),
+        "not decided by docs_journeys_report.py alarm",
+    ),
+    (
+        "alarm-decide-step-reads-gh",
+        _alarm_step(
+            ALARM_DECIDE,
+            lambda s: s.update({"run": "gh issue list --label x\n" + s["run"]}),
+        ),
+        "a step that posts is not the",
+    ),
+    (
+        "alarm-checks-out-everything",
+        lambda doc, text: (
+            doc["jobs"][ALARM_JOB]["steps"][0].update(
+                {"with": {"persist-credentials": False}}
+            )
+            or doc,
+            text,
+        ),
+        "checks out more than",
+    ),
+    (
+        "report-gets-a-second-posting-step",
+        _add_step(
+            "report",
+            {
+                "name": POST,
+                "if": POST_IF,
+                "run": 'gh issue comment 1 --repo "$GITHUB_REPOSITORY"'
+                ' --body-file "$DIR/body.md"',
+            },
+        ),
+        "report has 2 posting steps, not one",
+    ),
+    (
+        "demo-job-posts",
+        _add_step(
+            "demo",
+            {
+                "name": POST,
+                "if": POST_IF,
+                "run": 'gh issue comment 1 --repo "$GITHUB_REPOSITORY"'
+                ' --body-file "$DIR/body.md"',
+            },
+        ),
+        "demo posts, and is not a posting job",
+    ),
+    (
+        "alarm-job-dropped",
+        lambda doc, text: (doc["jobs"].pop(ALARM_JOB) and doc, text),
+        "there is no report-alarm job",
+    ),
+    (
+        "report-decides-on-error",
+        _step_set("Decide and render", "continue-on-error", True),
+        "report: 'Decide and render' carries continue-on-error",
+    ),
+    (
+        "report-job-continues-on-error-by-an-expression",
+        _set(
+            ["jobs", "report", "continue-on-error"],
+            "${{ github.event_name != 'schedule' }}",
+        ),
+        "report carries continue-on-error",
+    ),
+    (
+        "alarm-decides-on-error",
+        _alarm_step(ALARM_DECIDE, lambda s: s.update({"continue-on-error": True})),
+        "report-alarm: 'Decide the alarm' carries continue-on-error",
+    ),
+    (
+        "alarm-posts-on-error-by-an-expression",
+        _alarm_step(
+            POST,
+            lambda s: s.update(
+                {"continue-on-error": "${{ github.event_name == 'schedule' }}"}
+            ),
+        ),
+        f"report-alarm: {POST!r} carries continue-on-error",
+    ),
+    (
+        "alarm-job-continues-on-error",
+        _set(["jobs", ALARM_JOB, "continue-on-error"], True),
+        "report-alarm carries continue-on-error",
+    ),
+    (
+        "walk-continue-on-error-false",
+        _step_set(WALK, "continue-on-error", False),
+        f"journeys: {WALK!r} carries continue-on-error",
+    ),
 ]
 
 
@@ -1211,6 +1530,289 @@ def test_each_rule_fires_on_a_planted_defect(plant, fragment):
     doc, text = plant(copy.deepcopy(doc), text)
     found = workflow_problems(doc, text)
     assert any(fragment in problem for problem in found), found
+
+
+# ---------------------------------------------------------------------------
+# The posting steps, run: the gh calls each post makes
+# ---------------------------------------------------------------------------
+#: Not this repository: were a real ``gh`` ever reached, it has no credentials
+#: (no token in the environment, an empty config directory) and no repository
+#: of ours to write to.
+FAKE_REPOSITORY = "example-org/example-repo"
+FAKE_GH = """#!/bin/sh
+for arg in "$@"; do printf '%s\\037' "$arg"; done >> "$GH_LOG"
+printf '\\n' >> "$GH_LOG"
+if [ "$1 $2" = "issue list" ]; then printf '%s\\n' "$GH_ISSUES"; fi
+"""
+
+
+def posting_script(doc, job: str) -> str:
+    (step,) = [s for s in _job_steps(doc, job) if s.get("name") == POST]
+    return step["run"]
+
+
+def write_post(root: Path, number: int, **files: str) -> None:
+    target = root / "posts" / f"{number:02d}"
+    target.mkdir(parents=True)
+    for name, text in files.items():
+        (target / name.replace("_", ".")).write_text(text)
+
+
+def run_posting(
+    tmp_path: Path, script: str, step_env: Optional[Dict[str, str]] = None
+) -> Tuple[int, List[List[str]]]:
+    """The step's script under ``bash -e`` from the repository root, a fake
+    ``gh`` first on PATH (it answers ``issue list`` with ``$GH_ISSUES``); its
+    exit status and each gh call's arguments. The posts are under
+    ``tmp_path/runner`` (``$RUNNER_TEMP``)."""
+    fake = tmp_path / "bin"
+    fake.mkdir(exist_ok=True)
+    (fake / "gh").write_text(FAKE_GH)
+    (fake / "gh").chmod(0o755)
+    if not (fake / "python3").exists():
+        (fake / "python3").symlink_to(sys.executable)
+    (tmp_path / "gh-config").mkdir(exist_ok=True)
+    log = tmp_path / "gh.log"
+    log.write_text("")
+    env = {
+        "PATH": f"{fake}{os.pathsep}/usr/bin{os.pathsep}/bin",
+        "HOME": str(tmp_path),
+        "GH_CONFIG_DIR": str(tmp_path / "gh-config"),
+        "GH_LOG": str(log),
+        "GH_ISSUES": "[]",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "RUNNER_TEMP": str(tmp_path / "runner"),
+        "GITHUB_REPOSITORY": FAKE_REPOSITORY,
+        **(step_env or {}),
+    }
+    assert "GH_TOKEN" not in env and "GITHUB_TOKEN" not in env
+    assert shutil.which("gh", path=env["PATH"]) == str(fake / "gh")
+    done = subprocess.run(
+        ["bash", "-e", "-c", script],
+        env=env,
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    calls = [line.split("\x1f")[:-1] for line in log.read_text().splitlines()]
+    return done.returncode, calls
+
+
+def label_create() -> List[str]:
+    return [
+        "label",
+        "create",
+        "docs-journey-failure",
+        "--repo",
+        FAKE_REPOSITORY,
+        "--color",
+        "B60205",
+        "--description",
+        "Docs journey failed",
+    ]
+
+
+def issue_create(directory: str, title: str = "A rendered title") -> List[str]:
+    return [
+        "issue",
+        "create",
+        "--repo",
+        FAKE_REPOSITORY,
+        "--title",
+        title,
+        "--label",
+        "docs-journey-failure",
+        "--body-file",
+        f"{directory}/body.md",
+    ]
+
+
+def issue_comment(number: str, directory: str) -> List[str]:
+    return [
+        "issue",
+        "comment",
+        number,
+        "--repo",
+        FAKE_REPOSITORY,
+        "--body-file",
+        f"{directory}/body.md",
+    ]
+
+
+def close(number: str) -> List[str]:
+    return [
+        "api",
+        "--method",
+        "PATCH",
+        f"repos/{FAKE_REPOSITORY}/issues/{number}",
+        "-f",
+        "state=closed",
+        "-f",
+        "state_reason=completed",
+    ]
+
+
+def three_posts(root: Path) -> Dict[str, str]:
+    """An open, a comment and a close, as the script writes them; each
+    directory as the step's glob names it (with its trailing slash)."""
+    write_post(root, 1, action="open\n", title_txt="A rendered title\n", body_md="b\n")
+    write_post(root, 2, action="comment\n", issue="41\n", body_md="b\n")
+    write_post(root, 3, action="close\n", issue="42\n", body_md="b\n")
+    return {
+        action: f"{root}/posts/{number}/"
+        for action, number in (("open", "01"), ("comment", "02"), ("close", "03"))
+    }
+
+
+def test_the_report_posts_each_action_as_the_report_wrote_it(tmp_path):
+    """The report's open creates the label and the issue; its comment and its
+    close comment the rendered body; the close then closes the issue."""
+    doc, _ = real()
+    dirs = three_posts(tmp_path / "runner" / "docs-issues")
+    code, calls = run_posting(tmp_path, posting_script(doc, "report"))
+    assert code == 0
+    assert calls == [
+        label_create(),
+        issue_create(dirs["open"]),
+        issue_comment("41", dirs["comment"]),
+        issue_comment("42", dirs["close"]),
+        close("42"),
+    ]
+
+
+def alarm_calls(dirs: Dict[str, str]) -> List[List[str]]:
+    """The alarm's open and comment are the report's; its close only closes."""
+    return [
+        label_create(),
+        issue_create(dirs["open"]),
+        issue_comment("41", dirs["comment"]),
+        close("42"),
+    ]
+
+
+def test_the_alarm_posts_each_action_and_closes_without_a_comment(tmp_path):
+    """The alarm has no closing text: a body.md left in its close's directory
+    is not read."""
+    doc, _ = real()
+    dirs = three_posts(tmp_path / "runner" / "docs-alarm")
+    assert run_posting(tmp_path, posting_script(doc, ALARM_JOB)) == (
+        0,
+        alarm_calls(dirs),
+    )
+
+
+ALARM_TITLE = "Docs journeys report is red"
+ISSUE_LIST = [
+    "issue",
+    "list",
+    "--repo",
+    FAKE_REPOSITORY,
+    "--state",
+    "open",
+    "--label",
+    "docs-journey-failure",
+    "--limit",
+    "100",
+    "--json",
+    "number,title,author",
+]
+
+
+def run_alarm_job(
+    tmp_path: Path, night: Tuple[str, str, str], issues: List[Dict[str, Any]]
+) -> Tuple[int, List[List[str]]]:
+    """The alarm job's decide step, then its posting step, as a scheduled run
+    on main runs them: each name the decide step's ``env`` maps, with the
+    value GitHub would give it."""
+    doc, _ = real()
+    decide = _in_job(doc, ALARM_JOB, ALARM_DECIDE)
+    report_result, journeys, demo = night
+    given = {
+        "EVENT": "schedule",
+        "REF": "refs/heads/main",
+        "REPORT_RESULT": report_result,
+        "JOURNEYS_VERDICTS": journeys,
+        "DEMO_VERDICTS": demo,
+    }
+    assert set(given) == set(decide["env"]) - {"GH_TOKEN"}
+    step_env = {
+        **given,
+        "GITHUB_SHA": "c6e0f081d82f1a858e111c86db62aa5d8b8a71d4",
+        "GITHUB_RUN_ID": "37456943504",
+        "GH_ISSUES": json.dumps(issues),
+    }
+    script = decide["run"] + "\n" + posting_script(doc, ALARM_JOB)
+    return run_posting(tmp_path, script, step_env)
+
+
+def test_the_alarm_job_opens_the_alarm_when_the_report_failed(tmp_path):
+    """The decide step's posts are what the posting step reads: one open,
+    titled from the template, labelled, its body the rendered file."""
+    code, calls = run_alarm_job(tmp_path, ("failure", "true", "true"), [])
+    opened = f"{tmp_path}/runner/docs-alarm/posts/01/"
+    assert code == 0
+    assert calls == [ISSUE_LIST, label_create(), issue_create(opened, ALARM_TITLE)]
+    body = Path(opened, "body.md").read_text()
+    assert f"https://github.com/{FAKE_REPOSITORY}/actions/runs/37456943504" in body
+
+
+def test_the_alarm_job_closes_the_alarm_on_a_healthy_run(tmp_path):
+    alarm = {
+        "number": 90,
+        "title": ALARM_TITLE,
+        "author": {"login": "app/github-actions"},
+    }
+    code, calls = run_alarm_job(tmp_path, ("success", "true", "true"), [alarm])
+    assert (code, calls) == (0, [ISSUE_LIST, close("90")])
+
+
+@pytest.mark.parametrize("job", sorted(POSTING_JOBS))
+def test_a_posting_step_with_nothing_to_post_calls_no_gh(tmp_path, job):
+    doc, _ = real()
+    (tmp_path / "runner" / POSTING_JOBS[job] / "posts").mkdir(parents=True)
+    assert run_posting(tmp_path, posting_script(doc, job)) == (0, [])
+
+
+@pytest.mark.parametrize("job", sorted(POSTING_JOBS))
+def test_a_posting_step_refuses_an_unknown_action(tmp_path, job):
+    doc, _ = real()
+    write_post(tmp_path / "runner" / POSTING_JOBS[job], 1, action="reopen\n")
+    assert run_posting(tmp_path, posting_script(doc, job)) == (1, [])
+
+
+@pytest.mark.parametrize(
+    "plant",
+    [
+        # The alarm's close comments a body first, as the report's does.
+        lambda s: s.replace(
+            'ISSUE="$(head -n 1 "$DIR/issue")"\n',
+            'ISSUE="$(head -n 1 "$DIR/issue")"\n'
+            'gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY"'
+            ' --body-file "$DIR/body.md" > /dev/null\n',
+        ),
+        # The alarm's open forgets its label.
+        lambda s: s.replace(
+            " --label docs-journey-failure --body-file", " --body-file"
+        ),
+        # An unknown action is passed over.
+        lambda s: s.replace("exit 1", "continue"),
+    ],
+    ids=["close-with-a-comment", "open-unlabelled", "unknown-passed-over"],
+)
+def test_the_run_of_the_alarms_posting_step_fires_on_a_planted_defect(tmp_path, plant):
+    """The real step makes the three posts' calls, then fails on a fourth with
+    an unknown action; each planted copy of it does something else."""
+    doc, _ = real()
+    script = posting_script(doc, ALARM_JOB)
+    planted = plant(script)
+    assert planted != script, "the plant changed nothing"
+    root = tmp_path / "runner" / "docs-alarm"
+    dirs = three_posts(root)
+    write_post(root, 4, action="reopen\n")
+    assert run_posting(tmp_path, script) == (1, alarm_calls(dirs))
+    assert run_posting(tmp_path, planted) != (1, alarm_calls(dirs))
 
 
 def test_the_release_checklist_dispatches_the_journeys_after_the_docs_deploy():

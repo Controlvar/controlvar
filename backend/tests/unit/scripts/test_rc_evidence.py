@@ -14,15 +14,22 @@ from __future__ import annotations
 import base64
 import contextlib
 import copy
+import functools
 import hashlib
+import http.client
 import importlib.util
 import io
 import json
+import os
 import pathlib
+import subprocess
 import sys
 import tomllib
+import urllib.error
 import urllib.parse
-from typing import Any, Callable, Dict, List, Optional, Tuple
+import urllib.request
+import urllib.response
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 import pytest
 
@@ -80,6 +87,24 @@ FILES = {
 PYPI_URL = "https://pypi.org/pypi/controlvar/json"
 NPM_URL = "https://registry.npmjs.org/@controlvar%2fjs-sdk"
 TARBALL_URL = f"https://registry.npmjs.org/{JS_NAME}/-/js-sdk-{JS_VERSION}.tgz"
+#: Token-shaped, made up at run time: gitleaks scans every pushed commit, so
+#: no token-shaped literal is in this file. WORLD_TOKEN is the run's GH_TOKEN.
+WORLD_TOKEN = "gh" + "s_" + "W0r" * 12
+FAKE_TOKEN = "gh" + "s_" + "Q7x" * 12
+OTHER_TOKEN = "github" + "_pat_" + "Zz9" * 20
+#: Where GitHub's API sends a log read, and the signature its URL carries.
+LOG_API = f"https://api.github.com/repos/{REPO}/actions/jobs/"
+STORAGE_HOST = "productionresultssa3.blob.core.windows.net"
+SIGNATURE = "Ab3" * 15
+
+
+def signed_url(job_id: int) -> str:
+    return (
+        f"https://{STORAGE_HOST}/actions-results/x/{job_id}"
+        "?sv=2025-11-05&se=2026-11-05T05%3A30%3A00Z&sp=r&sig=" + SIGNATURE
+    )
+
+
 GOOD_DESCRIPTION = {
     "PyPI": (
         "# controlvar\n\nThe Python client. See the"
@@ -129,6 +154,21 @@ def _run(
 
 def _job(name: str, conclusion: str = "success", status: str = "completed"):
     return {"name": name, "status": status, "conclusion": conclusion, "html_url": ""}
+
+
+#: A JUnit outcome as a shard report's ``ran`` record gives it.
+SHARD_OUTCOME = {
+    "passed": "passed",
+    "failed": "failed",
+    "errored": "error",
+    "skipped": "skipped",
+}
+
+
+def _node(case: Tuple[str, ...]) -> str:
+    """A made-up node id for a case: a shard report's ids need only be the
+    same in every shard."""
+    return f"{case[0]}::{case[1]}"
 
 
 def _junit(cases: List[Tuple[str, ...]]) -> str:
@@ -252,6 +292,9 @@ class World:
         self.jest_cases = list(JEST_CASES)
         self.report_cases = copy.deepcopy(SUITE_CASES)
         self.suite_reports: Dict[str, Optional[str]] = {}
+        #: A shard report's text in place of the good one, by its file name;
+        #: None leaves it out.
+        self.shard_reports: Dict[str, Optional[str]] = {}
         self.root = tmp / "tree"
         (self.root / rc.JOURNEYS).mkdir(parents=True)
         for name in JOURNEYS + DEMO_JOURNEYS:
@@ -282,6 +325,12 @@ class World:
         self.logs: Dict[str, str] = {}
         self.web: Dict[str, bytes] = {}
         self.fetched: List[str] = []
+        #: Each GET of a job's log, hop by hop: (url, headers).
+        self.sent: List[Tuple[str, Dict[str, str]]] = []
+        #: Answers that replace the good ones, by job id: hop 1 (GitHub's API)
+        #: and hop 2 (the storage), each (status, headers, body).
+        self.hop1: Dict[int, Tuple[int, Dict[str, str], bytes]] = {}
+        self.hop2: Dict[int, Tuple[int, Dict[str, str], bytes]] = {}
         self.release_ids = {"js": 3000, "python": 3001}
         self.build_ids = {"js": 4000, "python": 4001}
         self.manifests = {"js": (JS_NAME, JS_VERSION), "python": (PY_NAME, PY_VERSION)}
@@ -510,6 +559,37 @@ class World:
             raise rc.FetchError(f"GET {url}: HTTPError 404")
         return answer
 
+    # -- a job's log, over HTTP (read_job_log) ------------------------------------
+    def log_text(self, job_id: int) -> Optional[str]:
+        """The log the world holds for a job: world.logs, else a build job's."""
+        if f"actions/jobs/{job_id}/logs" in self.logs:
+            return self.logs[f"actions/jobs/{job_id}/logs"]
+        for sdk, build_id in self.build_ids.items():
+            if job_id == build_id:
+                return self.build_log(sdk)
+        return None
+
+    def send(
+        self, url: str, headers: Mapping[str, str]
+    ) -> Tuple[int, Dict[str, str], bytes]:
+        """GitHub's API answers 302 to a signed storage URL; the storage
+        answers the log. Every request is kept, headers and all."""
+        self.sent.append((url, dict(headers)))
+        if url.startswith(LOG_API) and url.endswith("/logs"):
+            job_id = int(url[len(LOG_API) : -len("/logs")])
+            if job_id in self.hop1:
+                return self.hop1[job_id]
+            if self.log_text(job_id) is None:
+                return 404, {}, b'{"message":"Not Found","status":"404"}'
+            return 302, {"Location": signed_url(job_id)}, b""
+        assert url.startswith(f"https://{STORAGE_HOST}/"), url
+        job_id = int(url.split("/")[-1].split("?")[0])
+        if job_id in self.hop2:
+            return self.hop2[job_id]
+        text = self.log_text(job_id)
+        assert text is not None, url
+        return 200, {"Content-Type": "text/plain"}, text.encode("utf-8")
+
     # -- the fake gh -------------------------------------------------------------
     def gh(self, args: List[str]) -> str:
         self.calls.append(list(args))
@@ -518,13 +598,10 @@ class World:
             prefix = f"repos/{REPO}/"
             assert args[1].startswith(prefix)
             path = args[1][len(prefix) :]
+            # T174: gh exits 1 on a log read under a workflow's token.
+            assert not path.endswith("/logs"), f"a log is never read through gh: {args}"
             if path.startswith("actions/workflows/") and "/runs?" in path:
                 return json.dumps(self.list_runs(path))
-            if path in self.logs:
-                return self.logs[path]
-            for sdk, job_id in self.build_ids.items():
-                if path == f"actions/jobs/{job_id}/logs":
-                    return self.build_log(sdk)
             if path.startswith("contents/sdk?ref="):
                 trees = self.trees.get(path.split("=", 1)[1])
                 if trees is None:
@@ -564,43 +641,113 @@ class World:
             data = self.verdicts[name]
             return None if data is None else {"verdicts.json": json.dumps(data)}
         if run_id == self.ids["rc-evidence.yml"]:
-            for suite in rc.SUITES:
-                if name == rc.JUNIT_ARTIFACT.format(suite):
-                    return self.suite_files(suite)
+            for leg in rc.LEGS:
+                if name == rc.JUNIT_ARTIFACT.format(leg):
+                    return self.leg_files(leg)
         return None
 
-    def suite_files(self, suite: str) -> Dict[str, str]:
+    def sharded_cases(self, leg: Any) -> List[Tuple[str, ...]]:
+        """The cases of a shard's sharded session: unit's are ``self.cases``
+        and integration's eight made-up ones, dealt out over the shards."""
+        (session,) = [i for i in leg.sessions if i.shard]
+        if session.report in self.report_cases:
+            return self.report_cases[session.report]
+        if leg.suite == "unit":
+            every = self.cases
+        else:
+            every = [
+                (f"backend.tests.{leg.suite}.test_w", f"test_{k}", "passed")
+                for k in range(2 * leg.of)
+            ]
+        return [c for k, c in enumerate(every) if k % leg.of == leg.shard - 1]
+
+    def shard_doc(self, name: str) -> Dict[str, Any]:
+        """A shard's report as backend/tests/shard.py writes it, over the
+        cases its JUnit holds: every shard of the suite collected them all."""
+        leg = rc.LEGS[name]
+        (session,) = [i for i in leg.sessions if i.shard]
+        siblings = [g for g in rc.LEGS.values() if g.suite == leg.suite]
+        collected = sorted(_node(c) for g in siblings for c in self.sharded_cases(g))
+        mine = self.sharded_cases(leg)
+        return {
+            "version": 1,
+            "suite": " ".join(sorted(session.roots)),
+            "shard": leg.shard,
+            "of": leg.of,
+            "collected": collected,
+            "selected": sorted(_node(c) for c in mine),
+            "markexpr": "",
+            "keyword": "",
+            "deselect": [],
+            # As pytest records --ignore: the argument as given.
+            "ignore": [
+                a[len("--ignore=") :] for a in session.args if a.startswith("--ignore=")
+            ],
+            "ignore_glob": [],
+            "last_failed": False,
+            "pre_deselected": 0,
+            "unannounced": [],
+            "fabricated": [],
+            "disabled_plugins": ["cov"],
+            "autoload_disabled": False,
+            "collect_errors": [],
+            "ran": [
+                {
+                    "nodeid": _node(c),
+                    "outcome": SHARD_OUTCOME[c[2]],
+                    "skip_reason": "no reason" if c[2] == "skipped" else None,
+                }
+                for c in mine
+            ],
+        }
+
+    def leg_files(self, name: str) -> Dict[str, str]:
+        """What one leg's job uploads: its JUnit reports, and a shard's report."""
+        leg = rc.LEGS[name]
         files = {}
-        for number, invocation in zip(range(len(rc.SUITES[suite])), rc.SUITES[suite]):
+        for number, invocation in zip(range(len(leg.sessions)), leg.sessions):
             if invocation.report in self.suite_reports:
                 text = self.suite_reports[invocation.report]
                 if text is not None:
                     files[invocation.report] = text
                 continue
-            if suite == "frontend":
+            if leg.suite == "frontend":
                 cases = self.jest_cases
-            elif suite == "unit" and number == 0:
-                cases = self.cases
+            elif invocation.shard:
+                cases = self.sharded_cases(leg)
             elif invocation.report in self.report_cases:
                 cases = self.report_cases[invocation.report]
             elif invocation.runner == "jest":
                 cases = [(f"{invocation.cwd}/x.test.ts", "it works", "passed")]
             else:
-                cases = [(f"backend.tests.{suite}.test_{number}", "test_ok", "passed")]
+                cases = [(f"backend.tests.{name}.test_{number}", "test_ok", "passed")]
             files[invocation.report] = _junit(cases)
+        if leg.shard:
+            if leg.shard_report in self.shard_reports:
+                text = self.shard_reports[leg.shard_report]
+                if text is not None:
+                    files[leg.shard_report] = text
+            else:
+                files[leg.shard_report] = json.dumps(self.shard_doc(name))
         return files
 
     def junit_dir(self) -> pathlib.Path:
         """The reports as rc-evidence.yml's verify job has them, merged."""
         directory = self.tmp / "junit-here"
         directory.mkdir(exist_ok=True)
-        for suite in rc.SUITES:
-            for name, text in self.suite_files(suite).items():
+        for leg in rc.LEGS:
+            for name, text in self.leg_files(leg).items():
                 (directory / name).write_text(text)
         return directory
 
     # -- running the verifier ---------------------------------------------------
-    def main(self, *extra: str, out: Optional[pathlib.Path] = None) -> Tuple[int, str]:
+    def main(
+        self,
+        *extra: str,
+        out: Optional[pathlib.Path] = None,
+        gh: Optional[Callable[[List[str]], str]] = None,
+        send: Optional[rc.Send] = None,
+    ) -> Tuple[int, str]:
         out = out or self.tmp / "out"
         argv = [TAG, "--root", str(self.root), "--out", str(out), *extra]
         if self.staging is not None:
@@ -610,10 +757,12 @@ class World:
         with contextlib.redirect_stdout(buffer):
             code = rc.main(
                 argv,
-                gh=self.gh,
+                gh=gh or self.gh,
                 head_of=lambda root: self.head,
                 registry=lambda root: copy.deepcopy(self.registry),
                 fetch=self.fetch,
+                environ={**os.environ, "GH_TOKEN": WORLD_TOKEN},
+                send=send or self.send,
             )
         return code, buffer.getvalue()
 
@@ -658,7 +807,12 @@ def test_a_green_release_passes_and_archives_what_it_read(world):
     assert record["sha"] == RC and all(c["ok"] for c in record["checks"])
     for artifact in (rc.JOURNEY_VERDICTS, rc.DEMO_VERDICTS):
         assert json.loads((out / "verdicts" / artifact / "verdicts.json").read_text())
-    assert (out / "junit" / "unit.xml").is_file()
+    for name, leg in rc.LEGS.items():
+        for session in leg.sessions:
+            assert (out / "junit" / session.report).is_file(), name
+        if leg.shard:
+            assert (out / "junit" / leg.shard_report).is_file(), name
+    assert "each ran exactly once" in text
 
 
 def test_the_verify_job_passes_on_its_own_run_and_reports(world):
@@ -707,6 +861,25 @@ def test_plan_prints_one_dispatch_per_workflow_at_the_tag_and_runs_nothing(capsy
         f"python3 scripts/rc_evidence.py {TAG} --registry python --out <dir>",
     ]
     assert printed.index(checks[-1]) < printed.index(commands[0])
+
+
+def test_plan_dispatches_compose_production_only_after_release_yml_published(capsys):
+    """EM1807-3: the tag's compose-upgrade pulls core-N, which release.yml
+    publishes after the tag; dispatched before that, it is red."""
+
+    def refuse(args):
+        raise AssertionError("--plan called gh")
+
+    assert rc.main(["--plan", TAG], gh=refuse) == 0
+    printed = capsys.readouterr().out.splitlines()
+    (command,) = [
+        number
+        for number, line in enumerate(printed)
+        if line.startswith("gh workflow run compose-production.yml ")
+    ]
+    before = printed[command - 1]
+    assert before.startswith("# "), before
+    assert "only after the tag's release.yml run has published" in before, before
 
 
 #: The repository by another name: what a rename or a transfer makes it.
@@ -853,6 +1026,30 @@ def test_an_allowed_skip_may_only_be_skipped(world):
     )
     job["conclusion"] = "failure"
     _fails(world, "job 'File an issue on failure' failure")
+
+
+def test_the_compose_production_failure_issue_may_only_be_skipped(world):
+    """C2 (#1807): compose-production gained a failure-issue job, skipped at
+    the tag on a green run; it may be skipped, and only skipped."""
+    assert rc.ALLOWED_SKIPS[("compose-production.yml", "File an issue on failure")]
+    job = next(
+        j
+        for j in world.jobs("compose-production.yml")
+        if j["name"] == "File an issue on failure"
+    )
+    assert job["conclusion"] == "skipped"
+    job["conclusion"] = "failure"
+    _fails(world, "job 'File an issue on failure' failure")
+
+
+def test_the_compose_upgrade_must_have_run_at_the_tag(world):
+    """The tag's dispatch runs compose-upgrade too (N-1 is the tag itself):
+    a run without it is not the evidence."""
+    run_id = world.ids["compose-production.yml"]
+    jobs = list(world.jobs("compose-production.yml"))
+    assert "Compose Upgrade" in [j["name"] for j in jobs]
+    world.set_jobs(run_id, [j for j in jobs if j["name"] != "Compose Upgrade"])
+    _fails(world, "job 'Compose Upgrade' did not run")
 
 
 def test_a_skip_outside_the_allow_list_fails(world):
@@ -1252,11 +1449,12 @@ def test_a_jest_each_title_matches_every_test_that_fills_it_in():
 
 @pytest.mark.parametrize("outcome", ["failed", "errored"])
 def test_a_failing_test_no_target_names_fails_the_rc(world, outcome):
-    """Any failure or error in a suite's report, registry target or not."""
+    """Any failure or error in a suite's report, registry target or not: the
+    seventh unit case, dealt to shard 3 of 4, fails that shard's report."""
     world.cases.append(("backend.tests.unit.x.test_gamma", "test_unrelated", outcome))
     _fails(
         world,
-        "suite unit: 1 tests failed or errored in unit.xml (first:"
+        "suite unit (shard 3 of 4): 1 tests failed or errored in unit-3.xml (first:"
         " backend.tests.unit.x.test_gamma::test_unrelated)",
     )
 
@@ -1353,6 +1551,264 @@ def test_the_verify_job_reads_its_own_reports(world):
     world.cases = [c for c in world.cases if c[1] != "test_one"]
     code, text = world.in_workflow()
     assert code == 1 and "not in the suites' JUnit" in text
+
+
+# ---------------------------------------------------------------------------
+# The sharded suites (#1895): every shard reports, and every shard's report
+# is read
+# ---------------------------------------------------------------------------
+NOBODY = "backend/tests/integration/test_new.py::test_no_shard_runs"
+BENCHMARK = "absolute-timing benchmark; set RUN_BENCHMARKS=1 to run it"
+
+
+def _shard_row(text: str) -> str:
+    (row,) = [
+        line
+        for line in text.splitlines()
+        if line.startswith("| E4 | every test ran in exactly one shard |")
+    ]
+    return row
+
+
+def _plant_docs(world: World, suite: str, change: Callable[[Dict[str, Any]], None]):
+    """Every shard report of *suite*, changed by *change*."""
+    for name, leg in rc.LEGS.items():
+        if leg.suite == suite and leg.shard:
+            doc = world.shard_doc(name)
+            change(doc)
+            world.shard_reports[leg.shard_report] = json.dumps(doc)
+
+
+@pytest.mark.regression
+def test_unit_and_integration_run_in_four_shards_and_the_rest_whole():
+    sharded = {
+        name: (leg.suite, leg.shard, leg.of)
+        for name, leg in rc.LEGS.items()
+        if leg.shard
+    }
+    assert sharded == {
+        **{f"unit-{i}": ("unit", i, 4) for i in range(1, 5)},
+        **{f"integration-{i}": ("integration", i, 4) for i in range(1, 5)},
+    }
+    # The sessions run whole are in the first shard only: e2e and contract
+    # as integration-tests.yml's shard 1 runs them, performance with unit.
+    reports = {name: [i.report for i in leg.sessions] for name, leg in rc.LEGS.items()}
+    assert reports["integration-1"] == ["integration-1.xml", "e2e.xml", "contract.xml"]
+    assert reports["unit-1"] == ["unit-1.xml", "performance.xml"]
+    for index in (2, 3, 4):
+        assert reports[f"integration-{index}"] == [f"integration-{index}.xml"]
+        assert reports[f"unit-{index}"] == [f"unit-{index}.xml"]
+    # Every other suite is one leg under its own name, as before.
+    whole = [name for name, leg in rc.LEGS.items() if not leg.shard]
+    assert whole == [s for s in rc.SUITES if s not in ("unit", "integration")]
+    for name in whole:
+        assert rc.LEGS[name].sessions == rc.SUITES[name]
+
+
+def test_the_shard_variables_and_report_names_are_the_plugins_and_checkers():
+    import fnmatch
+
+    from backend.tests import shard
+
+    assert (rc.SHARD_SPEC, rc.SHARD_REPORT) == (shard.ENV_SHARD, shard.ENV_REPORT)
+    for leg in rc.LEGS.values():
+        if leg.shard:
+            assert fnmatch.fnmatch(leg.shard_report, rc.SHARD_CHECK.REPORT_GLOB)
+
+
+def test_a_green_release_proves_each_sharded_suite_ran_every_test_once(world):
+    code, text = world.main()
+    assert code == 0, text
+    row = _shard_row(text)
+    assert "| PASS |" in row
+    assert (
+        "backend/tests/integration: 8 tests in 4 shards, each ran exactly once" in row
+    )
+    assert (
+        "backend/tests/installer_sweeps backend/tests/realistic backend/tests/unit:"
+        " 6 tests in 4 shards, each ran exactly once"
+    ) in row
+
+
+def test_a_test_no_shard_runs_fails(world):
+    """PEK13-4's plant: a test every shard collected and none selected."""
+    _plant_docs(
+        world,
+        "integration",
+        lambda doc: doc.update(collected=sorted(doc["collected"] + [NOBODY])),
+    )
+    text = _fails(
+        world,
+        f"backend/tests/integration: 1 collected but selected by no shard ['{NOBODY}']",
+    )
+    assert "| FAIL |" in _shard_row(text)
+
+
+def test_a_test_whose_id_differs_between_shards_fails(world):
+    """The way a test lands in no shard, or two: a node id built from an
+    address or uuid4() is another id in each shard's process."""
+
+    def unstable(doc: Dict[str, Any]) -> None:
+        mine = (
+            f"backend/tests/integration/test_x.py::test_x[<object at 0x{doc['shard']}>]"
+        )
+        doc["collected"] = sorted(doc["collected"] + [mine])
+        if doc["shard"] == 2:
+            doc["selected"] = sorted(doc["selected"] + [mine])
+            doc["ran"].append(
+                {"nodeid": mine, "outcome": "passed", "skip_reason": None}
+            )
+
+    _plant_docs(world, "integration", unstable)
+    _fails(
+        world,
+        "backend/tests/integration: shard 2 collected a different list from shard 1"
+        " (node ids differ between processes?)",
+    )
+    # The table cell is cut at 400 characters; the record keeps every line.
+    record = json.loads((world.tmp / "out" / "runs.json").read_text())
+    (check,) = [
+        c
+        for c in record["checks"]
+        if c["subject"] == "every test ran in exactly one shard"
+    ]
+    assert (
+        "backend/tests/integration: 1 collected but selected by no shard"
+        " ['backend/tests/integration/test_x.py::test_x[<object at 0x1>]']"
+    ) in check["problems"]
+
+
+@pytest.mark.parametrize("mode", ["download", "in the workflow"])
+def test_a_shard_without_its_junit_fails_naming_the_shard(world, mode):
+    world.suite_reports["integration-3.xml"] = None
+    code, text = world.main() if mode == "download" else world.in_workflow()
+    assert code == 1 and text.rstrip().endswith("RC EVIDENCE: FAIL"), text
+    assert (
+        "suite integration (shard 3 of 4): no readable JUnit report integration-3.xml"
+        in text
+    )
+
+
+def test_a_shard_whose_artifact_is_missing_fails_naming_the_shard(world):
+    run = world.ids["rc-evidence.yml"]
+    world.artifacts[(run, "rc-evidence-junit-unit-2")] = None
+    _fails(
+        world,
+        f"suite unit (shard 2 of 4): no rc-evidence-junit-unit-2 artifact in run {run}",
+        "suite unit (shard 2 of 4): no readable JUnit report unit-2.xml",
+    )
+    _fails(world, "suite unit (shard 2 of 4): no shard report shard-unit-2.json")
+
+
+@pytest.mark.parametrize("mode", ["download", "in the workflow"])
+def test_a_shard_without_its_shard_report_fails_naming_the_shard(world, mode):
+    world.shard_reports["shard-integration-4.json"] = None
+    code, text = world.main() if mode == "download" else world.in_workflow()
+    assert code == 1 and text.rstrip().endswith("RC EVIDENCE: FAIL"), text
+    row = _shard_row(text)
+    assert (
+        "suite integration (shard 4 of 4): no shard report shard-integration-4.json"
+        in row
+    )
+    assert "backend/tests/integration: shard(s) [4] of 4 have no report" in row
+
+
+def test_a_shard_killed_before_its_report_was_written_fails(world):
+    """shard.py claims the file when the session starts; a session cancelled
+    at the job's limit leaves it empty."""
+    world.shard_reports["shard-integration-2.json"] = ""
+    _fails(
+        world,
+        "suite integration (shard 2 of 4): shard-integration-2.json: empty (the"
+        " session did not finish writing it)",
+    )
+
+
+@pytest.mark.parametrize("outcome", ["failed", "errored"])
+def test_a_failure_in_one_shard_fails(world, outcome):
+    world.report_cases["integration-2.xml"] = [
+        ("backend.tests.integration.test_w", "test_1", "passed"),
+        ("backend.tests.integration.test_w", "test_5", outcome),
+    ]
+    text = _fails(
+        world,
+        "suite integration (shard 2 of 4): 1 tests failed or errored in"
+        " integration-2.xml (first: backend.tests.integration.test_w::test_5)",
+    )
+    word = "failed" if outcome == "failed" else "error"
+    assert (
+        f"backend/tests/integration: shard 2: backend.tests.integration.test_w::test_5"
+        f" {word}" in _shard_row(text)
+    )
+
+
+def test_a_skip_in_unit_passes_as_before_and_in_integration_only_the_benchmark(world):
+    # unit: any skip, as before it was sharded (E4 judges a target's skip).
+    world.cases.append(("backend.tests.unit.x.test_zeta", "test_skips", "skipped"))
+    code, text = world.main()
+    assert code == 0, text
+    # integration: integration-tests.yml's one reason, and no other.
+    world.report_cases["integration-1.xml"] = [
+        ("backend.tests.integration.test_w", "test_0", "passed"),
+        ("backend.tests.integration.test_w", "test_4", "skipped"),
+    ]
+    text = _fails(world, "was skipped, and its reason is not allowed: 'no reason'")
+    assert "| FAIL |" in _shard_row(text)
+
+    def benchmark(doc: Dict[str, Any]) -> None:
+        for record in doc["ran"]:
+            if record["outcome"] == "skipped":
+                record["skip_reason"] = BENCHMARK
+
+    _plant_docs(world, "integration", benchmark)
+    code, text = world.main()
+    assert code == 0, text
+
+
+@pytest.mark.parametrize(
+    "change, needle",
+    [
+        (
+            lambda doc: doc.update(ignore=doc["ignore"] + ["backend/tests/unit/core"]),
+            "narrowed by ignore=['backend/tests/unit/chart', 'backend/tests/unit/core']",
+        ),
+        (lambda doc: doc.update(ignore=[]), None),
+        (
+            lambda doc: doc.update(markexpr="not slow"),
+            "narrowed by markexpr='not slow'",
+        ),
+        (
+            lambda doc: doc.update(disabled_plugins=["cov", "xdist"]),
+            "narrowed by disabled_plugins=['xdist']",
+        ),
+        (lambda doc: doc.update(of=5), "shard-unit-1.json is shard 1 of 5"),
+        (
+            lambda doc: doc.update(suite="backend/tests/unit"),
+            "shard-unit-1.json is a report of 'backend/tests/unit', not",
+        ),
+    ],
+    ids=[
+        "another-ignore",
+        "unit-without-its-own-ignore",
+        "a-marker",
+        "another-plugin-off",
+        "another-count",
+        "another-tree",
+    ],
+)
+def test_a_shard_that_ran_something_else_fails(world, change, needle):
+    """Only the session's own --ignore is not a narrowing; a report of another
+    count or tree is not this suite's."""
+    doc = world.shard_doc("unit-1")
+    change(doc)
+    world.shard_reports["shard-unit-1.json"] = json.dumps(doc)
+    code, text = world.main()
+    if needle is None:
+        # unit's own --ignore missing from the report is not narrowing.
+        assert code == 0, text
+        return
+    assert code == 1, text
+    assert needle in _shard_row(text), _shard_row(text)
 
 
 # ---------------------------------------------------------------------------
@@ -1544,14 +2000,43 @@ def test_a_suite_runs_every_session_and_fails_if_any_did(tmp_path, monkeypatch):
         assert cwd == str(rc.ROOT) and check is False
         return Done(1 if "e2e.xml" in command[-1] else 0)
 
-    assert rc.run_suite("integration", tmp_path, runner=runner) == 1
-    assert len(calls) == len(rc.SUITES["integration"])  # it ran them all
-    for (command, env), invocation in zip(calls, rc.SUITES["integration"]):
+    # The first shard runs its slice of integration, then e2e and contract
+    # whole: a spec the job's environment held slices none of them but the
+    # first, which gets its own.
+    monkeypatch.setenv(rc.SHARD_SPEC, "3/4")
+    monkeypatch.setenv(rc.SHARD_REPORT, str(tmp_path / "shard-leaked.json"))
+    first = rc.LEGS["integration-1"]
+    assert rc.run_suite("integration-1", tmp_path, runner=runner) == 1
+    assert len(calls) == len(rc.SUITES["integration"]) == 3  # it ran them all
+    assert [i.report for i in first.sessions] == [
+        "integration-1.xml",
+        "e2e.xml",
+        "contract.xml",
+    ]
+    for (command, env), invocation in zip(calls, first.sessions):
         assert command[-1] == f"--junitxml={tmp_path / invocation.report}"
         assert "-x" not in command and "--exitfirst" not in command
         for key, value in invocation.env:
             assert env[key] == value
-    assert rc.run_suite("smoke", tmp_path, runner=lambda c, **k: Done(0)) == 0
+    (_, sliced), *whole = calls
+    assert sliced[rc.SHARD_SPEC] == "1/4"
+    assert sliced[rc.SHARD_REPORT] == str(tmp_path / "shard-integration-1.json")
+    for _, env in whole:
+        assert rc.SHARD_SPEC not in env and rc.SHARD_REPORT not in env
+    # Every other shard runs its slice of integration alone.
+    for index in (2, 3, 4):
+        calls.clear()
+        assert rc.run_suite(f"integration-{index}", tmp_path, runner=runner) == 0
+        ((command, env),) = calls
+        assert "backend/tests/integration/" in command
+        assert command[-1] == f"--junitxml={tmp_path / f'integration-{index}.xml'}"
+        assert env[rc.SHARD_SPEC] == f"{index}/4"
+        assert env[rc.SHARD_REPORT] == str(tmp_path / f"shard-integration-{index}.json")
+    # A suite run whole is sliced by nothing.
+    calls.clear()
+    assert rc.run_suite("smoke", tmp_path, runner=runner) == 0
+    ((command, env),) = calls
+    assert rc.SHARD_SPEC not in env and rc.SHARD_REPORT not in env
     # The chart suite: its tree, with the variable its module skips without.
     calls.clear()
     assert rc.run_suite("chart", tmp_path, runner=runner) == 0
@@ -1605,8 +2090,13 @@ def test_a_frontend_suite_that_wrote_no_report_fails(tmp_path):
 
 
 def test_the_suites_report_names_are_unique():
+    """The verify job merges every leg's artifact into one directory."""
     names = [i.report for invocations in rc.SUITES.values() for i in invocations]
     assert len(names) == len(set(names))
+    files = [i.report for leg in rc.LEGS.values() for i in leg.sessions] + [
+        leg.shard_report for leg in rc.LEGS.values() if leg.shard
+    ]
+    assert len(files) == len(set(files))
 
 
 def test_the_demo_simulators_run_as_a_session_each(tmp_path):
@@ -2023,6 +2513,331 @@ def test_a_build_job_listed_without_an_id_fails(world):
 def test_an_unreadable_build_log_fails(world):
     world.build_ids["python"] = 4999  # the fake answers no log for job 4001
     _fails(world, "cannot read the log of 'test and build for PyPI'")
+
+
+# ---------------------------------------------------------------------------
+# A job's log, in two GETs (T174). v0.34.1, v0.34.3 and v0.36.0's verifier
+# runs failed P with "gh api .../logs failed (exit 1)" and nothing else; the
+# diagnostic run 41978116497 (PR #1764) showed GitHub's API answering 302 to
+# the workflow token and gh exiting 1 after the redirected read ended 200 OK.
+# The verifier now makes both hops itself (read_job_log).
+# ---------------------------------------------------------------------------
+SIGNED_URL = signed_url(4001)
+#: Azure blob storage's answer for a log that is not there (measured
+#: 2026-11-05 on a skipped job's log; the leading BOM is Azure's).
+BLOB_GONE = (
+    "\N{ZERO WIDTH NO-BREAK SPACE}"
+    '<?xml version="1.0" encoding="utf-8"?><Error><Code>BlobNotFound</Code>'
+    "<Message>The specified blob does not exist.\nRequestId:0</Message></Error>"
+).encode()
+AUTH_FAILED = b'<?xml version="1.0"?><Error><Code>AuthenticationFailed</Code></Error>'
+ADMIN_403 = b'{"message":"Must have admin rights to Repository.","status":"403"}'
+NOT_FOUND = b'{"message":"Not Found","status":"404"}'
+GONE = (
+    "the log is not in GitHub's log storage (past the repository's log"
+    " retention, deleted, or never written), so its record cannot be read back"
+)
+HOP_1 = "hop 1 (GitHub's API)"
+HOP_2 = f"hop 2 (log storage at {STORAGE_HOST})"
+
+
+def _p_row(text: str, registry: str) -> str:
+    return next(
+        line for line in text.splitlines() if line.startswith(f"| P | {registry} ")
+    )
+
+
+def _authorization(headers: Mapping[str, str]) -> Optional[str]:
+    return next((v for k, v in headers.items() if k.lower() == "authorization"), None)
+
+
+@pytest.mark.regression
+def test_the_log_is_read_in_two_hops_and_only_the_first_carries_the_token(world):
+    """A 302 then a 200: PASS on the record. The storage, which gets a signed
+    URL, never gets the token."""
+    code, text = world.main()
+    assert code == 0, text
+    assert "| PASS |" in _p_row(text, "PyPI") and "| PASS |" in _p_row(text, "npm")
+    hops = sorted((url, _authorization(headers)) for url, headers in world.sent)
+    assert hops == [
+        (f"{LOG_API}4000/logs", f"Bearer {WORLD_TOKEN}"),
+        (f"{LOG_API}4001/logs", f"Bearer {WORLD_TOKEN}"),
+        (signed_url(4000), None),
+        (signed_url(4001), None),
+    ]
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "hop1, hop2, says",
+    [
+        (
+            (403, {}, ADMIN_403),
+            None,
+            f"{HOP_1} answered HTTP 403, not a redirect: Must have admin rights to"
+            " Repository.",
+        ),
+        (
+            (404, {}, NOT_FOUND),
+            None,
+            f"{HOP_1} answered HTTP 404, not a redirect: Not Found",
+        ),
+        ((200, {}, b"a log"), None, f"{HOP_1} answered HTTP 200, not a redirect"),
+        ((302, {}, b""), None, f"{HOP_1} answered HTTP 302 with no https Location"),
+        (
+            (302, {"Location": f"http://{STORAGE_HOST}/4001"}, b""),
+            None,
+            f"{HOP_1} answered HTTP 302 with no https Location",
+        ),
+        (
+            None,
+            (403, {}, AUTH_FAILED),
+            f"{HOP_2} answered HTTP 403, storage AuthenticationFailed",
+        ),
+        (None, (404, {}, b""), f"(job 4001): {HOP_2} answered HTTP 404"),
+        (
+            None,
+            (404, {}, BLOB_GONE),
+            f"{GONE}: {HOP_2} answered HTTP 404, storage BlobNotFound",
+        ),
+        (None, (200, {}, b""), "GitHub answered with an empty log"),
+    ],
+    ids=[
+        "hop1-403",
+        "hop1-404",
+        "hop1-no-redirect",
+        "hop1-no-location",
+        "hop1-http-location",
+        "hop2-403",
+        "hop2-404",
+        "hop2-blob-gone",
+        "hop2-empty",
+    ],
+)
+def test_an_unreadable_log_fails_p_naming_the_hop(world, hop1, hop2, says):
+    """Each way a hop fails: P FAILs, and the reason names the hop and its
+    HTTP status (and the storage's code). The other package's P is untouched."""
+    if hop1 is not None:
+        world.hop1[4001] = hop1
+    if hop2 is not None:
+        world.hop2[4001] = hop2
+    code, text = world.main()
+    assert code == 1, text
+    assert text.rstrip().endswith("RC EVIDENCE: FAIL"), text
+    row = _p_row(text, "PyPI")
+    assert "| FAIL |" in row, row
+    assert "cannot read the log of 'test and build for PyPI' (job 4001)" in row, row
+    assert says in row, row
+    assert "| PASS |" in _p_row(text, "npm")
+
+
+@pytest.mark.parametrize("hop", [1, 2])
+def test_a_hop_that_does_not_answer_fails_p_naming_it(world, hop):
+    def send(url: str, headers: Mapping[str, str]):
+        if url.startswith(LOG_API if hop == 1 else f"https://{STORAGE_HOST}/"):
+            raise urllib.error.URLError(f"no route to {SIGNED_URL} for {WORLD_TOKEN}")
+        return world.send(url, headers)
+
+    code, text = world.main(send=send)
+    assert code == 1, text
+    assert f"{HOP_1 if hop == 1 else HOP_2}: URLError" in _p_row(text, "PyPI")
+    record = (world.tmp / "out" / "runs.json").read_text()
+    for written in (text, record):
+        for secret in (WORLD_TOKEN, SIGNATURE, "sig="):
+            assert secret not in written
+
+
+def test_a_log_longer_than_the_bound_fails_p_and_is_never_cut(world, monkeypatch):
+    monkeypatch.setattr(rc, "LOG_MAX", 64)
+    code, text = world.main()
+    assert code == 1, text
+    assert f"{HOP_2}: the log is longer than 64 bytes" in _p_row(text, "PyPI")
+
+
+@pytest.mark.regression
+def test_no_reason_holds_the_token_or_a_signed_query(world):
+    """GitHub's message, and the storage's body, carrying the token, another
+    token-shaped word and a signed URL: none of it is printed or recorded."""
+    leaky = f"Bad credentials {WORLD_TOKEN} {OTHER_TOKEN} at {SIGNED_URL}"
+    world.hop1[4001] = (
+        401,
+        {"Location": SIGNED_URL},
+        json.dumps({"message": leaky}).encode(),
+    )
+    world.hop2[4000] = (
+        403,
+        {},
+        f"<Error><Code>AuthenticationFailed</Code><Url>{signed_url(4000)}</Url>"
+        f"<T>{WORLD_TOKEN}</T></Error>".encode(),
+    )
+    code, text = world.main()
+    assert code == 1, text
+    record = (world.tmp / "out" / "runs.json").read_text()
+    for written in (text, record):
+        for secret in (
+            WORLD_TOKEN,
+            OTHER_TOKEN,
+            SIGNATURE,
+            "sig=",
+            "sv=",
+            "actions-results",
+        ):
+            assert secret not in written
+    assert (
+        f"{HOP_1} answered HTTP 401, not a redirect: Bad credentials <token> <token> at"
+        " <url>"
+    ) in _p_row(text, "PyPI")
+    assert f"{HOP_2} answered HTTP 403, storage AuthenticationFailed" in _p_row(
+        text, "npm"
+    )
+
+
+class FakeHTTPS(urllib.request.HTTPSHandler):
+    """HTTPS in process, no socket: GitHub's API answers 302 to the signed
+    storage URL, the storage answers the log. Every request is kept, with the
+    headers it carried, as urllib built it."""
+
+    def __init__(self, log: bytes):
+        super().__init__()
+        self.log = log
+        self.received: List[Tuple[str, Dict[str, str]]] = []
+
+    def https_open(self, req):
+        self.received.append((req.full_url, dict(req.header_items())))
+        if urllib.parse.urlsplit(req.full_url).hostname == "api.github.com":
+            status, reason, answer, body = 302, "Found", {"Location": SIGNED_URL}, b""
+        else:
+            status, reason, answer, body = 200, "OK", {}, self.log
+        message = http.client.HTTPMessage()
+        for key, value in answer.items():
+            message[key] = value
+        response = urllib.response.addinfourl(
+            io.BytesIO(body), message, req.full_url, status
+        )
+        response.msg = reason
+        return response
+
+
+@pytest.mark.regression
+def test_http_send_never_follows_the_redirect_so_the_token_stays_with_github():
+    """The real ``http_send`` through urllib: GitHub's 302 is an answer, so the
+    storage request is the verifier's own, without the token. urllib, left to
+    follow it, copies the Authorization header onto the storage request."""
+    https = FakeHTTPS(b"the log")
+    try:
+        text = rc.read_job_log(
+            REPO, 4001, WORLD_TOKEN, functools.partial(rc.http_send, handlers=[https])
+        )
+    except rc.LogError as error:
+        text = f"LogError: {error}"
+    storage = [headers for url, headers in https.received if STORAGE_HOST in url]
+    assert storage and all(_authorization(h) is None for h in storage), (
+        "the token reached the storage"
+    )
+    assert text == "the log"
+    assert [(url, _authorization(h)) for url, h in https.received] == [
+        (f"{LOG_API}4001/logs", f"Bearer {WORLD_TOKEN}"),
+        (SIGNED_URL, None),
+    ]
+
+
+def test_without_gh_token_the_token_is_gh_s_own_login():
+    calls: List[List[str]] = []
+
+    def gh(args: List[str]) -> str:
+        calls.append(args)
+        return WORLD_TOKEN + "\n"
+
+    assert rc.GitHub(gh, REPO, environ={}).token() == WORLD_TOKEN
+    assert calls == [["auth", "token"]]
+
+
+def test_no_usable_token_fails_the_read():
+    def gh(args: List[str]) -> str:
+        raise rc.GhError("gh auth token failed (exit 1)")
+
+    with pytest.raises(rc.LogError, match="no GitHub token to read it with"):
+        rc.GitHub(gh, REPO, environ={}).token()
+    with pytest.raises(rc.LogError, match="no usable GitHub token"):
+        rc.GitHub(gh, REPO, environ={"GH_TOKEN": "two words"}).token()
+
+
+def test_the_verifier_passes_through_the_real_run_gh(world, monkeypatch):
+    """The control for run_gh: every gh call through it, answered by the world."""
+
+    def gh_process(argv: List[str], **kwargs: Any) -> subprocess.CompletedProcess:
+        try:
+            answer = world.gh(argv[1:])
+        except rc.GhError:
+            return subprocess.CompletedProcess(
+                argv, 1, "", "gh: Not Found (HTTP 404)\n"
+            )
+        return subprocess.CompletedProcess(argv, 0, answer, "")
+
+    monkeypatch.setattr(rc.subprocess, "run", gh_process)
+    code, text = world.main(gh=rc.run_gh)
+    assert code == 0, text
+
+
+@pytest.mark.regression
+def test_a_failed_gh_call_says_its_http_status_and_never_the_token(monkeypatch):
+    """Every other gh call: run_gh keeps what gh said, cleaned by ``said``."""
+    monkeypatch.setenv("GH_TOKEN", FAKE_TOKEN)
+
+    def gh_process(argv: List[str], **kwargs: Any) -> subprocess.CompletedProcess:
+        said = f"gh: Bad credentials {FAKE_TOKEN} {OTHER_TOKEN} (HTTP 401) via {SIGNED_URL}\n"
+        return subprocess.CompletedProcess(
+            argv, 1, '{"message":"Bad credentials"}', said
+        )
+
+    monkeypatch.setattr(rc.subprocess, "run", gh_process)
+    with pytest.raises(rc.GhError) as raised:
+        rc.run_gh(["api", f"repos/{REPO}/actions/runs/1/jobs"])
+    assert str(raised.value) == (
+        f"gh api repos/{REPO}/actions/runs/1/jobs failed (exit 1, HTTP 401): gh: Bad"
+        " credentials <token> <token> (HTTP 401) via <url>"
+    )
+    assert raised.value.status == 401
+
+
+@pytest.mark.parametrize(
+    "stderr",
+    [
+        f"{FAKE_TOKEN}",
+        f"token {OTHER_TOKEN} refused",
+        "x" * 40 + "eyJhbGciOiJIUzI1NiJ9" * 3,
+        f"see {SIGNED_URL} and http://example.com/?q={SIGNATURE}",
+        "\x1b[31mgh:\N{LINE SEPARATOR} HTTP 500\x00\N{ZERO WIDTH NO-BREAK SPACE}",
+        " " * 5000 + FAKE_TOKEN,
+    ],
+    ids=["ghs", "pat", "long-run", "urls", "control-chars", "past-the-read"],
+)
+def test_said_takes_out_tokens_urls_and_controls(monkeypatch, stderr):
+    monkeypatch.setenv("GH_TOKEN", FAKE_TOKEN)
+    quoted = rc.said(stderr)
+    assert len(quoted) <= rc.GH_SAID_MAX
+    assert all(" " <= c <= "~" for c in quoted)
+    for secret in (FAKE_TOKEN, OTHER_TOKEN, SIGNATURE, "eyJhbGciOiJIUzI1NiJ9"):
+        assert secret not in quoted
+
+
+def test_said_takes_out_the_token_s_value_whatever_its_shape(monkeypatch):
+    monkeypatch.setenv("GH_TOKEN", "short-but-secret")
+    assert rc.said("gh: refused short-but-secret (HTTP 403)") == (
+        "gh: refused <token> (HTTP 403)"
+    )
+
+
+@pytest.mark.regression
+def test_p_never_passes_without_a_record(world, monkeypatch):
+    """Any path that reads no record and says nothing still fails P: without a
+    record the registry comparisons compare nothing."""
+    monkeypatch.setattr(rc.Verifier, "release_record", lambda self, *a: None)
+    _fails(
+        world,
+        "no record of 'test and build for PyPI' was read",
+        "no record of 'test and build for npm' was read",
+    )
 
 
 def test_a_registry_that_does_not_answer_fails(world):

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { UserTable } from '@/components/admin/users/UserTable';
 import { InviteUserModal } from '@/components/admin/users/InviteUserModal';
@@ -7,9 +7,10 @@ import { EffectivePermissionsModal } from '@/components/admin/users/EffectivePer
 import { AdminUser, AdminUserPatch } from '@/types/admin';
 import { AdminService } from '@/services/admin';
 import { withAdminGuard } from '@/components/admin/withAdminGuard';
-import { RequiresModule } from '@/contexts/ModulesContext';
+import { RequiresModule, useModule } from '@/contexts/ModulesContext';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { MODULES } from '@/services/modules';
+import { useDeferredAnnouncement } from '@/components/ui/Dialog';
 
 export function UserManagementPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -20,7 +21,13 @@ export function UserManagementPage() {
   const [reloadToken, setReloadToken] = useState(0);
   // The row whose Edit button gets focus back when the dialog closes.
   const [focusUserId, setFocusUserId] = useState<string | null>(null);
-  const [status, setStatus] = useState('');
+  // The save is announced after the edit dialog has closed: written in the
+  // same commit, it would change while the page is still inert (#369).
+  const [status, setStatus, announceStatus] = useDeferredAnnouncement();
+  // The Permissions button that opened the dialog; it gets focus back on close.
+  const permissionsTrigger = useRef<HTMLButtonElement | null>(null);
+  // The dialog reads a route of the rbac module: no button, no request without it.
+  const hasRbac = useModule(MODULES.RBAC);
   const currentUserId = useOptionalAuth()?.user?.id ?? null;
 
   const handleInviteSuccess = () => {
@@ -39,7 +46,7 @@ export function UserManagementPage() {
     setEditUser(null);
     setFocusUserId(userId);
     setReloadToken((n) => n + 1);
-    setStatus(`Saved changes to ${name}.`);
+    announceStatus(`Saved changes to ${name}.`);
   };
 
   const handleCloseEdit = (options?: EditUserCloseOptions) => {
@@ -47,6 +54,17 @@ export function UserManagementPage() {
     setEditUser(null);
     if (options?.reload) setReloadToken((n) => n + 1);
   };
+
+  const handleOpenPermissions = (user: AdminUser, trigger: HTMLButtonElement) => {
+    permissionsTrigger.current = trigger;
+    setPermissionsUser(user);
+  };
+
+  const handleClosePermissions = useCallback(() => {
+    setPermissionsUser(null);
+    permissionsTrigger.current?.focus();
+    permissionsTrigger.current = null;
+  }, []);
 
   const handleFocusHandled = useCallback(() => setFocusUserId(null), []);
 
@@ -83,6 +101,7 @@ export function UserManagementPage() {
         {/* User Table */}
         <UserTable
           onEdit={handleEdit}
+          onPermissions={hasRbac ? handleOpenPermissions : undefined}
           reloadToken={reloadToken}
           focusUserId={focusUserId}
           onFocusHandled={handleFocusHandled}
@@ -112,7 +131,7 @@ export function UserManagementPage() {
             isOpen={permissionsUser !== null}
             userId={permissionsUser?.id ?? null}
             userEmail={permissionsUser?.email ?? undefined}
-            onClose={() => setPermissionsUser(null)}
+            onClose={handleClosePermissions}
           />
         </RequiresModule>
       </div>

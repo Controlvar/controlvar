@@ -12,7 +12,11 @@ import { useApi } from '@/hooks/useApi';
 import { PageTitle } from '@/components/PageTitle';
 import { FirstRunChecklist } from '@/components/experiments/FirstRunChecklist';
 import { useOptionalAuth } from '@/contexts/AuthContext';
-import { canCreateExperiment } from '@/utils/experimentPermissions';
+import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
+import { useDemoMode } from '@/contexts/AuthConfigContext';
+import { DemoNote } from '@/components/DemoNote';
+import { DEMO_EXPERIMENTS_ACTION } from '@/utils/demoMode';
+import { canCreateExperiment, canReadEligibility } from '@/utils/experimentPermissions';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
 const STATUS_FILTERS: Array<{ label: string; value: ExperimentStatus | 'all' }> = [
@@ -25,10 +29,20 @@ const STATUS_FILTERS: Array<{ label: string; value: ExperimentStatus | 'all' }> 
 
 export default function ExperimentsPage() {
   const [statusFilter, setStatusFilter] = useState<ExperimentStatus | 'all'>('all');
-  // Analysts and viewers are refused by the API, so they are not offered the
-  // button; the page is otherwise identical for every role.
+  // A user the API would refuse (no EXPERIMENT CREATE by role, custom role or
+  // direct grant) is not offered the button; the page is otherwise identical
+  // for every user. While the effective map is on its way the button is not
+  // shown, and appears once it admits the user.
   const auth = useOptionalAuth();
-  const canCreate = canCreateExperiment(auth?.user);
+  const { effective } = useEffectivePermissions();
+  const canCreate = canCreateExperiment(auth?.user, effective);
+  // Intent, not a second check: today canReadEligibility answers exactly as
+  // canCreateExperiment does, so inside `canCreate &&` this is always true. It
+  // names the group routes' own question, so the link follows them if the two
+  // ever differ.
+  const canManageEligibility = canReadEligibility(auth?.user, effective);
+  // A read-only demo puts the demo note where "+ New Experiment" would be.
+  const demo = useDemoMode();
 
   const { data, loading: isLoading, error } = useApi<ExperimentListResponse>(
     () => ExperimentsService.list(statusFilter !== 'all' ? { status: statusFilter } : undefined),
@@ -46,21 +60,45 @@ export default function ExperimentsPage() {
       <PageTitle title="Experiments" />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Experiments</h1>
             <p className="text-sm text-slate-500 mt-1">
               Manage and monitor your A/B tests and feature experiments
             </p>
           </div>
-          {canCreate && (
-            <Link
-              href="/experiments/new"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-              data-testid="new-experiment-btn"
-            >
-              + New Experiment
-            </Link>
+          {demo ? (
+            <DemoNote action={DEMO_EXPERIMENTS_ACTION} className="text-sm text-slate-600 max-w-md" />
+          ) : canCreate && (
+            <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+              {/* Secondary links (#1455): the same roles as the API's group
+                  routes (canReadEligibility, EXPERIMENT CREATE). */}
+              {canManageEligibility && (
+                <Link
+                  href="/experiments/exclusion-groups"
+                  className="text-sm font-medium text-blue-700 underline"
+                  data-testid="exclusion-groups-link"
+                >
+                  Exclusion groups
+                </Link>
+              )}
+              {canManageEligibility && (
+                <Link
+                  href="/experiments/holdouts"
+                  className="text-sm font-medium text-blue-700 underline"
+                  data-testid="holdouts-link"
+                >
+                  Global holdouts
+                </Link>
+              )}
+              <Link
+                href="/experiments/new"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                data-testid="new-experiment-btn"
+              >
+                + New Experiment
+              </Link>
+            </div>
           )}
         </div>
 
@@ -126,7 +164,7 @@ export default function ExperimentsPage() {
         {/* Experiments table */}
         {!isLoading && !error && experiments.length > 0 && (
           <div
-            className="bg-white rounded-lg border border-slate-200 overflow-hidden"
+            className="bg-white rounded-lg border border-slate-200 overflow-x-auto"
             data-testid="experiments-table"
           >
             <table className="w-full text-sm">

@@ -1,16 +1,22 @@
 import React from 'react';
 import manifest from '@/content/videos.json';
+import { CARD_TITLE, FOCUS, H1 } from '@/components/homepage/styles';
 
 /**
- * The walkthrough videos on controlvar.com (#1290): the homepage section the
- * MARKETING build renders, one row per entry of `content/videos.json`.
+ * The walkthrough videos on controlvar.com (#1290): the /walkthroughs page of
+ * the MARKETING build, one row per entry of `content/videos.json`. The
+ * homepage has a teaser of posters that link here
+ * (`components/homepage/WalkthroughsTeaser.tsx`) and no player: the section
+ * was 23% of the homepage's height at 1440 px and 34% on a phone (site design
+ * 2026-11-11).
  *
- * Rendered only when `isMarketingSite()` is true (`pages/index.tsx`). The
- * files live in no build: `scripts/fetch-site-media.mjs`, the last command of
- * `build:marketing`, downloads them from the `media` release, checks each
- * against the size and sha256 pinned in the manifest, and places them in
- * `out/media/`. A self-hoster's dashboard has neither the section nor the
- * files.
+ * The page exists in the marketing build only (`pages/walkthroughs.tsx`,
+ * `utils/marketing-only.ts`; `scripts/check-platform-export.mjs` refuses it in
+ * a platform export). The files live in no build:
+ * `scripts/fetch-site-media.mjs`, the last command of `build:marketing`,
+ * downloads them from the `media` release, checks each against the size and
+ * sha256 pinned in the manifest, and places them in `out/media/`. A
+ * self-hoster's dashboard has neither the page nor the files.
  *
  * Two kinds of video, declared by the transcript's `kind`:
  *   - a recording (no `kind`): the dashboard filmed on a local stack with demo
@@ -44,9 +50,11 @@ import manifest from '@/content/videos.json';
  * or revert the change.
  *
  * Adding a video changes no code: an entry in `content/videos.json`, its
- * transcript in `content/walkthroughs/<slug>.json`, and the per-video rows of
- * the tests that pin them (the slug list in `tests/pages/walkthroughs.test.tsx`,
- * the description's facts in `test_site_walkthroughs.py`).
+ * transcript in `content/walkthroughs/<slug>.json`, its poster's frame in
+ * `content/poster-frames.json` (`scripts/check-site-media.mjs`), and the
+ * per-video rows of the tests that pin them (the slug list in
+ * `tests/pages/walkthroughs.test.tsx`, the description's facts in
+ * `test_site_walkthroughs.py`).
  */
 
 export type MediaFile = { name: string; bytes: number; sha256: string };
@@ -129,8 +137,10 @@ function TranscriptItemView({ item }: { item: TranscriptItem }) {
     return <p className="text-slate-700">{item.said.join(' ')}</p>;
   }
   if ('code' in item) {
+    // Wrapped, not scrolled: a card is a third of the page wide, and a block
+    // that scrolls sideways must take focus (axe scrollable-region-focusable).
     return (
-      <pre className="overflow-x-auto rounded-md bg-slate-900 p-4 text-xs leading-relaxed text-slate-100">
+      <pre className="whitespace-pre-wrap break-words rounded-md bg-slate-900 p-4 text-xs leading-relaxed text-slate-100">
         <code>{item.code.join('\n')}</code>
       </pre>
     );
@@ -138,59 +148,62 @@ function TranscriptItemView({ item }: { item: TranscriptItem }) {
   throw new Error(`a transcript item must be on_screen, said or code: ${JSON.stringify(item)}`);
 }
 
+/**
+ * The page's body: the h1, then a grid of one card per entry, three columns
+ * from `lg`, two from `sm`, one below (#1459). It takes any number of entries
+ * in manifest order. Each card is, in DOM order: its h2 title (so heading
+ * navigation lands before the player), the player, the description, the kind,
+ * the length and the transcript. No thumbnail, no play button over the video
+ * and no badge on it: the browser's own controls, as before. Each card's id is
+ * its anchor (`anchorFor`), which the homepage teaser links.
+ */
 export function Walkthroughs() {
   return (
-    <section id="walkthroughs" aria-labelledby="walkthroughs-heading" className="border-t border-slate-200">
-      <div className="mx-auto max-w-5xl px-6 py-14">
-        <h2 id="walkthroughs-heading" className="text-2xl font-semibold tracking-tight">
+    <section id="walkthroughs" aria-labelledby="walkthroughs-heading" className="scroll-mt-20">
+      <div className="mx-auto max-w-[1180px] px-6 py-14 lg:py-16">
+        <h1 id="walkthroughs-heading" className={H1}>
           Walkthroughs
-        </h2>
+        </h1>
         <p className="mt-3 max-w-2xl text-slate-600">
           The recordings were made on a local stack with demo data. Turn captions on in the player; the transcript is
           below each video.
         </p>
-        {/* Only Tailwind classes the dashboard already uses: a new one would change the CSS that
-            every page of the platform build loads (measured), though nothing there renders this. */}
-        <ol role="list" className="mt-10 flex flex-col gap-8">
+        <ol role="list" className="mt-10 grid gap-x-7 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
           {WALKTHROUGHS.map((video) => {
             const id = anchorFor(video.slug);
             const length = lengthLabel(video.duration_seconds);
             const transcript = transcriptFor(video.slug);
             const kind = kindOf(transcript);
             return (
-              <li key={video.slug} id={id}>
-                <div className="grid gap-6 lg:grid-cols-3 lg:items-start">
-                  <div>
-                    <h3 id={`${id}-title`} className="text-lg font-semibold">
-                      {video.title}
-                    </h3>
-                    <p id={`${id}-description`} className="mt-2 text-sm leading-relaxed text-slate-600">
-                      {video.description}
-                    </p>
-                    <p className="mt-2 text-sm text-slate-500" data-kind={kind}>
-                      {KIND_LABEL[kind]}
-                    </p>
-                    <p className="mt-2 text-sm text-slate-500">
-                      <span aria-hidden="true">{length.shown}</span>
-                      <span className="sr-only">{length.spoken}</span>
-                    </p>
-                  </div>
-                  <video
-                    className="block w-full rounded-lg bg-slate-900 lg:col-span-2"
-                    controls
-                    preload="none"
-                    poster={`/media/${video.poster.name}`}
-                    width={1920}
-                    height={1080}
-                    aria-labelledby={`${id}-title`}
-                    aria-describedby={`${id}-description`}
-                    src={`/media/${video.mp4.name}`}
-                  >
-                    <track kind="captions" srcLang="en" label="English" src={`/media/${siteCaptionsFor(video)}`} />
-                  </video>
-                </div>
-                <details className="mt-3">
-                  <summary className="cursor-pointer py-2 text-sm font-medium text-blue-700">
+              <li key={video.slug} id={id} className="min-w-0 scroll-mt-20">
+                <h2 id={`${id}-title`} className={CARD_TITLE}>
+                  {video.title}
+                </h2>
+                <video
+                  className={`mt-3 block h-auto w-full rounded-lg border border-slate-200 bg-slate-900 ${FOCUS}`}
+                  controls
+                  preload="none"
+                  poster={`/media/${video.poster.name}`}
+                  width={1920}
+                  height={1080}
+                  aria-labelledby={`${id}-title`}
+                  aria-describedby={`${id}-description`}
+                  src={`/media/${video.mp4.name}`}
+                >
+                  <track kind="captions" srcLang="en" label="English" src={`/media/${siteCaptionsFor(video)}`} />
+                </video>
+                <p id={`${id}-description`} className="mt-3 text-sm leading-relaxed text-slate-600">
+                  {video.description}
+                </p>
+                <p className="mt-2 text-sm text-slate-600" data-kind={kind}>
+                  {KIND_LABEL[kind]}
+                </p>
+                <p className="mt-1 text-sm text-slate-600">
+                  <span aria-hidden="true">{length.shown}</span>
+                  <span className="sr-only">{length.spoken}</span>
+                </p>
+                <details className="mt-2">
+                  <summary className={`cursor-pointer py-2 text-sm font-medium text-blue-700 ${FOCUS}`}>
                     Transcript<span className="sr-only">: {video.title}</span>
                   </summary>
                   <div className="mt-2 max-w-3xl space-y-2 text-sm leading-relaxed">

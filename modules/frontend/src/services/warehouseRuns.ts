@@ -55,6 +55,8 @@ export interface VariantResult {
   effect_size?: number | null;
   effect_size_label?: string | null;
   relative_improvement_pct: number | null;
+  /** Treatment minus control; the direction of a change when the control is at 0. */
+  absolute_difference?: number | null;
   power?: number | null;
   statistical_test_used?: string | null;
   /** Why this variant's comparison was not computed, e.g. "Not computed: no variation". */
@@ -67,6 +69,11 @@ export interface MetricResult {
   /** `conversion` for a proportion metric, `mean` for a mean metric. */
   metric_type: string;
   is_primary: boolean;
+  /**
+   * The direction this run analysed the metric in: its source's setting when
+   * the run started. Absent from a result stored before the field.
+   */
+  lower_is_better?: boolean;
   variants: VariantResult[];
   has_significant_result: boolean;
   winning_variant_id: string | null;
@@ -157,6 +164,8 @@ export interface WarehouseSourceSummary {
   name: string;
   table: string;
   metric_type: string | null;
+  /** Null for an assignment source; absent from an API older than the field. */
+  lower_is_better?: boolean | null;
   validated_at: string | null;
 }
 
@@ -201,6 +210,7 @@ export const WAREHOUSE_NAMES: Record<string, string> = {
   bigquery: 'BigQuery',
   snowflake: 'Snowflake',
   athena: 'Amazon Athena',
+  redshift: 'Amazon Redshift',
 };
 
 export function warehouseName(type: string | null | undefined): string {
@@ -248,6 +258,10 @@ const FAILURE_COPY: Record<string, (c: CopyContext) => FailureCopy> = {
     title: 'Stored warehouse credentials can’t be used on this deployment.',
     fix: 'An operator must set WAREHOUSE_CREDENTIALS_KEYS (see Self-hosting › Warehouse).',
   }),
+  aws_identity_unavailable: (c) => ({
+    title: `This deployment has no AWS identity to assume your role from, so ${c.warehouse} can’t be used here.`,
+    fix: `An operator must run the API with an AWS identity that may assume the role ${c.connection} uses.`,
+  }),
   auth_failed: (c) => ({
     title: `${c.warehouse} did not accept the credentials of ${c.connection}.`,
     fix: `An admin can replace them in Warehouse › Connections › ${c.connection}.`,
@@ -290,6 +304,12 @@ const FAILURE_COPY: Record<string, (c: CopyContext) => FailureCopy> = {
   workgroup_unsafe: () => ({
     title: 'The Athena workgroup’s settings don’t meet the requirements.',
     fix: 'An admin can check the workgroup settings listed in Warehouse › Connections.',
+  }),
+  role_trust_unsafe: (c) => ({
+    title: `The trust policy of the role ${c.connection} uses doesn’t require its external ID, so the role was refused.`,
+    fix:
+      `An admin adds a condition requiring the external ID shown in Warehouse › Connections › ${c.connection} ` +
+      'to the role’s trust policy.',
   }),
   timezone_not_utc: (c) => ({
     title: `The ${c.warehouse} session was not in UTC, so the results were refused.`,
@@ -420,7 +440,10 @@ export function startRefusal(err: unknown, now: Date = new Date()): StartRefusal
     };
   }
   const detail = detailRecord(err);
-  const code = err.code ?? (err.isNetworkError ? 'unreachable' : `http_${err.status}`);
+  // A time-out is not "unreachable": the run may have started (#1040). Its
+  // message is the dashboard's own time-out sentence, shown by `default`.
+  const code =
+    err.code ?? (err.timedOut ? 'timed_out' : err.isNetworkError ? 'unreachable' : `http_${err.status}`);
   const apiMessage = typeof detail.message === 'string' ? detail.message : err.message;
 
   switch (code) {

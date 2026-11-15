@@ -6,9 +6,9 @@
 #
 # While the key is valid (a flag evaluation with it has just answered 200, and
 # the assignment after answers 200), it is refused where the guide says it is:
-# 401 on a route that lists experiments, which takes a user login, with the
-# body a request with no login gets; and 403 on the flag ruleset, because the
-# key was made with sdk:ruleset unticked.
+# 403 on a route that lists experiments, which takes a user login or a key
+# with the mcp:read scope, because the key was made with no scopes; and 403 on
+# the flag ruleset, because the key was made with sdk:ruleset unticked.
 #
 # The key is shown once, so the screen that shows it keeps no screenshot and
 # no ARIA snapshot, the journey is not recorded, and the key is kept (keep)
@@ -199,10 +199,10 @@ steps:
         as: anonymous
         key: sdk-key
     expect:
-      status: 401
+      status: 403
       json:
-        detail: Not authenticated
-    fail: the key, which an SDK call has just accepted, is taken as a user login on a route that lists experiments
+        detail: "This API key does not have the 'mcp:read' scope. Create a key with the 'mcp:read' scope to read flags, experiments and results with it."
+    fail: the key, which an SDK call has just accepted and which has no mcp:read scope, is let read the experiments, or is refused with another answer
   - id: ruleset-scope
     doc: scopes
     do:

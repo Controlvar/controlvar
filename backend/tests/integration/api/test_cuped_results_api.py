@@ -808,3 +808,28 @@ def test_winsorization_on_a_conversion_metric_is_a_reason_not_zeroed(
     assert row["method"] == "winsorization"
     assert row["control_sample_size"] == 2000
     assert body["method"] == "winsorization"
+
+
+@pytest.mark.regression
+def test_winsorization_on_a_revenue_metric_is_listed_as_not_a_proportion_metric(
+    admin_client, built
+):
+    """Under ``winsorization`` this view still computes conversion metrics only:
+    a revenue metric is listed with the reason every mean metric gets, not
+    with numbers cut at a percentile (#1735)."""
+    exp = built(
+        TWO,
+        method="winsorization",
+        metrics=[
+            ("Purchase", "purchase", MetricType.CONVERSION),
+            ("Revenue", "purchase", MetricType.REVENUE),
+        ],
+    )
+
+    body = _get(admin_client, exp)
+
+    rows = {r["metric_name"]: r for r in body["metrics"]}
+    assert body["method"] == "winsorization"
+    assert rows["Revenue"]["unavailable_reason"] == "not_a_proportion_metric"
+    assert rows["Revenue"]["adjusted_effect"] is None
+    assert rows["Revenue"]["adjusted_control_mean"] is None

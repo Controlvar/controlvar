@@ -28,13 +28,15 @@ export async function initFeatureFlags(userId: string): Promise<void> {
 async function renderHomePage(userId: string): Promise<void> {
   const client = OpenFeature.getClient();
 
-  const ctx: EvaluationContext = { targetingKey: userId };
+  // Every key but targetingKey is sent as the user's attributes.
+  const ctx: EvaluationContext = { targetingKey: userId, plan: 'free' };
 
-  // Only boolean flags carry a value: the evaluate endpoint returns `config: null`.
   const showNewHero = await client.getBooleanValue('new-hero-section', false, ctx);
+  const heroTitle = await client.getStringValue('hero-title', 'Welcome', ctx);
 
   console.log(`User ${userId}:`);
   console.log(`  new-hero-section: ${showNewHero}`);
+  console.log(`  hero-title: ${heroTitle}`);
 }
 
 // Example usage.

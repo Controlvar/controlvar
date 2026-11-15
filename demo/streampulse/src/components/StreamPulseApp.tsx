@@ -49,7 +49,7 @@ export default function StreamPulseApp({ apiKey = API_KEY, apiUrl = API_URL, ini
             <h1 className="text-xl font-extrabold tracking-tight">
               Stream<span className="text-pulse-600">Pulse</span>
             </h1>
-            <p className="text-xs text-neutral-500">A simulated mobile app: pick a device, see which flags and experiments it gets.</p>
+            <p className="text-xs text-neutral-500">A phone drawn with the React SDK: pick a device, see which flags and experiments it gets.</p>
           </div>
           <nav className="flex items-center gap-2" aria-label="Page">
             <button type="button" className="btn-primary" onClick={() => setStoryOpen(true)} aria-haspopup="dialog" aria-expanded={storyOpen}>

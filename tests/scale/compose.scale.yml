@@ -1,0 +1,39 @@
+# The scale harness's override of the shipped Compose stack (#1608).
+#
+# Only scripts/scale_stack.py uses it, and always as
+#
+#   docker compose -p controlvar-scale --env-file <work>/.env \
+#       -f deploy/compose/compose.yml -f tests/scale/compose.scale.yml ...
+#
+# with a child environment reduced to PATH, HOME and the DOCKER_ settings
+# scripts/check_compose_config.py keeps. Do not run it by hand without -p:
+# the project name deploy/compose/compose.yml sets is a real installation's,
+# volumes included.
+#
+# It changes the shipped stack in exactly these ways, and
+# backend/tests/unit/scripts/test_scale_stack.py holds the key set to them:
+#   * the stack runs on CPUs 0 and 1 only: the api is pinned to CPU 0, and
+#     postgres, redis and web share CPU 1. CPUs 2 and 3 are left for the
+#     samplers, the harness and the load generator. A CPU here is a hardware
+#     thread as the VM reports it, not a core: on the runner probed so far the
+#     VM reports 0-1 and 2-3 as the hardware-thread pairs of its two physical
+#     cores, so with this layout nothing in the stack shares a physical core
+#     with the load generator. Which threads pair up is the VM's to report,
+#     and may differ on another runner;
+#   * the api's SDK rate limit is raised to a measurement setting (not advice),
+#     so the limiter stays on but does not refuse the generator's one address;
+#   * the api's /metrics token is set, so the harness can read its counters.
+# Nothing else about the api changes: not ENVIRONMENT, WEB_CONCURRENCY or the
+# image.
+services:
+  api:
+    cpuset: "0"
+    environment:
+      SDK_RATE_LIMIT_PER_MINUTE: "10000000"
+      METRICS_TOKEN: "${SCALE_METRICS_TOKEN:?required: written by scripts/scale_stack.py up}"
+  postgres:
+    cpuset: "1"
+  redis:
+    cpuset: "1"
+  web:
+    cpuset: "1"

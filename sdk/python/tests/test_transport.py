@@ -81,6 +81,32 @@ def test_network_failures_raise_transport_error(exc):
     assert "http://x/p" in str(info.value)
 
 
+CANARY = "c4nary.attr"
+QUERY_URL = f"http://x/api/v1/feature-flags/evaluate/f?user_id=user-1&context=%7B%22plan%22%3A%22{CANARY}%22%7D"
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "exc",
+    [
+        urllib.error.URLError("connection refused"),
+        TimeoutError("timed out"),
+        ConnectionResetError("reset"),
+        urllib.error.URLError(f"cannot reach {QUERY_URL}"),
+    ],
+    ids=["urlerror", "timeout", "reset", "url-in-the-error"],
+)
+def test_a_network_failure_names_the_url_without_its_query(exc):
+    """#1551: the message names the URL up to its ``?``; the query holds the user's attributes."""
+    with mock.patch("urllib.request.urlopen", side_effect=exc):
+        with pytest.raises(TransportError) as info:
+            UrllibTransport().send("GET", QUERY_URL, {}, None, 1.0)
+    message = str(info.value)
+    assert message.startswith("GET http://x/api/v1/feature-flags/evaluate/f failed: "), message
+    assert "?" not in message and "user_id=" not in message and "context=" not in message, message
+    assert CANARY not in message, message
+
+
 def test_the_suite_cannot_open_a_real_connection(_no_network):
     """conftest.py refuses every connection, so HTTP in this suite is faked or
     the test fails; the real urlopen below never leaves the process."""

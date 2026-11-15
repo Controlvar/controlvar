@@ -4,14 +4,14 @@
  * `fetch` is mocked; AsyncStorage is the in-memory `__mocks__` implementation.
  * Endpoints under test:
  *   POST /api/v1/tracking/assign
- *   GET  /api/v1/feature-flags/evaluate/{flag_key}?user_id=…
+ *   GET  /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=…
  *   GET  /api/v1/feature-flags/user/{user_id}
  *   POST /api/v1/tracking/track
  *   POST /api/v1/tracking/batch
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ApiError, ExperimentationClient } from '../src/client';
+import { ApiError, ExperimentationClient, FlagValueError } from '../src/client';
 import { OfflineStorage } from '../src/storage';
 import type { Assignment, FlagEvaluation, SdkConfig, TrackEvent } from '../src/types';
 
@@ -245,9 +245,9 @@ describe('getAssignment', () => {
     expect(results.map((r) => r?.variantName)).toEqual(['treatment', 'treatment', 'treatment']);
   });
 
-  test('404 (experiment not ACTIVE) → null, reported to onError, and not cached', async () => {
+  test('404 (no experiment has the key) → null, reported to onError, and not cached', async () => {
     const onError = jest.fn();
-    mockFetchAlways({ detail: 'Experiment not found' }, 404);
+    mockFetchAlways({ detail: "No experiment has the key 'missing'." }, 404);
     const client = makeClient({ onError });
 
     expect(await client.getAssignment('missing', 'user-1')).toBeNull();
@@ -450,7 +450,7 @@ describe('evaluateFlag', () => {
     expect(fetchMock()).toHaveBeenCalledTimes(2);
   });
 
-  test('404 (flag unknown / not active) → disabled, reported, and NOT cached', async () => {
+  test('404 (unknown flag key) → disabled, reported, and NOT cached', async () => {
     const onError = jest.fn();
     mockFetchAlways({ detail: 'Not found' }, 404);
     const client = makeClient({ onError });
@@ -576,6 +576,43 @@ describe('evaluateFlag — offline fallback (AsyncStorage)', () => {
     expect(fetchMock()).toHaveBeenCalledTimes(1);
   });
 
+  // #1519: the kill-switch page says a device that cannot reach the API serves the last answer it
+  // stored with no time limit, also after a restart (a new client over the same storage).
+  test('on API failure returns the last-known evaluation however long ago it expired', async () => {
+    const storage = new OfflineStorage();
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+    await storage.setFlag('user-1', 'dark-mode', { key: 'dark-mode', enabled: true, config: null }, -thirtyDaysMs);
+    mockFetchError('Connection refused');
+
+    const client = makeClient({ offlineFallback: true }, storage);
+    expect(await client.evaluateFlag('dark-mode', 'user-1')).toEqual({ key: 'dark-mode', enabled: true, config: null });
+    expect(fetchMock()).toHaveBeenCalledTimes(1);
+  });
+
+  test('a 404 (deleted flag) answers disabled and removes the stored answer', async () => {
+    const storage = new OfflineStorage();
+    await storage.setFlag('user-1', 'dark-mode', { key: 'dark-mode', enabled: true, config: { a: 1 } }, -1);
+    mockFetchOnce({ detail: 'not found' }, 404);
+
+    const client = makeClient({ offlineFallback: true }, storage);
+    expect(await client.evaluateFlag('dark-mode', 'user-1')).toEqual({ key: 'dark-mode', enabled: false, config: null });
+    expect(await storage.getFlag('user-1', 'dark-mode')).toBeNull();
+
+    // a later outage has nothing left to serve
+    mockFetchError('Connection refused');
+    expect((await makeClient({ offlineFallback: true }, storage).evaluateFlag('dark-mode', 'user-1')).enabled).toBe(false);
+  });
+
+  test('a 500 still serves the stored answer and keeps it', async () => {
+    const storage = new OfflineStorage();
+    await storage.setFlag('user-1', 'dark-mode', { key: 'dark-mode', enabled: true, config: null }, -1);
+    mockFetchOnce({ detail: 'boom' }, 500);
+
+    const client = makeClient({ offlineFallback: true }, storage);
+    expect((await client.evaluateFlag('dark-mode', 'user-1')).enabled).toBe(true);
+    expect(await storage.getFlag('user-1', 'dark-mode')).not.toBeNull();
+  });
+
   test('on API failure with nothing persisted returns disabled (and persists nothing)', async () => {
     mockFetchError('Connection refused');
     const storage = new OfflineStorage();
@@ -610,6 +647,186 @@ describe('evaluateFlag — offline fallback (AsyncStorage)', () => {
     await client.evaluateFlag('dark-mode', 'user-1');
     expect(AsyncStorage.setItem).toHaveBeenCalledTimes(1);
     expect((AsyncStorage.setItem as jest.Mock).mock.calls[0][0]).toBe('ep_sdk_flag:user-1:dark-mode');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Typed getters — the value a string, number or JSON flag serves (#1810)
+// ---------------------------------------------------------------------------
+
+function valueBody(value: unknown, valueType: string, enabled = true): Record<string, unknown> {
+  return { key: 'f', enabled, config: null, value, value_type: valueType };
+}
+
+describe('typed getters', () => {
+  test('each getter reads its type from GET /api/v1/feature-flags/evaluate/{key}, attributes as context', async () => {
+    const client = makeClient();
+    mockFetchOnce(valueBody('on-copy', 'string'));
+    expect(await client.getStringValue('s', 'user-1', 'fb', { plan: 'pro' })).toBe('on-copy');
+    mockFetchOnce(valueBody(2.5, 'number'));
+    expect(await client.getNumberValue('n', 'user-1', -1)).toBe(2.5);
+    mockFetchOnce(valueBody({ color: 'blue' }, 'json'));
+    expect(await client.getJsonValue('j', 'user-1', null)).toEqual({ color: 'blue' });
+    expect(calls().map((c) => c.url)).toEqual([
+      `${BASE_URL}/api/v1/feature-flags/evaluate/s?user_id=user-1&context=%7B%22plan%22%3A%22pro%22%7D`,
+      `${BASE_URL}/api/v1/feature-flags/evaluate/n?user_id=user-1`,
+      `${BASE_URL}/api/v1/feature-flags/evaluate/j?user_id=user-1`,
+    ]);
+  });
+
+  test('a flag that is off for the user answers its off value, not the default', async () => {
+    mockFetchOnce(valueBody('off-copy', 'string', false));
+    expect(await makeClient().getStringValue('f', 'user-1', 'fb')).toBe('off-copy');
+  });
+
+  test('an empty string, 0, {} and [] are values, not missing ones', async () => {
+    const onError = jest.fn();
+    const client = makeClient({ onError });
+    mockFetchOnce(valueBody('', 'string'));
+    expect(await client.getStringValue('a', 'user-1', 'fb')).toBe('');
+    mockFetchOnce(valueBody(0, 'number'));
+    expect(await client.getNumberValue('b', 'user-1', -1)).toBe(0);
+    mockFetchOnce(valueBody({}, 'json'));
+    expect(await client.getJsonValue('c', 'user-1', null)).toEqual({});
+    mockFetchOnce(valueBody([], 'json'));
+    expect(await client.getJsonValue('d', 'user-1', null)).toEqual([]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  test('another type answers the default and reports one TYPE_MISMATCH with "value"', async () => {
+    const onError = jest.fn();
+    mockFetchOnce(valueBody(10, 'number'));
+    expect(await makeClient({ onError }).getStringValue('f', 'user-1', 'fb')).toBe('fb');
+    expect(onError).toHaveBeenCalledTimes(1);
+    const [err, operation] = onError.mock.calls[0];
+    expect(operation).toBe('value');
+    expect(err).toBeInstanceOf(FlagValueError);
+    expect((err as FlagValueError).code).toBe('TYPE_MISMATCH');
+    expect((err as FlagValueError).flagKey).toBe('f');
+    expect(err.message).toBe('Flag "f" serves a number; getStringValue returned your default');
+  });
+
+  test('an answer without a value (a server without flag values) answers the default, INVALID_RESPONSE', async () => {
+    const onError = jest.fn();
+    mockFetchOnce(flagBody('f', true, null));
+    expect(await makeClient({ onError }).getNumberValue('f', 'user-1', -1)).toBe(-1);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0][1]).toBe('value');
+    expect((onError.mock.calls[0][0] as FlagValueError).code).toBe('INVALID_RESPONSE');
+  });
+
+  test.each([
+    ['a 503', () => mockFetchOnce({ detail: 'down' }, 503), 503],
+    ['a 404 (unknown flag)', () => mockFetchOnce({ detail: 'Not found' }, 404), 404],
+  ])('%s answers the default and passes the ApiError itself to onError once, with "value"', async (_label, serve, status) => {
+    const onError = jest.fn();
+    serve();
+    await expect(makeClient({ onError }).getStringValue('f', 'user-1', 'fb')).resolves.toBe('fb');
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0][0]).toBeInstanceOf(ApiError);
+    expect((onError.mock.calls[0][0] as ApiError).status).toBe(status);
+    expect(onError.mock.calls[0][1]).toBe('value');
+  });
+
+  test('never rejects: a network error answers the default and is reported once', async () => {
+    const onError = jest.fn();
+    mockFetchError('offline');
+    await expect(makeClient({ onError }).getJsonValue('f', 'user-1', ['fb'])).resolves.toEqual(['fb']);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0]).toEqual([expect.objectContaining({ message: 'offline' }), 'value']);
+  });
+
+  test('never rejects when onError itself throws', async () => {
+    mockFetchOnce(valueBody(10, 'number'));
+    const client = makeClient({
+      onError: () => {
+        throw new Error('handler bug');
+      },
+    });
+    await expect(client.getStringValue('f', 'user-1', 'fb')).resolves.toBe('fb');
+  });
+
+  test('a JSON value is a new copy on every read: changing it changes nothing the client keeps', async () => {
+    mockFetchOnce(valueBody({ color: 'blue', sizes: [1, 2] }, 'json'));
+    const client = makeClient();
+    const first = await client.getJsonValue<{ color: string; sizes: number[] }>('f', 'user-1', { color: '', sizes: [] });
+    first.color = 'red';
+    first.sizes.push(3);
+    expect(await client.getJsonValue('f', 'user-1', null)).toEqual({ color: 'blue', sizes: [1, 2] });
+    expect(fetchMock()).toHaveBeenCalledTimes(1);
+  });
+
+  test('one request answers isFeatureEnabled and then a getter (the same cache)', async () => {
+    mockFetchAlways(valueBody('on-copy', 'string'));
+    const client = makeClient();
+    expect(await client.isFeatureEnabled('f', 'user-1')).toBe(true);
+    expect(await client.getStringValue('f', 'user-1', 'fb')).toBe('on-copy');
+    expect(fetchMock()).toHaveBeenCalledTimes(1);
+  });
+
+  test('evaluateFlag carries value and valueType only when the server sent them', async () => {
+    mockFetchOnce(valueBody('on-copy', 'string'));
+    mockFetchOnce(flagBody('g', true, null));
+    const client = makeClient();
+    expect(await client.evaluateFlag('f', 'user-1')).toStrictEqual({
+      key: 'f',
+      enabled: true,
+      config: null,
+      value: 'on-copy',
+      valueType: 'string',
+    });
+    expect(await client.evaluateFlag('g', 'user-1')).toStrictEqual({ key: 'g', enabled: true, config: null });
+  });
+
+  test('a failed request shared by evaluateFlag and a getter: one report each, under its own name', async () => {
+    const onError = jest.fn();
+    mockFetchOnce({ detail: 'down' }, 503);
+    const client = makeClient({ onError });
+    const [evaluation, value] = await Promise.all([
+      client.evaluateFlag('f', 'user-1'),
+      client.getStringValue('f', 'user-1', 'fb'),
+      client.evaluateFlag('f', 'user-1'),
+    ]);
+    expect(evaluation.enabled).toBe(false);
+    expect(value).toBe('fb');
+    expect(fetchMock()).toHaveBeenCalledTimes(1);
+    // evaluateFlag reports a failed request once however many calls share it, as before;
+    // each getter call that falls back reports once.
+    expect(onError.mock.calls.map(([, operation]) => operation).sort()).toEqual(['evaluateFlag', 'value']);
+  });
+
+  test('offline fallback: a failed request answers the stored value of that type, and still reports', async () => {
+    const onError = jest.fn();
+    const storage = new OfflineStorage();
+    const stored: FlagEvaluation = { key: 'f', enabled: true, config: null, value: 'stored-copy', valueType: 'string' };
+    await storage.setFlag('user-1', 'f', stored, -1);
+    mockFetchError('Connection refused');
+    const client = makeClient({ offlineFallback: true, onError }, storage);
+    expect(await client.getStringValue('f', 'user-1', 'fb')).toBe('stored-copy');
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0]).toEqual([expect.objectContaining({ message: 'Connection refused' }), 'value']);
+  });
+
+  test('an answer persisted with its value is read back from AsyncStorage by a new client', async () => {
+    const storage = new OfflineStorage();
+    mockFetchOnce(valueBody(10, 'number'));
+    await makeClient({ offlineFallback: true }, storage).getNumberValue('f', 'user-1', -1);
+    expect(await makeClient({ offlineFallback: true }, storage).getNumberValue('f', 'user-1', -1)).toBe(10);
+    expect(fetchMock()).toHaveBeenCalledTimes(1);
+  });
+
+  test('an answer stored by 0.1 (no value) answers the default and reports INVALID_RESPONSE, no request', async () => {
+    const onError = jest.fn();
+    const storage = new OfflineStorage();
+    await storage.setFlag('user-1', 'f', { key: 'f', enabled: true, config: null }, 60_000);
+    const client = makeClient({ offlineFallback: true, onError }, storage);
+    expect(await client.getStringValue('f', 'user-1', 'fb')).toBe('fb');
+    expect(fetchMock()).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0][1]).toBe('value');
+    expect((onError.mock.calls[0][0] as FlagValueError).code).toBe('INVALID_RESPONSE');
+    // ...and the boolean answer it holds is unchanged.
+    expect(await client.isFeatureEnabled('f', 'user-1')).toBe(true);
   });
 });
 
@@ -1051,5 +1268,149 @@ describe('OfflineStorage', () => {
     await expect(storage.setFlag('u', 'f', { key: 'f', enabled: true, config: null }, 1)).resolves.toBeUndefined();
     await expect(storage.getFlag('u', 'f')).resolves.toBeNull();
     await expect(storage.clear()).resolves.toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #1520 — flag evaluation sends the user's attributes, as the JavaScript SDK does
+// ---------------------------------------------------------------------------
+
+describe('regression #1520 — flag evaluation sends the user attributes', () => {
+  // The same shape as sdk/js contextQuery: `&context=` + encodeURIComponent(JSON.stringify(attributes)).
+  // sdk/js/__tests__/client.test.ts (describe 'regression #1520') pins the same seven literal rows.
+  const FIXTURE: Array<[string, Record<string, unknown>, string]> = [
+    ['a space', { plan: 'a b' }, '%7B%22plan%22%3A%22a%20b%22%7D'],
+    ['non-ASCII', { city: 'été' }, '%7B%22city%22%3A%22%C3%A9t%C3%A9%22%7D'],
+    ['nested', { user: { tier: 'gold' } }, '%7B%22user%22%3A%7B%22tier%22%3A%22gold%22%7D%7D'],
+    ['a number', { age: 42 }, '%7B%22age%22%3A42%7D'],
+    ['a boolean', { beta: true }, '%7B%22beta%22%3Atrue%7D'],
+    ['null', { x: null }, '%7B%22x%22%3Anull%7D'],
+    ['a non-empty array', ['a'] as unknown as Record<string, unknown>, '%5B%22a%22%5D'],
+  ];
+
+  test.each(FIXTURE)('evaluateFlag sends %s as context=<encodeURIComponent(JSON)>', async (_name, attributes, encoded) => {
+    mockFetchOnce(flagBody());
+    await makeClient().evaluateFlag('dark-mode', 'user-1', attributes);
+    expect(callAt(0).url).toBe(
+      `${BASE_URL}/api/v1/feature-flags/evaluate/dark-mode?user_id=user-1&context=${encoded}`
+    );
+  });
+
+  test.each([
+    ['undefined', undefined],
+    ['{}', {}],
+  ])('sends no context for %s', async (_name, attributes) => {
+    mockFetchOnce(flagBody());
+    await makeClient().evaluateFlag('dark-mode', 'user-1', attributes);
+    expect(callAt(0).url).toBe(`${BASE_URL}/api/v1/feature-flags/evaluate/dark-mode?user_id=user-1`);
+    expect(callAt(0).url).not.toContain('context');
+  });
+
+  test('isFeatureEnabled passes the attributes on', async () => {
+    mockFetchOnce(flagBody('dark-mode', true));
+    expect(await makeClient().isFeatureEnabled('dark-mode', 'user-1', { plan: 'pro' })).toBe(true);
+    expect(callAt(0).url).toContain('&context=%7B%22plan%22%3A%22pro%22%7D');
+  });
+
+  test('getAllFlags sends ?context= and nothing for {} or undefined', async () => {
+    mockFetchAlways({ a: true });
+    const client = makeClient();
+    await client.getAllFlags('user@1', { plan: 'a b' });
+    await client.getAllFlags('user@1', {});
+    await client.getAllFlags('user@1');
+    expect(callAt(0).url).toBe(`${BASE_URL}/api/v1/feature-flags/user/user%401?context=%7B%22plan%22%3A%22a%20b%22%7D`);
+    expect(callAt(1).url).toBe(`${BASE_URL}/api/v1/feature-flags/user/user%401`);
+    expect(callAt(2).url).toBe(`${BASE_URL}/api/v1/feature-flags/user/user%401`);
+  });
+
+  test('the cache, storage and dedupe keys stay user + flag: other attributes are served the stored answer', async () => {
+    mockFetchAlways(flagBody());
+    const storage = new OfflineStorage();
+    const first = makeClient({ offlineFallback: true }, storage);
+    await first.evaluateFlag('dark-mode', 'user-1', { plan: 'pro' });
+    await first.evaluateFlag('dark-mode', 'user-1', { plan: 'free' });
+    expect(fetchMock()).toHaveBeenCalledTimes(1);
+
+    // A new client sharing the storage is served the stored answer too.
+    const second = makeClient({ offlineFallback: true }, storage);
+    await second.evaluateFlag('dark-mode', 'user-1', { plan: 'free' });
+    expect(fetchMock()).toHaveBeenCalledTimes(1);
+
+    // The remedies: clearCache() + clearStorage(), after which the new attributes are sent.
+    first.clearCache();
+    await first.clearStorage();
+    await first.evaluateFlag('dark-mode', 'user-1', { plan: 'free' });
+    expect(fetchMock()).toHaveBeenCalledTimes(2);
+    expect(callAt(1).url).toContain('&context=%7B%22plan%22%3A%22free%22%7D');
+
+    // Concurrent calls share one fetch.
+    fetchMock().mockClear();
+    const third = makeClient();
+    await Promise.all([
+      third.evaluateFlag('other', 'user-1', { plan: 'a' }),
+      third.evaluateFlag('other', 'user-1', { plan: 'b' }),
+    ]);
+    expect(fetchMock()).toHaveBeenCalledTimes(1);
+  });
+
+  test('without offlineFallback the memory key is user + flag too: other attributes, no clearCache(), one fetch', async () => {
+    // AsyncStorage is off, so nothing but the in-memory cache can answer the second call.
+    mockFetchAlways(flagBody());
+    const client = makeClient({ offlineFallback: false });
+    await client.evaluateFlag('dark-mode', 'user-1', { plan: 'pro' });
+    expect(await client.evaluateFlag('dark-mode', 'user-1', { plan: 'free' })).toEqual({
+      key: 'dark-mode',
+      enabled: true,
+      config: { theme: 'dark' },
+    });
+    expect(fetchMock()).toHaveBeenCalledTimes(1);
+    expect(callAt(0).url).toContain('%22plan%22%3A%22pro%22');
+  });
+
+  test('without offlineFallback, a changed attribute set is asked again after clearCache()', async () => {
+    mockFetchAlways(flagBody());
+    const client = makeClient({ offlineFallback: false });
+    await client.evaluateFlag('dark-mode', 'user-1', { plan: 'pro' });
+    client.clearCache();
+    await client.evaluateFlag('dark-mode', 'user-1', { plan: 'free' });
+    expect(fetchMock()).toHaveBeenCalledTimes(2);
+    expect(callAt(1).url).toContain('%22plan%22%3A%22free%22');
+  });
+
+  test('a 422 goes to onError with the path but not the query, and nothing is cached', async () => {
+    const onError = jest.fn();
+    mockFetchAlways({ detail: 'context too large' }, 422);
+    const client = makeClient({ onError });
+    expect(await client.evaluateFlag('dark-mode', 'user-1', { plan: 'pro' })).toEqual({
+      key: 'dark-mode',
+      enabled: false,
+      config: null,
+    });
+    expect(client.getEvaluatedFlags('user-1')).toEqual([]);
+    const err = onError.mock.calls[0][0] as ApiError;
+    expect(onError.mock.calls[0][1]).toBe('evaluateFlag');
+    expect(err.status).toBe(422);
+    expect(err.message).toBe('API error 422 (/api/v1/feature-flags/evaluate/dark-mode)');
+    expect(err.message).not.toContain('context=');
+    expect(err.message).not.toContain('pro');
+    expect(err.message).not.toContain('user-1');
+  });
+
+  test('attributes that cannot be serialised go to onError, nothing is sent or cached', async () => {
+    const onError = jest.fn();
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    const client = makeClient({ onError });
+    expect((await client.evaluateFlag('dark-mode', 'user-1', circular)).enabled).toBe(false);
+    expect(fetchMock()).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledWith(expect.any(Error), 'evaluateFlag');
+    expect(client.getEvaluatedFlags('user-1')).toEqual([]);
+  });
+
+  test('a getAllFlags failure message gives the path without the query', async () => {
+    const onError = jest.fn();
+    mockFetchOnce({}, 500);
+    await makeClient({ onError }).getAllFlags('user-1', { plan: 'pro' });
+    expect(onError.mock.calls[0][0].message).toBe('API error 500 (/api/v1/feature-flags/user/user-1)');
   });
 });

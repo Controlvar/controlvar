@@ -21,8 +21,9 @@
 
 - [ ] This is a bug fix, and it adds a test that fails without the fix:
       `<path::test_name>`
-- [ ] Not a bug fix (or the fix is untestable — say why, and add the
-      `skip-regression-guard` label so the `regression-guard` job passes)
+- [ ] Not a bug fix (or the fix is untestable — say why here, in the
+      description; a maintainer decides whether to waive the check and adds
+      the waiver label)
 
 ## Risk and rollback
 

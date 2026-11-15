@@ -231,19 +231,44 @@ text = "With two heads a bare -1 is ambiguous — alembic warns and picks one, w
 by = ["test:backend/tests/unit/db/test_alembic_commands.py::test_a_bare_minus_one_with_two_heads_warns_and_picks_one_branch"]
 
 [[unit]]
-text = "modules@-1 unapplies the newest one only; modules@-2 unapplies both, newest first."
-by = ["exempt:baseline"]
+text = "The modules branch, back to a named revision:"
+by = ["exempt:label"]
 
 [[unit]]
-text = "The modules branch, one revision back (modules_0002_warehouse_analysis):"
-by = ["exempt:baseline"]
+text = "downgrade modules_0004_rbac_activation unapplies modules_0005_redshift only, which puts back the previous release's constraints on warehouse_connections and changes no row; it refuses while any Amazon Redshift connection is stored."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_downgrade_narrows_the_constraints_and_keeps_every_row",
+    "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_downgrade_refuses_while_a_redshift_connection_is_stored",
+]
+
+[[unit]]
+text = "downgrade modules_0003_lower_is_better also unapplies modules_0004_rbac_activation, which drops the column activated_at from user_custom_roles and direct_permission_grants, with any activation time stored in it."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_an_activation_time_is_gone_after_a_downgrade_and_an_upgrade",
+]
+
+[[unit]]
+text = "downgrade modules_0002_warehouse_analysis also unapplies modules_0003_lower_is_better, which drops the column warehouse_sources.lower_is_better, every metric source's lower-is-better setting."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_modules_0003_transitions.py::test_downgrade_drops_the_column_keeps_the_rows_and_an_upgrade_restores_false",
+]
+
+[[unit]]
+text = "downgrade modules_0001_rbac also unapplies modules_0002_warehouse_analysis, which drops the three warehouse tables it created, with their rows."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_modules_0002_transitions.py::test_modules_0002_downgrade_restores_the_earlier_shape",
+]
 
 [[unit]]
 text = "One step back on the core chain:"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Each modules revision downgrades only the objects its own upgrade() created (it marks them with a PostgreSQL COMMENT as it goes)."
+text = "modules_0001_rbac and modules_0002_warehouse_analysis downgrade only the objects their own upgrade() created (each marks them with a PostgreSQL COMMENT as it goes)."
 by = [
     "test:backend/tests/integration/database/test_profile_migrations.py::test_downgrade_keeps_the_tables_the_bootstrap_created",
     "test:backend/tests/integration/database/test_profile_migrations.py::test_downgrade_drops_the_tables_the_migration_created",
@@ -252,6 +277,21 @@ by = [
 [[unit]]
 text = "On a database whose tables came from the bootstrap rather than from those migrations, their downgrade is a no-op — it will not drop populated tables it never made."
 by = ["exempt:baseline"]
+
+[[unit]]
+text = "modules_0003_lower_is_better drops its column on every database, however the column was made."
+by = [
+    "test:backend/tests/integration/database/test_profile_migrations.py::test_downgrade_keeps_the_tables_the_bootstrap_created",
+    "test:backend/tests/integration/database/test_modules_0003_transitions.py::test_downgrade_drops_the_column_keeps_the_rows_and_an_upgrade_restores_false",
+]
+
+[[unit]]
+text = "modules_0004_rbac_activation drops its two columns on every database in the same way, and modules_0005_redshift puts back its three constraints on every database."
+by = [
+    "test:backend/tests/integration/database/test_profile_migrations.py::test_downgrade_keeps_the_tables_the_bootstrap_created",
+    "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_downgrade_drops_both_columns_and_keeps_every_row",
+    "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_downgrade_narrows_the_constraints_and_keeps_every_row",
+]
 
 [[unit]]
 text = "modules_0002_warehouse_analysis removes saved warehouse connections"
@@ -265,8 +305,13 @@ by = [
 ]
 
 [[unit]]
-text = "Downgrading it cannot bring those rows back: downgrade modules@-1 drops the three tables it created and puts back an empty table of the earlier shape."
-by = ["test:backend/tests/integration/database/test_modules_0002_transitions.py::test_modules_0002_downgrade_restores_the_earlier_shape"]
+text = "Downgrading it cannot bring those rows back: downgrade modules_0001_rbac first unapplies modules_0005_redshift, which refuses while any Amazon Redshift connection is stored, modules_0004_rbac_activation, which drops the activation-time column of custom role assignments and direct grants, with any activation time stored in it, and modules_0003_lower_is_better, which drops each metric source's lower-is-better setting, then drops the three tables this revision created and puts back an empty table of the earlier shape."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_modules_0002_transitions.py::test_modules_0002_downgrade_restores_the_earlier_shape",
+    "test:backend/tests/integration/database/test_profile_migrations.py::test_downgrade_keeps_the_tables_the_bootstrap_created",
+    "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_downgrade_refuses_while_a_redshift_connection_is_stored",
+]
 
 [[unit]]
 text = "If you need the rows, take a snapshot of the database before upgrading to the release that carries this revision, and restore that snapshot to go back."
@@ -275,6 +320,116 @@ by = ["exempt:baseline"]
 [[unit]]
 text = "The migration logs how many rows it removed:"
 by = ["exempt:baseline"]
+
+[[unit]]
+text = "modules_0003_lower_is_better gives each warehouse metric source a direction"
+by = ["test:backend/tests/integration/database/test_modules_0003_transitions.py::test_a_database_at_the_previous_release_upgrades_and_every_source_reads_false"]
+
+[[unit]]
+text = "Until someone marks them again, those metrics are analysed as higher is better."
+by = [
+    "test:backend/tests/integration/database/test_modules_0003_transitions.py::test_downgrade_drops_the_column_keeps_the_rows_and_an_upgrade_restores_false",
+    "test:modules/backend/tests/unit/warehouse/test_runner_direction.py::test_a_run_names_the_winner_in_the_direction_of_its_source",
+]
+
+[[unit]]
+text = "Before downgrading, note which metric sources are marked: the dashboard's Warehouse › Metric sources list tags each one \"lower is better\"."
+by = ["test:modules/frontend/src/tests/warehouse/warehouse-index.test.tsx::tags a metric source marked lower is better in the list, outside its link"]
+
+[[unit]]
+text = "The compliance audit trail keeps a record too, and a downgrade leaves it in place: each source's latest entry (resource_type=warehouse_source) carries its definition as last saved, lower_is_better included."
+by = [
+    "test:backend/tests/integration/database/test_modules_0003_transitions.py::test_downgrade_drops_the_column_keeps_the_rows_and_an_upgrade_restores_false",
+    "test:modules/backend/tests/integration/warehouse/test_sources_api.py::test_a_metric_source_stores_and_returns_its_direction",
+    "test:modules/backend/tests/integration/warehouse/test_sources_api.py::test_a_put_without_lower_is_better_sets_it_back_to_false",
+]
+
+[[unit]]
+text = "This revision adds the column warehouse_sources.lower_is_better (boolean, NOT NULL, default false), and every source already stored gets false."
+by = [
+    "test:backend/tests/integration/database/test_modules_0003_transitions.py::test_a_database_at_the_previous_release_upgrades_and_every_source_reads_false",
+    "test:backend/tests/integration/database/test_modules_0003_transitions.py::test_the_column_is_boolean_not_null_with_server_default_false",
+]
+
+[[unit]]
+text = "The previous release runs against this schema unchanged: the sources it creates get false from the column's default."
+by = ["test:backend/tests/integration/database/test_modules_0003_transitions.py::test_the_previous_release_still_inserts_a_source_and_it_reads_false"]
+
+[[unit]]
+text = "Its downgrade drops the column on every database, however the column was made, and with it every metric source's setting; an upgrade afterwards sets each source back to false, not to what was stored."
+by = [
+    "test:backend/tests/integration/database/test_modules_0003_transitions.py::test_downgrade_drops_the_column_keeps_the_rows_and_an_upgrade_restores_false",
+    "test:backend/tests/integration/database/test_profile_migrations.py::test_downgrade_keeps_the_tables_the_bootstrap_created",
+]
+
+[[unit]]
+text = "modules_0004_rbac_activation adds an activation time to custom role assignments and direct grants"
+by = ["test:backend/tests/integration/database/test_modules_0004_transitions.py::test_a_database_at_the_previous_release_upgrades_and_no_row_has_an_activation_time"]
+
+[[unit]]
+text = "This revision adds a nullable activated_at column to user_custom_roles and direct_permission_grants."
+by = [
+    "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_a_database_at_the_previous_release_upgrades_and_no_row_has_an_activation_time",
+    "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_both_tables_have_the_models_shape_defaults_included",
+]
+
+[[unit]]
+text = "It sets no default and fills in nothing, so every assignment and grant already stored has none."
+by = [
+    "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_a_database_at_the_previous_release_upgrades_and_no_row_has_an_activation_time",
+    "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_the_previous_release_still_writes_and_its_rows_have_no_activation_time",
+]
+
+[[unit]]
+text = "It logs them, so you have a record of what existed when it ran: one WARNING that counts them, then one line per row (at most 200, then … and N more), or one INFO line when there are none."
+by = [
+    "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_a_database_at_the_previous_release_upgrades_and_no_row_has_an_activation_time",
+    "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_the_upgrade_log_counts_and_lists_the_rows_without_an_activation_time",
+]
+
+[[unit]]
+text = "Read the log where the 1ab99332f0ba section below says (Docker Compose, Helm, AWS)."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Downgrading this revision (to modules_0003_lower_is_better) drops both columns, and any activation time stored in them; upgrading afterwards adds them empty."
+by = [
+    "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_downgrade_drops_both_columns_and_keeps_every_row",
+    "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_an_activation_time_is_gone_after_a_downgrade_and_an_upgrade",
+]
+
+[[unit]]
+text = "modules_0005_redshift lets a warehouse connection be an Amazon Redshift connection"
+by = ["test:backend/tests/integration/database/test_modules_0005_transitions.py::test_the_database_accepts_a_redshift_row_with_an_external_id_and_no_secret"]
+
+[[unit]]
+text = "This revision changes three constraints of warehouse_connections and no column or row, so that a connection may be an Amazon Redshift one (warehouse_type redshift)."
+by = [
+    "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_a_database_at_the_previous_release_upgrades_and_keeps_every_connection",
+    "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_the_migrated_table_has_the_models_constraints",
+]
+
+[[unit]]
+text = "Like an Amazon Athena connection, it stores no secret and has the external ID generated when it is saved; unlike one, it has no per-query byte cap."
+by = [
+    "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_the_database_accepts_a_redshift_row_with_an_external_id_and_no_secret",
+    "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_the_database_refuses_a_redshift_row_that_breaks_a_rule",
+]
+
+[[unit]]
+text = "Every connection already stored is kept as it is, and the previous release keeps saving BigQuery, Snowflake and Athena connections against the upgraded schema."
+by = [
+    "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_a_database_at_the_previous_release_upgrades_and_keeps_every_connection",
+    "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_the_previous_release_still_writes_each_of_its_types",
+]
+
+[[unit]]
+text = "Downgrading this revision (to modules_0004_rbac_activation) puts back the previous release's constraints and changes no row."
+by = ["test:backend/tests/integration/database/test_modules_0005_transitions.py::test_downgrade_narrows_the_constraints_and_keeps_every_row"]
+
+[[unit]]
+text = "It refuses while any Amazon Redshift connection is stored, names them, and changes nothing:"
+by = ["test:backend/tests/integration/database/test_modules_0005_transitions.py::test_downgrade_refuses_while_a_redshift_connection_is_stored"]
 
 [[unit]]
 text = "1ab99332f0ba rewrites stored event times to UTC"
@@ -543,6 +698,52 @@ text = "So it now stops while any id list has members: that downgrade refuses, p
 by = ["exempt:baseline"]
 
 [[unit]]
+text = "Past 607c51a59bf5 it also runs that revision's downgrade, which drops feature_flags.value_type, on_value and off_value."
+by = [
+    "test:backend/tests/unit/db/test_alembic_commands.py::test_past_1ab99332f0ba_its_rerun_downgrade_also_undoes_the_later_revisions",
+    "test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_downgrade_removes_the_columns_and_the_check_and_nothing_else",
+]
+
+[[unit]]
+text = "So it also stops while any flag is a string, number or json flag: that downgrade refuses, names those flags, and changes nothing (see 607c51a59bf5)."
+by = ["test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_downgrade_refuses_while_a_value_flag_exists"]
+
+[[unit]]
+text = "Past 85dd4796bb8b it also drops the table event_dedup_keys, and with it every stored event_id (see 85dd4796bb8b)."
+by = [
+    "test:backend/tests/unit/db/test_alembic_commands.py::test_past_1ab99332f0ba_its_rerun_downgrade_also_undoes_the_later_revisions",
+    "test:backend/tests/integration/database/test_event_dedup_keys_migration.py::test_m5_the_downgrade_removes_exactly_the_table_online",
+]
+
+[[unit]]
+text = "Past 7b6b4b4fe246 it also runs that revision's downgrade, which drops rollout_stages.started_at, the recorded start of every rollout stage (see 7b6b4b4fe246)."
+by = [
+    "test:backend/tests/unit/db/test_alembic_commands.py::test_past_1ab99332f0ba_its_rerun_downgrade_also_undoes_the_later_revisions",
+    "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_downgrade_drops_the_column_only_and_an_upgrade_sets_it_from_updated_at",
+]
+
+[[unit]]
+text = "Past c448_balance_within it also runs that revision's downgrade, which drops every experiment's balance setting, every user's group and every counter (see c448_balance_within)."
+by = [
+    "test:backend/tests/unit/db/test_alembic_commands.py::test_past_1ab99332f0ba_its_rerun_downgrade_also_undoes_the_later_revisions",
+    "test:backend/tests/integration/database/test_balance_within_migration.py::test_the_downgrade_drops_exactly_the_columns_and_the_table",
+]
+
+[[unit]]
+text = "Past 4955571d232c it also runs that revision's downgrade, which drops the table visual_tokens and the columns experiments.visual_config and variants.visual_changes: every visual experiment's pages, goals and page changes (see 4955571d232c)."
+by = [
+    "test:backend/tests/unit/db/test_alembic_commands.py::test_past_1ab99332f0ba_its_rerun_downgrade_also_undoes_the_later_revisions",
+    "test:backend/tests/integration/database/test_visual_experiments_migration.py::test_the_downgrade_drops_the_table_and_both_columns_only",
+]
+
+[[unit]]
+text = "Past t1812_user_totp it first runs that revision's downgrade, which drops the table user_totp: every account's two-step sign-in secret, recovery codes and wrong-code count (see t1812_user_totp)."
+by = [
+    "test:backend/tests/unit/db/test_alembic_commands.py::test_past_1ab99332f0ba_its_rerun_downgrade_also_undoes_the_later_revisions",
+    "test:backend/tests/integration/database/test_user_totp_migration.py::test_the_downgrade_drops_the_table_only",
+]
+
+[[unit]]
 text = "d29a479daafe records who each global holdout covers"
 by = ["exempt:baseline"]
 
@@ -643,6 +844,50 @@ by = [
 ]
 
 [[unit]]
+text = "From a release that carries 607c51a59bf5, the same downgrade first runs that revision's downgrade, which drops each flag's value type and values and refuses while any flag is a string, number or json flag (see 607c51a59bf5)."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_downgrade_refuses_while_a_value_flag_exists",
+]
+
+[[unit]]
+text = "From a release that carries 85dd4796bb8b, it also drops the table event_dedup_keys before that."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_segment_members_migration.py::test_downgrade_with_the_override_runs",
+]
+
+[[unit]]
+text = "From a release that carries 7b6b4b4fe246, it also runs that revision's downgrade, which drops rollout_stages.started_at, the recorded start of every rollout stage (see 7b6b4b4fe246)."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_downgrade_drops_the_column_only_and_an_upgrade_sets_it_from_updated_at",
+]
+
+[[unit]]
+text = "From a release that carries c448_balance_within, it also runs that revision's downgrade, which drops every experiment's balance setting, every user's group and every counter (see c448_balance_within)."
+count = 2
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_balance_within_migration.py::test_the_downgrade_drops_exactly_the_columns_and_the_table",
+]
+
+[[unit]]
+text = "From a release that carries 4955571d232c, it also runs that revision's downgrade, which drops the table visual_tokens and the columns experiments.visual_config and variants.visual_changes (see 4955571d232c)."
+count = 4
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_visual_experiments_migration.py::test_the_downgrade_drops_the_table_and_both_columns_only",
+]
+
+[[unit]]
+text = "From a release that carries t1812_user_totp, it also runs that revision's downgrade, which drops the table user_totp, every account's two-step sign-in secret, recovery codes and wrong-code count (see t1812_user_totp)."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_user_totp_migration.py::test_the_downgrade_drops_the_table_only",
+]
+
+[[unit]]
 text = "4c2c09a2b3e8 keeps rollback records without a safety configuration"
 by = [
     "test:backend/tests/integration/database/test_rollback_record_config_link_migration.py::test_an_sql_delete_of_a_configuration_took_its_records_and_now_keeps_them",
@@ -697,6 +942,353 @@ by = ["test:backend/tests/integration/database/test_rollback_record_config_link_
 [[unit]]
 text = "The rollback runbook undoes a migration while the release that contains it still serves, before the API is rolled back (Database Rollback Procedure), and this release records a null safety_config_id for each rollback of a flag on the defaults, which NOT NULL would refuse."
 by = ["test:backend/tests/integration/database/test_rollback_record_config_link_migration.py::test_the_downgrade_changes_nothing_and_a_rollback_still_succeeds"]
+
+[[unit]]
+text = "607c51a59bf5 gives each flag a value type and two values"
+by = ["test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_a_database_at_the_previous_release_gains_the_columns_and_the_check"]
+
+[[unit]]
+text = "This revision adds three columns to feature_flags: value_type (boolean, string, number or json, default boolean), and on_value and off_value (jsonb), the values a string, number or json flag serves to the users it is on for and to everyone else."
+by = [
+    "test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_a_database_at_the_previous_release_gains_the_columns_and_the_check",
+    "test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_an_upgraded_database_and_a_bootstrapped_one_have_the_same_columns_and_checks",
+]
+
+[[unit]]
+text = "It also adds the check check_flag_values: a boolean flag stores neither value, a string or number flag stores two different values of its type, and a json flag stores two different objects or arrays."
+by = [
+    "test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_check_refuses",
+    "test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_check_accepts",
+]
+
+[[unit]]
+text = "Every flag already stored becomes a boolean flag, which is what it was."
+by = ["test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_a_database_at_the_previous_release_gains_the_columns_and_the_check"]
+
+[[unit]]
+text = "The previous release runs against this schema unchanged: the flags it creates get boolean from the column's default, and it reads and updates flags without touching the two values."
+by = ["test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_previous_release_writes_and_lists_flags_on_this_schema"]
+
+[[unit]]
+text = "The downgrade refuses while any flag is a string, number or json flag."
+by = ["test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_downgrade_refuses_while_a_value_flag_exists"]
+
+[[unit]]
+text = "607c51a59bf5's downgrade drops the check and the three columns, which would delete each such flag's value type and both of its values, and nothing could rebuild them."
+by = ["test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_downgrade_removes_the_columns_and_the_check_and_nothing_else"]
+
+[[unit]]
+text = "So while any flag's value_type is not boolean the downgrade refuses, names those flags, and changes nothing:"
+by = ["test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_downgrade_refuses_while_a_value_flag_exists"]
+
+[[unit]]
+text = "To go on, delete those flags or convert each to a boolean flag, or restore the backup taken before the upgrade."
+by = [
+    "test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_downgrade_refuses_while_a_value_flag_exists",
+    "test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_downgrade_removes_the_columns_and_the_check_and_nothing_else",
+]
+
+[[unit]]
+text = "With only boolean flags stored, the downgrade drops the check and the three columns, and nothing else."
+by = ["test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_downgrade_removes_the_columns_and_the_check_and_nothing_else"]
+
+[[unit]]
+text = "Neither the upgrade nor the downgrade can be emitted as SQL (--sql)."
+by = ["test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_downgrade_and_the_upgrade_refuse_offline_mode"]
+
+[[unit]]
+text = "From a release that carries 7b6b4b4fe246, a downgrade to 4c2c09a2b3e8 also runs that revision's downgrade, which drops rollout_stages.started_at, the recorded start of every rollout stage (see 7b6b4b4fe246)."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_downgrade_drops_the_column_only_and_an_upgrade_sets_it_from_updated_at",
+]
+
+[[unit]]
+text = "From a release that carries t1812_user_totp, it first runs that revision's downgrade, which drops the table user_totp, every account's two-step sign-in secret, recovery codes and wrong-code count (see t1812_user_totp)."
+count = 4
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_user_totp_migration.py::test_the_downgrade_drops_the_table_only",
+]
+
+[[unit]]
+text = "85dd4796bb8b stores an event sent again with its event_id once"
+by = [
+    "test:backend/tests/integration/database/test_event_dedup_keys_migration.py::test_m1_a_database_at_the_previous_release_gains_the_table",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r1_a_purchase_sent_again_with_its_event_id_is_stored_and_counted_once",
+]
+
+[[unit]]
+text = "This revision adds the table event_dedup_keys: one row per event stored with an event_id, holding the user id and a key made from the event's experiment, flag, event name and event_id (How events count)."
+by = [
+    "test:backend/tests/integration/database/test_event_dedup_keys_migration.py::test_m2_an_upgraded_database_and_a_bootstrapped_one_have_the_same_table",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r4_one_event_through_track_batch_and_events_is_one_row",
+]
+
+[[unit]]
+text = "It changes nothing in events, and it has no foreign key to events, so it takes no lock on events and completes while the previous release keeps writing events."
+by = [
+    "test:backend/tests/integration/database/test_event_dedup_keys_migration.py::test_m1_a_database_at_the_previous_release_gains_the_table",
+    "test:backend/tests/integration/database/test_event_dedup_keys_migration.py::test_m1b_the_upgrade_completes_beside_an_uncommitted_events_writer",
+]
+
+[[unit]]
+text = "The previous release runs against this schema unchanged: it never reads or writes the table, so an event it stores during the deploy is stored as every event was before, even when it carries an event_id."
+by = ["test:backend/tests/integration/database/test_event_dedup_keys_migration.py::test_m3_the_previous_releases_write_path_stores_events_on_this_schema"]
+
+[[unit]]
+text = "The downgrade drops the table and every key in it."
+by = ["test:backend/tests/integration/database/test_event_dedup_keys_migration.py::test_m5_the_downgrade_removes_exactly_the_table_online"]
+
+[[unit]]
+text = "No event is changed or removed."
+by = ["test:backend/tests/integration/database/test_event_dedup_keys_migration.py::test_m5_the_downgrade_removes_exactly_the_table_online"]
+
+[[unit]]
+text = "Until the API is rolled back too, this release answers 500 to an event that carries an event_id, because the table is gone, and stores every other event as before; so roll the API back straight after the downgrade, as the rollback runbook does."
+by = ["test:backend/tests/integration/database/test_event_dedup_keys_migration.py::test_after_the_downgrade_this_release_refuses_only_events_with_an_event_id"]
+
+[[unit]]
+text = "7b6b4b4fe246 records when each rollout stage started"
+by = ["test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_a_database_at_the_previous_release_gains_the_column_and_each_start"]
+
+[[unit]]
+text = "This revision adds rollout_stages.started_at, the time the scheduler or POST /api/v1/rollout-schedules/stages/{stage_id}/advance started the stage."
+by = [
+    "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_a_database_at_the_previous_release_gains_the_column_and_each_start",
+    "test:backend/tests/integration/api/test_rollout_stage_started_at.py::test_every_start_transition_records_the_start",
+]
+
+[[unit]]
+text = "It is empty until a stage starts."
+by = [
+    "test:backend/tests/integration/api/test_rollout_stage_started_at.py::test_every_start_transition_records_the_start",
+    "test:backend/tests/integration/api/test_rollout_stage_started_at.py::test_a_request_that_sends_started_at_does_not_set_it",
+]
+
+[[unit]]
+text = "The upgrade fills it for every stage in progress with the time the scheduler measured from before, so no stage's completion time moves; a stage that was pending, or that finished before the upgrade, stays empty."
+by = ["test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_a_database_at_the_previous_release_gains_the_column_and_each_start"]
+
+[[unit]]
+text = "The previous release runs against this schema unchanged: it never reads or writes the column."
+by = ["test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_previous_release_starts_stages_and_this_release_completes_them"]
+
+[[unit]]
+text = "A stage it starts while a deploy is rolling has an empty started_at; this release then measures from the stage's updated_at, as before, so an edit to that stage restarts its clock until it completes."
+by = [
+    "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_previous_release_starts_stages_and_this_release_completes_them",
+    "test:backend/tests/integration/api/test_rollout_stage_started_at.py::test_a_stage_an_older_release_started_completes_from_its_updated_at",
+]
+
+[[unit]]
+text = "To list them:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The downgrade drops every recorded start."
+by = ["test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_downgrade_drops_the_column_only_and_an_upgrade_sets_it_from_updated_at"]
+
+[[unit]]
+text = "7b6b4b4fe246's downgrade drops rollout_stages.started_at; it does not refuse, and nothing can restore the exact values."
+by = ["test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_downgrade_drops_the_column_only_and_an_upgrade_sets_it_from_updated_at"]
+
+[[unit]]
+text = "An upgrade afterwards sets each stage in progress from its updated_at, which an edit may have moved, so a stage edited in the meantime restarts its clock from the edit."
+by = ["test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_downgrade_drops_the_column_only_and_an_upgrade_sets_it_from_updated_at"]
+
+[[unit]]
+text = "Where the API migrates on start (Docker Compose, and the Helm chart's init container), the previous release refuses to start against this revision."
+count = 2
+by = [
+    "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_previous_release_starts_only_after_the_downgrade",
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_release_refuses_a_database_a_newer_release_migrated",
+]
+
+[[unit]]
+text = "To go back to it, first downgrade to the previous release's heads, with this release still running (An Older Image Against a Newer Database), and with the Engineering Lead's approval at the moment it runs when any stage is IN_PROGRESS."
+by = [
+    "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_previous_release_starts_only_after_the_downgrade",
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_after_the_newer_release_downgrades_the_database_the_older_one_starts",
+]
+
+[[unit]]
+text = "This revision's own down_revision is 85dd4796bb8b; from a release that carries c448_balance_within, this also runs that revision's downgrade, which drops every experiment's balance setting, every user's group and every counter (see c448_balance_within):"
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_downgrade_drops_the_column_only_and_an_upgrade_sets_it_from_updated_at",
+    "test:backend/tests/integration/database/test_balance_within_migration.py::test_the_downgrade_drops_exactly_the_columns_and_the_table",
+]
+
+[[unit]]
+text = "On Helm, run the same command in an API pod with kubectl exec."
+count = 4
+by = ["test:backend/tests/unit/infrastructure/test_upgrade_on_start.py::test_an_api_pod_runs_the_commands_the_compose_api_container_runs"]
+
+[[unit]]
+text = "Once the database is at the previous release's heads, start the previous release."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The upgrade cannot be emitted as SQL (--sql)."
+count = 2
+by = [
+    "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_upgrade_refuses_offline_mode",
+    "test:backend/tests/integration/database/test_balance_within_migration.py::test_the_upgrade_refuses_offline_mode",
+]
+
+[[unit]]
+text = "c448_balance_within balances the split within groups"
+by = ["test:backend/tests/integration/database/test_balance_within_migration.py::test_a_database_at_the_previous_release_gains_the_columns_and_the_table"]
+
+[[unit]]
+text = "This revision adds what an experiment needs to balance its split within groups: experiments.balance_within, the setting, and experiments.balance_seed, the key of the experiment's block order, which the server makes and never answers; assignments.balance_group and assignments.balance_seq, the group each user was balanced in and their place in it; and the table balance_group_counters, each group's next place."
+by = [
+    "test:backend/tests/integration/database/test_balance_within_migration.py::test_a_database_at_the_previous_release_gains_the_columns_and_the_table",
+    "test:backend/tests/integration/database/test_balance_within_migration.py::test_an_upgraded_and_a_bootstrapped_database_end_the_same",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_no_route_answers_the_block_order_key",
+]
+
+[[unit]]
+text = "Every column is nullable with no default, nothing is backfilled, and every experiment stored before the upgrade balances nothing."
+by = ["test:backend/tests/integration/database/test_balance_within_migration.py::test_a_database_at_the_previous_release_gains_the_columns_and_the_table"]
+
+[[unit]]
+text = "The previous release runs against this schema unchanged: it never reads or writes the new columns or the table."
+by = ["test:backend/tests/integration/database/test_balance_within_migration.py::test_the_previous_releases_statements_run_on_this_schema"]
+
+[[unit]]
+text = "While it serves, during a rolling deploy or for as long as a rollback to it lasts, it assigns every new user of a balanced experiment by the hash and stores no group, so those users stay outside the blocks for good."
+by = ["test:backend/tests/integration/database/test_balance_within_migration.py::test_the_previous_releases_statements_run_on_this_schema"]
+
+[[unit]]
+text = "To count them:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The downgrade drops every balance setting."
+by = ["test:backend/tests/integration/database/test_balance_within_migration.py::test_the_downgrade_drops_exactly_the_columns_and_the_table"]
+
+[[unit]]
+text = "c448_balance_within adds the balance setting, each user's group and place in it, and the per-group counters."
+by = ["test:backend/tests/integration/database/test_balance_within_migration.py::test_a_database_at_the_previous_release_gains_the_columns_and_the_table"]
+
+[[unit]]
+text = "Its downgrade drops every experiment's balance setting, every user's group and every counter; they cannot be recovered."
+by = ["test:backend/tests/integration/database/test_balance_within_migration.py::test_the_downgrade_drops_exactly_the_columns_and_the_table"]
+
+[[unit]]
+text = "Run it only with a human go at that moment."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It does not refuse, and it removes no assignment: every user keeps their variant."
+by = ["test:backend/tests/integration/database/test_balance_within_migration.py::test_the_downgrade_drops_exactly_the_columns_and_the_table"]
+
+[[unit]]
+text = "An upgrade afterwards starts every experiment with no balance setting."
+by = ["test:backend/tests/integration/database/test_balance_within_migration.py::test_the_downgrade_drops_exactly_the_columns_and_the_table"]
+
+[[unit]]
+text = "To go back to it, first downgrade to the previous release's heads, with this release still running (An Older Image Against a Newer Database)."
+by = ["test:backend/tests/integration/database/test_newer_database_rollback.py::test_after_the_newer_release_downgrades_the_database_the_older_one_starts"]
+
+[[unit]]
+text = "This revision's own down_revision is 7b6b4b4fe246; from a release that carries no later revision, this undoes this revision alone:"
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_balance_within_migration.py::test_the_downgrade_drops_exactly_the_columns_and_the_table",
+]
+
+[[unit]]
+text = "4955571d232c stores visual experiments"
+by = ["test:backend/tests/integration/database/test_visual_experiments_migration.py::test_a_database_at_the_previous_release_gains_the_columns_and_the_table"]
+
+[[unit]]
+text = "This revision adds what a visual experiment stores: experiments.visual_config, its pages, the page its editor opens and its goals; variants.visual_changes, a variant's page changes; and the table visual_tokens, for the visual editor's sign-in and its preview links."
+by = [
+    "test:backend/tests/integration/database/test_visual_experiments_migration.py::test_a_database_at_the_previous_release_gains_the_columns_and_the_table",
+    "test:backend/tests/integration/database/test_visual_experiments_migration.py::test_an_upgraded_database_and_a_bootstrapped_one_are_the_same",
+]
+
+[[unit]]
+text = "Both columns are empty on every experiment and variant already stored."
+by = ["test:backend/tests/integration/database/test_visual_experiments_migration.py::test_the_previous_release_still_stores_experiments_on_this_schema"]
+
+[[unit]]
+text = "The previous release runs against this schema unchanged: it never reads or writes the two columns or the table, and stores experiments and variants as before."
+by = ["test:backend/tests/integration/database/test_visual_experiments_migration.py::test_the_previous_release_still_stores_experiments_on_this_schema"]
+
+[[unit]]
+text = "The downgrade drops every visual experiment's design."
+by = ["test:backend/tests/integration/database/test_visual_experiments_migration.py::test_the_downgrade_drops_the_table_and_both_columns_only"]
+
+[[unit]]
+text = "4955571d232c's downgrade drops the table visual_tokens and the columns experiments.visual_config and variants.visual_changes; it does not refuse, and nothing can restore them."
+by = [
+    "test:backend/tests/integration/database/test_visual_experiments_migration.py::test_the_downgrade_drops_the_table_and_both_columns_only",
+    "test:backend/tests/unit/db/test_visual_experiments_revision.py::test_the_downgrade_drops_columns_as_the_downgrade_docs_test_reads_it",
+]
+
+[[unit]]
+text = "The experiments stay, as ordinary experiments with no page changes."
+by = ["test:backend/tests/integration/database/test_visual_experiments_migration.py::test_the_downgrade_drops_the_table_and_both_columns_only"]
+
+[[unit]]
+text = "This revision's own down_revision is c448_balance_within; from a release that carries no later revision, this undoes this revision alone:"
+by = [
+    "test:backend/tests/unit/db/test_visual_experiments_revision.py::test_it_extends_the_core_head_it_sits_on_and_fits_the_version_table",
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+]
+
+[[unit]]
+text = "t1812_user_totp stores two-step sign-in secrets"
+by = ["test:backend/tests/integration/database/test_user_totp_migration.py::test_a_database_at_the_previous_release_gains_the_table"]
+
+[[unit]]
+text = "This revision adds the table user_totp, one row per local account that has set two-step sign-in up or started to: the account's authenticator secret, sealed with a key derived from SECRET_KEY; its recovery codes, as bcrypt hashes; the last code step it used; and its count of wrong codes."
+by = [
+    "test:backend/tests/integration/database/test_user_totp_migration.py::test_a_database_at_the_previous_release_gains_the_table",
+    "test:backend/tests/unit/core/test_two_factor_keys.py::test_the_sealing_key_is_the_committed_derivation",
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_confirm_gives_ten_recovery_codes_and_stores_only_their_hashes",
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_confirm_stores_the_confirm_codes_step",
+]
+
+[[unit]]
+text = "The users table is not changed, and the new table is empty after the upgrade."
+by = [
+    "test:backend/tests/integration/database/test_user_totp_migration.py::test_a_database_at_the_previous_release_gains_the_table",
+    "test:backend/tests/unit/models/test_user_account_rules.py::test_there_is_no_last_sign_in_column",
+]
+
+[[unit]]
+text = "The previous release runs against this schema unchanged: it never reads or writes the table."
+by = ["test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_api_serves_a_database_a_newer_release_migrated"]
+
+[[unit]]
+text = "The downgrade drops every account's two-step sign-in."
+by = ["test:backend/tests/integration/database/test_user_totp_migration.py::test_the_downgrade_drops_the_table_only"]
+
+[[unit]]
+text = "t1812_user_totp's downgrade drops the table user_totp: every account's two-step sign-in secret, recovery codes and wrong-code count."
+by = [
+    "test:backend/tests/integration/database/test_user_totp_migration.py::test_the_downgrade_drops_the_table_only",
+    "test:backend/tests/unit/db/test_user_totp_revision.py::test_the_downgrade_drops_columns_as_the_downgrade_docs_test_reads_it",
+]
+
+[[unit]]
+text = "It does not refuse, and nothing can restore them: those accounts then sign in with the password alone and must set two-step sign-in up again."
+by = [
+    "test:backend/tests/integration/database/test_user_totp_migration.py::test_the_downgrade_drops_the_table_only",
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_after_the_newer_release_downgrades_the_database_the_older_one_starts",
+]
+
+[[unit]]
+text = "This revision's own down_revision is 4955571d232c; this undoes this revision alone:"
+by = [
+    "test:backend/tests/unit/db/test_user_totp_revision.py::test_it_extends_the_core_head_it_sits_on_and_fits_the_version_table",
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+]
 
 [[unit]]
 text = "Roll back to a specific revision:"
@@ -977,8 +1569,8 @@ text = "alembic upgrade heads answers in one of two ways: when the core chain is
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "downgrade and stamp do not skip: they fail with alembic's own \"Can't locate revision identified by 'modules_0002_warehouse_analysis'\" (or modules_0001_rbac, on a database a release before the warehouse tables migrated), and the schema is untouched."
-by = ["exempt:baseline"]
+text = "downgrade and stamp do not skip: they fail with alembic's own \"Can't locate revision identified by '…'\", naming the modules revision the database records, and the schema is untouched."
+by = ["test:backend/tests/integration/database/test_profile_transitions.py::test_a_core_build_does_not_pretend_to_downgrade_or_stamp"]
 
 [[unit]]
 text = "The escape hatch, when you really do want the core image to own that database: take a backup, then from the core image"
@@ -1034,6 +1626,44 @@ by = ["exempt:baseline"]
 [[unit]]
 text = "restore the backup taken before that upgrade, and run the older image against the restored database."
 by = ["exempt:baseline"]
+
+[[unit]]
+text = "On Docker Compose, the Compose README's Upgrade procedure takes that backup before it upgrades, and its last step restores it only when the older image refuses the database."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "A third way, when the newer release's migrations can be undone: with the newer release still running, downgrade to the heads of the older release, then start the older image."
+by = ["test:backend/tests/integration/database/test_newer_database_rollback.py::test_after_the_newer_release_downgrades_the_database_the_older_one_starts"]
+
+[[unit]]
+text = "Those are its core head and, on a full install, its modules head too, one alembic downgrade <id> for each; alembic heads, run with the older image, prints them."
+by = ["test:backend/tests/integration/database/test_newer_database_rollback.py::test_after_the_newer_release_downgrades_the_database_the_older_one_starts"]
+
+[[unit]]
+text = "The core head alone is not enough when the newer release also moved the modules branch: the older image still refuses, naming the modules revision."
+by = ["test:backend/tests/integration/database/test_newer_database_rollback.py::test_after_the_newer_release_downgrades_the_database_the_older_one_starts"]
+
+[[unit]]
+text = "Each migration in between runs its downgrade on the way: from a release that carries 7b6b4b4fe246, whose own down_revision is 85dd4796bb8b, that includes its downgrade, which drops the recorded start of every rollout stage (see 7b6b4b4fe246); from a release that carries c448_balance_within, whose own down_revision is 7b6b4b4fe246, that includes its downgrade, which drops every experiment's balance setting, every user's group and every counter (see c448_balance_within)."
+by = [
+    "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_previous_release_starts_only_after_the_downgrade",
+    "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_downgrade_drops_the_column_only_and_an_upgrade_sets_it_from_updated_at",
+    "test:backend/tests/integration/database/test_balance_within_migration.py::test_the_downgrade_drops_exactly_the_columns_and_the_table",
+]
+
+[[unit]]
+text = "From a release that carries 4955571d232c, whose own down_revision is c448_balance_within, it includes that downgrade too, which drops every visual experiment's pages, goals and page changes (see 4955571d232c)."
+by = [
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_after_the_newer_release_downgrades_the_database_the_older_one_starts",
+    "test:backend/tests/integration/database/test_visual_experiments_migration.py::test_the_downgrade_drops_the_table_and_both_columns_only",
+]
+
+[[unit]]
+text = "From a release that carries t1812_user_totp, whose own down_revision is 4955571d232c, it includes that downgrade too, which drops every account's two-step sign-in secret, recovery codes and wrong-code count (see t1812_user_totp)."
+by = [
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_after_the_newer_release_downgrades_the_database_the_older_one_starts",
+    "test:backend/tests/integration/database/test_user_totp_migration.py::test_the_downgrade_drops_the_table_only",
+]
 
 [[unit]]
 text = "Do not edit alembic_version to make the older image start."
@@ -1173,6 +1803,71 @@ text = "4c2c09a2b3e8 is backward-compatible for a rollback, and undoing it chang
 by = [
     "test:backend/tests/integration/database/test_rollback_record_config_link_migration.py::test_the_downgrade_changes_nothing_and_a_rollback_still_succeeds",
     "test:backend/tests/integration/database/test_rollback_record_config_link_migration.py::test_a_database_at_the_previous_release_upgraded_with_heads",
+]
+
+[[unit]]
+text = "607c51a59bf5 is backward-compatible for a rollback too, and undoing it drops each flag's value type and values; it refuses while any flag is a string, number or json flag."
+by = [
+    "test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_previous_release_writes_and_lists_flags_on_this_schema",
+    "test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_downgrade_refuses_while_a_value_flag_exists",
+]
+
+[[unit]]
+text = "85dd4796bb8b is backward-compatible for a rollback too, and undoing it drops event_dedup_keys, every stored event_id, and no event."
+by = [
+    "test:backend/tests/integration/database/test_event_dedup_keys_migration.py::test_m3_the_previous_releases_write_path_stores_events_on_this_schema",
+    "test:backend/tests/integration/database/test_event_dedup_keys_migration.py::test_m5_the_downgrade_removes_exactly_the_table_online",
+]
+
+[[unit]]
+text = "7b6b4b4fe246 is backward-compatible for a rollback too, and undoing it drops the recorded start of every rollout stage; an upgrade afterwards sets each stage in progress from its updated_at."
+by = [
+    "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_previous_release_starts_stages_and_this_release_completes_them",
+    "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_downgrade_drops_the_column_only_and_an_upgrade_sets_it_from_updated_at",
+]
+
+[[unit]]
+text = "c448_balance_within is backward-compatible for a rollback too: the older release assigns every balanced experiment's new users by the hash, with no group, for as long as it serves."
+by = ["test:backend/tests/integration/database/test_balance_within_migration.py::test_the_previous_releases_statements_run_on_this_schema"]
+
+[[unit]]
+text = "Undoing it drops every experiment's balance setting, every user's group and every counter."
+by = ["test:backend/tests/integration/database/test_balance_within_migration.py::test_the_downgrade_drops_exactly_the_columns_and_the_table"]
+
+[[unit]]
+text = "4955571d232c is backward-compatible for a rollback too, and undoing it drops every visual experiment's pages, goals and page changes, and every visual editor sign-in and preview link."
+by = [
+    "test:backend/tests/integration/database/test_visual_experiments_migration.py::test_the_previous_release_still_stores_experiments_on_this_schema",
+    "test:backend/tests/integration/database/test_visual_experiments_migration.py::test_the_downgrade_drops_the_table_and_both_columns_only",
+]
+
+[[unit]]
+text = "t1812_user_totp is backward-compatible for a rollback too, and undoing it drops every account's two-step sign-in secret, recovery codes and wrong-code count: those accounts then sign in with the password alone."
+by = [
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_api_serves_a_database_a_newer_release_migrated",
+    "test:backend/tests/integration/database/test_user_totp_migration.py::test_the_downgrade_drops_the_table_only",
+]
+
+[[unit]]
+text = "modules_0003_lower_is_better is backward-compatible for a rollback, and undoing it drops every warehouse metric source's lower-is-better setting; an upgrade afterwards sets each back to false, not to the choice."
+by = [
+    "test:backend/tests/integration/database/test_modules_0003_transitions.py::test_the_previous_release_still_inserts_a_source_and_it_reads_false",
+    "test:backend/tests/integration/database/test_modules_0003_transitions.py::test_downgrade_drops_the_column_keeps_the_rows_and_an_upgrade_restores_false",
+]
+
+[[unit]]
+text = "modules_0005_redshift is backward-compatible for a rollback too, and undoing it changes no row; it refuses while any Amazon Redshift connection is stored."
+by = [
+    "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_the_previous_release_still_writes_each_of_its_types",
+    "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_downgrade_narrows_the_constraints_and_keeps_every_row",
+    "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_downgrade_refuses_while_a_redshift_connection_is_stored",
+]
+
+[[unit]]
+text = "modules_0004_rbac_activation is backward-compatible for a rollback too, and undoing it drops the activation-time column of custom role assignments and direct grants, with any activation time stored in it; an upgrade afterwards adds the column empty."
+by = [
+    "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_the_previous_release_still_writes_and_its_rows_have_no_activation_time",
+    "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_an_activation_time_is_gone_after_a_downgrade_and_an_upgrade",
 ]
 
 [[unit]]
@@ -1356,7 +2051,7 @@ text = "Do not delete the account instead of retiring it."
 by = ["test:backend/tests/unit/models/test_user_account_rules.py::test_deleting_a_user_deletes_its_own_rows_and_detaches_everything_else"]
 
 [[unit]]
-text = "Deleting a user deletes or detaches what refers to it: its API keys, reports, notification preferences, role assignments and workspace memberships are deleted with it, and the experiments, flags, audit records and everything else that names it lose that reference."
+text = "Deleting a user deletes or detaches what refers to it: its API keys, reports, notification preferences, role assignments, workspace memberships and visual editor sign-ins and preview links are deleted with it, and the experiments, flags, audit records and everything else that names it lose that reference."
 by = ["test:backend/tests/unit/models/test_user_account_rules.py::test_deleting_a_user_deletes_its_own_rows_and_detaches_everything_else"]
 
 [[unit]]
@@ -1395,11 +2090,19 @@ text = "CI runs this page's exec blocks as written against the Quick Start stack
 by = ["mechanism:migration-pages-environments"]
 
 [[unit]]
-text = "The modules branch has two revisions: modules_0001_rbac and, after it, modules_0002_warehouse_analysis."
+text = "The modules branch has five revisions: modules_0001_rbac, then modules_0002_warehouse_analysis, then modules_0003_lower_is_better, then modules_0004_rbac_activation, then modules_0005_redshift."
 by = [
     "mechanism:alembic-plan-branch",
     "mechanism:alembic-plan-unapply",
 ]
+
+[[unit]]
+text = "Name the modules revision to end at rather than counting back: a relative step such as modules@-2 counts from the newest revision the image has, so it unapplies a different revision once a release adds one."
+by = ["mechanism:alembic-plan-relative-downgrade"]
+
+[[unit]]
+text = "modules@-5 unapplies all five, newest first."
+by = ["mechanism:alembic-plan-unapply"]
 
 [[unit]]
 text = "Not modules@base."
@@ -1540,3 +2243,14 @@ by = ["exempt:instruction"]
 [[unit]]
 text = "It prints UTC."
 by = ["docex:docs/self-hosting/migrations.md#UTC"]
+
+[[unit]]
+text = "Since the release in which custom roles took effect, assigning a role or making a grant records an activation time, and only assignments and grants that have one take effect (see RBAC)."
+by = [
+    "test:modules/backend/tests/unit/models/test_rbac_activation_time_readers_and_writers.py::test_every_insert_sets_the_activation_time",
+    "test:modules/backend/tests/integration/rbac/test_rbac_activation.py::test_rows_written_by_the_previous_code_stay_inactive_until_made_again",
+]
+
+[[unit]]
+text = "Downgrading below this revision after that release drops every activation time: every assignment and grant is inactive again, and stays inactive after upgrading; assign the roles and make the grants again."
+by = ["test:backend/tests/integration/database/test_modules_0004_transitions.py"]

@@ -38,6 +38,20 @@ class UserKeyCache(Generic[T]):
         with self._lock:
             self._users.setdefault(user_id, {})[key] = (_now() + self._ttl, value)
 
+    def set_new(self, user_id: str, key: str, value: T) -> bool:
+        """Store ``value`` as :meth:`set` does, and say whether it is new: ``True`` when the slot
+        held no unexpired value (it was empty or expired), ``False`` when it replaced a live one.
+
+        Checked and stored under the one lock: of two threads storing the same user and key, the
+        second finds the first one's value, and sees ``False`` while that value is unexpired."""
+        with self._lock:
+            by_key = self._users.setdefault(user_id, {})
+            now = _now()
+            entry = by_key.get(key)
+            new = entry is None or now >= entry[0]
+            by_key[key] = (now + self._ttl, value)
+            return new
+
     def entries(self, user_id: str) -> List[Tuple[str, T]]:
         """All live (unexpired) entries for a user, in insertion order."""
         with self._lock:

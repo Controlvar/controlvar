@@ -50,17 +50,35 @@ PREVIOUS_CORE_HEAD = "d12cbd384bbe"
 #: revision, ``1ab99332f0ba`` (``events.created_at`` in UTC), adds no DDL, and
 #: ``806901fb7735`` (the experiments' correction settings) adds only what a
 #: database built by ``create_all`` already has, and ``d29a479daafe`` (holdout
-#: population), ``37dcb2969766`` (segment kind and members) and
-#: ``4c2c09a2b3e8`` (rollback records keep without a safety configuration) find
-#: their objects already built by ``create_all`` and add none.
-CORE_HEAD = "4c2c09a2b3e8"
+#: population), ``37dcb2969766`` (segment kind and members), ``4c2c09a2b3e8``
+#: (rollback records keep without a safety configuration), ``607c51a59bf5``
+#: (a flag's value type and two values), ``85dd4796bb8b`` (the event_id keys),
+#: ``7b6b4b4fe246`` (when each rollout stage started), ``c448_balance_within``
+#: (balance the split within groups), ``4955571d232c`` (visual experiments)
+#: and ``t1812_user_totp`` (two-step sign-in) find their objects already built
+#: by ``create_all`` and add none.
+CORE_HEAD = "t1812_user_totp"
 #: Tables that a later core revision's downgrade drops: a downgrade from the
 #: head to this test's target unapplies those revisions too.  ``d29a479daafe``
 #: (#445) drops ``holdout_population``; ``37dcb2969766`` (#440) drops
-#: ``segment_members``.
-LATER_DOWNGRADE_TABLES = {"holdout_population", "segment_members"}
-#: The modules branch's head, in the previous release and in this one alike.
-MODULES_HEAD = "modules_0002_warehouse_analysis"
+#: ``segment_members``; ``85dd4796bb8b`` (#1543) drops ``event_dedup_keys``;
+#: ``c448_balance_within`` (#448) drops ``balance_group_counters``;
+#: ``4955571d232c`` (#1545) drops ``visual_tokens``; ``t1812_user_totp``
+#: (#1812) drops ``user_totp``.
+LATER_DOWNGRADE_TABLES = {
+    "holdout_population",
+    "segment_members",
+    "event_dedup_keys",
+    "balance_group_counters",
+    "visual_tokens",
+    "user_totp",
+}
+#: ``feature_flags`` columns a later core revision's downgrade drops:
+#: ``607c51a59bf5`` (#1497) drops a flag's value type and its two values.
+LATER_DOWNGRADE_COLUMNS = {"value_type", "on_value", "off_value"}
+#: The modules branch's head in this tree, recorded on both sides of every
+#: step here: this file is about the core chain.
+MODULES_HEAD = "modules_0005_redshift"
 
 PREVIOUS_ROWS = {
     CORE: {PREVIOUS_CORE_HEAD},
@@ -374,7 +392,7 @@ def test_downgrade_removes_the_column_and_nothing_else(
         c["name"]
         for c in inspect(test_db).get_columns("feature_flags", schema=scratch_schema)
     }
-    assert after == columns - {COLUMN}
+    assert after == columns - {COLUMN} - LATER_DOWNGRADE_COLUMNS
     assert (
         set(inspect(test_db).get_table_names(schema=scratch_schema))
         == tables - LATER_DOWNGRADE_TABLES

@@ -10,7 +10,8 @@
  * What is pinned:
  *  - the notice follows the server's `warning`, never a threshold of its own;
  *    a null check renders nothing, and nothing says "passed" for it;
- *  - under a mismatch the "Leading" chip and the Bayesian panel carry a
+ *  - under a mismatch the "Leading" chip, the Bayesian panel and the
+ *    Sequential tab's stopping banner ("Ready to stop", #1737) carry a
  *    qualifier, and without one they do not;
  *  - every Bayesian decision the API can send has fixed copy (the set is read
  *    from the API snapshot), and the panel's empty states are distinct;
@@ -22,7 +23,7 @@
 import fs from 'fs';
 import path from 'path';
 import React from 'react';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import axe from 'axe-core';
 import ResultDetailPage from '@/pages/results/[id]';
 import { ApiError, apiFetch } from '@/services/api';
@@ -340,6 +341,90 @@ describe('the "Leading" chip and the Bayesian panel are qualified under a mismat
     expect(screen.getByTestId('recommendation-pill')).toHaveTextContent(/^Ship Variant ✓$/);
     expect(screen.queryByTestId('leading-variant')).not.toBeInTheDocument();
     expect(screen.queryByTestId('leading-srm-qualifier')).not.toBeInTheDocument();
+  });
+});
+
+// #1737: the Sequential tab's banner can say "Ready to stop" on the same split
+// the notice above the tabs says not to trust. It follows the same field,
+// `srm.warning` from GET /results/{id}, and no threshold of its own.
+describe('the Sequential tab\'s stopping banner is qualified under a mismatch (#1737)', () => {
+  const QUALIFIER = 'The traffic split does not match the allocation, so treat this with caution.';
+
+  /** A sequential block; the interval's sign says which way the change went. */
+  function sequential(action: string, lower = 0.012, upper = 0.034) {
+    return {
+      method: 'msprt',
+      msprt_result: {
+        lambda_ratio: 40,
+        always_valid_p_value: 0.025,
+        can_stop: action !== 'continue',
+        evidence_strength: action === 'continue' ? 'inconclusive' : 'strong_for_effect',
+        boundary: 20,
+      },
+      confidence_sequence: { lower, upper, width: upper - lower, sample_size: 20000 },
+      evidence_trajectory: [],
+      alpha_spending: [],
+      long_running_risk: null,
+      recommended_action: action,
+      at_risk: false,
+      analysis_status: 'beta',
+      analysis_notice: 'Sequential testing is in beta.',
+    };
+  }
+
+  /** The primary metric is a conversion where higher is better, so a rise reads "better". */
+  const EXPERIMENT = {
+    bayesian_enabled: false,
+    sequential_testing_enabled: true,
+    metrics: [
+      {
+        id: 'm1',
+        name: 'Hero CTA click',
+        event_name: 'hero_click',
+        metric_type: 'conversion',
+        is_primary: true,
+        lower_is_better: false,
+      },
+    ],
+  };
+
+  async function openSequential(srm: unknown, block = sequential('stop_for_effect')) {
+    install(results({ srm, sequential_testing: block }), EXPERIMENT);
+    const { container } = await renderLoaded();
+    fireEvent.click(await screen.findByRole('tab', { name: /sequential/i }));
+    return { banner: await screen.findByTestId('early-stopping-banner'), container };
+  }
+
+  it('"Ready to stop" carries the qualifier when srm.warning is true', async () => {
+    const { banner, container } = await openSequential(SRM_MISMATCH);
+    expect(within(banner).getByTestId('action-label')).toHaveTextContent(
+      'Ready to stop — the variant is significantly better'
+    );
+    expect(within(banner).getByTestId('sequential-srm-qualifier')).toHaveTextContent(QUALIFIER);
+    await expectNoAxeViolations(container);
+  });
+
+  it.each([
+    ['a worse variant', sequential('stop_for_effect', -0.034, -0.012), /significantly worse/],
+    ['futility', sequential('stop_for_futility'), /unlikely to reach significance/],
+    ['continue', sequential('continue', -0.01, 0.03), /more data needed/],
+  ])('%s carries it too: the split qualifies every answer', async (_name, block, label) => {
+    const { banner } = await openSequential(SRM_MISMATCH, block);
+    expect(within(banner).getByTestId('action-label')).toHaveTextContent(label);
+    expect(within(banner).getByTestId('sequential-srm-qualifier')).toHaveTextContent(QUALIFIER);
+  });
+
+  it('"Ready to stop" carries none when the check passed (warning false at p = 0.01)', async () => {
+    const { banner } = await openSequential(SRM_FINE);
+    expect(within(banner).getByTestId('action-label')).toHaveTextContent(/^Ready to stop/);
+    expect(screen.queryByTestId('sequential-srm-qualifier')).not.toBeInTheDocument();
+    expect(banner).not.toHaveTextContent(/traffic split/i);
+  });
+
+  it('"Ready to stop" carries none when the check is null', async () => {
+    const { banner } = await openSequential(null);
+    expect(within(banner).getByTestId('action-label')).toHaveTextContent(/^Ready to stop/);
+    expect(screen.queryByTestId('sequential-srm-qualifier')).not.toBeInTheDocument();
   });
 });
 

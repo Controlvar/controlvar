@@ -18,8 +18,10 @@ the shell variables set by the ones before it.
 - **Server-to-server calls**: backend services that track conversions or evaluate flags.
 - **Event ingestion**: the tracking endpoints (`/api/v1/tracking/*`) take an API key.
 
-An API key authenticates as the user who created it, and only on the endpoints an SDK
-calls: tracking, flag evaluation and the flag ruleset. Creating or changing flags
+An API key authenticates as the user who created it, on the endpoints an SDK calls:
+tracking, flag evaluation and the flag ruleset. A key that carries the `mcp:read` scope also
+reads flags, experiments and results on four read operations (see [Scopes](#scopes)); a key
+without it is refused there with `403`. Creating or changing flags
 and experiments, and managing users, take a user login; an API key there is refused with
 `401` and `{"detail":"Not authenticated"}`, the answer to a request with no login at all.
 API keys are not for signing people in: user-facing applications use the login
@@ -78,16 +80,26 @@ repository). If you lose it, create a new key.
 The request takes:
 - `name` (required, up to 100 characters);
 - `description`;
-- `scopes`, a list of names (see [Scopes](#scopes));
+- `scopes`, a list of names, at most 255 characters in all when joined with commas; a longer
+  list answers `422` (see [Scopes](#scopes));
 - `expires_at`, an ISO 8601 time after which the key stops working. Leave it out for a
   key that doesn't expire.
 
 ### Scopes
 
-Scopes are stored with the key and returned when you list keys. **One scope is enforced:
-`sdk:ruleset`.** Every endpoint that accepts an API key, except the three below, accepts
-any active key, whatever its scopes. Names such as `read`, `write` or `admin` on existing
-keys are labels only; nothing checks them.
+Scopes are stored with the key and returned when you list keys. **Two scopes are enforced:
+`sdk:ruleset` and `mcp:read`.** Every endpoint that accepts an API key, except the ones
+listed below for each and the two a web page calls
+([Refused in a web page](#refused-in-a-web-page)), accepts any active key, whatever its
+scopes. Names such as `read`, `write` or `admin` on existing keys are labels only: no route
+requires one, though the two routes a web page calls refuse a key that carries any scope.
+
+Scope names are matched exactly and case-sensitively: the stored list is split on commas and
+each entry is trimmed, so `"read, sdk:ruleset "` carries `sdk:ruleset`, while `SDK:RULESET`,
+`xsdk:ruleset` and `sdk:ruleset-ro` do not. In the same way `MCP:READ`, `xmcp:read` and
+`mcp:read-only` do not carry `mcp:read`.
+
+#### `sdk:ruleset`
 
 `sdk:ruleset` is for a server: one that evaluates flags locally, or one that assigns lists
 of users to an experiment. These routes answer `403` to a key that does not carry it:
@@ -105,8 +117,8 @@ The `403` says
 `This API key does not have the 'sdk:ruleset' scope. Create a key with the 'sdk:ruleset' scope for server-side SDK use.`
 
 A key with `sdk:ruleset` can therefore download every feature flag's targeting rules,
-including the values in them, so keep such a key on a server and never ship it to a browser
-or a mobile app.
+including the values in them, and the values string, number and JSON flags serve, so keep
+such a key on a server and never ship it to a browser or a mobile app.
 
 - In the dashboard (**Admin → API Keys → Create API Key**), tick **Server-side local
   evaluation (sdk:ruleset)**; the same checkbox is the one for assigning lists of users.
@@ -116,16 +128,59 @@ or a mobile app.
 - Through the API, send `"scopes": ["sdk:ruleset"]`.
 
 **Only users who can change feature flags can create a key with the `sdk:ruleset` scope:**
-the ADMIN and DEVELOPER roles, and superusers. For anyone else (ANALYST or VIEWER) the
-request is refused with `403 Forbidden`, whose message names the roles that may create such
-a key, and no key is created. Keys without that scope can be created by every role, as
-before. Using such a key follows the same rule: both routes above accept a key with
-`sdk:ruleset` only while its owner can change feature flags, checked on every request, so a
-key whose owner is moved to ANALYST or VIEWER is refused with `403` from then on.
+the ADMIN and DEVELOPER roles, superusers, and in the full profile anyone whose custom role or
+direct grant gives `feature_flag (update)`. For anyone else the request is refused with
+`403 Forbidden`, whose message says who may create such a key, and no key is created. Keys
+without that scope can be created by every role, as before. Using such a key follows the same
+rule: the three routes above accept a key with `sdk:ruleset` only while its owner can change
+feature flags, checked on every request, so a key whose owner loses that (moved to ANALYST or
+VIEWER, or a grant revoked or expired) is refused with `403` from then on.
+`POST /api/v1/tracking/assign/batch` also needs the owner to be able to change experiments;
+otherwise it answers `403` and assigns nobody.
 
-Scope names are matched exactly and case-sensitively: the stored list is split on commas and
-each entry is trimmed, so `"read, sdk:ruleset "` carries `sdk:ruleset`, while `SDK:RULESET`,
-`xsdk:ruleset` and `sdk:ruleset-ro` do not.
+#### `mcp:read`
+
+`mcp:read` lets a key read flags, experiments and results. These four operations accept a
+key that carries it, as well as a user login:
+
+- `GET /api/v1/feature-flags/`, which lists the feature flags;
+- `GET /api/v1/experiments/`, which lists the experiments;
+- `GET /api/v1/experiments/{experiment_id}`, which reads one experiment;
+- `GET /api/v1/experiments/{experiment_id}/results`, which reads its results.
+
+The request reads as the user who created the key, and the operation checks that user's
+role as it does for a login. Every role may read all four, so anyone holding the key reads
+everything its owner can there: every flag, with its targeting rules and the values it
+serves, every experiment, and every experiment's results. Keep such a key out of browsers,
+mobile apps and code repositories. A key without the scope is refused on these four with
+`403`:
+
+`This API key does not have the 'mcp:read' scope. Create a key with the 'mcp:read' scope to read flags, experiments and results with it.`
+
+The scope opens nothing else. The routes that create, change or delete flags or experiments,
+and the routes that manage users, still take a user login, and a request that carries a bearer
+token is judged on the token alone.
+
+Every role can create a key with `mcp:read`: through the API, send `"scopes": ["mcp:read"]`.
+Keys already labelled `mcp:read` gain that access when the instance is upgraded to a
+version that enforces the scope. An ADMIN lists every user's keys, with their scopes, with
+`GET /api/v1/api-keys?all=true`.
+
+#### Refused in a web page
+
+A key in a web page can be read by anyone who opens the page. So the two routes the visual
+editor's browser script calls answer `403` to a key that carries any scope, whatever its name:
+
+- `POST /api/v1/tracking/visual` (beta), which answers the visual changes and goals a
+  visitor gets on a page;
+- `POST /api/v1/tracking/visual/preview` (beta), which answers the variant a preview link
+  shows.
+
+The `403` says
+`This API key has scopes, so it must stay on a server: a key in a web page can be read by anyone who opens the page. Use a key with no scopes on your website.`
+
+Use a key with no scopes on a website: through the API, send `"scopes": []` or leave
+`scopes` out. A key with a scope keeps working on every other route that takes a key.
 
 ---
 
@@ -312,7 +367,14 @@ lists of users. Every other key, including any key used in a browser or a mobile
 Because no other scope limits a key, a separate key per service is what lets you revoke one
 integration without touching the others.
 
+### Remember that a browser key answers for any user id
+
+A key used in a browser or a mobile app is visible to the people who use the app, and it answers for whichever user id it is sent: what that id is served, whether it is in a segment, and which experiments it is assigned to.
+Where that matters, use user ids that do not identify a person (not email addresses), in ID lists too, and read assignments from your server.
+
 ### Remember that a key acts as its owner
 
 A key authenticates as the user who created it. Create keys from an account whose role is
 no broader than the services need, and delete the keys of a user who leaves.
+Removing a user from the identity provider does not revoke their API keys: deactivate the
+Controlvar user or delete the keys.

@@ -1,14 +1,17 @@
-"""`scripts/guide_blocks.py` -- the chart-kind job runs the guide's own blocks.
+"""`scripts/guide_blocks.py` -- two CI jobs run their page's own blocks.
 
-The job's claim is that ``docs/self-hosting/kubernetes.md`` is tested as
-written. That holds only while the extractor refuses the ways a page and the
-job can drift apart: a shell block nobody marked (so nobody runs it), a marker
-that no longer sits on a block, a renamed or dropped block, a name used twice.
-Each case below is one of those, and the last checks the real page against the
-job's real list, so neither can change without the other.
+The chart-kind job's claim is that ``docs/self-hosting/kubernetes.md`` is
+tested as written, and the compose-upgrade job's (``compose-production.yml``,
+#1807) is the same for ``deploy/compose/README.md``, under its own marker,
+``--marker compose-upgrade``. That holds only while the extractor refuses the
+ways a page and the job can drift apart: a shell block nobody marked (so nobody
+runs it), a marker that no longer sits on a block, a renamed or dropped block,
+a name used twice. Each case below is one of those, and the last ones check
+each real page against its job's real list, so neither can change without the
+other.
 
-No git, no cluster: this runs anywhere, ``scripts/core_build.sh``'s copy
-included.
+No git, no cluster, no Docker: this runs anywhere, ``scripts/core_build.sh``'s
+copy included.
 """
 
 from __future__ import annotations
@@ -28,6 +31,15 @@ SCRIPT = REPO_ROOT / "scripts" / "guide_blocks.py"
 GUIDE = REPO_ROOT / "docs" / "self-hosting" / "kubernetes.md"
 JOB = REPO_ROOT / "scripts" / "chart_kind.sh"
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "chart-kind.yml"
+COMPOSE_PAGE = REPO_ROOT / "deploy" / "compose" / "README.md"
+COMPOSE_JOB = REPO_ROOT / "scripts" / "compose_upgrade.sh"
+COMPOSE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "compose-production.yml"
+#: Every bash block of the compose README, in page order: the install, the
+#: addresses check, back up and restore, then the upgrade procedure.
+COMPOSE_BLOCKS = (
+    "install,install-named,addresses,backup,restore,check-backup,get-files,"
+    "check-settings,pull,upgrade,verify,check-migrations"
+)
 
 _spec = importlib.util.spec_from_file_location("guide_blocks", SCRIPT)
 gb = importlib.util.module_from_spec(_spec)
@@ -40,19 +52,25 @@ def page(*parts: str) -> str:
     return "\n".join(parts) + "\n"
 
 
-def block(name: str | None, body: str, lang: str = "bash") -> str:
-    marker = [f"<!-- chart-kind: {name} -->"] if name else []
-    return "\n".join(marker + [f"{FENCE}{lang}", body, FENCE])
+def block(
+    name: str | None, body: str, lang: str = "bash", marker: str = "chart-kind"
+) -> str:
+    line = [f"<!-- {marker}: {name} -->"] if name else []
+    return "\n".join(line + [f"{FENCE}{lang}", body, FENCE])
 
 
-def run(tmp_path: Path, text: str, expect: str) -> subprocess.CompletedProcess:
+def run(
+    tmp_path: Path, text: str, expect: str, marker: str | None = None
+) -> subprocess.CompletedProcess:
     src = tmp_path / "guide.md"
     src.write_text(text)
+    chosen = ["--marker", marker] if marker is not None else []
     return subprocess.run(
         [
             sys.executable,
             str(SCRIPT),
             str(src),
+            *chosen,
             "--expect",
             expect,
             "--out",
@@ -264,3 +282,136 @@ def test_the_workflow_runs_on_a_change_to_the_guide() -> None:
         ".github/workflows/chart-kind.yml",
     ):
         assert f"- '{path}'" in workflow, path
+
+
+# ---------------------------------------------------------------------------
+# --marker: the compose README and the compose-upgrade job (#1807)
+# ---------------------------------------------------------------------------
+
+
+def test_the_compose_page_matches_the_upgrade_job() -> None:
+    """The compose README, under its own marker, against the list
+    compose_upgrade.sh passes: all twelve bash blocks, in page order."""
+    job = COMPOSE_JOB.read_text()
+    guide_blocks = re.search(r"^GUIDE_BLOCKS=(\S+)$", job, re.M)
+    guide_path = re.search(r"^GUIDE=(\S+)$", job, re.M)
+    marker = re.search(r"^MARKER=(\S+)$", job, re.M)
+    assert guide_blocks and guide_path and marker, (
+        "compose_upgrade.sh no longer names GUIDE / GUIDE_BLOCKS / MARKER"
+    )
+    assert REPO_ROOT / guide_path.group(1) == COMPOSE_PAGE
+    assert marker.group(1) == "compose-upgrade"
+    assert guide_blocks.group(1) == COMPOSE_BLOCKS
+    assert (
+        'scripts/guide_blocks.py "$GUIDE" --marker "$MARKER" --expect "$GUIDE_BLOCKS"'
+        in job
+    )
+
+    blocks, problems = gb.extract(
+        COMPOSE_PAGE.read_text(), str(COMPOSE_PAGE), marker="compose-upgrade"
+    )
+    assert problems == []
+    assert [name for name, _ in blocks] == COMPOSE_BLOCKS.split(",")
+
+
+def test_the_compose_workflow_runs_on_a_change_to_the_page_or_its_scripts() -> None:
+    """A pull request that changes the page, the script that runs it or the
+    extractor triggers compose-production (stdlib only: the trigger's text)."""
+    workflow = COMPOSE_WORKFLOW.read_text()
+    assert "\n  pull_request:\n" in workflow and "\n  push:\n" in workflow
+    pull_request = workflow[
+        workflow.index("\n  pull_request:\n") : workflow.index("\n  push:\n") + 1
+    ]
+    for path in (
+        "deploy/compose/README.md",
+        "scripts/compose_upgrade.sh",
+        "scripts/guide_blocks.py",
+        ".github/workflows/compose-production.yml",
+    ):
+        assert f"\n      - {path}\n" in pull_request, path
+
+
+@pytest.mark.parametrize(
+    "text, message",
+    [
+        pytest.param(
+            page(
+                block("one", "echo 1", marker="compose-upgrade"),
+                "",
+                block(None, "echo unrun"),
+            ),
+            "a bash block with no '<!-- compose-upgrade: NAME -->' line directly "
+            "above it; every shell block on this page is run by the "
+            "compose-upgrade job",
+            id="unmarked-bash-block",
+        ),
+        pytest.param(
+            page("<!-- compose-upgrade:one -->", block(None, "echo 1")),
+            "a malformed marker; write exactly '<!-- compose-upgrade: NAME -->'",
+            id="malformed-marker",
+        ),
+        pytest.param(
+            page(
+                block("one", "echo 1", marker="compose-upgrade"), "", block("two", "x")
+            ),
+            "a bash block with no '<!-- compose-upgrade: NAME -->'",
+            id="the-other-jobs-marker-is-no-marker",
+        ),
+        pytest.param(
+            page(
+                block("one", "echo 1", marker="compose-upgrade"),
+                "",
+                block(None, "echo unrun", lang="{.bash exec}"),
+            ),
+            "plain `bash` with a '<!-- compose-upgrade: NAME -->' marker",
+            id="tagged-fence",
+        ),
+        pytest.param(
+            page(
+                block("one", "echo 1", marker="compose-upgrade"),
+                "",
+                block(None, "echo unrun", lang="sh"),
+            ),
+            "write it as `bash` with a '<!-- compose-upgrade: NAME -->' marker",
+            id="other-shell",
+        ),
+    ],
+)
+def test_a_refusal_under_another_marker_names_that_marker(
+    tmp_path: Path, text: str, message: str
+) -> None:
+    """C9: every message names the marker in use, never chart-kind's."""
+    result = run(tmp_path, text, "one", marker="compose-upgrade")
+    assert result.returncode == 1
+    assert message in result.stderr, result.stderr
+    assert "chart-kind" not in result.stderr, result.stderr
+    assert not (tmp_path / "out").exists()
+
+
+def test_a_page_under_another_marker_is_written(tmp_path: Path) -> None:
+    text = page(
+        block("one", "echo 1", marker="compose-upgrade"),
+        "",
+        block("two", "echo 2", marker="compose-upgrade"),
+    )
+    result = run(tmp_path, text, "one,two", marker="compose-upgrade")
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "out" / "two.sh").read_text() == "echo 2\n"
+
+
+def test_the_default_marker_is_chart_kinds(tmp_path: Path) -> None:
+    """chart_kind.sh passes no --marker: a compose-upgrade marker is not its."""
+    text = page(block("one", "echo 1", marker="compose-upgrade"))
+    result = run(tmp_path, text, "one")
+    assert result.returncode == 1
+    assert "a bash block with no '<!-- chart-kind: NAME -->'" in result.stderr
+
+
+@pytest.mark.parametrize("marker", ["", "Compose", "compose upgrade", "a.b", "-x"])
+def test_a_marker_that_is_not_a_name_is_a_usage_error(
+    tmp_path: Path, marker: str
+) -> None:
+    result = run(tmp_path, page(block("one", "echo 1")), "one", marker=marker)
+    assert result.returncode == 2, result.stderr
+    assert "--marker" in result.stderr
+    assert not (tmp_path / "out").exists()

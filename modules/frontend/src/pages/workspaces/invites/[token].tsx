@@ -5,7 +5,7 @@ import { PageTitle } from '@/components/PageTitle';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useOptionalAuth } from '@/contexts/AuthContext';
-import { LOGIN_PATH, isApiError } from '@/services/api';
+import { isApiError, loginPathWithNext } from '@/services/api';
 import { WorkspaceInvite, workspaceService } from '@modules/services/workspaces';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
@@ -134,9 +134,11 @@ function AcceptInvitePage() {
     setSwitchingAccount(true);
     const next = `/workspaces/invites/${encodeURIComponent(token ?? '')}`;
     try {
-      await auth?.logout().catch(() => undefined);
+      // Named in the logout as well, so the protected-page guard sends this
+      // tab to the same sign-in path as the navigation below (#1006).
+      await auth?.logout({ next }).catch(() => undefined);
     } finally {
-      void router.replace(`${LOGIN_PATH}?next=${encodeURIComponent(next)}`);
+      void router.replace(loginPathWithNext(next));
     }
   }
 

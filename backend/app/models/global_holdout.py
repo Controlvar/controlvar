@@ -3,8 +3,10 @@ Global Holdout model for keeping a percentage of new users out of every
 experiment (EP-022, #445).
 
 While a holdout is active, ``POST /api/v1/tracking/assign`` answers a new user
-the holdout buckets with the control variant and no assignment.  Feature flags
-and split-URL experiments ignore it.
+the holdout buckets with the control variant and no assignment, and so does
+``POST /api/v1/tracking/split-url/assign``, which answers through it (a split
+URL experiment's visitor is then served the page they asked for).  Feature
+flags ignore it.
 
 Who a holdout covered is recorded in ``holdout_population``
 (``backend/app/models/holdout_population.py``), so the held-out users can be

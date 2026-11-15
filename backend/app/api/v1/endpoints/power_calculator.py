@@ -14,6 +14,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, status
 
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.logger import unexpected_failure
 from backend.app.schemas.power_calculator import (
     MDERequest,
@@ -34,17 +35,24 @@ from backend.app.services.power_calculator_service import PowerCalculatorService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 _calculator = PowerCalculatorService()
 _planner = AIExperimentPlannerService()
 
 # What the calculation routes (sample size, MDE, runtime, curve) answer, with
 # a 422, when a number in the calculation leaves floating-point range and
-# Python raises OverflowError (#1003). The request schemas' upper bounds keep
+# Python raises OverflowError (#1003), and GET /experiments/analysis/sample-size
+# when the days needed cannot be calculated (a traffic share so small that
+# users per variant per day come to 0, or the day count is not finite) (#820).
+# The request schemas' upper bounds keep
 # the integers in range; what is left is the sample size of a ``mean`` or
 # ``ratio`` metric with a very large ``baseline_std``, or with a baseline so
 # small that the difference squared underflows to zero. Those used to answer
-# 500. The curve skips a point it cannot compute, so it has no known case.
+# 500. A mean whose size comes out as 0 or as NaN (a ``baseline_std`` so small
+# that its square underflows, or a baseline so large that the difference
+# overflows) is refused with the same message, where it used to answer 200
+# with ``per_variant: 0`` or 422 with Python's own text (#1034). The curve
+# skips a point it cannot compute, so it has no known case.
 OUT_OF_RANGE_MESSAGE = (
     "These values are too large or too small to calculate with. "
     "Use values nearer those of a real experiment."
@@ -121,7 +129,9 @@ def compute_sample_size(body: SampleSizeRequest) -> SampleSizeResponse:
     summary="Compute Minimum Detectable Effect",
     description=(
         "Given a fixed sample size per variant, compute the smallest relative "
-        "effect that can be detected with the specified power and alpha."
+        "effect that can be detected with the specified power and alpha. It "
+        "plans a conversion rate (a proportion) only: baseline_rate is a rate "
+        "between 0 and 1, and a metric_type sent with the request is ignored."
     ),
 )
 def compute_mde(body: MDERequest) -> MDEResponse:
@@ -221,22 +231,26 @@ def get_power_curve(
         ...,
         gt=0,
         lt=1,
+        allow_inf_nan=False,
         description="Baseline conversion/success rate (0–1, exclusive).",
     ),
     alpha: float = Query(
         default=0.05,
         gt=0,
         lt=0.5,
+        allow_inf_nan=False,
         description="Type I error rate.",
     ),
     power: float = Query(
         default=0.80,
         gt=0,
         lt=1,
+        allow_inf_nan=False,
         description="Target statistical power.",
     ),
     mde: Optional[float] = Query(
         default=None,
+        allow_inf_nan=False,
         description="Currently selected MDE (marks a point on the curve).",
     ),
 ) -> PowerCurveResponse:

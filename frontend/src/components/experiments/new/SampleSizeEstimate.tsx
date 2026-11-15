@@ -1,6 +1,10 @@
 import React from 'react';
 import Link from 'next/link';
-import { ExperimentsService, SampleSizeEstimate as EstimateResponse } from '@/services/experiments';
+import {
+  ExperimentsService,
+  SampleSizeEstimate as EstimateResponse,
+  SampleSizeQuery,
+} from '@/services/experiments';
 import { isApiError } from '@/services/api';
 import {
   buildEstimateQuery,
@@ -8,6 +12,7 @@ import {
   estimateSignificance,
   INITIAL_ESTIMATE_INPUTS,
   isEvenSplit,
+  MAX_DAILY_USERS,
   POWER_OPTIONS,
 } from './estimate';
 import { wizardInputClass } from './fieldStyles';
@@ -61,51 +66,101 @@ interface SampleSizeEstimateProps {
   allocations: number[];
   /** The experiment's confidence level: the estimate plans at 1 minus it. */
   confidenceLevel: number;
-  /** The experiment's correction. The estimate does not apply it; the copy says so. */
+  /** The experiment's correction: the estimate sends it, and the copy describes the correction the answer applied. */
   correctionMethod: CorrectionMethod;
 }
 
 const pct = (fraction: number) => `${Math.round(fraction * 1000) / 10}%`;
+/** A per-comparison level as the results page's Sample Size tab prints it (its `pct(value, 3)`): 2.5%, 1.667%. */
+const pct3 = (fraction: number) => `${Number((fraction * 100).toFixed(3))}%`;
 const count = (n: number) => n.toLocaleString('en-US');
 
 /**
- * What the estimate says about the correction with three or more variants. The
- * estimate plans each comparison without one (PE condition 9; #820 would add it).
+ * The number of variants an answer was planned for: its total over its
+ * per-variant size. Exact (the endpoint multiplies one by the other), and
+ * every API version answers both. Every count in the result block comes from
+ * the answer shown, never from the Variants step, which may have changed since.
+ */
+export function answeredVariantCount(estimate: EstimateResponse): number {
+  return estimate.total_samples / estimate.samples_per_variant;
+}
+
+/**
+ * The correction an answer applied: its echoed `correction_method` when that is
+ * a correction and the answer has two or more comparisons; otherwise none. An
+ * older API, which ignores the correction and echoes nothing, is none.
+ */
+export function appliedCorrection(estimate: EstimateResponse): CorrectionMethod {
+  const method = estimate.correction_method;
+  const corrected = method === 'bonferroni' || method === 'benjamini_hochberg';
+  return corrected && typeof estimate.comparisons === 'number' && estimate.comparisons >= 2 ? method : 'none';
+}
+
+/**
+ * What the estimate says when its answer applied a correction, from the answer:
+ * its variant count, its comparisons and the level each is planned at.
+ */
+export function correctionInEstimate(
+  variantCount: number,
+  applied: CorrectionMethod,
+  comparisons: number,
+  alpha: number,
+): string {
+  const text =
+    `With ${variantCount} variants, this estimate uses the ${correctionName(applied)} correction: ` +
+    `each of the ${comparisons} comparisons with the control is planned at ${pct3(alpha)} significance.`;
+  if (applied !== 'benjamini_hochberg') return text;
+  return `${text} Benjamini-Hochberg is planned as strictly as Bonferroni, so this may be more users than it needs.`;
+}
+
+/**
+ * What the estimate says when its answer applied no correction: the experiment
+ * has none, or an older API ignored it. `sent` is the correction the answered
+ * query asked for. Over a stale estimate only the first clause is said; the
+ * stale banner says the rest.
  */
 export function noCorrectionInEstimate(
   variantCount: number,
-  confidenceLevel: number,
-  correctionMethod: CorrectionMethod,
+  significance: number,
+  sent: CorrectionMethod,
+  stale: boolean,
 ): string {
-  const sig = pct(estimateSignificance(confidenceLevel));
-  if (correctionMethod === 'none') {
-    return (
-      `With ${variantCount} variants, this estimate plans each comparison with the control at ` +
-      `${sig} significance and makes no correction for comparing several variants, the same as ` +
-      'the results will, because no correction is chosen above.'
-    );
-  }
-  return (
+  const first =
     `With ${variantCount} variants, this estimate plans each comparison with the control at ` +
-    `${sig} significance and makes no correction for comparing several variants. The results ` +
-    `will use the ${correctionName(correctionMethod)} correction chosen above, so the experiment ` +
+    `${pct(significance)} significance and makes no correction for comparing several variants`;
+  if (stale) return `${first}.`;
+  if (sent === 'none') return `${first}, the same as the results will, because no correction is chosen above.`;
+  return (
+    `${first}. The results will use the ${correctionName(sent)} correction chosen above, so the experiment ` +
     'needs more users than this.'
   );
 }
 
 /**
  * The estimate's answer when it answers exactly these inputs, or null when
- * there is none or the inputs have changed since.
+ * there is none or the inputs have changed since. The correction is part of
+ * the inputs, so changing it marks the estimate out of date.
  */
 export function currentEstimate(
   value: EstimatePanelState,
   mdePct: string,
   variantCount: number,
   confidenceLevel: number,
+  correctionMethod: CorrectionMethod,
 ): EstimateResponse | null {
   if (value.result === null) return null;
-  const current = buildEstimateQuery({ ...value.inputs, mdePct }, variantCount, confidenceLevel);
+  const current = buildEstimateQuery(
+    { ...value.inputs, mdePct },
+    variantCount,
+    confidenceLevel,
+    correctionMethod,
+  );
   return current.ok && JSON.stringify(current.query) === value.result.queryKey ? value.result.estimate : null;
+}
+
+/** The correction the answered query asked for (the query is stored as the estimate's key). */
+function sentCorrection(queryKey: string): CorrectionMethod {
+  return (JSON.parse(queryKey) as Partial<SampleSizeQuery>).correction_method ?? 'none';
 }
 
 /**
@@ -127,13 +182,14 @@ export function SampleSizeEstimate({
   const variantCount = allocations.length;
   const { result, problem, loading } = value;
   const inputs: EstimateInputs = { ...value.inputs, mdePct };
-  const stale = result !== null && currentEstimate(value, mdePct, variantCount, confidenceLevel) === null;
+  const stale =
+    result !== null && currentEstimate(value, mdePct, variantCount, confidenceLevel, correctionMethod) === null;
 
   const setInput = <K extends keyof EstimatePanelInputs>(key: K, next: EstimatePanelInputs[K]) =>
     onChange((prev) => ({ ...prev, inputs: { ...prev.inputs, [key]: next } }));
 
   const calculate = async () => {
-    const built = buildEstimateQuery(inputs, variantCount, confidenceLevel);
+    const built = buildEstimateQuery(inputs, variantCount, confidenceLevel, correctionMethod);
     if (!built.ok) {
       onChange((prev) => ({ ...prev, problem: built.problem }));
       return;
@@ -163,6 +219,10 @@ export function SampleSizeEstimate({
 
   const estimate = result?.estimate;
   const duration = estimate?.estimated_duration_days;
+  // Every count, comparison and significance in the result block comes from
+  // the answer shown; the live inputs decide only `stale` and the uneven split.
+  const answeredVariants = estimate ? answeredVariantCount(estimate) : 0;
+  const applied: CorrectionMethod = estimate ? appliedCorrection(estimate) : 'none';
 
   return (
     <div className="space-y-5" data-testid="sample-size-estimate">
@@ -170,7 +230,8 @@ export function SampleSizeEstimate({
         The minimum detectable effect you enter is saved with the experiment, and its results page plans
         the sample for it. The rest of this estimate is a guide and is not saved: the results page plans
         from the control variant&apos;s own conversion rate, at 80% power. This estimate plans at{' '}
-        {pct(estimateSignificance(confidenceLevel))} significance, from the confidence level above.
+        {pct(estimateSignificance(confidenceLevel))} significance, from the confidence level above, before
+        any correction.
       </p>
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -247,6 +308,7 @@ export function SampleSizeEstimate({
             inputMode="numeric"
             step={1}
             min={1}
+            max={MAX_DAILY_USERS}
             value={inputs.dailyUsers}
             onChange={(e) => setInput('dailyUsers', e.target.value)}
             aria-describedby="estimate-daily-users-help"
@@ -316,7 +378,7 @@ export function SampleSizeEstimate({
               {count(estimate.samples_per_variant)} users per variant
             </p>
             <p data-testid="estimate-total">
-              {count(estimate.total_samples)} users in total across {variantCount} variants, at{' '}
+              {count(estimate.total_samples)} users in total across {answeredVariants} variants, at{' '}
               {pct(estimate.statistical_power)} power and {pct(estimate.significance_level)} significance.
             </p>
             {duration && (
@@ -327,7 +389,7 @@ export function SampleSizeEstimate({
             )}
             {estimate.notes && <p data-testid="estimate-notes">{estimate.notes}</p>}
             <p data-testid="estimate-even-split">
-              This assumes users are split evenly across the {variantCount} variants.
+              This assumes users are split evenly across the {answeredVariants} variants.
             </p>
             {!isEvenSplit(allocations) && (
               <p className="text-amber-800" data-testid="estimate-uneven-split">
@@ -335,9 +397,25 @@ export function SampleSizeEstimate({
                 a day, so it takes longer than this to reach the number above.
               </p>
             )}
-            {variantCount >= 3 && (
+            {answeredVariants >= 3 && applied !== 'none' && (
               <p data-testid="estimate-many-variants">
-                {noCorrectionInEstimate(variantCount, confidenceLevel, correctionMethod)} The{' '}
+                {correctionInEstimate(
+                  answeredVariants,
+                  applied,
+                  estimate.comparisons ?? answeredVariants - 1,
+                  estimate.alpha ?? estimate.significance_level / (answeredVariants - 1),
+                )}
+              </p>
+            )}
+            {answeredVariants >= 3 && applied === 'none' && result && (
+              <p data-testid="estimate-many-variants">
+                {noCorrectionInEstimate(
+                  answeredVariants,
+                  estimate.significance_level,
+                  sentCorrection(result.queryKey),
+                  stale,
+                )}{' '}
+                The{' '}
                 <Link href="/power-calculator" className="text-blue-700 underline hover:text-blue-900">
                   Power Calculator
                 </Link>{' '}

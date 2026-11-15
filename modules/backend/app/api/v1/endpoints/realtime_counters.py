@@ -11,8 +11,10 @@ Endpoints:
     POST /api/v1/counters/bulk                      — atomic bulk increment
     POST /api/v1/counters/{experiment_id}/reset     — reset (ADMIN only)
 
-Reading a counter needs nothing beyond a session; *writing* one needs UPDATE
-on experiments (ADMIN, DEVELOPER or a superuser), because these counters are
+Reading a counter needs permission to view the experiment, as
+``GET /api/v1/experiments/{id}`` does; *writing* one needs UPDATE
+on experiments (ADMIN, DEVELOPER, a superuser, or anyone whose custom role or
+direct grant gives it), because these counters are
 the first source ``BanditScheduler`` consults for a bandit experiment's arm
 statistics — a forged conversion here re-weights live traffic.  Resetting is
 ADMIN only, as it discards data.
@@ -31,6 +33,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.permissions import Action, ResourceType, check_permission
 from backend.app.models.user import User, UserRole
 from modules.backend.app.schemas.realtime_counters import (
@@ -45,7 +48,7 @@ from modules.backend.app.services.dynamodb_counter_service import DynamoDBCounte
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 # ---------------------------------------------------------------------------
 # Dependency — provides a shared DynamoDBCounterService instance
@@ -54,9 +57,12 @@ router = APIRouter()
 _counter_service: Optional[DynamoDBCounterService] = None
 
 
-def get_counter_service() -> DynamoDBCounterService:
+async def get_counter_service() -> DynamoDBCounterService:
     """
     Dependency that returns a singleton DynamoDBCounterService.
+
+    ``async`` so that FastAPI calls it on the event loop rather than in a
+    worker thread; the service is built once per process, on first use.
 
     This can be overridden in tests via app.dependency_overrides.
     """
@@ -72,9 +78,10 @@ def _require_counter_write(current_user: User) -> None:
     This is a **role** check, not a per-experiment one, and the docstring
     used to claim otherwise ("the same one that gates editing the experiment
     these numbers describe"). It asks ``experiment: update``
-    (``backend/app/core/permissions.py``): ADMIN, DEVELOPER and superusers
-    pass; ANALYST and VIEWER, who may read every experiment but change none,
-    do not.
+    (``backend/app/core/permissions.py``): ADMIN, DEVELOPER, superusers and
+    anyone whose custom role or direct grant gives ``experiment (update)``
+    pass; anyone else, who may read every experiment but change none, does
+    not.
 
     A role check is the right one here. A deployment is single tenant
     (founder, 2026-09-21), so a DEVELOPER may edit any experiment this
@@ -148,6 +155,7 @@ def _require_body_matches_path(*, path_experiment_id: str, body_experiment_id: s
         200: {"description": "Experiment counters returned"},
         404: {"description": "No counter data found for this experiment"},
     },
+    dependencies=[Depends(deps.require_experiment_read)],
 )
 def get_experiment_counters(
     experiment_id: str,
@@ -195,7 +203,8 @@ def increment_counter(
     specific experiment variant.
 
     Uses DynamoDB's ADD update expression — safe under concurrent writes.
-    Requires ``experiment: update`` (ADMIN or DEVELOPER).
+    Requires ``experiment: update``: ADMIN, DEVELOPER, a superuser, or anyone
+    whose custom role or direct grant gives ``experiment (update)``.
     """
     _require_counter_write(current_user)
     _require_body_matches_path(
@@ -254,7 +263,8 @@ def bulk_increment(
     Accepts up to 100 increment requests, each naming its own experiment.
     Partial failures are collected and reported in the response — the
     operation does not abort on first error.
-    Requires ``experiment: update`` (ADMIN or DEVELOPER).
+    Requires ``experiment: update``: ADMIN, DEVELOPER, a superuser, or anyone
+    whose custom role or direct grant gives ``experiment (update)``.
 
     **This route has no ``{experiment_id}``**, and used to. Fixing the single
     write routes to honour their path (#95) put this one in an impossible

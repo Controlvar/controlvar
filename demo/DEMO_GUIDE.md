@@ -4,6 +4,9 @@
 
 This guide walks you through a 20-minute live demo of the Controlvar experimentation platform. The demo environment comes pre-loaded with 100K+ historical events, and a live simulator adds new events in the background while you present.
 
+To follow the demo apps on your own instead, one step at a time with what you will see at each
+step, use [Guided examples](https://docs.controlvar.com/guides/guided-examples/).
+
 ---
 
 ## Setup
@@ -52,8 +55,8 @@ React SDK and the public tracking API — the same path a customer's app would u
 and runs a traffic simulator against it so the dashboards fill up while you talk.
 
 **What to show:**
-- Open http://localhost:3200 — point at the **Controlvar panel** (bottom-right): the visitor id, the variant this visitor
-  got for each experiment, and the two feature flags.
+- Open http://localhost:3200 — point at the **Controlvar panel** (bottom-right): the visitor id, each experiment's variant
+  once a page has assigned it (here the hero test's; the others fill in as you click through), and the two feature flags.
   - "This is a real storefront calling our API with an API key. Every visitor is bucketed server-side, sticky, in one call."
 - Click **Shop the collection** (or **Watch & shop** if you got the video hero) → the panel logs `hero_cta_click`
   - "That click just became a conversion for the hero experiment. Nothing else to wire up."
@@ -76,7 +79,7 @@ Run pieces by hand: `python backend/scripts/seed_shoplab.py` (seeds experiments,
 
 ---
 
-### Scene 0b — StreamPulse: feature flags on mobile (5 min)
+### Scene 0b — StreamPulse: device targeting (web SDK) (5 min)
 
 StreamPulse (`demo/streampulse`, http://localhost:3300) is a simulated music app: a phone frame with seven screens and a
 device picker. Every flag and experiment is evaluated for the chosen device through the React SDK, with the device's
@@ -91,7 +94,7 @@ of devices through the same API, and a scripted "rollout story" walks the platfo
 - Pick **Internal tester** → the Player tab shows the redesigned player (`streampulse_player_v2: on (targeting_rule)`,
   employee rule) while normal devices are in the 5% canary.
 - Profile tab: `streampulse_wrapped` and `streampulse_profile_badges` are in a **mutual exclusion group** — the panel shows
-  one assigned and the other "excluded: mutual exclusion". A few devices show "in global holdout" for every experiment.
+  one assigned and the other "excluded: mutual exclusion". A few devices show "in global holdout" for every experiment whose screen you open.
 - Kill switch: in the dashboard (http://localhost:3100/feature-flags) disable **streampulse_recs_v2**, then reload StreamPulse
   or press **Refresh now** in its panel: the Home tab falls back to the classic feed.
 - The rollout story (drawer in the app, driven by `python demo/streampulse/simulator/rollout_story.py --auto`):
@@ -104,7 +107,9 @@ of devices through the same API, and a scripted "rollout story" walks the platfo
 **Key talking points:**
 - Server-side targeting with 20+ operators, including semantic versions
 - Rollout schedules and safety monitoring work together: expand automatically, retreat automatically
-- Kill switches take effect without a release, which is the whole point on mobile
+- Kill switches take effect without a release, which is the whole point in a native app
+- Native apps: kill switches and percentage rollouts work; attribute rules do not on iOS, Android and Flutter until
+  [#438](https://github.com/Controlvar/controlvar/issues/438). React Native sends the attributes.
 
 Run pieces by hand: `python backend/scripts/seed_streampulse.py`, `cd demo/streampulse && npm run dev`,
 `python demo/streampulse/simulator/traffic.py --rate 3`, `python demo/streampulse/simulator/rollout_story.py --auto`.
@@ -219,8 +224,10 @@ See `demo/streampulse/README.md`.
   - "Analyst and Viewer can see experiments and flags but can't create or change them."
   - Every role, Viewer included, can still create API keys for itself, and an API key can send
     assignments and events through the tracking API.
-- Four built-in roles are enforced today. Custom roles and resource-level grants exist in the data model but are
-  not yet enforced by the permission checks, so do not demo them (tracked in the launch plan, P5).
+- Custom roles and direct grants add permissions to a built-in role. To show one, grant the viewer `audit_log` read
+  ([RBAC API reference](../docs/api/rbac.md#let-a-viewer-read-the-audit-log)) and sign in as viewer@demo.com: the
+  Audit Log shows other users' entries too. Revoke it afterwards with
+  `DELETE /api/v1/rbac/users/{user_id}/grant/audit_log`.
 
 **API / Integrations:**
 - Open http://localhost:8000/api/v1/docs (Swagger UI)
@@ -232,8 +239,8 @@ See `demo/streampulse/README.md`.
 **Key talking points:**
 - An audit log of changes to flags, experiments, users and roles, and with the
   `compliance` module HMAC-SHA256 signed compliance events and report exports
-- RBAC with four built-in roles (custom roles: roadmap)
-- Full REST API + SDKs: Python and JavaScript on PyPI and npm, Go with `go get`, Java and React built from `sdk/`
+- RBAC with four built-in roles, plus custom roles and time-limited grants
+- Full REST API + SDKs: JavaScript, React, React Native and Python on npm and PyPI, Java on Maven Central, .NET on NuGet, Go with `go get`
 - Deployable to your own AWS account with the AWS CDK
 
 ---
@@ -247,7 +254,7 @@ See `demo/streampulse/README.md`.
 > The platform is not certified and we do not claim it. What it gives you are controls that support your own program: an audit log of changes to flags, experiments, API keys, users and roles, made by people or by the platform itself, in the core profile, where no API edits or deletes an entry, and with the `compliance` module HMAC-SHA256 signed audit events with exportable report packs. Your auditor decides what they satisfy.
 
 **"What about our tech stack?"**
-> The Python and JavaScript/TypeScript SDKs are on PyPI and npm, and the Go SDK installs with `go get`. The Java SDK (with Spring Boot auto-configuration) and the React SDK (with hooks and SSR support) build from the repository's `sdk/` directory. The REST API means you can integrate from anything.
+> The Python, JavaScript/TypeScript, React and React Native SDKs are on PyPI and npm, the Java SDK (with Spring Boot auto-configuration) is on Maven Central, the .NET SDK is on NuGet, and the Go SDK installs with `go get`. The REST API means you can integrate from anything.
 
 **"How do we deploy? What's the infrastructure cost?"**
 > Into your own AWS account with the AWS CDK — ECS Fargate, Aurora PostgreSQL, ElastiCache Redis — following docs/self-hosting/cdk.md, then dispatching the Deploy workflow for staging or prod. You own all the infrastructure. It is not one command, and the stacks create resources that AWS bills for (Aurora, NAT gateways, a load balancer); cdk.md says what a teardown leaves behind.
@@ -265,7 +272,7 @@ See `demo/streampulse/README.md`.
 | Page | URL |
 |------|-----|
 | ShopLab storefront | http://localhost:3200 |
-| StreamPulse mobile demo | http://localhost:3300 |
+| StreamPulse device-targeting demo | http://localhost:3300 |
 | Home | http://localhost:3100 |
 | Feature Flags | http://localhost:3100/feature-flags |
 | Experiments | http://localhost:3100/experiments |
@@ -288,8 +295,7 @@ Algorithm MAB** from the Experiments list.
 
 This stops the processes `setup-local.sh` started, stops the Docker services with
 `docker compose down` (or `docker-compose down` where only that is installed; the database
-volume is kept), and removes `demo/.logs`, `demo/.pids`
-and the demo API key file.
+volume is kept), and removes `demo/.logs` and `demo/.pids`.
 
 ---
 

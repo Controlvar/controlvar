@@ -157,16 +157,22 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
             "Set optimization_type to one of thompson_sampling, ucb1 or epsilon_greedy when you create the experiment"
         ),
     ),
-    "Full profile: store split URL experiments and preview the URL a user id hashes to. The edge router does not split traffic yet.": (
+    "Full profile: give each variant its own URL. Your server or edge, or on AWS an optional CloudFront router, asks Controlvar where to send each visitor, and conversions count for the variant they saw.": (
         lede("present in the full profile"),
-        lede("The edge router does not split traffic in this release"),
+        lede("A split URL experiment gives each variant its own page"),
+        lede("your server or edge asks Controlvar which variant the visitor is in"),
+        lede("On AWS, an optional CloudFront router can do the asking for your site"),
         lede(
-            "What works today is storing a split URL experiment and its configuration, and the preview endpoint"
+            "conversions tracked with their id and the experiment count for the variant they saw"
         ),
-        lede("it hashes the user_id you pass with the experiment's id"),
         says(
-            "Returns the URL variant the preview's own hash gives a user_id, without redirecting"
+            "A conversion counts for a variant only when it is tracked with the same visitor id"
         ),
+    ),
+    "Give each group of users the same split as the whole experiment, set through the API (beta)": (
+        lede("Balance the split within groups (beta)"),
+        lede("gives each group of users the same split as the whole experiment"),
+        says("PUT /api/v1/experiments/{id}"),
     ),
     "Keep users out of conflicting experiments, and a share of new users out of every experiment": (
         lede("prevent users from being enrolled in multiple conflicting experiments"),
@@ -216,13 +222,30 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         lede("Steps 3 to 5 need a provider key"),
     ),
     # SDKs
-    "Client libraries for web, mobile and server. The JavaScript SDK is on npm and the Python SDK is on PyPI.": (
+    "Client libraries for web, mobile and server. The JavaScript, React, React Native, Python, Java and .NET SDKs and the OpenFeature providers are on npm, PyPI, Maven Central or NuGet.": (
         lede("for Node >= 18 and browsers", "docs/sdk/javascript.md"),
         lede("iOS 14+", "docs/sdk/ios.md"),
         lede("Android applications", "docs/sdk/android.md"),
         lede("for Go services", "docs/sdk/go.md"),
         says("The @controlvar/js-sdk package is on npm", "docs/sdk/javascript.md"),
+        says("The @controlvar/react-sdk package is on npm", "docs/sdk/react.md"),
+        says(
+            "The @controlvar/react-native-sdk package is on npm",
+            "docs/sdk/react-native.md",
+        ),
         says("The controlvar package is on PyPI", "docs/sdk/python.md"),
+        says(
+            "com.controlvar:controlvar-sdk and the Spring Boot starter are on Maven Central",
+            "docs/sdk/java.md",
+        ),
+        says("The Controlvar.SDK package is on NuGet", "docs/sdk/dotnet.md"),
+        says(
+            "The @controlvar/openfeature-provider package is on npm",
+            "docs/sdk/openfeature.md",
+        ),
+        says(
+            "The controlvar-openfeature package is on PyPI", "docs/sdk/openfeature.md"
+        ),
     ),
     "Browser and Node.js": (lede("for Node >= 18 and browsers"),),
     "A synchronous Python client with no dependencies": (
@@ -259,13 +282,18 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
     "useFlag and useExperiment hooks, Provider, AsyncStorage offline support.": (
         lede("a context provider, three hooks"),
         lede("AsyncStorage-backed offline fallback"),
-        says("### useFlag(flagKey): FlagState"),
+        says("### useFlag(flagKey, attributes?): FlagState"),
         says("### useExperiment(experimentKey): ExperimentState"),
     ),
-    "Describes the API's tools for AI assistants.": (
+    "Connect Claude Code, Claude Desktop or Cursor to your instance: read flags and experiment results.": (
         lede(
-            "describes five tools in the vocabulary of the Model Context Protocol (MCP)"
+            "lets an AI assistant such as Claude Code, Claude Desktop or Cursor read your instance"
         ),
+        lede("list and read feature flags"),
+        lede("list experiments and read their results"),
+        says("### Claude Code"),
+        says("### Claude Desktop"),
+        says("### Cursor"),
     ),
     "OpenFeature (a CNCF project) providers": (
         lede("OpenFeature Provider"),
@@ -287,9 +315,9 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         lede("for PHP 8.1+ applications. It depends only on ext-curl and ext-json"),
         says("Composer for installation"),
     ),
-    "Targets netstandard2.1 and net6.0; System.Text.Json and HttpClient, no other dependencies.": (
+    "Targets net8.0 and netstandard2.1; System.Text.Json and HttpClient, no other dependencies.": (
         lede(
-            "It targets netstandard2.1 and net6.0, uses System.Text.Json and HttpClient, and has no other dependencies"
+            "It targets net8.0 and netstandard2.1, uses System.Text.Json and HttpClient, and has no other dependencies"
         ),
     ),
     "For Elixir and Phoenix: OTP's :httpc and Jason, with a GenServer-backed ETS cache.": (
@@ -402,16 +430,15 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         lede("No API edits or deletes an entry"),
         lede("It records the changes people make through the API"),
     ),
-    "Admin, Developer, Analyst and Viewer decide what a user can do; custom roles (full profile) are stored but not applied yet": (
+    "Admin, Developer, Analyst and Viewer decide what a user can do; in the full profile, custom roles and direct grants add to them": (
         lede(
             "Custom roles is one of the optional modules -- present in the full profile"
         ),
+        says("One of four roles every user has (admin, developer, analyst, viewer)"),
         says(
-            "One of four built-in system roles assigned to every user (admin, developer, analyst, viewer)"
+            "A user may do what their built-in role allows, plus what their custom roles and unexpired direct grants hold"
         ),
-        says("Only the base role decides what a user can do"),
-        says("Custom roles and direct grants are stored"),
-        says("no permission check reads them"),
+        says("Roles and grants only add"),
     ),
     "Create, expire and delete keys; the sdk:ruleset scope for local evaluation": (
         lede("an API key lasts until you delete it or it reaches its own expires_at"),

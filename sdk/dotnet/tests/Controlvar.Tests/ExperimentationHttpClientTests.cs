@@ -304,6 +304,101 @@ public class ExperimentationHttpClientTests
     }
 
     // -----------------------------------------------------------------------
+    // Error messages name the path without its query string (#1551, #1719)
+    // -----------------------------------------------------------------------
+
+    // EvaluateFlagAsync's request for user-1 with the attributes {"plan": Canary}: the query holds
+    // the user's id and attributes, and no exception message may contain any of it.
+    private const string Canary = "c4nary.attr";
+    private const string EvaluatePath = "/api/v1/feature-flags/evaluate/f";
+
+    private static Dictionary<string, string> EvaluateQuery() => new()
+    {
+        ["user_id"] = "user-1",
+        ["context"] = "{\"plan\":\"" + Canary + "\"}"
+    };
+
+    private static void AssertNoQuery(Exception ex)
+    {
+        foreach (var part in new[] { "?", "user_id=", "context=", Canary })
+            Assert.DoesNotContain(part, ex.Message);
+    }
+
+    [Fact]
+    public async Task GetAsync_NetworkErrorMessage_NamesThePathWithoutItsQuery()
+    {
+        var httpClient = new HttpClient(new ThrowingHandler(new HttpRequestException("Connection refused (test-api:80)")));
+        var client = new ExperimentationHttpClient(new SdkConfig("http://test-api", "key"), httpClient);
+
+        var ex = await Assert.ThrowsAsync<NetworkException>(
+            () => client.GetAsync<FlagEvaluationResult>(EvaluatePath, EvaluateQuery()));
+
+        Assert.Equal("Network error calling GET /api/v1/feature-flags/evaluate/f: Connection refused (test-api:80)", ex.Message);
+        AssertNoQuery(ex);
+    }
+
+    [Fact]
+    public async Task GetAsync_TimeoutMessage_NamesThePathWithoutItsQuery()
+    {
+        var httpClient = new HttpClient(new ThrowingHandler(new TaskCanceledException("timed out")));
+        var client = new ExperimentationHttpClient(new SdkConfig("http://test-api", "key"), httpClient);
+
+        var ex = await Assert.ThrowsAsync<NetworkException>(
+            () => client.GetAsync<FlagEvaluationResult>(EvaluatePath, EvaluateQuery()));
+
+        Assert.Equal("Request timed out calling GET /api/v1/feature-flags/evaluate/f: timed out", ex.Message);
+        AssertNoQuery(ex);
+    }
+
+    [Fact]
+    public async Task GetAsync_AuthErrorMessage_HoldsNoQuery()
+    {
+        var (client, _) = BuildClient(HttpStatusCode.Unauthorized, "{\"detail\": \"Unauthorized\"}");
+
+        var ex = await Assert.ThrowsAsync<AuthException>(
+            () => client.GetAsync<FlagEvaluationResult>(EvaluatePath, EvaluateQuery()));
+
+        Assert.Equal("Authentication failed (HTTP 401). Check your API key.", ex.Message);
+        AssertNoQuery(ex);
+    }
+
+    [Fact]
+    public async Task GetAsync_HttpErrorMessage_HoldsNoQuery()
+    {
+        var (client, _) = BuildClient(HttpStatusCode.InternalServerError, "{\"detail\": \"Internal error\"}");
+
+        var ex = await Assert.ThrowsAsync<ApiException>(
+            () => client.GetAsync<FlagEvaluationResult>(EvaluatePath, EvaluateQuery()));
+
+        Assert.StartsWith("API request failed with status 500", ex.Message);
+        AssertNoQuery(ex);
+    }
+
+    [Fact]
+    public async Task GetAsync_NullBodyMessage_HoldsNoQuery()
+    {
+        var (client, _) = BuildClient(HttpStatusCode.OK, "null");
+
+        var ex = await Assert.ThrowsAsync<ApiException>(
+            () => client.GetAsync<FlagEvaluationResult>(EvaluatePath, EvaluateQuery()));
+
+        Assert.Equal("API returned a null response body.", ex.Message);
+        AssertNoQuery(ex);
+    }
+
+    [Fact]
+    public async Task GetAsync_MalformedBodyMessage_HoldsNoQuery()
+    {
+        var (client, _) = BuildClient(HttpStatusCode.OK, "not json");
+
+        var ex = await Assert.ThrowsAsync<ApiException>(
+            () => client.GetAsync<FlagEvaluationResult>(EvaluatePath, EvaluateQuery()));
+
+        Assert.StartsWith("Failed to deserialise API response: ", ex.Message);
+        AssertNoQuery(ex);
+    }
+
+    // -----------------------------------------------------------------------
     // Injected HttpClient is not mutated
     // -----------------------------------------------------------------------
 

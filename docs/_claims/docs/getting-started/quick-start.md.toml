@@ -124,6 +124,45 @@ text = "The second prints 401, because the API requires a login."
 by = ["docex:docs/getting-started/quick-start.md#\"healthy\""]
 
 [[unit]]
+text = "Some features stay off until they have a key: WAREHOUSE_CREDENTIALS_KEYS turns on warehouse analysis (the full profile), and OPENAI_API_KEY and GEMINI_API_KEY turn on the OpenAI and Gemini variants in LLM experiments."
+by = [
+    "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_api_is_passed_each_feature_key_empty_by_default",
+    "test:modules/backend/tests/unit/core/test_credential_crypto.py::TestTheSetting::test_an_empty_value_from_the_environment_reads_as_not_set",
+    "test:backend/tests/unit/services/test_llm_provider_wiring.py::test_openai_variants_use_the_key_and_gateway_the_openai_sdk_reads",
+    "test:backend/tests/integration/api/test_llm_experiments_api.py::TestGeminiComplete::test_success_returns_the_completion",
+]
+
+[[unit]]
+text = "ANTHROPIC_API_KEY turns on Anthropic variants in LLM experiments and also Claude calls in POST /api/v1/ai/design and POST /api/v1/ai/interpret/{experiment_id} (limited to 10 requests a minute); without it those two routes answer from built-in templates."
+by = [
+    "test:backend/tests/unit/services/test_llm_provider_wiring.py::test_anthropic_variants_go_to_the_gateway_anthropic_base_url_names",
+    "test:backend/tests/unit/services/test_ai_design_service.py",
+    "test:backend/tests/unit/middleware/test_ai_rate_limits.py::test_design_has_its_own_limit_of_ten_a_minute",
+    "test:backend/tests/unit/middleware/test_ai_rate_limits.py::test_interpretations_share_ten_a_minute_whatever_the_id",
+]
+
+[[unit]]
+text = "A key set to an empty value is the same as a key that is not set, and both compose files pass these keys empty by default."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestFeatureKeys::test_the_api_is_passed_the_key_empty_by_default",
+    "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_api_is_passed_each_feature_key_empty_by_default",
+    "test:backend/tests/unit/infrastructure/test_compose_feature_keys.py::test_an_empty_warehouse_key_list_is_not_an_error",
+    "test:modules/backend/tests/unit/core/test_credential_crypto.py::TestTheSetting::test_an_empty_value_from_the_environment_reads_as_not_set",
+    "test:backend/tests/unit/infrastructure/test_compose_feature_keys.py::test_the_anthropic_sdk_reads_an_empty_key_as_none",
+    "test:backend/tests/unit/infrastructure/test_compose_feature_keys.py::test_the_openai_sdk_refuses_an_empty_key_as_it_refuses_none",
+    "test:backend/tests/unit/infrastructure/test_compose_feature_keys.py::test_the_gemini_provider_refuses_an_empty_key_before_sending",
+    "test:backend/tests/unit/infrastructure/test_compose_feature_keys.py::test_ai_design_uses_its_templates_with_an_empty_key",
+]
+
+[[unit]]
+text = "Put each key in the .env file next to the compose file: a key exported in another terminal does not reach the container, and one exported in the terminal that runs docker compose up does."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "If your shell exports ANTHROPIC_API_KEY, docker compose up passes it to the API."
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_api_is_passed_each_feature_key_empty_by_default"]
+
+[[unit]]
 text = "Step 2: Log in"
 by = ["exempt:label"]
 
@@ -209,10 +248,11 @@ text = "Step 5: Assign users and track events"
 by = ["exempt:label"]
 
 [[unit]]
-text = "The response carries variant_name, variant_id, is_control, configuration, and assigned with a reason (assigned, holdout, mutual_exclusion or targeting)."
+text = "The response carries variant_name, variant_id, is_control, configuration, and assigned with a reason (assigned, holdout, mutual_exclusion or targeting, or the status of an experiment that is not ACTIVE)."
 by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
     "docex:docs/getting-started/quick-start.md#\"assigned\": true",
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_each_status_answers_an_enrolled_and_a_new_user",
 ]
 
 [[unit]]
@@ -273,7 +313,7 @@ by = [
 ]
 
 [[unit]]
-text = "Evaluation returns {key, enabled, config, reason}."
+text = "Evaluation returns {key, enabled, value, value_type, config, reason}."
 by = ["test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_no_context_keeps_existing_behaviour"]
 
 [[unit]]
@@ -346,6 +386,13 @@ by = [
 [[unit]]
 text = "The demo guide walks through what to look at, and how to run the apps outside Docker."
 by = ["exempt:navigation"]
+
+[[unit]]
+text = "Guided examples takes you through the apps one step at a time, with what you will see at each step, on the stack ./demo/setup-local.sh starts."
+by = [
+    "journey:guided-examples#stop-simulator",
+    "journey:guided-examples#apply-below",
+]
 
 [[unit]]
 text = "Troubleshooting"

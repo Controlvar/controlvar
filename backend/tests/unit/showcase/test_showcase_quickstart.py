@@ -843,21 +843,29 @@ def test_an_override_list_that_is_not_justified_is_refused(entries, why):
 
 
 def test_a_stated_override_names_words_on_screen():
+    """A statement is words a scene draws, as the departure its setting is
+    (S7 of plan v2.2: video 4's one-minute safety check, a shortened
+    interval). A statement for a setting outside ``overrides.STATED`` is
+    refused: nothing would read back that it reached the API (C6)."""
+    v4 = board("04-streampulse-rollout")
+    listed = override_lists.load()
+    made = override_lists.override_list(v4, PORTS, listed)
+    assert [m.key for m in made] == ["CORS_ORIGINS", "SAFETY_CHECK_INTERVAL_MINUTES"]
     probe = board("90-app-probe")
     said = probe.scenes[0].departures[0].says
-    made = override_lists.override_list(
-        probe,
-        PORTS,
-        {
-            "90-app-probe": {
-                "CORS_ORIGINS": {
-                    "value": "{dashboard},{shoplab},{streampulse}",
-                    "statement": said,
+    with pytest.raises(guard.Refused, match="cannot read back"):
+        override_lists.override_list(
+            probe,
+            PORTS,
+            {
+                "90-app-probe": {
+                    "CORS_ORIGINS": {
+                        "value": "{dashboard},{shoplab},{streampulse}",
+                        "statement": said,
+                    }
                 }
-            }
-        },
-    )
-    assert [m.key for m in made] == ["CORS_ORIGINS"]
+            },
+        )
 
 
 @pytest.mark.regression
