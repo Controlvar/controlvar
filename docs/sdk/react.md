@@ -194,7 +194,8 @@ track('page_view', { page: '/products' });   // no key: fanned out, see below
 ```
 
 `TrackEventOptions`: `experimentKey?`, `featureFlagKey?`, `value?` (numeric value, e.g. revenue),
-`eventType?` (defaults to `eventName`), `timestamp?` (`Date`, sent as ISO-8601).
+`eventType?` (defaults to `eventName`), `timestamp?` (`Date`, sent as ISO-8601), `eventId?` (sent
+as `event_id`, see [Event ids](#event-ids)).
 
 **Fan-out rule.** With `experimentKey` and/or `featureFlagKey` the SDK sends one
 `POST /api/v1/tracking/track`. Without a key it sends one `POST /api/v1/tracking/batch` containing
@@ -215,6 +216,28 @@ experiment the user is in.
 
 Conversions are matched to metrics by **event name**: an experiment metric whose `event_name` is
 `purchase` counts every `purchase` event, whatever `event_type` was sent.
+
+### Event ids
+
+Every event this SDK sends carries an `event_id`. The server stores an event sent again with the
+same `event_id`, user, experiment, flag and event name only once (see
+[How events count](../guides/how-events-count.md#sending-an-event-again)). Use this from the next
+published version of this package, not from the version on npm now. It also needs a Controlvar
+server that includes the `event_id` change ([#1640](https://github.com/Controlvar/controlvar/pull/1640)),
+which the platform release after 0.39.0 is to carry; an older server ignores the field and stores
+an event sent again a second time.
+
+- Without an `eventId`, each call of the function `useTrackEvent` returns makes a new id, a
+  lowercase UUID v4, so two calls are two events. For an event your code may send again (a
+  retried checkout, a handler that runs twice), make the id once, when the event happens, and
+  pass the same `eventId` each time.
+- `eventId: undefined`, `null` and `''` mean none, so the SDK makes one. The SDK does not check
+  the id: the server refuses (`422`) one of more than 255 characters or one holding NUL, and in a
+  batch one such event refuses the whole request.
+- An event fanned out to several experiments and flags carries the same `event_id` in every entry,
+  so it counts once in each of them.
+- The SDK does not send a request again. A request that fails on the network or times out may
+  have been stored; send the event again with the same `eventId` and it is stored once.
 
 ### `useExperimentation(): { client, user }`
 
@@ -604,7 +627,7 @@ Every request carries `X-API-Key` and `Content-Type: application/json`.
 |---|---|---|---|
 | `useFeatureFlag`, `useVariant`, `useMultipleFlags`, `ServerClient.evaluateFeatureFlag`/`getAll`/`bootstrap` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=<url-encoded JSON>` | `context` = `user.attributes` (omitted when empty) | `{key, enabled, config, reason}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
 | `useExperiment`, `ServerClient.assignExperiment`/`bootstrap` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
-| `useTrackEvent` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
+| `useTrackEvent` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?, event_id}` | ignored |
 | `useTrackEvent` without keys | `POST /api/v1/tracking/batch` | `{events: [ ...track bodies ]}` (max 100 per request) | ignored |
 
 These SDK paths share a per-IP rate-limit ceiling of `SDK_RATE_LIMIT_PER_MINUTE` requests
@@ -654,6 +677,7 @@ interface TrackEventOptions {
   value?: number;
   eventType?: string;
   timestamp?: Date;
+  eventId?: string | null;
 }
 
 interface Exposure {          // what onExposure receives; also exported from '@controlvar/react-sdk/ssr'

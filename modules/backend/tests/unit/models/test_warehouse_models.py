@@ -13,16 +13,23 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from cryptography.fernet import Fernet, InvalidToken
-from sqlalchemy import text
+from sqlalchemy import CheckConstraint, text
 from sqlalchemy.exc import IntegrityError
 
+from modules.backend.app import settings as modules_settings
 from modules.backend.app.core.credential_crypto import (
     CredentialKeysUnavailable,
     CredentialUndecryptable,
 )
 from modules.backend.app.models.warehouse_analysis_run import WarehouseAnalysisRun
-from modules.backend.app.models.warehouse_connection import WarehouseConnection
+from modules.backend.app.models.warehouse_connection import (
+    BYTE_CAPPED_TYPES,
+    ROLE_TYPES,
+    WAREHOUSE_TYPES,
+    WarehouseConnection,
+)
 from modules.backend.app.models.warehouse_source import WarehouseSource
+from modules.backend.app.services import warehouse_clients as clients
 
 #: A stand-in for a private key: must never appear in a stored column.
 SENTINEL = b"w2a-model-sentinel-5d1e: stands in for a private key"
@@ -184,12 +191,118 @@ def test_repr_carries_no_parameters_or_credentials():
 
 
 # ---------------------------------------------------------------------------
+# Role-based types (ROLE_TYPES, #826): what "athena" stood for, unchanged
+# ---------------------------------------------------------------------------
+SECRET_TYPES = tuple(t for t in WAREHOUSE_TYPES if t not in ROLE_TYPES)
+
+
+def _role_connection(warehouse_type: str) -> WarehouseConnection:
+    return _connection(
+        warehouse_type=warehouse_type,
+        parameters={"region": "eu-west-1", "role_arn": "arn:aws:iam::1:role/r"},
+        external_id=f"exp-{uuid.uuid4().hex}",
+        max_bytes_per_query=(
+            10_000_000 if warehouse_type in BYTE_CAPPED_TYPES else None
+        ),
+    )
+
+
+def test_the_role_types_are_athena_and_redshift_and_are_known_types():
+    assert ROLE_TYPES == ("athena", "redshift")
+    assert set(ROLE_TYPES) < set(WAREHOUSE_TYPES)
+    assert SECRET_TYPES == ("bigquery", "snowflake")
+    assert "redshift" not in BYTE_CAPPED_TYPES
+
+
+@pytest.mark.parametrize("warehouse_type", ROLE_TYPES)
+def test_a_role_type_stores_no_credential(warehouse_type):
+    conn = _role_connection(warehouse_type)
+    with pytest.raises(ValueError):
+        conn.set_credentials(SENTINEL, keys=Fernet.generate_key().decode())
+    with pytest.raises(ValueError):
+        conn.set_credentials(
+            SENTINEL, pending=True, keys=Fernet.generate_key().decode()
+        )
+    assert conn.credentials_ciphertext is None
+    assert conn.pending_credentials_ciphertext is None
+
+
+@pytest.mark.parametrize("warehouse_type", SECRET_TYPES)
+def test_a_secret_type_stores_its_credential(warehouse_type):
+    key = Fernet.generate_key().decode()
+    conn = _connection(warehouse_type=warehouse_type)
+    conn.set_credentials(SENTINEL, keys=key)
+    assert conn.get_credentials(keys=key) == SENTINEL
+
+
+@pytest.mark.parametrize("warehouse_type", ROLE_TYPES)
+def test_a_role_connection_is_ok_and_its_spec_carries_its_external_id(
+    warehouse_type, monkeypatch
+):
+    # No keys configured: a role connection needs none.
+    monkeypatch.setattr(
+        modules_settings.load_modules_settings(), "WAREHOUSE_CREDENTIALS_KEYS", None
+    )
+    conn = _role_connection(warehouse_type)
+    assert clients.credentials_status(conn) == "ok"
+    spec = clients.spec_for(conn)
+    assert spec.external_id == conn.external_id
+    assert spec.credential is None
+    assert repr(spec) == f"ConnectionSpec(warehouse_type={warehouse_type!r})"
+
+
+@pytest.mark.parametrize("warehouse_type", SECRET_TYPES)
+def test_a_secret_connections_spec_has_no_external_id(warehouse_type, monkeypatch):
+    key = Fernet.generate_key().decode()
+    monkeypatch.setattr(
+        modules_settings.load_modules_settings(), "WAREHOUSE_CREDENTIALS_KEYS", key
+    )
+    conn = _connection(warehouse_type=warehouse_type)
+    conn.set_credentials(SENTINEL)
+    spec = clients.spec_for(conn)
+    assert spec.external_id is None
+    assert spec.credential == SENTINEL
+    assert clients.credentials_status(conn) == "ok"
+    assert "sentinel" not in repr(spec)
+
+
+def test_the_role_constraints_are_built_from_the_role_types():
+    """The type list and the two role constraints name every role type, in
+    exactly the text ``modules_0005_redshift`` writes, so a migrated database
+    and a bootstrapped one agree (``test_modules_0005_transitions.py``
+    compares the two catalogues)."""
+    sql = {
+        c.name: str(c.sqltext)
+        for c in WarehouseConnection.__table__.constraints
+        if isinstance(c, CheckConstraint)
+    }
+    assert sql["ck_warehouse_connections_type"] == (
+        "warehouse_type IN ('bigquery', 'snowflake', 'athena', 'redshift')"
+    )
+    assert sql["ck_warehouse_connections_external_id"] == (
+        "(warehouse_type IN ('athena', 'redshift')) = (external_id IS NOT NULL)"
+    )
+    assert sql["ck_warehouse_connections_athena_no_secret"] == (
+        "warehouse_type NOT IN ('athena', 'redshift') OR (credentials_ciphertext "
+        "IS NULL AND pending_credentials_ciphertext IS NULL)"
+    )
+    assert sql["ck_warehouse_connections_byte_cap_type"] == (
+        "(warehouse_type IN ('bigquery', 'athena')) = (max_bytes_per_query IS NOT NULL)"
+    )
+
+
+# ---------------------------------------------------------------------------
 # warehouse_connections
 # ---------------------------------------------------------------------------
+#: An Amazon Redshift row's external id: the rows that break a rule below have
+#: one, so each is refused by the rule it names and not by the external-id one.
+_REDSHIFT_ID = {"external_id": "exp-" + "2" * 32}
+
+
 @pytest.mark.parametrize(
     "overrides",
     [
-        pytest.param({"warehouse_type": "redshift"}, id="unknown-type"),
+        pytest.param({"warehouse_type": "postgres"}, id="unknown-type"),
         pytest.param({"query_timeout_seconds": 9}, id="query-limit-below-10"),
         pytest.param({"max_runs_per_day": 0}, id="no-runs-per-day"),
         pytest.param({"max_bytes_per_query": 10_000_000}, id="snowflake-byte-cap"),
@@ -212,6 +325,31 @@ def test_repr_carries_no_parameters_or_credentials():
             },
             id="athena-with-a-secret",
         ),
+        pytest.param({"warehouse_type": "redshift"}, id="redshift-no-external-id"),
+        pytest.param(
+            {
+                "warehouse_type": "redshift",
+                **_REDSHIFT_ID,
+                "credentials_ciphertext": b"gAAAAA-x",
+            },
+            id="redshift-with-a-secret",
+        ),
+        pytest.param(
+            {
+                "warehouse_type": "redshift",
+                **_REDSHIFT_ID,
+                "pending_credentials_ciphertext": b"gAAAAA-x",
+            },
+            id="redshift-with-a-pending-secret",
+        ),
+        pytest.param(
+            {
+                "warehouse_type": "redshift",
+                **_REDSHIFT_ID,
+                "max_bytes_per_query": 10_000_000,
+            },
+            id="redshift-with-a-byte-cap",
+        ),
         pytest.param({"name": None}, id="no-name"),
         pytest.param({"parameters": None}, id="no-parameters"),
         pytest.param({"parameters": ["a"]}, id="parameters-not-an-object"),
@@ -231,8 +369,13 @@ def test_the_connection_table_refuses(db_session, overrides):
             "max_bytes_per_query": 10_000_000,
             "external_id": f"exp-{uuid.uuid4().hex}",
         },
+        {
+            "warehouse_type": "redshift",
+            "parameters": {"region": "eu-west-1", "workgroup_name": "analytics"},
+            "external_id": f"exp-{uuid.uuid4().hex}",
+        },
     ],
-    ids=["snowflake", "bigquery", "athena"],
+    ids=["snowflake", "bigquery", "athena", "redshift"],
 )
 def test_the_connection_table_accepts_each_type(db_session, overrides):
     conn = _connection(**overrides)

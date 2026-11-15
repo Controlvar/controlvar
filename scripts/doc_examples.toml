@@ -12,7 +12,7 @@
 # scripts/doc_examples.py), and each page's residual counts can only fall.
 
 [meta]
-documents = 58
+documents = 60
 exec = 334
 universe = [
     ".github/pull_request_template.md",
@@ -34,6 +34,7 @@ universe = [
     "demo/streampulse/README.md",
     "demo/streampulse/simulator/README.md",
     "deploy/compose/README.md",
+    "deploy/demo/README.md",
     "docs/Enhanced_Rules_Engine_Reference.md",
     "docs/README.md",
     "docs/api/README.md",
@@ -95,6 +96,7 @@ universe = [
     "docs/getting-started/environment-setup.md",
     "docs/getting-started/faq.md",
     "docs/getting-started/limitations.md",
+    "docs/getting-started/live-demo.md",
     "docs/getting-started/modules.md",
     "docs/getting-started/pre-commit-hooks.md",
     "docs/getting-started/python-virtual-env-setup.md",
@@ -177,6 +179,14 @@ universe = [
     "sdk/ruby/README.md",
     "tests/sdk-contract/README.md",
 ]
+
+# The live demo's page: its one block is the quick start's demo command.
+[[document]]
+path = "docs/getting-started/live-demo.md"
+environment = "bare"
+exec = 0
+skip = 1
+expects = 0
 
 [[document]]
 path = "docs/getting-started/quick-start.md"
@@ -432,6 +442,14 @@ exec = 0
 skip = 6
 expects = 0
 
+# The demo box's runbook: every block runs on the box itself.
+[[document]]
+path = "deploy/demo/README.md"
+environment = "bare"
+exec = 0
+skip = 3
+expects = 0
+
 [[document]]
 path = "docs/guides/user-guide.md"
 environment = "bare"
@@ -609,7 +627,7 @@ expects = 33
 path = "docs/self-hosting/migrations.md"
 environment = "stack"
 exec = 7
-skip = 13
+skip = 15
 expects = 6
 
 # The beta AWS installer's page. One block runs: the installer's --help, which

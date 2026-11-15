@@ -20,7 +20,12 @@
  *     are allowed: public/ is copied into every export, and they are capped
  *     and show demo data (#1459 PE 2);
  *   - `out/media` exists, or an `.mp4`, `.webm`, `.vtt` or `.srt` file is
- *     anywhere in the export.
+ *     anywhere in the export;
+ *   - a page of the marketing build only is in the export: /walkthroughs (the
+ *     videos' page) or /books (site design 2026-11-11), as `<page>.html` or
+ *     `<page>/`. Their `getStaticProps` answers notFound outside the
+ *     marketing build (src/utils/marketing-only.ts), so `next build` writes
+ *     neither; one here means that gate stopped working.
  */
 import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
@@ -31,6 +36,8 @@ const MEDIA_FILE = /\.(mp4|webm|vtt|srt)$/i;
 const MEDIA_REFERENCE = /(?<![\w.~%/-])\/media\//;
 // The same for the screenshots in public/screens/ (components/homepage/Screenshot.tsx).
 const SCREENS_REFERENCE = /(?<![\w.~%/-])\/screens\//;
+/** The marketing build's own pages (src/pages/walkthroughs.tsx, src/pages/books.tsx). */
+export const MARKETING_ONLY_PAGES = ['walkthroughs', 'books'];
 
 function* walk(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -52,6 +59,11 @@ export function platformProblems(outDir) {
   if (MEDIA_REFERENCE.test(html)) problems.push('out/index.html references /media/');
   if (SCREENS_REFERENCE.test(html)) problems.push('out/index.html references /screens/: a screenshot rendered in the platform build');
   if (existsSync(join(outDir, 'media'))) problems.push('out/media exists in the platform export');
+  for (const page of MARKETING_ONLY_PAGES) {
+    for (const found of [`${page}.html`, page]) {
+      if (existsSync(join(outDir, found))) problems.push(`out/${found} exists: /${page} is a page of the marketing build only`);
+    }
+  }
   for (const path of walk(outDir)) {
     if (MEDIA_FILE.test(path)) problems.push(`the platform export carries ${relative(outDir, path)}`);
   }
@@ -74,6 +86,8 @@ if (invokedAsScript()) {
     for (const p of problems) console.error(`check-platform-export: FAIL ${p}`);
     process.exitCode = 1;
   } else {
-    console.log(`check-platform-export: ${outDir}: no walkthrough section, no media and no screenshot; the platform homepage is there`);
+    console.log(
+      `check-platform-export: ${outDir}: no walkthrough section, no media, no screenshot and no ${MARKETING_ONLY_PAGES.map((p) => `/${p}`).join(' or ')} page; the platform homepage is there`,
+    );
   }
 }

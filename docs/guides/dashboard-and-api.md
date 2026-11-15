@@ -40,9 +40,9 @@ The table lists each capability and where you do it today:
 | Schedule a paused experiment's resume | API only | [Running experiments](user-guide.md#pausing-and-stopping) |
 | Create or edit a rollout schedule and its stages | Dashboard | [Gradual rollouts](../feature-flags/rollouts.md#in-the-dashboard) |
 | Activate, pause, resume or cancel a rollout schedule, and advance a manual stage | Dashboard | [Gradual rollouts](../feature-flags/rollouts.md#in-the-dashboard) |
-| Set a rollout schedule's own start and end dates, maximum percentage and minimum stage duration | API only | [Gradual rollouts](../feature-flags/rollouts.md#creating-a-rollout-schedule-via-api) |
-| Delete a feature flag | API only | [Deleting a flag](../feature-flags/create.md#deleting-a-flag) |
-| Archive and unarchive a feature flag | API only | [Running experiments](user-guide.md) |
+| Set a rollout schedule's own start and end dates, maximum percentage and minimum stage duration | Dashboard | [Gradual rollouts](../feature-flags/rollouts.md#in-the-dashboard) |
+| Delete a feature flag | Dashboard | [Deleting a flag](../feature-flags/create.md#deleting-a-flag) |
+| Archive and unarchive a feature flag | Dashboard | [Archived flags](user-guide.md#archived-flags) |
 | Create a bandit experiment | API only | [Multi-armed bandits](../api/multi-armed-bandit.md) |
 | Set a bandit's weights by hand | API only | [Multi-armed bandits](../api/multi-armed-bandit.md) |
 | Global holdouts: create and activate; read their results (beta) | Dashboard | [Mutual exclusion groups and global holdout](../api/mutual-exclusion-groups.md) |
@@ -50,9 +50,9 @@ The table lists each capability and where you do it today:
 | Split-URL experiments (full profile) | API only | [Split URL testing](../api/split-url.md) |
 | CUPED-adjusted results (beta) | API only | [CUPED](../api/cuped.md) |
 | The interaction scan and the pair test (beta) | API only | [Interaction detection](../api/interaction-detection.md) |
-| Download results as CSV | API only | [Data export](../api/data-export.md) |
-| The effect size in the metric comparison table | API only | [Running experiments](user-guide.md) |
-| Each variant's confidence interval on the results page | API only | [Running experiments](user-guide.md) |
-| Bayesian priors, loss threshold and credible level | API only | [Bayesian analysis](../api/bayesian.md) |
+| Download results as CSV | Dashboard | [Exporting results](user-guide.md#exporting-results) |
+| The effect size in the metric comparison table | Dashboard | [Running experiments](user-guide.md) |
+| Each variant's confidence interval on the results page | Dashboard | [Running experiments](user-guide.md) |
+| Bayesian priors, loss threshold and credible level | Dashboard | [Bayesian analysis](../api/bayesian.md) |
 | Turn on sequential testing (beta) when creating an experiment | Dashboard | [Sequential testing](../api/sequential-testing.md#turning-it-on) |
 | Turn sequential testing (beta) on or off for an existing draft, and set its alpha | API only | [Sequential testing](../api/sequential-testing.md#turning-it-on) |

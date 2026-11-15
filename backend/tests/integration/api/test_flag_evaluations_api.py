@@ -515,7 +515,7 @@ class TestRecording:
         rule-match rate falls and its unique users stay those the server saw."""
         flag = flags()
         MetricsService.record_flag_evaluation(
-            db_session, flag.id, "user-1", value=True, targeting_rule_id="rule-1"
+            db_session, flag.id, "user-1", targeting_rule_id="rule-1"
         )
         assert _post(client, scoped_key["key"], _entry(flag.key, 9)).status_code == 201
         db_session.expire_all()

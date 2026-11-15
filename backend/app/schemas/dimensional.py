@@ -113,8 +113,15 @@ class DimensionalBreakdownResponse(BaseModel):
     has_heterogeneous_effects: bool = Field(
         ...,
         description=(
-            "True when a chi-squared test detects significant heterogeneity "
-            "in treatment effects across segments."
+            "True when a test that the first treatment's difference from the "
+            "control, in percentage points, is the same in every tested segment "
+            "rejects at 1 minus the confidence level the results were computed "
+            "at. The first treatment is the non-control variant whose name "
+            "sorts first. A segment is tested only when, in both the control "
+            "and that treatment, its users times the pooled conversion rate, "
+            "and times one minus that rate, are each at least 10; with fewer "
+            "than two tested segments it is false. An exploratory signal, not "
+            "a confirmed finding."
         ),
     )
     hte_warning: Optional[str] = Field(

@@ -101,6 +101,9 @@ azure-credentials
 # ...nor the scale harness's preload, which defines a function and holds no
 # data (#1608).
 !tests/scale/preload.sql
+# ...nor the demo box's lockdown, a statement run after the seeds that holds
+# no data.
+!deploy/demo/lockdown.sql
 *.dump
 *.backup
 db-backup/

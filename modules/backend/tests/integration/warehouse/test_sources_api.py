@@ -11,7 +11,11 @@ from sqlalchemy import text
 from modules.backend.app.models.warehouse_analysis_run import WarehouseAnalysisRun
 from modules.backend.app.models.warehouse_source import WarehouseSource
 from modules.backend.app.schemas.responses_warehouse import PreviewOut
-from modules.backend.tests.integration.warehouse.conftest import WA, ts
+from modules.backend.tests.integration.warehouse.conftest import (
+    REDSHIFT_BODY,
+    WA,
+    ts,
+)
 
 pytestmark = [pytest.mark.integration, pytest.mark.modules]
 
@@ -499,3 +503,55 @@ def test_a_source_name_is_unique_per_connection_and_kind(wh):
     )
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "source_name_taken"
+
+
+@pytest.mark.regression
+def test_a_source_on_a_redshift_connection_is_checked_by_redshifts_rules(wh):
+    """#826: a source on a stored Redshift connection found no identifier
+    rules for its type, and POST /sources answered 500.  It answers by
+    Redshift's: schema.table, in the connection's own database."""
+    admin = wh.as_("ADMIN")
+    wh.enabled = frozenset({"redshift"})
+    created = admin.post(f"{WA}/connections", json=REDSHIFT_BODY)
+    assert created.status_code == 201, created.text
+    body = {
+        "kind": "assignment",
+        "connection_id": created.json()["id"],
+        "name": "Exposures",
+        "table": "analytics.Exposures_2026",
+        "columns": {
+            "unit_id": "user_id",
+            "experiment_key": "experiment_key",
+            "variant": "variant",
+            "exposed_at": "exposed_at",
+        },
+    }
+    saved = admin.post(f"{WA}/sources", json=body)
+    assert saved.status_code == 201, saved.text
+    stored = wh.db.query(WarehouseSource).filter_by(id=saved.json()["id"]).one()
+    assert stored.table_reference == {"parts": ["analytics", "Exposures_2026"]}
+
+    before = wh.db.query(WarehouseSource).count()
+    # Each passes the body's pattern and is refused by Redshift's gate.
+    for table in (
+        "dev.analytics.exposures",
+        "1analytics.exposures",
+        "analytics.$exposures",
+    ):
+        refused = admin.post(
+            f"{WA}/sources", json={**body, "name": "Another", "table": table}
+        )
+        assert refused.status_code == 422, (table, refused.text)
+        assert refused.json()["detail"]["code"] == "invalid_identifier"
+        assert refused.json()["detail"]["field"].startswith("table")
+    three = admin.post(
+        f"{WA}/sources",
+        json={**body, "name": "Another", "table": "dev.analytics.exposures"},
+    )
+    assert three.json()["detail"] == {
+        "code": "invalid_identifier",
+        "message": "table must have exactly 2 dot-separated parts: schema.table",
+        "field": "table",
+    }
+    assert wh.db.query(WarehouseSource).count() == before
+    assert wh.queries == [] and wh.specs == []

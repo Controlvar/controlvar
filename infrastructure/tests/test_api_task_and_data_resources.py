@@ -91,8 +91,13 @@ def test_the_api_is_deployed_blue_green_by_codedeploy(synths, env):
 
 @pytest.mark.parametrize("env", ENVIRONMENTS)
 def test_the_api_task_role_holds_exactly_these_permissions(synths, env, core):
+    # The full profile outside demo also holds sts:AssumeRole on the customer
+    # warehouse role path (#826); the demo and the core profile do not.
+    full = CORE_ACTIONS | (MODULE_ACTIONS if MODULES_PRESENT else set())
+    if MODULES_PRESENT and env != "demo":
+        full = full | {"sts:AssumeRole"}
     for synth, expected in (
-        (synths[env], CORE_ACTIONS | (MODULE_ACTIONS if MODULES_PRESENT else set())),
+        (synths[env], full),
         (core, CORE_ACTIONS),
     ):
         statements = _task_role_statements(synth)
@@ -114,6 +119,26 @@ def test_the_api_task_role_holds_exactly_these_permissions(synths, env, core):
         assert json.dumps(managed).endswith(
             ':iam::aws:policy/CloudWatchLogsFullAccess"]]}'
         )
+
+
+@pytest.mark.parametrize("env", ENVIRONMENTS)
+def test_the_task_role_arn_is_an_output_of_the_full_profile_outside_demo(
+    synths, env, core
+):
+    """The ARN a customer's warehouse role must trust (#826)."""
+    for synth, wanted in (
+        (synths[env], MODULES_PRESENT and env != "demo"),
+        (core, False),
+    ):
+        outputs = synth.templates[f"experimentation-fargate-{synth.env}"].get(
+            "Outputs", {}
+        )
+        assert ("TaskRoleArn" in outputs) is wanted, (synth.env, sorted(outputs))
+        if wanted:
+            role_id = _backend_task_definition(synth)["Properties"]["TaskRoleArn"][
+                "Fn::GetAtt"
+            ][0]
+            assert outputs["TaskRoleArn"]["Value"] == {"Fn::GetAtt": [role_id, "Arn"]}
 
 
 @pytest.mark.parametrize("env", ENVIRONMENTS)

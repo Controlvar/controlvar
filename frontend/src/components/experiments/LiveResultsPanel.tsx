@@ -18,6 +18,7 @@ import {
   isFiniteNumber,
 } from '@/components/results/shared/resultFormat';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
+import { useAuthConfig } from '@/contexts/AuthConfigContext';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -182,7 +183,18 @@ function VariantsTable({ variants }: { variants: VariantResult[] }) {
 // Main component
 // ---------------------------------------------------------------------------
 
-export function LiveResultsPanel({ experimentId }: LiveResultsPanelProps) {
+/**
+ * A read-only demo's API refuses the results socket, so there the panel
+ * neither renders nor connects; nor does it before `/auth/config` has said
+ * whether this is one. (ResultsDashboard also leaves out the Live tab.)
+ */
+export function LiveResultsPanel(props: LiveResultsPanelProps) {
+  const { loading, demo } = useAuthConfig();
+  if (loading || demo) return null;
+  return <StreamingResultsPanel {...props} />;
+}
+
+function StreamingResultsPanel({ experimentId }: LiveResultsPanelProps) {
   const { snapshot, status, error, refresh, connect } =
     useExperimentStream(experimentId);
 

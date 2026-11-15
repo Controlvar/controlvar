@@ -2,14 +2,14 @@
   "captured_at": "v0.39.0",
   "screens": [
     {
-      "id": "results",
-      "file": "results-88c79d580b09.webp",
-      "bytes": 151096,
-      "sha256": "88c79d580b091738af930fadc2095c246246c0459b72db71dee2025e7ce2b005",
-      "width": 2300,
-      "height": 924,
-      "alt": "The results page of a ShopLab demo experiment in the Controlvar dashboard: its users, the planned sample reached, the leading variant and the sample ratio check.",
-      "caption": "An experiment's results in the dashboard (Controlvar v0.39.0), with data from the ShopLab demo storefront."
+      "id": "power-calculator",
+      "file": "power-calculator-2268c898864d.webp",
+      "bytes": 81106,
+      "sha256": "2268c898864d191970c08f3b238a77072808722072a856bee5e91314db4d260b",
+      "width": 1300,
+      "height": 707,
+      "alt": "The power calculator: the baseline conversion rate, the minimum detectable effect, the sample size each variant needs, and a power curve.",
+      "caption": null
     },
     {
       "id": "flag-rollout",
@@ -19,16 +19,6 @@
       "width": 1300,
       "height": 645,
       "alt": "A feature flag's page in the dashboard: its rollout schedule in stages, with the current stage, beside its safety check on the error rate.",
-      "caption": null
-    },
-    {
-      "id": "power-calculator",
-      "file": "power-calculator-2268c898864d.webp",
-      "bytes": 81106,
-      "sha256": "2268c898864d191970c08f3b238a77072808722072a856bee5e91314db4d260b",
-      "width": 1300,
-      "height": 707,
-      "alt": "The power calculator: the baseline conversion rate, the minimum detectable effect, the sample size each variant needs, and a power curve.",
       "caption": null
     },
     {

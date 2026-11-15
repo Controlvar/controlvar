@@ -18,11 +18,11 @@ export const WAREHOUSE_MODULE_NOTICE = {
   title: 'Warehouse',
   module: MODULES.WAREHOUSE,
   description:
-    'Analyse experiments with assignment and metric data that stays in your own warehouse (BigQuery, Snowflake, Amazon Athena).',
+    'Analyse experiments with assignment and metric data that stays in your own warehouse (BigQuery, Snowflake, Amazon Athena, Amazon Redshift).',
 };
 
 export const NO_CONNECTOR_TEXT =
-  "No warehouse connector is available on this deployment yet. BigQuery, Snowflake and Amazon Athena are each made available once they have been checked against a real account; until then, connections can't be created.";
+  "No warehouse connector is available on this deployment yet. BigQuery, Snowflake, Amazon Athena and Amazon Redshift are each made available once they have been checked against a real account; until then, connections can't be created.";
 
 export const BETA_TEXT =
   'Warehouse analysis is in beta: its settings and API may change. The statistics are computed by the same engine as every other result.';

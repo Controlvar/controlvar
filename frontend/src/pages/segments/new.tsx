@@ -11,6 +11,9 @@ import { targetingPayload } from '@/utils/experimentTargeting';
 import { ROLE_NOTE, rulesProblems, segmentErrorCopy } from '@/utils/segmentErrors';
 import { canCreateSegments } from '@/utils/segmentPermissions';
 import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
+import { useDemoMode } from '@/contexts/AuthConfigContext';
+import { DemoNote } from '@/components/DemoNote';
+import { DEMO_SEGMENTS_ACTION } from '@/utils/demoMode';
 import { SEGMENT_RULES_OPERATOR_OPTIONS, createEmptyGroup } from '@/utils/targeting';
 
 function initialRules(): TargetingRules {
@@ -21,6 +24,7 @@ export default function NewSegmentPage() {
   const router = useRouter();
   const auth = useOptionalAuth();
   const { effective, loading: permissionsLoading } = useEffectivePermissions();
+  const demo = useDemoMode();
   const nameId = useId();
   const descriptionId = useId();
   const [kind, setKind] = useState<SegmentKind>('rules');
@@ -37,6 +41,22 @@ export default function NewSegmentPage() {
   }, [saveError, problems]);
 
   const canCreate = canCreateSegments(auth?.user, effective);
+
+  // A read-only demo shows the demo note instead of the form, whatever the role.
+  if (demo) {
+    return (
+      <div className="flex-1 bg-slate-50">
+        <PageTitle title="New segment" />
+        <div className="max-w-3xl mx-auto px-4 py-8">
+          <h1 className="text-2xl font-bold text-slate-900">New segment</h1>
+          <DemoNote action={DEMO_SEGMENTS_ACTION} className="mt-4 text-sm text-slate-700" />
+          <Link href="/segments" className="mt-4 inline-block text-sm text-blue-700 underline">
+            Back to segments
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   // Also while the effective map may still add EXPERIMENT CREATE (#891):
   // neither the notice nor the form until it answers.

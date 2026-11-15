@@ -192,6 +192,18 @@ public final class ContractSmoke {
                         + ", not " + first.getVariantName());
             }
 
+            // 6. Flag values (#1810): a NEW client (so the fan-out above is untouched) reads the
+            //    seed's three value flags, each on at 100% while the SDK rows run, with defaults
+            //    that are no flag value, so a getter that falls back shows. The report is what
+            //    they returned; the runner requires the seed's on values.
+            Map<String, Object> values = new LinkedHashMap<>();
+            try (ExperimentationClient valued = new ExperimentationClient(config)) {
+                values.put("string", valued.getStringValue(user, "sdk_contract_value_string", "smoke-default"));
+                values.put("number", valued.getNumberValue(user, "sdk_contract_value_number", -1));
+                values.put("json", valued.getJsonValue(user, "sdk_contract_value_json",
+                        Collections.singletonList("smoke-default")));
+            }
+
             Map<String, Object> assign = new LinkedHashMap<>();
             assign.put("variant_name", first.getVariantName());
             assign.put("is_control", first.isControl());
@@ -229,6 +241,7 @@ public final class ContractSmoke {
             eventId.put("id", dedupId);
             eventId.put("sends", 2);
             report.put("event_id", eventId);
+            report.put("values", values);
 
             System.out.println(new ObjectMapper().writeValueAsString(report));
         } catch (Exception e) {

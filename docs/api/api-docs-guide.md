@@ -123,7 +123,7 @@ the SDK prefixes, then the default.
 | paths | limit |
 |---|---|
 | `/api/v1/auth/token`, `/auth/login` | 10 / min |
-| `/api/v1/auth/signup`, `/auth/forgot-password`, `/auth/reset-password` | 5 / min |
+| `/api/v1/auth/signup`, `/auth/confirm`, `/auth/forgot-password`, `/auth/reset-password` | 5 / min |
 | `/api/v1/users/me/password` | 5 / min |
 | `/api/v1/auth/sso/exchange` (full image) | 10 / min |
 | `/api/v1/auth/sso/login` (full image) | 30 / min |

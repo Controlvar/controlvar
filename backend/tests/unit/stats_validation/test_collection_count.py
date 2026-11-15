@@ -33,6 +33,7 @@ EXPECTED = {
     "test_false_winner_unequal_split.py": 3,
     "test_golden_aa_family_wise_rate.py": 2,
     "test_golden_aa_significance_rate.py": 2,
+    "test_golden_hte_false_positive_rate.py": 18,
     "test_golden_interval_coverage.py": 4,
     "test_golden_planted_lift.py": 3,
     "test_golden_srm.py": 4,

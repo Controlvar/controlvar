@@ -231,22 +231,26 @@ def get_power_curve(
         ...,
         gt=0,
         lt=1,
+        allow_inf_nan=False,
         description="Baseline conversion/success rate (0–1, exclusive).",
     ),
     alpha: float = Query(
         default=0.05,
         gt=0,
         lt=0.5,
+        allow_inf_nan=False,
         description="Type I error rate.",
     ),
     power: float = Query(
         default=0.80,
         gt=0,
         lt=1,
+        allow_inf_nan=False,
         description="Target statistical power.",
     ),
     mde: Optional[float] = Query(
         default=None,
+        allow_inf_nan=False,
         description="Currently selected MDE (marks a point on the curve).",
     ),
 ) -> PowerCurveResponse:

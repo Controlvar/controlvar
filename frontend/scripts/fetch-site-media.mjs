@@ -16,8 +16,10 @@
  *      ` line:-5` to every cue timing line and changing nothing else, and
  *      places only that: the setting lifts the captions above the video's
  *      burned-in headline band, where an unpositioned cue covers it;
- *   4. checks both ways that `out/index.html` references, as `/media/<name>`,
- *      exactly the files it placed.
+ *   4. checks both ways that `out/walkthroughs.html`, the walkthroughs page,
+ *      references, as `/media/<name>`, exactly the files it placed; and that
+ *      `out/index.html`, whose teaser shows posters only (site design
+ *      2026-11-11), references none but a placed poster.
  *
  * Nothing else runs here. What the files contain (faststart, the audio
  * stream, the captions against the transcript, the poster's size) is checked
@@ -26,7 +28,8 @@
  *
  * It REFUSES (exit 1, and no `out/media`) unless NEXT_PUBLIC_SITE_MODE is
  * `marketing` -- the dashboard a self-hoster builds must never carry the
- * media -- and when `out/index.html` is missing or `out/media` already exists.
+ * media -- and when `out/index.html` or `out/walkthroughs.html` is missing or
+ * `out/media` already exists.
  *
  * A PINNED ASSET IS NEVER REPLACED OR DELETED. `gh release upload --clobber`,
  * or deleting a pinned asset, fails this download and so blocks every later
@@ -204,11 +207,23 @@ export function mediaReferences(html) {
   return names;
 }
 
+/** The page that plays the videos: it references every placed file, and nothing else under /media/. */
+export const PAGE = 'walkthroughs.html';
+/** The homepage: its teaser shows posters, so it references posters only. */
+export const HOME = 'index.html';
+
 /** Problems with "the page references exactly the files placed", both ways. */
-export function referenceProblems(referenced, placed) {
+export function referenceProblems(referenced, placed, page = PAGE) {
   const problems = [];
-  for (const name of placed) if (!referenced.has(name)) problems.push(`${name} is placed but out/index.html never references /media/${name}`);
-  for (const name of referenced) if (!placed.has(name)) problems.push(`out/index.html references /media/${name}, which is not placed`);
+  for (const name of placed) if (!referenced.has(name)) problems.push(`${name} is placed but out/${page} never references /media/${name}`);
+  for (const name of referenced) if (!placed.has(name)) problems.push(`out/${page} references /media/${name}, which is not placed`);
+  return problems;
+}
+
+/** Problems with "the homepage references placed posters only": no video, no captions, nothing unplaced. */
+export function homeReferenceProblems(referenced, posters, page = HOME) {
+  const problems = [];
+  for (const name of referenced) if (!posters.has(name)) problems.push(`out/${page} references /media/${name}, which is not a placed poster`);
   return problems;
 }
 
@@ -301,13 +316,21 @@ export async function main({
           'self-hoster builds must never carry the site media',
       );
     }
-    const indexPath = join(outDir, 'index.html');
-    if (!existsSync(indexPath)) throw new Refusal(`${indexPath} does not exist; run next build first`);
+    const indexPath = join(outDir, HOME);
+    const pagePath = join(outDir, PAGE);
+    for (const path of [indexPath, pagePath]) {
+      if (!existsSync(path)) throw new Refusal(`${path} does not exist; run next build first`);
+    }
     if (existsSync(mediaDir)) throw new Refusal(`${mediaDir} already exists; run next build first (it empties out/)`);
 
     const videos = parseManifest(readFileSync(manifestPath, 'utf8'));
     const placed = new Set(videos.flatMap(placedNames));
-    const before = referenceProblems(mediaReferences(readFileSync(indexPath, 'utf8')), placed);
+    const posters = new Set(videos.map((entry) => entry.poster.name));
+    const references = () => [
+      ...referenceProblems(mediaReferences(readFileSync(pagePath, 'utf8')), placed),
+      ...homeReferenceProblems(mediaReferences(readFileSync(indexPath, 'utf8')), posters),
+    ];
+    const before = references();
     if (before.length) throw new Refusal(before.join('\n  '));
 
     // Each file is written as soon as it matches its pin, so at most one is
@@ -334,7 +357,11 @@ export async function main({
     placedDir = true;
     chmodSync(mediaDir, 0o755); // mkdtemp makes it 0700; the site is served from it
 
-    const after = referenceProblems(mediaReferences(readFileSync(indexPath, 'utf8')), new Set(readdirSync(mediaDir)));
+    const onDisk = new Set(readdirSync(mediaDir));
+    const after = [
+      ...referenceProblems(mediaReferences(readFileSync(pagePath, 'utf8')), onDisk),
+      ...homeReferenceProblems(mediaReferences(readFileSync(indexPath, 'utf8')), new Set([...posters].filter((n) => onDisk.has(n)))),
+    ];
     if (after.length) throw new Refusal(after.join('\n  '));
     log(`fetch-site-media: placed ${placed.size} files, ${total} bytes, in ${mediaDir}`);
     return 0;

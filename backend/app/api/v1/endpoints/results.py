@@ -199,7 +199,7 @@ def _compute_dimensional_breakdown(
     experiment_id: UUID,
     dimension: str,
     db,
-    base_alpha: float = 0.05,
+    base_alpha: float,
     value_source: Optional[ValueSource] = None,
 ) -> DimensionalBreakdownResponse:
     """
@@ -209,6 +209,11 @@ def _compute_dimensional_breakdown(
     user in exactly one segment, with the converting users of the metric the
     response lists first, so per variant the rows add up to that metric's
     headline.  DimensionalAnalysisService computes the statistics.
+
+    ``base_alpha`` is 1 minus the confidence level the results are computed
+    at, and has no default.  Each segment is tested at ``base_alpha`` divided
+    by the number of segments (Bonferroni); the heterogeneity test across the
+    segments (``detect_hte``) at ``base_alpha`` itself.
 
     ``value_source`` is passed to ``segment_rows`` when given: the
     balanced-groups route passes ``stored_strata``.  ``/results`` passes
@@ -275,7 +280,7 @@ def _compute_dimensional_breakdown(
     segment_results = dim_service.compute_segment_results(
         segments=segments, base_alpha=base_alpha
     )
-    has_hte = dim_service.detect_hte(segment_results)
+    has_hte = dim_service.detect_hte(segment_results, alpha=base_alpha)
     adjusted_alpha = (
         dim_service.get_adjusted_alpha(base_alpha, len(segments))
         if segments
@@ -284,9 +289,10 @@ def _compute_dimensional_breakdown(
 
     hte_warning = (
         (
-            f"Heterogeneous treatment effects detected across '{dimension}' segments. "
-            "Results may differ significantly between groups — "
-            "investigate per-segment effects before shipping."
+            "The first treatment's difference from the control varies between "
+            f"'{dimension}' segments by more than chance usually produces. "
+            "Treat this as a lead to confirm with a follow-up experiment, "
+            "not as a result."
         )
         if has_hte
         else None
@@ -339,6 +345,7 @@ def get_experiment_results(
         default=None,
         ge=0.80,
         le=0.99,
+        allow_inf_nan=False,
         description=(
             "Confidence level for this request. Omit it to use the "
             "experiment's stored confidence_level (0.95 unless set otherwise)."
@@ -794,6 +801,7 @@ def get_sample_size_status(
         default=None,
         gt=0.0,
         lt=1.0,
+        allow_inf_nan=False,
         description=(
             "Baseline conversion rate to plan from. Omit it to use the rate "
             "observed in the control variant on the primary metric so far."
@@ -803,6 +811,7 @@ def get_sample_size_status(
         default=None,
         gt=0.0,
         lt=1.0,
+        allow_inf_nan=False,
         description=(
             "Minimum detectable effect, relative to the baseline: 0.05 means "
             "12% -> 12.6%. Omit it to use the effect saved with the experiment "
@@ -814,6 +823,7 @@ def get_sample_size_status(
         default=None,
         ge=0.80,
         le=0.99,
+        allow_inf_nan=False,
         description=(
             "Confidence level of the two-sided test. Omit it to use the "
             "experiment's stored confidence_level."
@@ -823,6 +833,7 @@ def get_sample_size_status(
         default=0.80,
         ge=0.50,
         le=0.99,
+        allow_inf_nan=False,
         description="Target power. Default 0.80.",
     ),
     correction_method: Optional[str] = Query(
@@ -1315,6 +1326,7 @@ def get_sequential_results(
         default=None,
         gt=0.0,
         le=SEQUENTIAL_ALPHA_MAX,
+        allow_inf_nan=False,
         description=(
             "Significance level for this request, above 0 and at most 0.2. "
             "Overrides the experiment's stored sequential_testing_config.alpha "

@@ -56,8 +56,9 @@ has the same switch.
   moves there.
 - A draft that is a bandit or a split URL experiment shows a sentence in place of the switch.
 - The experiment page's **Balance** row says what the split is balanced within, such as
-  `within Platform (ios, android, web)`, or `off`. Once the experiment has started the row is all
-  there is: the setting cannot be changed.
+  `within Platform (ios, android, web)`, or `off`. Once the experiment has started the setting
+  cannot be changed, and **See each group's split** beside the row opens its balanced groups on
+  the results page ([On the results page](#on-the-results-page)).
 
 ## Assign users
 
@@ -143,6 +144,24 @@ results and their decision do not change.
 - `users_outside_blocks` is the number of users split without balancing. `unknown_share` is the
   share in `unknown` of the users whose group was stored.
 - An experiment that does not balance within groups answers `409`.
+
+### On the results page
+
+The **Breakdowns** tab of the experiment's results lists its balanced groups first, such as
+**Platform (balanced)**, and opens on them. They are this route's rows, and saved segments are
+shown by name.
+
+- A note says that each user is counted in the group they were balanced in when they were
+  assigned, so a breakdown by the same attribute can differ for users assigned from a list or
+  without it.
+- From 100 users whose group was stored, when more than half of them are in `unknown`, a note
+  says so, out of those users, and links to [Assign users](#assign-users).
+- When `users_outside_blocks` is not 0, a note gives it out of all the users and links to
+  [Users assigned without balancing](#users-assigned-without-balancing).
+- **All groups, weighted by size** gives `overall`: each variant's users and each treatment's
+  difference from the control in percentage points, with its interval and p-value. It names no
+  winner: the experiment's results keep their decision. When `overall` is `null`, it says why.
+- A group in `merged_groups` is named under it, with the group it was counted with.
 
 ### How they differ from `?breakdown=`
 

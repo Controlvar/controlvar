@@ -402,13 +402,13 @@ def test_pruning_leaves_a_healthy_version_table_alone(test_db, scratch_schema):
 # ---------------------------------------------------------------------------
 RBAC_TABLES = ("custom_roles", "user_custom_roles", "direct_permission_grants")
 
-#: Unapply the whole modules branch -- all four of its revisions, so that
+#: Unapply the whole modules branch -- all five of its revisions, so that
 #: ``modules_0001_rbac``'s own downgrade runs.  Not ``modules@base``: the branch
 #: is no longer an alembic *base*, and with a single tree root alembic cannot
 #: filter by branch label, so ``modules@base`` downgrades the whole core chain
-#: instead.  (``modules@-1`` unapplies only the head, modules_0004, and
-#: ``modules@-3`` stops short of modules_0001.)
-UNAPPLY_MODULES_BRANCH = "modules@-4"
+#: instead.  (``modules@-1`` unapplies only the head, modules_0005, and
+#: ``modules@-4`` stops short of modules_0001.)
+UNAPPLY_MODULES_BRANCH = "modules@-5"
 
 #: The tables ``modules_0002_warehouse_analysis`` owns.
 WAREHOUSE_TABLES = (

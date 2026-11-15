@@ -22,15 +22,24 @@
  * for this experiment and the assigned variant); the smoke itself fails when the hook
  * received another user. A second client's hook returns a rejected Promise: an
  * unhandled rejection would end this process with exit 1.
+ *
+ * Flag values (#1810): `useFlagValue` is a hook, and this smoke renders nothing,
+ * so it reads each of the seed's value flags the way the hook does in a browser:
+ * the browser client's evaluation (the request and mapping `useFeatureFlag`
+ * uses), read by type with the hook's own reader, `readFlagValue`. The line
+ * reports `values`, what the reads returned; the runner requires the seed's on
+ * values.
  */
 import { randomUUID } from 'node:crypto';
 
 // The SSR entry point: no React, no browser globals.
 import ssr from '../dist/ssr/index.js';
 import clientModule from '../dist/client/ExperimentationClient.js';
+import flagValueModule from '../dist/client/flagValue.js';
 
 const { ServerClient } = ssr;
 const { ExperimentationClient } = clientModule;
+const { readFlagValue } = flagValueModule;
 
 const apiUrl =
   process.env.CONTROLVAR_API_URL || process.env.EXPERIMENTLY_API_URL || 'http://localhost:8000';
@@ -121,6 +130,18 @@ try {
   if (fanout.made.length !== 1) fail(`expected one /tracking/batch call, saw ${fanout.made.length}`);
   if (fanout.bad) fail(`fan-out returned HTTP ${fanout.bad.status}`);
 
+  // 4b. One keyed event sent twice with one fixed eventId (#1543, C4). The server is to store it
+  //     once: the runner counts the rows for this user and event name.
+  const dedupName = `contract_dedup_${randomUUID()}`;
+  const dedupId = `contract-${randomUUID()}`;
+  mark = calls.length;
+  for (let i = 0; i < 2; i++) {
+    await client.trackEvent(userId, dedupName, undefined, { experimentKey, eventId: dedupId });
+  }
+  const dedup = since(mark, '/api/v1/tracking/track');
+  if (dedup.made.length !== 2) fail(`expected two /tracking/track calls, saw ${dedup.made.length}`);
+  if (dedup.bad) fail(`event_id: track returned HTTP ${dedup.bad.status}`);
+
   // 5. The exposure hook (#1499): a NEW ServerClient with onExposure assigns the
   //    same user twice with no clear in between. The user is already assigned, so
   //    the server answers assigned: true, records an exposure, and the hook is
@@ -154,6 +175,21 @@ try {
     fail(`a rejecting hook changed the answer: ${despite.variantName}, expected ${second.variantName}`);
   }
 
+  // 7. Flag values (#1810): a NEW browser client (so the fan-out above is untouched) evaluates
+  //    the seed's string, number and json flags, each on at 100%, and each answer is read by
+  //    type as useFlagValue reads it. Each default is no flag value, so a read that falls back
+  //    shows; the report is what the reads returned.
+  const valued = new ExperimentationClient(config);
+  const readValue = async (key, type, fallback) => {
+    const read = readFlagValue(await valued.evaluateFeatureFlagDetailed(user, key), type);
+    return read.found ? read.value : fallback;
+  };
+  const values = {
+    string: await readValue('sdk_contract_value_string', 'string', 'smoke-default'),
+    number: await readValue('sdk_contract_value_number', 'number', -1),
+    json: await readValue('sdk_contract_value_json', 'json', ['smoke-default']),
+  };
+
   process.stdout.write(
     JSON.stringify({
       sdk: 'react',
@@ -161,6 +197,7 @@ try {
       flag: { enabled: flag.isEnabled },
       track: { ok: true },
       fanout: { ok: true },
+      event_id: { user_id: userId, event_name: dedupName, id: dedupId, sends: 2 },
       exposure: {
         calls: exposures.length,
         payload: exposure
@@ -172,6 +209,7 @@ try {
             }
           : null,
       },
+      values,
     }) + '\n'
   );
 } catch (err) {

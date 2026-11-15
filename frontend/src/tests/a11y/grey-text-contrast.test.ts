@@ -35,6 +35,17 @@ const FILES = [
   'pages/experiments/[id].tsx',
   'components/experiments/new/BasicInfoFields.tsx',
   'components/experiments/new/ExperimentTypeField.tsx',
+  // #442: the results table's Effect size and Interval columns and their help.
+  'components/results/MetricComparison/MetricComparisonTable.tsx',
+  // #442: the results page's Download CSV button and the sentence under it.
+  'components/results/ResultsCsvDownload.tsx',
+  'pages/results/[id].tsx',
+  // #442: the flag page's Manage this flag group (Archive, its dialog,
+  // Unarchive), and the archived flag's note on both flag pages.
+  'components/feature-flags/FlagManageSection.tsx',
+  'components/feature-flags/ArchivedFlag.tsx',
+  // #442: the new-experiment form's analysis settings and Advanced Bayesian settings.
+  'components/experiments/new/AnalysisSettingsFields.tsx',
 ];
 
 /**
