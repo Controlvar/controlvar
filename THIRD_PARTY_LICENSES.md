@@ -335,7 +335,7 @@ Resolved with `license-checker-rseidelsohn --production`.
 
 | Package | Version |
 |---|---|
-| `@hono/node-server` | 2.1.5 |
+| `@hono/node-server` | 2.1.8 |
 | `@modelcontextprotocol/sdk` | 1.32.1 |
 | `accepts` | 2.0.0 |
 | `ajv` | 8.20.0 |
