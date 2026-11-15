@@ -296,6 +296,35 @@ by = [
 ]
 
 [[unit]]
+text = "Effect size and intervals: the results table gives each variant's effect size, its own interval, and the interval of its change from the control."
+by = [
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::f4: the treatment reads \"0.34% to 4.66%\" and \"0.32 (small)\", the control \"Control\"",
+    "test:frontend/src/tests/pages/results-reading.test.tsx::are in the table on the page, with the numbers the server sent in each row",
+]
+
+[[unit]]
+text = "Results as CSV: the results page saves an experiment's variant rows as a CSV file."
+by = [
+    "test:frontend/src/tests/pages/results-export-csv.test.tsx::the results page has a Download CSV button with the sentence under it",
+    "test:frontend/src/tests/pages/results-export-csv.test.tsx::saves the response body byte for byte, as results-{id}.csv",
+]
+
+[[unit]]
+text = "Bayesian priors at creation: the prior alpha and beta, loss threshold and credible level, set when you create an experiment with Bayesian analysis on."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::%s: shown only while the box is ticked, closed by default, and opens to four fields at their defaults with their helps",
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::%s: %s set to %s, changed alone, sends the five-field object with prior_family \"beta\"",
+    "test:backend/tests/integration/api/test_experiment_bayesian_config_api.py::TestTurningBayesianOn::test_create_enabled_without_config_stores_defaults",
+]
+
+[[unit]]
+text = "Rollout schedule settings: a schedule's dates, maximum percentage and minimum stage duration, set when you create it and edited while it is a draft or paused."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-rollout-schedule.test.tsx::creating sends the chosen maximum, both dates with Z, and min_stage_duration",
+    "test:frontend/src/tests/pages/feature-flag-rollout-schedule.test.tsx::editing shows the stored values, and Save sends only what changed, dates with Z",
+]
+
+[[unit]]
 text = "Experiment pages: start, pause, resume and complete an experiment, clone it, and edit, schedule or delete a draft."
 by = [
     "test:frontend/src/tests/pages/experiment-detail-manage.test.tsx::POSTs /clone with no body and goes to the NEW experiment",

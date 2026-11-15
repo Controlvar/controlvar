@@ -69,7 +69,7 @@ def exemption_problems(bullets: list[str], units: dict[str, list[str]]) -> list[
 
 def test_only_the_frame_and_the_pointer_are_exempt():
     bullets = _bullets()
-    assert len(bullets) == 54, "the page's bullets moved: this count is the contract"
+    assert len(bullets) == 58, "the page's bullets moved: this count is the contract"
     assert exemption_problems(bullets, _units()) == []
 
 

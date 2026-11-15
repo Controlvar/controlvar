@@ -52,6 +52,10 @@ What Controlvar does not do is in [Limitations](getting-started/limitations.md),
 
 - [Guided setup](guides/experiment-wizard.md): an A/B or multivariate experiment in five steps, with an optional sample-size estimate.
 - [The results page](guides/user-guide.md#reading-results): each variant's users, the planned sample reached, the leading variant and the sample ratio check.
+- [Effect size and intervals](guides/user-guide.md#reading-results): the results table gives each variant's effect size, its own interval, and the interval of its change from the control.
+- [Results as CSV](guides/user-guide.md#exporting-results): the results page saves an experiment's variant rows as a CSV file.
+- [Bayesian priors at creation](guides/user-guide.md#creating-an-experiment): the prior alpha and beta, loss threshold and credible level, set when you create an experiment with Bayesian analysis on.
+- [Rollout schedule settings](feature-flags/rollouts.md#in-the-dashboard): a schedule's dates, maximum percentage and minimum stage duration, set when you create it and edited while it is a draft or paused.
 - [Experiment pages](guides/dashboard-and-api.md): start, pause, resume and complete an experiment, clone it, and edit, schedule or delete a draft.
 - [Administration](guides/dashboard-and-api.md): users and their roles, API keys, and the audit log, which downloads as CSV or JSON (the download is beta).
 - [What has a screen and what is API only](guides/dashboard-and-api.md), capability by capability.
