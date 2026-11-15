@@ -21,6 +21,11 @@ lifecycle steps (create, then start the experiment), ``assign_batch``
   (``sticky_share``) come back for a second, sticky assignment. Everyone else
   is assigned in batches and sends their events in batches. Every event is
   sent after every assignment, so each one counts for its user's variant.
+* **Balance within groups** (#448, ``Scenario.balance``): the experiment is
+  created with ``balance_within``, and every assign sends its user's
+  ``context``, the one of the user's ``Cohort``. Each cohort is an exact number
+  of users, interleaved at random; a returning user sends the same context
+  again. ``user_groups`` gives each user's group from what the plan sends.
 
 The planted truth (each arm's conversion, repeat and value distribution) only
 sets a scenario's direction. What the results must show is computed from the
@@ -82,6 +87,36 @@ class Metric:
 
 
 @dataclass(frozen=True)
+class Cohort:
+    """Users of a balanced scenario who all send the same assign ``context``,
+    and the group ``docs/guides/balance-within-groups.md`` puts them in: a
+    listed value is its own group, a value not listed is ``other``, and a
+    context without the attribute at its top level is ``unknown``."""
+
+    group: str
+    context: Mapping[str, Any]
+    users: int
+
+
+@dataclass(frozen=True)
+class Balance:
+    """What a scenario balances its split within (#448): the attribute and
+    the values its ``balance_within`` lists, and its users' cohorts."""
+
+    attribute: str
+    values: tuple[str, ...]
+    cohorts: tuple[Cohort, ...]
+
+    def setting(self) -> dict[str, Any]:
+        """The experiment's ``balance_within``, as the create request sends it."""
+        return {"attribute": self.attribute, "values": list(self.values)}
+
+    def groups(self) -> tuple[str, ...]:
+        """Each cohort's group once, in the order the cohorts list them."""
+        return tuple(dict.fromkeys(cohort.group for cohort in self.cohorts))
+
+
+@dataclass(frozen=True)
 class Scenario:
     name: str
     experiment_key: str
@@ -98,6 +133,8 @@ class Scenario:
     assign_batch_size: int = MAX_ASSIGN_BATCH
     event_batch_size: int = MAX_EVENT_BATCH
     max_events_per_user: int = 50
+    #: Set for a scenario that balances its split within groups (#448).
+    balance: Balance | None = None
 
 
 @dataclass(frozen=True)
@@ -221,6 +258,27 @@ def _check(scenario: Scenario) -> None:
         raise ValueError(f"event_batch_size must be 1 to {MAX_EVENT_BATCH}")
     if scenario.max_events_per_user < 1:
         raise ValueError("max_events_per_user must be at least 1")
+    if scenario.balance is not None:
+        _check_balance(scenario.balance, scenario.users)
+
+
+def _check_balance(balance: Balance, users: int) -> None:
+    """A balanced scenario's cohorts: every user in exactly one, and each
+    cohort's context its own, so ``user_groups`` reads a user's group back
+    from the context the plan sends."""
+    if not balance.cohorts:
+        raise ValueError("a balanced scenario has at least one cohort")
+    if any(cohort.users < 1 for cohort in balance.cohorts):
+        raise ValueError("every cohort has at least one user")
+    if sum(cohort.users for cohort in balance.cohorts) != users:
+        raise ValueError("the cohorts' users must add up to the scenario's users")
+    contexts = [_canonical(cohort.context) for cohort in balance.cohorts]
+    if len(set(contexts)) != len(contexts):
+        raise ValueError("two cohorts send the same context")
+
+
+def _canonical(context: Mapping[str, Any]) -> str:
+    return json.dumps(context, sort_keys=True, separators=(",", ":"))
 
 
 def _normal(draw: Callable[[], float]) -> float:
@@ -253,6 +311,53 @@ def user_ids(seed: int, count: int) -> list[str]:
     return [f"gt-{seed}-{number:06d}" for number in range(count)]
 
 
+def _contexts(
+    users: Sequence[str], balance: Balance | None, draw: Callable[[], float]
+) -> dict[str, Mapping[str, Any]]:
+    """Each user's assign context under *balance* (none without it): the
+    cohorts' exact counts, shuffled over *users*, so the groups interleave."""
+    if balance is None:
+        return {}
+    labels = [
+        index
+        for index, cohort in enumerate(balance.cohorts)
+        for _ in range(cohort.users)
+    ]
+    _shuffle(labels, draw)
+    return {
+        user: balance.cohorts[label].context
+        for user, label in zip(users, labels, strict=True)
+    }
+
+
+def user_groups(plan: Plan) -> dict[str, str]:
+    """Each user's group in a balanced plan, read from the context its assigns
+    send: the group of the cohort whose context it is. A user sent with no
+    context, or with one no cohort sends, is refused (``ValueError``)."""
+    balance = plan.scenario.balance
+    if balance is None:
+        raise ValueError(f"scenario {plan.scenario.name} does not balance")
+    group_of = {_canonical(c.context): c.group for c in balance.cohorts}
+    groups: dict[str, str] = {}
+    for op in plan.ops:
+        if op.kind == "assign":
+            sent = [op.body]
+        elif op.kind == "assign_batch":
+            sent = list(op.body["users"])
+        else:
+            continue
+        for entry in sent:
+            context = entry.get("context")
+            group = None if context is None else group_of.get(_canonical(context))
+            if group is None:
+                raise ValueError(
+                    f"user {entry['user_id']} is sent with a context no cohort sends"
+                )
+            if groups.setdefault(entry["user_id"], group) != group:
+                raise ValueError(f"user {entry['user_id']} is sent in two groups")
+    return groups
+
+
 def simulate(seed: int, scenario: Scenario) -> Plan:
     """The plan for *scenario* under *seed*; the same inputs, the same plan."""
     _check(scenario)
@@ -263,6 +368,13 @@ def simulate(seed: int, scenario: Scenario) -> Plan:
 
     users = user_ids(seed, scenario.users)
     _shuffle(users, draw)
+    contexts = _contexts(users, scenario.balance, draw)
+
+    def who(user: str) -> dict[str, Any]:
+        """A user as an assign names them: with their context when balanced."""
+        if user in contexts:
+            return {"user_id": user, "context": contexts[user]}
+        return {"user_id": user}
 
     singles: list[str] = []
     returning: list[str] = []
@@ -306,10 +418,10 @@ def simulate(seed: int, scenario: Scenario) -> Plan:
         Op("lifecycle", None, {"action": "start", "experiment_key": key}),
     ]
     for chunk in _chunks(batched, scenario.assign_batch_size):
-        body = {"experiment_key": key, "users": [{"user_id": u} for u in chunk]}
+        body = {"experiment_key": key, "users": [who(u) for u in chunk]}
         ops.append(Op("assign_batch", ASSIGN_BATCH, body))
     for user in [*singles, *returning]:
-        ops.append(Op("assign", ASSIGN, {"experiment_key": key, "user_id": user}))
+        ops.append(Op("assign", ASSIGN, {"experiment_key": key, **who(user)}))
     for event in single_events:
         ops.append(Op("track", TRACK, event))
     for chunk in _chunks(batched_events, scenario.event_batch_size):
