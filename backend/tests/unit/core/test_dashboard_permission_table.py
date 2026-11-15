@@ -10,6 +10,9 @@ run by both profiles' Jest) holds every permission helper to:
   (``AUDIT_LOG_READ_ALL_ROLES``);
 * ``administer_eligibility_roles``: which may archive exclusion groups and run
   global holdouts (what both ``_require_admin`` functions admit);
+* ``override_bandit_weights_roles``: which may set a bandit's weights by hand
+  (what ``override_bandit_weights``, ``PUT /api/v1/bandit/{id}/weights``,
+  admits; #1957);
 * ``grantable``: the eleven pairs a custom role or direct grant can hold
   (``GRANTABLE``).
 
@@ -25,13 +28,14 @@ from __future__ import annotations
 import json
 import pathlib
 import sys
+import uuid
 from types import SimpleNamespace
 from typing import Any, Dict, List
 
 import pytest
 from fastapi import HTTPException
 
-from backend.app.api.v1.endpoints import global_holdout, mutual_exclusion_groups
+from backend.app.api.v1.endpoints import bandit, global_holdout, mutual_exclusion_groups
 from backend.app.core.permissions import (
     AUDIT_LOG_READ_ALL_ROLES,
     GRANTABLE,
@@ -40,6 +44,7 @@ from backend.app.core.permissions import (
     ResourceType,
 )
 from backend.app.models.user import UserRole
+from backend.app.schemas.bandit import BanditUpdateRequest
 
 pytestmark = [pytest.mark.unit]
 
@@ -63,6 +68,36 @@ def _admitted_by(require_admin) -> List[str]:
         except HTTPException as refused:
             assert refused.status_code == 403
         else:
+            admitted.append(name)
+    return admitted
+
+
+class _ReachedTheDatabase(Exception):
+    pass
+
+
+class _NoDatabase:
+    """A session that refuses every use: only a caller the route admits reaches it."""
+
+    def __getattr__(self, name: str):
+        raise _ReachedTheDatabase(name)
+
+
+def _admitted_by_override() -> List[str]:
+    # The route refuses with 403 before it touches the database, so the roles
+    # that reach the stand-in session are the ones it admits.
+    admitted = []
+    for name in ROLE_ORDER:
+        try:
+            bandit.override_bandit_weights(
+                experiment_id=uuid.uuid4(),
+                body=BanditUpdateRequest(weights={"variant": 1.0}),
+                db=_NoDatabase(),
+                current_user=SimpleNamespace(role=UserRole[name], is_superuser=False),
+            )
+        except HTTPException as refused:
+            assert refused.status_code == 403
+        except _ReachedTheDatabase:
             admitted.append(name)
     return admitted
 
@@ -91,6 +126,7 @@ def build_table() -> Dict[str, Any]:
             n for n in ROLE_ORDER if UserRole[n] in AUDIT_LOG_READ_ALL_ROLES
         ],
         "administer_eligibility_roles": holdout_admins,
+        "override_bandit_weights_roles": _admitted_by_override(),
         "grantable": [list(pair) for pair in sorted(GRANTABLE)],
     }
 
@@ -116,6 +152,7 @@ def test_the_table_is_not_empty():
     assert table["role_permissions"]["feature_flag"]["update"] == ["ADMIN", "DEVELOPER"]
     assert table["audit_log_read_roles"] == ["ADMIN", "ANALYST"]
     assert table["administer_eligibility_roles"] == ["ADMIN"]
+    assert table["override_bandit_weights_roles"] == ["ADMIN"]
 
 
 def test_a_changed_role_list_is_a_difference():

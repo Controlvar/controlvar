@@ -734,6 +734,11 @@ STALE: Tuple[Tuple[str, str], ...] = (
         r"(dashboard|page) has no schedule screen",
         "the experiment page's Schedule sets a draft's start and end (#1454)",
     ),
+    (
+        r"nothing in it changes the experiment",
+        "an Admin or a superuser sets a bandit's weights by hand from the "
+        "Current traffic weights panel (#1957)",
+    ),
 )
 
 _DROP = frozenset("*`")
@@ -826,6 +831,8 @@ def test_no_page_repeats_a_removed_dashboard_claim():
         "[which actions have a screen](dashboard-and-api.md))",
         "You can also schedule automatic start and end dates. The dashboard has no schedule\n"
         "screen yet, so this is an API call:",
+        # #1957: user-guide.md's bandit panel paragraph.
+        "Every role can read it, and nothing in it changes the experiment. It loads once and again when you",
     ],
 )
 def test_the_sweep_catches_the_removed_wording(removed):

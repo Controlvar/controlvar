@@ -825,7 +825,7 @@ export default function ExperimentDetailPage() {
           onSaved={onSaved}
         />
 
-        <BanditWeightsSection experiment={experiment} />
+        <BanditWeightsSection experiment={experiment} user={user} />
 
         {/* Warehouse analysis (beta): the `warehouse` module; renders nothing without it. */}
         <WarehouseAnalysisSection experiment={experiment} />

@@ -810,7 +810,7 @@ by = ["test:frontend/src/tests/components/BanditWeightsSection.test.tsx::shows e
 text = "It has no chart of how they changed over time"
 by = [
     "test:frontend/src/tests/components/BanditWeightsSection.test.tsx::shows each variant with the server values, in its order, and when they were computed",
-    "test:frontend/src/tests/components/BanditWeightsSection.test.tsx::offers no control but Refresh, for anyone",
+    "test:frontend/src/tests/components/BanditWeightsSection.test.tsx::offers no control but Refresh to anyone but an ADMIN or a superuser",
 ]
 
 [[unit]]

@@ -67,6 +67,9 @@
   "administer_eligibility_roles": [
     "ADMIN"
   ],
+  "override_bandit_weights_roles": [
+    "ADMIN"
+  ],
   "grantable": [
     [
       "audit_log",

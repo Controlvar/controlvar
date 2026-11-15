@@ -1,8 +1,16 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  BanditWeightsOverride,
+  OVERRIDE_LABEL,
+  OVERRIDE_ROLE_NOTE,
+  OVERRIDE_SAVED,
+  OVERRIDE_STATUSES,
+} from '@/components/experiments/BanditWeightsOverride';
 import { BanditService } from '@/services/bandit';
 import { BanditStatus } from '@/types/bandit';
 import { Experiment } from '@/types/experiments';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
+import { PermissionUser, canOverrideBanditWeights } from '@/utils/experimentPermissions';
 
 /**
  * Fixed copy. Nothing the server sends in an error is shown: a refusal or a
@@ -52,17 +60,29 @@ type State =
   | { kind: 'error' }
   | { kind: 'loaded'; status: BanditStatus };
 
+const OVERRIDE_FORM_ID = 'bandit-weights-override-form';
+
 /**
  * "Current traffic weights": a bandit experiment's live split, read once on
- * load and again on Refresh. Read-only for every role, because reading it is
- * allowed to every signed-in user and changing it is not offered here.
- * Renders nothing for a fixed-allocation experiment.
+ * load and again on Refresh. Every signed-in role may read it. Once it has
+ * loaded, on a draft, active or paused experiment, a superuser or an ADMIN
+ * (`canOverrideBanditWeights`, the same rule as `PUT /api/v1/bandit/{id}/weights`)
+ * also gets "Set weights by hand" beside Refresh, which opens
+ * `BanditWeightsOverride` inline; any other signed-in user gets one sentence
+ * naming the role that can. On a completed or archived experiment nobody new
+ * is assigned, so neither is shown. Renders nothing for a fixed-allocation
+ * experiment.
  */
-export function BanditWeightsSection({ experiment }: { experiment: Experiment }) {
+export function BanditWeightsSection({ experiment, user }: { experiment: Experiment; user?: PermissionUser }) {
   const bandit = isBandit(experiment);
   const [state, setState] = useState<State>({ kind: 'loading' });
+  const [overriding, setOverriding] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const overrideButton = useRef<HTMLButtonElement>(null);
 
   const load = useCallback(async () => {
+    setOverriding(false);
+    setSaved(false);
     setState({ kind: 'loading' });
     try {
       const status = await BanditService.status(experiment.id);
@@ -80,6 +100,20 @@ export function BanditWeightsSection({ experiment }: { experiment: Experiment })
 
   const loaded = state.kind === 'loaded' ? state.status : null;
   const neverUpdated = loaded !== null && loaded.last_updated === null;
+  const overridable = OVERRIDE_STATUSES.includes(experiment.status);
+  const mayOverride = overridable && canOverrideBanditWeights(user);
+  const showRoleNote = overridable && !mayOverride && Boolean(user) && loaded !== null;
+
+  const closeOverride = () => {
+    setOverriding(false);
+    overrideButton.current?.focus();
+  };
+
+  const onSaved = (status: BanditStatus) => {
+    setState({ kind: 'loaded', status });
+    setSaved(true);
+    closeOverride();
+  };
 
   return (
     <section
@@ -91,17 +125,61 @@ export function BanditWeightsSection({ experiment }: { experiment: Experiment })
         <h2 id="bandit-weights-heading" className="text-base font-semibold text-slate-800">
           Current traffic weights
         </h2>
-        <button
-          type="button"
-          onClick={() => void load()}
-          disabled={state.kind === 'loading'}
-          className="px-3 py-1.5 rounded-md text-sm font-medium bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 disabled:opacity-50"
-          data-testid="bandit-weights-refresh"
-        >
-          Refresh
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={state.kind === 'loading'}
+            className="px-3 py-1.5 rounded-md text-sm font-medium bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 disabled:opacity-50"
+            data-testid="bandit-weights-refresh"
+          >
+            Refresh
+          </button>
+          {mayOverride && loaded && (
+            <button
+              ref={overrideButton}
+              type="button"
+              onClick={() => {
+                setSaved(false);
+                setOverriding((open) => !open);
+              }}
+              aria-expanded={overriding}
+              aria-controls={overriding ? OVERRIDE_FORM_ID : undefined}
+              className="px-3 py-1.5 rounded-md text-sm font-medium bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 disabled:opacity-50"
+              data-testid="bandit-weights-override-toggle"
+            >
+              {OVERRIDE_LABEL}
+            </button>
+          )}
+        </div>
       </div>
       <p className="text-sm text-slate-600 mb-3">{BANDIT_INTRO}</p>
+
+      {showRoleNote && (
+        <p className="text-sm text-slate-700 mb-3" data-testid="bandit-weights-role-note">
+          {OVERRIDE_ROLE_NOTE}
+        </p>
+      )}
+
+      {mayOverride && (
+        <p
+          role="status"
+          className={saved ? 'text-sm text-green-700 mb-3' : 'sr-only'}
+          data-testid="bandit-weights-saved"
+        >
+          {saved ? OVERRIDE_SAVED : ''}
+        </p>
+      )}
+
+      {mayOverride && loaded && overriding && (
+        <BanditWeightsOverride
+          experiment={experiment}
+          status={loaded}
+          formId={OVERRIDE_FORM_ID}
+          onSaved={onSaved}
+          onCancel={closeOverride}
+        />
+      )}
 
       {state.kind === 'loading' && (
         <p role="status" className="text-sm text-slate-500" data-testid="bandit-weights-loading">

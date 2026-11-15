@@ -46,6 +46,9 @@ const FILES = [
   'components/feature-flags/ArchivedFlag.tsx',
   // #442: the new-experiment form's analysis settings and Advanced Bayesian settings.
   'components/experiments/new/AnalysisSettingsFields.tsx',
+  // #1957: the bandit panel, its role note and "Set weights by hand".
+  'components/experiments/BanditWeightsSection.tsx',
+  'components/experiments/BanditWeightsOverride.tsx',
 ];
 
 /**

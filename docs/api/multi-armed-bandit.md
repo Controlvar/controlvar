@@ -193,6 +193,10 @@ its weight; the weights must be at least 0 and add up to 1.0, or the API answers
 Use with caution: the scheduler replaces an override on its next cycle while the experiment
 is active.
 
+In the dashboard, an Admin or a superuser uses **Set weights by hand** in the experiment page's
+**Current traffic weights** panel; it sends this request with each variant's whole percentage
+divided by 100.
+
 ```{.bash exec}
 curl -s -X PUT localhost:8000/api/v1/bandit/$EXP_ID/weights \
   -H "Authorization: Bearer $TOKEN" \

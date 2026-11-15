@@ -14,7 +14,8 @@
  *
  *     expected = is_superuser || role_permissions[resource][action] has role || map holds the pair
  *
- * `canAdministerEligibility` answers a question no grant can change: its
+ * `canAdministerEligibility` and `canOverrideBanditWeights` (#1957, from
+ * `override_bandit_weights`) answer a question no grant can change: the
  * answer is the role's alone, whatever the map holds. Runs in both profiles'
  * Jest.
  */
@@ -32,6 +33,7 @@ interface PermissionTable {
   role_permissions: Record<string, Record<string, Role[]>>;
   audit_log_read_roles: Role[];
   administer_eligibility_roles: Role[];
+  override_bandit_weights_roles: Role[];
   grantable: Array<[string, string]>;
 }
 
@@ -159,6 +161,13 @@ const HELPERS: HelperRow[] = [
     // Takes no map: a grant can never give it.
     answer: (u) => experimentPermissions.canAdministerEligibility(u),
   },
+  {
+    name: 'canOverrideBanditWeights',
+    pair: null,
+    roles: TABLE.override_bandit_weights_roles,
+    // Takes no map: PUT /api/v1/bandit/{id}/weights checks the role itself.
+    answer: (u) => experimentPermissions.canOverrideBanditWeights(u),
+  },
 ];
 
 const STATES: Array<{ label: string; effective: EffectivePermissions | undefined }> = [
@@ -195,13 +204,16 @@ describe('the table the matrix reads', () => {
     expect(TABLE.roles).toEqual(['ADMIN', 'DEVELOPER', 'ANALYST', 'VIEWER']);
   });
 
-  it("names each helper's pair among the grantable ones, and none for canAdministerEligibility", () => {
+  it("names each helper's pair among the grantable ones, and none for the two role-only helpers", () => {
     const grantable = new Set(TABLE.grantable.map(([r, a]) => `${r}:${a}`));
     for (const row of HELPERS) {
       if (row.pair === null) continue;
       expect(grantable.has(row.pair.join(':'))).toBe(true);
     }
-    expect(HELPERS.filter((row) => row.pair === null).map((row) => row.name)).toEqual(['canAdministerEligibility']);
+    expect(HELPERS.filter((row) => row.pair === null).map((row) => row.name)).toEqual([
+      'canAdministerEligibility',
+      'canOverrideBanditWeights',
+    ]);
   });
 
   it('covers every exported can… helper of the two permission modules', () => {
@@ -211,17 +223,17 @@ describe('the table the matrix reads', () => {
       .filter((name) => name.startsWith('can'))
       .sort();
     const covered = HELPERS.map((row) => row.name).filter((name) => exported.includes(name));
-    expect(exported).toHaveLength(11);
+    expect(exported).toHaveLength(12);
     expect(exported).toEqual(Array.from(new Set(covered)).sort());
   });
 });
 
 describe('every helper x user x effective map (#891, check #41)', () => {
-  it('evaluates exactly 13 helpers x 6 users x 13 maps = 1014 cases', () => {
-    expect(HELPERS).toHaveLength(13);
+  it('evaluates exactly 14 helpers x 6 users x 13 maps = 1092 cases', () => {
+    expect(HELPERS).toHaveLength(14);
     expect(USERS).toHaveLength(6);
     expect(STATES).toHaveLength(13);
-    expect(CASES).toHaveLength(1014);
+    expect(CASES).toHaveLength(1092);
   });
 
   it('answers as the server decides, in every case', () => {
@@ -239,6 +251,7 @@ describe('every helper x user x effective map (#891, check #41)', () => {
     expect(experimentPermissions.canCreateExperiment(viewer, { feature_flag: ['create'] })).toBe(false);
     expect(readsAllAuditLogs(me(viewer), { audit_log: ['read'] })).toBe(true);
     expect(experimentPermissions.canAdministerEligibility(viewer)).toBe(false);
+    expect(experimentPermissions.canOverrideBanditWeights(viewer)).toBe(false);
   });
 
   it('a map that is not a map of lists admits nothing', () => {

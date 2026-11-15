@@ -38,6 +38,7 @@ import {
 } from '@/components/feature-flags/FlagManageSection';
 import { classifyPasswordError, passwordOutcomeSentence } from '@/services/password';
 import { FORBIDDEN_MESSAGE, editErrorMessage } from '@/components/admin/users/EditUserModal';
+import { OVERRIDE_ERROR_COPY, overrideErrorCopy } from '@/components/experiments/BanditWeightsOverride';
 
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
@@ -100,6 +101,8 @@ const MAPS: Array<[string, (err: unknown) => string]> = [
   ]),
   ['passwordOutcomeSentence', (e) => passwordOutcomeSentence(classifyPasswordError(e))],
   ['editErrorMessage', editErrorMessage],
+  // #1957: "Set weights by hand" on the experiment page's bandit panel.
+  ['overrideErrorCopy', overrideErrorCopy],
 ];
 
 beforeEach(() => {
@@ -153,6 +156,7 @@ describe('a role refusal (control): the same maps keep their own copy', () => {
     expect(rolloutErrorCopy(err)).toBe(ROLLOUT_ERROR_COPY[403]);
     expect(flagManageErrorCopy('archive', err)).toBe(FLAG_MANAGE_ERROR_COPY.archive[403]);
     expect(editErrorMessage(err)).toBe(FORBIDDEN_MESSAGE);
+    expect(overrideErrorCopy(err)).toBe(OVERRIDE_ERROR_COPY[403]);
   });
 
   it('is not a demo refusal on another status, even with the code', async () => {

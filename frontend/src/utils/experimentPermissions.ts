@@ -72,6 +72,30 @@ export function canAdministerEligibility(
 }
 
 /**
+ * Whether the API would accept a bandit's weights set by hand from this user
+ * (#1957): "Set weights by hand" on the experiment page's Current traffic
+ * weights panel, which sends `PUT /api/v1/bandit/{id}/weights`.
+ *
+ * Mirrors `override_bandit_weights`: a superuser, or the ADMIN role itself.
+ * Like `_require_admin`, the route checks the role, not a permission from the
+ * role table, so no custom role or direct grant can give it and this takes no
+ * effective map. It keeps its own list rather than sharing
+ * `canAdministerEligibility`'s, because it answers a different route:
+ * `test_dashboard_experiment_roles.py` calls `override_bandit_weights` for
+ * every role and holds the set it admits equal to this list.
+ *
+ * A null user (no session yet) answers false: the control appears only once
+ * the user is known to be an ADMIN or a superuser.
+ */
+const ROLES_THAT_OVERRIDE_BANDIT_WEIGHTS = ['ADMIN'] as const;
+
+export function canOverrideBanditWeights(user: PermissionUser): boolean {
+  if (!user) return false;
+  if (user.is_superuser) return true;
+  return ROLES_THAT_OVERRIDE_BANDIT_WEIGHTS.includes(user.role as 'ADMIN');
+}
+
+/**
  * Whether the API would accept a change to an experiment from this user:
  * start, pause, complete, archive, schedule, and edit a draft's details,
  * variants and metrics.

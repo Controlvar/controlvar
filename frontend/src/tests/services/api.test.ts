@@ -30,6 +30,7 @@ import {
 import { AdminService } from '@/services/admin';
 import { ResultsService } from '@/services/results';
 import { UserTable, deleteTimedOutMessage } from '@/components/admin/users/UserTable';
+import { overrideErrorCopy } from '@/components/experiments/BanditWeightsOverride';
 import { UNREACHABLE, errorCopy } from '@/components/experiments/ExperimentManageSection';
 import { SCHEDULE_ERROR_COPY, scheduleErrorCopy } from '@/components/experiments/ExperimentScheduleSection';
 import { flagManageErrorCopy } from '@/components/feature-flags/FlagManageSection';
@@ -908,6 +909,9 @@ describe('without AbortSignal.any (#1040 D6)', () => {
 const STATUS_ZERO_SITES: Record<string, { count: number; kind: string }> = {
   // The definition: ApiError.isNetworkError and its comparison.
   'services/api.ts': { count: 2, kind: 'definition' },
+  // overrideErrorCopy ("Set weights by hand", #1957): returns `err.message` for
+  // every status 0, so a timed-out PUT says its outcome is unknown.
+  'components/experiments/BanditWeightsOverride.tsx': { count: 1, kind: 'passes-message' },
   'components/experiments/ExperimentManageSection.tsx': { count: 1, kind: 'write' },
   // SCHEDULE_ERROR_COPY's `0:` entry.
   'components/experiments/ExperimentScheduleSection.tsx': { count: 1, kind: 'write' },
@@ -1081,6 +1085,10 @@ describe('each status-0 place says what a time-out means (#1040 D7)', () => {
   // modules/frontend/src/tests/services/request-timeouts.test.ts). Each says
   // the time-out text exactly, and keeps its own unreachable line otherwise.
   const CHECKS: Record<string, (write: ApiError, read: ApiError) => void> = {
+    'components/experiments/BanditWeightsOverride.tsx': (write) => {
+      expect(overrideErrorCopy(write)).toBe(WRITE_TEXT);
+      expect(overrideErrorCopy(unreachable())).toBe(unreachableMessage());
+    },
     'components/experiments/ExperimentManageSection.tsx': (write) => {
       for (const action of ['clone', 'edit', 'delete', 'design'] as const) {
         expect(errorCopy(action, write)).toBe(WRITE_TEXT);
