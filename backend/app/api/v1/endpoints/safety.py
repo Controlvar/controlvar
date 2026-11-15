@@ -53,7 +53,9 @@ async def update_safety_settings(
     Requires superuser privileges.
     """
     safety_service = SafetyService(db)
-    return await safety_service.create_or_update_safety_settings(settings)
+    return await safety_service.create_or_update_safety_settings(
+        settings, actor=current_user
+    )
 
 
 @router.get(

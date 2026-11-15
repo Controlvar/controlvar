@@ -7,7 +7,7 @@ experiments, rollout schedule changes, API keys, holdouts, mutual exclusion grou
 segments, creating and deleting users, changes to a user's role, superuser flag or active
 status, signing in with a password or through Cognito (`POST /auth/token`; a sign-in
 through the Cognito Hosted UI does not pass through the API and is not recorded), and
-safety rollbacks. In the full profile it also records custom roles defined, changed,
+safety rollbacks and saves of the global safety settings. In the full profile it also records custom roles defined, changed,
 deleted, assigned and revoked, direct permissions granted and revoked, a workspace
 member's role changes, and single sign-on (SSO) sign-ins.
 [Action Types](#action-types) lists every action and when it is written.
@@ -317,6 +317,7 @@ No entry holds a password, a token, any part of an API key, or a request body.
 | `user_login` | `user` | Signing in with a password (`POST /auth/login`, or `POST /auth/token` with `AUTH_PROVIDER=local`); `new_value` is `{"provider": "local"}` |
 | `user_login` | `user` | Signing in through Cognito (`POST /auth/token` with the Cognito provider) as a user who already has an account; `new_value` is `{"provider": "cognito"}`. A user's first Cognito sign-in writes no `user_login`: their account is created by the first request they make with the token, which writes `user_create`. A sign-in through the Cognito Hosted UI does not pass through this API and writes nothing |
 | `safety_rollback` | `feature_flag` | A safety rollback, manual (`POST /safety/feature-flags/{id}/rollback`, by the calling user) or by the safety monitor. `new_value` is `{"trigger_type", "previous_percentage", "new_percentage", "deactivated", "paused_schedules"}`; `reason` is the rollback's reason. It appears in the flag's history |
+| `safety_config_update` | `safety_config` | `POST /safety/settings` saves the global safety settings; one entry per save, by the calling superuser, whether or not a value changed. `old_value` and `new_value` are `{"enable_automatic_rollbacks", "default_metrics"}`; `old_value` is empty when the save creates the settings. A refused or invalid save writes none. A flag's own safety config (`POST /safety/feature-flags/{id}/config`) writes none |
 | `experiment_start`, `experiment_complete` | `experiment` | The experiment scheduler starts an experiment at its start date or scheduled resume, or completes it at its end date (also when `POST /experiments/schedules/process` runs it). `reason` is `scheduled start`, `scheduled resume` or `scheduled end` |
 | `feature_flag_update` | `feature_flag` | The rollout scheduler starts a rollout stage and sets the flag's rollout percentage. `reason` is `rollout schedule stage started` |
 | `user_create` | `user` | A user's first Cognito sign-in creates their account. The actor is the new user; `reason` is `first sign-in` |
@@ -350,7 +351,7 @@ active status is saved together with its entry: if the entry cannot be written, 
 change is refused with a `500` and nothing is saved, and sending the same request again
 once the problem is fixed writes it once.
 
-`ActionType` also defines `user_update`, `user_logout` and `safety_config_update`. You can
+`ActionType` also defines `user_update` and `user_logout`. You can
 filter on them, but nothing in this release writes them. `role_unassign`, `role_create`,
 `role_update`, `role_delete`, `permission_grant` and `permission_revoke` are written only
 with the modules installed.
