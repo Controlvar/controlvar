@@ -86,7 +86,7 @@ public class TrackEvent
         Value = Value,
         Metadata = Properties,
         Timestamp = Timestamp?.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture),
-        EventId = string.IsNullOrEmpty(EventId) ? null : EventId
+        EventId = null // TAMPER (do not merge): ToBody drops the event id
     };
 }
 
