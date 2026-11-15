@@ -82,9 +82,21 @@ function mockFetchSequence(...steps: Array<{ body: unknown; status?: number } | 
   return mock;
 }
 
+/**
+ * A request's body without the `event_id` of a tracking body or of each batch entry: the SDK makes
+ * a fresh one per call, so the exact-body assertions here leave it out. `event-id.test.ts` pins it.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function withoutEventId(body: unknown): any {
+  if (!body || typeof body !== 'object') return body;
+  const { event_id: _eventId, ...rest } = body as Record<string, unknown>;
+  if (Array.isArray(rest.events)) rest.events = rest.events.map(withoutEventId);
+  return rest;
+}
+
 function call(mock: jest.Mock, index = 0) {
   const [url, init] = mock.mock.calls[index];
-  return { url: url as string, init, body: init?.body ? JSON.parse(init.body) : undefined };
+  return { url: url as string, init, body: init?.body ? withoutEventId(JSON.parse(init.body)) : undefined };
 }
 
 afterEach(() => {

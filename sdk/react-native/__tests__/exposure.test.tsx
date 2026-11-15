@@ -453,7 +453,13 @@ describe('onExposure: the client around it', () => {
     await flush();
     expect(requests.map((r) => `${r.method} ${r.path}`)).toEqual(['POST /api/v1/tracking/assign', 'POST /api/v1/tracking/batch']);
     expect(requests[1].body.events).toEqual([
-      { event_type: 'experiment_viewed', event_name: 'experiment_viewed', user_id: 'u-1', experiment_key: 'exp-1' },
+      {
+        event_type: 'experiment_viewed',
+        event_name: 'experiment_viewed',
+        user_id: 'u-1',
+        experiment_key: 'exp-1',
+        event_id: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
+      },
     ]);
   });
 

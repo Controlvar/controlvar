@@ -69,6 +69,22 @@ function Home() {
 }
 ```
 
+## Event ids
+
+Every event the SDK sends carries an `event_id`, so the server stores an event sent again with the
+same `event_id`, user, experiment, flag and event name only once. Use this from the next published
+version, not from the version on npm now. It needs a Controlvar server that includes the
+`event_id` change (#1640, in the first platform release after it merged): an older server ignores
+the field.
+
+- Without an `eventId` option, each `track()` call and each event of `trackBatch()` makes a new
+  lowercase UUID v4. For an event your code may send again, make the id once, when the event
+  happens, and pass the same `eventId` each time.
+- `undefined`, `null` and `''` mean none, so the SDK makes one. The server refuses an id of more
+  than 255 characters or one holding NUL with `422`; the SDK does not check it.
+- An event fanned out to several experiments and flags carries the same id in every entry. The
+  SDK does not send a request again.
+
 ## Exposure hook
 
 `onExposure`, a function you give `ExperimentationClient` when you create it, is called once each

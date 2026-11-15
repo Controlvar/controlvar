@@ -130,6 +130,18 @@ try {
   if (fanout.made.length !== 1) fail(`expected one /tracking/batch call, saw ${fanout.made.length}`);
   if (fanout.bad) fail(`fan-out returned HTTP ${fanout.bad.status}`);
 
+  // 4b. One keyed event sent twice with one fixed eventId (#1543, C4). The server is to store it
+  //     once: the runner counts the rows for this user and event name.
+  const dedupName = `contract_dedup_${randomUUID()}`;
+  const dedupId = `contract-${randomUUID()}`;
+  mark = calls.length;
+  for (let i = 0; i < 2; i++) {
+    await client.trackEvent(userId, dedupName, undefined, { experimentKey, eventId: dedupId });
+  }
+  const dedup = since(mark, '/api/v1/tracking/track');
+  if (dedup.made.length !== 2) fail(`expected two /tracking/track calls, saw ${dedup.made.length}`);
+  if (dedup.bad) fail(`event_id: track returned HTTP ${dedup.bad.status}`);
+
   // 5. The exposure hook (#1499): a NEW ServerClient with onExposure assigns the
   //    same user twice with no clear in between. The user is already assigned, so
   //    the server answers assigned: true, records an exposure, and the hook is
@@ -185,6 +197,7 @@ try {
       flag: { enabled: flag.isEnabled },
       track: { ok: true },
       fanout: { ok: true },
+      event_id: { user_id: userId, event_name: dedupName, id: dedupId, sends: 2 },
       exposure: {
         calls: exposures.length,
         payload: exposure

@@ -28,6 +28,7 @@
   "role_delete",
   "role_unassign",
   "role_update",
+  "safety_config_update",
   "safety_rollback",
   "segment_archive",
   "segment_create",

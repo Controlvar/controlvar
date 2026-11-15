@@ -1654,6 +1654,12 @@ count = 2
 reason = "K18: CI plumbing (env-inventory.md)"
 
 [[keep]]
+path = ".github/workflows/nightly-qa.yml"
+literal = "EXPERIMENTLY_TEST_SHARD"
+count = 2
+reason = "K18: CI plumbing (env-inventory.md)"
+
+[[keep]]
 path = "backend/tests/shard.py"
 literal = "EXPERIMENTLY_TEST_SHARD"
 count = 6
@@ -1669,6 +1675,12 @@ reason = "K18: CI plumbing (env-inventory.md)"
 path = "backend/tests/unit/scripts/test_check_test_shards.py"
 literal = "EXPERIMENTLY_TEST_SHARD"
 count = 3
+reason = "K18: CI plumbing (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/scripts/test_nightly_workflow.py"
+literal = "EXPERIMENTLY_TEST_SHARD"
+count = 2
 reason = "K18: CI plumbing (env-inventory.md)"
 
 [[keep]]

@@ -379,12 +379,12 @@ def delete_experiment(
 ```bash
 # Format and auto-fix (ruff replaces black, isort and flake8). The scope is
 # backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/
-# tests/usecases/ -- what `make format` and the lint job use.
-ruff format backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/
-ruff check backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/ --fix
+# tests/usecases/ tests/personas/ -- what `make format` and the lint job use.
+ruff format backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/ tests/personas/
+ruff check backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/ tests/personas/ --fix
 
 # Check only, exactly as CI does
-ruff check backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/ && ruff format --check backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/
+ruff check backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/ tests/personas/ && ruff format --check backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/ tests/personas/
 
 # Type checking
 mypy backend/app/

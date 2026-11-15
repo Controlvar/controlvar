@@ -45,12 +45,12 @@ pytest backend/tests/integration/  # Integration tests only
 
 # Code quality (ruff replaces black, isort and flake8). The scope is
 # `backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/
-# tests/usecases/` -- exactly what `make format` / `make lint` and the lint CI
-# job pass; linting backend/ alone leaves the modules, the repository tooling,
-# the acceptance runner, the ground-truth library and the use-case harness
-# unchecked.
-ruff format backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/        # Format code
-ruff check backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/ --fix   # Lint and auto-fix (includes import sorting)
+# tests/usecases/ tests/personas/` -- exactly what `make format` / `make lint`
+# and the lint CI job pass; linting backend/ alone leaves the modules, the
+# repository tooling, the acceptance runner, the ground-truth library, the
+# use-case harness and the persona catalogue unchecked.
+ruff format backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/ tests/personas/        # Format code
+ruff check backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/ tests/personas/ --fix   # Lint and auto-fix (includes import sorting)
 mypy backend/app/                             # Type checking: NOT gated, NOT clean (#788)
 make format                 # The two ruff commands above
 make lint                   # Everything the `lint` CI job runs (see below)
@@ -1280,13 +1280,14 @@ python -m alembic -c backend/app/db/alembic.ini current
 ### Code Quality Checks
 ```bash
 # Format and auto-fix backend/, modules/, scripts/, tests/acceptance/,
-# tests/ground_truth/ and tests/usecases/ in place (ruff: format + lint +
-# import order)
+# tests/ground_truth/, tests/usecases/ and tests/personas/ in place (ruff:
+# format + lint + import order)
 make format
 
 # The full lint gate, in this order:
 #   ruff check / ruff format --check   backend/ modules/ scripts/ tests/acceptance/
 #                                      tests/ground_truth/ tests/usecases/
+#                                      tests/personas/
 #   lint-imports                       the core/modules import boundary
 #                                      ([tool.importlinter] in pyproject.toml,
 #                                      backend/lambda/.importlinter)
