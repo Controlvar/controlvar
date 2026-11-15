@@ -278,6 +278,8 @@ steps:
       click:
         role: button
         name: Revoke
+        quote: false
+        reason: the dashboard's button for the guide's "Deleting a Key" (both call DELETE /api/v1/api-keys/{id})
     expect:
       aria: |
         - alertdialog "Revoke API key Docs journey first key":
