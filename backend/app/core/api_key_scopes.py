@@ -1,10 +1,10 @@
 """
 The one rule for reading an API key's ``scopes`` column.
 
-``APIKey.scopes`` is a comma-separated string (``String(255)``, nullable).
-Several writers fill it -- the create endpoint, which normalises, and the demo
-and contract seed scripts, which write literals such as ``"read,write"`` -- so
-every reader goes through :func:`parse_scopes`:
+``APIKey.scopes`` is a comma-separated string (``String(SCOPES_MAX_LENGTH)``,
+nullable). Several writers fill it -- the create endpoint, which normalises,
+and the demo and contract seed scripts, which write literals such as
+``"read,write"`` -- so every reader goes through :func:`parse_scopes`:
 
 * split on ``","``;
 * strip surrounding whitespace from each entry;
@@ -30,6 +30,13 @@ SDK_RULESET_SCOPE = "sdk:ruleset"
 # mcp:read lets a key read flags, experiments and results on the four read
 # operations of backend/app/api/read_scope.py.
 MCP_READ_SCOPE = "mcp:read"
+
+# The length of the scopes column (backend/app/models/api_key.py), and so the
+# most the stored form -- the names joined with commas -- may hold. The create
+# request refuses a longer set with 422 (backend/app/schemas/api_key.py);
+# without that the insert failed and answered 500 (#1936). Changing it needs a
+# migration of the column.
+SCOPES_MAX_LENGTH = 255
 
 
 def parse_scopes(scopes: Optional[str]) -> List[str]:

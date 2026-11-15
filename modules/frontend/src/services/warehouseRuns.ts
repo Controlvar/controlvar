@@ -55,6 +55,8 @@ export interface VariantResult {
   effect_size?: number | null;
   effect_size_label?: string | null;
   relative_improvement_pct: number | null;
+  /** Treatment minus control; the direction of a change when the control is at 0. */
+  absolute_difference?: number | null;
   power?: number | null;
   statistical_test_used?: string | null;
   /** Why this variant's comparison was not computed, e.g. "Not computed: no variation". */
@@ -208,6 +210,7 @@ export const WAREHOUSE_NAMES: Record<string, string> = {
   bigquery: 'BigQuery',
   snowflake: 'Snowflake',
   athena: 'Amazon Athena',
+  redshift: 'Amazon Redshift',
 };
 
 export function warehouseName(type: string | null | undefined): string {

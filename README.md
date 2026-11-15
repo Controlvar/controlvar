@@ -17,6 +17,16 @@ that changes for an install you already run.
 
 ---
 
+## Try the live demo
+
+A read-only copy runs at <https://demo.controlvar.com>: the dashboard as a viewer, with ShopLab and
+StreamPulse sending it simulated traffic. Creating and changing things is turned off there, and
+everything is rebuilt every night at 08:00 UTC. To create experiments, run it on your machine
+(below).
+[The live demo](docs/getting-started/live-demo.md) says what is turned off there, and why.
+
+---
+
 ## Try it on your machine
 
 You need Docker with Compose v2, `curl` and `jq`. Clone the repository:

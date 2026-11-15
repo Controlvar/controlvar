@@ -146,7 +146,9 @@ An experiment that balances its split within groups also answers
 with each user in the group stored when they were assigned instead of their first value, and it
 adds one estimate over the groups.
 [Balance the split within groups](../guides/balance-within-groups.md#results-by-group) says what
-it returns and where the two differ.
+it returns and where the two differ. On the results page, the **Breakdowns** tab of such an
+experiment lists its balanced groups first and opens on them; its other choices are breakdowns
+as above.
 
 ---
 

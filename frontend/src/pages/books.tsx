@@ -23,15 +23,15 @@ export default function BooksPage() {
       <PageTitle
         title="The Controlvar books"
         path="/books"
-        description="Learn engineering, programming and the craft of shipping software through one real, open-source codebase: Controlvar itself. The books are licensed CC BY 4.0."
+        description="Engineering and programming books that use Controlvar's own code for their examples. The books are licensed CC BY 4.0."
       />
       <div className="flex-1 bg-white">
         <div className={`${WIDTH} py-14 lg:py-16`}>
           <h1 className={H1}>The Controlvar books</h1>
           <p className="mt-5 max-w-3xl text-lg leading-relaxed text-slate-600">
-            Learn engineering, programming and the craft of shipping software through one real, open-source codebase:
-            Controlvar itself. Every concept is taught twice: once in general terms, and once in Controlvar&apos;s own
-            source, which you can clone, run and break on your own machine.
+            Engineering and programming books that use Controlvar&apos;s own code for their examples. Every concept is
+            taught twice: once in general terms, and once in Controlvar&apos;s own source, which you can clone, run and
+            break on your own machine.
           </p>
 
           {/* Labels, not headings: the page's h2s are its groups of books, on the site's one scale. */}

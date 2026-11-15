@@ -384,7 +384,7 @@ alembic stamp heads
 
 #### Role-Based Access Control (RBAC)
 The `core/permissions.py` module implements a comprehensive RBAC system with four roles:
-- **ADMIN**: Full access to all resources and actions
+- **ADMIN**: Manages experiments, flags, integrations and compliance exports, but is not a superuser: user management, changing safety settings and the dashboard's Users, API Keys and Roles pages need `is_superuser` (`docs/rbac/README.md`)
 - **DEVELOPER**: Can create and manage experiments and feature flags
 - **ANALYST**: Can view all data but cannot create or modify resources
 - **VIEWER**: Read-only access to approved resources
@@ -479,7 +479,7 @@ def admin_token(admin_user, monkeypatch):
 - Verify that proper 403 responses are returned when unauthorized actions are attempted
 - Use mock objects that accurately represent actual objects including ownership properties
 - All permission tests should validate that:
-  - ADMIN users can perform all actions
+  - ADMIN users can manage experiments, flags, integrations and compliance exports, but not the superuser-gated routes (`/api/v1/admin/users`, changing safety settings) unless `is_superuser`
   - DEVELOPER users can create and manage resources
   - ANALYST users can view but not modify resources
   - VIEWER users have read-only access

@@ -579,10 +579,11 @@ def may_run_alembic(cfg: Config, recorded: set[str], schema: str) -> bool:
 
     * a **full database opened by a core build** -- the reverse profile
       switch.  ``alembic_version`` then holds the modules head
-      (``modules_0004_rbac_activation``, or an earlier modules revision --
-      ``modules_0003_lower_is_better``, ``modules_0002_warehouse_analysis``,
-      ``modules_0001_rbac`` -- on a database an older full release
-      migrated), which a core tree has no file for.  ``deploy.yml`` runs the
+      (``modules_0005_redshift``, or an earlier modules revision --
+      ``modules_0004_rbac_activation``, ``modules_0003_lower_is_better``,
+      ``modules_0002_warehouse_analysis``, ``modules_0001_rbac`` -- on a
+      database an older full release migrated), which a core tree has no
+      file for.  ``deploy.yml`` runs the
       migration task with
       the image it is deploying, so the first ``profile=core`` deploy after an
       environment's stacks are redeployed from a core checkout, onto a
@@ -714,6 +715,11 @@ def _bootstrap_schema(engine: Engine, schema: str) -> str:
     return result
 
 
+def make_engine() -> Engine:
+    """The engine of a process outside the API (bootstrap, operator commands)."""
+    return create_engine(database_url())
+
+
 def bootstrap(engine: Engine | None = None, schema: str | None = None) -> str:
     """
     Bring the database up to date. Returns "upgraded" or "created".
@@ -722,7 +728,7 @@ def bootstrap(engine: Engine | None = None, schema: str | None = None) -> str:
     on a PostgreSQL advisory lock and run one after another.
     """
     schema = schema or schema_name()
-    engine = engine or create_engine(database_url())
+    engine = engine or make_engine()
     lock_key = f"{BOOTSTRAP_LOCK_NAMESPACE}{schema}"
 
     # Dedicated autocommit connection: a session-level advisory lock is held

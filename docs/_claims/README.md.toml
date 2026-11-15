@@ -42,6 +42,36 @@ by = [
 ]
 
 [[unit]]
+text = "Try the live demo"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A read-only copy runs at https://demo.controlvar.com: the dashboard as a viewer, with ShopLab and StreamPulse sending it simulated traffic."
+by = [
+    "test:backend/tests/unit/infrastructure/test_demo_box.py::test_the_sites_are_exactly_the_demo_host_and_its_two_storefronts",
+    "test:backend/tests/unit/infrastructure/test_demo_box.py::test_the_overlay_turns_demo_mode_on_itself",
+    "test:backend/tests/integration/demo/test_demo_mode_sign_in.py::test_only_a_non_superuser_viewer_signs_in",
+    "test:backend/tests/unit/infrastructure/test_demo_box.py::test_the_two_demo_apps_send_simulated_traffic",
+]
+
+[[unit]]
+text = "Creating and changing things is turned off there, and everything is rebuilt every night at 08:00 UTC."
+by = [
+    "test:backend/tests/smoke/test_demo_mode_routes.py::test_every_mutating_route_is_refused_for_a_signed_in_viewer",
+    "test:backend/tests/unit/middleware/test_demo_mode_middleware.py::test_the_allow_list_is_eight_posts_under_the_api_prefix",
+    "test:backend/tests/unit/infrastructure/test_demo_box.py::test_the_reset_time_is_the_one_the_dashboard_shows",
+    "test:backend/tests/unit/infrastructure/test_demo_box.py::TestTheBoxScripts::test_no_answer_twice_rebuilds_and_reopens",
+]
+
+[[unit]]
+text = "To create experiments, run it on your machine (below)."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The live demo says what is turned off there, and why."
+by = ["exempt:navigation"]
+
+[[unit]]
 text = "Try it on your machine"
 by = ["exempt:label"]
 

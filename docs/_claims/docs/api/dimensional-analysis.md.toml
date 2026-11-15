@@ -455,3 +455,10 @@ by = [
 [[unit]]
 text = "Balance the split within groups says what it returns and where the two differ."
 by = ["exempt:navigation"]
+
+[[unit]]
+text = "On the results page, the Breakdowns tab of such an experiment lists its balanced groups first and opens on them; its other choices are breakdowns as above."
+by = [
+    "test:frontend/src/tests/pages/results-balanced-groups.test.tsx::lists Platform (balanced) first and chooses it, from the balanced-groups route",
+    "test:frontend/src/tests/pages/results-balanced-groups.test.tsx::another dimension reads /results?breakdown= as before, and the balanced groups can be chosen again",
+]

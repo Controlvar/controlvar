@@ -577,6 +577,10 @@ GET /api/v1/experiments/{experiment_id}/segmented-results/{segment_by}
 
 See the [Dimensional Analysis Guide](../api/dimensional-analysis.md).
 
+For an experiment that balances its split within groups, the **Breakdowns** tab opens on its
+balanced groups, from `GET /api/v1/results/{experiment_id}/balanced-groups` (beta); see
+[Balance the split within groups](balance-within-groups.md#on-the-results-page).
+
 ---
 
 ### Multi-Armed Bandit — Maximize Conversions During the Experiment

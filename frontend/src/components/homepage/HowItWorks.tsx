@@ -75,7 +75,7 @@ export function HowItWorks() {
           <div className="lg:grid lg:grid-cols-2 lg:items-start lg:gap-10">
             <div className="min-w-0">
               <p className="mt-2 leading-relaxed text-slate-600">
-                Clone the repository and start everything from its root: four containers — Postgres, Redis, the API and
+                Clone the repository and start it from the root. It runs four containers: Postgres, Redis, the API and
                 the dashboard. The first start builds the images, creates the database and applies the demo seed.
               </p>
               <p className="mt-3 leading-relaxed text-slate-600">

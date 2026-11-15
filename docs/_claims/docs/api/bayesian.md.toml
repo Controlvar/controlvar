@@ -147,16 +147,16 @@ by = ["test:backend/tests/integration/api/test_experiment_analysis_settings_fixe
 [[unit]]
 text = "In the dashboard, the new-experiment form's Also analyse the primary metric with Bayesian statistics checkbox sends bayesian_enabled: true, and Advanced Bayesian settings under it sets the prior alpha, prior beta, loss threshold and credible level."
 by = [
-    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::shown only while the box is ticked, closed by default, and opens to four fields at their defaults with their helps",
-    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::changed alone, sends the five-field object with prior_family \"beta\"",
-    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::offers no Prior family control",
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::%s: shown only while the box is ticked, closed by default, and opens to four fields at their defaults with their helps",
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::%s: %s set to %s, changed alone, sends the five-field object with prior_family \"beta\"",
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::%s: offers no Prior family control (T337: every family is analysed as Beta)",
 ]
 
 [[unit]]
 text = "The form sends those four, with prior_family \"beta\", as a bayesian_config only when one of them differs from its default, and never sends a rope."
 by = [
-    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::untouched, the POST has no bayesian_config",
-    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::changed alone, sends the five-field object with prior_family \"beta\"",
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::%s: untouched, the POST has no bayesian_config",
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::%s: %s set to %s, changed alone, sends the five-field object with prior_family \"beta\"",
     "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::a field changed back to its default value sends no bayesian_config",
 ]
 

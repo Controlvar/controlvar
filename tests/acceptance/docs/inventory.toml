@@ -124,6 +124,10 @@ class = "journey"
 journey = "quick-start"
 reason = "the first-run guide: its shell steps run in Doc Examples; the journey walks the dashboard half"
 
+[pages."getting-started/live-demo.md"]
+class = "reference"
+reason = "what the public read-only demo is and what is turned off there; its one block, the quick start's demo command, is not run"
+
 [pages."capabilities.md"]
 class = "reference"
 reason = "one line per capability, each linked to its page; no steps to follow"
@@ -717,7 +721,7 @@ note = "sign-in per role and a password change, a first API key used for an assi
 # above says what each field means.
 # ---------------------------------------------------------------------------
 [meta]
-walked = 162
+walked = 163
 
 # The front door, the policy beside it, and the plan.
 

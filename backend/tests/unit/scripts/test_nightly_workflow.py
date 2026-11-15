@@ -6,6 +6,9 @@ not ``failure``, so ``nightly-failure-issue`` (``if: failure()``) was skipped
 and nobody was told. Pinned here:
 
 * the unit job's timeout is at least 45 minutes;
+* the integration job's timeout is at least 100 minutes: its last green runs
+  took 53.7, 65.4 and 73.0 minutes, and on 2026-11-13 run 43357047435 was
+  cancelled at its 75 minute limit;
 * the issue job runs when a job it needs is ``failure`` or ``cancelled`` and
   not when all of them succeeded (the expression is evaluated, not only
   compared as a string);
@@ -30,6 +33,7 @@ NIGHTLY = (
 )
 ISSUE_JOB = "nightly-failure-issue"
 MIN_UNIT_MINUTES = 45
+MIN_INTEGRATION_MINUTES = 100
 
 
 def _jobs() -> Dict[str, Any]:
@@ -68,6 +72,15 @@ def test_the_unit_job_has_room_to_finish():
     assert timeout >= MIN_UNIT_MINUTES, (
         f"unit-tests has timeout-minutes: {timeout}; the suite needs about 30.5 "
         f"minutes, so anything under {MIN_UNIT_MINUTES} times out (#1695)"
+    )
+
+
+def test_the_integration_job_has_room_to_finish():
+    timeout = _jobs()["integration-tests"]["timeout-minutes"]
+    assert timeout >= MIN_INTEGRATION_MINUTES, (
+        f"integration-tests has timeout-minutes: {timeout}; its green runs took up to "
+        f"73 minutes and one was cancelled at 75, so anything under "
+        f"{MIN_INTEGRATION_MINUTES} leaves no room"
     )
 
 

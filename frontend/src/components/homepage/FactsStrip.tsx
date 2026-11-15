@@ -24,7 +24,7 @@ export function FactsStrip() {
         <div className="min-w-0">
           <dt className="font-semibold">Apache-2.0, SDKs MIT</dt>
           <dd className="mt-1 text-sm leading-relaxed text-slate-600">
-            Both build profiles are the same licence and the same price: none. Read the{' '}
+            The core and full builds are both free and have the same licence. Read the{' '}
             <a href={LICENSE_URL} className={LINK}>
               LICENSE
             </a>
@@ -49,17 +49,17 @@ export function FactsStrip() {
           </dd>
         </div>
         <div className="min-w-0">
-          <dt className="font-semibold">Statistics you can check</dt>
+          <dt className="font-semibold">Tested statistics</dt>
           <dd className="mt-1 text-sm leading-relaxed text-slate-600">
             <a href={STATS_TESTS_URL} className={LINK}>
               Tests
             </a>{' '}
-            hold the analysis to known answers: the false-positive rate of A/A tests, interval coverage and a planted
-            lift.
+            check the analysis against known answers: the false-positive rate of A/A tests, interval coverage and a
+            planted lift.
           </dd>
         </div>
         <div className="min-w-0">
-          <dt className="font-semibold">Released in the open</dt>
+          <dt className="font-semibold">Public releases</dt>
           <dd className="mt-1 text-sm leading-relaxed text-slate-600">
             Versions are published on the{' '}
             <a href={RELEASES_URL} className={LINK}>

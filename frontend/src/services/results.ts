@@ -1,4 +1,5 @@
 import {
+  BalancedGroupsResponse,
   CorrectionMethod,
   ExperimentResultsResponse,
   DailyResultsResponse,
@@ -63,6 +64,18 @@ export class ResultsService {
         confidence_level: overrides?.confidence_level,
         correction_method: overrides?.correction_method,
       },
+      timeoutMs: LONG_REQUEST_TIMEOUT_MS,
+    });
+  }
+
+  /**
+   * The results of an experiment that balances its split within groups, by
+   * the group each user was balanced in (beta, #448). The server uses the
+   * experiment's stored confidence level and correction; an experiment that
+   * does not balance answers 409.
+   */
+  static async getBalancedGroups(experimentId: string): Promise<BalancedGroupsResponse> {
+    return apiFetch<BalancedGroupsResponse>(`/api/v1/results/${experimentId}/balanced-groups`, {
       timeoutMs: LONG_REQUEST_TIMEOUT_MS,
     });
   }

@@ -53,6 +53,15 @@ export const STATS_TESTS_URL = `${REPO_URL}/tree/main/backend/tests/unit/stats_v
  */
 export const BOOKS_URL = 'https://github.com/amarkanday/controlvar-books';
 
+/**
+ * The public read-only demo (D381): the dashboard as a viewer, rebuilt every
+ * night, which the marketing hero's "Try the live demo" button opens. It is
+ * the host `deploy/demo/` serves; README.md and the docs page
+ * `getting-started/live-demo.md` name the same address
+ * (`backend/tests/unit/docs/test_live_demo_page.py`).
+ */
+export const DEMO_URL = 'https://demo.controlvar.com';
+
 /** The books' licence, as their README links it: Creative Commons Attribution 4.0 International. */
 export const BOOKS_LICENCE_URL = 'https://creativecommons.org/licenses/by/4.0/';
 

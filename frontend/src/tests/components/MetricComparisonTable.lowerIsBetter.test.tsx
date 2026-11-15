@@ -169,6 +169,48 @@ describe('changeVerdict', () => {
     expect(changeVerdict(lower, { ...lower.variants[1], relative_improvement_pct: NaN })).toBeNull();
   });
 
+  describe('a control at 0 (no relative change)', () => {
+    const higher = metric({ lower_is_better: false }, 'Purchase');
+    const rel = (over: Partial<VariantResult>): VariantResult => ({
+      ...higher.variants[1],
+      relative_improvement_pct: null,
+      ...over,
+    });
+
+    it('a significant winner over a 0 control is better, and green in the table', () => {
+      expect(changeVerdict(higher, rel({ absolute_difference: 0.05 }))).toBe('better');
+      expect(changeVerdict(higher, rel({ absolute_difference: -0.05 }))).toBe('worse');
+      const m: MetricResult = {
+        ...higher,
+        variants: [
+          variant('ctrl', 'Control', null, false, 0),
+          { ...rel({ variant_id: 'up', variant_name: 'Rose', absolute_difference: 0.05 }) },
+        ],
+      };
+      renderTable([m]);
+      const row = screen.getByRole('row', { name: /\bRose\b/ });
+      const cell = within(row).getAllByRole('cell').find((c) => /· better/.test(c.textContent ?? ''));
+      expect(cell).toBeDefined();
+      expect(cell).toHaveClass('text-green-700');
+    });
+
+    it('a lower-is-better metric that rises from 0 is worse', () => {
+      expect(changeVerdict(lower, rel({ absolute_difference: 0.05 }))).toBe('worse');
+      expect(changeVerdict(lower, rel({ absolute_difference: -0.05 }))).toBe('better');
+    });
+
+    it('not significant, or both arms at 0, stays neutral', () => {
+      expect(changeVerdict(higher, rel({ is_significant: false, absolute_difference: 0.05 }))).toBeNull();
+      expect(changeVerdict(higher, rel({ absolute_difference: 0 }))).toBeNull();
+    });
+
+    it('a defined relative change keeps its own sign over the absolute difference', () => {
+      expect(
+        changeVerdict(higher, rel({ relative_improvement_pct: 10, absolute_difference: -0.05 })),
+      ).toBe('better');
+    });
+  });
+
   it('reads only a boolean as the direction', () => {
     expect(metricLowerIsBetter(metric({ lower_is_better: true }))).toBe(true);
     expect(metricLowerIsBetter(metric({ lower_is_better: false }))).toBe(false);

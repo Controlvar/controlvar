@@ -438,10 +438,14 @@ While any code may still ask for the flag, archive it instead. After a delete:
   [iOS](../sdk/ios.md), [Android](../sdk/android.md), [Flutter](../sdk/flutter.md),
   [Edge](../sdk/edge.md)).
 - A client keeps an answer it cached until the cache expires, 5 minutes by default.
+- Its rollout schedules and their stages, its safety configuration and its rollback
+  records are deleted with it.
 - Its events are kept, with `feature_flag_id` null.
 - The audit log records the delete as `feature_flag_delete`.
 - Only a role that may delete flags can do it (ADMIN, DEVELOPER, or in the full
   profile a custom role with `feature_flag (delete)`); anyone else gets `403`.
+
+In the dashboard, Delete on the flag's page asks you to type its key first.
 
 ### Create an API key
 

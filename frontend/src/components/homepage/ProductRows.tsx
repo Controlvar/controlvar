@@ -33,7 +33,7 @@ const ROWS: Row[] = [
   {
     id: 'rollouts',
     icon: icon(['M4 22V4', 'M4 4h12l-2 4 2 4H4']),
-    heading: 'Roll features out gradually, and watch their safety signals',
+    heading: 'Roll features out gradually, with automatic rollback',
     body: 'Sticky assignment, gradual rollouts with configurable stages, and automated safety rollback on error-rate and latency thresholds.',
     bullets: [
       'Targeting with 20+ operators: semantic version comparison, geo-distance, time windows and array operations',
@@ -46,7 +46,7 @@ const ROWS: Row[] = [
   {
     id: 'statistics',
     icon: icon(['M3 3v18h18', 'M7 15l4-4 3 3 5-6']),
-    heading: 'Statistics beyond a p-value',
+    heading: 'Plan tests and analyse results',
     body: "Work out a test's sample size in the power calculator, which needs no account.",
     bullets: [
       'Frequentist and Bayesian analysis',

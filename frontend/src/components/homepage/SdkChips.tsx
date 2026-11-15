@@ -51,7 +51,7 @@ export function SdkChips() {
     <section aria-labelledby="sdks-heading" className={`${WIDTH} py-12 lg:py-16`}>
       <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 sm:p-10">
         <h2 id="sdks-heading" className={H2}>
-          SDKs for the stack you have
+          SDKs for web, mobile and server
         </h2>
         <p className="mt-3 max-w-3xl leading-relaxed text-slate-600">
           All MIT-licensed. By default, flag evaluation and experiment assignment happen on the server.

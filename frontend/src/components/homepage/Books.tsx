@@ -28,9 +28,8 @@ export function Books() {
         The Controlvar books
       </h2>
       <p className="mt-3 max-w-3xl leading-relaxed text-slate-600">
-        Learn engineering, programming and the craft of shipping software through one real, open-source codebase:
-        Controlvar itself. The books are for newcomers to a language or framework, engineers who already code, and
-        contributors. They are licensed CC BY 4.0.
+        Engineering and programming books that use Controlvar&apos;s own code for their examples. They are for newcomers
+        to a language or framework, engineers who already code, and contributors. The licence is CC BY 4.0.
       </p>
       <ul role="list" className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {CORE_PATH.map((book) => (
