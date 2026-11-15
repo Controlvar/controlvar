@@ -87,6 +87,8 @@ later release.
 `GET /api/v1/results/{id}/balanced-groups` is beta too (#448): it answers for
 an experiment that balances its split within groups, and its response may
 still change.
+`GET /api/v1/results/{id}/segments/{segment_id}` is beta too (#1933): it
+answers for one ID-list segment's members, and its response may still change.
 
 ## Changing a stable route
 

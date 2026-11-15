@@ -293,7 +293,7 @@ by = [
 ]
 
 [[unit]]
-text = "Not planned unless users ask: interleaving, switchbacks, contextual bandits, an AI-assisted visual editor, post-stratification, retention metrics, and effects by segment beyond breakdowns."
+text = "Not planned unless users ask: interleaving, switchbacks, contextual bandits, an AI-assisted visual editor, post-stratification, retention metrics, and effects for a rules segment's members beyond breakdowns."
 by = ["exempt:policy"]
 
 [[unit]]

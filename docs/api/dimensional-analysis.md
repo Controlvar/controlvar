@@ -264,6 +264,128 @@ conversions of `blue_button` and `green_button`.
 
 ---
 
+## Results for one saved segment
+
+`GET /api/v1/results/{experiment_id}/segments/{segment_id}` (beta) computes the experiment's
+results for the users in one ID-list segment and nobody else. Nobody's assignment changes, and
+`GET /api/v1/results/{experiment_id}` answers exactly as before.
+
+A result for a segment is exploratory, like a breakdown. The correction covers the comparisons
+inside the segment, not the choice of segment, and each segment you read is another chance of a
+false positive. Confirm a finding with an experiment that targets the segment.
+
+A user is counted when their `user_id` is in the list at the time the results are computed,
+matched exactly. A user added later is counted, and one removed is not. A list built from
+something the experiment could change biases the comparison.
+
+The segment must be an ID list, in any status. An archived list's IDs cannot change while it
+stays archived, so its answer stays the same. A rules segment is refused: the attributes its rules
+read are stored only with the assignment event of `/tracking/assign`, and `/tracking/assign/batch`
+records none.
+
+This creates an ID-list segment, "Desktop testers", with the four desktop users above, and saves
+its id in `$DESKTOP`:
+
+```{.bash exec}
+DESKTOP=$(curl -s -X POST localhost:8000/api/v1/segments \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"name": "Desktop testers", "kind": "id_list"}' | jq -r .id)
+
+curl -s -X POST localhost:8000/api/v1/segments/$DESKTOP/members \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"add": ["segment-user-1", "segment-user-3", "segment-user-5", "segment-user-7"]}' | jq -c .
+```
+<!-- expect: {"added":4,"already_members":0,"member_count":4} -->
+
+It prints `{"added":4,"already_members":0,"member_count":4}`. The experiment's results for those
+four users:
+
+```{.bash exec}
+curl -s "localhost:8000/api/v1/results/$EXP_ID/segments/$DESKTOP" \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq -c '{segment: (.segment | {name, kind, status, membership, member_count}), is_exploratory, total_users: .summary.total_users}'
+```
+<!-- expect: {"segment":{"name":"Desktop testers","kind":"id_list","status":"active","membership":"current","member_count":4},"is_exploratory":true,"total_users":4} -->
+
+It prints `{"segment":{"name":"Desktop testers","kind":"id_list","status":"active","membership":"current","member_count":4},"is_exploratory":true,"total_users":4}`.
+
+The four were assigned with the `device` `desktop`, so each variant's users and converting users
+are the `desktop` row of the breakdown above:
+
+```{.bash exec}
+A=$(curl -s "localhost:8000/api/v1/results/$EXP_ID/segments/$DESKTOP" \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq -c '[.metrics[0].variants[] | {variant_name, sample_size, conversions}] | sort_by(.variant_name)')
+B=$(curl -s "localhost:8000/api/v1/results/$EXP_ID?breakdown=device" \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq -c '[.breakdown.segments[] | select(.segment_value == "desktop") | .variants[] | {variant_name, sample_size, conversions}] | sort_by(.variant_name)')
+[ "$A" = "$B" ] && echo same
+```
+<!-- expect: same -->
+
+It prints `same`.
+
+`srm` is the sample ratio check of the segment's users alone. They were assigned by the
+allocation like everyone else, so they should split as allocated; a mismatch inside the segment
+while all users pass usually means the list depends on something the experiment changed. Its
+counts are the segment's users:
+
+```{.bash exec}
+curl -s "localhost:8000/api/v1/results/$EXP_ID/segments/$DESKTOP" \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq -c '{srm_users: (.srm.observed | add)}'
+```
+<!-- expect: {"srm_users":4} -->
+
+It prints `{"srm_users":4}`. A rules segment is refused. This creates one on the `device`
+`desktop` and asks for its results:
+
+```{.bash exec}
+RULES=$(curl -s -X POST localhost:8000/api/v1/segments \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"name": "Desktop by rule", "rules": {"logical_operator": "AND", "groups": [{"logical_operator": "AND", "conditions": [{"attribute": "device", "operator": "equals", "value": "desktop"}]}]}}' | jq -r .id)
+
+curl -s "localhost:8000/api/v1/results/$EXP_ID/segments/$RULES" \
+  -H "Authorization: Bearer $TOKEN" | jq -r '.detail[0].msg'
+```
+<!-- expect: This is a rules segment. -->
+
+It prints `This is a rules segment. Results can be computed for the members of an id_list
+segment only: the attributes a rules segment matches are not stored for every assigned user.`
+
+| Request | Answer |
+|---|---|
+| An experiment that does not exist | `404` `Experiment not found` |
+| A segment that does not exist | `404` `Segment not found` |
+| A rules segment | `422`, its `detail` a list with one entry at `loc` `["path", "segment_id"]`, the text above |
+| An id that is not a UUID | FastAPI's own `422` at `["path", "experiment_id"]` or `["path", "segment_id"]`; like every route's, it repeats the value sent |
+| A caller without READ on experiments | `403` `You don't have permission to view experiments`, before any of the above |
+| Another segment's results are being computed in the same API process | `503` with `Retry-After: 5`: `Another segment's results are being computed. Try again shortly.` |
+
+The answer has the fields of `GET /api/v1/results/{experiment_id}` that describe the results:
+
+- `segment` (`id`, `name`, `kind`, `status`, `membership`, `member_count`, `experiment_users`,
+  `experiment_srm_warning`) and `is_exploratory`;
+- `metrics`, `summary`, `sample_size_adequate` and `srm`, for the segment's users;
+- `summary.recommendation`, computed for them, with the sample-ratio rule applied to their check
+  and to the whole experiment's: it is `INCONCLUSIVE` when either warns. Do not automate a decision
+  from it;
+- no `sequential_testing`, `bayesian_results` or `breakdown`.
+
+Only `GET /api/v1/results/{experiment_id}/segments/{segment_id}` filters by a saved segment. Its
+answer always has a `segment` object and `is_exploratory: true`, and never has
+`sequential_testing`, `bayesian_results` or `breakdown`. Every other results route,
+`GET /api/v1/experiments/{experiment_id}/results` and the export answer for all users; a
+`segment_id` query parameter sent to one of them is ignored, not refused. A server older than
+0.48.0 answers the segment route with `404` `{"detail": "Not Found"}`.
+
+The answer is computed on each request: it is not cached, and no analysis snapshot is recorded.
+
+---
+
 ## Reading the Results
 
 1. **`adjusted_alpha`** is the per-segment significance threshold after Bonferroni correction. A segment is `is_significant: true` only if its p-value is below this threshold.
@@ -289,3 +411,5 @@ conversions of `blue_button` and `green_button`.
 ## Permissions
 
 Reading either breakdown takes permission to view the experiment, as on the experiment page; every role has it.
+
+Reading the results for a saved segment takes the same permission, which is also the one that reads the segment, so every role can do it.
