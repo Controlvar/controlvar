@@ -2,6 +2,7 @@
 
 The main capabilities of Controlvar, one line each, grouped by area; each line links the page that explains it.
 **(beta)** marks a capability its own page calls beta; each route's level is in [API stability](api/stability.md). **(full profile)** marks a capability of the optional modules ([Modules & Profiles](getting-started/modules.md)).
+What Controlvar does not do is in [Limitations](getting-started/limitations.md), and what is planned, Now, Next and Later, is in the [roadmap](https://github.com/Controlvar/controlvar/blob/main/ROADMAP.md).
 
 ## Experiments and statistics
 
@@ -17,6 +18,7 @@ The main capabilities of Controlvar, one line each, grouped by area; each line l
 - [Interaction detection](api/interaction-detection.md): a scan for running experiments that share users, and a test of one pair of them (beta).
 - [Live results](websocket-streaming.md): a WebSocket that sends an experiment's results every 30 seconds by default.
 - [Scheduling](guides/user-guide.md#creating-an-experiment): start and end dates that the scheduler acts on, and a scheduled resume after a pause.
+- [Balanced split within groups](guides/balance-within-groups.md) (beta): each group of users, by an attribute or a saved segment, gets the experiment's split among themselves, with results for each group.
 - [Split URL experiments](api/split-url.md) (full profile, beta): each variant is its own page, and your server or edge sends each visitor to theirs.
 - [Warehouse analysis](api/warehouse-analytics.md) (full profile, beta): an experiment's analysis run on tables in your own Snowflake or BigQuery warehouse.
 - [LLM experiments](llm-evaluation/overview.md): users split between model variants, with an optional LLM judge that scores the answers.
@@ -29,6 +31,7 @@ The main capabilities of Controlvar, one line each, grouped by area; each line l
 - [Safety monitoring](feature-flags/safety.md): each active flag's error rate and latency checked against your thresholds, and an automatic rollback on a breach when you turn that on.
 - [Turning a flag off](feature-flags/kill-switch.md): the server answers off from the next evaluation, and each SDK once its cached answer expires.
 - [Stale flags](feature-flags/stale-flags.md): the flag list marks a flag that looks ready to remove, and says why; listing changes no flag.
+- [Archiving and deleting a flag](feature-flags/create.md#archived-flags): an archived flag answers every evaluation as off and can be unarchived; a delete removes it for good; the dashboard does both.
 - [Slack alerts](api/alerting.md): a message when the safety monitor rolls a flag back, a rollout stage advances, or the scheduler starts, resumes or completes an experiment.
 
 ## Targeting and segments
@@ -49,6 +52,10 @@ The main capabilities of Controlvar, one line each, grouped by area; each line l
 
 - [Guided setup](guides/experiment-wizard.md): an A/B or multivariate experiment in five steps, with an optional sample-size estimate.
 - [The results page](guides/user-guide.md#reading-results): each variant's users, the planned sample reached, the leading variant and the sample ratio check.
+- [Effect size and intervals](guides/user-guide.md#reading-results): the results table gives each variant's effect size, its own interval, and the interval of its change from the control.
+- [Results as CSV](guides/user-guide.md#exporting-results): the results page saves an experiment's variant rows as a CSV file.
+- [Bayesian priors at creation](guides/user-guide.md#creating-an-experiment): the prior alpha and beta, loss threshold and credible level, set when you create an experiment with Bayesian analysis on.
+- [Rollout schedule settings](feature-flags/rollouts.md#in-the-dashboard): a schedule's dates, maximum percentage and minimum stage duration, set when you create it and edited while it is a draft or paused.
 - [Experiment pages](guides/dashboard-and-api.md): start, pause, resume and complete an experiment, clone it, and edit, schedule or delete a draft.
 - [Administration](guides/dashboard-and-api.md): users and their roles, API keys, and the audit log, which downloads as CSV or JSON (the download is beta).
 - [What has a screen and what is API only](guides/dashboard-and-api.md), capability by capability.
@@ -61,6 +68,8 @@ The main capabilities of Controlvar, one line each, grouped by area; each line l
 - [AWS installer](self-hosting/aws-install.md) (beta): one command that runs the CDK steps for you, for the core profile in us-west-2.
 - [Signed releases](self-hosting/releases.md#verifying-what-you-pulled): each image is signed with cosign and carries an SBOM, and you can verify both.
 - [Two profiles](getting-started/modules.md): core, and full with the optional modules; `GET /api/v1/modules` says which one is running.
+- [Upgrading Docker Compose](https://github.com/Controlvar/controlvar/blob/main/deploy/compose/README.md): move a running stack to a newer release and keep its database; CI rehearses it from the previous release's images.
+- [Demo mode](getting-started/environment-setup.md#demo-mode): `DEMO_MODE=true` makes the API read-only for a public demo install, off by default.
 - [Monitoring](self-hosting/monitoring.md): Prometheus metrics at `/metrics`, structured logs and health probes.
 
 ## Security, roles and audit
@@ -73,5 +82,3 @@ The main capabilities of Controlvar, one line each, grouped by area; each line l
 - [Single sign-on](auth/sso.md) (full profile): OIDC providers, with an account created at a user's first sign-in and roles mapped from the provider's groups.
 - [HIPAA module](hipaa/overview.md) (full profile): PHI encryption, a PHI access log and BAA records.
 - [Workspaces](workspaces/overview.md) (full profile): users grouped into teams; a workspace role does not decide access to experiments and flags.
-
-What Controlvar does not do is in [Limitations](getting-started/limitations.md), and what is planned, Now, Next and Later, is in the [roadmap](https://github.com/Controlvar/controlvar/blob/main/ROADMAP.md).
