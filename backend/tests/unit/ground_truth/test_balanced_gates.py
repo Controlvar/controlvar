@@ -230,6 +230,7 @@ def test_g0b2_a_returning_user_answered_another_variant_is_refused():
     small = replace(
         S5,
         users=100,
+        sticky_share=1.0,
         balance=replace(
             S5.balance,
             cohorts=(generator.Cohort("US", {"country": "US"}, 100),),
@@ -291,7 +292,9 @@ def test_s5_sends_every_user_with_a_context_and_its_documented_group():
     }
     assigns = [op for op in plan.ops if op.kind == "assign"]
     assert {op.kind for op in plan.ops} == {"lifecycle", "assign", "track"}
-    assert len(assigns) == 12000  # every user, then every user again
+    # Every user, then about one in ten again.
+    returning = suite.returning_sends(plan)
+    assert len(assigns) == 6000 + returning and 500 < returning < 700
     assert all("context" in op.body for op in assigns)
     # The server's own reading of each context agrees with the docs' group.
     setting = S5.balance.setting()

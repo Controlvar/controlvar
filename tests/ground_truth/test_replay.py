@@ -19,8 +19,8 @@ S3    2, 30/70, 6,000: about 5% buyers, repeat purchases, a          the treatme
       and a count metric on the same events
 S4    3, 34/33/33, 6,000, Benjamini-Hochberg                         one arm lifted
 S5    2, 30/70, 6,000, balanced within ``country`` (US, DE, FR)      A/A in every group
-      (#448): every user assigned one at a time with a context and
-      assigned again (US 2,000, DE 1,500, FR 1,400, ``other`` 500,
+      (#448): every user assigned one at a time with a context, about
+      one in ten again (US 2,000, DE 1,500, FR 1,400, ``other`` 500,
       ``unknown`` 600); about 10% buyers, repeat purchases
 ====  ============================================================  =====================
 
@@ -115,9 +115,9 @@ PROPORTION_MEAN_REL = 1e-12
 #: Findings shown per failure; the count says how many there were.
 SHOWN = 25
 #: S5's share of its users who come back for a second assign, which G0b (2)
-#: reads: every one. Should the pull-request Replay pass 12 minutes, it is
-#: every tenth user (#1897).
-S5_RETURNING = 1.0
+#: reads: about one in ten. Every one took the pull-request Replay job past
+#: 12 minutes (12.1, its first run), the limit #1897 set for S5.
+S5_RETURNING = 0.1
 
 
 def resolve_scale(environ: Mapping[str, str]) -> str:
