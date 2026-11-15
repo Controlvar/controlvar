@@ -98,6 +98,11 @@ ENGINE_FINGERPRINTS: Dict[str, str] = {
     # 1.11.0: a significant treatment against a control with no conversions
     # is the winner.  This dataset has no such control: 1.10.0's.
     "1.11.0": "11f01afb88c2d4f930234b60a8c4004a733743f4dbd9af81132c4349ffb52c23",
+    # 1.12.0 is #1969: the breakdown's heterogeneity flag is a test of equal
+    # percentage-point differences at the given alpha.  This dataset's flag
+    # goes from True (lifts of both signs) to False (p 0.061), and the
+    # dataset gains the walk data of #1969 (``breakdown_walk``, p 0.23).
+    "1.12.0": "99d7a3cc572e1181cf24400c893b7fbe6889425247dc2f1a759171ca5db39f84",
 }
 
 # Two ids where the control sorts AFTER the treatment, so an engine that
@@ -193,7 +198,37 @@ def _engine_outputs() -> Dict[str, Any]:
     segment_results = dim.compute_segment_results(segments, base_alpha=0.05)
     outputs["breakdown"] = {
         "segments": segment_results,
-        "has_hte": dim.detect_hte(segment_results),
+        "has_hte": dim.detect_hte(segment_results, alpha=0.05),
+    }
+
+    # The walk data of #1969 (1.12.0): the same lift in every platform, the
+    # unknown segment below the heterogeneity test's floor.
+    walk = {
+        platform: {
+            _TREATMENT: {
+                "variant_name": "treatment",
+                "is_control": False,
+                "total": treatment[0],
+                "conversions": treatment[1],
+            },
+            _CONTROL: {
+                "variant_name": "control",
+                "is_control": True,
+                "total": control[0],
+                "conversions": control[1],
+            },
+        }
+        for platform, control, treatment in (
+            ("web", (90, 7), (89, 16)),
+            ("android", (88, 12), (88, 15)),
+            ("ios", (84, 6), (84, 20)),
+            ("unknown", (31, 1), (32, 4)),
+        )
+    }
+    walk_results = dim.compute_segment_results(walk, base_alpha=0.05)
+    outputs["breakdown_walk"] = {
+        "segments": walk_results,
+        "has_hte": dim.detect_hte(walk_results, alpha=0.05),
     }
 
     # Bayesian (/results bayesian_results, /bayesian), fixed seed.

@@ -1788,7 +1788,7 @@
             "type": "string"
           },
           "engine_version": {
-            "default": "1.11.0",
+            "default": "1.12.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"
@@ -1889,7 +1889,7 @@
             "type": "array"
           },
           "engine_version": {
-            "default": "1.11.0",
+            "default": "1.12.0",
             "description": "Statistics engine version that computed the current weights",
             "title": "Engine Version",
             "type": "string"
@@ -2275,7 +2275,7 @@
             ]
           },
           "engine_version": {
-            "default": "1.11.0",
+            "default": "1.12.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"
@@ -4465,7 +4465,7 @@
             "title": "Covariate Lookback Days"
           },
           "engine_version": {
-            "default": "1.11.0",
+            "default": "1.12.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"
@@ -4987,7 +4987,7 @@
             "type": "string"
           },
           "has_heterogeneous_effects": {
-            "description": "True when a chi-squared test detects significant heterogeneity in treatment effects across segments.",
+            "description": "True when a test that the first treatment's difference from the control, in percentage points, is the same in every tested segment rejects at 1 minus the confidence level the results were computed at. The first treatment is the non-control variant whose name sorts first. A segment is tested only when, in both the control and that treatment, its users times the pooled conversion rate, and times one minus that rate, are each at least 10; with fewer than two tested segments it is false. An exploratory signal, not a confirmed finding.",
             "title": "Has Heterogeneous Effects",
             "type": "boolean"
           },

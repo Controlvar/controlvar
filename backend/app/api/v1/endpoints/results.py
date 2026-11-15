@@ -199,7 +199,7 @@ def _compute_dimensional_breakdown(
     experiment_id: UUID,
     dimension: str,
     db,
-    base_alpha: float = 0.05,
+    base_alpha: float,
     value_source: Optional[ValueSource] = None,
 ) -> DimensionalBreakdownResponse:
     """
@@ -209,6 +209,11 @@ def _compute_dimensional_breakdown(
     user in exactly one segment, with the converting users of the metric the
     response lists first, so per variant the rows add up to that metric's
     headline.  DimensionalAnalysisService computes the statistics.
+
+    ``base_alpha`` is 1 minus the confidence level the results are computed
+    at, and has no default.  Each segment is tested at ``base_alpha`` divided
+    by the number of segments (Bonferroni); the heterogeneity test across the
+    segments (``detect_hte``) at ``base_alpha`` itself.
 
     ``value_source`` is passed to ``segment_rows`` when given: the
     balanced-groups route passes ``stored_strata``.  ``/results`` passes
@@ -275,7 +280,7 @@ def _compute_dimensional_breakdown(
     segment_results = dim_service.compute_segment_results(
         segments=segments, base_alpha=base_alpha
     )
-    has_hte = dim_service.detect_hte(segment_results)
+    has_hte = dim_service.detect_hte(segment_results, alpha=base_alpha)
     adjusted_alpha = (
         dim_service.get_adjusted_alpha(base_alpha, len(segments))
         if segments
@@ -284,9 +289,10 @@ def _compute_dimensional_breakdown(
 
     hte_warning = (
         (
-            f"Heterogeneous treatment effects detected across '{dimension}' segments. "
-            "Results may differ significantly between groups — "
-            "investigate per-segment effects before shipping."
+            "The first treatment's difference from the control varies between "
+            f"'{dimension}' segments by more than chance usually produces. "
+            "Treat this as a lead to confirm with a follow-up experiment, "
+            "not as a result."
         )
         if has_hte
         else None

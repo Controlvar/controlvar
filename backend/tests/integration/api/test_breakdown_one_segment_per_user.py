@@ -1827,9 +1827,9 @@ def test_a_breakdown_computes_statistics_for_the_listed_rows_only(
     original_hte = DimensionalAnalysisService.detect_hte
     hte_rows: List[List[str]] = []
 
-    def hte_spy(self, segment_results):
+    def hte_spy(self, segment_results, **kwargs):
         hte_rows.append([r.segment_value for r in segment_results])
-        return original_hte(self, segment_results)
+        return original_hte(self, segment_results, **kwargs)
 
     monkeypatch.setattr(DimensionalAnalysisService, "detect_hte", hte_spy)
     response = _get_results(viewer_client, exp)

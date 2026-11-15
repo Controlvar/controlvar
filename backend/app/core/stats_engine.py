@@ -66,6 +66,13 @@ import numpy as np
 #: None, so treatments all significantly worse than a control at 0 (for a
 #: proportion, only when lower is better) are no longer "no significant
 #: difference".
+#: 1.12.0 (#1969): a breakdown's ``has_heterogeneous_effects`` is true only
+#: when a test that the first treatment's difference from the control, in
+#: percentage points, is the same in every tested segment rejects at 1 minus
+#: the confidence level (``DimensionalAnalysisService.detect_hte``).  It no
+#: longer fires on a spread or a change of sign of the lifts, nor on a
+#: chi-squared test of the converting users alone at a fixed 0.05; the
+#: ``hte_warning`` text changes with it.
 #:
 #: The rule: an engine-changing PR bumps ``ENGINE_VERSION`` to the next minor
 #: and appends it to ``RELEASED_ENGINE_VERSIONS`` ("frozen on main", in
@@ -77,7 +84,7 @@ import numpy as np
 #: path stamping ``engine_version`` returns, caches or persists: results and
 #: its snapshots, Bayesian, CUPED, sequential, and the bandit's state, history
 #: and status.  A revert of an engine-changing PR bumps again.
-ENGINE_VERSION: str = "1.11.0"
+ENGINE_VERSION: str = "1.12.0"
 
 #: Mask that keeps the derived seed inside the signed 64-bit range.
 _SEED_MASK = (1 << 63) - 1
