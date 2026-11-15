@@ -29,6 +29,7 @@ import {
 } from '@/services/featureFlags';
 import type { SafetyCheckResponse } from '@/types/safety';
 import { PageTitle } from '@/components/PageTitle';
+import { formatSafetyMetricValue } from '@/components/admin/safety/SafetyStatusCard';
 import { FlagToggle } from '@/components/feature-flags/FlagToggle';
 import {
   ARCHIVED_LABEL,
@@ -704,9 +705,8 @@ export default function FeatureFlagDetailPage() {
                         <span className="text-slate-800">{humanize(m.name)}</span>
                         <span className="flex items-center gap-2 shrink-0">
                           <span className="tabular-nums text-slate-700">
-                            {m.current_value}
-                            {m.unit ? ` ${m.unit}` : ''}{' '}
-                            <span className="text-slate-500">/ {m.threshold}{m.unit ? ` ${m.unit}` : ''}</span>
+                            {formatSafetyMetricValue(m.name, m.current_value, m.unit)}{' '}
+                            <span className="text-slate-500">/ {formatSafetyMetricValue(m.name, m.threshold, m.unit)}</span>
                           </span>
                           {unmeasured && RATE_METRICS.has(m.name) ? (
                             <span className="text-xs text-slate-700" data-testid="safety-metric-not-computed">
