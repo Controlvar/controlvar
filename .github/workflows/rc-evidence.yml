@@ -21,7 +21,9 @@ name: RC evidence
 #
 # The suites run as the pull request jobs run them (pr-qa-gate.yml,
 # integration-tests.yml, chart.yml, infrastructure-tests.yml,
-# sdk-unit-tests.yml), the tag's whole tree, one job each: the pytest ones in
+# sdk-unit-tests.yml), the tag's whole tree, one job each, except unit and
+# integration, one job per shard (#1895; the verifier proves the shards ran
+# every collected test exactly once): the pytest ones in
 # the python-suites matrix (with the chart's render tests, run as chart.yml
 # runs them: EXPERIMENTLY_CHART_TESTS=1, its pinned helm, no skip; the CDK
 # stack tests, sdk/python's own suite, the SDK contract tests -- with Node.js
@@ -30,7 +32,7 @@ name: RC evidence
 # its pull request job does), the jest ones in the jest-suites matrix (the
 # frontend, sdk/js and the two demo apps), whose reports are written as JUnit
 # too. The list is
-# SUITES in scripts/rc_evidence.py. Their JUnit reports and the verifier's
+# LEGS in scripts/rc_evidence.py. Their JUnit reports and the verifier's
 # record (the run table, the verdicts it read, the reports) are kept 90 days.
 # The table is in the log and the record, not the step summary: it names run
 # ids and test names, which the public QA summaries leave out
@@ -63,8 +65,26 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # LEGS in scripts/rc_evidence.py: a suite each, except unit and
+        # integration, four shards each (#1895). Run whole at v0.45.0
+        # (42944394836), the integration session was cancelled at this job's
+        # 60 minutes after 90% of its tests, and the unit session took 45
+        # (PR QA Gate's Unit Tests, over the same trees, took up to 61 minutes
+        # a job on 11-10). integration-tests.yml's four shards of the same
+        # session took 13 to 23 minutes a job over 48 shard jobs on main on
+        # 11-10 and 11-11. The verifier proves the shards ran every collected
+        # test exactly once.
         include:
-          - suite: unit
+          - suite: unit-1
+            db: experimentation
+            deps: backend
+          - suite: unit-2
+            db: experimentation
+            deps: backend
+          - suite: unit-3
+            db: experimentation
+            deps: backend
+          - suite: unit-4
             db: experimentation
             deps: backend
           - suite: chart
@@ -79,7 +99,16 @@ jobs:
           - suite: modules
             db: experimentation
             deps: backend
-          - suite: integration
+          - suite: integration-1
+            db: experimentation_test
+            deps: backend
+          - suite: integration-2
+            db: experimentation_test
+            deps: backend
+          - suite: integration-3
+            db: experimentation_test
+            deps: backend
+          - suite: integration-4
             db: experimentation_test
             deps: backend
           - suite: infrastructure
@@ -200,14 +229,15 @@ jobs:
           python -m pip install -r modules/requirements.txt
           python -m pip install -r modules/requirements-test.txt
 
-      # As integration-tests.yml: the repository installed editable, the schema
-      # bootstrapped, and a second Redis that requires a password.
+      # As integration-tests.yml, in every integration shard: the repository
+      # installed editable, the schema bootstrapped, and a second Redis that
+      # requires a password.
       - name: Install the repository (editable)
-        if: matrix.suite == 'integration'
+        if: startsWith(matrix.suite, 'integration-')
         run: python -m pip install -e . --no-deps
 
       - name: Bootstrap database schema
-        if: matrix.suite == 'integration'
+        if: startsWith(matrix.suite, 'integration-')
         env:
           POSTGRES_SERVER: localhost
           POSTGRES_SCHEMA: test_experimentation
@@ -215,7 +245,7 @@ jobs:
         run: python -m backend.app.db.bootstrap
 
       - name: Start a password-protected Redis
-        if: matrix.suite == 'integration'
+        if: startsWith(matrix.suite, 'integration-')
         run: |
           set -euo pipefail
           password="$(openssl rand -hex 16)"
@@ -253,6 +283,7 @@ jobs:
         if: matrix.suite == 'chart'
         run: python3 scripts/check_junit_skips.py "$RUNNER_TEMP/junit/chart.xml" backend/tests/unit/chart
 
+      # A shard's JUnit and its shard report, under a name unique to the shard.
       - name: Upload the JUnit reports
         if: always()
         uses: actions/upload-artifact@v7

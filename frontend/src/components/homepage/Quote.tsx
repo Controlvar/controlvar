@@ -1,6 +1,7 @@
 import React from 'react';
 import table from '@/content/home-quotes.json';
 import { docsUrl } from '@/services/docs';
+import { CodeLine } from '@/components/homepage/CodeLine';
 
 /**
  * A homepage sentence that quotes a docs page, rendered from
@@ -29,7 +30,10 @@ const ROWS: ReadonlyArray<{ id: string; parts?: Part[]; code?: string[] }> = tab
 
 /**
  * A sentence renders as a `<span>`; a code row (lines of a docs page's code
- * block) as a `<code>` of its lines, for a `<pre>` to hold.
+ * block) as a `<code>` of its lines, for a `<pre>` to hold. Each line is a
+ * `CodeLine`: when the `<pre>` wraps, it breaks only at a space or right after
+ * a `(`, and the rest of the line is indented under its start. The `code`
+ * element's `textContent` is the table's lines joined by newlines.
  */
 export function Quote({ id }: { id: string }) {
   const row = ROWS.find((q) => q.id === id);
@@ -37,7 +41,14 @@ export function Quote({ id }: { id: string }) {
     throw new Error(`content/home-quotes.json has no quote with the id ${id}`);
   }
   if (row.code) {
-    return <code data-quote={id}>{row.code.join('\n')}</code>;
+    const lines = row.code;
+    return (
+      <code data-quote={id}>
+        {lines.map((line, i) => (
+          <CodeLine key={i} text={line} last={i === lines.length - 1} />
+        ))}
+      </code>
+    );
   }
   if (!row.parts) {
     throw new Error(`the quote ${id} has neither parts nor code`);

@@ -28,6 +28,7 @@ def test_sign_in_takes_ten_requests_a_minute():
 def test_sign_up_and_the_password_reset_routes_take_five_a_minute():
     for path in (
         "/api/v1/auth/signup",
+        "/api/v1/auth/confirm",
         "/api/v1/auth/forgot-password",
         "/api/v1/auth/reset-password",
         "/api/v1/users/me/password",
@@ -57,6 +58,7 @@ def test_these_are_all_the_routes_with_a_limit_of_their_own():
         "/api/v1/auth/token",
         "/api/v1/auth/login",
         "/api/v1/auth/signup",
+        "/api/v1/auth/confirm",
         "/api/v1/auth/forgot-password",
         "/api/v1/auth/reset-password",
         "/api/v1/users/me/password",

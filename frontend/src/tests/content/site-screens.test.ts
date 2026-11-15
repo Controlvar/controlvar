@@ -7,8 +7,10 @@
  * them with their bytes, sha256, size, alt text and caption. This test holds
  * the two together:
  *
- *   - the registry names exactly the four planned screenshots (S1-S4 of the
- *     UX plan), was captured at a release tag, and gives each a file name
+ *   - the registry names exactly the planned screenshots, in the order the
+ *     page shows them (three since site polish 2026-11-10: S1, the results
+ *     page, was retired and the hero is S3, the power calculator), was
+ *     captured at a release tag, and gives each a file name
  *     made from its own sha256, and an alt text with no figure in it (a
  *     number would be wrong after a retake);
  *   - the folder exists and holds exactly the registered files: each is the
@@ -33,8 +35,13 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const FRONTEND = path.join(REPO_ROOT, 'frontend');
 const SCREENS_DIR = path.join(FRONTEND, 'public', 'screens');
 
-/** The four screenshots the plan names, in the order the page shows them (UX S1-S4). */
-const PLANNED = ['results', 'flag-rollout', 'power-calculator', 'audit-log'];
+/**
+ * The screenshots the page shows, in its order: the hero, then the rows (UX S3,
+ * S2 and S4). S1, an experiment's results page, was retired on 2026-11-10: it
+ * read "Planned sample: Reached" beside "not every variant has reached the
+ * minimum sample size yet". The hero is now S3, the same approved bytes.
+ */
+const PLANNED = ['power-calculator', 'flag-rollout', 'audit-log'];
 
 /** Caps (C8, the architect's): one file, and the folder. */
 const MAX_FILE_BYTES = 256 * 1024;
@@ -146,7 +153,7 @@ describe('content/site-screens.json', () => {
     expect(registry.captured_at).toMatch(/^v\d+\.\d+\.\d+$/);
   });
 
-  it('names exactly the four planned screenshots, in order', () => {
+  it('names exactly the planned screenshots, in order', () => {
     expect(registry.screens.map((s) => s.id)).toEqual(PLANNED);
   });
 

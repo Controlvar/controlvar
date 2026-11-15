@@ -59,6 +59,8 @@ from backend.app.core.logger import bind_log_context
 bind_log_context(user_id=str(user.id), workspace_id=str(ws.id))
 ```
 
+The API does not start without the request-ID middleware: if it cannot be imported, startup stops with the import error, in every environment.
+
 `request_id` is the field to correlate on. It appears on every line of a
 request and is handed back to the caller in the response header, so a user
 reporting an error can quote it.

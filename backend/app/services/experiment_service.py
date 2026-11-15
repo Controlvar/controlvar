@@ -32,6 +32,13 @@ from backend.app.schemas.experiment import (
 )
 from backend.app.schemas.split_url_config import split_url_config_problem
 from backend.app.schemas.variance_reduction import VarianceReductionConfig
+from backend.app.services.visual import (
+    STARTED,
+    design_etag,
+    revoke_editor_tokens,
+    visual_config_of,
+    visual_start_problem,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -985,6 +992,10 @@ class ExperimentService:
 
         experiment.updated_at = datetime.now(timezone.utc)
 
+        # A started experiment has no editor (#1545): its tickets and sessions
+        # end in the start's own transaction.
+        revoke_editor_tokens(self.db, experiment.id, STARTED)
+
         self.db.commit()
         self.db.refresh(experiment)
 
@@ -1262,6 +1273,9 @@ class ExperimentService:
             status=ExperimentStatus.DRAFT,
             owner_id=str(user_id),
             tags=experiment.tags,
+            # #1545: a clone of a visual experiment is a visual draft with the
+            # same pages, goals and page changes. The route has checked them.
+            visual_config=copy.deepcopy(visual_config_of(experiment)),
             **{
                 field: copy.deepcopy(getattr(experiment, field))
                 for field in CLONED_ANALYSIS_FIELDS
@@ -1281,6 +1295,7 @@ class ExperimentService:
                 is_control=variant.is_control,
                 traffic_allocation=variant.traffic_allocation,
                 configuration=variant.configuration,
+                visual_changes=copy.deepcopy(getattr(variant, "visual_changes", None)),
                 experiment_id=new_experiment.id,
             )
             self.db.add(new_variant)
@@ -1461,6 +1476,16 @@ class ExperimentService:
                 )
                 return False
 
+        # A visual experiment makes start's one visual check (#1545, C1). The
+        # line names the experiment's id and nothing it stores.
+        if visual_start_problem(experiment) is not None:
+            logger.warning(
+                "Experiment %s is not ready to start: its visual settings fail "
+                "the start check",
+                experiment.id,
+            )
+            return False
+
         # All checks passed
         return True
 
@@ -1548,6 +1573,10 @@ class ExperimentService:
             "split_url_config": experiment.split_url_config,
             # #448: the setting only; its block-order key is never answered.
             "balance_within": experiment.balance_within,
+            # #1545: the visual settings, and the etag of the design read here,
+            # from the row (never from a cache).
+            "visual_config": visual_config_of(experiment),
+            "design_etag": design_etag(experiment),
             # Issue #197: every column ExperimentResponse declares with a
             # default must be copied here, or the response reports the
             # default instead of the stored value (a bandit read as "fixed").
@@ -1580,6 +1609,7 @@ class ExperimentService:
                     "is_control": v.is_control,
                     "traffic_allocation": v.traffic_allocation,
                     "configuration": v.configuration,
+                    "visual_changes": getattr(v, "visual_changes", None),
                     "experiment_id": str(v.experiment_id),
                     "created_at": (
                         v.created_at.isoformat()

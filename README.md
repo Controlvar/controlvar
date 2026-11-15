@@ -4,9 +4,9 @@
 
 **Website:** [controlvar.com](https://controlvar.com) · **Documentation:** [docs.controlvar.com](https://docs.controlvar.com)
 
-![The results page of a ShopLab demo experiment in the Controlvar dashboard: its users, the planned sample reached, the leading variant and the sample ratio check.](frontend/public/screens/results-88c79d580b09.webp)
+![The power calculator: the baseline conversion rate, the minimum detectable effect, the sample size each variant needs, and a power curve.](frontend/public/screens/power-calculator-2268c898864d.webp)
 
-Watch the [walkthrough videos](https://controlvar.com/#walkthroughs) on controlvar.com.
+Watch the [walkthrough videos](https://controlvar.com/walkthroughs) on controlvar.com.
 
 The core, the optional modules and the dashboard are Apache-2.0; the client SDKs under `sdk/`
 are MIT. Controlvar is pre-1.0: see the
@@ -14,6 +14,16 @@ are MIT. Controlvar is pre-1.0: see the
 Controlvar was called Experimently before 0.35.0;
 [Upgrading to Controlvar](docs/self-hosting/upgrading-to-controlvar.md) says what
 that changes for an install you already run.
+
+---
+
+## Try the live demo
+
+A read-only copy runs at <https://demo.controlvar.com>: the dashboard as a viewer, with ShopLab and
+StreamPulse sending it simulated traffic. Creating and changing things is turned off there, and
+everything is rebuilt every night at 08:00 UTC. To create experiments, run it on your machine
+(below).
+[The live demo](docs/getting-started/live-demo.md) says what is turned off there, and why.
 
 ---
 

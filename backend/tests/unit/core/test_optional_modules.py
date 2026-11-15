@@ -193,8 +193,10 @@ class TestSplitUrlRefusedWithoutRouting:
             with pytest.raises(HTTPException) as exc:
                 await experiments.update_experiment(
                     experiment_id=uuid4(),
+                    # As an ExperimentUpdate: the fields sent are model_fields_set.
                     experiment_in=SimpleNamespace(
-                        experiment_type=ExperimentType.SPLIT_URL
+                        experiment_type=ExperimentType.SPLIT_URL,
+                        model_fields_set={"experiment_type"},
                     ),
                     db=db,
                     current_user=_user(),
@@ -222,7 +224,8 @@ class TestSplitUrlRefusedWithoutRouting:
                 await experiments.update_experiment(
                     experiment_id=uuid4(),
                     experiment_in=SimpleNamespace(
-                        experiment_type=ExperimentType.SPLIT_URL
+                        experiment_type=ExperimentType.SPLIT_URL,
+                        model_fields_set={"experiment_type"},
                     ),
                     db=db,
                     current_user=_user(),
@@ -246,7 +249,8 @@ class TestSplitUrlRefusedWithoutRouting:
                 await experiments.update_experiment(
                     experiment_id=uuid4(),
                     experiment_in=SimpleNamespace(
-                        experiment_type=ExperimentType.SPLIT_URL
+                        experiment_type=ExperimentType.SPLIT_URL,
+                        model_fields_set={"experiment_type"},
                     ),
                     db=db,
                     current_user=_user(is_superuser=False),
@@ -279,7 +283,9 @@ class TestSplitUrlRefusedWithoutRouting:
                 await experiments.update_experiment(
                     experiment_id=uuid4(),
                     experiment_in=SimpleNamespace(
-                        experiment_type=ExperimentType.SPLIT_URL, name="renamed"
+                        experiment_type=ExperimentType.SPLIT_URL,
+                        name="renamed",
+                        model_fields_set={"experiment_type", "name"},
                     ),
                     db=db,
                     current_user=_user(),

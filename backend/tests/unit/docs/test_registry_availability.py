@@ -440,7 +440,15 @@ NAMED_BY_D = (
     "dotnet",
 )
 #: Pages whose registry sentences today name these SDKs, which the sweep must
-#: find (a pattern that stopped matching would pass every page).
+#: find (a pattern that stopped matching would pass every page). The
+#: homepage's SDK section (SdkChips.tsx) left this list when the site design of
+#: 2026-11-11 removed its closing sentence ("The SDKs marked beta have a
+#: release: ... are on npm, PyPI, Maven Central or NuGet ..."): it names no
+#: registry now, its beta marks are held to ON_REGISTRY by
+#: test_the_homepages_beta_chips_are_the_sdks_with_a_release, and
+#: test_the_homepage_sdk_section_is_still_read plants that sentence back to show
+#: the sweep still reads the file. The homepage's own registry sentence is
+#: HowItWorks.tsx's, below.
 FOUND_TODAY = {
     ("docs/sdk/javascript.md", "js"),
     ("docs/sdk/python.md", "python"),
@@ -465,7 +473,6 @@ FOUND_TODAY = {
             "docs/getting-started/faq.md",
             "docs/getting-started/limitations.md",
             "frontend/src/pages/docs/index.tsx",
-            "frontend/src/components/homepage/SdkChips.tsx",
         )
         for sdk in NAMED_BY_D
     ),
@@ -809,9 +816,40 @@ def _quoted_keys(source: str, start: str) -> Set[str]:
     return set(re.findall(r"""^\s{0,8}['"]?([a-z][a-z-]{0,40})['"]?[:,]""", body, re.M))
 
 
+#: The homepage SDK section's closing sentence until the site design of
+#: 2026-11-11, as SdkChips.tsx set it, for the plant below.
+CHIPS_SENTENCE = (
+    "        <p>\n"
+    "          The SDKs marked beta have a release: the JavaScript, React, React"
+    " Native, Python, Java and .NET SDKs and the\n"
+    "          OpenFeature providers are on npm, PyPI, Maven Central or NuGet,"
+    " and the Go SDK installs by module path. The\n"
+    "          others install from the repository. Each guide shows how to"
+    " install its SDK.\n"
+    "        </p>\n"
+)
+
+
+def test_the_homepage_sdk_section_is_still_read():
+    """SdkChips.tsx says no registry today, and the sweep still reads it: its
+    old closing sentence, planted back after the chips, is found for each SDK it
+    names, and a sentence naming an SDK not on npm is refused there."""
+    source = read(CHIPS)
+    assert CHIPS in pages()
+    assert registry_claims(CHIPS, source) == []
+    assert source.count("</ul>") == 1
+    planted = source.replace("</ul>", "</ul>\n" + CHIPS_SENTENCE, 1)
+    found = {sdk for claim in registry_claims(CHIPS, planted) for sdk in claim.sdks}
+    assert found == set(NAMED_BY_D), sorted(found)
+    assert problems(CHIPS, planted) == []
+    wrong = source.replace("</ul>", "</ul>\n<p>The Edge SDK is on npm.</p>\n", 1)
+    assert [p for p in problems(CHIPS, wrong) if "sdk/edge " in p]
+
+
 def test_the_homepages_beta_chips_are_the_sdks_with_a_release():
-    """SdkChips.tsx marks an SDK beta, and its sentence says those have a
-    release: each one the homepage names that is in ON_REGISTRY, and Go."""
+    """SdkChips.tsx marks an SDK beta, and a beta mark means a release (the
+    sentence that said so in words left the page in the site design of
+    2026-11-11): each one the homepage names that is in ON_REGISTRY, and Go."""
     beta = _quoted_keys(read(CHIPS), "const BETA: ReadonlySet<string> = new Set([")
     named = _quoted_keys(
         read(HOMEPAGE_SDKS), "export const SDKS: Readonly<Record<string, string>> = {"

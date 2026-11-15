@@ -22,6 +22,10 @@ Pinned, because the verifier's PASS is only as good as these:
   jest ones, each in its npm project (their reports written as JUnit); every
   session names trees that exist, and ignores only trees under its roots,
   which ``suite_of`` reads;
+  unit and integration are a leg per shard (``LEGS``, #1895), every
+  integration shard set up as integration-tests.yml's are, no job naming a
+  shard variable, and the shard check holding integration's skips as
+  integration-tests.yml does;
   each runs ``--suite`` and uploads its reports as the artifact the verifier
   downloads, for 90 days; the verify job runs after every leg (``always()``),
   reads them, never ``--staging`` or ``--registry``, and keeps its record for
@@ -186,14 +190,17 @@ def test_the_matrix_is_the_scripts_suites(doc):
     job = doc["jobs"]["python-suites"]
     assert job["name"] == rc.SUITE_JOB.format("${{ matrix.suite }}")
     include = job["strategy"]["matrix"]["include"]
+    # One leg per suite, and one per shard of unit and integration (#1895).
     assert [leg["suite"] for leg in include] == [
-        s for s in rc.SUITES if not rc.is_jest(s)
+        name for name, leg in rc.LEGS.items() if not rc.is_jest(leg.suite)
     ]
-    assert all(i.runner == "pytest" for leg in include for i in rc.SUITES[leg["suite"]])
+    assert all(
+        i.runner == "pytest" for leg in include for i in rc.LEGS[leg["suite"]].sessions
+    )
     for leg in include:
         expected = (
             "experimentation_test"
-            if leg["suite"] == "integration"
+            if rc.LEGS[leg["suite"]].suite == "integration"
             else "experimentation"
         )
         assert leg["db"] == expected
@@ -211,6 +218,57 @@ def test_the_matrix_is_the_scripts_suites(doc):
     assert upload["with"]["name"] == rc.JUNIT_ARTIFACT.format("${{ matrix.suite }}")
     assert upload["with"]["retention-days"] == 90
     assert upload["if"] == "always()"
+    # The directory --suite writes into: a shard's JUnit and its shard report.
+    assert upload["with"]["path"] == "${{ runner.temp }}/junit"
+
+
+#: The steps integration-tests.yml's shards run before the suite, which every
+#: integration shard here runs too.
+INTEGRATION_STEPS = (
+    "Install the repository (editable)",
+    "Bootstrap database schema",
+    "Start a password-protected Redis",
+)
+INTEGRATION_IF = "startsWith(matrix.suite, 'integration-')"
+
+
+def test_every_integration_shard_and_no_other_leg_is_set_up_as_integration(doc):
+    """The editable install, the bootstrap and the second Redis are on every
+    integration shard (the session's REQUIRE switches fail it without them),
+    and the condition picks out exactly those legs."""
+    steps = {s.get("name"): s for s in doc["jobs"]["python-suites"]["steps"]}
+    for name in INTEGRATION_STEPS:
+        assert steps[name]["if"] == INTEGRATION_IF, name
+    picked = [name for name in rc.LEGS if name.startswith("integration-")]
+    assert picked == [
+        name for name, leg in rc.LEGS.items() if leg.suite == "integration"
+    ]
+    assert len(picked) == 4
+
+
+def test_the_shard_check_allows_the_skip_integration_tests_yml_allows():
+    """The integration shards' skips are held as integration-tests.yml's
+    summary holds them: the benchmark's reason, and no other."""
+    jobs = _load(WORKFLOWS / "integration-tests.yml")["jobs"]
+    (step,) = [
+        s
+        for s in jobs["integration-tests"]["steps"]
+        if "check_test_shards.py" in str(s.get("run", ""))
+    ]
+    reasons = re.findall(
+        r"--allow-skip 'backend/tests/integration=([^']{1,200})'", step["run"]
+    )
+    assert reasons and tuple(reasons) == rc.SHARD_SKIPS["integration"]
+    assert rc.SHARD_SKIPS["unit"] is None
+    assert set(rc.SHARD_SKIPS) == {leg.suite for leg in rc.LEGS.values() if leg.shard}
+
+
+def test_no_job_names_a_shard_variable(doc):
+    """The script gives each sharded session its slice; a spec in a job's or
+    a step's env would reach every session the step runs (e2e, contract,
+    performance), as integration-tests.yml's F6 says."""
+    text = WORKFLOW.read_text(encoding="utf-8")
+    assert rc.SHARD_SPEC not in text
 
 
 #: The legs whose pull request job installs pytest alone (sdk-unit-tests.yml's
@@ -586,7 +644,7 @@ def test_the_required_and_skippable_jobs_are_names_in_their_workflows():
             # The Linux tier's jobs are its matrix's; the rest are named jobs.
             present |= set(rc.SDK_JOBS[:13])
         if workflow == "rc-evidence.yml":
-            present |= {rc.suite_job(s) for s in rc.SUITES}
+            present |= {rc.suite_job(s) for s in rc.LEGS}
         assert set(names) <= present, (workflow, set(names) - present)
     for workflow, name in rc.ALLOWED_SKIPS:
         assert name in _job_names(workflow), (workflow, name)

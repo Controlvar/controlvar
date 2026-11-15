@@ -1320,6 +1320,14 @@ text = "Use a dedicated key for browser traffic so it can be revoked on its own,
 by = ["test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestContents::test_every_owners_flags_and_nothing_else"]
 
 [[unit]]
+text = "The two routes the visual editor's browser script calls refuse a key with any scope (Refused in a web page); the routes this SDK calls do not."
+by = [
+    "test:backend/tests/smoke/test_page_key_routes.py::test_the_page_key_routes_are_exactly_these",
+    "test:backend/tests/integration/api/test_visual_tracking_api.py::test_a_key_with_any_scope_is_refused",
+    "test:backend/tests/integration/api/test_visual_tracking_api.py::test_a_server_key_still_works_on_the_other_sdk_routes",
+]
+
+[[unit]]
 text = "Server-side, lower timeoutMs if the SDK sits on a request path:"
 by = ["exempt:advice"]
 

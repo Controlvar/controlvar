@@ -316,10 +316,10 @@ text = "Next steps"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Remove the flag from your code, then archive it with POST /api/v1/feature-flags/bulk-toggle and \"action\": \"archive\"; the dashboard has no archive action yet."
+text = "Remove the flag from your code, then archive it with Archive on the flag's page, or with POST /api/v1/feature-flags/bulk-toggle and \"action\": \"archive\"."
 by = [
     "test:backend/tests/integration/api/test_bulk_toggle_api.py",
-    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::neither page offers archive or unarchive for an %s flag",
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::no bulk-toggle call before Archive is confirmed in the dialog",
 ]
 
 [[unit]]

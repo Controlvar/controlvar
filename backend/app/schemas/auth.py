@@ -182,13 +182,22 @@ class UserInfoResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class DemoAccount(BaseModel):
+    """The shared account a demo visitor signs in with (``DEMO_MODE=true``)."""
+
+    email: str = Field(..., description="The demo account's e-mail address")
+    password: str = Field(..., description="The demo account's published password")
+
+
 class AuthConfigResponse(BaseModel):
     """``GET /api/v1/auth/config``: how the dashboard signs in.
 
     ``{"provider": "local"}`` under the local provider. Under Cognito, either
     the Hosted UI's ``hosted_ui_domain``, the app ``client_id`` and the
     ``scopes`` to ask for, or ``configured: false`` with the names of the
-    unset settings in ``missing``. A field that does not apply is absent.
+    unset settings in ``missing``. With ``DEMO_MODE=true``, ``demo_mode:
+    true`` as well, and ``demo_account`` when a demo account is configured.
+    A field that does not apply is absent.
     """
 
     provider: Literal["local", "cognito"]
@@ -209,6 +218,17 @@ class AuthConfigResponse(BaseModel):
     )
     scopes: Optional[List[str]] = Field(
         default=None, description="The OAuth scopes to ask the Hosted UI for"
+    )
+    demo_mode: Optional[Literal[True]] = Field(
+        default=None,
+        description=(
+            "Present, and true, when this is a read-only demo install: every "
+            "write but signing in and the SDK's tracking calls is refused"
+        ),
+    )
+    demo_account: Optional[DemoAccount] = Field(
+        default=None,
+        description="The shared demo account, when demo_mode is true and one is set",
     )
 
 

@@ -16,8 +16,9 @@ text = "No API edits or deletes an entry."
 by = ["test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact"]
 
 [[unit]]
-text = "It records the changes people make through the API: creating, changing and deleting feature flags and experiments, turning flags on and off, starting, pausing and completing experiments, rollout schedule changes, API keys, holdouts, mutual exclusion groups, segments, creating and deleting users, changes to a user's role, superuser flag or active status, signing in with a password or through Cognito (POST /auth/token; a sign-in through the Cognito Hosted UI does not pass through the API and is not recorded), and safety rollbacks."
+text = "It records the changes people make through the API: creating, changing and deleting feature flags and experiments, turning flags on and off, starting, pausing and completing experiments, rollout schedule changes, API keys, holdouts, mutual exclusion groups, segments, creating and deleting users, changes to a user's role, superuser flag or active status, signing in with a password or through Cognito (POST /auth/token; a sign-in through the Cognito Hosted UI does not pass through the API and is not recorded), and safety rollbacks and saves of the global safety settings."
 by = [
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_saving_the_global_safety_settings_writes_one_entry",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_create",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_update_records_only_what_changed",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_delete",
@@ -461,10 +462,12 @@ by = [
 ]
 
 [[unit]]
-text = "Descriptions, hypotheses, targeting rules, segment rules, variants, metrics and an experiment's analysis configurations (variance_reduction_config for CUPED, sequential_testing_config, bayesian_config) are never stored."
+text = "Descriptions, hypotheses, targeting rules, segment rules, variants, metrics, an experiment's analysis configurations (variance_reduction_config for CUPED, sequential_testing_config, bayesian_config) and a visual experiment's pages, goals and page changes (visual_config, visual_changes) are never stored."
 by = [
     "test:backend/tests/integration/api/test_audit_route_events.py::test_free_text_never_reaches_an_entry",
     "test:backend/tests/integration/api/test_audit_analysis_settings.py::test_a_draft_put_of_an_analysis_setting_is_named_in_its_entry",
+    "test:backend/tests/integration/api/test_visual_experiment_api.py::test_v30_a_save_names_visual_config_and_stores_none_of_it",
+    "test:backend/tests/integration/api/test_visual_experiment_api.py::test_d8_a_save_names_page_changes_as_visual_changes",
 ]
 
 [[unit]]
@@ -473,6 +476,8 @@ by = [
     "test:backend/tests/integration/api/test_audit_route_events.py::test_experiment_create_update_delete",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_a_design_save_names_the_variants_and_metrics_it_changed",
     "test:backend/tests/integration/api/test_audit_analysis_settings.py::test_a_draft_put_of_an_analysis_setting_is_named_in_its_entry",
+    "test:backend/tests/integration/api/test_visual_experiment_api.py::test_v30_a_save_names_visual_config_and_stores_none_of_it",
+    "test:backend/tests/integration/api/test_visual_experiment_api.py::test_d8_a_save_names_page_changes_as_visual_changes",
 ]
 
 [[unit]]
@@ -566,6 +571,20 @@ by = [
 ]
 
 [[unit]]
+text = "experiment_preview_link_create | experiment | POST /experiments/{id}/visual/preview-links makes a visual experiment's preview link; new_value is {\"variant_id\", \"expires_at\"}, never the link or its token"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_visual_preview_links_api.py::test_making_and_revoking_are_audited",
+]
+
+[[unit]]
+text = "experiment_preview_links_revoke | experiment | DELETE /experiments/{id}/visual/preview-links ends the experiment's live preview links; new_value is {\"revoked\"}, how many were ended"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_visual_preview_links_api.py::test_making_and_revoking_are_audited",
+]
+
+[[unit]]
 text = "api_key_create, api_key_revoke | api_key | POST /api-keys, DELETE /api-keys/{id}"
 by = [
     "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
@@ -624,6 +643,25 @@ by = [
     "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_active_status_through_put_is_recorded",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_patch_role_and_active",
+]
+
+[[unit]]
+text = "user_2fa_enable, user_2fa_disable, user_2fa_recovery_used, user_2fa_recovery_regenerate | user | An account's two-step sign-in is turned on (new_value is {\"recovery_codes\": 10}), turned off (new_value is {\"second_step\"}, totp or recovery), signs in or turns off with a recovery code (new_value is {\"recovery_codes_remaining\"}), or gets a new set of recovery codes. The actor is the account itself. This release has no route that turns two-step sign-in on, so nothing in it writes these four yet"
+by = [
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_confirm_gives_ten_recovery_codes_and_stores_only_their_hashes",
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_turning_it_off_with_a_recovery_code",
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_a_recovery_code_signs_in_once",
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_new_recovery_codes_void_the_old_set",
+    "test:backend/tests/smoke/test_audit_non_route_inventory.py::test_each_audited_site_names_its_actions",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_local_sign_in_takes_an_email_and_a_password_alone",
+]
+
+[[unit]]
+text = "user_2fa_reset | user | python -m backend.app.db.two_factor_reset deletes an account's two-step sign-in (--email, or every account's with --all --yes-reset-every-account). The actor is system:operator-cli; old_value is {\"enabled\"}, false for an account that had started setting it up but not finished"
+by = [
+    "test:backend/tests/integration/services/test_two_factor_reset_cli.py::test_one_account_by_its_address_in_any_case",
+    "test:backend/tests/integration/services/test_two_factor_reset_cli.py::test_every_account_with_the_confirmation_flag",
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_a_reset_records_one_entry_per_account_and_never_commits",
 ]
 
 [[unit]]
@@ -779,10 +817,17 @@ by = [
 ]
 
 [[unit]]
-text = "ActionType also defines user_update, user_logout and safety_config_update."
+text = "ActionType also defines user_update and user_logout."
 by = [
     "test:backend/tests/smoke/test_audit_inventory.py::test_written_action_types_are_what_the_inventory_writes",
     "test:backend/tests/smoke/test_audit_action_types_json.py",
+]
+
+[[unit]]
+text = "safety_config_update | safety_config | POST /safety/settings saves the global safety settings; one entry per save, by the calling superuser, whether or not a value changed. old_value and new_value are {\"enable_automatic_rollbacks\", \"default_metrics\"}; old_value is empty when the save creates the settings. A refused or invalid save writes none. A flag's own safety config (POST /safety/feature-flags/{id}/config) writes none"
+by = [
+    "test:backend/tests/unit/services/test_safety_settings_audit.py::test_a_save_writes_one_entry_with_before_and_after",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_saving_the_global_safety_settings_writes_one_entry",
 ]
 
 [[unit]]
@@ -814,36 +859,43 @@ by = ["exempt:baseline"]
 [[unit]]
 text = "system:experiment-scheduler | The experiment scheduler: scheduled starts, resumes and ends"
 by = [
-    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_five",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_six",
     "test:backend/tests/integration/services/test_audit_service_sites.py::test_scheduled_start_is_recorded_by_the_experiment_scheduler",
 ]
 
 [[unit]]
 text = "system:rollout-scheduler | The rollout scheduler: each rollout stage it starts"
 by = [
-    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_five",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_six",
     "test:backend/tests/integration/services/test_audit_service_sites.py::test_stage_start_is_recorded_by_the_rollout_scheduler",
 ]
 
 [[unit]]
 text = "system:safety-monitor | The safety monitor: each automatic rollback"
 by = [
-    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_five",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_six",
     "test:backend/tests/integration/services/test_audit_service_sites.py::test_monitor_rollback_is_recorded_by_the_safety_monitor",
 ]
 
 [[unit]]
 text = "system:cognito-sync | Cognito group sync: each role or superuser flag change"
 by = [
-    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_five",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_six",
     "test:backend/tests/integration/services/test_audit_service_sites.py::test_group_role_change_is_recorded_by_cognito_sync",
 ]
 
 [[unit]]
 text = "system:sso-sync | SSO sign-in (full profile): each role change from a mapped group"
 by = [
-    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_five",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_six",
     "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_an_sso_role_change_writes_one_role_assign_by_sso_sync",
+]
+
+[[unit]]
+text = "system:operator-cli | An operator's command, python -m backend.app.db.two_factor_reset: each account whose two-step sign-in it resets"
+by = [
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_six",
+    "test:backend/tests/integration/services/test_two_factor_reset_cli.py::test_one_account_by_its_address_in_any_case",
 ]
 
 [[unit]]
@@ -893,15 +945,21 @@ text = "passwords or their hashes, tokens, or any part of an API key or its hash
 by = ["test:backend/tests/integration/api/test_audit_route_events.py::test_api_key_create_and_revoke_hold_no_part_of_the_key"]
 
 [[unit]]
+text = "two-step sign-in secrets, codes or recovery codes, or a wrong code (a wrong code writes a two_factor_refused log line with the account's id and the reason, never the code);"
+by = ["test:backend/tests/integration/services/test_two_factor_service.py::test_no_entry_or_log_line_holds_a_secret_or_a_code"]
+
+[[unit]]
 text = "request bodies, IP addresses or user agents;"
 by = ["test:backend/tests/unit/models/test_audit_log_text_normalised.py"]
 
 [[unit]]
-text = "the contents of descriptions, hypotheses, targeting rules, segment rules, variants, metrics and an experiment's CUPED, sequential testing and Bayesian configurations (a change to one is named under changed_fields);"
+text = "the contents of descriptions, hypotheses, targeting rules, segment rules, variants, metrics, an experiment's CUPED, sequential testing and Bayesian configurations, and a visual experiment's pages, goals and page changes (a change to one is named under changed_fields);"
 by = [
     "test:backend/tests/integration/api/test_audit_route_events.py::test_free_text_never_reaches_an_entry",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_a_design_save_names_the_variants_and_metrics_it_changed",
     "test:backend/tests/integration/api/test_audit_analysis_settings.py::test_a_draft_put_of_an_analysis_setting_is_named_in_its_entry",
+    "test:backend/tests/integration/api/test_visual_experiment_api.py::test_v30_a_save_names_visual_config_and_stores_none_of_it",
+    "test:backend/tests/integration/api/test_visual_experiment_api.py::test_d8_a_save_names_page_changes_as_visual_changes",
 ]
 
 [[unit]]
@@ -935,6 +993,13 @@ by = [
 [[unit]]
 text = "A superuser's change to a user's role, superuser flag or active status | Nothing is saved and the response is 500; resend it once the problem is fixed"
 by = ["test:backend/tests/integration/api/test_audit_route_events.py::test_patch_under_a_failed_audit_write_keeps_neither"]
+
+[[unit]]
+text = "Two-step sign-in turned on or off, a recovery code used or renewed, or a reset by python -m backend.app.db.two_factor_reset | Nothing is saved: the change and its entry are kept or lost together. The reset command says Nothing was changed. and exits with status 2"
+by = [
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_an_entry_that_cannot_be_written_takes_its_change_with_it",
+    "test:backend/tests/integration/services/test_two_factor_reset_cli.py::test_when_the_entry_cannot_be_written_nothing_is_reset",
+]
 
 [[unit]]
 text = "A custom role defined, changed, deleted, assigned or revoked, or a direct permission granted or revoked (full profile) | The change is kept and the response is 2xx; there is no entry. Unlike a change to a user's built-in role, it is not refused"

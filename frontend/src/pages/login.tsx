@@ -3,7 +3,17 @@ import { useRouter } from 'next/router';
 import { INACTIVE_ACCOUNT_MESSAGE, useAuth } from '@/contexts/AuthContext';
 import { useAuthConfig } from '@/contexts/AuthConfigContext';
 import { ApiError, safeNextPath, signInTimeoutMessage, unreachableMessage } from '@/services/api';
-import type { AuthConfig } from '@/services/authConfig';
+import type { AuthConfig, DemoAccount } from '@/services/authConfig';
+import {
+  DEMO_ENTER_FAILED,
+  DEMO_ENTER_LABEL,
+  DEMO_LOGIN_HEADING,
+  DEMO_LOGIN_INTRO,
+  DEMO_LOGIN_SMALL_PRINT,
+  DEMO_UNREACHABLE,
+  demoAppLinks,
+  demoRateLimitedMessage,
+} from '@/utils/demoMode';
 import {
   SignInNotice,
   beginHostedUiSignIn,
@@ -77,14 +87,138 @@ function firstQueryValue(value: string | string[] | undefined): string | undefin
  * (#708): the Cognito Hosted UI's one button when the API answers with a
  * well-formed Cognito configuration, and otherwise -- the local provider, or
  * any answer that is not one (an older API's 404, no answer, a page that is
- * not JSON) -- the email and password form. Until the answer arrives the page
- * says it is loading and shows neither.
+ * not JSON) -- the email and password form. A read-only demo that publishes
+ * its account gets one "Enter the demo" button and no form. Until the answer
+ * arrives the page says it is loading and shows none of them.
  */
 export default function LoginPage() {
-  const { loading, config } = useAuthConfig();
+  const { loading, config, demo } = useAuthConfig();
   if (loading) return <SignInLoading />;
+  if (config.kind === 'local' && demo?.account) return <DemoSignIn account={demo.account} />;
   if (config.kind === 'local') return <LocalSignIn />;
   return <HostedUiSignIn config={config} />;
+}
+
+/** The demo sign-in's copy for a failure: never the API's own words. */
+export function demoEnterErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.status === 429) return demoRateLimitedMessage(err.retryAfter);
+    if (err.status === 400 && err.detail === INVALID_HOST_DETAIL) return wrongHostMessage();
+    if (err.unreadableAnswer) return DEMO_ENTER_FAILED;
+    if (err.timedOut) return signInTimeoutMessage();
+    if (err.status === 0 || err.status >= 500) return DEMO_UNREACHABLE;
+  }
+  return DEMO_ENTER_FAILED;
+}
+
+/**
+ * `/login` on a read-only demo: what it is, one button that signs in with the
+ * account `/auth/config` publishes (`POST /auth/login`, as the form would),
+ * the two demo apps, and no password field. `?next=` is honoured.
+ */
+function DemoSignIn({ account }: { account: DemoAccount }) {
+  const router = useRouter();
+  const { login, status, sessionError } = useAuth();
+  const [entering, setEntering] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const messageRef = useRef<HTMLDivElement>(null);
+  // Only ever rendered in the browser (after `/auth/config` has answered), so
+  // the page's own host is there to read.
+  const links = demoAppLinks();
+
+  const nextPath = safeNextPath(firstQueryValue(router.query.next), DEFAULT_AFTER_LOGIN);
+
+  // Already signed in: go straight through.
+  useEffect(() => {
+    if (status === 'authenticated' && !entering && router.isReady) {
+      void router.replace(nextPath);
+    }
+  }, [status, entering, router, nextPath]);
+
+  useEffect(() => {
+    if (error) messageRef.current?.focus();
+  }, [error]);
+
+  const enter = async () => {
+    if (entering) return;
+    setEntering(true);
+    setError(null);
+    try {
+      await login(account.email, account.password);
+      await router.replace(nextPath);
+    } catch (err) {
+      setError(demoEnterErrorMessage(err));
+      setEntering(false);
+    }
+  };
+
+  return (
+    <>
+      <PageTitle title="Live demo" />
+      <main className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4 py-12">
+        <div className="w-full max-w-md">
+          <div className="flex justify-center mb-8">
+            <Wordmark href={null} />
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 sm:p-8">
+            <h1 className="text-xl font-semibold text-slate-900 mb-2">{DEMO_LOGIN_HEADING}</h1>
+            <p className="text-sm text-slate-600 mb-6" data-testid="demo-login-intro">
+              {DEMO_LOGIN_INTRO}
+            </p>
+
+            {!error && sessionError && (
+              <div
+                role="alert"
+                data-testid="login-session-error"
+                className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+              >
+                {sessionError}
+              </div>
+            )}
+            {error && (
+              <div
+                ref={messageRef}
+                tabIndex={-1}
+                role="alert"
+                data-testid="login-error"
+                className="login-error mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+              >
+                {error}
+              </div>
+            )}
+
+            <button
+              type="button"
+              data-testid="demo-enter"
+              onClick={() => void enter()}
+              disabled={entering}
+              aria-busy={entering}
+              className="w-full min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-base font-medium rounded-md hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+            >
+              {entering ? 'Entering…' : DEMO_ENTER_LABEL}
+            </button>
+
+            {links.length > 0 && (
+              <ul className="mt-6 space-y-2 text-sm" data-testid="demo-app-links">
+                {links.map((link) => (
+                  <li key={link.href}>
+                    <a href={link.href} data-testid={link.testId} className="text-blue-700 underline hover:text-blue-900">
+                      {link.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <p className="mt-6 text-center text-xs text-slate-500" data-testid="demo-login-small-print">
+            {DEMO_LOGIN_SMALL_PRINT}
+          </p>
+        </div>
+      </main>
+    </>
+  );
 }
 
 function SignInLoading() {

@@ -139,9 +139,13 @@ cannot be changed after it starts:
 
 Below them, **Also analyse the primary metric with Bayesian statistics** is off by default. Turned
 on, the results also carry a Bayesian analysis of the primary metric (the probability that each
-variant is the best) with default priors; the frequentist results and the recommendation do not
-change. Like the two settings above, it is saved with the experiment and cannot be changed
-after it starts. To set the priors, see [Bayesian analysis](../api/bayesian.md).
+variant is the best); the frequentist results and the recommendation do not change. Under it,
+**Advanced Bayesian settings** opens to the prior alpha, prior beta, loss threshold and credible
+level, each at its default (1.0, 1.0, 0.001 and 0.95); they are sent only when one of them is
+changed. A value the API would refuse is named under its field, and nothing is created until it
+is fixed. Like the two settings above, Bayesian analysis and its settings are saved with the
+experiment and cannot be changed after it starts. For what each setting does, see
+[Bayesian analysis](../api/bayesian.md).
 
 The single-page form has the same settings in a collapsed **Analysis settings** section,
 whose title shows the current values.
@@ -327,13 +331,16 @@ For each metric and variant pair:
 |--------|---------|
 | **Sample Size** | Users assigned to this variant |
 | **Value** | Conversion rate for this variant: the share of its users who sent the metric's event. For a revenue metric, revenue per user: each user's event values added up, averaged over every user assigned to the variant (0 for a user with none), as a plain number with no currency. A count metric reads events per user (how many times each user sent the event), a duration metric duration per user and a custom metric value per user, averaged the same way, with no unit |
+| **Effect size** | How large the difference from the control is, in a standardised unit: Cohen's h for a rate, Cohen's d for an average. It is written to two places with the label the server gives it (negligible, small, medium or large), e.g. 0.32 (small). The control's row reads Control. |
+| **Interval (95%)** | This variant's own rate or average with its confidence interval, headed with the experiment's confidence level (Interval (99%) at 99%). A variant with fewer than 2 users reads Not enough data yet. When every user of a variant has the same value, for example none converted, it reads No interval: all 200 users have the same value (with its own user count), because the interval is built from how much users differ, and they do not. The interval of the change is in the Change column. |
 | **Change** | Relative change vs. control (e.g., +12.3%). A significant change also says *better* or *worse* in the metric's direction, so a fall is better when lower is better. A treatment's Change cell shows the change from the control, its confidence interval, and the difference with its interval. For a metric whose control's average is too uncertain around 0 to bound the relative change, the cell says so in place of the interval. For a conversion metric the difference is in percentage points; for a revenue, count, duration or custom metric it is the difference per user with its confidence interval, e.g. +1.19 per user (95% CI −0.47 to +2.84). Every interval on a row is marked *unadjusted* when the p-value beside it is adjusted |
 | **Impact** | The difference times the treatment's own assigned users (converting users, events, or the total of the values sent), with its interval. It is not projected beyond those users and has no currency or unit. |
 | **p-value** | Probability the difference is due to chance (lower = more confident). Headed **Adjusted p-value** when a correction applies and a metric has two or more treatments with a p-value: the p-value after the experiment's correction, with the unadjusted value beneath it. A footnote under the table names the correction. |
 | **Significance** | (adjusted) p-value < (1 - confidence level), e.g., < 0.05 for 95% confidence |
 
-For each variant, `GET /api/v1/results/{experiment_id}` also returns `effect_size`,
-`effect_size_label` (negligible / small / medium / large) and `confidence_interval`.
+The table shows the effect size and the interval that `GET /api/v1/results/{experiment_id}`
+returns for each variant as `effect_size`, `effect_size_label` (negligible / small / medium /
+large) and `confidence_interval`.
 
 **Green** = significantly better in the metric's direction
 **Red** = significantly worse in the metric's direction
@@ -490,11 +497,12 @@ flag off for every user and pauses its rollout schedule (see
 An archived flag is retired: every evaluation answers it as off, with its off value. It cannot be turned on until it is
 unarchived: the API refuses every request that would turn it on with "This flag is
 archived. Unarchive it before turning it on." Turning it off succeeds and changes
-nothing. Archiving and unarchiving are API calls for now (bulk toggle with
-`archive`, and `POST /api/v1/feature-flags/{id}/unarchive`, which is beta); an
-unarchived flag comes back inactive. The dashboard shows an archived flag as **Archived**, with
-no on/off switch, and the flag list has an **Archived** filter. See
-[Archived flags](../feature-flags/create.md#archived-flags).
+nothing. To archive a flag, open its page and choose **Archive**, then confirm; an archived
+flag's page offers **Unarchive**, and an unarchived flag comes back inactive (off). Both need
+permission to change feature flags, which the ADMIN and DEVELOPER roles have; through the API
+they are a bulk toggle with `archive` and `POST /api/v1/feature-flags/{id}/unarchive` (beta).
+The dashboard shows an archived flag as **Archived**, with no on/off switch, and the flag list
+has an **Archived** filter. See [Archived flags](../feature-flags/create.md#archived-flags).
 
 ---
 
@@ -509,7 +517,11 @@ Filter by status: All / Draft / Active / Paused / Completed.
 
 ### Exporting Results
 
-Export results through the API:
+On an experiment's results page, **Download CSV** saves its variant rows as a CSV file.
+The file covers the primary metric only, with the experiment's saved correction and
+confidence level, and has no adjusted p-value.
+
+Through the API:
 - **CSV export**: `GET /api/v1/export/variants` downloads per-variant results as CSV
   (`?format=json` for JSON); see [Data Export](../api/data-export.md)
 - **Full results**: `GET /api/v1/results/{experiment_id}` returns JSON with all statistics
@@ -564,6 +576,10 @@ GET /api/v1/experiments/{experiment_id}/segmented-results/{segment_by}
 ```
 
 See the [Dimensional Analysis Guide](../api/dimensional-analysis.md).
+
+For an experiment that balances its split within groups, the **Breakdowns** tab opens on its
+balanced groups, from `GET /api/v1/results/{experiment_id}/balanced-groups` (beta); see
+[Balance the split within groups](balance-within-groups.md#on-the-results-page).
 
 ---
 

@@ -7,7 +7,8 @@ paths.  Before any
 test runs, the target and its credentials are read from the environment
 (:func:`~.harness.load_config`); anything missing stops the session with a
 message naming what to set -- nothing is skipped.  Tests for the other
-warehouse are deselected.  When the session ends, the evidence is written
+warehouses are deselected (each target's tests carry its prefix,
+``harness.CHECK_PREFIXES``).  When the session ends, the evidence is written
 outside the repository and its path printed.
 """
 
@@ -25,10 +26,6 @@ from modules.backend.tests.live_warehouse.selection import (
 )
 
 _STATE: Dict[str, Any] = {}
-
-
-def _prefix(target: str) -> str:
-    return "bq_" if target == "bigquery" else "sf_"
 
 
 def pytest_collection_modifyitems(session, config, items):
@@ -55,7 +52,7 @@ def pytest_collection_modifyitems(session, config, items):
         root = harness.evidence_root()
     except harness.LiveConfigError as exc:
         pytest.exit(f"warehouse_live check refused to start: {exc}", returncode=4)
-    prefix = _prefix(live_config.target)
+    prefix = harness.CHECK_PREFIXES[live_config.target]
     keep: List[Any] = []
     drop: List[Any] = []
     for item in items:

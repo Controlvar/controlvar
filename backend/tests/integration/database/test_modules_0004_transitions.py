@@ -31,9 +31,13 @@ What is pinned:
    origins and keeps every row with its other columns; an activation time
    stored before it is gone, and an upgrade afterwards adds the columns back
    empty;
-6. the previous release refuses the upgraded database and names this
-   revision, and starts once the database is downgraded to
+6. the previous release refuses the upgraded database and names the modules
+   head it records, and starts once the database is downgraded to
    ``modules_0003_lower_is_better``, with every row still there.
+
+``upgrade heads`` runs on past this revision to ``modules_0005_redshift``
+(#826), which changes no RBAC table, and a downgrade to
+``modules_0003_lower_is_better`` unapplies that one first.
 """
 
 from __future__ import annotations
@@ -54,8 +58,12 @@ pytestmark = [pytest.mark.integration, pytest.mark.modules]
 CORE_HEAD = tree_profiles.CORE_HEAD
 #: The modules head of the previous full release, and this revision's parent.
 PREVIOUS_MODULES_HEAD = "modules_0003_lower_is_better"
-#: This revision: the modules branch's head.
-MODULES_HEAD = "modules_0004_rbac_activation"
+#: This revision.
+MODULES_0004 = "modules_0004_rbac_activation"
+#: The modules branch's head: not this revision since ``modules_0005_redshift``
+#: (#826) was added on top of it.  ``upgrade heads`` runs on to that one, and a
+#: downgrade to :data:`PREVIOUS_MODULES_HEAD` unapplies both.
+MODULES_HEAD = "modules_0005_redshift"
 PREVIOUS_FULL_HEADS = {CORE_HEAD, PREVIOUS_MODULES_HEAD}
 FULL_HEADS = {CORE_HEAD, MODULES_HEAD}
 
@@ -664,21 +672,24 @@ def test_an_activation_time_is_gone_after_a_downgrade_and_an_upgrade(
 # 6. The previous release, put back
 # ---------------------------------------------------------------------------
 def _previous_full_release(tmp_path):
-    """The previous full release's migrations: this tree without this revision.
+    """The previous full release's migrations: this tree without this revision
+    and the one added after it, :data:`MODULES_HEAD` (whose ``down_revision``
+    would otherwise name a revision that is not there).
 
     Built from parts, as ``tree_profiles`` builds its paths: a string literal
     naming a path under the modules would be a core -> module crossing.
     """
     tree = tree_profiles.full_tree(tmp_path / "previous-full-release")
-    tree.joinpath(
-        "modules",
-        "backend",
-        "app",
-        "db",
-        "migrations",
-        "versions",
-        f"{MODULES_HEAD}.py",
-    ).unlink()
+    for revision in (MODULES_HEAD, MODULES_0004):
+        tree.joinpath(
+            "modules",
+            "backend",
+            "app",
+            "db",
+            "migrations",
+            "versions",
+            f"{revision}.py",
+        ).unlink()
     return tree
 
 
@@ -687,7 +698,9 @@ def test_the_previous_release_refuses_the_database_until_it_is_downgraded(
     test_db, scratch_schema, core_tree, full_tree, tmp_path
 ):
     """The previous image against the upgraded database refuses by both
-    documented paths and names this revision; the modules downgrade to
+    documented paths and names the modules head the database records (this
+    revision until ``modules_0005_redshift`` was added); the modules
+    downgrade to
     ``modules_0003_lower_is_better`` is the way back, and after it that image
     starts with every row in place."""
     _at_head(MIGRATED, test_db, scratch_schema, core_tree, full_tree)

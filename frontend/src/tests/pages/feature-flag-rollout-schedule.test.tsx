@@ -1,6 +1,6 @@
 import React from 'react';
 import axe from 'axe-core';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import FeatureFlagDetailPage, { SCHEDULES_LOAD_ERROR, SLIDER_SCHEDULE_NOTE } from '@/pages/feature-flags/[id]';
 import {
   CREATED,
@@ -1211,6 +1211,215 @@ describe('a schedule that changed (409) and the schedule maximum', () => {
       await waitFor(() => expect(writes()).toHaveLength(1));
       expect(screen.queryByTestId('rollout-schedule-form-error')).toBeNull();
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #442: the schedule's own start and end dates, maximum and minimum stage duration
+// ---------------------------------------------------------------------------
+describe("#442: a schedule's own dates, maximum and minimum stage duration", () => {
+  beforeEach(() => signIn('DEVELOPER'));
+
+  const API = '/api/v1/rollout-schedules';
+  const MAX_409 = "The maximum cannot be below a stage's target. Lower that stage's target first.";
+
+  const HELPS = {
+    start: "Recorded with the schedule. Each time-based stage's own start date decides when that stage starts.",
+    end: 'After this date no stage starts or completes by itself, and the schedule stays active.',
+    max: 'No stage may target more than this. Default 100.',
+    min: 'Whole hours from 0 to 8760, measured from when each stage started. Leave it empty for no minimum.',
+  };
+
+  const settingsBox = () => within(screen.getByTestId('rollout-schedule-form')).getByTestId('rollout-schedule-settings');
+  const field = (label: string) => within(settingsBox()).getByLabelText(label);
+
+  function installCreate(state: { schedules: RolloutSchedule[] }) {
+    install(state, [
+      {
+        method: 'POST',
+        path: `${API}/`,
+        handler: () => {
+          const made = schedule();
+          state.schedules = [made];
+          return made;
+        },
+      },
+    ]);
+  }
+
+  async function openCreate() {
+    const state = { schedules: [] as RolloutSchedule[] };
+    installCreate(state);
+    await renderPage();
+    fireEvent.click(screen.getByTestId('rollout-schedule-create'));
+    change(screen.getByTestId('rollout-schedule-name-input'), 'Gradual rollout');
+    fillStage(0, { name: 'Canary', target: '10' });
+  }
+
+  const paused = (overrides: Partial<RolloutSchedule> = {}) =>
+    schedule({
+      status: 'paused',
+      stages: [
+        stage('s-1', 1, { name: 'Canary', target_percentage: 10 }),
+        stage('s-2', 2, { name: 'Expanded', target_percentage: 50 }),
+      ],
+      ...overrides,
+    });
+
+  async function openEdit(routes: Route[] = [], overrides: Partial<RolloutSchedule> = {}) {
+    install({ schedules: [paused(overrides)] }, routes);
+    await renderPage();
+    fireEvent.click(screen.getByTestId('rollout-schedule-edit'));
+  }
+
+  it('creating sends the chosen maximum, both dates with Z, and min_stage_duration', async () => {
+    await openCreate();
+    change(field('Schedule start date (UTC)'), '2026-11-02T09:00');
+    change(field('Schedule end date (UTC)'), '2026-12-01T17:30');
+    change(field('Maximum percentage'), '60');
+    change(field('Minimum stage duration (hours)'), '24');
+    fireEvent.click(screen.getByTestId('rollout-schedule-submit'));
+    await wroteOnce();
+    expect(writes()).toEqual([
+      [
+        'POST',
+        `${API}/`,
+        {
+          name: 'Gradual rollout',
+          feature_flag_id: 'flag-1',
+          start_date: '2026-11-02T09:00:00Z',
+          end_date: '2026-12-01T17:30:00Z',
+          max_percentage: 60,
+          min_stage_duration: 24,
+          stages: [{ name: 'Canary', stage_order: 1, target_percentage: 10, trigger_type: 'manual' }],
+        },
+      ],
+    ]);
+  });
+
+  it('the four fields say what they do, in these words', async () => {
+    await openCreate();
+    for (const help of Object.values(HELPS)) {
+      expect(within(settingsBox()).getByText(help)).toBeInTheDocument();
+    }
+    expect(field('Maximum percentage')).toHaveValue(100);
+    expect(field('Minimum stage duration (hours)')).toHaveValue(null);
+  });
+
+  it('creating: a stage above the field’s maximum is refused before any request', async () => {
+    await openCreate();
+    change(field('Maximum percentage'), '5');
+    fireEvent.click(screen.getByTestId('rollout-schedule-submit'));
+    expect(await screen.findByTestId('rollout-schedule-form-error')).toHaveTextContent(
+      "Stage 1's target must be at most 5%, the schedule's maximum.",
+    );
+    expect(writes()).toEqual([]);
+  });
+
+  it('creating: an end date before the start date is refused before any request', async () => {
+    await openCreate();
+    change(field('Schedule start date (UTC)'), '2026-12-01T09:00');
+    change(field('Schedule end date (UTC)'), '2026-11-02T09:00');
+    fireEvent.click(screen.getByTestId('rollout-schedule-submit'));
+    expect(await screen.findByTestId('rollout-schedule-form-error')).toHaveTextContent(
+      'The end date must be after the start date.',
+    );
+    expect(writes()).toEqual([]);
+  });
+
+  it('creating: a maximum or a minimum out of range is refused before any request', async () => {
+    await openCreate();
+    change(field('Maximum percentage'), '101');
+    change(field('Minimum stage duration (hours)'), '8761');
+    fireEvent.click(screen.getByTestId('rollout-schedule-submit'));
+    expect(await screen.findByTestId('rollout-schedule-form-error')).toHaveTextContent(
+      'Enter a whole number from 0 to 100.',
+    );
+    change(field('Maximum percentage'), '100');
+    fireEvent.click(screen.getByTestId('rollout-schedule-submit'));
+    await waitFor(() =>
+      expect(screen.getByTestId('rollout-schedule-form-error')).toHaveTextContent(
+        'Enter a whole number of hours from 0 to 8760, or leave it empty.',
+      ),
+    );
+    expect(writes()).toEqual([]);
+  });
+
+  it('editing shows the stored values, and Save sends only what changed, dates with Z', async () => {
+    await openEdit(
+      [{ method: 'PUT', path: `${API}/sched-1`, handler: () => paused() }],
+      { start_date: '2026-11-02T09:00:00', end_date: '2026-12-01T17:30:00Z', max_percentage: 80, min_stage_duration: 12 },
+    );
+    expect(field('Schedule start date (UTC)')).toHaveValue('2026-11-02T09:00');
+    expect(field('Schedule end date (UTC)')).toHaveValue('2026-12-01T17:30');
+    expect(field('Maximum percentage')).toHaveValue(80);
+    expect(field('Minimum stage duration (hours)')).toHaveValue(12);
+    change(field('Schedule end date (UTC)'), '2026-12-15T00:00');
+    change(field('Maximum percentage'), '70');
+    change(field('Minimum stage duration (hours)'), '');
+    fireEvent.click(screen.getByTestId('rollout-schedule-settings-save'));
+    await wroteOnce();
+    expect(writes()).toEqual([
+      ['PUT', `${API}/sched-1`, { end_date: '2026-12-15T00:00:00Z', max_percentage: 70, min_stage_duration: null }],
+    ]);
+  });
+
+  it('editing: a maximum below a stage’s target is refused before any request', async () => {
+    await openEdit();
+    change(field('Maximum percentage'), '40');
+    fireEvent.click(screen.getByTestId('rollout-schedule-settings-save'));
+    expect(await screen.findByTestId('rollout-schedule-form-error')).toHaveTextContent(
+      "Stage 2's target must be at most 40%, the schedule's maximum.",
+    );
+    expect(writes()).toEqual([]);
+  });
+
+  it('editing: a 409 shows the fixed copy, never the server’s detail', async () => {
+    await openEdit([
+      {
+        method: 'PUT',
+        path: `${API}/sched-1`,
+        handler: () => {
+          throw apiError(409, PLANTED);
+        },
+      },
+    ]);
+    change(field('Maximum percentage'), '60');
+    fireEvent.click(screen.getByTestId('rollout-schedule-settings-save'));
+    const alert = await screen.findByTestId('rollout-schedule-action-error');
+    expect(alert).toHaveAttribute('role', 'alert');
+    expect(alert.textContent).toBe(MAX_409);
+    expect(document.body).not.toHaveTextContent(PLANTED);
+  });
+
+  it('editing: another refusal shows fixed copy too, never the server’s detail', async () => {
+    await openEdit([
+      {
+        method: 'PUT',
+        path: `${API}/sched-1`,
+        handler: () => {
+          throw apiError(422, PLANTED);
+        },
+      },
+    ]);
+    change(field('Minimum stage duration (hours)'), '5');
+    fireEvent.click(screen.getByTestId('rollout-schedule-settings-save'));
+    const alert = await screen.findByTestId('rollout-schedule-action-error');
+    expect(alert.textContent).not.toBe('');
+    expect(document.body).not.toHaveTextContent(PLANTED);
+  });
+
+  it('the witness rollout-schedule-settings is in the create form and the edit form, and for no VIEWER', async () => {
+    await openCreate();
+    expect(settingsBox()).toBeInTheDocument();
+    cleanup();
+    await openEdit();
+    expect(settingsBox()).toBeInTheDocument();
+    cleanup();
+    signIn('VIEWER');
+    install({ schedules: [paused()] });
+    await renderPage();
+    expect(screen.queryByTestId('rollout-schedule-settings')).toBeNull();
   });
 });
 
