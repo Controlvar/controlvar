@@ -9,9 +9,10 @@
  * restarts and can be served as last-known values when the API is unreachable.
  *
  * None of the public methods throw: `evaluateFlag` resolves to a disabled
- * evaluation and `getAssignment` to `null` on failure (failures are never
- * cached); `track` is fire-and-forget. Swallowed failures are reported to
- * `config.onError`.
+ * evaluation, `getAssignment` to `null` and the typed getters
+ * (`getStringValue`, `getNumberValue`, `getJsonValue`) to your default on
+ * failure (failures are never cached); `track` is fire-and-forget. Swallowed
+ * failures are reported to `config.onError`.
  *
  * @example
  * ```typescript
@@ -95,6 +96,181 @@ function disabled(flagKey: string): FlagEvaluation {
   return { key: flagKey, enabled: false, config: null };
 }
 
+/** The value types the typed getters and `useFlagValue` read. A boolean flag is read with `evaluateFlag`. */
+export type FlagValueType = 'string' | 'number' | 'json';
+
+/**
+ * Why a typed read did not answer with a value the server served:
+ *
+ * - `TYPE_MISMATCH`: the flag serves another type than the one asked for.
+ * - `INVALID_RESPONSE`: the answer holds no value of that type: a server without flag values, one
+ *   that cannot serve the flag's stored value, a value that is not of the type the answer names,
+ *   or an answer stored by 0.1 of this SDK.
+ * - `REQUEST_FAILED`: `useFlagValue`'s `error` when the request failed (a network error, a
+ *   timeout, or a non-2xx status: a flag key the server does not know is a 404); `cause` is the
+ *   request's error. The typed getters pass that error itself to `onError`.
+ */
+export type FlagValueErrorCode = 'TYPE_MISMATCH' | 'INVALID_RESPONSE' | 'REQUEST_FAILED';
+
+/** Why a typed getter or `useFlagValue` did not answer with a value the server served. */
+export class FlagValueError extends Error {
+  readonly code: FlagValueErrorCode;
+  /** The flag that was read. */
+  readonly flagKey: string;
+  /** For `REQUEST_FAILED`, the request's error; otherwise `undefined`. */
+  readonly cause: unknown;
+
+  constructor(message: string, code: FlagValueErrorCode, flagKey: string, cause?: unknown) {
+    super(message);
+    this.name = 'FlagValueError';
+    this.code = code;
+    this.flagKey = flagKey;
+    this.cause = cause;
+  }
+}
+
+/** The largest integer a JSON number carries exactly in every SDK: 2^53 - 1. */
+const MAX_SAFE_INTEGER = 9007199254740991;
+
+/**
+ * Whether `value` is a value of `type` as the server serves one: a string; a number that is
+ * finite and within ±(2^53−1), never a boolean; a JSON object or array.
+ */
+function isValueOfType(value: unknown, type: FlagValueType): boolean {
+  switch (type) {
+    case 'string':
+      return typeof value === 'string';
+    case 'number':
+      return typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= MAX_SAFE_INTEGER;
+    case 'json':
+      return value !== null && typeof value === 'object';
+    default:
+      return false;
+  }
+}
+
+/** The JSON type of a value the server sent without a `value_type`. */
+function jsonTypeOf(value: unknown): string {
+  return value !== null && typeof value === 'object' ? 'json' : typeof value;
+}
+
+/** A value type as the error messages name it. */
+function describeType(type: string): string {
+  switch (type) {
+    case 'boolean':
+      return 'a boolean';
+    case 'string':
+      return 'a string';
+    case 'number':
+      return 'a number';
+    case 'json':
+      return 'a JSON value';
+    default:
+      return `a value of type ${JSON.stringify(type.slice(0, 64))}`;
+  }
+}
+
+/**
+ * A copy of a JSON value that shares nothing with it: an object or array is copied deeply by a
+ * JSON round trip (it came from JSON, so nothing is lost); anything else is returned as it is.
+ */
+function copyValue<T>(value: T): T {
+  return value !== null && typeof value === 'object' ? (JSON.parse(JSON.stringify(value)) as T) : value;
+}
+
+/**
+ * The value `evaluation` holds for a reader of `type`, read as every Controlvar SDK reads one
+ * (`tests/sdk-contract/value-vectors.json`): no value -> `INVALID_RESPONSE`; the served type
+ * (`valueType`, else the value's JSON type) is not `type` -> `TYPE_MISMATCH`; the value is not
+ * one of `type` -> `INVALID_RESPONSE`; otherwise the value, a JSON object or array as a new copy.
+ * Exported for `useFlagValue` (not from the package root).
+ */
+export function readValueOf(
+  evaluation: FlagEvaluation,
+  type: FlagValueType,
+  flagKey: string,
+  reader: string
+): FlagValueRead {
+  const { value, valueType } = evaluation;
+  const flag = JSON.stringify(String(flagKey));
+  if (value === undefined || value === null) {
+    return notFound(
+      new FlagValueError(
+        `Flag ${flag} came back without a value (from a server without flag values, or one that ` +
+          `cannot serve this flag's stored value); ${reader} returned your default`,
+        'INVALID_RESPONSE',
+        flagKey
+      )
+    );
+  }
+  const served = typeof valueType === 'string' ? valueType : jsonTypeOf(value);
+  if (served !== type) {
+    return notFound(
+      new FlagValueError(
+        `Flag ${flag} serves ${describeType(served)}; ${reader} returned your default`,
+        'TYPE_MISMATCH',
+        flagKey
+      )
+    );
+  }
+  if (!isValueOfType(value, type)) {
+    return notFound(
+      new FlagValueError(
+        `Flag ${flag} serves ${describeType(type)}, but the server's value is not one; ` +
+          `${reader} returned your default`,
+        'INVALID_RESPONSE',
+        flagKey
+      )
+    );
+  }
+  return { found: true, value: copyValue(value), error: null };
+}
+
+function notFound(error: FlagValueError): FlagValueRead {
+  return { found: false, value: undefined, error };
+}
+
+/**
+ * The `REQUEST_FAILED` error of a typed read whose request failed with `cause`. Exported for
+ * `useFlagValue` (not from the package root).
+ */
+export function requestFailed(flagKey: string, cause: Error): FlagValueError {
+  const flag = JSON.stringify(String(flagKey));
+  return new FlagValueError(`The request for flag ${flag} failed (${cause.message})`, 'REQUEST_FAILED', flagKey, cause);
+}
+
+/** What a typed read of a flag gives: the value it serves, or why there is none. */
+export interface FlagValueRead {
+  /** `true` when `value` is a value the server served (or the offline fallback stored), of the type asked for. */
+  readonly found: boolean;
+  /** The value when `found` (a JSON value is a new copy); `undefined` otherwise. */
+  readonly value: unknown;
+  /** Why the read is not a value the server served just now; `null` when it is. */
+  readonly error: FlagValueError | null;
+}
+
+/**
+ * The method `useFlagValue` reads through: the typed getters' body without the default. Keyed by a
+ * symbol the package root does not export, so it is not part of the client's API.
+ */
+export const readFlagValue: unique symbol = Symbol('controlvar.readFlagValue');
+
+/**
+ * One flag answer and, when it is a fallback, the failure behind it. A request shared by several
+ * calls gives each the same answer; `evaluateFlag` reports the failure once per request (the
+ * first call to see it sets `reported`), each typed read once per call.
+ */
+interface FlagAnswer {
+  evaluation: FlagEvaluation;
+  error: Error | null;
+  reported: boolean;
+}
+
+/** `err` as an `Error`: itself, or an `Error` whose message is `String(err)`. */
+export function asError(err: unknown): Error {
+  return err instanceof Error ? err : new Error(String(err));
+}
+
 export class ExperimentationClient {
   private readonly apiKey: string;
   private readonly baseUrl: string;
@@ -155,14 +331,31 @@ export class ExperimentationClient {
     userId: string,
     attributes?: Record<string, unknown>
   ): Promise<FlagEvaluation> {
-    const cached = this.flagCache.get(userId, flagKey);
-    if (cached) return cached;
+    const answer = await this.flagAnswer(flagKey, userId, attributes);
+    if (answer.error !== null && !answer.reported) {
+      answer.reported = true;
+      this.report(answer.error, 'evaluateFlag');
+    }
+    return answer.evaluation;
+  }
 
-    return this.dedupe(`flag ${userId} ${flagKey}`, async () => {
+  /**
+   * `evaluateFlag`'s body: the evaluation, and the failure behind it when it is a fallback,
+   * reported by the caller (see {@link FlagAnswer}).
+   */
+  private async flagAnswer(
+    flagKey: string,
+    userId: string,
+    attributes: Record<string, unknown> | undefined
+  ): Promise<FlagAnswer> {
+    const cached = this.flagCache.get(userId, flagKey);
+    if (cached) return { evaluation: cached, error: null, reported: false };
+
+    return this.dedupe(`flag ${userId} ${flagKey}`, async (): Promise<FlagAnswer> => {
       const stored = this.offlineFallback ? await this.storage.getFlag(userId, flagKey) : null;
       if (stored && Date.now() <= stored.expiresAt) {
         this.flagCache.set(userId, flagKey, stored.value);
-        return stored.value;
+        return { evaluation: stored.value, error: null, reported: false };
       }
 
       try {
@@ -174,18 +367,21 @@ export class ExperimentationClient {
           enabled: Boolean(data?.enabled),
           config: data?.config === undefined ? null : data.config,
         };
+        // Only when the server sent them: a server without flag values sends neither.
+        if (data?.value !== undefined && data.value !== null) evaluation.value = data.value;
+        if (typeof data?.value_type === 'string') evaluation.valueType = data.value_type;
         this.flagCache.set(userId, flagKey, evaluation);
         if (this.offlineFallback) await this.storage.setFlag(userId, flagKey, evaluation, this.cacheTtlMs);
-        return evaluation;
+        return { evaluation, error: null, reported: false };
       } catch (err) {
-        this.report(err, 'evaluateFlag');
+        const error = asError(err);
         // A 404 is a definitive answer (the flag was deleted), not an outage: drop the
         // stored answer so it is never served again, and answer disabled.
         if (err instanceof ApiError && err.status === 404) {
           if (this.offlineFallback) await this.storage.removeFlag(userId, flagKey);
-          return disabled(flagKey);
+          return { evaluation: disabled(flagKey), error, reported: false };
         }
-        return stored ? stored.value : disabled(flagKey);
+        return { evaluation: stored ? stored.value : disabled(flagKey), error, reported: false };
       }
     });
   }
@@ -197,6 +393,100 @@ export class ExperimentationClient {
     attributes?: Record<string, unknown>
   ): Promise<boolean> {
     return (await this.evaluateFlag(flagKey, userId, attributes)).enabled;
+  }
+
+  /**
+   * The string a string flag serves `userId`: its on value when the flag is on for them, its off
+   * value otherwise. Evaluated as `evaluateFlag` does, with the same request, cache and
+   * AsyncStorage entry: reading a value after `evaluateFlag` or `isFeatureEnabled` asks nothing
+   * more. Reading a value records no exposure.
+   *
+   * Never rejects. Returns `defaultValue`, and calls `onError` once with `'value'`, when the
+   * request fails (with the request's own error; a 404 for an unknown flag included), the server
+   * sends no value (a server without flag values, or an answer stored by 0.1:
+   * `FlagValueError` code `'INVALID_RESPONSE'`), or the flag serves another type (code
+   * `'TYPE_MISMATCH'`). When the request fails and the offline fallback holds an answer with a
+   * value of this type, that value is returned instead of `defaultValue`, and the request's error
+   * still goes to `onError`, as `evaluateFlag` does.
+   */
+  async getStringValue(
+    flagKey: string,
+    userId: string,
+    defaultValue: string,
+    attributes?: Record<string, unknown>
+  ): Promise<string> {
+    return this.typedValue(flagKey, userId, defaultValue, 'string', attributes, 'getStringValue');
+  }
+
+  /**
+   * The number a number flag serves `userId` (an integer or a decimal, as saved); see
+   * `getStringValue` for when it returns `defaultValue` instead. Never rejects.
+   */
+  async getNumberValue(
+    flagKey: string,
+    userId: string,
+    defaultValue: number,
+    attributes?: Record<string, unknown>
+  ): Promise<number> {
+    return this.typedValue(flagKey, userId, defaultValue, 'number', attributes, 'getNumberValue');
+  }
+
+  /**
+   * The JSON object or array a json flag serves `userId`, as a new copy on every call: changing
+   * it changes nothing the client keeps. It is checked to be an object or an array, not to match
+   * `T`. See `getStringValue` for when it returns `defaultValue` instead. Never rejects.
+   */
+  async getJsonValue<T = unknown>(
+    flagKey: string,
+    userId: string,
+    defaultValue: T,
+    attributes?: Record<string, unknown>
+  ): Promise<T> {
+    return this.typedValue(flagKey, userId, defaultValue, 'json', attributes, 'getJsonValue');
+  }
+
+  /** The typed getters' one body: the value read, or `defaultValue`. */
+  private async typedValue<T>(
+    flagKey: string,
+    userId: string,
+    defaultValue: T,
+    type: FlagValueType,
+    attributes: Record<string, unknown> | undefined,
+    reader: string
+  ): Promise<T> {
+    const read = await this[readFlagValue](flagKey, userId, type, attributes, reader);
+    return read.found ? (read.value as T) : defaultValue;
+  }
+
+  /**
+   * What the typed getters and `useFlagValue` read: the value `flagKey` serves `userId` when it
+   * is of `type`, or why not. Calls `onError` once with `'value'` when the request failed (its
+   * own error) or the read found no value (a `FlagValueError`). Never rejects.
+   */
+  async [readFlagValue](
+    flagKey: string,
+    userId: string,
+    type: FlagValueType,
+    attributes: Record<string, unknown> | undefined,
+    reader: string
+  ): Promise<FlagValueRead> {
+    let read: FlagValueRead;
+    let failure: Error | null = null;
+    try {
+      const answer = await this.flagAnswer(flagKey, userId, attributes);
+      failure = answer.error;
+      read = readValueOf(answer.evaluation, type, flagKey, reader);
+    } catch (err) {
+      // `flagAnswer` does not reject; this keeps a getter from rejecting if it ever did.
+      failure = asError(err);
+      read = { found: false, value: undefined, error: null };
+    }
+    if (failure !== null) {
+      this.report(failure, 'value');
+      return { found: read.found, value: read.value, error: requestFailed(flagKey, failure) };
+    }
+    if (read.error !== null) this.report(read.error, 'value');
+    return read;
   }
 
   /**
@@ -445,7 +735,7 @@ export class ExperimentationClient {
   private report(err: unknown, operation: SwallowedOperation): void {
     if (!this.onError) return;
     try {
-      this.onError(err instanceof Error ? err : new Error(String(err)), operation);
+      this.onError(asError(err), operation);
     } catch {
       // a throwing error handler must not break fire-and-forget semantics
     }

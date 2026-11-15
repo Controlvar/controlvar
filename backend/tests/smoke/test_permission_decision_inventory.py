@@ -436,6 +436,10 @@ ROLE_READS = {
         "N",
         "syncs the role from Cognito groups",
     ),
+    ("services/local_auth_service.py", "_is_demo_viewer"): (
+        "B",
+        "demo mode signs in only a built-in non-superuser VIEWER",
+    ),
 }
 
 
@@ -511,7 +515,7 @@ def test_every_role_read_is_classified():
 def test_the_computed_b_set():
     """The class-B decisions, as the PR reports them (PB91-7)."""
     b = sorted(f"{f}::{fn}" for (f, fn), (cls, _) in ROLE_READS.items() if cls == "B")
-    assert len(b) == 12, b
+    assert len(b) == 13, b
 
 
 def test_a_role_comparison_in_a_route_is_named():

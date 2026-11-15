@@ -149,6 +149,7 @@ jobs:
     permissions:
       contents: read
       checks: read
+      actions: read
     outputs:
       sha: ${{ steps.tag.outputs.sha }}
     steps:

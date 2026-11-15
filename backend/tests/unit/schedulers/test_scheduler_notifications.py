@@ -544,6 +544,9 @@ class TestExperimentSchedulerNotifications:
         # What Start requires; the scheduler starts only such a draft (#1454).
         mock_exp.variants = [MagicMock(is_control=True), MagicMock(is_control=False)]
         mock_exp.metric_definitions = [MagicMock()]
+        # Not a visual experiment. Only None reads as absent, so a mock's own
+        # attribute would count as visual settings and fail the start check (#1545).
+        mock_exp.visual_config = None
         return mock_exp
 
     @pytest.mark.asyncio

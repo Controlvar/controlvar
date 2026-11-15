@@ -363,16 +363,38 @@ text = "Below them, Also analyse the primary metric with Bayesian statistics is 
 by = ["test:frontend/src/tests/pages/experiment-new-configuration.test.tsx"]
 
 [[unit]]
-text = "Turned on, the results also carry a Bayesian analysis of the primary metric (the probability that each variant is the best) with default priors; the frequentist results and the recommendation do not change."
+text = "Turned on, the results also carry a Bayesian analysis of the primary metric (the probability that each variant is the best); the frequentist results and the recommendation do not change."
 by = [
     "test:backend/tests/integration/api/test_bayesian_route_claims.py::test_turning_it_on_changes_neither_the_frequentist_results_nor_the_recommendation",
     "test:frontend/src/tests/components/experiment-form-state.test.ts::sends bayesian_enabled: true only when it is turned on",
+]
+
+[[unit]]
+text = "Under it, Advanced Bayesian settings opens to the prior alpha, prior beta, loss threshold and credible level, each at its default (1.0, 1.0, 0.001 and 0.95); they are sent only when one of them is changed."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::%s: shown only while the box is ticked, closed by default, and opens to four fields at their defaults with their helps",
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::%s: untouched, the POST has no bayesian_config",
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::%s: %s set to %s, changed alone, sends the five-field object with prior_family \"beta\"",
     "test:backend/tests/integration/api/test_experiment_bayesian_config_api.py::TestTurningBayesianOn::test_create_enabled_without_config_stores_defaults",
 ]
 
 [[unit]]
-text = "To set the priors, see Bayesian analysis."
-by = ["exempt:baseline"]
+text = "A value the API would refuse is named under its field, and nothing is created until it is fixed."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::%s: alpha 0 reads \"Must be greater than 0.\" and sends nothing",
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::%s (%s) set to \"%s\" is refused beside the field and at Next",
+]
+
+[[unit]]
+text = "Like the two settings above, Bayesian analysis and its settings are saved with the experiment and cannot be changed after it starts."
+by = [
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_superuser_cannot_change_an_analysis_setting_once_out_of_draft",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_developer_meets_the_refusal_of_every_change_outside_draft_first",
+]
+
+[[unit]]
+text = "For what each setting does, see Bayesian analysis."
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "The single-page form has the same settings in a collapsed Analysis settings section, whose title shows the current values."
@@ -983,10 +1005,30 @@ text = "Significance | (adjusted) p-value < (1 - confidence level), e.g., < 0.05
 by = ["journey:experiment-results#results-api"]
 
 [[unit]]
-text = "For each variant, GET /api/v1/results/{experiment_id} also returns effect_size, effect_size_label (negligible / small / medium / large) and confidence_interval."
+text = "The table shows the effect size and the interval that GET /api/v1/results/{experiment_id} returns for each variant as effect_size, effect_size_label (negligible / small / medium / large) and confidence_interval."
 by = [
     "test:backend/tests/unit/api/test_results_api.py",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::f4: the treatment reads \"0.34% to 4.66%\" and \"0.32 (small)\", the control \"Control\"",
+    "test:frontend/src/tests/pages/results-reading.test.tsx::are in the table on the page, with the numbers the server sent in each row",
+]
+
+[[unit]]
+text = "Effect size | How large the difference from the control is, in a standardised unit: Cohen's h for a rate, Cohen's d for an average. It is written to two places with the label the server gives it (negligible, small, medium or large), e.g. 0.32 (small). The control's row reads Control."
+by = [
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::f4: the treatment reads \"0.34% to 4.66%\" and \"0.32 (small)\", the control \"Control\"",
+    "test:frontend/src/tests/pages/results-reading.test.tsx::are in the table on the page, with the numbers the server sent in each row",
+]
+
+[[unit]]
+text = "Interval (95%) | This variant's own rate or average with its confidence interval, headed with the experiment's confidence level (Interval (99%) at 99%). A variant with fewer than 2 users reads Not enough data yet. When every user of a variant has the same value, for example none converted, it reads No interval: all 200 users have the same value (with its own user count), because the interval is built from how much users differ, and they do not. The interval of the change is in the Change column."
+by = [
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::f4: the control of 0/200 reads \"No interval: all 200 users have the same value\"",
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::d_mean_control_zero: the control of 100 users reads \"No interval: all 100 users have the same value\"",
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::f6: an arm with no users reads \"Not enough data yet\", for a rate and a mean",
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::f1 at 0.99: the header reads \"Interval (99%)\"",
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::one user reads \"Not enough data yet\"",
+    "test:frontend/src/tests/pages/results-reading.test.tsx::are in the table on the page, with the numbers the server sent in each row",
 ]
 
 [[unit]]
@@ -1393,8 +1435,19 @@ text = "Unarchive it before turning it on.\" Turning it off succeeds and changes
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Archiving and unarchiving are API calls for now (bulk toggle with archive, and POST /api/v1/feature-flags/{id}/unarchive, which is beta); an unarchived flag comes back inactive."
+text = "To archive a flag, open its page and choose Archive, then confirm; an archived flag's page offers Unarchive, and an unarchived flag comes back inactive (off)."
 by = [
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::no bulk-toggle call before Archive is confirmed in the dialog",
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::confirming archives the flag: it reads Archived, with no switch, and offers Unarchive",
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::Unarchive asks nothing, sends one POST /unarchive, and the flag reads Off with its switch back",
+    "test:backend/tests/integration/api/test_archived_flag_verbs.py::test_unarchive_is_the_way_back",
+]
+
+[[unit]]
+text = "Both need permission to change feature flags, which the ADMIN and DEVELOPER roles have; through the API they are a bulk toggle with archive and POST /api/v1/feature-flags/{id}/unarchive (beta)."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::ADMIN and DEVELOPER see Archive on an %s flag and Unarchive on an archived one",
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::ANALYST and VIEWER see no archive control and the role note",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
     "test:backend/tests/integration/api/test_archived_flag_verbs.py",
 ]
@@ -1402,8 +1455,8 @@ by = [
 [[unit]]
 text = "The dashboard shows an archived flag as Archived, with no on/off switch, and the flag list has an Archived filter."
 by = [
-    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::reads Archived on its page, with no switch, and says how to unarchive it",
-    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::reads Archived in the list, with no switch in its row and a link saying how to unarchive it",
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::reads Archived on its page, with no switch, and says to unarchive it before turning it on",
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::reads Archived in the list, with no switch in its row and a note to unarchive it before turning it on",
     "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::the list filters archived flags, asking the API for status ARCHIVED",
 ]
 
@@ -1432,7 +1485,21 @@ text = "Exporting Results"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Export results through the API:"
+text = "On an experiment's results page, Download CSV saves its variant rows as a CSV file."
+by = [
+    "test:frontend/src/tests/pages/results-export-csv.test.tsx::the results page has a Download CSV button with the sentence under it",
+    "test:frontend/src/tests/pages/results-export-csv.test.tsx::saves the response body byte for byte, as results-{id}.csv",
+]
+
+[[unit]]
+text = "The file covers the primary metric only, with the experiment's saved correction and confidence level, and has no adjusted p-value."
+by = [
+    "test:frontend/src/tests/pages/results-export-csv.test.tsx::the results page has a Download CSV button with the sentence under it",
+    "test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_variant_columns_are_the_results_numbers_with_the_stored_settings",
+]
+
+[[unit]]
+text = "Through the API:"
 by = ["exempt:instruction"]
 
 [[unit]]
@@ -1560,6 +1627,13 @@ by = [
 [[unit]]
 text = "See the Dimensional Analysis Guide."
 by = ["exempt:baseline"]
+
+[[unit]]
+text = "For an experiment that balances its split within groups, the Breakdowns tab opens on its balanced groups, from GET /api/v1/results/{experiment_id}/balanced-groups (beta); see Balance the split within groups."
+by = [
+    "test:frontend/src/tests/pages/results-balanced-groups.test.tsx::lists Platform (balanced) first and chooses it, from the balanced-groups route",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_the_rows_are_the_stored_groups_and_add_up_to_every_user",
+]
 
 [[unit]]
 text = "Multi-Armed Bandit — Maximize Conversions During the Experiment"

@@ -216,7 +216,9 @@ class _FeatureFlagRequest(BaseModel):
         start with a letter or a digit."""
         import re
 
-        if not re.match(r"^[a-z0-9][a-z0-9_-]*$", v):
+        # fullmatch, not match with a "$": "$" also matches before a final
+        # newline, which let "search_v2\n" through (#1806).
+        if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", v):
             raise ValueError(
                 "Key must be lowercase alphanumeric characters, hyphens, or underscores only"
             )

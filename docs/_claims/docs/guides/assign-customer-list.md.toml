@@ -237,3 +237,36 @@ by = ["exempt:baseline"]
 [[unit]]
 text = "For a bandit experiment, each enrolled user also counts as a pull of their variant."
 by = ["test:backend/tests/integration/services/test_bandit_scheduler_db.py::test_postgres_fallback_counts_converting_users_as_results_does"]
+
+[[unit]]
+text = "Balance each segment of the list"
+by = ["exempt:label"]
+
+[[unit]]
+text = "If the experiment balances its split within groups, send each customer's value of its attribute in their context, for example their tier, at the top level."
+by = ["test:backend/tests/unit/services/test_balanced_allocation.py::test_the_label_table"]
+
+[[unit]]
+text = "Each tier then gets the experiment's split among its own customers, across every chunk and together with the users assigned one at a time: within a tier, each variant's count is never more than a few customers from its share, for the customers balanced in the blocks."
+by = [
+    "test:backend/tests/integration/api/test_balanced_assignment.py::test_a_list_and_single_assigns_share_each_groups_places",
+    "test:backend/tests/unit/services/test_balanced_allocation.py::test_the_bound_holds_for_every_split_in_steps_of_5",
+]
+
+[[unit]]
+text = "A customer split without balancing is outside that: one the server split while it was busy balancing other users at that moment keeps their group and is counted in the experiment_balance_fallback_total metric, and one an older server version assigned has no group."
+by = [
+    "test:backend/tests/integration/api/test_balanced_assignment.py::test_a_held_counter_row_holds_up_nothing_else",
+    "test:backend/tests/integration/database/test_balance_within_migration.py::test_the_previous_releases_statements_run_on_this_schema",
+]
+
+[[unit]]
+text = "The same list sent in another order can split differently; each customer keeps the variant they got."
+by = [
+    "test:backend/tests/integration/api/test_balanced_assignment.py::test_a_list_and_single_assigns_share_each_groups_places",
+    "test:backend/tests/integration/api/test_balanced_assignment.py::test_a_sticky_user_keeps_their_variant_and_group",
+]
+
+[[unit]]
+text = "To count each tier's customers in each variant, join the request's tiers to the answer:"
+by = ["exempt:instruction"]

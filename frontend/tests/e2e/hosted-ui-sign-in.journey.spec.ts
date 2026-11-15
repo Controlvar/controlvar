@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
@@ -16,6 +16,7 @@ import {
   type TestInfo,
 } from "@playwright/test";
 import { TOKEN_STORAGE_KEY } from "./env";
+import { listenOnFreePort, startStaticServer } from "./free-port";
 
 /**
  * Journey: sign in through the Cognito Hosted UI (#708), in the built
@@ -36,13 +37,15 @@ import { TOKEN_STORAGE_KEY } from "./env";
  * the callback, /logout with a redirect to its logout_uri, and each counts
  * its visits. Nothing reaches AWS.
  *
- * Ports: HOSTED_UI_E2E_PORT (dashboard, default 55549) and
- * HOSTED_UI_E2E_API_PORT (the stub, default 55550).
+ * Ports: both servers take one the OS hands out, so a port already in use
+ * on the runner cannot stop the journeys (#1888, tests/e2e/free-port.ts).
+ * HOSTED_UI_E2E_PORT (dashboard) and HOSTED_UI_E2E_API_PORT (the stub) fix
+ * them when set.
  */
 
-const PORT = Number(process.env.HOSTED_UI_E2E_PORT ?? 55549);
-const API_PORT = Number(process.env.HOSTED_UI_E2E_API_PORT ?? 55550);
-const DASHBOARD = `http://127.0.0.1:${PORT}`;
+// Both set in beforeAll, from the ports the two servers got.
+let API_PORT = 0;
+let DASHBOARD = "";
 const HOSTED_UI = "hosted-ui.cognito.test";
 const CLIENT_ID = "e2eclient";
 const FRONTEND = join(__dirname, "..", "..");
@@ -257,18 +260,17 @@ test.describe("Journey: sign in through the Cognito Hosted UI (built dashboard, 
   test.beforeAll(async () => {
     expect(existsSync(join(FRONTEND, "out", "auth", "callback.html")), "run `npm run build` first").toBe(true);
     stub = createServer((req, res) => void api(req, res));
-    await new Promise<void>((resolve) => stub.listen(API_PORT, "127.0.0.1", resolve));
-    dashboard = spawn(
-      process.execPath,
-      [join(FRONTEND, "tests", "e2e", "static-server.mjs"), "--port", String(PORT), "--api", `http://127.0.0.1:${API_PORT}`, "--nginx-headers"],
-      { stdio: "inherit" },
-    );
+    API_PORT = await listenOnFreePort(stub, "HOSTED_UI_E2E_API_PORT");
+    const served = await startStaticServer(["--api", `http://127.0.0.1:${API_PORT}`, "--nginx-headers"], "HOSTED_UI_E2E_PORT");
+    dashboard = served.child;
+    DASHBOARD = `http://127.0.0.1:${served.port}`;
     await waitFor(`${DASHBOARD}/login`);
   });
 
   test.afterAll(async () => {
     // Both servers are this spec's own; a worker restarted after a failure
-    // starts them again on the same ports, so they are gone before it does.
+    // starts them again (on the same ports when the variables fix them), so
+    // they are gone before it does.
     if (dashboard && dashboard.exitCode === null) {
       const exited = new Promise((resolve) => dashboard.once("exit", resolve));
       dashboard.kill("SIGKILL");

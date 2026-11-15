@@ -9,6 +9,8 @@ import { ApiKeyRouteHint } from '@/components/experiments/ApiKeyRouteHint';
 import WarehouseAnalysisSection from '@modules/components/warehouse/runs/WarehouseAnalysisSection';
 import { useAuth } from '@/contexts/AuthContext';
 import { EligibilityUser, useExperimentEligibility } from '@/hooks/useExperimentEligibility';
+import { useSegmentList } from '@/hooks/useSegmentList';
+import { BALANCE_RESULTS_LINK, balanceSummary } from '@/components/experiments/new/balanceWithin';
 import { isApiError } from '@/services/api';
 import { docsUrl } from '@/services/docs';
 import { ExperimentsService } from '@/services/experiments';
@@ -27,6 +29,9 @@ import {
 } from '@/types/experiments';
 import { canChangeExperiment } from '@/utils/experimentPermissions';
 import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
+import { useDemoMode } from '@/contexts/AuthConfigContext';
+import { DemoNote } from '@/components/DemoNote';
+import { DEMO_EXPERIMENTS_ACTION } from '@/utils/demoMode';
 import { correctionName, formatConfidence } from '@/components/results/shared/analysisSettings';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
@@ -83,6 +88,33 @@ function formatDate(value: string | null | undefined): string {
 export function algorithmLabel(optimizationType: string | null | undefined): string | null {
   if (!optimizationType || optimizationType === 'fixed') return null;
   return OPTIMIZATION_TYPE_LABELS[optimizationType as OptimizationType] ?? optimizationType;
+}
+
+/**
+ * The header's "Balance" row: what the split is balanced within ("within
+ * Platform (ios, android, web)", or the segments by name) or "off". Read-only:
+ * a draft changes it in "Edit variants and metrics", and it is fixed once the
+ * experiment has started. Saved segments are loaded only when it lists some.
+ * Once there are results, a balanced experiment's row links to its balanced
+ * groups on Results › Breakdowns (`resultsHref`).
+ */
+function BalanceRow({ setting, resultsHref }: { setting: Experiment['balance_within']; resultsHref?: string }) {
+  const segmentList = useSegmentList(Boolean(setting?.segments?.length));
+  const names =
+    segmentList.state === 'ready' ? new Map(segmentList.segments.map((s) => [s.id, s.name] as const)) : null;
+  return (
+    <div className="flex items-center gap-1.5">
+      <dt className="text-slate-500">Balance</dt>
+      <dd data-testid="experiment-balance">{balanceSummary(setting ?? null, names)}</dd>
+      {setting && resultsHref && (
+        <dd>
+          <Link href={resultsHref} className={NOTE_LINK} data-testid="experiment-balance-results">
+            {BALANCE_RESULTS_LINK}
+          </Link>
+        </dd>
+      )}
+    </div>
+  );
 }
 
 /** The header's term for an experiment's start or end date. */
@@ -260,6 +292,8 @@ export default function ExperimentDetailPage() {
   const router = useRouter();
   const { user } = useAuth();
   const { effective, loading: permissionsLoading } = useEffectivePermissions();
+  // A read-only demo shows the demo note in place of the role note.
+  const demo = useDemoMode();
   const rawId = router.query.id;
   const id = typeof rawId === 'string' ? rawId : undefined;
 
@@ -492,6 +526,12 @@ export default function ExperimentDetailPage() {
                     <dd data-testid="experiment-algorithm">{algorithm}</dd>
                   </div>
                 )}
+                {experiment.balance_within !== undefined && (
+                  <BalanceRow
+                    setting={experiment.balance_within}
+                    resultsHref={resultsAvailable ? `/results/${experiment.id}?tab=breakdowns` : undefined}
+                  />
+                )}
                 <div className="flex items-center gap-1.5">
                   <dt className="text-slate-500">Owner</dt>
                   <dd data-testid="experiment-owner" title={experiment.owner_id ?? undefined}>
@@ -586,7 +626,8 @@ export default function ExperimentDetailPage() {
             </div>
           </div>
 
-          {showRoleNote && (
+          {demo && <DemoNote action={DEMO_EXPERIMENTS_ACTION} className="mt-4 text-sm text-slate-700" />}
+          {showRoleNote && !demo && (
             <p className="mt-4 text-sm text-slate-700" data-testid="experiment-role-note">
               {isOwner
                 ? 'You own this experiment, but starting, pausing, completing and archiving it needs permission to change experiments, which the ADMIN and DEVELOPER roles have; '

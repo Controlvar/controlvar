@@ -471,6 +471,49 @@ DESCRIPTION_FACTS: dict[str, dict[str, Any]] = {
             }
         },
     },
+    "10-serve-a-value": {
+        "description": (
+            "Create a flag that serves a string instead of on or off: its type, an "
+            "on value and an off value, and a rule for pro plan users. Switch it "
+            "on, then see the Go SDK lines that read the value."
+        ),
+        "seed": "demo",
+        # New Flag; the String type; the on and off values typed into their
+        # fields; the rule's group and its value; the switch to on.
+        "actions": [
+            ["click", {"testid": "new-flag-btn"}],
+            ["click", {"role": "radio", "name": "String", "exact": True}],
+            ["type", {"label": "On value", "exact": True}],
+            ["type", {"label": "Off value", "exact": True}],
+            ["click", {"testid": "add-group"}],
+            ["type", {"testid": "condition-value"}],
+            ["click", {"testid": "flag-toggle"}],
+        ],
+        # The Go card's lines are the docs' own (test_showcase_quoted_docs.py);
+        # the narration says what they do.
+        "said": [
+            "A flag can serve a value instead of on or off.",
+            "Add a rule: users on the pro plan get the on value.",
+            "In your app, the Go SDK reads the value for each user.",
+        ],
+        # What the capture reads back through the API (gate 10): the one flag,
+        # a string flag with both values and the pro-plan rule, switched on.
+        "end_state": {
+            "flag": {
+                "name": "Checkout button label",
+                "key": "checkout-button-label",
+                "rule": {
+                    "attribute": "user.plan",
+                    "operator": "equals",
+                    "value": "pro",
+                },
+                "status": "active",
+                "value_type": "string",
+                "on_value": "Complete purchase",
+                "off_value": "Buy now",
+            }
+        },
+    },
     "05-plan-and-team": {
         "description": (
             "Work out a test's sample size in the power calculator, which needs no "

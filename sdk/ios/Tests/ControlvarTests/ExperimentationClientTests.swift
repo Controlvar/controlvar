@@ -440,7 +440,7 @@ final class ExperimentationClientTests: XCTestCase {
         _ = try await client.evaluateFlag("new-ui", user: user)
         client.clearCache()
 
-        MockURLProtocol.respond(status: 404, json: #"{"detail":"archived"}"#)
+        MockURLProtocol.respond(status: 404, json: #"{"detail":"Feature flag with key 'new-ui' not found"}"#)
         do {
             _ = try await client.evaluateFlag("new-ui", user: user)
             XCTFail("Expected flagNotFound")

@@ -66,6 +66,19 @@ export interface FeatureFlagEvaluation {
    * the server did not send one.
    */
   reason?: string;
+  /**
+   * The value the server served the user (`value` in its answer): the flag's on value when it is
+   * on for them, its off value otherwise; for a boolean flag, `isEnabled` itself. `undefined`
+   * while loading, on error, or when the server sent none (a server without flag values, or one
+   * that cannot serve the flag's stored value). It is the cached answer's own value, shared by
+   * every reader of this evaluation; `useFlagValue` reads it by type and returns a copy.
+   */
+  value?: unknown;
+  /**
+   * The type the server says the flag serves (`value_type` in its answer): `'boolean'`,
+   * `'string'`, `'number'` or `'json'`. `undefined` when it sent none.
+   */
+  valueType?: string;
 }
 
 /**
@@ -121,6 +134,13 @@ export interface FeatureFlagEvaluateResponse {
   config: unknown | null;
   /** `targeting_rule` | `rollout` | `inactive` | `error`; absent on older servers. */
   reason?: string;
+  /**
+   * The value served to this user: the on value when `enabled`, else the off value. Absent on
+   * servers without flag values, and when the flag's stored value cannot be served.
+   */
+  value?: unknown;
+  /** `boolean` | `string` | `number` | `json`; absent on servers without flag values. */
+  value_type?: string;
 }
 
 /**

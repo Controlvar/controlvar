@@ -69,6 +69,10 @@ INVENTORY: Dict[str, str] = {
     "backend/app/services/assignment_service.py::AssignmentService.delete_assignments_by_experiment": DELETES,
     "backend/app/api/v1/endpoints/results.py::_get_sequential_data._count_assignments": READS,
     "backend/app/api/v1/endpoints/results.py::get_sample_size_status": READS,
+    # /results/{id}/balanced-groups: each user's stored group, and the users
+    # split without balancing (#448).
+    "backend/app/services/balanced_groups_results.py::stored_strata": READS,
+    "backend/app/services/balanced_groups_results.py::users_outside_blocks": READS,
     # /track and /batch read the user's stored variant through it.
     "backend/app/api/v1/endpoints/tracking.py::_variant_at_receipt": READS,
     "backend/app/core/bandit_scheduler.py::BanditScheduler._count_assignments_by_variant": READS,
@@ -84,7 +88,6 @@ INVENTORY: Dict[str, str] = {
     "backend/app/services/assignment_service.py::AssignmentService._stored_assignment": READS,
     "backend/app/services/assignment_service.py::AssignmentService.get_assignment": READS,
     "backend/app/services/assignment_service.py::AssignmentService.get_user_assignments": READS,
-    "backend/app/services/audience_service.py::AudienceService.preview_audience_size": READS,
     "backend/app/services/event_matching.py::_assigned_pairs": READS,
     "backend/app/services/event_matching.py::assignment_times": READS,
     "backend/app/services/event_service.py::EventService.track_conversion": READS,

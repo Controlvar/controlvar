@@ -41,6 +41,16 @@
       "psnr_db": 43.3
     },
     {
+      "slug": "10-serve-a-value",
+      "mp4_sha256": "5afc444bad1e3622cbf8d9b3cb1356c79865e090956d8e43976226693915e0c3",
+      "poster_sha256": "d44a1994c7cd031c4b17de03ac776ed4bed6b41cac12439dc8a51e3618aee705",
+      "t": 59.5,
+      "first_cue": 3.033,
+      "crop": [1920, 940, 0, 0],
+      "pad": "#f3fafc",
+      "psnr_db": 44.02
+    },
+    {
       "slug": "05-plan-and-team",
       "mp4_sha256": "5446fa6cdb042a32991f8ca52acf9e88d4c89db83f7dcd45c9fdde8fee519e6c",
       "poster_sha256": "ece0127a444c3ed993fcb333fd025d0af7bdb90e8dd22c9443773054a6392561",

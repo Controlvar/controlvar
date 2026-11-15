@@ -61,8 +61,9 @@ class ExperimentationClient(
      * @param flagKey the feature flag's unique key
      * @param user    the user to evaluate the flag for
      * @return EvalResult with the flag key, enabled state and config
-     * @throws ExperimentationException.FlagNotFoundException if the flag is unknown or not
-     *         ACTIVE (HTTP 404) and no offline value exists
+     * @throws ExperimentationException.FlagNotFoundException if the flag key is unknown
+     *         (HTTP 404; a flag that is not ACTIVE answers 200 with `enabled: false`) and no
+     *         offline value exists
      * @throws ExperimentationException.ServerException on another non-2xx response with no offline value
      * @throws ExperimentationException.NetworkException on network failure with no offline value
      */

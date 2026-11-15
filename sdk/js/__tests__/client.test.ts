@@ -1283,6 +1283,28 @@ describe('track after the cache TTL', () => {
     now.mockRestore();
   });
 
+  const keylessTrackAfter25Hours = async (ttl: number) => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(T0);
+    const fetchMock = mockFetchSequence({ body: flagOn }, { body: { success_count: 1, failure_count: 0 } });
+    const client = new ExperimentationClient({ ...baseConfig, cacheTtlMs: ttl });
+    await client.evaluateFlag('new-search', user);
+    now.mockReturnValue(T0 + 25 * HOUR); // the entry never expires, so no request is made
+    expect(client.getEvaluatedFlags('user-123')).toHaveLength(1);
+
+    await client.track('user-123', 'purchase', { value: 120 });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(call(fetchMock, 1).url).toBe(BATCH_URL);
+    expect(batchKeys(call(fetchMock, 1).body)).toEqual(['flag:new-search']);
+    now.mockRestore();
+  };
+
+  it('#1540: a cacheTtlMs of Infinity keeps the record as long as the cache: a key-less track() 25 h later is still tagged', () =>
+    keylessTrackAfter25Hours(Infinity));
+
+  it('#1540: a cacheTtlMs of NaN keeps the record as long as the cache: a key-less track() 25 h later is still tagged', () =>
+    keylessTrackAfter25Hours(NaN));
+
   it('cacheTtlMs: 0 caches nothing, and a key-less track() still reaches the experiment and flag just answered', async () => {
     jest.spyOn(Date, 'now').mockReturnValue(T0);
     const fetchMock = mockFetchSequence({ body: assignment }, { body: flagOn }, { body: { success_count: 2, failure_count: 0 } });

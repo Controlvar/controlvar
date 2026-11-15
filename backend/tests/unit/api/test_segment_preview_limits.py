@@ -22,7 +22,7 @@ at ``["query", "sample_size"]``.
 
 The endpoint tests run the real endpoint and the real
 ``AudienceService.preview_audience_size`` against a ``MagicMock`` session whose
-assignment query returns no rows (an empty table). Every call made on the
+exposure read returns no rows (an empty table). Every call made on the
 session is recorded in ``session.mock_calls``, which is how the "no database
 query" property is observed.
 """
@@ -128,10 +128,13 @@ def _viewer() -> User:
 
 
 def _empty_table_session() -> MagicMock:
-    """A session whose segment lookup finds a row and whose assignments are empty."""
+    """A session whose segment lookup finds a row and whose exposure read is empty.
+
+    The read is ``session.execute(...)``, iterated: a ``MagicMock`` iterates
+    as empty.
+    """
     session = MagicMock()
-    assignments = session.query.return_value.filter.return_value.limit.return_value
-    assignments.all.return_value = []
+    session.execute.return_value.__iter__.return_value = iter([])
     return session
 
 
@@ -168,7 +171,17 @@ def _assert_previewed(response) -> None:
     assert response.status_code == 200, response.text
     body = response.json()
     # The empty table: the real service ran and sampled nothing.
-    assert body == {"estimated_percentage": 0.0, "sample_size": 0, "matched": 0}
+    assert body == {
+        "estimated_percentage": None,
+        "sample_size": 0,
+        "matched": 0,
+        "source": "exposure_metadata",
+        "window_days": 30,
+        "sampled_since": None,
+        "ended_by": "window",
+        "users_without_context": 0,
+        "reason": "no_exposures_with_context",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -392,8 +405,9 @@ def test_the_session_probe_sees_the_queries_of_an_accepted_preview(preview):
     """The probe above is live: an accepted preview does query the session."""
     response, session = preview(_flat([_eq()]))
     _assert_previewed(response)
-    queried = [c for c in session.mock_calls if c[0] == "query"]
-    assert len(queried) == 2, session.mock_calls  # the segment, the assignments
+    queried = [c for c in session.mock_calls if c[0] in ("query", "execute")]
+    # The segment, then the exposures.
+    assert [c[0] for c in queried] == ["query", "execute"], session.mock_calls
 
 
 # ---------------------------------------------------------------------------

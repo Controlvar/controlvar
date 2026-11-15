@@ -126,15 +126,39 @@ text = "Turning Bayesian analysis on"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Set bayesian_enabled to true on POST /api/v1/experiments/ or PUT /api/v1/experiments/{experiment_id}, and optionally a bayesian_config."
+text = "Set bayesian_enabled to true on POST /api/v1/experiments/, or with PUT /api/v1/experiments/{experiment_id} while the experiment is a draft, and optionally a bayesian_config."
 by = [
     "test:backend/tests/integration/api/test_experiment_bayesian_config_api.py::TestTurningBayesianOn::test_create_persists_config_and_enables_analysis",
     "test:backend/tests/integration/api/test_experiment_bayesian_config_api.py::TestTurningBayesianOn::test_update_persists_config_and_enables_analysis",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_draft_takes_each_analysis_setting",
 ]
 
 [[unit]]
-text = "In the dashboard, the new-experiment form's Also analyse the primary metric with Bayesian statistics checkbox sends bayesian_enabled: true with no config."
-by = ["test:frontend/src/tests/components/experiment-form-state.test.ts"]
+text = "Once the experiment has left draft neither can be changed, by anyone, a superuser included: on an active experiment the PUT answers 400 with \"Cannot update bayesian_enabled for experiments in active status\" (or bayesian_config) for a superuser and \"Cannot update experiments in active status\" for anyone else who may change experiments."
+by = [
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_superuser_cannot_change_an_analysis_setting_once_out_of_draft",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_developer_meets_the_refusal_of_every_change_outside_draft_first",
+]
+
+[[unit]]
+text = "To use other settings, clone the experiment (POST /api/v1/experiments/{experiment_id}/clone): the copy is a new experiment, a draft, and takes them."
+by = ["test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_clone_of_a_running_experiment_takes_the_settings_as_a_draft"]
+
+[[unit]]
+text = "In the dashboard, the new-experiment form's Also analyse the primary metric with Bayesian statistics checkbox sends bayesian_enabled: true, and Advanced Bayesian settings under it sets the prior alpha, prior beta, loss threshold and credible level."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::%s: shown only while the box is ticked, closed by default, and opens to four fields at their defaults with their helps",
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::%s: %s set to %s, changed alone, sends the five-field object with prior_family \"beta\"",
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::%s: offers no Prior family control (T337: every family is analysed as Beta)",
+]
+
+[[unit]]
+text = "The form sends those four, with prior_family \"beta\", as a bayesian_config only when one of them differs from its default, and never sends a rope."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::%s: untouched, the POST has no bayesian_config",
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::%s: %s set to %s, changed alone, sends the five-field object with prior_family \"beta\"",
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::a field changed back to its default value sends no bayesian_config",
+]
 
 [[unit]]
 text = "Turning it on without a config stores the defaults in the table below."
@@ -220,7 +244,7 @@ by = [
 ]
 
 [[unit]]
-text = "So is a PUT that sends \"bayesian_config\": null while Bayesian analysis stays on; to turn it off and clear the config, send \"bayesian_enabled\": false with it."
+text = "So is a PUT to a draft that sends \"bayesian_config\": null while Bayesian analysis stays on; to turn it off and clear the config, send \"bayesian_enabled\": false with it."
 by = [
     "test:backend/tests/integration/api/test_experiment_bayesian_config_api.py::TestClearingTheConfig::test_null_config_while_enabled_is_refused",
     "test:backend/tests/integration/api/test_experiment_bayesian_config_api.py::TestClearingTheConfig::test_disable_and_null_together_clears",

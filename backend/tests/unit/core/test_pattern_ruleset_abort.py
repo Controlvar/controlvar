@@ -32,6 +32,7 @@ from backend.app.core.targeting_adapter import (
 )
 from backend.app.models.feature_flag import FeatureFlagStatus
 from backend.app.schemas.targeting_rule import TargetingRules
+from backend.app.services import audience_service
 from backend.app.services import feature_flag_service as ffs
 from backend.app.services.assignment_service import AssignmentService
 from backend.app.services.audience_service import AudienceService
@@ -283,13 +284,19 @@ def test_segment_membership_is_not_granted(monkeypatch):
 
 
 @pytest.mark.regression
-def test_segment_preview_does_not_count_the_user():
-    db = MagicMock()
-    rows = db.query.return_value.filter.return_value.limit.return_value
-    rows.all.return_value = [(LONG_COMPETITOR,)]
-    preview = AudienceService.preview_audience_size(db, SEGMENT_NESTED_NOT, 10)
+def test_segment_preview_does_not_count_the_user(monkeypatch):
+    """The competitor is sampled and not matched; the user with no context
+    is not sampled at all."""
+
+    def read(db, since, until, cap):
+        yield ("competitor", LONG_COMPETITOR, "2026-11-06T12:00:01+00:00")
+        yield ("no-context", {}, "2026-11-06T12:00:00+00:00")
+
+    monkeypatch.setattr(audience_service, "_read_recent_exposures", read)
+    preview = AudienceService.preview_audience_size(MagicMock(), SEGMENT_NESTED_NOT, 10)
     assert preview.sample_size == 1
     assert preview.matched == 0
+    assert preview.users_without_context == 1
 
 
 @pytest.mark.regression

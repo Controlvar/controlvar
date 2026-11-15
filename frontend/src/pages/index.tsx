@@ -1,16 +1,18 @@
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAuthConfig } from '@/contexts/AuthConfigContext';
+import { LOGIN_PATH } from '@/services/api';
 import { PageTitle } from '@/components/PageTitle';
 import { SiteHeader } from '@/components/SiteHeader';
 import { isMarketingSite } from '@/utils/site-mode';
-import { Walkthroughs } from '@/components/Walkthroughs';
 import { Hero } from '@/components/homepage/Hero';
 import { FactsStrip } from '@/components/homepage/FactsStrip';
 import { HowItWorks } from '@/components/homepage/HowItWorks';
+import { Books } from '@/components/homepage/Books';
 import { ProductRows } from '@/components/homepage/ProductRows';
 import { SdkChips } from '@/components/homepage/SdkChips';
-import { DeployCards } from '@/components/homepage/DeployCards';
+import { WalkthroughsTeaser } from '@/components/homepage/WalkthroughsTeaser';
 import { ClosingBand } from '@/components/homepage/ClosingBand';
 import { HomeFooter } from '@/components/homepage/HomeFooter';
 
@@ -43,28 +45,43 @@ export const HOME_AFTER_LOGIN = '/experiments';
  * `tests/pages/helpers/homeInventory.ts` with its source, and
  * `tests/pages/home-page.test.tsx` fails a rendered sentence that is not a row
  * and a row that is not rendered, in both builds. The two builds differ in
- * three things only: the walkthroughs and the screenshots are the marketing
- * build's, and its second hero button is the power calculator where a
- * self-hosted platform build offers "Sign in to the dashboard".
+ * these only: the walkthroughs teaser and the screenshots are the marketing
+ * build's; its second hero button is the power calculator where a self-hosted
+ * platform build offers "Sign in to the dashboard"; and the books and
+ * walkthroughs links go to the marketing build's own /books and
+ * /walkthroughs pages, which a platform build does not have.
+ *
+ * The order is the site design of 2026-11-11 (D377): the hero, the facts
+ * strip (which took in the deploy cards), How it works, the books, the
+ * product rows, the SDKs, the walkthroughs teaser and the closing band.
  */
 export default function HomePage() {
   const router = useRouter();
   const { status } = useAuth();
+  const { demo } = useAuthConfig();
   // There is no hosted tier, so the public site offers no sign-in: the button
   // posted to an endpoint that 404s. See utils/site-mode.ts.
   const marketing = isMarketingSite();
 
   useEffect(() => {
-    if (status === 'authenticated') {
+    // A read-only demo has no homepage: once `/auth/config` says this is one,
+    // `/` goes to the sign-in page, which sends a visitor already signed in
+    // on to the dashboard. Until it has answered the homepage shows, as on
+    // any install: the demo box is meant to redirect `/` at its proxy, and
+    // this is the fallback.
+    if (demo) {
+      void router.replace(LOGIN_PATH);
+    } else if (status === 'authenticated') {
       void router.replace(HOME_AFTER_LOGIN);
     }
-  }, [status, router]);
+  }, [demo, status, router]);
 
-  // An authenticated visitor is on their way to the dashboard: render nothing
-  // rather than paint the whole marketing page and replace it a moment later.
-  // `loading` still renders the page, so an anonymous visitor -- who is every
-  // visitor this page exists for -- sees no spinner.
-  if (status === 'authenticated') {
+  // An authenticated visitor is on their way to the dashboard, and a demo's
+  // visitor on their way to /login: render nothing rather than paint the
+  // whole marketing page and replace it a moment later. `loading` still
+  // renders the page (and so does the static export), so an anonymous
+  // visitor -- who is every visitor this page exists for -- sees no spinner.
+  if (demo || status === 'authenticated') {
     return <PageTitle />;
   }
 
@@ -81,10 +98,10 @@ export default function HomePage() {
           <Hero />
           <FactsStrip />
           <HowItWorks />
+          <Books />
           <ProductRows />
           <SdkChips />
-          {marketing && <Walkthroughs />}
-          <DeployCards />
+          {marketing && <WalkthroughsTeaser />}
           <ClosingBand />
         </main>
 

@@ -2,7 +2,10 @@ import React, { ReactNode, useCallback, useEffect, useRef, useState } from 'reac
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/contexts/AuthContext';
+import { useDemoMode } from '@/contexts/AuthConfigContext';
+import { DemoBanner } from '@/components/DemoBanner';
 import { SiteHeader } from '@/components/SiteHeader';
+import { HomeFooter } from '@/components/homepage/HomeFooter';
 import { Wordmark } from '@/components/Wordmark';
 import { LOGIN_PATH, Role, UserMe, safeNextPath } from '@/services/api';
 import { isMarketingSite } from '@/utils/site-mode';
@@ -274,12 +277,14 @@ interface AppShellProps {
  * Audit Log · Admin · Docs · More, which holds "Your API keys" and "Change
  * password") and the user
  * area with a visible "Log out" button. Mounted by `_app.tsx` for every route
- * except `/login`.
+ * except `/login`. In demo mode the demo banner sits above the header and
+ * More holds neither account page (the API refuses both pages' changes).
  */
 export function AppShell({ children }: AppShellProps) {
   const router = useRouter();
   const { user, status, logout } = useAuth();
   const { profile, modules, version, isLoading: modulesLoading, error: modulesError } = useModules();
+  const demo = useDemoMode();
   const [menuOpen, setMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -310,9 +315,10 @@ export function AppShell({ children }: AppShellProps) {
   const showModulesGuide = !marketing && !modulesLoading && modulesError === null && profile === 'core';
   // The signed-in user's own pages. "Your API keys" is every user's. Only
   // local sign-in has a password the API can change; under any other provider
-  // that route answers 404. Neither waits for the modules probe.
+  // that route answers 404. Neither waits for the modules probe. A read-only
+  // demo offers neither: both exist to change something.
   const accountNav: NavItem[] =
-    marketing || !user
+    marketing || !user || demo
       ? []
       : user.auth_provider === 'local'
         ? [OWN_API_KEYS_ITEM, CHANGE_PASSWORD_ITEM]
@@ -348,6 +354,9 @@ export function AppShell({ children }: AppShellProps) {
     </a>
   );
 
+  // The homepage's footer too, so every page of the public site ends the same
+  // way (/docs had a footer of its own, /power-calculator and /privacy none).
+  // The homepage is a `bare` route and renders HomeFooter itself.
   if (marketing) {
     return (
       <div data-testid="app-shell" className="min-h-screen bg-slate-50 flex flex-col">
@@ -356,6 +365,7 @@ export function AppShell({ children }: AppShellProps) {
         <main id="main-content" className="flex-1 flex flex-col">
           {children}
         </main>
+        <HomeFooter />
       </div>
     );
   }
@@ -363,6 +373,7 @@ export function AppShell({ children }: AppShellProps) {
   return (
     <div data-testid="app-shell" className="min-h-screen bg-slate-50 flex flex-col">
       {skipLink}
+      {demo && <DemoBanner signedIn={status === 'authenticated'} />}
 
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-4">

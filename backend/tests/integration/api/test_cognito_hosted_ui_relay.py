@@ -33,7 +33,7 @@ import boto3
 import pytest
 from botocore.exceptions import ClientError
 from fastapi.testclient import TestClient
-from moto import mock_cognitoidp
+from moto import mock_aws
 from sqlalchemy import func
 
 from backend.app.api import deps
@@ -108,7 +108,7 @@ def hosted_ui(db_session, monkeypatch) -> Iterator[HostedUI]:
     app.dependency_overrides[deps.get_db] = override_get_db
     app.dependency_overrides[session_get_db] = override_get_db
     try:
-        with mock_cognitoidp(), FakeIssuer() as issuer:
+        with mock_aws(), FakeIssuer() as issuer:
             idp = boto3.client("cognito-idp", region_name=REGION)
             pool = idp.create_user_pool(PoolName="hosted-ui")["UserPool"]["Id"]
             app_client = _app_client(idp, pool)

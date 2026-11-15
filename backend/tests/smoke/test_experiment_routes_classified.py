@@ -90,6 +90,9 @@ CORE_ROUTES = {
     ("PUT", f"{E}/{{experiment_id}}/schedule"): CHANGE_UPDATE,
     ("DELETE", f"{E}/{{experiment_id}}"): CHANGE_DELETE,
     ("GET", f"{E}/{{experiment_id}}/split-url/preview"): ROLE_ONLY,
+    # visual_preview_links.py (#1545)
+    ("POST", f"{E}/{{experiment_id}}/visual/preview-links"): CHANGE_UPDATE,
+    ("DELETE", f"{E}/{{experiment_id}}/visual/preview-links"): CHANGE_UPDATE,
     # results.py and post_stratification.py
     ("GET", R): READ,
     ("GET", f"{R}/daily"): READ,
@@ -97,6 +100,7 @@ CORE_ROUTES = {
     ("GET", f"{R}/bayesian"): READ,
     ("GET", f"{R}/sequential"): READ,
     ("GET", f"{R}/cuped"): READ,
+    ("GET", f"{R}/balanced-groups"): READ,
     ("POST", f"{R}/post-stratification"): READ,
     ("POST", f"{R}/fdr-correction"): READ,
     ("POST", f"{R}/invalidate-cache"): SUPERUSER,
@@ -160,8 +164,8 @@ EXPORT_AND_INTERACTION_ROUTES = {
 }
 EXPORT_AND_INTERACTION_PREFIXES = ("/api/v1/export/", "/api/v1/interactions/")
 
-CORE_COUNT = 48  # 46 HTTP + 1 WebSocket selected, and the explicit entry
-FULL_COUNT = 53
+CORE_COUNT = 51  # 49 HTTP + 1 WebSocket selected, and the explicit entry
+FULL_COUNT = 56
 
 
 def _full_profile() -> bool:

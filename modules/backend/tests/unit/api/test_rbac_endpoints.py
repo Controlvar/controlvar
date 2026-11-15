@@ -324,12 +324,14 @@ class TestEffectivePermissions:
 class TestGrantRevokePermission:
     def test_grant_permission_returns_201(self, admin_client):
         client, _, _ = admin_client
+        # The body names the path's user: another id is refused with 400 (#1789).
+        user_id = uuid4()
         with patch("modules.backend.app.api.v1.endpoints.rbac.RBACService") as mock_svc:
             mock_svc.grant_direct_permission.return_value = MagicMock()
             response = client.post(
-                f"/api/v1/rbac/users/{uuid4()}/grant",
+                f"/api/v1/rbac/users/{user_id}/grant",
                 json={
-                    "user_id": str(uuid4()),
+                    "user_id": str(user_id),
                     "resource": "experiment",
                     "actions": ["update"],
                 },

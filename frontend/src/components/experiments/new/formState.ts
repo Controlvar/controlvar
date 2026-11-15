@@ -10,6 +10,8 @@
 import { TargetingRules } from '@/types/targeting';
 import { createEmptyRules, validateRules } from '@/utils/targeting';
 import {
+  BalanceWithin,
+  BayesianConfigInput,
   DesignMetric,
   DesignVariant,
   Experiment,
@@ -26,6 +28,14 @@ import {
   DEFAULT_CORRECTION_METHOD,
 } from '@/components/results/shared/analysisSettings';
 import { plannedEffectFraction, plannedEffectProblem } from './estimate';
+import {
+  balanceStateFromStored,
+  BalanceFormState,
+  buildBalancePayload,
+  initialBalanceState,
+  sameBalance,
+  splitProblem,
+} from './balanceWithin';
 
 export function generateKey(name: string): string {
   return name
@@ -104,6 +114,12 @@ export interface ExperimentFormState {
   /** Also analyse the primary metric with Bayesian statistics (#216); saved with the experiment. */
   bayesianEnabled: boolean;
   /**
+   * Advanced Bayesian settings (#442), as typed. Read only while
+   * `bayesianEnabled` is on, and sent as `bayesian_config` only when a field
+   * has left its default (`buildBayesianConfig`).
+   */
+  bayesianConfig: BayesianConfigFormState;
+  /**
    * Also test the primary metric sequentially (beta, #1454); saved with the
    * experiment. Only the switch: no `sequential_testing_config` is sent, so the
    * API's defaults apply.
@@ -126,6 +142,118 @@ export interface ExperimentFormState {
    * `buildCreatePayload` does with `plannedEffectPct`.
    */
   designPlannedEffect?: number | null;
+  /** Balance the split within groups of users (beta, #448); see `balanceWithin.ts`. */
+  balance: BalanceFormState;
+  /**
+   * The design edit's stored setting, as read (null: off). Set only by
+   * `formStateFromExperiment`; `buildDesignPayload` sends `balance_within`
+   * only when the form's differs from it.
+   */
+  balanceStored?: BalanceWithin | null;
+}
+
+// --- Advanced Bayesian settings (#442) ---------------------------------------
+//
+// The four numbers of the API's `BayesianConfig` that the create form offers
+// (`backend/app/schemas/bayesian.py`). `prior_family` is not offered: the
+// analysis reads only alpha and beta, so every family gives the same results
+// (T337), and the form always sends "beta". `rope` is never sent. They are set
+// only when an experiment is created: the design edit does not send them, and
+// the API refuses a change once the experiment has left draft.
+
+/**
+ * The fields as typed. The numbers are kept as text, so a value that is half
+ * typed shows as it is; `bayesianConfigProblems` reads them as the API's
+ * `BayesianConfig` does.
+ */
+export interface BayesianConfigFormState {
+  alpha: string;
+  beta: string;
+  lossThreshold: string;
+  credibleLevel: string;
+}
+
+export type BayesianNumberField = keyof BayesianConfigFormState;
+export const BAYESIAN_NUMBER_FIELDS: BayesianNumberField[] = ['alpha', 'beta', 'lossThreshold', 'credibleLevel'];
+
+/** The fields as they start: the API's defaults. */
+export const DEFAULT_BAYESIAN_CONFIG: BayesianConfigFormState = {
+  alpha: '1.0',
+  beta: '1.0',
+  lossThreshold: '0.001',
+  credibleLevel: '0.95',
+};
+
+export const BAYESIAN_FIELD_LABELS: Record<BayesianNumberField, string> = {
+  alpha: 'Prior alpha',
+  beta: 'Prior beta',
+  lossThreshold: 'Loss threshold',
+  credibleLevel: 'Credible level',
+};
+
+/** The API's own bounds: alpha, beta and the loss threshold > 0; 0 < credible level < 1. */
+export const MUST_BE_POSITIVE = 'Must be greater than 0.';
+export const MUST_BE_BETWEEN_0_AND_1 = 'Must be more than 0 and less than 1.';
+
+/** The number `text` holds, or null when it holds none (blank, not a number, or infinite). */
+function typedNumber(text: string): number | null {
+  if (text.trim() === '') return null;
+  const value = Number(text);
+  return Number.isFinite(value) ? value : null;
+}
+
+/** Each number field's problem, or null where there is none. */
+export function bayesianConfigProblems(
+  config: BayesianConfigFormState,
+): Record<BayesianNumberField, string | null> {
+  const positive = (text: string) => {
+    const value = typedNumber(text);
+    return value !== null && value > 0 ? null : MUST_BE_POSITIVE;
+  };
+  const level = typedNumber(config.credibleLevel);
+  return {
+    alpha: positive(config.alpha),
+    beta: positive(config.beta),
+    lossThreshold: positive(config.lossThreshold),
+    credibleLevel: level !== null && level > 0 && level < 1 ? null : MUST_BE_BETWEEN_0_AND_1,
+  };
+}
+
+/**
+ * The first problem with Advanced Bayesian settings, in the words shown where
+ * Next or Create is refused, or null. Nothing while Bayesian analysis is off:
+ * the fields are hidden then, and not sent.
+ */
+export function bayesianConfigProblem(
+  state: Pick<ExperimentFormState, 'bayesianEnabled' | 'bayesianConfig'>,
+): string | null {
+  if (!state.bayesianEnabled) return null;
+  const problems = bayesianConfigProblems(state.bayesianConfig);
+  const first = BAYESIAN_NUMBER_FIELDS.find((field) => problems[field] !== null);
+  return first ? `Advanced Bayesian settings, ${BAYESIAN_FIELD_LABELS[first]}: ${problems[first]}` : null;
+}
+
+/**
+ * The `bayesian_config` to send, or undefined when all four numbers hold the
+ * API's defaults: the API then stores the defaults itself. Otherwise the five
+ * fields, `prior_family` always "beta", so the stored config is complete.
+ * Compared by value, so "1" is alpha's default as much as "1.0" is.
+ * Validation refuses a field with a problem before this is called.
+ */
+export function buildBayesianConfig(config: BayesianConfigFormState): BayesianConfigInput | undefined {
+  const sent: BayesianConfigInput = {
+    prior_family: 'beta',
+    alpha: Number(config.alpha),
+    beta: Number(config.beta),
+    loss_threshold: Number(config.lossThreshold),
+    credible_level: Number(config.credibleLevel),
+  };
+  const atDefaults =
+    sent.alpha === Number(DEFAULT_BAYESIAN_CONFIG.alpha) &&
+    sent.beta === Number(DEFAULT_BAYESIAN_CONFIG.beta) &&
+    sent.loss_threshold === Number(DEFAULT_BAYESIAN_CONFIG.lossThreshold) &&
+    sent.credible_level === Number(DEFAULT_BAYESIAN_CONFIG.credibleLevel);
+  return atDefaults ? undefined : sent;
 }
 
 const DEFAULT_VARIANTS: VariantFormData[] = [
@@ -152,8 +280,10 @@ export function createInitialFormState(): ExperimentFormState {
     confidenceLevel: DEFAULT_CONFIDENCE_LEVEL,
     correctionMethod: DEFAULT_CORRECTION_METHOD,
     bayesianEnabled: false,
+    bayesianConfig: { ...DEFAULT_BAYESIAN_CONFIG },
     sequentialEnabled: false,
     plannedEffectPct: '',
+    balance: initialBalanceState(),
   };
 }
 
@@ -315,6 +445,16 @@ export function validateForm(
 }
 
 /**
+ * The API's refusal of the split for a balanced experiment (every share must
+ * be a multiple of 5), or null: nothing while the switch is off, and nothing
+ * until the shares add up to 100.
+ */
+export function balanceSplitProblem(state: Pick<ExperimentFormState, 'balance' | 'variants'>): string | null {
+  if (!state.balance.on) return null;
+  return splitProblem(state.variants.map((v) => Number(v.traffic_allocation) || 0));
+}
+
+/**
  * Every problem with the targeting rules, in the builder's words, or [] when
  * they can be sent. No groups means no targeting and is always fine.
  *
@@ -339,11 +479,12 @@ export type FormStep = (typeof FORM_STEPS)[number];
 /**
  * The first problem with the part of the form one step asks for, or null.
  *
- * `type` always has a valid value and cannot fail. `estimate` fails only on a
- * minimum detectable effect that is typed but cannot be saved (blank is fine;
- * the rest of that step is not sent). `review` is the whole-form check, and
- * every other message is one `validateForm` can return. The single-page form
- * does not ask for the effect, so `validateForm` does not check it, and
+ * `type` always has a valid value and cannot fail. `estimate` fails on an
+ * Advanced Bayesian setting the API would refuse (#442), and on a minimum
+ * detectable effect that is typed but cannot be saved (blank is fine; the rest
+ * of the estimate is not sent). `review` is the whole-form check, and every
+ * other message is one `validateForm` can return. The single-page form does
+ * not ask for the effect, so `validateForm` does not check it, and
  * `buildCreatePayload` sends only a usable one.
  */
 export function validateStep(step: FormStep, state: ExperimentFormState): string | null {
@@ -353,11 +494,15 @@ export function validateStep(step: FormStep, state: ExperimentFormState): string
     case 'details':
       return checkName(state.name) ?? checkMetrics(state.metrics);
     case 'variants':
-      return checkVariants(state.variants);
+      return checkVariants(state.variants) ?? balanceSplitProblem(state);
     case 'estimate':
-      return plannedEffectProblem(state.plannedEffectPct);
+      return bayesianConfigProblem(state) ?? plannedEffectProblem(state.plannedEffectPct);
     case 'review':
-      return validateForm(state.name, state.variants, state.metrics);
+      return (
+        validateForm(state.name, state.variants, state.metrics) ??
+        balanceSplitProblem(state) ??
+        bayesianConfigProblem(state)
+      );
   }
 }
 
@@ -421,8 +566,16 @@ export function buildCreatePayload(state: ExperimentFormState): CreateExperiment
     confidence_level: state.confidenceLevel,
     correction_method: state.correctionMethod,
   };
-  if (state.bayesianEnabled) payload.bayesian_enabled = true;
+  if (state.bayesianEnabled) {
+    payload.bayesian_enabled = true;
+    // Only a change is sent: with all five at their defaults the API stores the defaults itself.
+    const bayesianConfig = buildBayesianConfig(state.bayesianConfig);
+    if (bayesianConfig) payload.bayesian_config = bayesianConfig;
+  }
   if (state.sequentialEnabled) payload.sequential_testing_enabled = true;
+  // Sent only when on: a draft that does not balance is created as before.
+  const balance = buildBalancePayload(state.balance);
+  if (balance) payload.balance_within = balance;
   return payload;
 }
 
@@ -478,6 +631,8 @@ export function formStateFromExperiment(experiment: Experiment): ExperimentFormS
     name: experiment.name,
     variants: experiment.variants.map(variantFromStored),
     metrics: experiment.metrics.map((m, i) => metricFromStored(m, i === planned)),
+    balance: balanceStateFromStored(experiment.balance_within),
+    balanceStored: experiment.balance_within ?? null,
   };
   if (planned >= 0) state.designPlannedEffect = experiment.metrics[planned].expected_effect ?? null;
   return state;
@@ -528,7 +683,11 @@ export function buildDesignPayload(state: ExperimentFormState): ExperimentDesign
     if (carried?.minimum_sample_size != null) metric.minimum_sample_size = carried.minimum_sample_size;
     return metric;
   });
-  return { variants, metrics };
+  const body: ExperimentDesignUpdate = { variants, metrics };
+  // Only a change to the setting is sent: a save that leaves it alone sends the two lists, as before.
+  const balance = buildBalancePayload(state.balance);
+  if (!sameBalance(balance, state.balanceStored ?? null)) body.balance_within = balance;
+  return body;
 }
 
 /** The design edit's own refusals; every other one is guided setup's (`checkVariants`, `checkMetrics`). */
@@ -593,6 +752,10 @@ export function checkDesign(state: ExperimentFormState): DesignProblem | null {
   if (controls.length > 1) {
     return { message: ONE_CONTROL, field: { list: 'variants', index: controls[0], field: 'is_control' } };
   }
+  const splitRefusal = balanceSplitProblem(state);
+  if (splitRefusal !== null) {
+    return { message: splitRefusal, field: { list: 'variants', index: 0, field: 'traffic_allocation' } };
+  }
   const metricProblem = checkMetrics(metrics);
   if (metricProblem !== null) return { message: metricProblem, field: metricProblemField(metrics) };
   const primaries = indexesWhere(metrics, (m) => m.is_primary);
@@ -614,8 +777,19 @@ export type ExperimentFormAction =
   | { type: 'setConfidenceLevel'; confidenceLevel: number }
   | { type: 'setCorrectionMethod'; correctionMethod: CorrectionMethod }
   | { type: 'setBayesianEnabled'; bayesianEnabled: boolean }
+  | { type: 'setBayesianField'; field: BayesianNumberField; value: string }
   | { type: 'setSequentialEnabled'; sequentialEnabled: boolean }
   | { type: 'setPlannedEffect'; plannedEffectPct: string }
+  | { type: 'setBalanceOn'; on: boolean }
+  | { type: 'setBalanceGroupBy'; groupBy: BalanceFormState['groupBy'] }
+  | { type: 'setBalanceCustomKey'; customKey: string }
+  /** `from` is the key as it stood when the text field was entered. */
+  | { type: 'commitBalanceCustomKey'; from: string }
+  | { type: 'addBalanceValue'; value: string }
+  | { type: 'removeBalanceValue'; index: number }
+  | { type: 'addBalanceSegment'; segmentId: string }
+  | { type: 'removeBalanceSegment'; index: number }
+  | { type: 'moveBalanceSegment'; index: number; by: -1 | 1 }
   | { type: 'addVariant' }
   | { type: 'removeVariant'; index: number }
   | {
@@ -657,10 +831,49 @@ export function experimentFormReducer(
       return { ...state, correctionMethod: action.correctionMethod };
     case 'setBayesianEnabled':
       return { ...state, bayesianEnabled: action.bayesianEnabled };
+    case 'setBayesianField':
+      return { ...state, bayesianConfig: { ...state.bayesianConfig, [action.field]: action.value } };
     case 'setSequentialEnabled':
       return { ...state, sequentialEnabled: action.sequentialEnabled };
     case 'setPlannedEffect':
       return { ...state, plannedEffectPct: action.plannedEffectPct };
+
+    case 'setBalanceOn':
+      return { ...state, balance: { ...state.balance, on: action.on } };
+    case 'setBalanceGroupBy':
+      // The values belong to the key they were listed for.
+      return { ...state, balance: { ...state.balance, groupBy: action.groupBy, values: [] } };
+    case 'setBalanceCustomKey':
+      // Typing only changes the text: a typo fixed mid-word keeps the values listed so far.
+      return { ...state, balance: { ...state.balance, customKey: action.customKey } };
+    case 'commitBalanceCustomKey':
+      // The key is settled (blur or Enter): values listed for another key do not go with this one.
+      if (state.balance.customKey === action.from) return state;
+      return { ...state, balance: { ...state.balance, values: [] } };
+    case 'addBalanceValue':
+      // A value is matched exactly, so it is kept as typed; only nothing is not added.
+      if (action.value.trim() === '') return state;
+      return { ...state, balance: { ...state.balance, values: [...state.balance.values, action.value] } };
+    case 'removeBalanceValue':
+      return {
+        ...state,
+        balance: { ...state.balance, values: state.balance.values.filter((_, i) => i !== action.index) },
+      };
+    case 'addBalanceSegment':
+      if (action.segmentId === '' || state.balance.segments.includes(action.segmentId)) return state;
+      return { ...state, balance: { ...state.balance, segments: [...state.balance.segments, action.segmentId] } };
+    case 'removeBalanceSegment':
+      return {
+        ...state,
+        balance: { ...state.balance, segments: state.balance.segments.filter((_, i) => i !== action.index) },
+      };
+    case 'moveBalanceSegment': {
+      const to = action.index + action.by;
+      if (to < 0 || to >= state.balance.segments.length) return state;
+      const segments = [...state.balance.segments];
+      [segments[action.index], segments[to]] = [segments[to], segments[action.index]];
+      return { ...state, balance: { ...state.balance, segments } };
+    }
 
     case 'addVariant':
       return {

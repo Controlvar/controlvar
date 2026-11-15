@@ -870,6 +870,29 @@ class TestLateConversions:
         assert transport.calls() == ["POST /api/v1/tracking/assign", "POST /api/v1/tracking/batch"]
         assert batch_keys(transport.last) == ["checkout_flow"]
 
+    def _keyless_track_25_hours_after_the_answer(self, transport, cache_ttl_seconds):
+        client = ExperimentationClient(API_URL, API_KEY, cache_ttl_seconds=cache_ttl_seconds, transport=transport)
+        assign_route(transport)
+        batch_route(transport, success_count=1)
+        with mock.patch("controlvar.cache._now") as now:
+            now.return_value = 1000.0
+            client.get_assignment("checkout_flow", "user-1")
+            now.return_value = 1000.0 + 25 * 3600  # the entry never expires, so no request is made
+            assert len(client.cached_assignments("user-1")) == 1
+            assert client.track("user-1", "purchase", event_value=120) is True
+        assert transport.calls() == ["POST /api/v1/tracking/assign", "POST /api/v1/tracking/batch"]
+        assert batch_keys(transport.last) == ["checkout_flow"]
+
+    @pytest.mark.regression
+    def test_a_cache_ttl_of_nan_keeps_the_record_as_long_as_the_cache_1540(self, transport):
+        """#1540: a NaN lifetime never expires a cache entry, so the record must not expire either."""
+        self._keyless_track_25_hours_after_the_answer(transport, float("nan"))
+
+    @pytest.mark.regression
+    def test_a_cache_ttl_of_infinity_keeps_the_record_as_long_as_the_cache_1540(self, transport):
+        """#1540: an infinite lifetime never expires a cache entry; the record already agrees."""
+        self._keyless_track_25_hours_after_the_answer(transport, float("inf"))
+
     def test_control_the_same_purchase_at_299_seconds_while_still_cached(self, client, transport):
         assign_route(transport)
         batch_route(transport, success_count=1)

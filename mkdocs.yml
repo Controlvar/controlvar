@@ -85,6 +85,7 @@ nav:
 - Home: README.md
 - Getting Started:
   - Quick Start: getting-started/quick-start.md
+  - Live Demo: getting-started/live-demo.md
   - What Controlvar Does: capabilities.md
   - Limitations: getting-started/limitations.md
   - Roadmap: https://github.com/Controlvar/controlvar/blob/main/ROADMAP.md
@@ -94,6 +95,7 @@ nav:
   - Modules & Profiles: getting-started/modules.md
   - Local Development with Docker: getting-started/docker-guide.md
   - The Development Compose File: getting-started/docker-compose-file.md
+  - The Controlvar Books: https://github.com/amarkanday/controlvar-books
 - Feature Flags:
   - Creating Feature Flags: feature-flags/create.md
   - Targeting & Rules: Enhanced_Rules_Engine_Reference.md
@@ -113,6 +115,7 @@ nav:
   - Split URL Testing: api/split-url.md
   - Mutual Exclusion Groups: api/mutual-exclusion-groups.md
   - Assign a Customer List (beta): guides/assign-customer-list.md
+  - Balance the Split Within Groups (beta): guides/balance-within-groups.md
   - Live Results Streaming: websocket-streaming.md
 - LLM / AI Model Evaluation:
   - Overview: llm-evaluation/overview.md

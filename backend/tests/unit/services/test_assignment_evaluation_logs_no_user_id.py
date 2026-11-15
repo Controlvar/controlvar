@@ -230,7 +230,8 @@ def _run_batch_failing_with(monkeypatch, exc):
     for variant in exp.variants:
         variant.configuration = {}
     db = MagicMock()
-    db.query.return_value.filter.return_value.first.return_value = exp
+    # The route's query leaves out the visual columns with options (#1545).
+    db.query.return_value.options.return_value.filter.return_value.first.return_value = exp
 
     class FailingService:
         def __init__(self, _db):

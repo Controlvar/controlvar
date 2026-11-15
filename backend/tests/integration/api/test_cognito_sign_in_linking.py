@@ -40,7 +40,7 @@ from typing import Any, Callable, Dict, Iterator, List, NamedTuple, Optional
 import boto3
 import pytest
 from fastapi.testclient import TestClient
-from moto import mock_cognitoidp
+from moto import mock_aws
 from sqlalchemy import event, func, text
 from sqlalchemy.orm import Session
 
@@ -185,7 +185,7 @@ def signin(db_session, test_db, monkeypatch) -> Iterator[SignIn]:
 
     saved = _route_db_to(db_session)
     try:
-        with mock_cognitoidp():
+        with mock_aws():
             monkeypatch.setattr(deps.auth_service, "get_user_with_groups", stub)
             yield SignIn(
                 TestClient(app, raise_server_exceptions=False),
@@ -1008,7 +1008,7 @@ def pool(db_session, test_db, monkeypatch) -> Iterator[Pool]:
     monkeypatch.setattr(settings, "AUTH_PROVIDER", "cognito")
     saved = _route_db_to(db_session)
     try:
-        with mock_cognitoidp():
+        with mock_aws():
             idp = boto3.client("cognito-idp", region_name=REGION)
             pool_id = idp.create_user_pool(PoolName="ours")["UserPool"]["Id"]
             app_client = idp.create_user_pool_client(

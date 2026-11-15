@@ -581,30 +581,105 @@
         "type": "object"
       },
       "AudiencePreviewResponse": {
-        "description": "Estimated audience size from preview evaluation.",
+        "description": "How many of the users seen most recently the rules match.\n\nThe users are the most recent ones with an exposure (a /tracking/assign\ncall) in the last 30 days, each counted once, with the attributes sent as\ncontext on their latest one. It is not a random sample: it leans toward\nfrequent users and the time of day.",
         "example": {
+          "ended_by": "sample_size",
           "estimated_percentage": 35.5,
           "matched": 355,
-          "sample_size": 1000
+          "sample_size": 1000,
+          "sampled_since": "2026-11-06T09:12:45.120391+00:00",
+          "source": "exposure_metadata",
+          "users_without_context": 42,
+          "window_days": 30
         },
         "properties": {
+          "ended_by": {
+            "description": "sample_size: enough users were found; cap: the row cap was reached first; window: every exposure in the window was read.",
+            "enum": [
+              "sample_size",
+              "cap",
+              "window"
+            ],
+            "title": "Ended By",
+            "type": "string"
+          },
           "estimated_percentage": {
-            "title": "Estimated Percentage",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "matched / sample_size x 100, to 2 decimals. null when reason is set: no user seen with attributes, or fewer than 30.",
+            "title": "Estimated Percentage"
           },
           "matched": {
+            "description": "Of those users, how many the rules match.",
             "title": "Matched",
             "type": "integer"
           },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "no_exposures_with_context",
+                  "too_few_users"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why estimated_percentage is null: no_exposures_with_context (no user with attributes) or too_few_users (1 to 29). null otherwise.",
+            "title": "Reason"
+          },
           "sample_size": {
+            "description": "Distinct users read whose latest exposure carried attributes; at most the requested sample_size.",
             "title": "Sample Size",
+            "type": "integer"
+          },
+          "sampled_since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The time of the oldest exposure read, UTC ISO-8601; null when none was read.",
+            "title": "Sampled Since"
+          },
+          "source": {
+            "const": "exposure_metadata",
+            "description": "Where the attributes come from: the exposures' stored context.",
+            "title": "Source",
+            "type": "string"
+          },
+          "users_without_context": {
+            "description": "Distinct users read whose latest exposure carried no attributes; not counted in sample_size.",
+            "title": "Users Without Context",
+            "type": "integer"
+          },
+          "window_days": {
+            "description": "The read goes back at most this many days (fixed at 30).",
+            "title": "Window Days",
             "type": "integer"
           }
         },
         "required": [
           "estimated_percentage",
           "sample_size",
-          "matched"
+          "matched",
+          "source",
+          "window_days",
+          "sampled_since",
+          "ended_by",
+          "users_without_context",
+          "reason"
         ],
         "title": "AudiencePreviewResponse",
         "type": "object"
@@ -872,7 +947,7 @@
         "type": "object"
       },
       "AuthConfigResponse": {
-        "description": "``GET /api/v1/auth/config``: how the dashboard signs in.\n\n``{\"provider\": \"local\"}`` under the local provider. Under Cognito, either\nthe Hosted UI's ``hosted_ui_domain``, the app ``client_id`` and the\n``scopes`` to ask for, or ``configured: false`` with the names of the\nunset settings in ``missing``. A field that does not apply is absent.",
+        "description": "``GET /api/v1/auth/config``: how the dashboard signs in.\n\n``{\"provider\": \"local\"}`` under the local provider. Under Cognito, either\nthe Hosted UI's ``hosted_ui_domain``, the app ``client_id`` and the\n``scopes`` to ask for, or ``configured: false`` with the names of the\nunset settings in ``missing``. With ``DEMO_MODE=true``, ``demo_mode:\ntrue`` as well, and ``demo_account`` when a demo account is configured.\nA field that does not apply is absent.",
         "properties": {
           "client_id": {
             "anyOf": [
@@ -898,6 +973,30 @@
             ],
             "description": "Present, and false, when Cognito sign-in is not set up",
             "title": "Configured"
+          },
+          "demo_account": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DemoAccount"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The shared demo account, when demo_mode is true and one is set"
+          },
+          "demo_mode": {
+            "anyOf": [
+              {
+                "const": true,
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Present, and true, when this is a read-only demo install: every write but signing in and the SDK's tracking calls is refused",
+            "title": "Demo Mode"
           },
           "hosted_ui_domain": {
             "anyOf": [
@@ -956,6 +1055,275 @@
         "title": "AuthConfigResponse",
         "type": "object"
       },
+      "BalanceWithin": {
+        "additionalProperties": false,
+        "description": "Balance the split within each group of users (beta).",
+        "example": {
+          "attribute": "tier",
+          "values": [
+            "high_value",
+            "churn_risk"
+          ]
+        },
+        "properties": {
+          "attribute": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The top-level key of the assign `context` whose value puts a user in a group: letters, digits, `_` and `-`, at most 100 characters, no dot, not `user_id` or `segment`.",
+            "title": "Attribute"
+          },
+          "segments": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 36,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Saved segments to balance within instead of an attribute: 1 to 10 segment ids, each listed once, each an active segment. A new user is balanced in the first listed segment they belong to, in `other` when they belong to none, and in `unknown` when their membership of a segment listed before it cannot be decided.",
+            "title": "Segments"
+          },
+          "values": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 100,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The values to balance within, 1 to 20 strings of 1 to 100 characters, matched exactly. Users with any other value are balanced together as `other`, users without the key as `unknown`, so neither name can be listed. Left out only for a closed key (`web_device`, `web_visitor`, `web_browser`), whose set is the list.",
+            "title": "Values"
+          }
+        },
+        "title": "BalanceWithin",
+        "type": "object"
+      },
+      "BalancedGroupsEstimate": {
+        "description": "One treatment against the control, over every group.",
+        "properties": {
+          "absolute_difference": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The treatment's conversion rate minus the control's in each group, weighted by the group's share of the experiment's users (every variant's), as a proportion (0.02 is 2 percentage points). Null when the treatment has no users.",
+            "title": "Absolute Difference"
+          },
+          "absolute_difference_ci": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The normal interval of absolute_difference at the experiment's confidence_level. Null when standard_error is 0 or null.",
+            "title": "Absolute Difference Ci"
+          },
+          "adjusted_p_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "p_value corrected across the treatments with the experiment's correction_method; null with no correction.",
+            "title": "Adjusted P Value"
+          },
+          "is_significant": {
+            "description": "Whether adjusted_p_value (p_value with no correction) is below 1 - confidence_level. Not a verdict: the experiment's results carry its decision.",
+            "title": "Is Significant",
+            "type": "boolean"
+          },
+          "p_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Two-sided normal p-value of absolute_difference. Null when standard_error is 0 or null, never 0.0.",
+            "title": "P Value"
+          },
+          "relative_improvement_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "absolute_difference over the control's conversion rate weighted the same way, in percent. Null when that rate is 0.",
+            "title": "Relative Improvement Pct"
+          },
+          "standard_error": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The standard error of absolute_difference.",
+            "title": "Standard Error"
+          },
+          "variant_id": {
+            "description": "The treatment variant's id.",
+            "title": "Variant Id",
+            "type": "string"
+          },
+          "variant_name": {
+            "description": "The treatment variant's name.",
+            "title": "Variant Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "variant_id",
+          "variant_name",
+          "is_significant"
+        ],
+        "title": "BalancedGroupsEstimate",
+        "type": "object"
+      },
+      "BalancedGroupsResponse": {
+        "description": "The results of an experiment that balances its split within groups, by\nthe group each user was balanced in, and one estimate over the groups.",
+        "properties": {
+          "confidence_level": {
+            "description": "The experiment's confidence level, which the estimate uses.",
+            "title": "Confidence Level",
+            "type": "number"
+          },
+          "correction_method": {
+            "description": "The experiment's multiple-comparison correction.",
+            "title": "Correction Method",
+            "type": "string"
+          },
+          "engine_version": {
+            "default": "1.12.0",
+            "description": "Statistics engine version that produced these results.",
+            "title": "Engine Version",
+            "type": "string"
+          },
+          "experiment_id": {
+            "description": "The experiment's id.",
+            "title": "Experiment Id",
+            "type": "string"
+          },
+          "groups": {
+            "$ref": "#/components/schemas/DimensionalBreakdownResponse",
+            "description": "One row per group: the breakdown's rows, with each user in the group stored when they were assigned. Exploratory, as every breakdown is: each row's significance uses adjusted_alpha, the Bonferroni threshold over the rows returned."
+          },
+          "merged_groups": {
+            "description": "Groups with fewer than 2 users in a variant that has users, each counted in overall with the largest group that has 2 in every variant that has users.",
+            "items": {
+              "$ref": "#/components/schemas/MergedGroup"
+            },
+            "title": "Merged Groups",
+            "type": "array"
+          },
+          "overall": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/BalancedGroupsEstimate"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "One estimate per treatment of the primary metric, over every group; null with a reason. No CUPED adjustment is applied to it.",
+            "title": "Overall"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "mean_metric",
+                  "sequential_testing",
+                  "too_few_users"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why overall is null: mean_metric (the primary metric is not a conversion), sequential_testing (the experiment uses sequential testing) or too_few_users (no treatment has users, or no group has 2 users in every variant that has users). Null when overall is given.",
+            "title": "Reason"
+          },
+          "unknown_share": {
+            "anyOf": [
+              {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Of the users whose group was stored, the share in unknown (assigned without the attribute). Users whose row stored no group are not counted. Null when no user's group was stored.",
+            "title": "Unknown Share"
+          },
+          "users_outside_blocks": {
+            "description": "Users split without balancing: assigned by the hash because the server was busy balancing other users at that moment, or by an older server version (whose rows stored no group and are counted under unknown).",
+            "minimum": 0,
+            "title": "Users Outside Blocks",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "experiment_id",
+          "confidence_level",
+          "correction_method",
+          "groups",
+          "users_outside_blocks"
+        ],
+        "title": "BalancedGroupsResponse",
+        "type": "object"
+      },
       "BanditStatusResponse": {
         "description": "Full bandit status snapshot for an experiment.\n\nAttributes\n----------\nexperiment_id:\n    Identifier of the parent experiment.\nalgorithm:\n    Algorithm currently driving traffic allocation.\ncurrent_weights:\n    Per-variant allocation weights.\ntotal_pulls:\n    Total pulls across all variants.\nregret_reduction_pct:\n    Estimated regret reduction vs. uniform allocation (may be None early on).\nrecommendation:\n    Narrative recommendation: one of ``\"EXPLORING\"``, ``\"CONVERGING\"``,\n    or ``\"DEPLOYING_<VariantName>\"``.\nlast_updated:\n    ISO-8601 timestamp of the last weight update (None if never updated).\nseed:\n    Deterministic RNG seed used by the last Thompson-sampling tick\n    (``blake2b(experiment_id | tick day | n_samples)``); ``None`` for\n    deterministic algorithms or before the first tick.\nn_samples:\n    Monte Carlo draws per variant used by the last Thompson-sampling\n    tick; ``None`` for deterministic algorithms or before the first tick.\nengine_version:\n    Version of the statistics engine that computed the current weights.",
         "properties": {
@@ -972,7 +1340,7 @@
             "type": "array"
           },
           "engine_version": {
-            "default": "1.9.0",
+            "default": "1.12.0",
             "description": "Statistics engine version that computed the current weights",
             "title": "Engine Version",
             "type": "string"
@@ -1358,7 +1726,7 @@
             ]
           },
           "engine_version": {
-            "default": "1.9.0",
+            "default": "1.12.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"
@@ -1721,6 +2089,37 @@
           "success"
         ],
         "title": "BulkToggleResult",
+        "type": "object"
+      },
+      "ClickGoal": {
+        "additionalProperties": false,
+        "description": "A click on the one element *selector* matches, on page *page*.",
+        "properties": {
+          "event_name": {
+            "description": "A goal's event_name is 1 to 100 lower-case letters, digits and underscores, and cannot be exposure or experiment_exposure.",
+            "title": "Event Name",
+            "type": "string"
+          },
+          "kind": {
+            "const": "click",
+            "title": "Kind",
+            "type": "string"
+          },
+          "page": {
+            "$ref": "#/components/schemas/VisualPage"
+          },
+          "selector": {
+            "title": "Selector",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_name",
+          "page",
+          "kind",
+          "selector"
+        ],
+        "title": "ClickGoal",
         "type": "object"
       },
       "ClientErrorBatchRequest": {
@@ -2760,7 +3159,7 @@
             "title": "Covariate Lookback Days"
           },
           "engine_version": {
-            "default": "1.9.0",
+            "default": "1.12.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"
@@ -2892,6 +3291,27 @@
           "series"
         ],
         "title": "DailyResultsResponse",
+        "type": "object"
+      },
+      "DemoAccount": {
+        "description": "The shared account a demo visitor signs in with (``DEMO_MODE=true``).",
+        "properties": {
+          "email": {
+            "description": "The demo account's e-mail address",
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "description": "The demo account's published password",
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "DemoAccount",
         "type": "object"
       },
       "DesignRequest": {
@@ -3062,7 +3482,7 @@
             "type": "string"
           },
           "has_heterogeneous_effects": {
-            "description": "True when a chi-squared test detects significant heterogeneity in treatment effects across segments.",
+            "description": "True when a test that the first treatment's difference from the control, in percentage points, is the same in every tested segment rejects at 1 minus the confidence level the results were computed at. The first treatment is the non-control variant whose name sorts first. A segment is tested only when, in both the control and that treatment, its users times the pooled conversion rate, and times one minus that rate, are each at least 10; with fewer than two tested segments it is false. An exploratory signal, not a confirmed finding.",
             "title": "Has Heterogeneous Effects",
             "type": "boolean"
           },
@@ -3869,6 +4289,17 @@
           ]
         },
         "properties": {
+          "balance_within": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BalanceWithin"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Beta. Balance the split within groups of users as they are assigned: `{\"attribute\": \"tier\", \"values\": [\"gold\", \"silver\"]}` puts each new user in the group of their `context.tier` (a top-level key, matched exactly; any other value is `other`, no value is `unknown`), and each group gets the experiment's split among its own users. `{\"segments\": [\"<segment id>\", ...]}` (1 to 10 active saved segments) puts each new user in the group of the first listed segment they belong to, and in `other` when they belong to none. Every share must be a multiple of 5; a bandit or a split URL experiment cannot balance. Null balances nothing."
+          },
           "bayesian_config": {
             "anyOf": [
               {
@@ -3946,11 +4377,10 @@
             "title": "Key"
           },
           "metrics": {
-            "description": "Metrics to track, at least one. Each name may appear once: names are compared exactly, so case and spaces count (`Revenue` and `revenue` are two metrics), and a repeated name is refused with 422.",
+            "description": "Metrics to track: at least one, except on an experiment created with visual_config, which may have none until it starts (start still refuses an experiment without a metric). Each name may appear once: names are compared exactly, so case and spaces count (`Revenue` and `revenue` are two metrics), and a repeated name is refused with 422.",
             "items": {
               "$ref": "#/components/schemas/MetricBase"
             },
-            "minItems": 1,
             "title": "Metrics",
             "type": "array"
           },
@@ -4046,6 +4476,17 @@
             "minItems": 1,
             "title": "Variants",
             "type": "array"
+          },
+          "visual_config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VisualConfig"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Makes this a visual experiment (#1545): {\"version\": 1, \"editor_url\": ..., \"pages\": [{\"match\": \"exact\"|\"prefix\", \"url\": ...}], \"goals\": [...]}, with 1 to 10 pages and 0 to 10 goals; each goal's event_name is the event_name of one of the metrics. Not on a split URL experiment. Cannot change once the experiment leaves draft. A visual draft keeps it (null is refused with 422), cannot be given a scheduled start, and starts only with POST /api/v1/experiments/{id}/start carrying its design_etag. Stored and returned; nothing applies it to a page yet."
           }
         },
         "required": [
@@ -4120,6 +4561,19 @@
       "ExperimentDetailResponse": {
         "description": "The answer of ``GET /api/v1/experiments/{experiment_id}`` (#921).\n\n``ExperimentResponse`` plus the owner's display name. Only that read\ncarries it: the list and every other experiment route answer with\n``ExperimentResponse``.",
         "properties": {
+          "balance_within": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Beta. What the experiment balances its split within: `{\"attribute\": ..., \"values\": [...]}`, `{\"segments\": [...]}`, or null when it balances nothing.",
+            "title": "Balance Within"
+          },
           "bayesian_config": {
             "anyOf": [
               {
@@ -4175,6 +4629,18 @@
               }
             ],
             "title": "Description"
+          },
+          "design_etag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A visual experiment's design version (#1545): the SHA-256 hex of its targeting rules, exclusion group, balance_within (when set), visual_config and every field of every variant and metric. Any change to one of them changes it. Starting a visual draft sends it in the body of POST /api/v1/experiments/{id}/start, and a different value answers 409. Null for an experiment that is not visual.",
+            "title": "Design Etag"
           },
           "end_date": {
             "anyOf": [
@@ -4400,6 +4866,19 @@
             },
             "title": "Variants",
             "type": "array"
+          },
+          "visual_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The experiment's visual settings, as stored (#1545); null for an experiment that is not visual.",
+            "title": "Visual Config"
           }
         },
         "required": [
@@ -4465,6 +4944,19 @@
       "ExperimentResponse": {
         "description": "Model for experiment response data.",
         "properties": {
+          "balance_within": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Beta. What the experiment balances its split within: `{\"attribute\": ..., \"values\": [...]}`, `{\"segments\": [...]}`, or null when it balances nothing.",
+            "title": "Balance Within"
+          },
           "bayesian_config": {
             "anyOf": [
               {
@@ -4520,6 +5012,18 @@
               }
             ],
             "title": "Description"
+          },
+          "design_etag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A visual experiment's design version (#1545): the SHA-256 hex of its targeting rules, exclusion group, balance_within (when set), visual_config and every field of every variant and metric. Any change to one of them changes it. Starting a visual draft sends it in the body of POST /api/v1/experiments/{id}/start, and a different value answers 409. Null for an experiment that is not visual.",
+            "title": "Design Etag"
           },
           "end_date": {
             "anyOf": [
@@ -4733,6 +5237,19 @@
             },
             "title": "Variants",
             "type": "array"
+          },
+          "visual_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The experiment's visual settings, as stored (#1545); null for an experiment that is not visual.",
+            "title": "Visual Config"
           }
         },
         "required": [
@@ -4886,6 +5403,26 @@
         "title": "ExperimentResultsResponse",
         "type": "object"
       },
+      "ExperimentStartRequest": {
+        "description": "The optional body of ``POST /api/v1/experiments/{id}/start`` (#1545).\n\nNo body, ``null`` and ``{}`` all start as before. An unknown key is\nignored, as on ``PUT /experiments/{id}`` (#595).",
+        "properties": {
+          "design_etag": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Required to start a visual draft: the design_etag of the version being started, as GET /api/v1/experiments/{id} returned it. Missing answers 400; different from the experiment's current one answers 409 and nothing is started. Ignored for any other experiment and on a resume.",
+            "title": "Design Etag"
+          }
+        },
+        "title": "ExperimentStartRequest",
+        "type": "object"
+      },
       "ExperimentStatus": {
         "description": "Experiment status enum.",
         "enum": [
@@ -4996,6 +5533,17 @@
           ]
         },
         "properties": {
+          "balance_within": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BalanceWithin"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Beta. Balance the split within groups of users as they are assigned: `{\"attribute\": \"tier\", \"values\": [\"gold\", \"silver\"]}` puts each new user in the group of their `context.tier` (a top-level key, matched exactly; any other value is `other`, no value is `unknown`), and each group gets the experiment's split among its own users. `{\"segments\": [\"<segment id>\", ...]}` (1 to 10 active saved segments) puts each new user in the group of the first listed segment they belong to, and in `other` when they belong to none. Every share must be a multiple of 5; a bandit or a split URL experiment cannot balance. Null balances nothing. Changeable only while the experiment is a draft."
+          },
           "bayesian_config": {
             "anyOf": [
               {
@@ -5005,7 +5553,7 @@
                 "type": "null"
               }
             ],
-            "description": "Bayesian analysis configuration (priors, loss threshold, ROPE)."
+            "description": "Bayesian analysis configuration (priors, loss threshold, ROPE). Changeable only while the experiment is a draft."
           },
           "bayesian_enabled": {
             "anyOf": [
@@ -5016,7 +5564,7 @@
                 "type": "null"
               }
             ],
-            "description": "Turn Bayesian analysis on or off. Turning it on with no stored or supplied bayesian_config stores the default BayesianConfig.",
+            "description": "Turn Bayesian analysis on or off. Turning it on with no stored or supplied bayesian_config stores the default BayesianConfig. Changeable only while the experiment is a draft.",
             "title": "Bayesian Enabled"
           },
           "confidence_level": {
@@ -5108,10 +5656,10 @@
                 "type": "null"
               }
             ],
-            "description": "Sequential testing configuration."
+            "description": "Sequential testing configuration. Changeable only while the experiment is a draft."
           },
           "sequential_testing_enabled": {
-            "description": "Enable or disable sequential testing.",
+            "description": "Enable or disable sequential testing. Changeable only while the experiment is a draft.",
             "title": "Sequential Testing Enabled",
             "type": "boolean"
           },
@@ -5167,7 +5715,7 @@
                 "type": "null"
               }
             ],
-            "description": "CUPED / Winsorization variance-reduction configuration."
+            "description": "CUPED / Winsorization variance-reduction configuration. Changeable only while the experiment is a draft."
           },
           "variants": {
             "anyOf": [
@@ -5183,6 +5731,17 @@
             ],
             "description": "Experiment variants",
             "title": "Variants"
+          },
+          "visual_config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VisualConfig"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Makes this a visual experiment (#1545): {\"version\": 1, \"editor_url\": ..., \"pages\": [{\"match\": \"exact\"|\"prefix\", \"url\": ...}], \"goals\": [...]}, with 1 to 10 pages and 0 to 10 goals; each goal's event_name is the event_name of one of the metrics. Not on a split URL experiment. Cannot change once the experiment leaves draft. A visual draft keeps it (null is refused with 422), cannot be given a scheduled start, and starts only with POST /api/v1/experiments/{id}/start carrying its design_etag. Stored and returned; nothing applies it to a page yet. Refused with 422 on a draft that has a scheduled start."
           }
         },
         "title": "ExperimentUpdate",
@@ -6503,6 +7062,28 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "Hide": {
+        "additionalProperties": false,
+        "description": "Hide the element, from assistive technology too.",
+        "properties": {
+          "op": {
+            "const": "hide",
+            "title": "Op",
+            "type": "string"
+          },
+          "selector": {
+            "description": "A CSS selector for exactly one element: 1 to 512 characters, without { } ; \\ @ <, the comment marks /* and */, or a control character. A change whose selector matches no element, or more than one, is not applied.",
+            "title": "Selector",
+            "type": "string"
+          }
+        },
+        "required": [
+          "selector",
+          "op"
+        ],
+        "title": "Hide",
         "type": "object"
       },
       "HoldoutCheckResponse": {
@@ -8150,6 +8731,27 @@
         "title": "MSPRTResultResponse",
         "type": "object"
       },
+      "MergedGroup": {
+        "description": "A group with too few users to estimate, counted with a larger one.",
+        "properties": {
+          "group": {
+            "description": "The group with too few users.",
+            "title": "Group",
+            "type": "string"
+          },
+          "into": {
+            "description": "The group it was counted with.",
+            "title": "Into",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group",
+          "into"
+        ],
+        "title": "MergedGroup",
+        "type": "object"
+      },
       "MetricBase": {
         "description": "Base model for metric data.",
         "example": {
@@ -9150,6 +9752,32 @@
         "title": "OptimizationType",
         "type": "string"
       },
+      "PageViewGoal": {
+        "additionalProperties": false,
+        "description": "A view of page *page*.",
+        "properties": {
+          "event_name": {
+            "description": "A goal's event_name is 1 to 100 lower-case letters, digits and underscores, and cannot be exposure or experiment_exposure.",
+            "title": "Event Name",
+            "type": "string"
+          },
+          "kind": {
+            "const": "page_view",
+            "title": "Kind",
+            "type": "string"
+          },
+          "page": {
+            "$ref": "#/components/schemas/VisualPage"
+          }
+        },
+        "required": [
+          "event_name",
+          "page",
+          "kind"
+        ],
+        "title": "PageViewGoal",
+        "type": "object"
+      },
       "PasswordChange": {
         "description": "The body of ``POST /api/v1/users/me/password``.",
         "properties": {
@@ -9455,6 +10083,52 @@
           "power_target"
         ],
         "title": "PowerCurveResponse",
+        "type": "object"
+      },
+      "PreviewLinkCreate": {
+        "additionalProperties": false,
+        "description": "The variant to preview, and for how long.",
+        "properties": {
+          "expires_in_hours": {
+            "default": 24,
+            "description": "How long the link works: 1 to 168 hours. 24 if not given.",
+            "maximum": 168,
+            "minimum": 1,
+            "title": "Expires In Hours",
+            "type": "integer"
+          },
+          "variant_id": {
+            "description": "One of the experiment's variants, the control included.",
+            "format": "uuid",
+            "title": "Variant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "variant_id"
+        ],
+        "title": "PreviewLinkCreate",
+        "type": "object"
+      },
+      "PreviewLinkCreated": {
+        "description": "The link, shown once.",
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "url": {
+            "description": "The experiment's editor page with `#controlvar-preview=<token>`. Anyone who opens it on a page with the Controlvar script sees the variant, until it expires or is revoked; opening it records nothing.",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "expires_at"
+        ],
+        "title": "PreviewLinkCreated",
         "type": "object"
       },
       "PriorFamily": {
@@ -12180,6 +12854,144 @@
         "title": "SequentialTestingResponse",
         "type": "object"
       },
+      "SetAttribute": {
+        "additionalProperties": false,
+        "description": "Set one of five attributes. ``href`` takes a link (see ``link_problem``).",
+        "properties": {
+          "name": {
+            "enum": [
+              "alt",
+              "title",
+              "aria-label",
+              "placeholder",
+              "href"
+            ],
+            "title": "Name",
+            "type": "string"
+          },
+          "op": {
+            "const": "set_attribute",
+            "title": "Op",
+            "type": "string"
+          },
+          "selector": {
+            "description": "A CSS selector for exactly one element: 1 to 512 characters, without { } ; \\ @ <, the comment marks /* and */, or a control character. A change whose selector matches no element, or more than one, is not applied.",
+            "title": "Selector",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 2048,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "selector",
+          "op",
+          "name",
+          "value"
+        ],
+        "title": "SetAttribute",
+        "type": "object"
+      },
+      "SetImage": {
+        "additionalProperties": false,
+        "description": "Show another image: an ``http(s)`` URL or a path on this site.",
+        "properties": {
+          "alt": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alt"
+          },
+          "op": {
+            "const": "set_image",
+            "title": "Op",
+            "type": "string"
+          },
+          "selector": {
+            "description": "A CSS selector for exactly one element: 1 to 512 characters, without { } ; \\ @ <, the comment marks /* and */, or a control character. A change whose selector matches no element, or more than one, is not applied.",
+            "title": "Selector",
+            "type": "string"
+          },
+          "src": {
+            "maxLength": 2048,
+            "title": "Src",
+            "type": "string"
+          }
+        },
+        "required": [
+          "selector",
+          "op",
+          "src"
+        ],
+        "title": "SetImage",
+        "type": "object"
+      },
+      "SetStyle": {
+        "additionalProperties": false,
+        "description": "Set 1 to 20 properties from a fixed list, through the CSSOM.",
+        "properties": {
+          "op": {
+            "const": "set_style",
+            "title": "Op",
+            "type": "string"
+          },
+          "selector": {
+            "description": "A CSS selector for exactly one element: 1 to 512 characters, without { } ; \\ @ <, the comment marks /* and */, or a control character. A change whose selector matches no element, or more than one, is not applied.",
+            "title": "Selector",
+            "type": "string"
+          },
+          "styles": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Styles",
+            "type": "object"
+          }
+        },
+        "required": [
+          "selector",
+          "op",
+          "styles"
+        ],
+        "title": "SetStyle",
+        "type": "object"
+      },
+      "SetText": {
+        "additionalProperties": false,
+        "description": "Replace the element's text. Written as text, never as HTML.",
+        "properties": {
+          "op": {
+            "const": "set_text",
+            "title": "Op",
+            "type": "string"
+          },
+          "selector": {
+            "description": "A CSS selector for exactly one element: 1 to 512 characters, without { } ; \\ @ <, the comment marks /* and */, or a control character. A change whose selector matches no element, or more than one, is not applied.",
+            "title": "Selector",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 2000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "selector",
+          "op",
+          "text"
+        ],
+        "title": "SetText",
+        "type": "object"
+      },
       "SignUpRequest": {
         "description": "Schema for user registration request.",
         "properties": {
@@ -13219,6 +14031,17 @@
             "minimum": 0,
             "title": "Traffic Allocation",
             "type": "integer"
+          },
+          "visual_changes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VisualChanges"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A visual experiment's page changes for this variant (#1545): {\"version\": 1, \"changes\": [...]}, at most 100 changes and 64 KiB. Only on a non-control variant of an experiment with visual_config. On an update, a variant sent without this field keeps the changes stored for the variant of the same name; null removes them. Stored and returned; nothing applies them to a page yet."
           }
         },
         "required": [
@@ -13284,6 +14107,19 @@
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
+          },
+          "visual_changes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The variant's page changes, as stored (#1545); null when none.",
+            "title": "Visual Changes"
           }
         },
         "required": [
@@ -13817,6 +14653,413 @@
           "cumulative"
         ],
         "title": "VariantTimeSeries",
+        "type": "object"
+      },
+      "VisualChanges": {
+        "additionalProperties": false,
+        "description": "A variant's page changes: ``{\"version\": 1, \"changes\": [...]}``.",
+        "properties": {
+          "changes": {
+            "description": "At most 100 changes, and at most 64 KiB in all. Each is one of set_text, set_attribute, set_image, hide and set_style.",
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "hide": "#/components/schemas/Hide",
+                  "set_attribute": "#/components/schemas/SetAttribute",
+                  "set_image": "#/components/schemas/SetImage",
+                  "set_style": "#/components/schemas/SetStyle",
+                  "set_text": "#/components/schemas/SetText"
+                },
+                "propertyName": "op"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/SetText"
+                },
+                {
+                  "$ref": "#/components/schemas/SetAttribute"
+                },
+                {
+                  "$ref": "#/components/schemas/SetImage"
+                },
+                {
+                  "$ref": "#/components/schemas/Hide"
+                },
+                {
+                  "$ref": "#/components/schemas/SetStyle"
+                }
+              ]
+            },
+            "maxItems": 100,
+            "title": "Changes",
+            "type": "array"
+          },
+          "version": {
+            "description": "The format version: 1.",
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "changes"
+        ],
+        "title": "VisualChanges",
+        "type": "object"
+      },
+      "VisualConfig": {
+        "additionalProperties": false,
+        "description": "``experiments.visual_config``: the pages, the editor's page and the goals.",
+        "properties": {
+          "editor_url": {
+            "description": "The page the visual editor opens: on one of the pages, and like them except that it may carry a query.",
+            "title": "Editor Url",
+            "type": "string"
+          },
+          "goals": {
+            "description": "0 to 10 goals. Each event_name must be the event_name of one of the experiment's metrics.",
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "click": "#/components/schemas/ClickGoal",
+                  "page_view": "#/components/schemas/PageViewGoal"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/ClickGoal"
+                },
+                {
+                  "$ref": "#/components/schemas/PageViewGoal"
+                }
+              ]
+            },
+            "maxItems": 10,
+            "title": "Goals",
+            "type": "array"
+          },
+          "pages": {
+            "items": {
+              "$ref": "#/components/schemas/VisualPage"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Pages",
+            "type": "array"
+          },
+          "version": {
+            "description": "The format version: 1.",
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "editor_url",
+          "pages"
+        ],
+        "title": "VisualConfig",
+        "type": "object"
+      },
+      "VisualExperimentAnswer": {
+        "description": "One running visual experiment whose pages include this page.",
+        "properties": {
+          "assigned": {
+            "description": "False when the visitor is not in the experiment; `changes` and `goals` are then null.",
+            "title": "Assigned",
+            "type": "boolean"
+          },
+          "changes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The variant's page changes, `{version, changes}`, or null (the control, a variant with none, or a visitor not in the experiment).",
+            "title": "Changes"
+          },
+          "experiment_key": {
+            "title": "Experiment Key",
+            "type": "string"
+          },
+          "goals": {
+            "anyOf": [
+              {
+                "items": {
+                  "discriminator": {
+                    "mapping": {
+                      "click": "#/components/schemas/ClickGoal",
+                      "page_view": "#/components/schemas/PageViewGoal"
+                    },
+                    "propertyName": "kind"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ClickGoal"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PageViewGoal"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The experiment's goals, to record for every assigned visitor, the control's included; null when the visitor is not in the experiment.",
+            "title": "Goals"
+          },
+          "reason": {
+            "description": "As POST /api/v1/tracking/assign answers it: assigned, holdout, mutual_exclusion or targeting.",
+            "title": "Reason",
+            "type": "string"
+          },
+          "variant_id": {
+            "title": "Variant Id",
+            "type": "string"
+          },
+          "variant_name": {
+            "title": "Variant Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "experiment_key",
+          "variant_id",
+          "variant_name",
+          "assigned",
+          "reason"
+        ],
+        "title": "VisualExperimentAnswer",
+        "type": "object"
+      },
+      "VisualPage": {
+        "additionalProperties": false,
+        "description": "A page rule: ``exact`` matches one path, ``prefix`` the path and every\npath below it. Matching ignores the scheme, the port, the query, the\nfragment and one trailing ``/``; the host is compared in lower case and\nthe path exactly. No regular expressions.",
+        "properties": {
+          "match": {
+            "enum": [
+              "exact",
+              "prefix"
+            ],
+            "title": "Match",
+            "type": "string"
+          },
+          "url": {
+            "description": "A page is a full http:// or https:// URL with an ASCII host, without a user name, password, query, # fragment, backslash or space.",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "match",
+          "url"
+        ],
+        "title": "VisualPage",
+        "type": "object"
+      },
+      "VisualPageRule": {
+        "description": "A page rule on the page's host: ``exact`` matches one path, ``prefix``\nthe path and every path below it.",
+        "properties": {
+          "match": {
+            "enum": [
+              "exact",
+              "prefix"
+            ],
+            "title": "Match",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "match",
+          "path"
+        ],
+        "title": "VisualPageRule",
+        "type": "object"
+      },
+      "VisualPages": {
+        "description": "The page rules of every running visual experiment on this host, which\nthe script may keep for ``max_age`` seconds and use to skip a page none\nof them matches.",
+        "properties": {
+          "host": {
+            "description": "The host, lower case, without a port.",
+            "title": "Host",
+            "type": "string"
+          },
+          "max_age": {
+            "default": 60,
+            "description": "Seconds the rules may be kept.",
+            "title": "Max Age",
+            "type": "integer"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/VisualPageRule"
+            },
+            "title": "Rules",
+            "type": "array"
+          }
+        },
+        "required": [
+          "host",
+          "rules"
+        ],
+        "title": "VisualPages",
+        "type": "object"
+      },
+      "VisualPreviewRequest": {
+        "additionalProperties": false,
+        "description": "``POST /api/v1/tracking/visual/preview``: one variant, by preview link.",
+        "properties": {
+          "host": {
+            "description": "The page's host, as `location.host` gives it: 1 to 261 characters, a port allowed. Not stored.",
+            "title": "Host",
+            "type": "string"
+          },
+          "path": {
+            "description": "The page's path, as `location.pathname` gives it: 1 to 2048 characters, with no query. Not stored.",
+            "title": "Path",
+            "type": "string"
+          },
+          "token": {
+            "description": "The token from the preview link's `#controlvar-preview=` fragment.",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "host",
+          "path",
+          "token"
+        ],
+        "title": "VisualPreviewRequest",
+        "type": "object"
+      },
+      "VisualPreviewResponse": {
+        "description": "``POST /api/v1/tracking/visual/preview``'s answer: one variant's page\nchanges. A preview records nothing. Sent with ``Cache-Control: no-store``.",
+        "properties": {
+          "changes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The variant's page changes, or null for the control or a variant with none.",
+            "title": "Changes"
+          },
+          "experiment_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The experiment's key; null only for an experiment that has none.",
+            "title": "Experiment Key"
+          },
+          "pages": {
+            "$ref": "#/components/schemas/VisualPages"
+          },
+          "variant_name": {
+            "title": "Variant Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "variant_name",
+          "pages"
+        ],
+        "title": "VisualPreviewResponse",
+        "type": "object"
+      },
+      "VisualTrackingRequest": {
+        "additionalProperties": false,
+        "description": "``POST /api/v1/tracking/visual``: which visual changes and goals this\nvisitor gets on this page.",
+        "properties": {
+          "context": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Attributes for targeting, as in POST /api/v1/tracking/assign: the site's own and the script's `web_*` website details. A `web_*` key not in its documented form is dropped, never refused. Stored on each exposure.",
+            "title": "Context"
+          },
+          "format_version": {
+            "description": "The newest page-change format the script applies. An experiment stored in a newer format is left out, and nobody is assigned to it.",
+            "minimum": 1,
+            "title": "Format Version",
+            "type": "integer"
+          },
+          "host": {
+            "description": "The page's host, as `location.host` gives it: 1 to 261 characters, a port allowed. Not stored.",
+            "title": "Host",
+            "type": "string"
+          },
+          "path": {
+            "description": "The page's path, as `location.pathname` gives it: 1 to 2048 characters, with no query. Not stored.",
+            "title": "Path",
+            "type": "string"
+          },
+          "user_id": {
+            "description": "The visitor's id: the script's random cookie id, or the site's own `data-user-id`.",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "host",
+          "path",
+          "user_id",
+          "format_version"
+        ],
+        "title": "VisualTrackingRequest",
+        "type": "object"
+      },
+      "VisualTrackingResponse": {
+        "description": "``POST /api/v1/tracking/visual``'s answer. Sent with\n``Cache-Control: no-store``.",
+        "properties": {
+          "experiments": {
+            "description": "At most 10 running experiments whose pages include this page, the one that started first first.",
+            "items": {
+              "$ref": "#/components/schemas/VisualExperimentAnswer"
+            },
+            "title": "Experiments",
+            "type": "array"
+          },
+          "pages": {
+            "$ref": "#/components/schemas/VisualPages"
+          }
+        },
+        "required": [
+          "experiments",
+          "pages"
+        ],
+        "title": "VisualTrackingResponse",
         "type": "object"
       },
       "WizardDraftCreate": {
@@ -14512,7 +15755,7 @@
   "info": {
     "description": "API for managing experiments and feature flags in test environment",
     "title": "Controlvar",
-    "version": "0.44.1"
+    "version": "0.47.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -14629,6 +15872,7 @@
             "required": false,
             "schema": {
               "default": 0,
+              "format": "int64",
               "minimum": 0,
               "title": "Skip",
               "type": "integer"
@@ -15528,6 +16772,7 @@
             "schema": {
               "default": 1,
               "description": "Page number (1-based)",
+              "format": "int64",
               "minimum": 1,
               "title": "Page",
               "type": "integer"
@@ -16356,7 +17601,7 @@
     },
     "/api/v1/auth/config": {
       "get": {
-        "description": "How the dashboard signs in. Needs no credentials.\n\n* ``AUTH_PROVIDER=local``, or the development sign-in bypass:\n  ``{\"provider\": \"local\"}``.\n* ``AUTH_PROVIDER=cognito`` with ``COGNITO_DOMAIN``, ``COGNITO_CLIENT_ID``\n  and ``COGNITO_USER_POOL_ID`` set: ``{\"provider\": \"cognito\",\n  \"hosted_ui_domain\", \"client_id\", \"scopes\"}``, what the dashboard needs\n  to send the browser to the Hosted UI. The callback is not served: it is\n  the dashboard's own origin followed by ``/auth/callback``, which must be\n  an allowed callback URL of the app client.\n* ``AUTH_PROVIDER=cognito`` with any of the three unset:\n  ``{\"provider\": \"cognito\", \"configured\": false, \"missing\": [...]}``,\n  naming the unset settings.\n\nEvery value comes from the configuration, none from the request.",
+        "description": "How the dashboard signs in. Needs no credentials.\n\n* ``AUTH_PROVIDER=local``, or the development sign-in bypass:\n  ``{\"provider\": \"local\"}``.\n* ``AUTH_PROVIDER=cognito`` with ``COGNITO_DOMAIN``, ``COGNITO_CLIENT_ID``\n  and ``COGNITO_USER_POOL_ID`` set: ``{\"provider\": \"cognito\",\n  \"hosted_ui_domain\", \"client_id\", \"scopes\"}``, what the dashboard needs\n  to send the browser to the Hosted UI. The callback is not served: it is\n  the dashboard's own origin followed by ``/auth/callback``, which must be\n  an allowed callback URL of the app client.\n* ``AUTH_PROVIDER=cognito`` with any of the three unset:\n  ``{\"provider\": \"cognito\", \"configured\": false, \"missing\": [...]}``,\n  naming the unset settings.\n* ``DEMO_MODE=true`` adds ``\"demo_mode\": true`` to any of these, and\n  ``\"demo_account\": {\"email\", \"password\"}`` when ``DEMO_ACCOUNT_EMAIL`` and\n  ``DEMO_ACCOUNT_PASSWORD`` are set: the shared account a demo visitor\n  signs in with, whose password is public by design.\n\nEvery value comes from the configuration, none from the request.",
         "operationId": "get_auth_config_api_v1_auth_config_get",
         "responses": {
           "200": {
@@ -17012,6 +18257,7 @@
             "schema": {
               "default": 1,
               "description": "Page number (1-indexed)",
+              "format": "int64",
               "minimum": 1,
               "title": "Page",
               "type": "integer"
@@ -17309,6 +18555,7 @@
             "schema": {
               "default": 0,
               "description": "Number of records to skip for pagination",
+              "format": "int64",
               "minimum": 0,
               "title": "Skip",
               "type": "integer"
@@ -18086,7 +19333,7 @@
         ]
       },
       "put": {
-        "description": "Update experiment.\n\nThis endpoint allows users to update an existing experiment.\nThe caller's role must hold UPDATE on experiments; who created the\nexperiment is not considered.\n\nFields that can be updated:\n- Basic properties: name, description, hypothesis\n- Variants: if experiment is in DRAFT status\n- Metrics: if experiment is in DRAFT status\n- Targeting (`targeting_rules`): while the experiment is DRAFT or PAUSED,\n  for every role including superusers. On a PAUSED experiment it must be\n  the only field in the request. On an ACTIVE, COMPLETED or ARCHIVED\n  experiment a request that includes `targeting_rules` is refused, even\n  when the value equals the stored one; pause the experiment first.\n  People already assigned keep their variant; the new rules apply to\n  people not yet in the experiment once it is resumed.\n\n`status` is not changed by an update, for any role including superusers.\nA `status` equal to the current one is accepted and changes nothing, so an\nexperiment fetched with GET can be sent back. Any other value is refused\nwith 422; status changes through `POST /api/v1/experiments/{id}/start`,\n`/pause`, `/complete` or `/archive`. `status` still counts as a field\nsent, so on a PAUSED experiment `targeting_rules` must be sent without it.\n\n`schedule` is not applied here: a request that contains it, with any\nvalue including null, is refused with 422. Schedule an experiment with\n`PUT /api/v1/experiments/{experiment_id}/schedule`.\n\nReturns:\n    ExperimentResponse: The updated experiment\n\nRaises:\n    HTTPException 403: If the caller's role does not hold UPDATE on\n        experiments. This is checked before the experiment's state.\n    HTTPException 400: If the experiment's state does not allow the change\n        (the detail names the state): any change to a non-DRAFT experiment\n        by a non-superuser, other than targeting alone on a PAUSED one;\n        targeting outside DRAFT or PAUSED; targeting with other fields on\n        a PAUSED experiment; variants or metrics outside DRAFT\n    HTTPException 404: If the experiment doesn't exist\n    HTTPException 422: If `targeting_rules` is not a valid rule set,\n        `status` differs from the experiment's current status, the\n        request contains `schedule`, `metrics` is an empty list or repeats\n        a metric name, or a request sending `variants`,\n        `split_url_config` or `experiment_type` would leave a split URL\n        experiment whose `split_url_config` does not match its variants.\n        An empty or repeating `metrics` is refused before the caller's\n        role, the experiment's existence or its state is checked.",
+        "description": "Update experiment.\n\nThis endpoint allows users to update an existing experiment.\nThe caller's role must hold UPDATE on experiments; who created the\nexperiment is not considered.\n\nFields that can be updated:\n- Basic properties: name, description, hypothesis\n- Variants: if experiment is in DRAFT status\n- Metrics: if experiment is in DRAFT status\n- `balance_within`: if experiment is in DRAFT status, for every role\n  including superusers\n- Analysis settings (`correction_method`, `confidence_level`,\n  `variance_reduction_config`, `sequential_testing_enabled`,\n  `sequential_testing_config`, `bayesian_enabled`, `bayesian_config`):\n  if experiment is in DRAFT status, for every role including superusers.\n  Outside DRAFT a request that includes one is refused, even when the\n  value equals the stored one or is null. To change one on a running\n  experiment, clone it (`POST /api/v1/experiments/{id}/clone`, a draft\n  copy) and set it on the copy.\n- Targeting (`targeting_rules`): while the experiment is DRAFT or PAUSED,\n  for every role including superusers. On a PAUSED experiment it must be\n  the only field in the request. On an ACTIVE, COMPLETED or ARCHIVED\n  experiment a request that includes `targeting_rules` is refused, even\n  when the value equals the stored one; pause the experiment first.\n  People already assigned keep their variant; the new rules apply to\n  people not yet in the experiment once it is resumed.\n\n`status` is not changed by an update, for any role including superusers.\nA `status` equal to the current one is accepted and changes nothing, so an\nexperiment fetched with GET can be sent back. Any other value is refused\nwith 422; status changes through `POST /api/v1/experiments/{id}/start`,\n`/pause`, `/complete` or `/archive`. `status` still counts as a field\nsent, so on a PAUSED experiment `targeting_rules` must be sent without it.\n\n`schedule` is not applied here: a request that contains it, with any\nvalue including null, is refused with 422. Schedule an experiment with\n`PUT /api/v1/experiments/{experiment_id}/schedule`.\n\nReturns:\n    ExperimentResponse: The updated experiment\n\nRaises:\n    HTTPException 403: If the caller's role does not hold UPDATE on\n        experiments. This is checked before the experiment's state.\n    HTTPException 400: If the experiment's state does not allow the change\n        (the detail names the state): any change to a non-DRAFT experiment\n        by a non-superuser, other than targeting alone on a PAUSED one;\n        targeting outside DRAFT or PAUSED; targeting with other fields on\n        a PAUSED experiment; variants, metrics, `balance_within` or an\n        analysis setting outside DRAFT\n    HTTPException 404: If the experiment doesn't exist\n    HTTPException 422: If `targeting_rules` is not a valid rule set,\n        `status` differs from the experiment's current status, the\n        request contains `schedule`, `metrics` is an empty list or repeats\n        a metric name, or a request sending `variants`,\n        `split_url_config` or `experiment_type` would leave a split URL\n        experiment whose `split_url_config` does not match its variants.\n        An empty or repeating `metrics` is refused before the caller's\n        role, the experiment's existence or its state is checked.\n        Also (#1545): `visual_config: null` on a visual draft, and\n        `visual_config` on a draft with a scheduled start, at\n        `[\"body\", \"visual_config\"]`; and, at the field the rule is about,\n        a result in which page changes sit on the control or on an\n        experiment without `visual_config`, a goal's event_name is no\n        metric's, or a split URL experiment has `visual_config`.\n\nA variant sent without `visual_changes` keeps the page changes stored\nfor the variant of the same name; `visual_changes: null` removes them.",
         "operationId": "update_experiment_api_v1_experiments__experiment_id__put",
         "parameters": [
           {
@@ -18302,7 +19549,7 @@
     },
     "/api/v1/experiments/{experiment_id}/clone": {
       "post": {
-        "description": "Clone an experiment.\n\nThis endpoint creates a new experiment that is a copy of an existing experiment.\nThe cloned experiment will:\n- Have a name prefixed with \"Copy of\", shortened to fit the 100-character\n  name limit when the source's name is long\n- Be in DRAFT status\n- Have the same variants, metrics, and configuration as the original\n- Have the current user as the owner\n\nThis is useful for creating variations of existing experiments or repeating\nsuccessful experiments with minor modifications.\n\nReturns:\n    ExperimentResponse: The newly created cloned experiment\n\nRaises:\n    HTTPException 403: If the caller's role does not hold READ and CREATE on experiments\n    HTTPException 404: If the source experiment doesn't exist",
+        "description": "Clone an experiment.\n\nThis endpoint creates a new experiment that is a copy of an existing experiment.\nThe cloned experiment will:\n- Have a name prefixed with \"Copy of\", shortened to fit the 100-character\n  name limit when the source's name is long\n- Be in DRAFT status\n- Have the same variants, metrics, and configuration as the original\n- Have the current user as the owner\n\nThis is useful for creating variations of existing experiments or repeating\nsuccessful experiments with minor modifications.\n\nReturns:\n    ExperimentResponse: The newly created cloned experiment\n\nRaises:\n    HTTPException 403: If the caller's role does not hold READ and CREATE on experiments\n    HTTPException 404: If the source experiment doesn't exist\n    HTTPException 422: If the source's stored visual settings or page\n        changes (#1545), which the clone copies, are not valid",
         "operationId": "clone_experiment_api_v1_experiments__experiment_id__clone_post",
         "parameters": [
           {
@@ -18940,7 +20187,7 @@
     },
     "/api/v1/experiments/{experiment_id}/schedule": {
       "put": {
-        "description": "Update experiment scheduling configuration.\n\nOn a **DRAFT** experiment this schedules its activation and completion:\n\n- **start_date**: When the experiment should automatically activate\n- **end_date**: When the experiment should automatically complete\n- **time_zone**: IANA time zone name (default: UTC) for a date given\n  without a UTC offset; a date with an offset keeps it. Dates are stored\n  in UTC. A name that is not an IANA zone answers 422.\n\nOn either status, a field the request omits is left unchanged and an\nexplicit null clears it. On a draft, end_date must be at least an hour\nafter start_date (the stored one when the request omits it).\n\nOn a **PAUSED** experiment, start_date is the time to resume it at. It is\nstored as ``resume_at``; the experiment's own start_date is never moved. A\nnull start_date cancels a scheduled resume. end_date must be later than\nthe experiment's start date and, with a resume scheduled, at least an hour\nafter the resume time. A paused experiment is resumed automatically only\nby a resume scheduled after it was paused; any change of status cancels a\nscheduled resume.\n\nstart_date may not be more than ten minutes in the past.\n\nReturns:\n    ExperimentResponse: The updated experiment with scheduling information\n\nRaises:\n    HTTPException 400: If scheduling parameters are invalid\n    HTTPException 403: If the caller's role does not hold READ and UPDATE\n        on experiments\n    HTTPException 404: If experiment not found\n    HTTPException 422: If a date is malformed or time_zone is not an IANA\n        time zone name",
+        "description": "Update experiment scheduling configuration.\n\nOn a **DRAFT** experiment this schedules its activation and completion:\n\n- **start_date**: When the experiment should automatically activate\n- **end_date**: When the experiment should automatically complete\n- **time_zone**: IANA time zone name (default: UTC) for a date given\n  without a UTC offset; a date with an offset keeps it. Dates are stored\n  in UTC. A name that is not an IANA zone answers 422.\n\nOn either status, a field the request omits is left unchanged and an\nexplicit null clears it. On a draft, end_date must be at least an hour\nafter start_date (the stored one when the request omits it).\n\nOn a **PAUSED** experiment, start_date is the time to resume it at. It is\nstored as ``resume_at``; the experiment's own start_date is never moved. A\nnull start_date cancels a scheduled resume. end_date must be later than\nthe experiment's start date and, with a resume scheduled, at least an hour\nafter the resume time. A paused experiment is resumed automatically only\nby a resume scheduled after it was paused; any change of status cancels a\nscheduled resume.\n\nstart_date may not be more than ten minutes in the past.\n\nA visual draft (one with `visual_config`, #1545) takes no start date: it\nstarts only with POST /{experiment_id}/start. A request with a start date\nother than null answers 400; `{\"start_date\": null}` clears one, and an end\ndate is accepted.\n\nReturns:\n    ExperimentResponse: The updated experiment with scheduling information\n\nRaises:\n    HTTPException 400: If scheduling parameters are invalid\n    HTTPException 403: If the caller's role does not hold READ and UPDATE\n        on experiments\n    HTTPException 404: If experiment not found\n    HTTPException 422: If a date is malformed or time_zone is not an IANA\n        time zone name",
         "operationId": "update_experiment_schedule_api_v1_experiments__experiment_id__schedule_put",
         "parameters": [
           {
@@ -19292,7 +20539,7 @@
     },
     "/api/v1/experiments/{experiment_id}/start": {
       "post": {
-        "description": "Start an experiment.\n\nThis endpoint activates an experiment, changing its status to ACTIVE\nand setting the start date to now if not already set. A draft started\nbefore its scheduled start date starts now, and its start date is set to\nnow; a scheduled end date is kept.\n\nStarting an experiment makes it eligible for:\n- User traffic assignment\n- Event tracking and analysis\n- Results calculation\n\nPrerequisites for starting an experiment:\n- The experiment must be in DRAFT or PAUSED status\n- The experiment must have at least one control and one non-control variant\n- The experiment must have at least one metric defined\n- An experiment with no start date must not have an end date that has\n  passed: set a later one, or clear it, with\n  PUT /{experiment_id}/schedule first\n- A split URL experiment must have a `split_url_config` whose URL\n  variants match its variants. Its control URL's host and path must not\n  be those of an active split URL experiment's control URL or of one of\n  that experiment's variant URLs, and none of its variant URLs may have\n  the host and path of an active split URL experiment's control URL\n\nReturns:\n    ExperimentResponse: The updated experiment with ACTIVE status\n\nRaises:\n    HTTPException 400: If the experiment cannot be started\n    HTTPException 403: If the caller's role does not hold UPDATE on experiments",
+        "description": "Start an experiment.\n\nThis endpoint activates an experiment, changing its status to ACTIVE\nand setting the start date to now if not already set. A draft started\nbefore its scheduled start date starts now, and its start date is set to\nnow; a scheduled end date is kept.\n\nStarting an experiment makes it eligible for:\n- User traffic assignment\n- Event tracking and analysis\n- Results calculation\n\nPrerequisites for starting an experiment:\n- The experiment must be in DRAFT or PAUSED status\n- The experiment must have at least one control and one non-control variant\n- The experiment must have at least one metric defined\n- An experiment with no start date must not have an end date that has\n  passed: set a later one, or clear it, with\n  PUT /{experiment_id}/schedule first\n- A split URL experiment must have a `split_url_config` whose URL\n  variants match its variants. Its control URL's host and path must not\n  be those of an active split URL experiment's control URL or of one of\n  that experiment's variant URLs, and none of its variant URLs may have\n  the host and path of an active split URL experiment's control URL\n- A visual draft (one with `visual_config`, #1545) is started with the\n  body `{\"design_etag\": ...}`, the `design_etag` of the version being\n  started as `GET /api/v1/experiments/{id}` returned it: without one it\n  answers 400, and with one that is not its current design's it answers\n  409 and nothing is started. It needs a page change in a non-control\n  variant, stored visual settings and page changes that are valid, and a\n  metric for every goal. Every other start takes no body (an empty body,\n  `null` and `{}` are the same), and ignores a `design_etag` sent.\n\nStarting an experiment ends every visual editor sign-in of it.\n\nReturns:\n    ExperimentResponse: The updated experiment with ACTIVE status\n\nRaises:\n    HTTPException 400: If the experiment cannot be started\n    HTTPException 403: If the caller's role does not hold UPDATE on experiments\n    HTTPException 409: If a visual draft's design_etag is not its\n        current design's",
         "operationId": "start_experiment_api_v1_experiments__experiment_id__start_post",
         "parameters": [
           {
@@ -19318,6 +20565,24 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ExperimentStartRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Optional. A visual draft needs its design_etag here; every other start takes no body, null or {}.",
+                "title": "Start"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
@@ -19389,6 +20654,119 @@
           "Experiments",
           "Experiments"
         ]
+      }
+    },
+    "/api/v1/experiments/{experiment_id}/visual/preview-links": {
+      "delete": {
+        "description": "End every live preview link of the experiment at once: each answers 404\nfrom then on. Needs a caller who may change experiments (READ and\nUPDATE). The audit entry records how many links were ended.",
+        "operationId": "revoke_preview_links_api_v1_experiments__experiment_id__visual_preview_links_delete",
+        "parameters": [
+          {
+            "description": "The experiment",
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "description": "The experiment",
+              "format": "uuid",
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "The caller may not change experiments"
+          },
+          "404": {
+            "description": "No such experiment"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "End every preview link of an experiment (beta)",
+        "tags": [
+          "Experiments"
+        ],
+        "x-stability": "beta"
+      },
+      "post": {
+        "description": "Make a link that shows one variant of a visual experiment on its page.\n\nAnyone who opens the link on a page with the Controlvar script sees the\nvariant there, whatever the experiment's audience and status, until the\nlink expires (1 to 168 hours, 24 by default) or the experiment's links are\nrevoked. Opening it records nothing. The link is answered once; only a\nhash of its token is stored.\n\nNeeds a caller who may change experiments (READ and UPDATE). Refused with\n422 when one of the experiment's pages, or its editor page, is on a site\nthis server does not accept requests from (CORS_ORIGINS), or on the\ndashboard's own address, when CORS_ORIGINS is `*`, or when the server does\nnot know the dashboard's address (DASHBOARD_ORIGINS or PUBLIC_BASE_URL).\nSent with `Cache-Control: no-store`.",
+        "operationId": "create_preview_link_api_v1_experiments__experiment_id__visual_preview_links_post",
+        "parameters": [
+          {
+            "description": "The visual experiment",
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "description": "The visual experiment",
+              "format": "uuid",
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewLinkCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewLinkCreated"
+                }
+              }
+            },
+            "description": "The link, shown once"
+          },
+          "400": {
+            "description": "The experiment has no visual settings"
+          },
+          "403": {
+            "description": "The caller may not change experiments"
+          },
+          "404": {
+            "description": "No such experiment, or no such variant of it"
+          },
+          "422": {
+            "description": "The request is not in the documented form, or a page of the experiment is on a site this server does not accept"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Make a preview link for a visual experiment's variant (beta)",
+        "tags": [
+          "Experiments"
+        ],
+        "x-stability": "beta"
       }
     },
     "/api/v1/export/experiments": {
@@ -19843,6 +21221,8 @@
             "required": false,
             "schema": {
               "default": 0,
+              "format": "int64",
+              "minimum": 0,
               "title": "Skip",
               "type": "integer"
             }
@@ -19853,6 +21233,8 @@
             "required": false,
             "schema": {
               "default": 100,
+              "format": "int64",
+              "minimum": 0,
               "title": "Limit",
               "type": "integer"
             }
@@ -21255,6 +22637,7 @@
             "required": false,
             "schema": {
               "default": 0,
+              "format": "int64",
               "minimum": 0,
               "title": "Offset",
               "type": "integer"
@@ -21597,6 +22980,7 @@
             "required": false,
             "schema": {
               "default": 0,
+              "format": "int64",
               "minimum": 0,
               "title": "Skip",
               "type": "integer"
@@ -21959,6 +23343,7 @@
             "required": false,
             "schema": {
               "default": 1,
+              "format": "int64",
               "minimum": 1,
               "title": "Page",
               "type": "integer"
@@ -22919,6 +24304,7 @@
             "schema": {
               "default": 0,
               "description": "Number of records to skip",
+              "format": "int64",
               "minimum": 0,
               "title": "Skip",
               "type": "integer"
@@ -23064,6 +24450,7 @@
             "schema": {
               "default": 0,
               "description": "Number of records to skip",
+              "format": "int64",
               "minimum": 0,
               "title": "Skip",
               "type": "integer"
@@ -23272,6 +24659,7 @@
             "required": false,
             "schema": {
               "default": 0,
+              "format": "int64",
               "minimum": 0,
               "title": "Skip",
               "type": "integer"
@@ -23690,6 +25078,7 @@
             "required": false,
             "schema": {
               "default": 1,
+              "format": "int64",
               "minimum": 1,
               "title": "Page",
               "type": "integer"
@@ -24269,6 +25658,59 @@
         ]
       }
     },
+    "/api/v1/results/{experiment_id}/balanced-groups": {
+      "get": {
+        "description": "The results of an experiment that balances its split within groups (#448).\n\n``groups`` has one row per group, each user in the group stored when they\nwere assigned: the rows of a breakdown (the 20 groups with the most\nusers, then ``other`` and ``unknown``), with each row's p-value and its\nBonferroni threshold. Per variant the rows add up to every user\nassigned. ``overall`` gives, for the primary metric, one estimate per\ntreatment over every group: each group's difference from the control\nweighted by the group's share of the users, at the experiment's\n``confidence_level``, corrected across the treatments with its\n``correction_method``. It is null, with ``reason``, for a primary metric\nthat is not a conversion, for an experiment with sequential testing, and\nwhen no treatment has users or no group has 2 users in every variant that\nhas users. The experiment's results and their decision do not change.\n\nAn experiment that does not balance within groups answers 409. The\nanswer is computed on each request: it is not cached and no snapshot is\nrecorded.",
+        "operationId": "get_balanced_groups_api_v1_results__experiment_id__balanced_groups_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BalancedGroupsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "This experiment does not balance its split within groups, so it has no balanced groups. For its results by an attribute, add ?breakdown=<attribute> to its results."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Beta: results by the group each user was balanced in",
+        "tags": [
+          "Results"
+        ],
+        "x-stability": "beta"
+      }
+    },
     "/api/v1/results/{experiment_id}/bayesian": {
       "get": {
         "description": "Get the Bayesian analysis block for an experiment on its own.\n\nReturns the same ``bayesian_results`` payload that ``GET /results/{id}``\nembeds, always freshly computed (no cache).  The Monte Carlo seed is\nderived from ``(experiment_id, UTC day, n_samples)`` and echoed in the\nresponse, so two calls on the same day return byte-identical posteriors\nand the same ``seed``.\n\nReturns ``is_enabled=false`` (HTTP 200) when the experiment has not opted\ninto Bayesian analysis, and 404 when the experiment does not exist.",
@@ -24587,7 +26029,8 @@
     },
     "/api/v1/results/{experiment_id}/post-stratification": {
       "post": {
-        "description": "Not available yet: this route answers 501 for every existing experiment. Post-stratification needs one metric value and the stratum attributes per assigned user, and nothing builds those rows from an experiment's recorded assignments and events yet. The route reports no numbers until it can compute them from that data.",
+        "deprecated": true,
+        "description": "**Deprecated**, because it is not available: this route answers 501 for every existing experiment, and it may be removed in a later release. Post-stratification needs one metric value and the stratum attributes per assigned user, and nothing builds those rows from an experiment's recorded assignments and events yet.",
         "operationId": "compute_post_stratification_api_v1_results__experiment_id__post_stratification_post",
         "parameters": [
           {
@@ -24644,7 +26087,7 @@
             "OAuth2PasswordBearer": []
           }
         ],
-        "summary": "Post-stratification variance reduction (not available yet)",
+        "summary": "Post-stratification variance reduction, not available yet (deprecated)",
         "tags": [
           "Results",
           "Results"
@@ -24913,6 +26356,7 @@
             "schema": {
               "default": 0,
               "description": "Number of records to skip",
+              "format": "int64",
               "minimum": 0,
               "title": "Skip",
               "type": "integer"
@@ -26093,6 +27537,7 @@
             "schema": {
               "default": 0,
               "description": "Number of results to skip",
+              "format": "int64",
               "minimum": 0,
               "title": "Offset",
               "type": "integer"
@@ -26233,7 +27678,7 @@
     },
     "/api/v1/segments/{segment_id}": {
       "delete": {
-        "description": "Soft-delete a segment by setting its status to ARCHIVED. Refused (409) while targeting rules use the segment. Requires permission to delete experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (delete).",
+        "description": "Soft-delete a segment by setting its status to ARCHIVED. Refused (409) while targeting rules use the segment or while a draft, active or paused experiment balances within it. Requires permission to delete experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (delete).",
         "operationId": "delete_segment_api_v1_segments__segment_id__delete",
         "parameters": [
           {
@@ -26252,7 +27697,7 @@
             "description": "Successful Response"
           },
           "409": {
-            "description": "The segment is used by the targeting rules of a flag that is not archived or an experiment that is draft, active or paused. `detail` is `{\"code\": \"segment_in_use\", \"message\", \"feature_flags\": [{id, key, name}], \"experiments\": [{id, key, name, status}]}`."
+            "description": "The segment is used by the targeting rules of a flag that is not archived or an experiment that is draft, active or paused, or a draft, active or paused experiment balances within it. `detail` is `{\"code\": \"segment_in_use\", \"message\", \"feature_flags\": [{id, key, name}], \"experiments\": [{id, key, name, status}]}`."
           },
           "422": {
             "content": {
@@ -26325,7 +27770,7 @@
         ]
       },
       "put": {
-        "description": "Update segment name, description, rules, or status. A segment's kind cannot be changed, and an id_list segment takes no rules (422). A status other than active is refused (409) while targeting rules use the segment. Requires permission to change experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (update).",
+        "description": "Update segment name, description, rules, or status. A segment's kind cannot be changed, and an id_list segment takes no rules (422). A status other than active is refused (409) while targeting rules use the segment or while a draft, active or paused experiment balances within it. Requires permission to change experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (update).",
         "operationId": "update_segment_api_v1_segments__segment_id__put",
         "parameters": [
           {
@@ -26361,7 +27806,7 @@
             "description": "Successful Response"
           },
           "409": {
-            "description": "The segment is used by the targeting rules of a flag that is not archived or an experiment that is draft, active or paused. `detail` is `{\"code\": \"segment_in_use\", \"message\", \"feature_flags\": [{id, key, name}], \"experiments\": [{id, key, name, status}]}`."
+            "description": "The segment is used by the targeting rules of a flag that is not archived or an experiment that is draft, active or paused, or a draft, active or paused experiment balances within it. `detail` is `{\"code\": \"segment_in_use\", \"message\", \"feature_flags\": [{id, key, name}], \"experiments\": [{id, key, name, status}]}`."
           },
           "422": {
             "content": {
@@ -26451,7 +27896,7 @@
     },
     "/api/v1/segments/{segment_id}/experiments": {
       "get": {
-        "description": "Return all experiments and feature flags whose targeting_rules reference this segment's UUID.",
+        "description": "Return all experiments and feature flags whose targeting_rules reference this segment's UUID, and the experiments that balance within it.",
         "operationId": "get_segment_experiments_api_v1_segments__segment_id__experiments_get",
         "parameters": [
           {
@@ -26621,7 +28066,7 @@
     },
     "/api/v1/segments/{segment_id}/preview": {
       "post": {
-        "description": "Estimate the percentage of users who would match the provided targeting rules by evaluating them against the stored contexts of up to sample_size assignments. Only assignments that carry a context are counted; the answer's sample_size is how many there were, and 0 when none do.",
+        "description": "Estimate the share of the users seen most recently that the provided rules match. The users are the most recent ones with an exposure (a /tracking/assign call) in the last 30 days, each counted once with the attributes sent as context on their latest one; up to sample_size of them are evaluated. Not a random sample: it leans toward frequent users and the time of day. estimated_percentage is null when fewer than 30 users have attributes (reason says why); sampled_since and ended_by say how far back the read went. Any role that can read segments may preview: the answer is counts and a share, never a stored attribute value.",
         "operationId": "preview_audience_size_api_v1_segments__segment_id__preview_post",
         "parameters": [
           {
@@ -26679,6 +28124,9 @@
               }
             },
             "description": "Validation Error"
+          },
+          "503": {
+            "description": "The read of recent exposures, all its fetches together, took longer than its 5-second limit (a large events table with few exposures can). The text is fixed."
           }
         },
         "security": [
@@ -26715,7 +28163,7 @@
     },
     "/api/v1/tracking/assign": {
       "post": {
-        "description": "Assign a user to an experiment variant.\n\nThis endpoint assigns a user to a variant of the specified experiment.\nIt handles consistent assignment for returning users.\n\nThe assignment is deterministic based on:\n- User ID\n- Experiment ID\n- Targeting rules\n- Traffic allocation percentages\n\nThis means that the same user will always get the same variant assignment\nfor a specific experiment, including across experiments in the same mutual\nexclusion group: a user enrolled in one experiment of a group is not\nenrolled in another, even as experiments in the group are activated,\npaused or resumed.\n\nNew users are first checked for eligibility: the global holdout, the\nexperiment's mutual exclusion group and its targeting rules (evaluated\nagainst ``context``; top-level keys also answer ``user.<key>`` /\n``device.<key>`` / ``app.<key>``).  Ineligible users receive HTTP 200 with\nthe control variant, ``assigned: false`` and ``reason`` set to\n``holdout`` | ``mutual_exclusion`` | ``targeting``; nothing is recorded\nfor them.  Existing assignments are always returned as-is.\n\nAn experiment that is not ACTIVE (a draft, or paused, completed or\narchived) answers every user, enrolled or not, with HTTP 200, its control\nvariant, ``assigned: false`` and ``reason`` set to its status: ``draft``\n| ``paused`` | ``completed`` | ``archived``.  Nothing is recorded, and\nusers who were assigned keep their assignment, so a resumed experiment\ngives them their variant again.  A draft with no control variant answers\n404.\n\n**Authentication**: Requires a valid API key in the X-API-Key header.\n\nReturns:\n    VariantAssignmentResponse: The variant assignment with configuration\n    details plus ``assigned`` / ``reason``\n\nRaises:\n    HTTPException 401: If the API key is invalid\n    HTTPException 404: If no experiment has the key, or a draft has no\n        control variant\n    HTTPException 500: If there's an error during assignment",
+        "description": "Assign a user to an experiment variant.\n\nThis endpoint assigns a user to a variant of the specified experiment.\nIt handles consistent assignment for returning users.\n\nThe assignment is deterministic based on:\n- User ID\n- Experiment ID\n- Targeting rules\n- Traffic allocation percentages\n\nFor an experiment that balances within groups, a new user's variant also\ndepends on the users of their group assigned before them.\n\nThis means that the same user will always get the same variant assignment\nfor a specific experiment, including across experiments in the same mutual\nexclusion group: a user enrolled in one experiment of a group is not\nenrolled in another, even as experiments in the group are activated,\npaused or resumed.\n\nNew users are first checked for eligibility: the global holdout, the\nexperiment's mutual exclusion group and its targeting rules (evaluated\nagainst ``context``; top-level keys also answer ``user.<key>`` /\n``device.<key>`` / ``app.<key>``).  Ineligible users receive HTTP 200 with\nthe control variant, ``assigned: false`` and ``reason`` set to\n``holdout`` | ``mutual_exclusion`` | ``targeting``; nothing is recorded\nfor them.  Existing assignments are always returned as-is.\n\nAn experiment that is not ACTIVE (a draft, or paused, completed or\narchived) answers every user, enrolled or not, with HTTP 200, its control\nvariant, ``assigned: false`` and ``reason`` set to its status: ``draft``\n| ``paused`` | ``completed`` | ``archived``.  Nothing is recorded, and\nusers who were assigned keep their assignment, so a resumed experiment\ngives them their variant again.  A draft with no control variant answers\n404.\n\n**Authentication**: Requires a valid API key in the X-API-Key header.\n\nReturns:\n    VariantAssignmentResponse: The variant assignment with configuration\n    details plus ``assigned`` / ``reason``\n\nRaises:\n    HTTPException 401: If the API key is invalid\n    HTTPException 404: If no experiment has the key, or a draft has no\n        control variant\n    HTTPException 500: If there's an error during assignment",
         "operationId": "assign_user_to_experiment_api_v1_tracking_assign_post",
         "requestBody": {
           "content": {
@@ -26763,7 +28211,7 @@
     },
     "/api/v1/tracking/assign/batch": {
       "post": {
-        "description": "Assign up to 1,000 users to an ACTIVE experiment in one request.\n\nEach user gets what ``POST /api/v1/tracking/assign`` would give them, with\nthe bandit weights read at the start of the request: the same eligibility\nchecks for a new user (global holdout, mutual exclusion group, targeting\nrules against that user's ``context``) and the same sticky answer for a\nuser already assigned. Users are processed in request order and each new\nassignment is committed on its own, as N single calls would be.\n\nOnly assignments are recorded, never a view event: the user's first\n``POST /api/v1/tracking/assign`` records that they saw the experiment.\n\n**Authentication**: an API key with the ``sdk:ruleset`` scope, whose owner\ncan change feature flags and experiments: ADMIN, DEVELOPER, a superuser, or\nin the full profile anyone whose custom roles or direct grants give\n``feature_flag (update)`` and ``experiment (update)``. A key whose owner can\nchange feature flags but not experiments is refused with 403 before anyone\nis assigned.\n\nA plain ``def``: FastAPI runs it in the thread pool, so a batch does not\nhold the event loop while it works through its users.",
+        "description": "Assign up to 1,000 users to an ACTIVE experiment in one request.\n\nEach user gets what ``POST /api/v1/tracking/assign`` would give them, with\nthe bandit weights read at the start of the request: the same eligibility\nchecks for a new user (global holdout, mutual exclusion group, targeting\nrules against that user's ``context``) and the same sticky answer for a\nuser already assigned. Users are processed in request order and each new\nassignment is committed on its own, as N single calls would be. For an\nexperiment that balances within groups, the same list sent in another\norder can split differently; each user keeps the variant they got.\n\nOnly assignments are recorded, never a view event: the user's first\n``POST /api/v1/tracking/assign`` records that they saw the experiment.\n\n**Authentication**: an API key with the ``sdk:ruleset`` scope, whose owner\ncan change feature flags and experiments: ADMIN, DEVELOPER, a superuser, or\nin the full profile anyone whose custom roles or direct grants give\n``feature_flag (update)`` and ``experiment (update)``. A key whose owner can\nchange feature flags but not experiments is refused with 403 before anyone\nis assigned.\n\nA plain ``def``: FastAPI runs it in the thread pool, so a batch does not\nhold the event loop while it works through its users.",
         "operationId": "assign_users_to_experiment_batch_api_v1_tracking_assign_batch_post",
         "requestBody": {
           "content": {
@@ -27182,6 +28630,114 @@
         ]
       }
     },
+    "/api/v1/tracking/visual": {
+      "post": {
+        "description": "Which visual changes and goals this visitor gets on this page.\n\nCalled by the visual editor's browser script on each page view, with the\npage's host and path (never its query) and the visitor's id. Answers the\nrunning visual experiments whose pages include the page, at most 10, the\none that started first first. Each is assigned exactly as\n`POST /api/v1/tracking/assign` assigns, and records what it records: an\nassignment for a new visitor, and an exposure event with the context on\nevery matched page view. A visitor who is not in an experiment gets\n`assigned: false` with the reason, and no changes or goals.\n\nThe context's `web_*` website details are kept only in their documented\nform; any other `web_*` key, and `web_country`, is dropped, never refused.\nThe host and the path are not stored.\n\n`pages` holds the page rules of every running visual experiment on this\nhost; the script may keep them for `max_age` seconds and make no call on a\npage none of them matches. Sent with `Cache-Control: no-store`.\n\n**Authentication**: an API key with no scopes, in `X-API-Key`. A key with\nany scope is refused with 403: it belongs on a server.",
+        "operationId": "visual_changes_for_page_api_v1_tracking_visual_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VisualTrackingRequest",
+                "description": "The page and the visitor"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisualTrackingResponse"
+                }
+              }
+            },
+            "description": "Each running visual experiment on the page, and the host's page rules"
+          },
+          "401": {
+            "description": "No API key, or an unknown, expired or revoked one"
+          },
+          "403": {
+            "description": "The API key has scopes: a key in a web page must have none"
+          },
+          "422": {
+            "description": "The request is not in the documented form"
+          },
+          "429": {
+            "description": "More requests from this address than the SDK limit allows"
+          },
+          "503": {
+            "description": "The database is not available; send the request again later"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "The visual changes and goals a visitor gets on a page (beta)",
+        "tags": [
+          "Tracking"
+        ],
+        "x-stability": "beta"
+      }
+    },
+    "/api/v1/tracking/visual/preview": {
+      "post": {
+        "description": "The page changes of the variant a preview link shows.\n\nThe token is the one in the link's `#controlvar-preview=` fragment, made\non the experiment's page in Controlvar (`POST /api/v1/experiments/{id}/\nvisual/preview-links`). A preview ignores the experiment's audience and\nstatus and records nothing: no assignment, no exposure, no event. A link\nthat is unknown, expired or revoked answers 404 with one text for all\nthree. `pages` holds the experiment's page rules on this host. Sent with\n`Cache-Control: no-store`.\n\n**Authentication**: an API key with no scopes, in `X-API-Key`; a key with\nany scope is refused with 403.",
+        "operationId": "visual_preview_api_v1_tracking_visual_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VisualPreviewRequest",
+                "description": "The preview link's token and the page"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisualPreviewResponse"
+                }
+              }
+            },
+            "description": "The variant's page changes and the host's page rules"
+          },
+          "401": {
+            "description": "No API key, or an unknown, expired or revoked one"
+          },
+          "403": {
+            "description": "The API key has scopes: a key in a web page must have none"
+          },
+          "404": {
+            "description": "The preview link is unknown, expired or revoked"
+          },
+          "422": {
+            "description": "The request is not in the documented form"
+          },
+          "429": {
+            "description": "More requests from this address than the SDK limit allows"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "One variant's visual changes, for a preview link (beta)",
+        "tags": [
+          "Tracking"
+        ],
+        "x-stability": "beta"
+      }
+    },
     "/api/v1/users/": {
       "get": {
         "description": "List users.\n\nFor superusers: retrieves all users\nFor regular users: retrieves only their own user",
@@ -27193,6 +28749,7 @@
             "required": false,
             "schema": {
               "default": 0,
+              "format": "int64",
               "minimum": 0,
               "title": "Skip",
               "type": "integer"

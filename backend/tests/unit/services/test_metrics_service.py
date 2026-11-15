@@ -60,7 +60,7 @@ def test_record_metric(mock_db_session):
         value=4.5,
         count=1,
         timestamp=timestamp,
-        meta_data={"browser": "Chrome", "device": "mobile"},
+        metadata={"browser": "Chrome", "device": "mobile"},
     )
 
     # Setup mock
@@ -76,8 +76,6 @@ def test_record_metric(mock_db_session):
         # Call the service method
         result = MetricsService.record_metric(mock_db_session, metric_data)
 
-        # We need to inspect what actually happened rather than assert an exact call
-        # since the mock may actually receive meta_data=None
         assert mock_raw_metric.call_count == 1
         call_args = mock_raw_metric.call_args[1]  # Keyword arguments of the call
 
@@ -88,9 +86,7 @@ def test_record_metric(mock_db_session):
         assert call_args["user_id"] == "user123"
         assert call_args["value"] == 4.5
         assert call_args["count"] == 1
-
-        # The actual behavior may transform meta_data from the input
-        # so we just verify a few things about the mock call
+        assert call_args["meta_data"] == {"browser": "Chrome", "device": "mobile"}
 
         # Verify the session methods were called
         mock_db_session.add.assert_called_once_with(mock_metric)
@@ -107,7 +103,6 @@ def test_record_flag_evaluation(mock_db_session, sample_feature_flag_id):
     targeting_rule_id = "rule_abc"
     segment_id = uuid4()
     latency_ms = 42.5
-    metadata = {"context": {"country": "US"}}
 
     # Mock the record_metric method to track calls and return mock objects
     with patch.object(MetricsService, "record_metric") as mock_record_metric:
@@ -129,11 +124,9 @@ def test_record_flag_evaluation(mock_db_session, sample_feature_flag_id):
             db=mock_db_session,
             feature_flag_id=sample_feature_flag_id,
             user_id=user_id,
-            value=True,
             targeting_rule_id=targeting_rule_id,
             segment_id=segment_id,
             latency_ms=latency_ms,
-            metadata=metadata,
         )
 
         # Verify record_metric was called 4 times for different metric types
@@ -148,7 +141,6 @@ def test_record_flag_evaluation(mock_db_session, sample_feature_flag_id):
                 user_id=user_id,
                 targeting_rule_id=targeting_rule_id,
                 segment_id=segment_id,
-                meta_data={"result": True, "context": {"country": "US"}},
             ),
         )
 
@@ -188,6 +180,50 @@ def test_record_flag_evaluation(mock_db_session, sample_feature_flag_id):
 
         # Verify the result is the first metric (flag evaluation)
         assert result == mock_flag_metric
+
+
+@pytest.mark.regression
+def test_a_flag_evaluation_builds_its_rows_with_no_metadata(
+    mock_db_session, sample_feature_flag_id
+):
+    """``record_flag_evaluation`` passes no metadata to ``RawMetricCreate``.
+
+    It used to pass the evaluation's result and the client's targeting
+    context as ``meta_data=``, a name the schema does not have, so pydantic
+    dropped it and nothing was stored. Spelled ``metadata=``, it would store
+    the user's attributes with every evaluation. The keyword names are
+    checked, not ``.metadata``, because the misspelling leaves that ``None``.
+    """
+    with (
+        patch.object(MetricsService, "record_metric") as recorded,
+        patch(
+            "backend.app.services.metrics_service.RawMetricCreate",
+            wraps=RawMetricCreate,
+        ) as built,
+    ):
+        MetricsService.record_flag_evaluation(
+            db=mock_db_session,
+            feature_flag_id=sample_feature_flag_id,
+            user_id="u-1",
+            targeting_rule_id="rule-1",
+            segment_id=uuid4(),
+            latency_ms=1.5,
+        )
+
+    assert built.call_count == 4
+    for made in built.call_args_list:
+        assert not {"metadata", "meta_data"} & set(made.kwargs), made.kwargs
+    assert [c.args[1].metadata for c in recorded.call_args_list] == [None] * 4
+
+
+def test_raw_metric_create_drops_an_unknown_meta_data_keyword():
+    """Guard the probe: ``RawMetricCreate`` ignores ``meta_data=`` silently,
+    which is why the test above checks the keyword names."""
+    data = RawMetricCreate(
+        metric_type=MetricType.FLAG_EVALUATION, meta_data={"result": True}
+    )
+    assert data.metadata is None
+    assert "meta_data" not in RawMetricCreate.model_fields
 
 
 def test_log_error(mock_db_session, sample_feature_flag_id):

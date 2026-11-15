@@ -23,6 +23,9 @@
 # * the LATEST completed run wins, so a re-run that passed after a flaky
 #   failure is honoured, and a later failure is not hidden by an earlier pass.
 #   Any run still in progress refuses outright: its result is unknown.
+# * with no summary at all, the workflow's own runs for the commit are read
+#   once, only to choose the message: a run still queued or in progress gets
+#   "still running", none gets the dispatch hint. Exit 1 either way.
 #
 # Needs `gh` (GH_TOKEN in the environment) and nothing else; the workflow runs
 # it in a job that holds no AWS credential.
@@ -52,6 +55,23 @@ fi
 RUNS="$(awk -F '\t' -v name="$CHECK_NAME" 'NF >= 5 && $5 == name' <<<"$RUNS")"
 
 if [ -z "$RUNS" ]; then
+  # The summary check run exists only once backend-gate, frontend-gate and
+  # security-gate have finished, so "no summary" can also mean the push run of
+  # Release Gate is still working. Ask the workflow's runs for this commit
+  # before telling the operator to dispatch one. A failed read changes the
+  # message only, never the outcome: this branch refuses either way.
+  if ! WORKFLOW_RUNS="$(gh api --paginate \
+        "repos/${REPO}/actions/workflows/release-gate.yml/runs?head_sha=${SHA}&per_page=100" \
+        --jq '.workflow_runs[] | select(.status != "completed") | .html_url')"; then
+    echo "::error title=No Release Gate result::${TAG} (${SHORT}) has no Release Gate result, and the Release Gate workflow runs for it could not be read, so it cannot be told whether one is still running. Nothing was deployed; re-run this deploy in a few minutes."
+    exit 1
+  fi
+  # awk, not `head -n 1`: see the SIGPIPE note below.
+  ACTIVE_URL="$(awk 'NF { print; exit }' <<<"$WORKFLOW_RUNS")"
+  if [ -n "$ACTIVE_URL" ]; then
+    echo "::error title=Release Gate still running::Release Gate is still running on ${TAG}: ${ACTIVE_URL}. Re-run when it finishes."
+    exit 1
+  fi
   echo "::error title=No Release Gate result::${TAG} (${SHORT}) has no Release Gate result. Release Gate runs on every push to main; for a tag cut before that, run it on the tag with \`gh workflow run release-gate.yml --ref ${TAG}\`, then re-run this deploy."
   exit 1
 fi

@@ -38,6 +38,7 @@ heads``. Then:
 from __future__ import annotations
 
 import json
+import pathlib
 import re
 import shutil
 import textwrap
@@ -45,6 +46,8 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import inspect, text
 
 from backend.app.db import bootstrap
@@ -57,11 +60,22 @@ pytestmark = [pytest.mark.integration]
 #: which reached main before it.
 REVISION = "7b6b4b4fe246"
 PREVIOUS_CORE_HEAD = "85dd4796bb8b"
-#: The core head of this tree.
-CORE_HEAD = "7b6b4b4fe246"
+#: The core head of this tree: ``t1812_user_totp`` (#1812), whose downgrade
+#: drops ``user_totp``, after ``4955571d232c`` (#1545), whose downgrade drops
+#: ``visual_tokens`` and two columns of ``experiments`` and ``variants``, after
+#: ``c448_balance_within`` (#448), the revision after this one, whose downgrade
+#: drops the table ``balance_group_counters`` and four columns of
+#: ``experiments`` and ``assignments``.
+CORE_HEAD = "t1812_user_totp"
+#: The core revisions after this one today, newer than release N-1 too: the
+#: walk from the revision graph below must find each of them.
+LATER_REVISIONS = ("c448_balance_within", "4955571d232c", "t1812_user_totp")
+#: Tables a later core revision's downgrade drops: a downgrade from the head to
+#: this test's target unapplies those revisions too.
+LATER_DOWNGRADE_TABLES = {"balance_group_counters", "visual_tokens", "user_totp"}
 #: The modules branch's head in this tree, recorded on both sides of every
 #: step here: this file is about the core chain.
-MODULES_HEAD = "modules_0004_rbac_activation"
+MODULES_HEAD = "modules_0005_redshift"
 
 PREVIOUS_ROWS = {
     CORE: {PREVIOUS_CORE_HEAD},
@@ -451,17 +465,69 @@ _PREVIOUS_RELEASE_REMOVALS = (
 )
 
 
-def _previous_release(profile: str, tmp_path):
-    """Release N-1: a copy of this tree without the revision, the column and
-    its writes."""
-    destination = tmp_path / "release-n-minus-1"
+def _this_revision_and_every_later_one(tree) -> dict:
+    """``{revision id: script file}`` for REVISION and every revision after
+    it, in *tree*'s own script directory: each is newer than release N-1.
+
+    Read from the revision graph, not listed, so a revision added on top
+    later, or re-pointed onto another, is removed with the rest."""
+    script = ScriptDirectory.from_config(Config(str(tree_profiles.alembic_ini(tree))))
+    found, pending = {}, [REVISION]
+    while pending:
+        revision = script.get_revision(pending.pop())
+        if revision.revision not in found:
+            found[revision.revision] = pathlib.Path(revision.path)
+            pending.extend(sorted(revision.nextrev))
+    return found
+
+
+#: A revision written on top of the core head in a copy of the tree, as a
+#: later release (or a re-point) would add one.
+_LATER = "9f8e7d6c5b4a"
+
+
+@pytest.mark.parametrize("profile", BOTH_PROFILES)
+def test_the_previous_release_loses_this_revision_and_each_later_one(profile, tmp_path):
+    """The walk above, on a copy of each profile's tree with one more revision
+    on top of the core head: this revision, the core head and the one on top,
+    never one of release N-1's and never the modules branch's."""
+    destination = tmp_path / "walk"
     if profile == FULL:
         tree = tree_profiles.full_tree(destination)
     else:
         tree = tree_profiles.core_tree(destination)
     versions = tree / "backend" / "app" / "db" / "migrations" / "versions"
-    (revision_file,) = versions.glob(f"{REVISION}_*.py")
-    revision_file.unlink()
+    (versions / f"{_LATER}_a_later_revision.py").write_text(
+        f'revision = "{_LATER}"\ndown_revision = "{CORE_HEAD}"\n'
+        "branch_labels = None\ndepends_on = None\n\n\n"
+        "def upgrade():\n    pass\n\n\ndef downgrade():\n    pass\n",
+        encoding="utf-8",
+    )
+
+    newer = _this_revision_and_every_later_one(tree)
+
+    print(f"[{profile}] newer than release N-1: {sorted(newer)}")
+    assert {REVISION, *LATER_REVISIONS, CORE_HEAD, _LATER} <= set(newer)
+    assert PREVIOUS_CORE_HEAD not in newer
+    assert not any(revision.startswith("modules") for revision in newer)
+    parents = {path.parent.resolve() for path in newer.values()}
+    assert parents == {versions.resolve()}
+
+
+def _previous_release(profile: str, tmp_path):
+    """Release N-1: a copy of this tree without the revision, the column and
+    its writes.
+
+    The revisions after this one go too: they are newer than release N-1, and
+    one whose ``down_revision`` file is gone would break the script directory.
+    """
+    destination = tmp_path / "release-n-minus-1"
+    if profile == FULL:
+        tree = tree_profiles.full_tree(destination)
+    else:
+        tree = tree_profiles.core_tree(destination)
+    for revision_file in _this_revision_and_every_later_one(tree).values():
+        revision_file.unlink()
     for parts, pattern, expected in _PREVIOUS_RELEASE_REMOVALS:
         path = tree.joinpath(*parts)
         source, found = pattern.subn("", path.read_text(encoding="utf-8"))
@@ -567,7 +633,7 @@ def test_the_downgrade_drops_the_column_only_and_an_upgrade_sets_it_from_updated
     _report(profile, "after downgrade", test_db, scratch_schema)
     assert _rows(test_db, scratch_schema) == PREVIOUS_ROWS[profile]
     assert _all_columns(test_db, scratch_schema) == columns - {COLUMN}
-    assert _tables(test_db, scratch_schema) == tables
+    assert _tables(test_db, scratch_schema) == tables - LATER_DOWNGRADE_TABLES
     with test_db.connect() as conn:
         kept = conn.execute(
             text(f'SELECT count(*) FROM "{scratch_schema}".{TABLE}')
@@ -613,7 +679,9 @@ def test_the_previous_release_starts_only_after_the_downgrade(
     print(f"[{profile}] previous release's bootstrap: exit {refused.returncode}")
     assert refused.returncode != 0, refused.stdout[-2000:]
     assert "migrated by a newer Controlvar release" in refused.stderr
-    assert REVISION in refused.stderr
+    # The database records the core head, the newest revision release N-1
+    # does not know.
+    assert CORE_HEAD in refused.stderr
     assert _rows(test_db, scratch_schema) == ROWS[profile]
 
     heads = tree_profiles.alembic(release_n_minus_1, "public", "heads")

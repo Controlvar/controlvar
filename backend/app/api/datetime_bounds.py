@@ -5,7 +5,7 @@ that compares with a larger one ("time zone displacement out of range"), which
 answered 500. The parser accepts offsets up to 23:59, so a date such as
 ``2026-01-01T00:00:00+23:00`` reached the query.
 
-Two forms of the one rule, both answering 422 at ``["query", <field>]`` with a
+Two forms of the one rule, both answering 422 at ``["query" or "body", <field>]`` with a
 fixed message that never repeats the value sent:
 
 - :func:`storable_offset`, the ``AfterValidator`` inside a parameter's
@@ -35,7 +35,7 @@ OFFSET_TOO_LARGE = "the UTC offset must be less than 16 hours"
 def storable_offset(value: Optional[datetime]) -> Optional[datetime]:
     """Refuse a date whose UTC offset is 16 hours or more either way.
 
-    A refusal is a validation error, i.e. 422 at ``["query", <field>]``. A
+    A refusal is a validation error, i.e. 422 at ``["query" or "body", <field>]``. A
     naive date, ``Z`` and offsets up to 15:59 either way pass unchanged.
     """
     if value is not None:

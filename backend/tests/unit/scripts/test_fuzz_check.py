@@ -874,6 +874,7 @@ def test_auth_is_read_from_the_operation_or_the_document():
 #: The exclusion list, pinned: (operation, passes). Change it with
 #: tests/fuzz/exclusions.toml.
 ALL_PASSES = ("superuser", "viewer", "sdk")
+POST_STRAT = "POST /api/v1/results/{experiment_id}/post-stratification"
 EXCLUDED = {
     # signing in and out, and the caller's own credentials
     "POST /api/v1/auth/login": ALL_PASSES,
@@ -903,6 +904,8 @@ EXCLUDED = {
     "POST /api/v1/auth/sso/configs": ALL_PASSES,
     "PUT /api/v1/auth/sso/configs/{config_id}": ALL_PASSES,
     "GET /api/v1/auth/sso/oidc/{provider}/callback": ALL_PASSES,
+    # deprecated and unimplemented (#963): excluded by name, never as a class
+    POST_STRAT: ALL_PASSES,
 }
 
 
@@ -974,6 +977,19 @@ def test_no_known_entry_cites_955():
 
 
 @pytest.mark.regression
+def test_no_known_entry_cites_957():
+    """#957 is fixed: a holdout, exclusion-group or API-key body value of the
+    wrong type answers 422, not 500. An entry still citing it would be a stale
+    waiver."""
+    import tomllib
+
+    data = tomllib.loads(fuzz_check.KNOWN_5XX.read_text(encoding="utf-8"))
+    citing = [e for e in data.get("known", []) if e.get("issue") == 957]
+    assert citing == []
+    assert "957" not in " ".join(e["reason"] for e in data.get("known", []))
+
+
+@pytest.mark.regression
 def test_no_known_entry_cites_958_or_959():
     """#958 and #959 are fixed: the two sample-size routes answer 422 for the
     inputs they cannot calculate with, and an id that is not a UUID answers
@@ -988,10 +1004,73 @@ def test_no_known_entry_cites_958_or_959():
     assert "958" not in reasons and "959" not in reasons
 
 
+@pytest.mark.regression
+def test_no_known_entry_cites_963():
+    """#963 is not fixed, but the route is deprecated and excluded by name
+    (exclusions.toml), so no known-5xx waiver may stand for it in any pass: a
+    leftover entry is quiet (it answers no 5xx) and turns the run red."""
+    import tomllib
+
+    data = tomllib.loads(fuzz_check.KNOWN_5XX.read_text(encoding="utf-8"))
+    entries = data.get("known", [])
+    assert [e for e in entries if e.get("issue") == 963] == []
+    assert "963" not in " ".join(e["reason"] for e in entries)
+    assert [e for e in entries if e["operation"] == POST_STRAT] == []
+
+
+def test_deprecated_operations_stay_fuzzed():
+    """Only the post-stratification route is excluded for being deprecated.
+    Every other deprecated operation (the live wizard routes) is still
+    selected in the superuser and viewer passes."""
+    assert FULL_SNAPSHOT.is_file(), "the full API snapshot is missing"
+    document = json.loads(FULL_SNAPSHOT.read_text())
+    deprecated = {
+        f"{method.upper()} {path}"
+        for path, item in document["paths"].items()
+        for method, op in item.items()
+        if isinstance(op, dict) and op.get("deprecated") is True
+    }
+    assert POST_STRAT in deprecated, "the excluded route is no longer deprecated"
+    others = deprecated - {POST_STRAT}
+    assert others, "no other deprecated operation to protect"
+    operations = fuzz_check.load_operations(document)
+    excluded = fuzz_check.load_exclusions(fuzz_check.EXCLUSIONS, operations)
+    for pass_name in ("superuser", "viewer"):
+        selected = fuzz_check.selection(pass_name, operations, excluded)
+        assert POST_STRAT not in selected, pass_name
+        assert [(o, pass_name) for o in sorted(others) if o not in selected] == []
+
+
+def test_the_fuzz_commands_do_not_exclude_deprecated():
+    """No fuzz command skips deprecated operations as a class: the one
+    deprecated route that is excluded is excluded by name."""
+    texts = {
+        "_platform.yml": _arm(),
+        "fuzz_local.sh": _local(),
+        "fuzz.yml": (WORKFLOWS / "fuzz.yml").read_text(),
+        "Makefile": (REPO_ROOT / "Makefile").read_text(),
+    }
+    for name, text in texts.items():
+        assert "exclude-deprecated" not in text, name
+
+
 def test_the_sdk_prefixes_are_the_rate_limiters():
     from backend.app.middleware.rate_limiter import SDK_PATH_PREFIXES
 
     assert fuzz_check.SDK_PATH_PREFIXES == tuple(SDK_PATH_PREFIXES)
+
+
+@pytest.mark.regression
+def test_no_known_entry_cites_1001():
+    """#1001 is fixed: a skip, offset or page past the largest offset the
+    database takes answers 422, not 500, on every list route. An entry still
+    citing it would be a stale waiver."""
+    import tomllib
+
+    data = tomllib.loads(fuzz_check.KNOWN_5XX.read_text(encoding="utf-8"))
+    citing = [e for e in data.get("known", []) if e.get("issue") == 1001]
+    assert citing == []
+    assert "offset range" not in " ".join(e["reason"] for e in data.get("known", []))
 
 
 def test_the_sdk_regex_selects_what_the_evaluation_selects(full_operations):

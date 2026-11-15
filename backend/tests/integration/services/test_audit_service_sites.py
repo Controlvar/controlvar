@@ -42,7 +42,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-from moto import mock_cognitoidp
+from moto import mock_aws
 from sqlalchemy import text, update
 from sqlalchemy.orm import sessionmaker
 
@@ -796,7 +796,7 @@ def cognito(monkeypatch, db_session):
     app.dependency_overrides[deps.get_db] = override_get_db
     app.dependency_overrides[session_get_db] = override_get_db
     try:
-        with mock_cognitoidp():
+        with mock_aws():
             monkeypatch.setattr(
                 deps.auth_service, "get_user_with_groups", lambda token: answer["value"]
             )
@@ -949,14 +949,17 @@ def test_a_refused_entry_still_applies_the_role_change(
 # --- system actors --------------------------------------------------------------
 
 
-def test_the_reserved_actors_are_exactly_five():
-    # The fifth, system:sso-sync, is written by the modules' SSO sign-in.
+def test_the_reserved_actors_are_exactly_six():
+    # The fifth, system:sso-sync, is written by the modules' SSO sign-in; the
+    # sixth, system:operator-cli, by `python -m backend.app.db.two_factor_reset`
+    # (#1812).
     assert SYSTEM_ACTOR_EMAILS == {
         EXPERIMENT_SCHEDULER,
         ROLLOUT_SCHEDULER,
         SAFETY_MONITOR,
         COGNITO_SYNC,
         "system:sso-sync",
+        "system:operator-cli",
     }
 
 

@@ -1,4 +1,5 @@
 import {
+  BalancedGroupsResponse,
   CorrectionMethod,
   ExperimentResultsResponse,
   DailyResultsResponse,
@@ -6,7 +7,7 @@ import {
   SampleSizeResult,
 } from '@/types/results';
 import { SequentialTestingResponse } from '@/types/sequential';
-import { LONG_REQUEST_TIMEOUT_MS, apiFetch } from '@/services/api';
+import { LONG_REQUEST_TIMEOUT_MS, apiDownload, apiFetch, type ApiDownload } from '@/services/api';
 
 // Every results call waits LONG_REQUEST_TIMEOUT_MS: computing results on a
 // large experiment can take longer than the default, and each is a read or
@@ -67,12 +68,34 @@ export class ResultsService {
     });
   }
 
+  /**
+   * The results of an experiment that balances its split within groups, by
+   * the group each user was balanced in (beta, #448). The server uses the
+   * experiment's stored confidence level and correction; an experiment that
+   * does not balance answers 409.
+   */
+  static async getBalancedGroups(experimentId: string): Promise<BalancedGroupsResponse> {
+    return apiFetch<BalancedGroupsResponse>(`/api/v1/results/${experimentId}/balanced-groups`, {
+      timeoutMs: LONG_REQUEST_TIMEOUT_MS,
+    });
+  }
+
   static async getSequentialResults(
     experimentId: string
   ): Promise<SequentialTestingResponse> {
     return apiFetch<SequentialTestingResponse>(`/api/v1/results/${experimentId}/sequential`, {
       timeoutMs: LONG_REQUEST_TIMEOUT_MS,
     });
+  }
+
+  /**
+   * The experiment's variant rows as a CSV file (`GET
+   * /export/reports/experiments/{id}?format=csv`). `format` must be sent: with
+   * none the API answers JSON. One call is one request against the export
+   * limit, which every export path shares.
+   */
+  static async exportCsv(experimentId: string): Promise<ApiDownload> {
+    return apiDownload(`/api/v1/export/reports/experiments/${experimentId}`, { format: 'csv' });
   }
 
   static async invalidateCache(

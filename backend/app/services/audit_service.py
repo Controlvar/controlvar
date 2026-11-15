@@ -77,6 +77,8 @@ AUDIT_VALUE_FIELDS: Dict[EntityType, Tuple[str, ...]] = {
         "end_date",
         "correction_method",
         "confidence_level",
+        "sequential_testing_enabled",
+        "bayesian_enabled",
     ),
     EntityType.USER: ("username", "role", "is_active", "is_superuser"),
     EntityType.API_KEY: ("name", "scopes", "expires_at", "user_id"),
@@ -96,7 +98,10 @@ AUDIT_VALUE_FIELDS: Dict[EntityType, Tuple[str, ...]] = {
 #: ``off_value`` are user-authored content of up to 8 KiB, like its rules: a
 #: value recorded beside them could push the whole entry over
 #: ``AUDIT_VALUE_MAX`` and lose the ``rollout_percentage`` change with it
-#: (Plan F ruling 3).
+#: (Plan F ruling 3). An experiment's three analysis configurations (CUPED,
+#: sequential testing, Bayesian) are JSON objects and are named the same way;
+#: the two switches that turn sequential and Bayesian analysis on are values
+#: (#848).
 AUDIT_NAME_ONLY_FIELDS: Dict[EntityType, Tuple[str, ...]] = {
     EntityType.FEATURE_FLAG: (
         "description",
@@ -105,13 +110,71 @@ AUDIT_NAME_ONLY_FIELDS: Dict[EntityType, Tuple[str, ...]] = {
         "on_value",
         "off_value",
     ),
-    EntityType.EXPERIMENT: ("description", "hypothesis", "targeting_rules", "metrics"),
+    # visual_config (#1545): a visual experiment's pages and goals, named
+    # only; its contents (URLs, selectors) are never stored in an entry.
+    EntityType.EXPERIMENT: (
+        "description",
+        "hypothesis",
+        "targeting_rules",
+        "variance_reduction_config",
+        "sequential_testing_config",
+        "bayesian_config",
+        "visual_config",
+    ),
     EntityType.USER: ("email",),
     EntityType.API_KEY: (),
     EntityType.HOLDOUT: ("description",),
     EntityType.MUTUAL_EXCLUSION_GROUP: ("description",),
     EntityType.SEGMENT: ("description", "rules"),
 }
+
+#: Child rows an update records by name only, like ``AUDIT_NAME_ONLY_FIELDS``:
+#: ``{name in changed_fields: (relationship, columns compared)}``. An
+#: experiment's variants and metrics are rows of their own (the JSONB
+#: ``experiments.metrics`` column is never written), and every design save
+#: deletes and re-creates them, so they are compared by these columns only,
+#: never by id or timestamp, and in no particular order (#1782). A variant's
+#: page changes are named apart, as ``visual_changes`` (#1545): renaming a
+#: variant that has page changes names both.
+#: ``test_audit_values.py`` classifies every column of the two tables.
+AUDIT_NAME_ONLY_ROWS: Dict[EntityType, Dict[str, Tuple[str, Tuple[str, ...]]]] = {
+    EntityType.EXPERIMENT: {
+        "variants": (
+            "variants",
+            (
+                "name",
+                "description",
+                "is_control",
+                "traffic_allocation",
+                "configuration",
+            ),
+        ),
+        # Only the variants that have page changes: renaming one without them,
+        # or any variant of an experiment that is not visual, names only
+        # ``variants`` (AUDIT_ROWS_WITH_LAST_COLUMN_SET).
+        "visual_changes": ("variants", ("name", "visual_changes")),
+        "metrics": (
+            "metric_definitions",
+            (
+                "name",
+                "description",
+                "event_name",
+                "metric_type",
+                "is_primary",
+                "aggregation_method",
+                "minimum_sample_size",
+                "expected_effect",
+                "event_value_path",
+                "lower_is_better",
+            ),
+        ),
+    },
+}
+
+#: Members of ``AUDIT_NAME_ONLY_ROWS`` that compare only the rows whose last
+#: listed column is set (#1545): a variant without page changes is not part of
+#: ``visual_changes``.
+AUDIT_ROWS_WITH_LAST_COLUMN_SET = frozenset({"visual_changes"})
 
 #: Every ``action_type`` something in this profile writes. The inventories in
 #: ``backend/tests/smoke/test_audit_inventory.py`` (routes and non-route
@@ -133,11 +196,18 @@ WRITTEN_ACTION_TYPES: frozenset = frozenset(
         ActionType.EXPERIMENT_START,
         ActionType.EXPERIMENT_PAUSE,
         ActionType.EXPERIMENT_COMPLETE,
+        ActionType.EXPERIMENT_PREVIEW_LINK_CREATE,
+        ActionType.EXPERIMENT_PREVIEW_LINKS_REVOKE,
         ActionType.USER_CREATE,
         ActionType.USER_DELETE,
         ActionType.USER_LOGIN,
         ActionType.USER_ACTIVATE,
         ActionType.USER_DEACTIVATE,
+        ActionType.USER_2FA_ENABLE,
+        ActionType.USER_2FA_DISABLE,
+        ActionType.USER_2FA_RESET,
+        ActionType.USER_2FA_RECOVERY_USED,
+        ActionType.USER_2FA_RECOVERY_REGENERATE,
         ActionType.ROLE_ASSIGN,
         ActionType.API_KEY_CREATE,
         ActionType.API_KEY_REVOKE,
@@ -204,6 +274,9 @@ SYSTEM_COGNITO_SYNC = AuditActor(id=None, email="system:cognito-sync")
 #: Written by the modules; reserved here so that every profile reads it the
 #: same way.
 SYSTEM_SSO_SYNC = AuditActor(id=None, email="system:sso-sync")
+#: An operator's command run where the database is reachable, such as
+#: ``python -m backend.app.db.two_factor_reset`` (#1812): nobody is signed in.
+SYSTEM_OPERATOR_CLI = AuditActor(id=None, email="system:operator-cli")
 
 #: The reserved ``user_email`` values of the system actors.
 SYSTEM_ACTOR_EMAILS: frozenset = frozenset(
@@ -214,6 +287,7 @@ SYSTEM_ACTOR_EMAILS: frozenset = frozenset(
         SYSTEM_SAFETY_MONITOR,
         SYSTEM_COGNITO_SYNC,
         SYSTEM_SSO_SYNC,
+        SYSTEM_OPERATOR_CLI,
     )
 )
 
@@ -252,10 +326,25 @@ def _fingerprint(value: Any) -> str:
     return json.dumps(value, default=str, sort_keys=True)
 
 
+def _rows_fingerprint(rows: Any, columns: Tuple[str, ...]) -> str:
+    """Comparable text for child rows recorded by name only (never stored):
+    each row's listed columns as sorted JSON, the rows sorted, so a save that
+    re-creates the same rows in another order compares equal."""
+    if rows is None:
+        return _fingerprint(None)
+    return _fingerprint(
+        sorted(
+            _fingerprint({column: _plain(_read(row, column)) for column in columns})
+            for row in rows
+        )
+    )
+
+
 def audit_snapshot(entity_type: EntityType, source: Any) -> Dict[str, Any]:
     """The allow-listed fields of ``source`` (an ORM row or a dict), now.
 
-    Value fields are kept as values; name-only fields are kept as a
+    Value fields are kept as values; name-only fields and name-only rows
+    (``AUDIT_NAME_ONLY_ROWS``, read through the relationship) are kept as a
     fingerprint, so a later ``audit_changes`` can tell that they changed.
     Take it before the change, while the row still holds the old values.
     """
@@ -264,6 +353,13 @@ def audit_snapshot(entity_type: EntityType, source: Any) -> Dict[str, Any]:
     }
     for field in AUDIT_NAME_ONLY_FIELDS[entity_type]:
         snap["#" + field] = _fingerprint(_read(source, field))
+    for field, (relationship, columns) in AUDIT_NAME_ONLY_ROWS.get(
+        entity_type, {}
+    ).items():
+        rows = _read(source, relationship)
+        if field in AUDIT_ROWS_WITH_LAST_COLUMN_SET and rows is not None:
+            rows = [row for row in rows if _read(row, columns[-1]) is not None]
+        snap["#" + field] = _rows_fingerprint(rows, columns)
     return snap
 
 
@@ -963,6 +1059,11 @@ def record_experiment_change(
     try:
         experiment_id = UUID(str(experiment_id))
         row = db.query(Experiment).filter(Experiment.id == experiment_id).first()
+        if row is not None:
+            # A session that does not expire on commit still holds the rows
+            # it loaded for ``before``; a design save has replaced them.
+            members = AUDIT_NAME_ONLY_ROWS[EntityType.EXPERIMENT].values()
+            db.expire(row, [relationship for relationship, _ in members])
         after = audit_snapshot(EntityType.EXPERIMENT, row) if row is not None else {}
         if before is None:
             old_value, new_value = None, audit_identity(after)

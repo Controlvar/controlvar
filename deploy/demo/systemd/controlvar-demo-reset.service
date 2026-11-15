@@ -1,0 +1,11 @@
+# The nightly rebuild (deploy/demo/reset.sh). provision.sh installs it.
+[Unit]
+Description=Controlvar demo: rebuild from nothing, then probe
+Wants=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/controlvar-demo/box.env
+ExecStart=/opt/controlvar-demo/recipe/deploy/demo/reset.sh
+TimeoutStartSec=1800

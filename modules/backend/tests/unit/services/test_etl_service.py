@@ -2,7 +2,7 @@
 Unit tests for ETLService (P3-A TDD).
 
 All AWS interactions are mocked via moto so tests run without real credentials.
-Uses moto 4.2.2 decorator-style mocking for Glue.
+Uses moto's decorator-style mocking (``mock_aws``) for Glue.
 
 Coverage:
 - run_etl_job: maps boto3 Glue response to ETLJobResponse
@@ -19,7 +19,7 @@ from unittest.mock import MagicMock, patch
 
 import boto3
 import pytest
-from moto import mock_glue
+from moto import mock_aws
 
 from modules.backend.app.schemas.etl import (
     ETLJobRequest,
@@ -78,7 +78,7 @@ def mock_settings(monkeypatch):
 
 
 class TestRunETLJob:
-    @mock_glue
+    @mock_aws
     def test_run_events_to_parquet_job(self, mock_settings):
         """run_etl_job for EVENTS_TO_PARQUET starts the correct Glue job."""
         from modules.backend.app.services.etl_service import ETLService
@@ -101,7 +101,7 @@ class TestRunETLJob:
         assert resp.status in {GlueJobStatus.STARTING, GlueJobStatus.RUNNING}
         assert resp.job_run_id  # non-empty string
 
-    @mock_glue
+    @mock_aws
     def test_run_metrics_aggregation_job(self, mock_settings):
         """run_etl_job for METRICS_AGGREGATION uses the metrics job name."""
         from modules.backend.app.services.etl_service import ETLService
@@ -119,7 +119,7 @@ class TestRunETLJob:
 
         assert resp.job_name == GLUE_METRICS_JOB_NAME
 
-    @mock_glue
+    @mock_aws
     def test_run_etl_job_with_experiment_id(self, mock_settings):
         """run_etl_job passes experiment_id as a Glue job argument."""
         from modules.backend.app.services.etl_service import ETLService
@@ -142,7 +142,7 @@ class TestRunETLJob:
         assert isinstance(resp, ETLJobResponse)
         assert resp.job_run_id
 
-    @mock_glue
+    @mock_aws
     def test_run_etl_job_with_force_reprocess(self, mock_settings):
         """run_etl_job with force_reprocess=True still starts the job."""
         from modules.backend.app.services.etl_service import ETLService
@@ -164,7 +164,7 @@ class TestRunETLJob:
 
         assert isinstance(resp, ETLJobResponse)
 
-    @mock_glue
+    @mock_aws
     def test_run_daily_summary_uses_etl_job(self, mock_settings):
         """DAILY_SUMMARY job type uses the ETL job name."""
         from modules.backend.app.services.etl_service import ETLService
@@ -190,7 +190,7 @@ class TestRunETLJob:
 
 
 class TestGetJobStatus:
-    @mock_glue
+    @mock_aws
     def test_get_job_status_running(self, mock_settings):
         """get_job_status returns the correct status for a job run."""
         from modules.backend.app.services.etl_service import ETLService
@@ -212,7 +212,7 @@ class TestGetJobStatus:
         assert resp.job_name == GLUE_ETL_JOB_NAME
         assert resp.status in set(GlueJobStatus)
 
-    @mock_glue
+    @mock_aws
     def test_get_job_status_maps_job_type(self, mock_settings):
         """get_job_status includes job_type derived from job_name."""
         from modules.backend.app.services.etl_service import ETLService
@@ -242,7 +242,7 @@ class TestGetJobStatus:
 
 
 class TestAddPartitions:
-    @mock_glue
+    @mock_aws
     def test_add_partitions_creates_correct_values(self, mock_settings):
         """add_partitions creates 24 hourly partitions for a given date."""
         from modules.backend.app.services.etl_service import ETLService
@@ -294,7 +294,7 @@ class TestAddPartitions:
             assert p.partition_values["month"] == "01"
             assert p.partition_values["day"] == "15"
 
-    @mock_glue
+    @mock_aws
     def test_add_partitions_hour_values(self, mock_settings):
         """add_partitions creates partitions for all 24 hours (00-23)."""
         from modules.backend.app.services.etl_service import ETLService
@@ -337,7 +337,7 @@ class TestAddPartitions:
         expected_hours = {f"{h:02d}" for h in range(24)}
         assert hours == expected_hours
 
-    @mock_glue
+    @mock_aws
     def test_add_partitions_location_format(self, mock_settings):
         """add_partitions builds correct S3 partition locations."""
         from modules.backend.app.services.etl_service import ETLService
@@ -383,7 +383,7 @@ class TestAddPartitions:
             assert "day=15" in p.location
             assert "hour=" in p.location
 
-    @mock_glue
+    @mock_aws
     def test_re_running_a_date_answers_the_same_24_partitions(self, mock_settings):
         """Glue reports the second run's hours as already existing (in ``Errors``
         of a successful reply); that is success, and nothing is added twice."""
@@ -421,7 +421,7 @@ class TestAddPartitions:
 
 
 class TestRunCrawler:
-    @mock_glue
+    @mock_aws
     def test_run_crawler_returns_status(self, mock_settings):
         """run_crawler starts crawler and returns GlueCrawlerStatus."""
         from modules.backend.app.services.etl_service import ETLService
@@ -446,7 +446,7 @@ class TestRunCrawler:
         # After start_crawler, moto reports RUNNING
         assert status.state in {"RUNNING", "READY", "STOPPING"}
 
-    @mock_glue
+    @mock_aws
     def test_get_crawler_status_ready(self, mock_settings):
         """get_crawler_status returns READY state for a newly created crawler."""
         from modules.backend.app.services.etl_service import ETLService

@@ -7,7 +7,10 @@
  * out is deleted, and a field left out of an item is reset to its default,
  * with a 200 (`minimum_sample_size` to 100, `expected_effect` to null, ...).
  * So the gates here are on the exact body: every item, every time (QA #5),
- * and every field, held to the OpenAPI snapshot's own schema (QA #6).
+ * and every field, held to the OpenAPI snapshot's own schema (QA #6). The one
+ * exception is `visual_changes` (#1545): a variant sent without it keeps the
+ * page changes stored for the variant of the same name, so the dashboard never
+ * sends it, and a copy read with the page cannot overwrite a later save.
  *
  * Every case renders the page module itself, with `apiFetch` mocked and a
  * RESOLVED user (a null user is offered everything, so a role case rendered
@@ -449,17 +452,29 @@ describe('the body', () => {
       ) as { components: { schemas: Record<string, { properties: Record<string, unknown> }> } };
       return Object.keys(doc.components.schemas[schema].properties).sort();
     };
+    // Left out on purpose: the server keeps a variant's stored page changes
+    // when the key is absent (#1545), so sending a copy read with the page
+    // would overwrite changes saved since.
+    const sentVariantFields = (file: string) =>
+      properties(file, 'VariantBase').filter((k) => k !== 'visual_changes');
+    // The page read them, as the API's GET returns them; they still stay out.
+    const withPageChanges = experiment({
+      variants: FULL.variants.map((v, i) =>
+        i === 1 ? { ...v, visual_changes: { version: 1, changes: [{ op: 'hide', selector: '#banner' }] } } : v,
+      ),
+    });
 
     it.each(['openapi-v1.full.json', 'openapi-v1.stable.json'])(
       'each item carries exactly the %s VariantBase and MetricBase properties, as stored',
       async (file) => {
-        await openDesign();
+        await openDesign(withPageChanges);
         type('variant-allocation-1', '32');
         type('variant-allocation-2', '34');
         save();
         await screen.findByTestId('design-saved');
         const body = putBody();
-        for (const v of body.variants) expect(Object.keys(v).sort()).toEqual(properties(file, 'VariantBase'));
+        for (const v of body.variants) expect(v).not.toHaveProperty('visual_changes');
+        for (const v of body.variants) expect(Object.keys(v).sort()).toEqual(sentVariantFields(file));
         for (const m of body.metrics) expect(Object.keys(m).sort()).toEqual(properties(file, 'MetricBase'));
         expect(body.variants).toEqual(
           FULL.variants.map((v, i) =>

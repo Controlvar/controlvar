@@ -42,6 +42,17 @@ export interface ExperimentMetric {
   updated_at?: string;
 }
 
+/**
+ * What an experiment balances its split within (beta): an attribute of the
+ * assign `context` with the values to keep apart (`values` is left out for a
+ * closed `web_*` key), or saved segments by id, in the order listed.
+ */
+export interface BalanceWithin {
+  attribute?: string;
+  values?: string[];
+  segments?: string[];
+}
+
 /** `ExperimentResponse` */
 export interface Experiment {
   id: string;
@@ -83,6 +94,11 @@ export interface Experiment {
   correction_method?: CorrectionMethod;
   /** Whether results also carry a Bayesian analysis of the primary metric (#216). */
   bayesian_enabled?: boolean;
+  /**
+   * Null when the experiment balances nothing. Absent when the server is older
+   * than the feature and does not answer the field at all.
+   */
+  balance_within?: BalanceWithin | null;
 }
 
 /** `VariantBase` (create payload) */
@@ -147,6 +163,26 @@ export interface DesignMetric {
 export interface ExperimentDesignUpdate {
   variants: DesignVariant[];
   metrics: DesignMetric[];
+  /**
+   * Sent only when the form changed it (null turns balancing off), so a save
+   * that does not touch it leaves the stored setting and its server-side state
+   * alone.
+   */
+  balance_within?: BalanceWithin | null;
+}
+
+/**
+ * `BayesianConfig` as the new-experiment form sends it (#442): its four numbers
+ * and `prior_family`, which the form always sends as "beta" (T337), never
+ * `rope`. The API refuses alpha, beta or loss_threshold <= 0 and a
+ * credible_level outside (0, 1).
+ */
+export interface BayesianConfigInput {
+  prior_family: 'beta' | 'normal' | 'gamma';
+  alpha: number;
+  beta: number;
+  loss_threshold: number;
+  credible_level: number;
 }
 
 /** `ExperimentCreate` */
@@ -166,13 +202,17 @@ export interface CreateExperimentRequest {
   confidence_level?: number;
   /** The API's default is `benjamini_hochberg`. */
   correction_method?: CorrectionMethod;
-  /** Sent only when true; the API then stores its default Bayesian settings. */
+  /** Sent only when true; with no `bayesian_config` the API then stores its default Bayesian settings. */
   bayesian_enabled?: boolean;
+  /** Sent only with `bayesian_enabled`, and only when a field differs from the API's default. */
+  bayesian_config?: BayesianConfigInput;
   /**
    * Sent only when true, and never with a `sequential_testing_config`: the
    * sequential analysis then uses the API's defaults (beta).
    */
   sequential_testing_enabled?: boolean;
+  /** Sent only when balancing is on. */
+  balance_within?: BalanceWithin;
 }
 
 /** `ExperimentListResponse` (offset pagination: `skip`/`limit`). */

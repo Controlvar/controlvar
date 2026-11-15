@@ -416,9 +416,12 @@ and leaves the flag archived. A request that turns it off (`"is_active": false`,
 archived flag is already off. The way back is
 `POST /api/v1/feature-flags/$FLAG_ID/unarchive` (beta), which makes the flag
 inactive; turn it on afterwards as usual. A flag is archived with
-`POST /api/v1/feature-flags/bulk-toggle` and `"action": "archive"`. The dashboard has no
-archive or unarchive action yet. It shows an archived flag as **Archived**, with no on/off
-switch and a link to this section, and the flag list has an **Archived** filter.
+`POST /api/v1/feature-flags/bulk-toggle` and `"action": "archive"`. In the dashboard, anyone
+with permission to change feature flags (the ADMIN and DEVELOPER roles have it) archives a
+flag with **Archive** on its page, which asks you to confirm, and brings it back with
+**Unarchive** there. An archived flag reads **Archived**, with no on/off switch on either
+page: in its place each page says to unarchive it first, and the flag's page links to this
+section. The flag list has an **Archived** filter.
 [Stale Flags](stale-flags.md) lists the flags that look ready to archive.
 
 ### Deleting a flag
@@ -435,10 +438,14 @@ While any code may still ask for the flag, archive it instead. After a delete:
   [iOS](../sdk/ios.md), [Android](../sdk/android.md), [Flutter](../sdk/flutter.md),
   [Edge](../sdk/edge.md)).
 - A client keeps an answer it cached until the cache expires, 5 minutes by default.
+- Its rollout schedules and their stages, its safety configuration and its rollback
+  records are deleted with it.
 - Its events are kept, with `feature_flag_id` null.
 - The audit log records the delete as `feature_flag_delete`.
 - Only a role that may delete flags can do it (ADMIN, DEVELOPER, or in the full
   profile a custom role with `feature_flag (delete)`); anyone else gets `403`.
+
+In the dashboard, Delete on the flag's page asks you to type its key first.
 
 ### Create an API key
 

@@ -26,13 +26,32 @@ export interface RolloutStageCreateRequest {
   start_date?: string;
 }
 
-/** `POST /api/v1/rollout-schedules/`. The schedule's own dates are not sent. */
+/**
+ * `POST /api/v1/rollout-schedules/`. The schedule's own dates are UTC with a
+ * `Z` (`YYYY-MM-DDTHH:MM:SSZ`); each is sent only when the person filled it,
+ * and `min_stage_duration` (whole hours, 0 to 8760) likewise.
+ */
 export interface RolloutScheduleCreateRequest {
   name: string;
   description?: string;
   feature_flag_id: string;
+  start_date?: string;
+  end_date?: string;
   max_percentage: number;
+  min_stage_duration?: number;
   stages: RolloutStageCreateRequest[];
+}
+
+/**
+ * `PUT /api/v1/rollout-schedules/{schedule_id}`: only the changed settings. A
+ * date or the minimum is null to clear it. Never `stages` (the API refuses it)
+ * and never `status`.
+ */
+export interface RolloutScheduleUpdateRequest {
+  start_date?: string | null;
+  end_date?: string | null;
+  max_percentage?: number;
+  min_stage_duration?: number | null;
 }
 
 /** `PUT /api/v1/rollout-schedules/stages/{stage_id}`: only the changed fields. */
@@ -49,6 +68,10 @@ const BASE = '/api/v1/rollout-schedules';
 export const RolloutSchedulesService = {
   async create(data: RolloutScheduleCreateRequest): Promise<RolloutSchedule> {
     return apiFetch<RolloutSchedule>(`${BASE}/`, { method: 'POST', json: data });
+  },
+
+  async update(scheduleId: string, data: RolloutScheduleUpdateRequest): Promise<RolloutSchedule> {
+    return apiFetch<RolloutSchedule>(`${BASE}/${scheduleId}`, { method: 'PUT', json: data });
   },
 
   async addStage(scheduleId: string, data: RolloutStageCreateRequest): Promise<RolloutStage> {

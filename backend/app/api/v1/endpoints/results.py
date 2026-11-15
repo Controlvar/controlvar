@@ -22,11 +22,13 @@ from backend.app.api.deps import (
 )
 from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.analysis_status import analysis_notice, analysis_status
+from backend.app.core.balanced_blocks import UNKNOWN, balance_setting
 from backend.app.core.logger import unexpected_failure
 from backend.app.core.stats_engine import ENGINE_VERSION
 from backend.app.models.analysis_snapshot import AnalysisKind
 from backend.app.models.experiment import Experiment, Metric, MetricType
 from backend.app.models.user import User
+from backend.app.schemas.balanced_groups import BalancedGroupsResponse
 from backend.app.schemas.bayesian import BayesianResultsResponse
 from backend.app.schemas.dimensional import (
     DimensionalBreakdownResponse,
@@ -53,6 +55,15 @@ from backend.app.schemas.variance_reduction import (
 from backend.app.services.analysis_service import AnalysisService
 from backend.app.services.analysis_settings import resolve_analysis_settings
 from backend.app.services.analysis_snapshot_service import record_snapshot
+from backend.app.services.balanced_groups_estimate import (
+    Arm,
+    GroupCounts,
+    overall_estimate,
+)
+from backend.app.services.balanced_groups_results import (
+    stored_strata,
+    users_outside_blocks,
+)
 from backend.app.services.cache import CacheService
 from backend.app.services.dimensional_analysis_service import DimensionalAnalysisService
 from backend.app.services.event_matching import (
@@ -67,7 +78,11 @@ from backend.app.services.power_calculator_service import (
     compute_power,
     sample_size_two_proportions,
 )
-from backend.app.services.segment_breakdown import NUL_IN_DIMENSION, segment_rows
+from backend.app.services.segment_breakdown import (
+    NUL_IN_DIMENSION,
+    ValueSource,
+    segment_rows,
+)
 from backend.app.services.sequential_testing_service import SequentialTestingService
 from backend.app.services.sufficient_stats_analysis import (
     SufficientStatsNotComputed,
@@ -184,7 +199,8 @@ def _compute_dimensional_breakdown(
     experiment_id: UUID,
     dimension: str,
     db,
-    base_alpha: float = 0.05,
+    base_alpha: float,
+    value_source: Optional[ValueSource] = None,
 ) -> DimensionalBreakdownResponse:
     """
     The per-segment breakdown of an experiment's results by ``dimension``.
@@ -193,6 +209,16 @@ def _compute_dimensional_breakdown(
     user in exactly one segment, with the converting users of the metric the
     response lists first, so per variant the rows add up to that metric's
     headline.  DimensionalAnalysisService computes the statistics.
+
+    ``base_alpha`` is 1 minus the confidence level the results are computed
+    at, and has no default.  Each segment is tested at ``base_alpha`` divided
+    by the number of segments (Bonferroni); the heterogeneity test across the
+    segments (``detect_hte``) at ``base_alpha`` itself.
+
+    ``value_source`` is passed to ``segment_rows`` when given: the
+    balanced-groups route passes ``stored_strata``.  ``/results`` passes
+    none, so its breakdown reads each user's value as ``segment_rows``
+    describes.
 
     A failure to read or compute the breakdown raises: the route answers it
     as an error, never with a partial breakdown.
@@ -222,7 +248,13 @@ def _compute_dimensional_breakdown(
     metrics = AnalysisService._ordered_metrics(experiment) if experiment else []
     event_name = metrics[0].event_name if metrics else None
 
-    for row in segment_rows(db, experiment_id, dimension, [event_name]):
+    if value_source is None:
+        rows = segment_rows(db, experiment_id, dimension, [event_name])
+    else:
+        rows = segment_rows(
+            db, experiment_id, dimension, [event_name], value_source=value_source
+        )
+    for row in rows:
         # Every variant is listed, with zero counts where it has no users.
         variant_map: Dict[str, Any] = {
             vid: {
@@ -248,7 +280,7 @@ def _compute_dimensional_breakdown(
     segment_results = dim_service.compute_segment_results(
         segments=segments, base_alpha=base_alpha
     )
-    has_hte = dim_service.detect_hte(segment_results)
+    has_hte = dim_service.detect_hte(segment_results, alpha=base_alpha)
     adjusted_alpha = (
         dim_service.get_adjusted_alpha(base_alpha, len(segments))
         if segments
@@ -257,9 +289,10 @@ def _compute_dimensional_breakdown(
 
     hte_warning = (
         (
-            f"Heterogeneous treatment effects detected across '{dimension}' segments. "
-            "Results may differ significantly between groups — "
-            "investigate per-segment effects before shipping."
+            "The first treatment's difference from the control varies between "
+            f"'{dimension}' segments by more than chance usually produces. "
+            "Treat this as a lead to confirm with a follow-up experiment, "
+            "not as a result."
         )
         if has_hte
         else None
@@ -312,6 +345,7 @@ def get_experiment_results(
         default=None,
         ge=0.80,
         le=0.99,
+        allow_inf_nan=False,
         description=(
             "Confidence level for this request. Omit it to use the "
             "experiment's stored confidence_level (0.95 unless set otherwise)."
@@ -767,6 +801,7 @@ def get_sample_size_status(
         default=None,
         gt=0.0,
         lt=1.0,
+        allow_inf_nan=False,
         description=(
             "Baseline conversion rate to plan from. Omit it to use the rate "
             "observed in the control variant on the primary metric so far."
@@ -776,6 +811,7 @@ def get_sample_size_status(
         default=None,
         gt=0.0,
         lt=1.0,
+        allow_inf_nan=False,
         description=(
             "Minimum detectable effect, relative to the baseline: 0.05 means "
             "12% -> 12.6%. Omit it to use the effect saved with the experiment "
@@ -787,6 +823,7 @@ def get_sample_size_status(
         default=None,
         ge=0.80,
         le=0.99,
+        allow_inf_nan=False,
         description=(
             "Confidence level of the two-sided test. Omit it to use the "
             "experiment's stored confidence_level."
@@ -796,6 +833,7 @@ def get_sample_size_status(
         default=0.80,
         ge=0.50,
         le=0.99,
+        allow_inf_nan=False,
         description="Target power. Default 0.80.",
     ),
     correction_method: Optional[str] = Query(
@@ -1288,6 +1326,7 @@ def get_sequential_results(
         default=None,
         gt=0.0,
         le=SEQUENTIAL_ALPHA_MAX,
+        allow_inf_nan=False,
         description=(
             "Significance level for this request, above 0 and at most 0.2. "
             "Overrides the experiment's stored sequential_testing_config.alpha "
@@ -1712,3 +1751,136 @@ def get_bayesian_results(
         )
 
     return response
+
+
+# ---------------------------------------------------------------------------
+# Endpoint 8 — GET /{experiment_id}/balanced-groups (#448)
+# ---------------------------------------------------------------------------
+
+#: The 409 an experiment that does not balance within groups answers.
+NOT_BALANCED = (
+    "This experiment does not balance its split within groups, so it has no "
+    "balanced groups. For its results by an attribute, add "
+    "?breakdown=<attribute> to its results."
+)
+BALANCED_GROUPS_FAILURE = "Could not compute the experiment's balanced groups"
+
+
+def _balanced_groups(
+    experiment: Experiment, setting: Dict[str, Any], db: Session
+) -> BalancedGroupsResponse:
+    """The balanced-groups response of an experiment that balances within groups.
+
+    The rows are ``_compute_dimensional_breakdown``'s, with ``stored_strata``
+    as the value source; the overall estimate is computed from those rows'
+    counts, so it counts the same users in the same groups.
+    """
+    from backend.app.models.experiment import Variant
+
+    settings = resolve_analysis_settings(experiment)
+    stored: Dict[str, str] = {}
+
+    def stored_groups(session: Session, experiment_id: Any, dimension: str):
+        # The source segment_rows calls; the groups it read also give
+        # unknown_share, so both come from one statement.
+        stored.update(stored_strata(session, experiment_id, dimension))
+        return stored
+
+    groups = _compute_dimensional_breakdown(
+        experiment_id=experiment.id,
+        dimension=str(setting.get("attribute") or "group"),
+        db=db,
+        base_alpha=1.0 - settings.confidence_level,
+        value_source=stored_groups,
+    )
+    arms = [
+        Arm(str(v.id), v.name, bool(v.is_control))
+        for v in sorted(
+            db.query(Variant).filter(Variant.experiment_id == experiment.id),
+            key=lambda v: (not bool(v.is_control), v.name or "", str(v.id)),
+        )
+    ]
+    counts = [
+        GroupCounts(
+            segment.segment_value,
+            {
+                v.variant_id: (v.sample_size, v.conversions or 0)
+                for v in segment.variants
+            },
+        )
+        for segment in groups.segments
+    ]
+    metrics = AnalysisService._ordered_metrics(experiment)
+    estimate = overall_estimate(
+        counts,
+        arms,
+        confidence_level=settings.confidence_level,
+        correction_method=settings.correction_method,
+        is_proportion=not metrics or _metric_is_proportion(metrics[0]),
+        sequential_testing=bool(
+            getattr(experiment, "sequential_testing_enabled", False)
+        ),
+    )
+    in_unknown = sum(1 for group in stored.values() if group == UNKNOWN)
+    return BalancedGroupsResponse(
+        experiment_id=str(experiment.id),
+        confidence_level=settings.confidence_level,
+        correction_method=settings.correction_method,
+        groups=groups,
+        overall=estimate["overall"],
+        reason=estimate["reason"],
+        merged_groups=estimate["merged_groups"],
+        users_outside_blocks=users_outside_blocks(db, experiment.id),
+        unknown_share=in_unknown / len(stored) if stored else None,
+        engine_version=ENGINE_VERSION,
+    )
+
+
+@router.get(
+    "/{experiment_id}/balanced-groups",
+    response_model=BalancedGroupsResponse,
+    summary="Beta: results by the group each user was balanced in",
+    responses={409: {"description": NOT_BALANCED}},
+    openapi_extra={"x-stability": "beta"},
+)
+def get_balanced_groups(
+    experiment_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> BalancedGroupsResponse:
+    """
+    The results of an experiment that balances its split within groups (#448).
+
+    ``groups`` has one row per group, each user in the group stored when they
+    were assigned: the rows of a breakdown (the 20 groups with the most
+    users, then ``other`` and ``unknown``), with each row's p-value and its
+    Bonferroni threshold. Per variant the rows add up to every user
+    assigned. ``overall`` gives, for the primary metric, one estimate per
+    treatment over every group: each group's difference from the control
+    weighted by the group's share of the users, at the experiment's
+    ``confidence_level``, corrected across the treatments with its
+    ``correction_method``. It is null, with ``reason``, for a primary metric
+    that is not a conversion, for an experiment with sequential testing, and
+    when no treatment has users or no group has 2 users in every variant that
+    has users. The experiment's results and their decision do not change.
+
+    An experiment that does not balance within groups answers 409. The
+    answer is computed on each request: it is not cached and no snapshot is
+    recorded.
+    """
+    experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
+    if experiment is None:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    setting = balance_setting(experiment)
+    if setting is None:
+        raise HTTPException(status_code=409, detail=NOT_BALANCED)
+    try:
+        return _balanced_groups(experiment, dict(setting), db)
+    except Exception as exc:
+        raise unexpected_failure(
+            exc,
+            "Balanced groups",
+            BALANCED_GROUPS_FAILURE,
+            db=db,
+            logger=logger,
+        )

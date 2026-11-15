@@ -21,7 +21,9 @@ rollback).
   and ``off_value`` in every other case (a rule or the rollout out, inactive,
   archived, ``reason: "error"``, a safety rollback to 0% and the users a
   partial rollback removes); ``config`` stays null. UX C5: the bulk route
-  stays ``{key: bool}``.
+  stays ``{key: bool}``. #1810 (C3): both evaluate routes answer with
+  ``evaluation_answer``, the builder value-vectors.json is generated with,
+  and the vectors' 404 body is the route's own.
 * PF-1: PostgreSQL refuses NaN, Infinity, NUL and a lone surrogate at INSERT;
   a stored value that decodes but breaks the rules is answered with no
   ``value``, and no route answers 500 for it.
@@ -45,6 +47,7 @@ from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import sessionmaker
 
 from backend.app.api import deps
+from backend.app.api.v1.endpoints import feature_flags
 from backend.app.api.v1.endpoints.feature_flags import _values_refused
 from backend.app.core.config import settings
 from backend.app.core.database_config import get_schema_name
@@ -65,6 +68,7 @@ from backend.app.services.feature_flag_service import (
     FeatureFlagService,
     FlagValuesRefused,
 )
+from backend.scripts import generate_value_vectors
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_db]
 
@@ -1047,6 +1051,68 @@ def test_a_safety_rollback_serves_the_off_value(
     assert _evaluate(client, api_key, lowered["key"], outside, PRO) == _served(
         lowered["key"], value_type, True, "targeting_rule", on
     )
+
+
+def test_both_evaluate_routes_answer_with_evaluation_answer(
+    client, developer, api_key, monkeypatch
+):
+    """#1810 (C3): the body of GET and POST ``/evaluate/{key}`` is what
+    ``evaluation_answer`` returns -- the builder value-vectors.json is
+    generated with -- given the flag and the service's evaluation. The
+    evaluation metric is recorded by the route, once per request, not by the
+    builder. The planted defect "the route builds the body inline again"
+    fails here."""
+    flag = _create(client, developer, "string", is_active=True, rollout_percentage=100)
+    key = flag["key"]
+    built, recorded = [], []
+
+    def fake_answer(flag_key, db_flag, evaluation):
+        built.append(
+            (flag_key, db_flag.key, evaluation["enabled"], evaluation["reason"])
+        )
+        return {"sentinel": "evaluation_answer"}
+
+    monkeypatch.setattr(feature_flags, "evaluation_answer", fake_answer)
+    monkeypatch.setattr(
+        feature_flags,
+        "record_flag_evaluation",
+        lambda flag_key, result: recorded.append((flag_key, result)),
+    )
+    assert _evaluate(client, api_key, key, "user-1") == {
+        "sentinel": "evaluation_answer"
+    }
+    posted = client.post(
+        f"{COLLECTION}/evaluate/{key}",
+        json={"user_id": "user-1"},
+        headers={"X-API-Key": api_key},
+    )
+    assert posted.status_code == 200, posted.text
+    assert posted.json() == {"sentinel": "evaluation_answer"}
+    assert built == [(key, key, True, "rollout")] * 2
+    assert recorded == [(key, "enabled")] * 2
+
+
+def test_the_value_vectors_404_is_what_the_route_answers_for_an_unknown_key(
+    client, api_key
+):
+    """#1810: the three 404 vectors of value-vectors.json are not built by
+    ``evaluation_answer``; their status and body are the route's own for an
+    unknown key."""
+    vectors = json.loads(generate_value_vectors.VECTORS_PATH.read_text("utf-8"))
+    unknown = [
+        v["response"] for v in vectors["served"] if v["response"]["status"] == 404
+    ]
+    assert len(unknown) == 3
+    response = client.get(
+        f"{COLLECTION}/evaluate/{generate_value_vectors.UNKNOWN_KEY}",
+        params={"user_id": generate_value_vectors.USER_ID},
+        headers={"X-API-Key": api_key},
+    )
+    for vector in unknown:
+        assert (response.status_code, response.json()) == (
+            vector["status"],
+            vector["body"],
+        )
 
 
 @pytest.mark.regression

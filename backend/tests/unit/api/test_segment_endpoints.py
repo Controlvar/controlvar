@@ -568,6 +568,12 @@ class TestPreviewAudienceSize:
             estimated_percentage=42.0,
             sample_size=1000,
             matched=420,
+            source="exposure_metadata",
+            window_days=30,
+            sampled_since="2026-11-06T09:00:00+00:00",
+            ended_by="sample_size",
+            users_without_context=0,
+            reason=None,
         )
 
         app.dependency_overrides[deps.get_current_active_user] = lambda: mock_user

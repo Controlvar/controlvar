@@ -79,6 +79,14 @@ REVENUE_RESULTS_FINGERPRINTS: Dict[str, str] = {
     "1.8.0": "ac54b3b114353fad31c73c95e0e8513c579edee92538696ac5ce1c8cc2640071",
     # 1.9.0 (#1776) changes the segment breakdown only: 1.8.0's.
     "1.9.0": "ac54b3b114353fad31c73c95e0e8513c579edee92538696ac5ce1c8cc2640071",
+    # 1.10.0 (#448) adds the balanced-groups estimate only: 1.9.0's.
+    "1.10.0": "ac54b3b114353fad31c73c95e0e8513c579edee92538696ac5ce1c8cc2640071",
+    # 1.11.0 changes the winner against a control with no conversions; this
+    # experiment has none: 1.10.0's.
+    "1.11.0": "ac54b3b114353fad31c73c95e0e8513c579edee92538696ac5ce1c8cc2640071",
+    # 1.12.0 (#1969) changes the segment breakdown's heterogeneity flag only:
+    # 1.11.0's.
+    "1.12.0": "ac54b3b114353fad31c73c95e0e8513c579edee92538696ac5ce1c8cc2640071",
 }
 
 

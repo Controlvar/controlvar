@@ -155,6 +155,10 @@ aliases in rules (`country` matches `user.country`), and nested dicts flatten to
 Attributes are assumed **stable per user**: evaluations and assignments are cached by user + key
 only, so call `clear_cache()` after changing a user's attributes.
 
+An experiment that [balances its split within groups](../guides/balance-within-groups.md) reads
+its attribute from the top level of `user_attributes` only: `{"tier": "gold"}`, not
+`{"user": {"tier": "gold"}}`.
+
 ### Caching and retries
 
 - Successful assignments and evaluations are cached per user + key for `cache_ttl_seconds`

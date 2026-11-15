@@ -26,6 +26,7 @@ export function connectors(enabled: Partial<Record<WarehouseType, boolean>> = {}
     { warehouse_type: 'bigquery', name: 'BigQuery', enabled: !!enabled.bigquery },
     { warehouse_type: 'snowflake', name: 'Snowflake', enabled: !!enabled.snowflake },
     { warehouse_type: 'athena', name: 'Amazon Athena', enabled: !!enabled.athena },
+    { warehouse_type: 'redshift', name: 'Amazon Redshift', enabled: !!enabled.redshift },
   ];
 }
 
@@ -62,6 +63,27 @@ export function snowflakeConnection(overrides: Partial<Connection> = {}): Connec
     warehouse_type: 'snowflake',
     parameters: { account: 'MYORG-MYACCOUNT', user: 'CONTROLVAR_SVC', role: 'CONTROLVAR_READER', warehouse: 'ANALYTICS_XS' },
     public_key_fingerprint: 'SHA256:abc123=',
+    max_bytes_per_query: null,
+    worst_case_bytes_per_day: null,
+    worst_case_seconds_per_day: 66000,
+    ...overrides,
+  });
+}
+
+/** A saved Amazon Redshift connection (provisioned), as the API returns it. */
+export function redshiftConnection(overrides: Partial<Connection> = {}): Connection {
+  return connection({
+    id: 'c-rs',
+    name: 'Redshift prod',
+    warehouse_type: 'redshift',
+    parameters: {
+      region: 'eu-west-1',
+      role_arn: 'arn:aws:iam::123456789012:role/controlvar-warehouse/controlvar-reader',
+      cluster_identifier: 'prod-cluster-1',
+      db_user: 'controlvar_reader',
+      database: 'dev',
+    },
+    external_id: 'exp-0123456789abcdef0123456789abcdef',
     max_bytes_per_query: null,
     worst_case_bytes_per_day: null,
     worst_case_seconds_per_day: 66000,

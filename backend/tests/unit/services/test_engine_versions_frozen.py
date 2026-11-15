@@ -118,6 +118,17 @@ FROZEN_DIGESTS: Dict[str, str] = {
     # 1.9.0 (#1776): 1.8.0's entries, except ENGINE_FINGERPRINTS, whose
     # dataset runs the segment breakdown (Fisher's exact test per segment).
     "1.9.0": "c358e3eb90dce1f4f767c4a9ce600ded5ccacb9fb33c1dc84ed17b626c65198b",
+    # 1.10.0 (#448): 1.9.0's entries, except ENGINE_FINGERPRINTS, whose
+    # dataset adds the balanced-groups estimate.
+    "1.10.0": "ec55320811f62c109954076e2d76e053cab9ef00c0563a46f7f2683c8bfa1195",
+    # 1.11.0: 1.10.0's entries, except where a pinned fixture has a
+    # significant treatment against a control with no conversions, which is
+    # now the winner: the characterisation's edges-* cases and the binomial
+    # fingerprint.
+    "1.11.0": "71c2e2348fd22c1b804a09939c9a2c90636d7caf14b5f7c75e650f979902eaa2",
+    # 1.12.0 (#1969): 1.11.0's entries, except ENGINE_FINGERPRINTS, whose
+    # dataset runs the breakdown's heterogeneity flag and adds the walk data.
+    "1.12.0": "a2f02f83762ab8c2dbb84320cf95a8c2c3e2a2701bcfabf514b0fae476ffbdf9",
 }
 
 
@@ -135,6 +146,9 @@ FROZEN_VERSIONS: Tuple[str, ...] = (
     "1.7.0",
     "1.8.0",
     "1.9.0",
+    "1.10.0",
+    "1.11.0",
+    "1.12.0",
 )
 
 

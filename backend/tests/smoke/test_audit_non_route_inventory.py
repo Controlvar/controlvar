@@ -8,10 +8,16 @@ that:
 * sets an experiment's ``status`` to an ``ExperimentStatus`` member;
 * sets ``rollout_percentage`` (a flag's rollout);
 * sets ``role``, ``is_superuser`` or ``is_active``;
-* constructs a ``User``.
+* constructs a ``User``;
+* writes an account's two-step sign-in (#1812): ``insert``, ``pg_insert``,
+  ``update`` or ``delete`` called with ``UserTOTP`` first, or a ``UserTOTP``
+  constructed. The table is written with statements, not by setting
+  attributes, so its sites are the statements.
 
 It finds them syntactically, so a site is any assignment to one of those
-attributes, whatever the object. A dynamic ``setattr`` is not seen.
+attributes, whatever the object. A dynamic ``setattr`` is not seen, nor is an
+ORM ``session.delete(row)`` or ``query(UserTOTP).delete()``, a statement on
+``UserTOTP.__table__`` rather than ``UserTOTP`` itself, or raw SQL.
 
 ``SITES`` names each one -- module, function, kind, and how many times the
 function does it -- and classifies it:
@@ -172,7 +178,91 @@ SITES: Dict[Tuple[str, str, str], Tuple[int, object]] = {
             "database is created, before anyone can sign in"
         ),
     ),
+    # --- two-step sign-in (#1812): every write to user_totp --------------------
+    (
+        "backend/app/services/two_factor_service.py",
+        "TwoFactorService.confirm",
+        "user_totp update",
+    ): (1, Audited(A.USER_2FA_ENABLE)),
+    (
+        "backend/app/services/two_factor_service.py",
+        "TwoFactorService.disable",
+        "user_totp delete",
+    ): (1, Audited(A.USER_2FA_DISABLE)),
+    (
+        "backend/app/services/two_factor_service.py",
+        "TwoFactorService.regenerate_recovery_codes",
+        "user_totp update",
+    ): (1, Audited(A.USER_2FA_RECOVERY_REGENERATE)),
+    (
+        "backend/app/services/two_factor_service.py",
+        "TwoFactorService.reset",
+        "user_totp delete",
+    ): (1, Audited(A.USER_2FA_RESET)),
+    (
+        "backend/app/services/two_factor_service.py",
+        "TwoFactorService._consume_recovery_hash",
+        "user_totp update",
+    ): (1, Audited(A.USER_2FA_RECOVERY_USED)),
+    (
+        "backend/app/services/two_factor_service.py",
+        "TwoFactorService.enrol",
+        "user_totp insert",
+    ): (
+        1,
+        Exempt(
+            "a secret waiting for its first code, which changes nothing at "
+            "sign-in; confirming it writes user_2fa_enable"
+        ),
+    ),
+    (
+        "backend/app/services/two_factor_service.py",
+        "TwoFactorService._accept_totp_step",
+        "user_totp update",
+    ): (
+        1,
+        Exempt(
+            "the step of an accepted code, so it is not used again; the "
+            "change the code was for writes its own entry"
+        ),
+    ),
+    (
+        "backend/app/services/two_factor_service.py",
+        "TwoFactorService._count_refusal",
+        "user_totp update",
+    ): (
+        1,
+        Exempt(
+            "one more wrong code; a refused code is logged "
+            "(two_factor_refused), never audited"
+        ),
+    ),
 }
+
+#: The calls that write ``user_totp`` when ``UserTOTP`` is their first
+#: argument, and the kind each site is recorded as.
+_TOTP_WRITES = {
+    "insert": "user_totp insert",
+    "pg_insert": "user_totp insert",
+    "update": "user_totp update",
+    "delete": "user_totp delete",
+}
+
+
+def _totp_write_kind(node: ast.Call):
+    func = node.func
+    if isinstance(func, ast.Name):
+        name = func.id
+    elif isinstance(func, ast.Attribute):
+        name = func.attr
+    else:
+        return None
+    if name == "UserTOTP":
+        return "UserTOTP()"
+    first = node.args[0] if node.args else None
+    if name in _TOTP_WRITES and isinstance(first, ast.Name) and first.id == "UserTOTP":
+        return _TOTP_WRITES[name]
+    return None
 
 
 # --- reading the source -------------------------------------------------------
@@ -251,6 +341,9 @@ def sites_in(rel: str, tree: ast.Module) -> Counter:
                 isinstance(func, ast.Attribute) and func.attr == "User"
             ):
                 found[(rel, self.qualname, "User()")] += 1
+            totp_kind = _totp_write_kind(node)
+            if totp_kind:
+                found[(rel, self.qualname, totp_kind)] += 1
             self.generic_visit(node)
 
     V().visit(tree)
@@ -354,7 +447,7 @@ def test_the_sites_are_exact():
         f"{sorted((k, n) for k, n in found.items() if expected.get(k) != n)}; "
         f"gone: {sorted(k for k in expected if k not in found)}"
     )
-    assert sum(expected.values()) == 21
+    assert sum(expected.values()) == 29
 
 
 @pytest.mark.parametrize(
@@ -413,6 +506,12 @@ def test_the_scanner_finds_each_kind_of_site():
         "        u.is_active = False\n"
         "        User(email='a@example.com')\n"
         "        e.status = 'x'\n"
+        "        db.execute(update(UserTOTP).values(failed_attempts=0))\n"
+        "        db.execute(sa.delete(UserTOTP))\n"
+        "        db.execute(pg_insert(UserTOTP).values(user_id=u))\n"
+        "        UserTOTP(user_id=u)\n"
+        "        db.execute(update(Other))\n"
+        "        db.execute(select(UserTOTP))\n"
     )
     assert found == Counter(
         {
@@ -424,6 +523,10 @@ def test_the_scanner_finds_each_kind_of_site():
                 "is_superuser",
                 "is_active",
                 "User()",
+                "user_totp update",
+                "user_totp delete",
+                "user_totp insert",
+                "UserTOTP()",
             )
         }
     )

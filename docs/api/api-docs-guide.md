@@ -64,7 +64,7 @@ with `limit` or `page_size`, and a few take no paging parameter. The route's ent
 the API documentation names its parameters.
 
 - `limit`: Maximum number of records to return (default: 100; the largest value allowed
-  differs by route, and some lists have none: the route's OpenAPI entry gives it)
+  differs by route, and the route's OpenAPI entry gives it)
 
 ## Filtering and Sorting
 
@@ -123,7 +123,7 @@ the SDK prefixes, then the default.
 | paths | limit |
 |---|---|
 | `/api/v1/auth/token`, `/auth/login` | 10 / min |
-| `/api/v1/auth/signup`, `/auth/forgot-password`, `/auth/reset-password` | 5 / min |
+| `/api/v1/auth/signup`, `/auth/confirm`, `/auth/forgot-password`, `/auth/reset-password` | 5 / min |
 | `/api/v1/users/me/password` | 5 / min |
 | `/api/v1/auth/sso/exchange` (full image) | 10 / min |
 | `/api/v1/auth/sso/login` (full image) | 30 / min |

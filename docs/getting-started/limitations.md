@@ -35,6 +35,16 @@ the row links it.
 | A traffic allocation for the experiment as a whole | There is none. Variant weights must add up to exactly 100%, or the request is refused with `422`. Users are left out only by targeting rules, a mutual exclusion group or the global holdout. |
 | One user known by two ids, such as a visitor who signs in | No identify or alias call: a user who signs in under a new id mid-funnel gets a second assignment. Assign with the id you will track purchases with. |
 | An LLM experiment that picks the variant with the lowest value | An LLM experiment's winner is the variant with the highest mean of the metric it is compared on: the business metric when every variant has one, otherwise the judge score. There is no lower-is-better setting for it. |
+| An experiment balanced within a nested or dotted attribute (`user.tier`) | A balanced experiment reads its attribute from the top level of the assign `context` only: a user sent `{"user": {"tier": "gold"}}` or `{"user.tier": "gold"}` is balanced in `unknown`, and the setting refuses a key with a dot. See [Balance the split within groups](../guides/balance-within-groups.md). |
+| A balanced experiment with more than 20 groups | At most 20 values are listed; every other value is balanced together as `other`, and users without the attribute as `unknown`. |
+| A balanced experiment with more than 10 saved segments | At most 10 segments are listed, as in one set of targeting rules. |
+| A user balanced in each of the saved segments they belong to | A user is balanced in the first listed segment they belong to, so the order of `segments` decides; a user in none of them is balanced in `other`. |
+| Archiving a saved segment that an experiment balances within | Refused with `409` while a draft, active or paused experiment balances within it, as for a segment its targeting rules use. |
+| A balanced 34/33/33 split | Every share of a balanced experiment must be a multiple of 5, such as 50/50, 20/80, 35/35/30 or 40/30/30; any other split is refused with `422`. |
+| A balanced bandit or split URL experiment | Both are refused with `422`: a bandit moves traffic between variants as results come in, and the edge router sends no user attributes. |
+| Changing what a running experiment balances within | `balance_within` cannot be changed once the experiment leaves draft (`400`). A clone copies it and can be changed while it is a draft. |
+| A user who changes tier moving to their new group | A user keeps the variant and the group of their first assignment whatever a later call sends. |
+| Every user of a balanced experiment balanced within their group | A user assigned while the server is busy balancing other users is assigned by the hash instead, keeps their group and is counted in `experiment_balance_fallback_total`. An older server version, during a rolling deploy or a rollback, assigns every new user by the hash with no group. Either way the user's chance of each variant is still its share, but they are outside the balance. |
 
 ## Deployments
 

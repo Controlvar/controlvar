@@ -1,7 +1,7 @@
 # SDK contract tests
 
-Three layers keep the SDKs honest: the golden vectors and the ruleset vectors
-(offline, against the SDKs in this tree), the published local evaluators
+Three layers keep the SDKs honest: the golden vectors, the ruleset vectors and the
+value vectors (offline, against the SDKs in this tree), the published local evaluators
 (against the releases on npm and PyPI), and the live contract (against a
 running backend).
 
@@ -92,6 +92,44 @@ reorder.
 regenerates it in-process, with no database and no `.git`), pins the counts and the operator list,
 and runs a reference local evaluator over the file. A change to the rules engine, the targeting
 adapter or the flag service that moves any answer fails there until the file is regenerated.
+
+## Value vectors (typed getters, #1810)
+
+`value-vectors.json` says what a typed getter (`getStringValue`, `getNumberValue`,
+`getJsonValue`; Python `get_string_value` and the rest) returns for each answer of
+`GET /api/v1/feature-flags/evaluate/{key}`, and whether it passes the reason to `onError(err,
+'value')`. Each vector has a `response` (status and body), the `getter`, the `default` it is given,
+`expect` (`"default"`, or the value it returns), `error_code` (`TYPE_MISMATCH`, `INVALID_RESPONSE`,
+or `null`, which is not compared: a 404 or a 503 carries each SDK's own transport code) and
+`reported`. It is **generated**, never edited by hand:
+
+```bash
+python -m backend.scripts.generate_value_vectors
+python -m backend.scripts.generate_value_vectors --check
+```
+
+- `served` (35): bodies the server builds, by the evaluate route's own `evaluation_answer` from
+  in-memory flags (each value type on and off, a boolean flag, falsy values, an inactive flag, a
+  stored value outside the value rules), and the route's 404 for an unknown key. Their `expect`,
+  `error_code` and `reported` come from the generator's case table (the flag's stored values and
+  the getter's type), not from the bodies and not from any SDK.
+- `malformed` (14): answers no current server sends, written in the generator: a server from
+  before flag values (neither `value` nor `value_type`), a value that does not match its
+  `value_type`, an unknown `value_type`, a number beyond 2^53-1, a 503.
+
+The JavaScript SDK (`sdk/js/__tests__/value-vectors.test.ts`) and the Python SDK
+(`sdk/python/tests/test_value_vectors.py`) each answer every vector in one test that counts the
+vectors it answered and checked and requires 49, so an empty file fails instead of running
+nothing. They run in the `js` and `python` jobs of `SDK Unit Tests`. The Go SDK does not read this
+file: its getters are methods of an evaluation result with no error channel, and it answers four of
+the malformed vectors differently (no `value_type`; a number beyond 2^53-1; json `7` and json `"x"`,
+decoded into an `any`), none of which a server sends.
+
+`backend/tests/unit/services/test_sdk_value_vectors.py` fails when the file is stale (in-process,
+no database, no `.git`), pins 35 and 14, checks that every served body as the server builds it
+now carries what its case expects, and that the generator loads nothing from under `sdk/`.
+`backend/tests/integration/api/test_flag_values_api.py` checks that both evaluate routes answer
+with `evaluation_answer` and that the 404 body is the route's.
 
 ## 2. Published local evaluators (#1497)
 

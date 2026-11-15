@@ -9,13 +9,15 @@
  *   - {@link ExperimentationClient} — core client for flag evaluation, assignments, and tracking.
  *   - {@link ExperimentationProvider} — React context provider.
  *   - {@link useFlag} — hook for feature flag evaluation.
+ *   - {@link useFlagValue} — hook for the value a string, number or JSON flag serves.
  *   - {@link useExperiment} — hook for experiment assignment.
  *   - {@link useExperimentationClient} — hook for raw client access.
  *   - {@link hashUser} — the cross-SDK consistent hash (compatibility utility only).
  */
 
 // Core client
-export { ExperimentationClient, ApiError } from './client';
+export { ExperimentationClient, ApiError, FlagValueError } from './client';
+export type { FlagValueErrorCode, FlagValueType } from './client';
 
 // Consistent hash (utility only — nothing in the SDK uses it to pick a variant)
 export { hashUser } from './hash';
@@ -30,6 +32,8 @@ export { ExperimentationProvider } from './context/ExperimentationProvider';
 
 // Hooks
 export { useFlag } from './hooks/useFlag';
+export { useFlagValue } from './hooks/useFlagValue';
+export type { FlagValueResult } from './hooks/useFlagValue';
 export { useExperiment } from './hooks/useExperiment';
 export { useExperimentationClient } from './hooks/useExperimentationClient';
 

@@ -242,7 +242,7 @@ RSpec.describe Controlvar::Client do
       expect(WebMock).to have_requested(:get, evaluate_url).twice
     end
 
-    it 'reports the flag as disabled on 404 (flag not ACTIVE) and never caches the failure' do
+    it 'reports the flag as disabled on 404 (unknown flag key) and never caches the failure' do
       stub_evaluate(status: 404, body: '{"detail":"Feature flag not found"}')
 
       result = client.evaluate_flag('dark-mode', 'user-123')

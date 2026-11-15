@@ -21,6 +21,8 @@ from pydantic import (
 )
 from pydantic_core import PydanticCustomError
 
+from backend.app.api.datetime_bounds import storable_offset
+
 #: The largest ``stage_order`` a request may set. A schedule has a handful of
 #: stages (the documented example has three, and their target percentages run
 #: from 0 to 100), so this is well above any real schedule. A larger value
@@ -379,8 +381,9 @@ class RolloutScheduleCreate(RolloutScheduleBase):
     @field_validator("start_date", "end_date")
     @classmethod
     def take_unzoned_as_utc(cls, value: Optional[datetime]) -> Optional[datetime]:
-        """Store a date with no zone as that moment in UTC (#1534)."""
-        return _as_utc(value)
+        """Refuse an offset the database cannot store, which answered 500
+        (#956), and store a date with no zone as that moment in UTC (#1534)."""
+        return _as_utc(storable_offset(value))
 
     @model_validator(mode="after")
     def validate_stages(self) -> "RolloutScheduleCreate":
@@ -469,8 +472,9 @@ class RolloutScheduleUpdate(BaseModel):
     @field_validator("start_date", "end_date")
     @classmethod
     def take_unzoned_as_utc(cls, value: Optional[datetime]) -> Optional[datetime]:
-        """Store a date with no zone as that moment in UTC (#1534)."""
-        return _as_utc(value)
+        """Refuse an offset the database cannot store, which answered 500
+        (#956), and store a date with no zone as that moment in UTC (#1534)."""
+        return _as_utc(storable_offset(value))
 
     @field_validator("stages")
     @classmethod

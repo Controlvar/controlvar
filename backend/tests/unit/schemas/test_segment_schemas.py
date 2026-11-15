@@ -306,12 +306,29 @@ class TestAudiencePreviewResponse:
     """Tests for AudiencePreviewResponse schema."""
 
     def test_preview_response_fields(self):
-        """AudiencePreviewResponse contains required keys."""
+        """AudiencePreviewResponse carries the nine fields, and a null percent."""
         resp = AudiencePreviewResponse(
-            estimated_percentage=35.5,
-            sample_size=1000,
-            matched=355,
+            estimated_percentage=None,
+            sample_size=12,
+            matched=4,
+            source="exposure_metadata",
+            window_days=30,
+            sampled_since="2026-11-06T09:00:00+00:00",
+            ended_by="window",
+            users_without_context=3,
+            reason="too_few_users",
         )
-        assert resp.estimated_percentage == 35.5
-        assert resp.sample_size == 1000
-        assert resp.matched == 355
+        assert resp.estimated_percentage is None
+        assert resp.sample_size == 12
+        assert resp.matched == 4
+        assert set(resp.model_dump()) == {
+            "estimated_percentage",
+            "sample_size",
+            "matched",
+            "source",
+            "window_days",
+            "sampled_since",
+            "ended_by",
+            "users_without_context",
+            "reason",
+        }

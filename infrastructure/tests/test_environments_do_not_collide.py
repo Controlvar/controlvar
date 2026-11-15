@@ -782,15 +782,36 @@ def test_the_glue_grant_names_what_the_api_is_told(synths, env):
 def test_the_task_role_has_no_athena_s3_or_sts_and_the_execution_role_no_glue(
     synths, env
 ):
-    """Athena, S3 and STS are not granted to the API task's role (T54/D25)."""
+    """Athena, S3 and STS are not granted to the API task's role (T54/D25).
+
+    The one exception (#826): the full profile outside demo may hold
+    ``sts:AssumeRole`` on ``arn:aws:iam::*:role/controlvar-warehouse/*`` and
+    nothing else under ``sts:``, which is how a customer's warehouse role is
+    reached. Any other STS action, any other resource, the core profile and
+    the demo still fail.
+    """
     synth = synths[env]
-    task_actions = {
-        a.lower() for s in _role_statements(synth, "TaskRoleArn") for a in _actions(s)
-    }
+    task_statements = _role_statements(synth, "TaskRoleArn")
+    task_actions = {a.lower() for s in task_statements for a in _actions(s)}
     assert task_actions, "the task role's statements were not found"
     assert "*" not in task_actions, task_actions
+    sts_statements = [
+        s
+        for s in task_statements
+        if any(a.lower().startswith("sts:") for a in _actions(s))
+    ]
+    if MODULES_PRESENT and env != "demo":
+        (sts_statement,) = sts_statements
+        assert _actions(sts_statement) == ["sts:AssumeRole"], sts_statement
+        assert sts_statement["Effect"] == "Allow", sts_statement
+        assert "Condition" not in sts_statement, sts_statement
+        assert _rendered(synth, sts_statement) == [
+            "arn:aws:iam::*:role/controlvar-warehouse/*"
+        ], sts_statement
+    else:
+        assert not sts_statements, sts_statements
     assert not {
-        a for a in task_actions if a.startswith(("athena:", "s3:", "sts:", "glue:*"))
+        a for a in task_actions if a.startswith(("athena:", "s3:", "glue:*"))
     }, task_actions
     execution_actions = {
         a.lower()

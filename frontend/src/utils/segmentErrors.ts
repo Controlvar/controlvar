@@ -6,9 +6,11 @@
  * carry anything, and a 403's wording is not ours to vouch for. Two parts of
  * an answer are read, both data rather than prose: the targeting problems of
  * a 422 in the builder's path form ("Group 1, Condition 2: ..."), and the
- * lists of a 409 `segment_in_use`.
+ * lists of a 409 `segment_in_use`. The one exception is a read-only demo's
+ * refusal, told apart by its code (`utils/demoMode.ts`).
  */
 import { isApiError, unreachableMessage } from '@/services/api';
+import { demoRefusalMessage } from '@/utils/demoMode';
 import { describeTargetingIssue } from '@/components/experiments/new/createErrors';
 
 export type SegmentAction =
@@ -63,9 +65,14 @@ const UNPROCESSABLE: Partial<Record<SegmentAction, string>> = {
     'These rules are over the preview limits (20 groups, 50 conditions, 10 regex conditions, 1,000 list values).',
 };
 
+/** A preview the server stopped at its time limit (503). */
+export const PREVIEW_TOO_SLOW = 'The estimate took too long. Try again later.';
+
 /** The copy for a failed request while doing `action`. */
 export function segmentErrorCopy(err: unknown, action: SegmentAction): string {
   if (!isApiError(err)) return 'Something went wrong in the dashboard. Reload the page and try again.';
+  const demo = demoRefusalMessage(err);
+  if (demo) return demo;
   const { status } = err;
   // A time-out keeps the dashboard's own time-out sentence (#1040).
   if (err.timedOut) return err.message;
@@ -76,6 +83,7 @@ export function segmentErrorCopy(err: unknown, action: SegmentAction): string {
   if (status === 409) return CONFLICT[action] ?? SERVER_FAILED;
   if (status === 422) return UNPROCESSABLE[action] ?? 'The request was not accepted.';
   if (status === 429) return 'Too many requests. Wait a minute and try again.';
+  if (status === 503 && action === 'preview') return PREVIEW_TOO_SLOW;
   const id = err.requestId ? ` Request ID: ${err.requestId}.` : '';
   return `${SERVER_FAILED}${id}`;
 }

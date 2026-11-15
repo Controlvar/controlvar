@@ -8,17 +8,29 @@ pointed at a small QueuePool engine on the test database (2 + 2 connections,
 ``pool_timeout`` 1 s), and the event loop's default worker limit is set to 4
 for the test, inside the running loop. A burst of 24 concurrent requests is
 more than that serves at once: each route must give every request its normal
-answer.
+answer. ``/tracking/assign`` is driven for an experiment that balances its
+split within groups (#448), where the assignment runs in a worker: a balanced
+burst is answered, and every user of it takes a place in their group's blocks.
 
 Listeners on the engine count checkouts and checkins. Their peak shows that
 the burst used every connection, and they record the thread of each checkout:
 none of these routes checks out on the event loop's thread.
+
+The two routes a web page calls (#1545) take a key with no scopes: the
+fixture gives them one, a running visual experiment whose page rule names a
+host of its own, and a live preview link of it. ``POST /tracking/visual``
+assigns a new visitor on every call, so each call commits and reads again. It
+is also driven for a visual experiment that balances within groups, where
+``/tracking/assign``'s function takes its own worker trip from inside the page
+answer's worker: that burst is answered too, and every visitor of it takes a
+place in their group's blocks.
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
+import secrets
 import threading
 import time
 import uuid
@@ -38,6 +50,7 @@ from sqlalchemy.pool import QueuePool
 from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps
+from backend.app.core.security import hash_api_key
 from backend.app.main import app
 from backend.app.models.api_key import APIKey
 from backend.app.models.assignment import Assignment
@@ -49,15 +62,24 @@ from backend.app.models.experiment import (
     Variant,
 )
 from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
+from backend.app.models.global_holdout import GlobalHoldout
 from backend.app.models.metrics.metric import ErrorLog, RawMetric
 from backend.app.models.sdk_evaluation_count import (
     SdkEvaluationFlagCount,
     SdkEvaluationKeyCount,
 )
+from backend.app.models.visual_token import PREVIEW, VisualToken
+from backend.app.services import balanced_allocation
 
 pytestmark = pytest.mark.integration
 
 SCHEMA = "test_experimentation"
+#: The balanced experiment's setting (#448).
+TIER = {"attribute": "tier", "values": ["gold", "silver"]}
+#: The counter step's statement timeout during the test, raised so that a
+#: slow runner cannot turn a place in the blocks into a fallback; it is not
+#: what the burst row is about.
+STEP_TIMEOUT_MS = 30_000
 POOL_SIZE = 2
 MAX_OVERFLOW = 2
 CONNECTIONS = POOL_SIZE + MAX_OVERFLOW
@@ -98,6 +120,18 @@ class SdkSetup:
     headers: dict
     flag_key: str
     experiment_key: str
+    #: An ACTIVE experiment that balances its split within ``tier`` (#448).
+    balanced_experiment_key: str
+    balanced_experiment_id: Any
+    #: The same developer's key with no scopes, the one a web page carries.
+    page_headers: dict
+    #: The host a running visual experiment's page rule names.
+    visual_host: str
+    #: A live preview link of that experiment's treatment.
+    preview_token: str
+    #: The host of a running visual experiment that balances within ``tier``.
+    balanced_visual_host: str
+    balanced_visual_id: Any
 
 
 @pytest.fixture
@@ -147,21 +181,39 @@ def small_pool(test_db, monkeypatch):
 
 
 @pytest.fixture
-def sdk(db_session, developer_user, make_feature_flag, admin_user):
-    """A key with ``sdk:ruleset`` of an active developer, an ACTIVE flag and an
-    ACTIVE experiment with two variants."""
-    key, plaintext = APIKey.create_for_user(
-        db_session,
-        developer_user.id,
-        f"overload-{uuid.uuid4().hex[:8]}",
-        scopes="sdk:ruleset",
+def no_active_holdout(db_session):
+    """No global holdout during the test, so every new user is assigned;
+    restored after."""
+    parked = (
+        db_session.query(GlobalHoldout).filter(GlobalHoldout.is_active.is_(True)).all()
     )
-    flag = make_feature_flag(
-        key=f"overload-{uuid.uuid4().hex[:8]}",
-        status=FeatureFlagStatus.ACTIVE,
-        rollout_percentage=100,
-    )
+    for row in parked:
+        row.is_active = False
+    db_session.commit()
+    yield
+    db_session.rollback()
+    for row in parked:
+        db_session.merge(row).is_active = True
+    db_session.commit()
+
+
+def _experiment(
+    db_session, admin_user, balance_within=None, visual_host=None
+) -> Experiment:
+    """An ACTIVE 50/50 experiment with two variants, committed. With
+    *visual_host*, a visual experiment whose page rule names that host, and
+    whose treatment hides an element."""
     suffix = uuid.uuid4().hex[:8]
+    visual_config = changes = None
+    if visual_host is not None:
+        page = {"match": "prefix", "url": f"https://{visual_host}/"}
+        visual_config = {
+            "version": 1,
+            "editor_url": f"https://{visual_host}/",
+            "pages": [page],
+            "goals": [],
+        }
+        changes = {"version": 1, "changes": [{"op": "hide", "selector": "#promo"}]}
     experiment = Experiment(
         name=f"Overload {suffix}",
         key=f"overload-{suffix}",
@@ -170,6 +222,8 @@ def sdk(db_session, developer_user, make_feature_flag, admin_user):
         status=ExperimentStatus.ACTIVE,
         experiment_type=ExperimentType.A_B,
         owner_id=admin_user.id,
+        balance_within=balance_within,
+        visual_config=visual_config,
     )
     db_session.add(experiment)
     db_session.commit()
@@ -183,24 +237,78 @@ def sdk(db_session, developer_user, make_feature_flag, admin_user):
                 is_control=is_control,
                 traffic_allocation=50,
                 configuration={},
+                visual_changes=None if is_control else changes,
             )
         )
+    db_session.commit()
+    return experiment
+
+
+@pytest.fixture
+def sdk(db_session, developer_user, make_feature_flag, admin_user):
+    """A key with ``sdk:ruleset`` of an active developer, an ACTIVE flag, an
+    ACTIVE experiment with two variants and an ACTIVE one that balances its
+    split within ``tier``; and for the page routes, the same developer's key
+    with no scopes, an ACTIVE visual experiment on a host of its own, a live
+    preview link of its treatment, and an ACTIVE visual experiment that
+    balances within ``tier`` on another host."""
+    key, plaintext = APIKey.create_for_user(
+        db_session,
+        developer_user.id,
+        f"overload-{uuid.uuid4().hex[:8]}",
+        scopes="sdk:ruleset",
+    )
+    page_key, page_plaintext = APIKey.create_for_user(
+        db_session, developer_user.id, f"overload-page-{uuid.uuid4().hex[:8]}"
+    )
+    flag = make_feature_flag(
+        key=f"overload-{uuid.uuid4().hex[:8]}",
+        status=FeatureFlagStatus.ACTIVE,
+        rollout_percentage=100,
+    )
+    experiment = _experiment(db_session, admin_user)
+    balanced = _experiment(db_session, admin_user, balance_within=TIER)
+    host = f"overload-{uuid.uuid4().hex[:8]}.example.com"
+    visual = _experiment(db_session, admin_user, visual_host=host)
+    balanced_host = f"overload-{uuid.uuid4().hex[:8]}.example.com"
+    balanced_visual = _experiment(
+        db_session, admin_user, balance_within=TIER, visual_host=balanced_host
+    )
+    preview_token = secrets.token_urlsafe(32)
+    db_session.add(
+        VisualToken(
+            kind=PREVIEW,
+            token_hash=hash_api_key(preview_token),
+            experiment_id=visual.id,
+            variant_name="treatment",
+            user_id=developer_user.id,
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        )
+    )
     db_session.commit()
     yield SdkSetup(
         headers={"X-API-Key": plaintext},
         flag_key=flag.key,
         experiment_key=experiment.key,
+        balanced_experiment_key=balanced.key,
+        balanced_experiment_id=balanced.id,
+        page_headers={"X-API-Key": page_plaintext},
+        visual_host=host,
+        preview_token=preview_token,
+        balanced_visual_host=balanced_host,
+        balanced_visual_id=balanced_visual.id,
     )
     db_session.rollback()
-    for model in (Event, Assignment, Variant):
-        db_session.query(model).filter(model.experiment_id == experiment.id).delete()
-    db_session.query(Experiment).filter(Experiment.id == experiment.id).delete()
+    for created in (experiment, balanced, visual, balanced_visual):
+        for model in (Event, Assignment, Variant, VisualToken):
+            db_session.query(model).filter(model.experiment_id == created.id).delete()
+        db_session.query(Experiment).filter(Experiment.id == created.id).delete()
     db_session.query(RawMetric).filter(RawMetric.feature_flag_id == flag.id).delete()
     db_session.query(ErrorLog).filter(ErrorLog.feature_flag_id == flag.id).delete()
     for model in (SdkEvaluationKeyCount, SdkEvaluationFlagCount):
         db_session.query(model).filter(model.flag_key == flag.key).delete()
     db_session.query(FeatureFlag).filter(FeatureFlag.id == flag.id).delete()
-    db_session.query(APIKey).filter(APIKey.id == key.id).delete()
+    db_session.query(APIKey).filter(APIKey.id.in_([key.id, page_key.id])).delete()
     db_session.commit()
 
 
@@ -258,24 +366,143 @@ def _evaluate(http: httpx.AsyncClient, sdk: SdkSetup):
     )
 
 
-#: (label, request, the route's normal status). The two error report routes
-#: get ``{}``: the key is checked before the body is refused.
+def _assign_balanced(http: httpx.AsyncClient, sdk: SdkSetup):
+    """A new user of the experiment that balances within ``tier``."""
+    return http.post(
+        "/api/v1/tracking/assign",
+        json={
+            "experiment_key": sdk.balanced_experiment_key,
+            "user_id": f"u-{uuid.uuid4().hex[:12]}",
+            "context": {"tier": "gold"},
+        },
+        headers=sdk.headers,
+    )
+
+
+def _every_user_took_a_place_in_the_blocks(
+    db_session, sdk: SdkSetup, experiment_id: Any = None
+) -> None:
+    """After the balanced row: every request assigned a new user in group
+    ``gold``, each with a place, the places exactly 0 .. n - 1."""
+    db_session.expire_all()
+    rows = (
+        db_session.query(Assignment.balance_group, Assignment.balance_seq)
+        .filter(
+            Assignment.experiment_id == (experiment_id or sdk.balanced_experiment_id)
+        )
+        .all()
+    )
+    sent = BURST + 2
+    assert len(rows) == sent, f"{len(rows)} users assigned, want {sent}"
+    groups = Counter(group for group, _ in rows)
+    assert groups == {"gold": sent}, f"groups {dict(groups)}, want {{'gold': {sent}}}"
+    seqs = sorted(seq for _, seq in rows if seq is not None)
+    assert seqs == list(range(sent)), (
+        f"{sent - len(seqs)} users outside the blocks; places {seqs}"
+    )
+
+
+def _visual(http: httpx.AsyncClient, sdk: SdkSetup):
+    """A new visitor on the visual experiment's page: an assignment and an
+    exposure are written on every call."""
+    return http.post(
+        "/api/v1/tracking/visual",
+        json={
+            "user_id": f"u-{uuid.uuid4().hex[:12]}",
+            "host": sdk.visual_host,
+            "path": "/",
+            "format_version": 1,
+        },
+        headers=sdk.page_headers,
+    )
+
+
+def _visual_preview(http: httpx.AsyncClient, sdk: SdkSetup):
+    return http.post(
+        "/api/v1/tracking/visual/preview",
+        json={"token": sdk.preview_token, "host": sdk.visual_host, "path": "/"},
+        headers=sdk.page_headers,
+    )
+
+
+def _visual_balanced(http: httpx.AsyncClient, sdk: SdkSetup):
+    """A new visitor in ``tier`` gold on the balanced visual experiment's page:
+    ``/tracking/assign``'s function takes its own worker trip from the page
+    answer's private event loop."""
+    return http.post(
+        "/api/v1/tracking/visual",
+        json={
+            "user_id": f"u-{uuid.uuid4().hex[:12]}",
+            "host": sdk.balanced_visual_host,
+            "path": "/",
+            "format_version": 1,
+            "context": {"tier": "gold"},
+        },
+        headers=sdk.page_headers,
+    )
+
+
+def _every_visitor_took_a_place_in_the_blocks(db_session, sdk: SdkSetup) -> None:
+    """After the balanced visual row: as for the balanced row."""
+    _every_user_took_a_place_in_the_blocks(db_session, sdk, sdk.balanced_visual_id)
+
+
+#: (label, request, the route's normal status, a check after the burst or
+#: None). The two error report routes get ``{}``: the key is checked before
+#: the body is refused. ``assign-balanced`` sends new users of an experiment
+#: that balances within groups (#448): a balanced burst is answered, and every
+#: user of it takes a place in their group's blocks.
 ROUTES = [
-    pytest.param("GET /api/v1/sdk/ruleset", _ruleset, 200, id="ruleset"),
+    pytest.param("GET /api/v1/sdk/ruleset", _ruleset, 200, None, id="ruleset"),
     pytest.param(
-        "POST /api/v1/tracking/evaluations", _evaluations, 201, id="evaluations"
+        "POST /api/v1/tracking/evaluations",
+        _evaluations,
+        201,
+        None,
+        id="evaluations",
     ),
     pytest.param(
-        "POST /api/v1/tracking/assign/batch", _assign_batch, 200, id="assign-batch"
+        "POST /api/v1/tracking/assign/batch",
+        _assign_batch,
+        200,
+        None,
+        id="assign-batch",
     ),
-    pytest.param("POST /api/v1/tracking/errors", _errors, 422, id="errors"),
     pytest.param(
-        "POST /api/v1/tracking/errors/batch", _errors_batch, 422, id="errors-batch"
+        "POST /api/v1/tracking/assign (balanced)",
+        _assign_balanced,
+        200,
+        _every_user_took_a_place_in_the_blocks,
+        id="assign-balanced",
+    ),
+    pytest.param("POST /api/v1/tracking/errors", _errors, 422, None, id="errors"),
+    pytest.param(
+        "POST /api/v1/tracking/errors/batch",
+        _errors_batch,
+        422,
+        None,
+        id="errors-batch",
+    ),
+    pytest.param("POST /api/v1/tracking/visual", _visual, 200, None, id="visual"),
+    pytest.param(
+        "POST /api/v1/tracking/visual/preview",
+        _visual_preview,
+        200,
+        None,
+        id="visual-preview",
+    ),
+    pytest.param(
+        "POST /api/v1/tracking/visual (balanced)",
+        _visual_balanced,
+        200,
+        _every_visitor_took_a_place_in_the_blocks,
+        id="visual-balanced",
     ),
     pytest.param(
         "GET /api/v1/tracking/split-url/routes",
         _split_url_routes,
         200,
+        None,
         id="split-url-routes",
         marks=pytest.mark.modules,
     ),
@@ -326,10 +553,19 @@ async def _drain(watch: PoolWatch) -> None:
 
 
 @pytest.mark.regression
-@pytest.mark.parametrize("label, send, status", ROUTES)
+@pytest.mark.parametrize("label, send, status, check", ROUTES)
 async def test_every_request_of_a_burst_is_answered(
-    label: str, send: Send, status: int, small_pool: PoolWatch, sdk: SdkSetup
+    label: str,
+    send: Send,
+    status: int,
+    check: Optional[Callable[[Any, SdkSetup], None]],
+    small_pool: PoolWatch,
+    sdk: SdkSetup,
+    no_active_holdout,
+    db_session,
+    monkeypatch,
 ):
+    monkeypatch.setattr(balanced_allocation, "BALANCE_STEP_TIMEOUT_MS", STEP_TIMEOUT_MS)
     watch = small_pool
     watch.loop_thread = threading.get_ident()
     async with _worker_limit(WORKERS), _client() as http:
@@ -364,6 +600,8 @@ async def test_every_request_of_a_burst_is_answered(
     assert after.status_code == status, (
         f"{label} after the burst: {after.status_code} {after.text}"
     )
+    if check is not None:
+        check(db_session, sdk)
 
 
 @pytest.mark.regression

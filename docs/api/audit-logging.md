@@ -282,10 +282,14 @@ writes it after the change is saved, with the signed-in user as the actor; the
 written. An update records only the fields that changed, as
 `old_value` and `new_value` JSON; a create records the new entity's identifying fields in
 `new_value`, and a delete the old ones in `old_value`. Descriptions, hypotheses, targeting
-rules, segment rules, variants and metrics are never stored. A change to a description, a hypothesis or
-a rule is named in `new_value.changed_fields`; a change to an experiment's variants or metrics is not yet
-named there (the entry records who saved and when; #1782 tracks naming them). No entry holds a password, a token, any part of
-an API key, or a request body.
+rules, segment rules, variants, metrics, an experiment's analysis configurations
+(`variance_reduction_config` for CUPED, `sequential_testing_config`, `bayesian_config`)
+and a visual experiment's pages, goals and page changes (`visual_config`,
+`visual_changes`) are never stored. A change to any of them is named in
+`new_value.changed_fields`.
+Whether sequential testing and Bayesian analysis are on (`sequential_testing_enabled`,
+`bayesian_enabled`) is stored as a value, in an experiment's create and delete entries too.
+No entry holds a password, a token, any part of an API key, or a request body.
 
 | Action Type | Entity | Written when |
 |-------------|--------|--------------|
@@ -298,6 +302,8 @@ an API key, or a request body.
 | `experiment_update` | `experiment` | `PUT /experiments/{id}`, `/schedule`, `/metadata`, `/archive`, `PUT /bandit/{id}/weights` (`reason` names the change, except for `PUT`) |
 | `experiment_delete` | `experiment` | `DELETE /experiments/{id}` |
 | `experiment_start`, `experiment_pause`, `experiment_complete` | `experiment` | `/start` (also a resume), `/pause`, `/complete` |
+| `experiment_preview_link_create` | `experiment` | `POST /experiments/{id}/visual/preview-links` makes a visual experiment's preview link; `new_value` is `{"variant_id", "expires_at"}`, never the link or its token |
+| `experiment_preview_links_revoke` | `experiment` | `DELETE /experiments/{id}/visual/preview-links` ends the experiment's live preview links; `new_value` is `{"revoked"}`, how many were ended |
 | `api_key_create`, `api_key_revoke` | `api_key` | `POST /api-keys`, `DELETE /api-keys/{id}` |
 | `holdout_create` | `holdout` | `POST /holdout`. With `is_active: true` it turns the active holdout off, and that holdout gets its own `holdout_deactivate` |
 | `holdout_update`, `holdout_activate`, `holdout_deactivate` | `holdout` | `PUT /holdout/{id}`, one entry per kind of change. Activating a holdout turns any other active one off, and that holdout gets its own `holdout_deactivate`. An activate or deactivate entry also carries the `activated_at` or `deactivated_at` it set |
@@ -306,6 +312,8 @@ an API key, or a request body.
 | `user_create`, `user_delete` | `user` | `POST /users/`; `DELETE /users/{id}` and `DELETE /admin/users/{id}`. Deleting your own account is recorded with no `user_id` |
 | `role_assign` | `user` | A superuser changes a user's role or superuser flag (`PATCH /admin/users/{id}`, `PUT /admin/users/{id}`, `PUT /users/{id}`); `old_value` and `new_value` are `{"role", "is_superuser"}` |
 | `user_activate`, `user_deactivate` | `user` | The same routes change a user's active status |
+| `user_2fa_enable`, `user_2fa_disable`, `user_2fa_recovery_used`, `user_2fa_recovery_regenerate` | `user` | An account's two-step sign-in is turned on (`new_value` is `{"recovery_codes": 10}`), turned off (`new_value` is `{"second_step"}`, `totp` or `recovery`), signs in or turns off with a recovery code (`new_value` is `{"recovery_codes_remaining"}`), or gets a new set of recovery codes. The actor is the account itself. This release has no route that turns two-step sign-in on, so nothing in it writes these four yet |
+| `user_2fa_reset` | `user` | `python -m backend.app.db.two_factor_reset` deletes an account's two-step sign-in (`--email`, or every account's with `--all --yes-reset-every-account`). The actor is `system:operator-cli`; `old_value` is `{"enabled"}`, `false` for an account that had started setting it up but not finished |
 | `user_login` | `user` | Signing in with a password (`POST /auth/login`, or `POST /auth/token` with `AUTH_PROVIDER=local`); `new_value` is `{"provider": "local"}` |
 | `user_login` | `user` | Signing in through Cognito (`POST /auth/token` with the Cognito provider) as a user who already has an account; `new_value` is `{"provider": "cognito"}`. A user's first Cognito sign-in writes no `user_login`: their account is created by the first request they make with the token, which writes `user_create`. A sign-in through the Cognito Hosted UI does not pass through this API and writes nothing |
 | `safety_rollback` | `feature_flag` | A safety rollback, manual (`POST /safety/feature-flags/{id}/rollback`, by the calling user) or by the safety monitor. `new_value` is `{"trigger_type", "previous_percentage", "new_percentage", "deactivated", "paused_schedules"}`; `reason` is the rollback's reason. It appears in the flag's history |
@@ -359,6 +367,7 @@ these reserved values:
 | `system:safety-monitor` | The safety monitor: each automatic rollback |
 | `system:cognito-sync` | Cognito group sync: each role or superuser flag change |
 | `system:sso-sync` | SSO sign-in (full profile): each role change from a mapped group |
+| `system:operator-cli` | An operator's command, `python -m backend.app.db.two_factor_reset`: each account whose two-step sign-in it resets |
 
 An entry is automatic only when `user_id` is empty **and** `user_email` is one of these
 values. Deleting a user also empties `user_id` on their entries, but keeps their own
@@ -373,10 +382,14 @@ entry. No entry ever holds:
 - reading anything: lists, reports, the audit log itself, or exporting it;
 - failed sign-ins (there is no account to attach them to) or sign-outs;
 - passwords or their hashes, tokens, or any part of an API key or its hash;
+- two-step sign-in secrets, codes or recovery codes, or a wrong code (a wrong
+  code writes a `two_factor_refused` log line with the account's id and the
+  reason, never the code);
 - request bodies, IP addresses or user agents;
-- the contents of descriptions, hypotheses, targeting rules, segment rules, variants and
-  metrics (descriptions, hypotheses and rules are named under `changed_fields`; an experiment's
-  variants and metrics are not yet named, #1782);
+- the contents of descriptions, hypotheses, targeting rules, segment rules, variants,
+  metrics, an experiment's CUPED, sequential testing and Bayesian configurations, and a
+  visual experiment's pages, goals and page changes (a change to one is named under
+  `changed_fields`);
 - error text;
 - changes made directly in the database rather than through the platform.
 
@@ -388,6 +401,7 @@ Whether a change is kept when its entry cannot be written depends on where it is
 |-------|--------------------------------|
 | A route (all the route actions above) | The change is kept and the response is `2xx`; there is no entry |
 | A superuser's change to a user's role, superuser flag or active status | Nothing is saved and the response is `500`; resend it once the problem is fixed |
+| Two-step sign-in turned on or off, a recovery code used or renewed, or a reset by `python -m backend.app.db.two_factor_reset` | Nothing is saved: the change and its entry are kept or lost together. The reset command says `Nothing was changed.` and exits with status 2 |
 | A custom role defined, changed, deleted, assigned or revoked, or a direct permission granted or revoked (full profile) | The change is kept and the response is `2xx`; there is no entry. Unlike a change to a user's built-in role, it is not refused |
 | A safety rollback, manual or by the safety monitor | The rollback is kept; there is no entry |
 | The experiment scheduler | The start or end is kept; there is no entry, and **it is not written later** |
@@ -402,9 +416,16 @@ Each entry that cannot be written logs one ERROR line from the API:
 Failed to create audit log for <action> on <entity type> <entity id> (<exception type>)
 ```
 
-In a deployed stack that line is the only signal that an entry is missing. The API also
-counts these failures in a Prometheus counter, `audit_write_failures_total`, but do not
-rely on it there: the AWS deployment does not collect it.
+The AWS deployment counts those lines: `experimentation-api-audit-write-failed-<env>` goes
+into alarm on the first one in any 5 minutes and emails `ALARM_EMAIL`, once that address
+has [confirmed its subscription](../self-hosting/cdk.md#required-environment-variables).
+It sends one email when it goes into alarm, not one per line, and each line also counts
+toward `experimentation-api-error-logs-<env>`. To find which entries are missing, search
+the log group `/ecs/experimentation-backend-<env>` for `Failed to create audit log`: each
+line names the action and the entity of one missing entry. Nothing writes a missing entry
+later. The API also counts these failures in a Prometheus counter,
+`audit_write_failures_total`, but do not rely on it there: the AWS deployment does not
+collect it.
 
 ### Keeping entries, and deleted users
 

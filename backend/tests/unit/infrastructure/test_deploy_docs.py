@@ -542,7 +542,7 @@ def _db_migrate_target_description() -> str:
 @pytest.mark.regression
 def test_the_db_migrate_help_names_an_id_and_does_not_suggest_minus_one():
     description = _db_migrate_target_description()
-    assert "85dd4796bb8b" in description
+    assert "7b6b4b4fe246" in description
     # PE v2 C8: the modules example is not there on a core image.
     assert "modules_0001_rbac exists only in a full-profile image" in description
     assert _sentences_recommending_minus_one(description) == []

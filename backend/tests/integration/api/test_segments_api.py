@@ -757,7 +757,11 @@ class TestPreviewAudience:
     """POST /api/v1/segments/{id}/preview"""
 
     def test_preview_returns_200_with_estimate_structure(self, admin_client):
-        """Preview endpoint returns 200 with estimated_percentage, sample_size, matched."""
+        """Preview endpoint returns 200 with the nine fields of the estimate.
+
+        The exposures it reads are whatever earlier tests left, so only the
+        shape is checked here; test_segment_preview_exposures.py checks values.
+        """
         seg = _create_segment(admin_client, "Preview Segment")
 
         payload = {
@@ -770,12 +774,25 @@ class TestPreviewAudience:
         assert response.status_code == 200, response.text
 
         data = response.json()
-        assert "estimated_percentage" in data
-        assert "sample_size" in data
-        assert "matched" in data
-        assert isinstance(data["estimated_percentage"], (int, float))
+        assert set(data) == {
+            "estimated_percentage",
+            "sample_size",
+            "matched",
+            "source",
+            "window_days",
+            "sampled_since",
+            "ended_by",
+            "users_without_context",
+            "reason",
+        }
+        if data["reason"] is None:
+            assert isinstance(data["estimated_percentage"], (int, float))
+        else:
+            assert data["estimated_percentage"] is None
         assert isinstance(data["sample_size"], int)
         assert isinstance(data["matched"], int)
+        assert data["source"] == "exposure_metadata"
+        assert data["window_days"] == 30
 
     def test_preview_for_nonexistent_segment_returns_404(self, admin_client):
         """Preview endpoint returns 404 when segment does not exist."""
@@ -831,9 +848,10 @@ class TestPreviewAudience:
         assert response.status_code == 200, response.text
 
         data = response.json()
-        assert data["estimated_percentage"] >= 0
+        assert data["estimated_percentage"] is None or data["estimated_percentage"] >= 0
         assert data["sample_size"] >= 0
         assert data["matched"] >= 0
+        assert data["users_without_context"] >= 0
 
     @pytest.mark.regression
     def test_preview_refuses_eleven_match_regex_conditions(self, admin_client):

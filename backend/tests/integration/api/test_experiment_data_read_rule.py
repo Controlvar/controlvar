@@ -89,6 +89,7 @@ ROUTES = {
     "sequential": ("GET", f"{R}/sequential", None),
     "cuped": ("GET", f"{R}/cuped", None),
     "bayesian": ("GET", f"{R}/bayesian", None),
+    "balanced_groups": ("GET", f"{R}/balanced-groups", None),
     "post_stratification": ("POST", f"{R}/post-stratification", POST_STRAT_BODY),
     "fdr_correction": ("POST", f"{R}/fdr-correction", FDR_BODY),
     "export_experiments": ("GET", "/api/v1/export/experiments", None),
@@ -115,10 +116,11 @@ RESULTS_ROUTES = [
     "sequential",
     "cuped",
     "bayesian",
+    "balanced_groups",
     "post_stratification",
     "fdr_correction",
 ]
-#: The 8 results routes, and the results route with a breakdown.
+#: The 9 results routes, and the results route with a breakdown.
 BREAKDOWN = "results_breakdown"
 NO_ROLE_RESULTS_CELLS = [*RESULTS_ROUTES, BREAKDOWN]
 
@@ -134,6 +136,9 @@ INTERACTIONS = ["interaction_scan", "interaction_pair"]
 
 #: Post-stratification answers 501 to everyone it admits: it is not available.
 POST_STRAT_UNAVAILABLE = 501
+#: The balanced-groups route answers 409 to everyone it admits: the
+#: experiment every cell reads balances nothing.
+NOT_BALANCED_ANSWER = 409
 
 
 def _everyone(answer):
@@ -149,6 +154,7 @@ FOUR_ROLES = {
     "sequential": _everyone(200),
     "cuped": _everyone(200),
     "bayesian": _everyone(200),
+    "balanced_groups": _everyone(NOT_BALANCED_ANSWER),
     "post_stratification": _everyone(POST_STRAT_UNAVAILABLE),
     "fdr_correction": _everyone(200),
     "export_experiments": _everyone(200),
@@ -499,12 +505,12 @@ def test_the_development_sign_in_is_off():
 
 
 def test_the_table_is_the_live_application_routes():
-    """17 routes in the core profile and 18 in the full one, by 5 callers:
-    85 and 90 answers. A route added under these prefixes, or one of them
+    """18 routes in the core profile and 19 in the full one, by 5 callers:
+    90 and 95 answers. A route added under these prefixes, or one of them
     mounted somewhere else, fails here until it is in the table."""
     declared = {(method, path) for method, path, _ in _routes().values()}
     assert _live_read_routes() == declared
-    expected_routes = 18 if _full_profile() else 17
+    expected_routes = 19 if _full_profile() else 18
     assert len(_four_roles()) == len(_routes()) == expected_routes
     answers = sum(len(row) for row in _four_roles().values())
     assert answers == expected_routes * len(SHIPPED)

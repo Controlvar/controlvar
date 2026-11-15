@@ -503,6 +503,9 @@ Grant a specific resource permission directly to a user, without assigning a rol
 }
 ```
 
+`user_id` must name the same user as the path: any other value, or one that is not a UUID,
+is refused with `400`, and nothing is written.
+
 `expires_at` is optional. If omitted, the grant never expires. `resource` and `actions`
 are checked as a role's permissions are (see
 [What a role or a grant can hold](#create-custom-role)): any other pair is refused with
@@ -520,6 +523,7 @@ are checked as a role's permissions are (see
 ```
 
 **Error responses:**
+- `400 Bad Request` — `user_id` in the body differs from the path's
 - `403 Forbidden` — Caller is not an admin
 - `404 Not Found` — User does not exist
 - `422 Unprocessable Entity` — A permission a grant cannot hold (`"type": "not_grantable"`)

@@ -66,12 +66,15 @@ BODIES = {
         "SnowflakeConnectionCreate",
         "BigQueryConnectionCreate",
         "AthenaConnectionCreate",
+        "RedshiftConnectionCreate",
     },
     ("PUT", "/api/v1/warehouse/analysis/connections/{connection_id}"): {
         "SnowflakeConnectionUpdate",
         "BigQueryConnectionUpdate",
         "AthenaConnectionUpdate",
+        "RedshiftConnectionUpdate",
     },
+    # No Redshift body: a Redshift connection is tested once it is saved.
     ("POST", "/api/v1/warehouse/analysis/connections/test"): {
         "BigQueryConnectionTest",
         "AthenaConnectionTest",

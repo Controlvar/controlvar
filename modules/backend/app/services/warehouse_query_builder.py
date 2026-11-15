@@ -47,6 +47,10 @@ Every floating-point result leaves the warehouse as a string our SQL asked
 for, with at least 17 significant digits, so nothing depends on how a driver
 or an HTTP API renders a FLOAT: Snowflake ``CAST(CAST(x AS DECFLOAT) AS
 VARCHAR)``, BigQuery ``FORMAT('%.17g', x)``, Athena ``format('%.17g', x)``.
+Amazon Redshift has no such format function: its statement is ``CAST(x AS
+VARCHAR)``, and the digits come from the session's ``extra_float_digits``,
+which the connector sets before every statement and checks with a probe in
+the same batch (:mod:`modules.backend.app.warehouse.redshift`).
 Counts are integers.
 
 Dialects
@@ -75,6 +79,7 @@ from typing import Callable, Final, Literal, Optional, Sequence
 from modules.backend.app.core.warehouse_identifiers import (
     ATHENA,
     BIGQUERY,
+    REDSHIFT,
     SNOWFLAKE,
     IdentifierRules,
     SourceFilter,
@@ -196,8 +201,29 @@ ATHENA_SQL: Final = SqlDialect(
     epoch_seconds=lambda e: f"CAST(floor(to_unixtime({e})) AS BIGINT)",
 )
 
+#: Amazon Redshift, through the Data API (:mod:`modules.backend.app.warehouse.redshift`).
+#: The connector runs every statement in a batch that first sets the session's
+#: time zone to UTC and ``extra_float_digits`` to 2, then checks both with a
+#: probe; so ``serialise`` is a plain cast to text, ``time_column`` reads a
+#: ``TIMESTAMP`` column in UTC, and there is no per-row session offset.
+REDSHIFT_SQL: Final = SqlDialect(
+    name="redshift",
+    identifiers=REDSHIFT,
+    # VARCHAR with no length is VARCHAR(256) in Redshift, which a longer unit
+    # id would not fit; 65535 is the longest VARCHAR it has.
+    string_type="VARCHAR(65535)",
+    double_type="DOUBLE PRECISION",
+    timestamp_literal=lambda t: f"CAST('{t}+00:00' AS TIMESTAMPTZ)",
+    add_hours=lambda e, h: f"DATEADD(hour, {h}, {e})",
+    serialise=lambda x: f"CAST({x} AS VARCHAR)",
+    time_column=lambda c: f"CAST({c} AS TIMESTAMPTZ)",
+    epoch_seconds=lambda e: f"CAST(FLOOR(EXTRACT(EPOCH FROM {e})) AS BIGINT)",
+)
+
 #: The dialects a connection can have (the DuckDB set lives in the tests).
-SQL_DIALECTS: Final = {d.name: d for d in (SNOWFLAKE_SQL, BIGQUERY_SQL, ATHENA_SQL)}
+SQL_DIALECTS: Final = {
+    d.name: d for d in (SNOWFLAKE_SQL, BIGQUERY_SQL, ATHENA_SQL, REDSHIFT_SQL)
+}
 
 
 @dataclass(frozen=True)
@@ -433,7 +459,7 @@ def build_metric_query(
         # ``y.y``, not ``y``: the CTE and its column share the name, and
         # BigQuery reads a bare ``y`` here as the whole row (a STRUCT), so
         # AVG is refused with invalidQuery.  Snowflake, Athena and DuckDB read
-        # it as the column; the qualified name means the column in all four.
+        # it as the column; the qualified name means the column in every dialect.
         "  SELECT AVG(y.y) AS k FROM y\n"
         "),\ndiag AS (\n"
         "  SELECT (SELECT COUNT(*) FROM events) AS metric_rows_in_window,\n"

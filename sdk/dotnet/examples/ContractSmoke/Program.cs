@@ -169,6 +169,21 @@ static async Task<int> RunAsync()
     if (thrown != 1)
         return Fail($"the OnExposure that throws was called {thrown} times, expected 1");
 
+    // 6. Flag values (#1810): a NEW client (so the fan-out above is untouched) reads the seed's
+    //    three value flags, each on at 100% while the SDK rows run, with defaults that are no flag
+    //    value, so a getter that falls back shows. The report is what they returned; the runner
+    //    requires the seed's on values.
+    string stringValue;
+    double numberValue;
+    JsonElement jsonValue;
+    using (var valued = new ExperimentationClient(config))
+    {
+        using var smokeDefault = JsonDocument.Parse("[\"smoke-default\"]");
+        stringValue = await valued.GetStringValueAsync("sdk_contract_value_string", userId, "smoke-default");
+        numberValue = await valued.GetNumberValueAsync("sdk_contract_value_number", userId, -1);
+        jsonValue = (await valued.GetJsonValueAsync("sdk_contract_value_json", userId, smokeDefault.RootElement)).Clone();
+    }
+
     var seen = exposures.ToArray();
     var payload = seen.Length == 0
         ? null
@@ -188,7 +203,8 @@ static async Task<int> RunAsync()
         track = new { ok = trackOk },
         fanout = new { ok = fanoutOk && batchOk },
         targeted = new { pro = pro.Enabled, free = free.Enabled, reason = answered[0] },
-        exposure = new { calls = seen.Length, payload }
+        exposure = new { calls = seen.Length, payload },
+        values = new { @string = stringValue, number = numberValue, json = jsonValue }
     });
     Console.Out.WriteLine(line);
     return 0;

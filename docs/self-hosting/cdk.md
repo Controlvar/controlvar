@@ -8,6 +8,16 @@ The platform's AWS infrastructure is defined as code using **AWS CDK v2**, in **
 
 ---
 
+## Known issue: `prod` and `demo` deploys fail at the Redis stack until v0.46.0
+
+In every release up to and including v0.45.0, `cdk deploy` fails for the `prod` and `demo` environments at the stack `experimentation-redis-<env>`. The stack cuts the name of its Redis subnet group to 40 characters, and for those two environments the cut ends in a hyphen. ElastiCache refuses it with `The parameter CacheSubnetGroupName is not a valid identifier`. `staging` and `dev` are not affected, and neither is the [one-command installer](aws-install.md), which installs `staging`'s shape. As of v0.45.0, on 2026-11-11, the fix is planned for v0.46.0. The change is a single line, so it is safe to apply by hand. Until then, to deploy `prod` or `demo`, change `[:40]` to `[:40].rstrip("-")` in the `cache_subnet_group_name` of `infrastructure/cdk/stacks/elasticache_redis_stack.py`, and leave the `[:40]` on `replication_group_id` as it is:
+
+```python
+cache_subnet_group_name=f"{construct_id}-redis-subnet-group".lower().replace("_", "-")[:40].rstrip("-"),
+```
+
+---
+
 ## Prerequisites
 
 | Tool | Version | Install |
@@ -600,9 +610,11 @@ unless you deploy with `-c bastion_ssh_cidr=<cidr>`.
 
 ### experimentation-monitoring-<env> {#experimentation-monitoring}
 
-- CloudWatch dashboards `experimentation-platform-<env>` and
-  `experimentation-application-metrics-<env>` (some of their widgets graph
-  metrics nothing publishes, #424)
+- CloudWatch dashboards `experimentation-platform-<env>`, which graphs the
+  Aurora writer and each Redis node, and
+  `experimentation-application-metrics-<env>`, which graphs the API service's
+  CPU and memory, its running tasks, its log lines at level `error` or
+  `critical`, and the audit-log entries it could not write.
 - CloudWatch alarms: `AuroraHighCPU-<env>` on the Aurora writer, and one
   `RedisHighCPU-00N-<env>` per Redis node. The Aurora alarm reads the cluster's
   identifier from the SSM parameter
@@ -613,9 +625,11 @@ unless you deploy with `-c bastion_ssh_cidr=<cidr>`.
   email subscriber: `ALARM_EMAIL` (none in `dev` or `demo` without it). The
   fargate stack's alarms publish to it too: the two API 5xx alarms, which roll
   a deployment back, `experimentation-api-no-healthy-task-<env>`, which fires
-  when no API task is healthy, and `experimentation-api-error-logs-<env>`,
+  when no API task is healthy, `experimentation-api-error-logs-<env>`,
   which fires on 10 or more lines in 5 minutes whose JSON `level` is `error`
-  or `critical`.
+  or `critical`, and `experimentation-api-audit-write-failed-<env>`, which
+  fires on one line in 5 minutes saying an audit-log entry could not be
+  written ([Audit logging](../api/audit-logging.md#when-an-entry-can-be-missing)).
   That is why `experimentation-fargate-<env>` depends on this stack.
 - With the `etl` module: a Kinesis widget and an iterator-age alarm on that
   module's event stream. A core deployment gets neither, rather than an alarm

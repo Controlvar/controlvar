@@ -85,9 +85,10 @@ def _make_breakdown_response(
 
     hte_warning = (
         (
-            f"Heterogeneous treatment effects detected across '{dimension}' segments. "
-            "Results may differ significantly between groups — "
-            "investigate per-segment effects before shipping."
+            "The first treatment's difference from the control varies between "
+            f"'{dimension}' segments by more than chance usually produces. "
+            "Treat this as a lead to confirm with a follow-up experiment, "
+            "not as a result."
         )
         if has_hte
         else None

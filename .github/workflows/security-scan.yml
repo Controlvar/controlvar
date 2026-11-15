@@ -127,10 +127,19 @@ jobs:
       # this is what stops them drifting back. The launch plan puts them on a
       # public VM, so they are internet-facing.
       #
-      # sdk/react-native is still NOT audited: its 12 high advisories are all
-      # reachable only through react-native 0.73 itself, which is a
-      # devDependency and a peerDependency -- consumers bring their own. That
-      # is react-native 0.73 -> 0.87, its own change.
+      # sdk/react-native is still NOT audited: react-native 0.73 is a
+      # devDependency and a peerDependency -- consumers bring their own. Its
+      # toolchain carries advisories (measured 2026-11-07 on a fresh `npm ci`:
+      # `npm audit` reports 2 high, image-size and joi, and 7 moderate, the
+      # fast-xml-parser ones through @react-native-community/cli; `npm audit
+      # --omit=dev` reports none, since react-native is not a production
+      # dependency there). They leave the tree only with a newer toolchain:
+      # image-size when metro reaches 0.83.8 (metro 0.81 to 0.83.7 still
+      # depend on image-size ^1.0.2), which means react-native 0.81 or later
+      # with a fresh lock. fast-xml-parser does not leave with a newer cli
+      # alone: @react-native-community/cli-platform-android 15.1.0 still
+      # declares fast-xml-parser ^4.4.1. That is the React 18 -> 19 migration
+      # (#82), its own change.
       - name: Run npm audit
         # --omit=dev, to match the sentence above it. Without it this audits
         # the whole lockfile, so a HIGH advisory in jest, eslint or ts-jest --

@@ -314,6 +314,13 @@ by = [
 ]
 
 [[unit]]
+text = "An experiment that balances its split within the segment uses it the same way (Balance within saved segments)."
+by = [
+    "test:backend/tests/integration/api/test_balance_within_segments.py::test_a_segment_an_experiment_balances_within_cannot_be_archived",
+    "test:backend/tests/integration/api/test_balance_within_segments.py::test_a_completed_experiment_or_an_attribute_value_does_not_hold_a_segment",
+]
+
+[[unit]]
 text = "It prints {\"code\":\"segment_in_use\",\"flags\":1}."
 by = ["exempt:baseline"]
 
