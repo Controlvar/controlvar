@@ -60,5 +60,9 @@ two-step sign-in:
 - A session you already hold stays signed in until it expires, after two-step sign-in is turned
   on or off and after a reset.
 - Nothing can require two-step sign-in for a role yet.
+- Signing in with SSO (OIDC, with the `sso` module) asks for no code: only the identity provider's
+  own checks apply.
+- An API rolled back to a release from before the code step asks for no code either:
+  [Rolling back past two-step sign-in](../deployment/rollback-runbook.md#rolling-back-past-two-step-sign-in).
 - The count of wrong passwords and codes is kept by each API process; the count of 100 wrong
   codes is stored with the account.

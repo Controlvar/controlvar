@@ -405,6 +405,24 @@ by = [
 ]
 
 [[unit]]
+text = "Rolling back past two-step sign-in"
+by = ["exempt:label"]
+
+[[unit]]
+text = "An API rolled back to a release that does not serve POST /api/v1/auth/mfa/verify asks for no code: every local account signs in with its password alone, two-step sign-in on or not, for as long as that release serves."
+by = [
+    "test:backend/tests/integration/database/test_user_totp_migration.py::test_a_database_at_the_previous_release_gains_the_table",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_the_password_step_answers_mfa_required_and_no_access_token",
+]
+
+[[unit]]
+text = "Each account's secret and recovery codes stay in user_totp and work again once a release that serves the code step is back, unless the database was also downgraded below t1812_user_totp, which drops them (above)."
+by = [
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_api_serves_a_database_a_newer_release_migrated",
+    "test:backend/tests/integration/database/test_user_totp_migration.py::test_the_downgrade_drops_the_table_only",
+]
+
+[[unit]]
 text = "Step 1: Find the Previous Task Definition ARN"
 by = ["exempt:label"]
 

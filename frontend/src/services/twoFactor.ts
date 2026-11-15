@@ -168,6 +168,7 @@ export type TwoFactorOutcome =
   | 'capped'
   | 'unavailable'
   | 'changed'
+  | 'not-waiting'
   | 'invalid'
   | 'session-ended'
   | 'forbidden'
@@ -215,7 +216,9 @@ export function classifyTwoFactorError(err: unknown, context: TwoFactorErrorCont
     case 404:
       return { outcome: 'not-local' };
     case 409:
-      return { outcome: 'changed' };
+      // At confirm: the secret is no longer waiting, which is also what an
+      // account that is already on answers there.
+      return { outcome: context.confirming ? 'not-waiting' : 'changed' };
     case 422:
       return { outcome: 'invalid' };
     case 423:
@@ -237,6 +240,8 @@ const SENTENCES: Record<Exclude<TwoFactorOutcome, 'locked' | 'timed-out' | 'read
   capped: CODE_STEP_LOCKED_TEXT,
   unavailable: UNAVAILABLE_TEXT,
   changed: 'Two-step sign-in changed since this page was opened. The page now shows how it is.',
+  'not-waiting':
+    'No new secret is waiting for its first code, or two-step sign-in is already on. The page now shows how it is.',
   invalid: 'Enter the code as your authenticator app shows it, or a recovery code as you saved it.',
   'session-ended': 'Your session has ended. Sign in again.',
   forbidden: 'Two-step sign-in could not be changed. Ask an administrator to check your account.',

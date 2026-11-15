@@ -147,7 +147,7 @@ export default function TwoFactorPage() {
 
   const fail = (failure: TwoFactorFailure) => {
     setMessage({ tone: 'error', text: twoFactorFailureSentence(failure) });
-    if (failure.outcome === 'changed') {
+    if (failure.outcome === 'changed' || failure.outcome === 'not-waiting') {
       // The page was out of date: show how it is now.
       setView('status');
       setAction(null);

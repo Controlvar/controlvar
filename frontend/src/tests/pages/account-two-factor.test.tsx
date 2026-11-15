@@ -277,6 +277,21 @@ describe('TwoFactorPage: off, and setting it up', () => {
     expect(screen.getByTestId('two-factor-code-input')).toHaveAttribute('aria-invalid', 'true');
   });
 
+  it('a first code for an account that is already on (409 at confirm) says so and shows it on', async () => {
+    await openOff();
+    await startEnrolment();
+    type('123456');
+    respond(409, { detail: PLANTED });
+    respond(200, ON);
+    await click('two-factor-confirm');
+    await screen.findByTestId('two-factor-on');
+    expect(await outcome()).toHaveTextContent(
+      'No new secret is waiting for its first code, or two-step sign-in is already on. The page now shows how it is.',
+    );
+    expect(document.body.innerHTML).not.toContain('PLANTED-SERVER-TEXT');
+    expect(document.body.textContent).not.toContain('JBSW');
+  });
+
   it('Cancel goes back to the off state', async () => {
     await openOff();
     await startEnrolment();

@@ -221,6 +221,20 @@ by = [
 ]
 
 [[unit]]
+text = "Signing in with SSO (OIDC, with the sso module) asks for no code: only the identity provider's own checks apply."
+by = [
+    "test:modules/backend/tests/unit/api/test_sso_asks_for_no_second_step.py::test_an_oidc_sign_in_issues_the_token_to_a_two_step_account_without_a_code",
+    "test:modules/backend/tests/unit/api/test_sso_asks_for_no_second_step.py::test_the_dashboards_sso_exchange_issues_the_token_without_a_code",
+]
+
+[[unit]]
+text = "An API rolled back to a release from before the code step asks for no code either: Rolling back past two-step sign-in."
+by = [
+    "test:backend/tests/integration/database/test_user_totp_migration.py::test_a_database_at_the_previous_release_gains_the_table",
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_api_serves_a_database_a_newer_release_migrated",
+]
+
+[[unit]]
 text = "The count of wrong passwords and codes is kept by each API process; the count of 100 wrong codes is stored with the account."
 by = [
     "test:backend/tests/unit/api/test_local_auth.py::TestLoginAttemptTracker",
