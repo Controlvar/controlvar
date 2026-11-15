@@ -189,6 +189,11 @@ DOCS_TESTS = (
     # Reads the manifest, storyboards and transcripts as text; passes with
     # backend/requirements.txt alone (checked).
     "backend/tests/unit/showcase/test_site_walkthroughs.py",
+    # The persona catalogue and the role matrix cite anchors in docs/ (the
+    # RBAC page, the API-key page, the guides) and refuse one that is gone, so
+    # a docs-only reword of a cited sentence must meet it. Reads YAML, JSON and
+    # text; passes with backend/requirements.txt alone (checked).
+    "backend/tests/unit/personas/",
 )
 
 #: Python tests that name docs/ but are deliberately NOT in DOCS_TESTS.
