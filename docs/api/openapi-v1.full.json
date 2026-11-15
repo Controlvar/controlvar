@@ -13342,6 +13342,71 @@
         "title": "ResultsInterpretationResponse",
         "type": "object"
       },
+      "ResultsSegment": {
+        "description": "The segment the results were counted for, and how its members were read.",
+        "properties": {
+          "experiment_srm_warning": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The warning of the whole experiment's sample ratio check. Null when that check is not defined (a bandit, fewer than two allocated variants, no assignments).",
+            "title": "Experiment Srm Warning"
+          },
+          "experiment_users": {
+            "description": "Distinct users assigned to the experiment, members of the list or not.",
+            "minimum": 0,
+            "title": "Experiment Users",
+            "type": "integer"
+          },
+          "id": {
+            "description": "The segment's id.",
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SegmentKind",
+            "description": "Always id_list: only an ID-list segment is accepted."
+          },
+          "member_count": {
+            "description": "How many user ids the list held when it was read, members not assigned to the experiment included.",
+            "minimum": 0,
+            "title": "Member Count",
+            "type": "integer"
+          },
+          "membership": {
+            "const": "current",
+            "description": "Always current: the list's user ids when the request was made, not when each user was assigned.",
+            "title": "Membership",
+            "type": "string"
+          },
+          "name": {
+            "description": "The segment's name.",
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SegmentStatus",
+            "description": "The segment's status when the results were computed. A segment in any status is accepted."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "status",
+          "membership",
+          "member_count",
+          "experiment_users"
+        ],
+        "title": "ResultsSegment",
+        "type": "object"
+      },
       "RevokeRoleRequest": {
         "properties": {
           "reason": {
@@ -16412,6 +16477,122 @@
           "updated_at"
         ],
         "title": "SegmentResponse",
+        "type": "object"
+      },
+      "SegmentResultsResponse": {
+        "description": "An experiment's main results, counted only for its assigned users whose\nuser_id is in one ID-list segment.",
+        "properties": {
+          "computed_at": {
+            "description": "UTC timestamp at which these results were computed.",
+            "format": "date-time",
+            "title": "Computed At",
+            "type": "string"
+          },
+          "confidence_level": {
+            "default": 0.95,
+            "description": "Confidence level the results were computed at: the request's, or the experiment's stored one.",
+            "maximum": 0.99,
+            "minimum": 0.8,
+            "title": "Confidence Level",
+            "type": "number"
+          },
+          "correction_method": {
+            "$ref": "#/components/schemas/CorrectionMethod",
+            "default": "none",
+            "description": "Multiple-comparison correction applied across each metric's treatments within the segment: the request's, or the experiment's stored one. It does not cover the choice of segment."
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "UTC timestamp when the experiment ended, or None if still running.",
+            "title": "End Date"
+          },
+          "experiment_id": {
+            "description": "Unique identifier of the experiment.",
+            "format": "uuid",
+            "title": "Experiment Id",
+            "type": "string"
+          },
+          "experiment_name": {
+            "description": "Human-readable name of the experiment.",
+            "title": "Experiment Name",
+            "type": "string"
+          },
+          "is_exploratory": {
+            "default": true,
+            "description": "Always true. The correction covers the comparisons within the segment, not the choice of segment.",
+            "title": "Is Exploratory",
+            "type": "boolean"
+          },
+          "metrics": {
+            "description": "Every metric, primary first, for the segment's users.",
+            "items": {
+              "$ref": "#/components/schemas/MetricResult"
+            },
+            "title": "Metrics",
+            "type": "array"
+          },
+          "sample_size_adequate": {
+            "description": "True when every variant's users in the segment reach the primary metric's minimum sample size.",
+            "title": "Sample Size Adequate",
+            "type": "boolean"
+          },
+          "segment": {
+            "$ref": "#/components/schemas/ResultsSegment",
+            "description": "The segment these results were counted for."
+          },
+          "srm": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SRMResult"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The sample ratio check of the segment's users alone. Null for a bandit, for fewer than two allocated variants, and when no member is assigned."
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "UTC timestamp when the experiment started, or None if not yet started.",
+            "title": "Start Date"
+          },
+          "status": {
+            "description": "Current lifecycle status of the experiment: 'draft', 'active', 'paused', 'completed', or 'archived'.",
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/backend__app__schemas__results__ExperimentSummary",
+            "description": "The summary for the segment's users. Its recommendation is INCONCLUSIVE whenever their sample ratio check or the whole experiment's warns. Exploratory: do not automate a decision from it."
+          }
+        },
+        "required": [
+          "experiment_id",
+          "experiment_name",
+          "status",
+          "sample_size_adequate",
+          "computed_at",
+          "summary",
+          "metrics",
+          "segment"
+        ],
+        "title": "SegmentResultsResponse",
         "type": "object"
       },
       "SegmentStatus": {
@@ -33625,6 +33806,111 @@
         "tags": [
           "Results"
         ]
+      }
+    },
+    "/api/v1/results/{experiment_id}/segments/{segment_id}": {
+      "get": {
+        "description": "Beta. The experiment's results counted only for its assigned users whose user_id is in the id_list segment when the request is made, matched exactly. Exploratory: is_exploratory is always true, and the correction covers the comparisons within the segment, not the choice of segment. srm is the sample ratio check of those users alone; summary.recommendation is computed for them, and is INCONCLUSIVE whenever that check or the whole experiment's (segment.experiment_srm_warning) warns. Do not automate a decision from it. A segment in any status is accepted. 404 for an unknown experiment or segment; 422 for a rules segment; 503 with Retry-After while another segment's results are being computed in the same API process. Computed on each request: not cached, and no snapshot is recorded. No other route filters by a segment.",
+        "operationId": "get_segment_results_api_v1_results__experiment_id__segments__segment_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "segment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Segment Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Confidence level for this request. Omit it to use the experiment's stored confidence_level (0.95 unless set otherwise).",
+            "in": "query",
+            "name": "confidence_level",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 0.99,
+                  "minimum": 0.8,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Confidence level for this request. Omit it to use the experiment's stored confidence_level (0.95 unless set otherwise).",
+              "title": "Confidence Level"
+            }
+          },
+          {
+            "description": "Multiple-comparison correction for this request. Omit it to use the experiment's stored correction_method (benjamini_hochberg unless set otherwise). 'none' shows the uncorrected numbers.",
+            "in": "query",
+            "name": "correction_method",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(none|bonferroni|benjamini_hochberg)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Multiple-comparison correction for this request. Omit it to use the experiment's stored correction_method (benjamini_hochberg unless set otherwise). 'none' shows the uncorrected numbers.",
+              "title": "Correction Method"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SegmentResultsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Experiment not found, or Segment not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Another segment's results are being computed. Try again shortly."
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Beta: an experiment's results for the members of one ID-list segment",
+        "tags": [
+          "Results"
+        ],
+        "x-stability": "beta"
       }
     },
     "/api/v1/results/{experiment_id}/sequential": {
