@@ -648,4 +648,73 @@ test.describe("Journey: RBAC", () => {
       await page.close();
     }
   });
+
+  // #442: a DEVELOPER (not a superuser) deletes a flag from its page, typing
+  // its key in the Dialog first, and the list no longer has it; an ANALYST
+  // opens the same flag beforehand and is offered no Delete. The flag is this
+  // attempt's own, made through the API under a key no other attempt uses
+  // (one worker, one CI retry): no seeded flag is deleted.
+  test("developer deletes its own flag after typing its key; an analyst is offered no delete", async ({ sessions }) => {
+    const page = await (await sessions("developer")).newPage();
+    const flags = new FeatureFlagsPage(page);
+    const key = `j442-delete-${Date.now()}`;
+    let headers: Record<string, string> = {};
+    let flagId: string | null = null;
+    try {
+      await flags.goto();
+      await expect(flags.flagList).toBeVisible({ timeout: 15_000 });
+      const token = await page.evaluate((storageKey) => window.localStorage.getItem(storageKey), TOKEN_STORAGE_KEY);
+      expect(token, "the developer session has a token").toBeTruthy();
+      headers = { Authorization: `Bearer ${token}` };
+      const created = await page.request.post(`${API_URL}/api/v1/feature-flags/`, {
+        headers: { ...headers, "content-type": "application/json" },
+        data: { key, name: key },
+      });
+      expect(created.status(), await created.text()).toBe(201);
+      flagId = ((await created.json()) as { id: string }).id;
+
+      // The ANALYST reads the flag and gets no Delete, only the note why.
+      const analyst = await (await sessions("analyst")).newPage();
+      try {
+        const analystFlags = new FeatureFlagsPage(analyst);
+        await analystFlags.gotoFlag(flagId);
+        await expect(analystFlags.detailKey).toHaveText(key, { timeout: 15_000 });
+        await expect(analyst.getByTestId("flag-role-note")).toBeVisible();
+        await expect(analyst.getByTestId("flag-delete")).toHaveCount(0);
+        await expect(analyst.getByRole("button", { name: /delete/i })).toHaveCount(0);
+      } finally {
+        await analyst.close();
+      }
+
+      await flags.gotoFlag(flagId);
+      await expect(flags.detailKey).toHaveText(key, { timeout: 15_000 });
+
+      // Delete asks for the key, with focus on Cancel, and stays disabled until it is typed.
+      await page.getByTestId("flag-delete").getByRole("button", { name: "Delete" }).click();
+      const dialog = page.getByRole("dialog", { name: `Delete ${key}?` });
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+      const confirm = dialog.getByRole("button", { name: "Delete" });
+      await expect(confirm).toBeDisabled();
+      await dialog.getByLabel(`Type ${key} to delete it`).fill(key);
+      await expect(confirm).toBeEnabled();
+      await confirm.click();
+
+      // The list, which says so and no longer has the flag.
+      await expect(page).toHaveURL(/\/feature-flags\/?$/, { timeout: 15_000 });
+      await expect(page.getByTestId("flags-deleted-status")).toHaveText(`Deleted ${key}.`, { timeout: 15_000 });
+      await expect(flags.flagList.or(flags.emptyState)).toBeVisible({ timeout: 15_000 });
+      await expect(page.locator(`[data-testid="flag-row"][data-flag-key="${key}"]`)).toHaveCount(0);
+      const gone = await page.request.get(`${API_URL}/api/v1/feature-flags/${flagId}`, { headers });
+      expect(gone.status()).toBe(404);
+    } finally {
+      // Its own flag only: removed here when a step above failed before the
+      // dialog deleted it (404 once it has).
+      if (flagId) {
+        const removed = await page.request.delete(`${API_URL}/api/v1/feature-flags/${flagId}`, { headers });
+        expect.soft([204, 404], `DELETE the journey's flag ${flagId}`).toContain(removed.status());
+      }
+      await page.close();
+    }
+  });
 });

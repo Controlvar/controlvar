@@ -538,7 +538,9 @@ is served, whether it is in a segment, and which experiments it is assigned to. 
 user ids that do not identify a person (not email addresses), in ID lists too, and read assignments from
 your server. Use a dedicated key for browser traffic so it can be revoked on its
 own, and never give it the `sdk:ruleset` scope, which lets a key download every flag's targeting
-rules. Server-side, lower `timeoutMs` if the SDK sits on a request path:
+rules. The two routes the visual editor's browser script calls refuse a key with any scope
+([Refused in a web page](../security/api-keys.md#refused-in-a-web-page)); the routes this SDK
+calls do not. Server-side, lower `timeoutMs` if the SDK sits on a request path:
 
 ```typescript
 const client = new ExperimentationClient({

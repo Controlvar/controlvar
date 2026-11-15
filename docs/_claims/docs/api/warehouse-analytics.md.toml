@@ -41,6 +41,13 @@ by = [
 ]
 
 [[unit]]
+text = "Amazon Redshift isn't available yet."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_connectors.py::test_disabled_connector_refused_with_422",
+    "test:modules/backend/tests/unit/warehouse/test_connectors.py::test_enabled_connectors_exact",
+]
+
+[[unit]]
 text = "GET /api/v1/warehouse/analysis/connectors says which are available on your deployment; creating a connection of any other type answers 422 connector_disabled."
 by = [
     "test:modules/backend/tests/unit/warehouse/test_connectors.py",

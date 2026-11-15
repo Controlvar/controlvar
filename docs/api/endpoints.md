@@ -167,7 +167,8 @@ curl -s -X GET "http://localhost:8000/api/v1/experiments/" \
 On the Quick Start stack it prints its three demo experiments, among them
 `Checkout Button Color`.
 
-Step 2: Create a new experiment. It needs at least one variant and one metric, and
+Step 2: Create a new experiment. It needs at least one variant and one metric, though a
+visual experiment (one sent with `visual_config`) may be created without metrics, and
 `experiment_type` is `a_b`, `mv`, `split_url` or `bandit`. `key` is what the tracking API
 and the SDKs call it by:
 
@@ -405,11 +406,21 @@ the API answers `429` with a
 - An event's `metadata` on `/tracking/track`, `/tracking/batch` and `/tracking/events` has limits
   of its own: 16,384 bytes and 64 levels ([Track Event](#track-event))
 
+### Number Fields
+A number field (`"type": "number"` in the OpenAPI document) in the body or the query that is
+given NaN, Infinity, -Infinity or a number too large for a double such as `1e400`, quoted or
+not, answers 422 with `"type": "finite_number"` at its place:
+`{"type": "finite_number", "loc": ["query", "mde"], "msg": "Input should be a finite number"}`.
+That holds on every route, including the power calculator's, which need no sign-in. A field that
+takes only a JSON number answers `"type": "float_type"` to any string, these four included. A
+tracking event's `value` keeps its own refusals ([Track Event](#track-event)).
+
 ### Targeting Context Limits
 The routes that take a targeting `context` hold it to two limits before it is matched against
 any rule: `GET` and `POST /api/v1/feature-flags/evaluate/{flag_key}`,
-`GET /api/v1/feature-flags/user/{user_id}`, `POST /api/v1/tracking/assign`, and each user's
-`context` in `POST /api/v1/tracking/assign/batch`. `POST /api/v1/segments/{segment_id}/evaluate`
+`GET /api/v1/feature-flags/user/{user_id}`, `POST /api/v1/tracking/assign`, each user's
+`context` in `POST /api/v1/tracking/assign/batch`, and `POST /api/v1/tracking/visual` (beta).
+`POST /api/v1/segments/{segment_id}/evaluate`
 and `POST /api/v1/segments/bulk-evaluate` hold their `user_context` to the same limits.
 
 | Limit | At most | `detail` of the 422 |
@@ -1725,6 +1736,9 @@ any value including `null` or `{}`, is refused with 422, nothing is changed,
 and the error is on `["body", "schedule"]` with the message `schedule is not
 applied by this endpoint; use PUT /api/v1/experiments/{experiment_id}/schedule`.
 Schedule an experiment with `PUT /api/v1/experiments/{experiment_id}/schedule`.
+A visual draft takes no start date there: a `start_date` other than `null` is
+refused with 400, because it starts only with `POST /start`; an `end_date` is
+accepted, and `{"start_date": null}` clears a start date.
 
 ### An experiment's status
 
@@ -1742,6 +1756,11 @@ the caller's role, superusers included:
   split URL experiment is also refused with 400 when its `split_url_config`
   is missing or cannot split; see
   [Starting a split URL experiment](split-url.md#starting-a-split-url-experiment).
+  A visual draft (one with `visual_config`) starts only with the body
+  `{"design_etag": "..."}`, the `design_etag` that
+  `GET /api/v1/experiments/{experiment_id}` returned: without it the start is
+  refused with 400, and with a different one (its design changed after it was
+  read) with 409, and nothing is changed.
 - `POST /api/v1/experiments/{experiment_id}/pause`: `active` to `paused`.
 - `POST /api/v1/experiments/{experiment_id}/complete`: `active` or `paused` to
   `completed`, and sets `end_date` to now. An experiment that an earlier

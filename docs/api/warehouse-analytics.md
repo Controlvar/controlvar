@@ -9,6 +9,7 @@
     Snowflake is available (see [Setting up Snowflake](#setting-up-snowflake)).
     BigQuery is available (see [Setting up BigQuery](#setting-up-bigquery)).
     Amazon Athena isn't available yet.
+    Amazon Redshift isn't available yet.
     `GET /api/v1/warehouse/analysis/connectors` says which are available on
     your deployment; creating a connection of any other type answers
     `422 connector_disabled`.

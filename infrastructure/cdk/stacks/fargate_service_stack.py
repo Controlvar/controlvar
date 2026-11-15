@@ -1277,6 +1277,40 @@ class FargateServiceStack(Stack):
                 )
             )
 
+        # --- Customer warehouse roles (#826) ---
+        # The one STS grant the API task role holds: AssumeRole on roles under
+        # the `controlvar-warehouse/` path, in any account, which is where a
+        # customer's role for a role-based warehouse connection lives. Full
+        # profile only, and never the demo, whose task role stays without STS.
+        # Dormant: nothing calls AssumeRole while the warehouse types that use
+        # it are disabled. infrastructure/tests/test_environments_do_not_collide.py
+        # and test_api_task_and_data_resources.py pin this exact action on
+        # this exact resource and nothing else under `sts:`.
+        if include_modules and env_name != "demo":
+            task_role.add_to_policy(
+                iam.PolicyStatement(
+                    actions=["sts:AssumeRole"],
+                    resources=[
+                        self.format_arn(
+                            service="iam",
+                            region="",
+                            account="*",
+                            resource="role",
+                            resource_name="controlvar-warehouse/*",
+                        )
+                    ],
+                )
+            )
+            CfnOutput(
+                self,
+                "TaskRoleArn",
+                value=task_role.role_arn,
+                description=(
+                    "ARN of the API task role, the principal a customer's "
+                    "warehouse role must trust"
+                ),
+            )
+
         # --- CloudFormation Outputs ---
         # Where the API's tasks run: the subnets and security group a one-off
         # task (the migration) must be given to reach what the service

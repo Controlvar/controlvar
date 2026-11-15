@@ -200,6 +200,8 @@ def test_the_jsonb_pin_sees_every_config():
         "split_url_config",
         # #448: strings only (an attribute name and values), no float.
         "balance_within",
+        # #1545: a visual experiment's settings hold no number but `version`.
+        "visual_config",
     }
     paths = {(field, path) for field, _, path, _, _ in FLOAT_CASES}
     assert ("bayesian_config", ("rope",)) in paths

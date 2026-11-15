@@ -339,6 +339,7 @@ def get_experiment_results(
         default=None,
         ge=0.80,
         le=0.99,
+        allow_inf_nan=False,
         description=(
             "Confidence level for this request. Omit it to use the "
             "experiment's stored confidence_level (0.95 unless set otherwise)."
@@ -794,6 +795,7 @@ def get_sample_size_status(
         default=None,
         gt=0.0,
         lt=1.0,
+        allow_inf_nan=False,
         description=(
             "Baseline conversion rate to plan from. Omit it to use the rate "
             "observed in the control variant on the primary metric so far."
@@ -803,6 +805,7 @@ def get_sample_size_status(
         default=None,
         gt=0.0,
         lt=1.0,
+        allow_inf_nan=False,
         description=(
             "Minimum detectable effect, relative to the baseline: 0.05 means "
             "12% -> 12.6%. Omit it to use the effect saved with the experiment "
@@ -814,6 +817,7 @@ def get_sample_size_status(
         default=None,
         ge=0.80,
         le=0.99,
+        allow_inf_nan=False,
         description=(
             "Confidence level of the two-sided test. Omit it to use the "
             "experiment's stored confidence_level."
@@ -823,6 +827,7 @@ def get_sample_size_status(
         default=0.80,
         ge=0.50,
         le=0.99,
+        allow_inf_nan=False,
         description="Target power. Default 0.80.",
     ),
     correction_method: Optional[str] = Query(
@@ -1315,6 +1320,7 @@ def get_sequential_results(
         default=None,
         gt=0.0,
         le=SEQUENTIAL_ALPHA_MAX,
+        allow_inf_nan=False,
         description=(
             "Significance level for this request, above 0 and at most 0.2. "
             "Overrides the experiment's stored sequential_testing_config.alpha "

@@ -7,6 +7,9 @@ import { PageTitle } from '@/components/PageTitle';
 export default function ResultDetailPage() {
   const { query } = useRouter();
   const id = query.id as string | undefined;
+  // `?tab=breakdowns` (the experiment page's "See each group's split") opens
+  // on Breakdowns; any other value is ignored.
+  const initialTab = query.tab === 'breakdowns' ? 'breakdowns' : undefined;
 
   if (!id) {
     return (
@@ -24,7 +27,7 @@ export default function ResultDetailPage() {
         <div className="flex justify-end mb-4">
           <ResultsCsvDownload experimentId={id} />
         </div>
-        <ResultsDashboard experimentId={id} />
+        <ResultsDashboard experimentId={id} initialTab={initialTab} />
       </div>
     </div>
   );

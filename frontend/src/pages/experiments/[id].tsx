@@ -10,7 +10,7 @@ import WarehouseAnalysisSection from '@modules/components/warehouse/runs/Warehou
 import { useAuth } from '@/contexts/AuthContext';
 import { EligibilityUser, useExperimentEligibility } from '@/hooks/useExperimentEligibility';
 import { useSegmentList } from '@/hooks/useSegmentList';
-import { balanceSummary } from '@/components/experiments/new/balanceWithin';
+import { BALANCE_RESULTS_LINK, balanceSummary } from '@/components/experiments/new/balanceWithin';
 import { isApiError } from '@/services/api';
 import { docsUrl } from '@/services/docs';
 import { ExperimentsService } from '@/services/experiments';
@@ -95,8 +95,10 @@ export function algorithmLabel(optimizationType: string | null | undefined): str
  * Platform (ios, android, web)", or the segments by name) or "off". Read-only:
  * a draft changes it in "Edit variants and metrics", and it is fixed once the
  * experiment has started. Saved segments are loaded only when it lists some.
+ * Once there are results, a balanced experiment's row links to its balanced
+ * groups on Results › Breakdowns (`resultsHref`).
  */
-function BalanceRow({ setting }: { setting: Experiment['balance_within'] }) {
+function BalanceRow({ setting, resultsHref }: { setting: Experiment['balance_within']; resultsHref?: string }) {
   const segmentList = useSegmentList(Boolean(setting?.segments?.length));
   const names =
     segmentList.state === 'ready' ? new Map(segmentList.segments.map((s) => [s.id, s.name] as const)) : null;
@@ -104,6 +106,13 @@ function BalanceRow({ setting }: { setting: Experiment['balance_within'] }) {
     <div className="flex items-center gap-1.5">
       <dt className="text-slate-500">Balance</dt>
       <dd data-testid="experiment-balance">{balanceSummary(setting ?? null, names)}</dd>
+      {setting && resultsHref && (
+        <dd>
+          <Link href={resultsHref} className={NOTE_LINK} data-testid="experiment-balance-results">
+            {BALANCE_RESULTS_LINK}
+          </Link>
+        </dd>
+      )}
     </div>
   );
 }
@@ -517,7 +526,12 @@ export default function ExperimentDetailPage() {
                     <dd data-testid="experiment-algorithm">{algorithm}</dd>
                   </div>
                 )}
-                {experiment.balance_within !== undefined && <BalanceRow setting={experiment.balance_within} />}
+                {experiment.balance_within !== undefined && (
+                  <BalanceRow
+                    setting={experiment.balance_within}
+                    resultsHref={resultsAvailable ? `/results/${experiment.id}?tab=breakdowns` : undefined}
+                  />
+                )}
                 <div className="flex items-center gap-1.5">
                   <dt className="text-slate-500">Owner</dt>
                   <dd data-testid="experiment-owner" title={experiment.owner_id ?? undefined}>

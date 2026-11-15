@@ -111,16 +111,24 @@ def interpret_results(
 )
 def estimate_sample_size(
     baseline_rate: float = Query(
-        ..., description="Current baseline conversion rate (0–1)"
+        ...,
+        allow_inf_nan=False,
+        description="Current baseline conversion rate (0–1)",
     ),
     mde: float = Query(
-        ..., description="Minimum detectable effect — absolute change (0–1)"
+        ...,
+        allow_inf_nan=False,
+        description="Minimum detectable effect — absolute change (0–1)",
     ),
     confidence: float = Query(
-        default=0.95, description="Desired confidence level (default 0.95)"
+        default=0.95,
+        allow_inf_nan=False,
+        description="Desired confidence level (default 0.95)",
     ),
     power: float = Query(
-        default=0.80, description="Desired statistical power (default 0.80)"
+        default=0.80,
+        allow_inf_nan=False,
+        description="Desired statistical power (default 0.80)",
     ),
     daily_traffic: Optional[int] = Query(
         default=None,

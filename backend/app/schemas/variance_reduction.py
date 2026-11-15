@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from backend.app.core import analysis_status as analysis_table
 from backend.app.core.analysis_status import AnalysisStatusValue
 from backend.app.core.stats_engine import ENGINE_VERSION
+from backend.app.schemas.finite_number import FiniteFloat
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -78,7 +79,7 @@ class VarianceReductionConfig(BaseModel):
             "covariate. Must be between 1 and 90."
         ),
     )
-    winsorization_percentile: float = Field(
+    winsorization_percentile: FiniteFloat = Field(
         default=99.0,
         ge=50.0,
         le=100.0,

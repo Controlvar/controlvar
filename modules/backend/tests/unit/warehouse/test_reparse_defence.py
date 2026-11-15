@@ -94,23 +94,21 @@ def test_missing_a_rendered_table_is_refused():
     )
 
 
+#: A valid table per dialect, for the statements built below.
+_TABLES = {
+    "athena": ("analytics", "e"),
+    "bigquery": ("acme-prod", "a", "e"),
+    "redshift": ("analytics", "e"),
+    "snowflake": ("A", "B", "E"),
+}
+
+
 def test_sqlglot_absent_refuses_all(monkeypatch):
+    assert set(_TABLES) == set(SQL_DIALECTS)
     monkeypatch.setattr(builder, "sqlglot", None)
     monkeypatch.setattr(builder, "sqlglot_exp", None)
     for dialect in SQL_DIALECTS.values():
-        a = AssignmentMapping(
-            ("analytics", "e")
-            if dialect.name == "athena"
-            else (
-                ("acme-prod", "a", "e")
-                if dialect.name == "bigquery"
-                else ("A", "B", "E")
-            ),
-            "u",
-            "k",
-            "v",
-            "t",
-        )
+        a = AssignmentMapping(_TABLES[dialect.name], "u", "k", "v", "t")
         m = MetricMapping(a.table, "u", "t", "proportion")
         for build in (
             lambda: build_metric_query(dialect, a, m, "key", WINDOW),

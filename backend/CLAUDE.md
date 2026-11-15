@@ -323,7 +323,7 @@ class Settings(BaseSettings):
 
 ### User Roles
 
-- **ADMIN**: Full access to all resources
+- **ADMIN**: Manages experiments, flags, integrations and compliance exports; not a superuser, so user management and changing safety settings need `is_superuser`
 - **DEVELOPER**: Create and manage experiments/feature flags
 - **ANALYST**: View all data, cannot create/modify
 - **VIEWER**: Read-only access to approved resources

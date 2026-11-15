@@ -142,6 +142,17 @@ describe('react-native SDK against a live backend', () => {
     expect(swallowed).toEqual([]);
     for (const exposure of exposures) expect(exposure.userId).toBe(userId);
 
+    // 7. Flag values (#1810): a NEW client with offlineFallback off (so the fan-out above is
+    //    untouched, and nothing is kept in AsyncStorage) reads the seed's three value flags with
+    //    the typed getters. Each default is no flag value, so a getter that falls back shows; the
+    //    report is what they returned, and the runner requires the seed's on values.
+    const valued = new ExperimentationClient({ ...config, offlineFallback: false });
+    const values = {
+      string: await valued.getStringValue('sdk_contract_value_string', userId, 'smoke-default'),
+      number: await valued.getNumberValue('sdk_contract_value_number', userId, -1),
+      json: await valued.getJsonValue('sdk_contract_value_json', userId, ['smoke-default']),
+    };
+
     writeFileSync(
       REPORT,
       JSON.stringify({
@@ -162,6 +173,7 @@ describe('react-native SDK against a live backend', () => {
               }
             : null,
         },
+        values,
       }) + '\n'
     );
   });

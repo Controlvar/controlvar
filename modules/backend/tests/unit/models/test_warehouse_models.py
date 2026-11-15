@@ -23,6 +23,7 @@ from modules.backend.app.core.credential_crypto import (
 )
 from modules.backend.app.models.warehouse_analysis_run import WarehouseAnalysisRun
 from modules.backend.app.models.warehouse_connection import (
+    BYTE_CAPPED_TYPES,
     ROLE_TYPES,
     WAREHOUSE_TYPES,
     WarehouseConnection,
@@ -200,14 +201,17 @@ def _role_connection(warehouse_type: str) -> WarehouseConnection:
         warehouse_type=warehouse_type,
         parameters={"region": "eu-west-1", "role_arn": "arn:aws:iam::1:role/r"},
         external_id=f"exp-{uuid.uuid4().hex}",
-        max_bytes_per_query=10_000_000,
+        max_bytes_per_query=(
+            10_000_000 if warehouse_type in BYTE_CAPPED_TYPES else None
+        ),
     )
 
 
-def test_the_role_types_are_athena_and_are_known_types():
-    assert ROLE_TYPES == ("athena",)
+def test_the_role_types_are_athena_and_redshift_and_are_known_types():
+    assert ROLE_TYPES == ("athena", "redshift")
     assert set(ROLE_TYPES) < set(WAREHOUSE_TYPES)
     assert SECRET_TYPES == ("bigquery", "snowflake")
+    assert "redshift" not in BYTE_CAPPED_TYPES
 
 
 @pytest.mark.parametrize("warehouse_type", ROLE_TYPES)
@@ -262,30 +266,43 @@ def test_a_secret_connections_spec_has_no_external_id(warehouse_type, monkeypatc
     assert "sentinel" not in repr(spec)
 
 
-def test_the_role_constraints_keep_their_text():
-    """ROLE_TYPES is no schema change: the role constraints read as before it,
-    so the database's constraints and the model's still agree."""
+def test_the_role_constraints_are_built_from_the_role_types():
+    """The type list and the two role constraints name every role type, in
+    exactly the text ``modules_0005_redshift`` writes, so a migrated database
+    and a bootstrapped one agree (``test_modules_0005_transitions.py``
+    compares the two catalogues)."""
     sql = {
         c.name: str(c.sqltext)
         for c in WarehouseConnection.__table__.constraints
         if isinstance(c, CheckConstraint)
     }
+    assert sql["ck_warehouse_connections_type"] == (
+        "warehouse_type IN ('bigquery', 'snowflake', 'athena', 'redshift')"
+    )
     assert sql["ck_warehouse_connections_external_id"] == (
-        "(warehouse_type = 'athena') = (external_id IS NOT NULL)"
+        "(warehouse_type IN ('athena', 'redshift')) = (external_id IS NOT NULL)"
     )
     assert sql["ck_warehouse_connections_athena_no_secret"] == (
-        "warehouse_type <> 'athena' OR (credentials_ciphertext IS NULL "
-        "AND pending_credentials_ciphertext IS NULL)"
+        "warehouse_type NOT IN ('athena', 'redshift') OR (credentials_ciphertext "
+        "IS NULL AND pending_credentials_ciphertext IS NULL)"
+    )
+    assert sql["ck_warehouse_connections_byte_cap_type"] == (
+        "(warehouse_type IN ('bigquery', 'athena')) = (max_bytes_per_query IS NOT NULL)"
     )
 
 
 # ---------------------------------------------------------------------------
 # warehouse_connections
 # ---------------------------------------------------------------------------
+#: An Amazon Redshift row's external id: the rows that break a rule below have
+#: one, so each is refused by the rule it names and not by the external-id one.
+_REDSHIFT_ID = {"external_id": "exp-" + "2" * 32}
+
+
 @pytest.mark.parametrize(
     "overrides",
     [
-        pytest.param({"warehouse_type": "redshift"}, id="unknown-type"),
+        pytest.param({"warehouse_type": "postgres"}, id="unknown-type"),
         pytest.param({"query_timeout_seconds": 9}, id="query-limit-below-10"),
         pytest.param({"max_runs_per_day": 0}, id="no-runs-per-day"),
         pytest.param({"max_bytes_per_query": 10_000_000}, id="snowflake-byte-cap"),
@@ -308,6 +325,31 @@ def test_the_role_constraints_keep_their_text():
             },
             id="athena-with-a-secret",
         ),
+        pytest.param({"warehouse_type": "redshift"}, id="redshift-no-external-id"),
+        pytest.param(
+            {
+                "warehouse_type": "redshift",
+                **_REDSHIFT_ID,
+                "credentials_ciphertext": b"gAAAAA-x",
+            },
+            id="redshift-with-a-secret",
+        ),
+        pytest.param(
+            {
+                "warehouse_type": "redshift",
+                **_REDSHIFT_ID,
+                "pending_credentials_ciphertext": b"gAAAAA-x",
+            },
+            id="redshift-with-a-pending-secret",
+        ),
+        pytest.param(
+            {
+                "warehouse_type": "redshift",
+                **_REDSHIFT_ID,
+                "max_bytes_per_query": 10_000_000,
+            },
+            id="redshift-with-a-byte-cap",
+        ),
         pytest.param({"name": None}, id="no-name"),
         pytest.param({"parameters": None}, id="no-parameters"),
         pytest.param({"parameters": ["a"]}, id="parameters-not-an-object"),
@@ -327,8 +369,13 @@ def test_the_connection_table_refuses(db_session, overrides):
             "max_bytes_per_query": 10_000_000,
             "external_id": f"exp-{uuid.uuid4().hex}",
         },
+        {
+            "warehouse_type": "redshift",
+            "parameters": {"region": "eu-west-1", "workgroup_name": "analytics"},
+            "external_id": f"exp-{uuid.uuid4().hex}",
+        },
     ],
-    ids=["snowflake", "bigquery", "athena"],
+    ids=["snowflake", "bigquery", "athena", "redshift"],
 )
 def test_the_connection_table_accepts_each_type(db_session, overrides):
     conn = _connection(**overrides)

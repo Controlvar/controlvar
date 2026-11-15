@@ -154,7 +154,7 @@ Development-only dependencies — what `backend/requirements.txt` adds for test 
 
 | Package | Version |
 |---|---|
-| `dnspython` | 2.9.0 |
+| `dnspython` | 2.9.2 |
 
 #### LGPL (1)  ⚠️ weak copyleft — linking an unmodified copy is fine; modifications to the library must be published under the LGPL
 

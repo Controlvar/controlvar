@@ -5,6 +5,10 @@ export {
 } from './context/ExperimentationProvider';
 export type { ExperimentationContextValue } from './context/ExperimentationProvider';
 export { useFeatureFlag } from './hooks/useFeatureFlag';
+export { useFlagValue } from './hooks/useFlagValue';
+export type { FlagValueResult } from './hooks/useFlagValue';
+export { FlagValueError } from './client/flagValue';
+export type { FlagValueErrorCode, FlagValueType } from './client/flagValue';
 export { useExperiment } from './hooks/useExperiment';
 export { useTrackEvent } from './hooks/useTrackEvent';
 export type { TrackEventFn } from './hooks/useTrackEvent';

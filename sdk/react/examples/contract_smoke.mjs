@@ -22,15 +22,24 @@
  * for this experiment and the assigned variant); the smoke itself fails when the hook
  * received another user. A second client's hook returns a rejected Promise: an
  * unhandled rejection would end this process with exit 1.
+ *
+ * Flag values (#1810): `useFlagValue` is a hook, and this smoke renders nothing,
+ * so it reads each of the seed's value flags the way the hook does in a browser:
+ * the browser client's evaluation (the request and mapping `useFeatureFlag`
+ * uses), read by type with the hook's own reader, `readFlagValue`. The line
+ * reports `values`, what the reads returned; the runner requires the seed's on
+ * values.
  */
 import { randomUUID } from 'node:crypto';
 
 // The SSR entry point: no React, no browser globals.
 import ssr from '../dist/ssr/index.js';
 import clientModule from '../dist/client/ExperimentationClient.js';
+import flagValueModule from '../dist/client/flagValue.js';
 
 const { ServerClient } = ssr;
 const { ExperimentationClient } = clientModule;
+const { readFlagValue } = flagValueModule;
 
 const apiUrl =
   process.env.CONTROLVAR_API_URL || process.env.EXPERIMENTLY_API_URL || 'http://localhost:8000';
@@ -154,6 +163,21 @@ try {
     fail(`a rejecting hook changed the answer: ${despite.variantName}, expected ${second.variantName}`);
   }
 
+  // 7. Flag values (#1810): a NEW browser client (so the fan-out above is untouched) evaluates
+  //    the seed's string, number and json flags, each on at 100%, and each answer is read by
+  //    type as useFlagValue reads it. Each default is no flag value, so a read that falls back
+  //    shows; the report is what the reads returned.
+  const valued = new ExperimentationClient(config);
+  const readValue = async (key, type, fallback) => {
+    const read = readFlagValue(await valued.evaluateFeatureFlagDetailed(user, key), type);
+    return read.found ? read.value : fallback;
+  };
+  const values = {
+    string: await readValue('sdk_contract_value_string', 'string', 'smoke-default'),
+    number: await readValue('sdk_contract_value_number', 'number', -1),
+    json: await readValue('sdk_contract_value_json', 'json', ['smoke-default']),
+  };
+
   process.stdout.write(
     JSON.stringify({
       sdk: 'react',
@@ -172,6 +196,7 @@ try {
             }
           : null,
       },
+      values,
     }) + '\n'
   );
 } catch (err) {

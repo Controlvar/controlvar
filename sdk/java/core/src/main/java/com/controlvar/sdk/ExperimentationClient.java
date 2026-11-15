@@ -2,6 +2,7 @@ package com.controlvar.sdk;
 
 import com.controlvar.sdk.config.SdkConfig;
 import com.controlvar.sdk.exception.ExperimentationException;
+import com.controlvar.sdk.exception.FlagValueException;
 import com.controlvar.sdk.model.ExperimentAssignment;
 import com.controlvar.sdk.model.Exposure;
 import com.controlvar.sdk.model.FlagEvaluation;
@@ -22,6 +23,8 @@ import okhttp3.Response;
 import okhttp3.ResponseBody;
 
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -48,6 +51,8 @@ import java.util.concurrent.TimeUnit;
  *
  * <ul>
  *   <li>{@link #evaluateFeatureFlag} — {@code GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=…}</li>
+ *   <li>{@link #getStringValue}, {@link #getNumberValue}, {@link #getJsonValue} — the value a
+ *       flag serves the user, from the same request and cache as {@link #evaluateFeatureFlag}</li>
  *   <li>{@link #getExperimentAssignment} — {@code POST /api/v1/tracking/assign}</li>
  *   <li>{@link #trackEvent(TrackEvent)} — {@code POST /api/v1/tracking/track}, or
  *       {@code POST /api/v1/tracking/batch} when the event has no key (fan-out)</li>
@@ -199,6 +204,183 @@ public class ExperimentationClient implements AutoCloseable {
     }
 
     // =========================================================================
+    // Flag values
+    // =========================================================================
+
+    /**
+     * The string a string flag serves this user: its on value when the flag is on for them, its
+     * off value otherwise. Evaluated as {@link #evaluateFeatureFlag} evaluates, with the same
+     * request and the same cache: reading a value records no exposure.
+     *
+     * <p>Never throws. Returns {@code defaultValue}, and passes the reason to the
+     * {@link ErrorListener} with the operation {@code "value"}, when the request fails, the flag
+     * is unknown (404), the server sends no value (a server without flag values), the flag serves
+     * another type ({@link FlagValueException#TYPE_MISMATCH}), or {@code user} is {@code null} or
+     * {@code flagKey} empty (then nothing is sent; {@link FlagValueException#INVALID_RESPONSE}).
+     * Unlike {@link #evaluateFeatureFlag}, it throws no {@link IllegalArgumentException}.
+     *
+     * @param user         the user to evaluate the flag for
+     * @param flagKey      the flag key
+     * @param defaultValue what to return when there is no string value to return
+     * @return the flag's string value, or {@code defaultValue}
+     */
+    public String getStringValue(User user, String flagKey, String defaultValue) {
+        Object value = typedValue(user, flagKey, "string", "getStringValue");
+        return value == null ? defaultValue : (String) value;
+    }
+
+    /**
+     * The number a number flag serves this user, as a {@code double}: an integer as saved
+     * ({@code 10} is {@code 10.0}) or a decimal. See {@link #getStringValue} for when it returns
+     * {@code defaultValue} instead; a number beyond ±(2^53−1), which no server sends, is one of
+     * those ({@link FlagValueException#INVALID_RESPONSE}). Never throws.
+     *
+     * @param user         the user to evaluate the flag for
+     * @param flagKey      the flag key
+     * @param defaultValue what to return when there is no number value to return
+     * @return the flag's number value, or {@code defaultValue}
+     */
+    public double getNumberValue(User user, String flagKey, double defaultValue) {
+        Object value = typedValue(user, flagKey, "number", "getNumberValue");
+        return value == null ? defaultValue : ((Number) value).doubleValue();
+    }
+
+    /**
+     * The JSON object or array a json flag serves this user: a {@code Map<String, Object>} or a
+     * {@code List<Object>}, holding strings, numbers, booleans, {@code null}s, maps and lists. A
+     * new copy on every call: changing it changes nothing the client keeps. See
+     * {@link #getStringValue} for when it returns {@code defaultValue} instead (the same object,
+     * not a copy). Never throws.
+     *
+     * @param user         the user to evaluate the flag for
+     * @param flagKey      the flag key
+     * @param defaultValue what to return when there is no JSON value to return
+     * @return a copy of the flag's JSON value, or {@code defaultValue}
+     */
+    public Object getJsonValue(User user, String flagKey, Object defaultValue) {
+        Object value = typedValue(user, flagKey, "json", "getJsonValue");
+        return value == null ? defaultValue : value;
+    }
+
+    /**
+     * The typed getters' one body, as the JavaScript SDK's: the value the flag serves this user
+     * when it is of {@code type} (a copy), and otherwise {@code null}, with the reason passed to
+     * the error listener once. The order of the checks is the contract
+     * ({@code tests/sdk-contract/value-vectors.json}): no value; a served type other than
+     * {@code type} ({@code value_type} when the answer has one, else the value's own JSON type);
+     * a value that is not of {@code type}.
+     */
+    private Object typedValue(User user, String flagKey, String type, String method) {
+        ExperimentationException reason;
+        try {
+            if (user == null) {
+                throw new FlagValueException(
+                        "user is null; " + method + " sent nothing and returned your default",
+                        FlagValueException.INVALID_RESPONSE);
+            }
+            if (flagKey == null || flagKey.isEmpty()) {
+                throw new FlagValueException(
+                        "flagKey is empty; " + method + " sent nothing and returned your default",
+                        FlagValueException.INVALID_RESPONSE);
+            }
+            FlagEvaluation evaluation = evaluateFeatureFlag(user, flagKey);
+            Object value = evaluation.getValue();
+            String flag = "Flag '" + flagKey + "'";
+            if (value == null) {
+                throw new FlagValueException(flag + " came back without a value (from a server without flag "
+                        + "values, or one that cannot serve this flag's stored value); " + method
+                        + " returned your default", FlagValueException.INVALID_RESPONSE);
+            }
+            String served = evaluation.getValueType() != null ? evaluation.getValueType() : jsonTypeOf(value);
+            if (!served.equals(type)) {
+                throw new FlagValueException(flag + " serves " + describeType(served) + "; " + method
+                        + " returned your default", FlagValueException.TYPE_MISMATCH);
+            }
+            if (!isValueOfType(value, type)) {
+                throw new FlagValueException(flag + " serves " + describeType(type) + ", but the server's "
+                        + "value is not one; " + method + " returned your default",
+                        FlagValueException.INVALID_RESPONSE);
+            }
+            return value;
+        } catch (ExperimentationException e) {
+            reason = e;
+        } catch (RuntimeException e) {
+            // Not the SDK's own kind (an unreadable base URL is OkHttp's IllegalArgumentException):
+            // reported as one, with what was thrown as its cause.
+            reason = new ExperimentationException(
+                    "Could not evaluate flag '" + flagKey + "' (" + e.getClass().getName() + "); "
+                            + method + " returned your default", e);
+        }
+        ErrorHook.call(config.getErrorListener(), reason, "value");
+        return null;
+    }
+
+    /** A JSON value's type as the server names value types; the answer's value is one of these. */
+    private static String jsonTypeOf(Object value) {
+        if (value instanceof String) return "string";
+        if (value instanceof Boolean) return "boolean";
+        if (value instanceof Number) return "number";
+        if (value instanceof Map || value instanceof List) return "json";
+        return value.getClass().getName();
+    }
+
+    /** A value type as the typed getters' messages name it. */
+    private static String describeType(String type) {
+        switch (type) {
+            case "boolean": return "a boolean";
+            case "string": return "a string";
+            case "number": return "a number";
+            case "json": return "a JSON value";
+            default: return "a value of type \"" + (type.length() > 64 ? type.substring(0, 64) : type) + "\"";
+        }
+    }
+
+    /**
+     * Whether {@code value} is a value of {@code type} as the server serves one: a string; a
+     * number that is finite and within ±(2^53−1) ({@link #isPortableNumber}); a JSON object or
+     * array.
+     */
+    private static boolean isValueOfType(Object value, String type) {
+        switch (type) {
+            case "string": return value instanceof String;
+            case "number": return isPortableNumber(value);
+            case "json": return value instanceof Map || value instanceof List;
+            default: return false;
+        }
+    }
+
+    /** 2^53−1: the largest integer every SDK's numbers hold exactly. */
+    private static final long MAX_SAFE_INTEGER = 9007199254740991L;
+
+    /**
+     * Whether {@code value} is a number the server serves: finite and within ±(2^53−1). Each
+     * class the JSON reader gives ({@code Integer}, {@code Long}, {@code BigInteger},
+     * {@code Double}; and {@code Short}, {@code Byte}, {@code Float}, {@code BigDecimal}) is
+     * checked as it is, before any conversion to {@code double} could round it into range. A
+     * {@code Boolean} is not a number, and neither is any other class.
+     */
+    static boolean isPortableNumber(Object value) {
+        if (value instanceof Integer || value instanceof Short || value instanceof Byte) {
+            return true;
+        }
+        if (value instanceof Long) {
+            long number = (Long) value;
+            return number >= -MAX_SAFE_INTEGER && number <= MAX_SAFE_INTEGER;
+        }
+        if (value instanceof Double || value instanceof Float) {
+            double number = ((Number) value).doubleValue();
+            return !Double.isNaN(number) && !Double.isInfinite(number) && Math.abs(number) <= MAX_SAFE_INTEGER;
+        }
+        if (value instanceof BigInteger) {
+            return ((BigInteger) value).abs().compareTo(BigInteger.valueOf(MAX_SAFE_INTEGER)) <= 0;
+        }
+        if (value instanceof BigDecimal) {
+            return ((BigDecimal) value).abs().compareTo(BigDecimal.valueOf(MAX_SAFE_INTEGER)) <= 0;
+        }
+        return false;
+    }
+
+    // =========================================================================
     // Experiments
     // =========================================================================
 
@@ -287,8 +469,9 @@ public class ExperimentationClient implements AutoCloseable {
         }
         if (exposure != null) {
             // Last, outside the request's try blocks, with no cache lock held. The listener's
-            // failure becomes a hook error (ExposureHook.HookError), which this SDK, having no
-            // error channel, drops: the answer below is returned whatever the listener did.
+            // failure becomes a hook error (ExposureHook.HookError), which this SDK drops (its
+            // ErrorListener hears only the typed getters' fallbacks): the answer below is
+            // returned whatever the listener did.
             ExposureHook.call(listener, exposure);
         }
         return assignment;

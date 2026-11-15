@@ -953,7 +953,7 @@ MECHANISMS: Dict[str, Mechanism] = {
         holds=(
             (
                 "docs/api/warehouse-analytics.md",
-                r"\b(?:BigQuery|Snowflake|Amazon Athena) is available\b",
+                r"\b(?:BigQuery|Snowflake|Amazon Athena|Amazon Redshift) is available\b",
             ),
         ),
     ),
@@ -1737,13 +1737,13 @@ MECHANISMS: Dict[str, Mechanism] = {
             "This command applies all unapplied migrations in order.",
         ),
     ),
-    # The modules branch: its four revisions, in order.
+    # The modules branch: its five revisions, in order.
     "alembic-plan-branch": Mechanism(
         "backend/tests/unit/db/test_alembic_plan.py"
         "::test_the_core_plan_is_the_full_plan_without_the_branch",
         holds=_whole(
             "docs/self-hosting/migrations.md",
-            "The modules branch has four revisions: modules_0001_rbac, then modules_0002_warehouse_analysis, then modules_0003_lower_is_better, then modules_0004_rbac_activation.",
+            "The modules branch has five revisions: modules_0001_rbac, then modules_0002_warehouse_analysis, then modules_0003_lower_is_better, then modules_0004_rbac_activation, then modules_0005_redshift.",
         ),
     ),
     # modules_0001_rbac runs after a7b8c9d0e1f2.
@@ -1763,14 +1763,14 @@ MECHANISMS: Dict[str, Mechanism] = {
         holds=_whole(
             "docs/self-hosting/migrations.md",
             "Roll back the most recent migration of one branch.",
-            "The modules branch has four revisions: modules_0001_rbac, then modules_0002_warehouse_analysis, then modules_0003_lower_is_better, then modules_0004_rbac_activation.",
-            "modules@-4 unapplies all four, newest first.",
+            "The modules branch has five revisions: modules_0001_rbac, then modules_0002_warehouse_analysis, then modules_0003_lower_is_better, then modules_0004_rbac_activation, then modules_0005_redshift.",
+            "modules@-5 unapplies all five, newest first.",
             "Not modules@base.",
             "modules_0001_rbac is a child of the core revision a7b8c9d0e1f2, not an alembic base, and with a single tree root alembic cannot filter a downgrade by branch label: downgrade modules@base resolves to the whole core chain to base, and drops every table in the schema.",
         )
         + _whole(
             "docs/development/database/migrations.md",
-            "The modules branch has four revisions, modules_0001_rbac, modules_0002_warehouse_analysis, modules_0003_lower_is_better and then modules_0004_rbac_activation: downgrade modules@-1 unapplies modules_0004_rbac_activation only, and downgrade modules@-4 the whole branch.",
+            "The modules branch has five revisions, modules_0001_rbac, modules_0002_warehouse_analysis, modules_0003_lower_is_better, modules_0004_rbac_activation and then modules_0005_redshift: downgrade modules@-1 unapplies modules_0005_redshift only, and downgrade modules@-5 the whole branch.",
         ),
     ),
     # A relative modules downgrade the documents give is one revision or the

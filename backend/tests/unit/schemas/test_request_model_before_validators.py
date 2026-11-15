@@ -35,9 +35,15 @@ from backend.app.main import app
 
 pytestmark = [pytest.mark.unit]
 
-#: Request body models reachable from the routes, per profile.
-CORE_MODEL_COUNT = 79
-FULL_MODEL_COUNT = 121
+#: Request body models reachable from the routes, per profile. #1545 added 11
+#: to both: /start's body, VisualConfig with its page and two goal kinds, and
+#: VisualChanges with its five change operations. #826 added 2 to the full
+#: profile: the Redshift create and update bodies. #1545's delivery routes
+#: added 3 more to both: the bodies of /tracking/visual (VisualTrackingRequest),
+#: /tracking/visual/preview (VisualPreviewRequest) and a preview link's create
+#: (PreviewLinkCreate).
+CORE_MODEL_COUNT = 93
+FULL_MODEL_COUNT = 137
 
 #: ``(model, field)`` pairs that a ``mode="before"`` field validator covers.
 CORE_BEFORE_COUNT = 46
