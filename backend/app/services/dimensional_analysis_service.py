@@ -10,13 +10,51 @@ from __future__ import annotations
 
 import logging
 import math
+import numbers
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-import numpy as np
 from scipy import stats
 
+from backend.app.services import interaction_analysis
+
 logger = logging.getLogger(__name__)
+
+#: A segment enters the heterogeneity test only when, in both the control and
+#: the tested treatment, its users times the pooled conversion rate, and its
+#: users times one minus that rate, are each at least this
+#: (``hte_tested_segments``).  The seeded simulations that hold it are in
+#: ``backend/tests/unit/stats_validation/test_golden_hte_false_positive_rate.py``.
+HTE_MIN_EXPECTED_PER_CELL = 10
+
+
+def hte_tested_segments(rows: Sequence[Sequence[int]]) -> List[int]:
+    """The segments the heterogeneity test uses, as indexes into ``rows``.
+
+    Each row is one segment's ``(control users, control conversions,
+    treatment users, treatment conversions)``.  The candidates are the
+    segments with at least one user in both arms, and the pooled rate is
+    their conversions over their users, both arms together.  A candidate is
+    tested when, in both arms, its users ``n`` give ``n * rate`` and
+    ``n * (1 - rate)`` of at least ``HTE_MIN_EXPECTED_PER_CELL``.
+
+    The comparison is made in integers, ``n * conversions >= floor * users``,
+    so a segment exactly at the floor is tested whatever floating point would
+    round ``n * rate`` to.  A pooled rate of 0 or 1 tests nothing.
+    """
+    counts = [tuple(int(value) for value in row) for row in rows]
+    candidates = [i for i, row in enumerate(counts) if row[0] > 0 and row[2] > 0]
+    users = sum(counts[i][0] + counts[i][2] for i in candidates)
+    conversions = sum(counts[i][1] + counts[i][3] for i in candidates)
+    floor = HTE_MIN_EXPECTED_PER_CELL * users
+    return [
+        i
+        for i in candidates
+        if all(
+            n * conversions >= floor and n * (users - conversions) >= floor
+            for n in (counts[i][0], counts[i][2])
+        )
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -188,102 +226,82 @@ class DimensionalAnalysisService:
 
         return results
 
-    def detect_hte(self, segment_results: List[SegmentResult]) -> bool:
+    def detect_hte(self, segment_results: List[SegmentResult], *, alpha: float) -> bool:
         """
-        Detect heterogeneous treatment effects (HTE) across segments.
+        Whether the treatment effect differs between segments (#1969).
 
-        Uses a chi-squared-like test on the treatment conversion rates across
-        segments.  Returns True when at least two segments differ significantly
-        in their observed treatment effect.
+        Tests whether the first treatment's difference from the control, in
+        percentage points, is the same in every tested segment, and returns
+        True only when that is rejected at ``alpha``.  The test is
+        ``interaction_analysis.interaction_test`` (#219): the additive model
+        (one baseline per segment, one common difference) fitted by binomial
+        maximum likelihood, and Pearson's X^2 against it on J - 1 degrees of
+        freedom, J being the number of tested segments.
+
+        The control is the variant flagged ``is_control``, and the treatment
+        the first other variant of the first segment.  The route lists the
+        control first and then the variants by name, so it is the
+        non-control variant whose name sorts first.  Both are looked up by id
+        in every segment.  A segment is tested when it passes
+        ``hte_tested_segments``; ``other`` and ``unknown`` are segments like
+        any other.  With fewer than two tested segments (no control, no
+        treatment, too few users or conversions) the answer is False, so
+        False means either "tested, alike" or "too little data to tell".
 
         Args:
             segment_results: Output of compute_segment_results.
+            alpha: The significance level, finite and strictly between 0 and
+                1: the experiment's ``1 - confidence_level``, never the
+                per-segment Bonferroni threshold.  Required, so a caller
+                cannot silently test at a default.
 
         Returns:
-            True when HTE is detected, False otherwise.
+            A Python ``bool``.
+
+        Raises:
+            ValueError: ``alpha`` is not a finite number between 0 and 1.
+            interaction_analysis.InteractionFitError: the fit failed.  Never
+                caught here: the breakdown fails as a whole (a 500), never
+                with a partial or guessed answer.
         """
-        if len(segment_results) < 2:
+        if not (
+            isinstance(alpha, numbers.Real)
+            and math.isfinite(alpha)
+            and 0.0 < alpha < 1.0
+        ):
+            raise ValueError(
+                f"alpha must be a finite number between 0 and 1, got {alpha!r}"
+            )
+        if not segment_results:
             return False
 
-        # Gather (control_total, control_conv, treatment_total, treatment_conv)
-        # for each segment — use the first non-control variant as "treatment".
-        segment_data: List[Tuple[int, int, int, int]] = []
+        first = segment_results[0].variants
+        control_id = next((v.variant_id for v in first if v.is_control), None)
+        treatment_id = next((v.variant_id for v in first if not v.is_control), None)
+        if control_id is None or treatment_id is None:
+            return False
+
+        rows: List[Tuple[int, int, int, int]] = []
         for seg in segment_results:
-            ctrl = next((v for v in seg.variants if v.is_control), None)
-            treat = next((v for v in seg.variants if not v.is_control), None)
-            if ctrl is None or treat is None:
-                continue
-            segment_data.append(
+            by_id = {v.variant_id: v for v in seg.variants}
+            control = by_id.get(control_id)
+            treatment = by_id.get(treatment_id)
+            rows.append(
                 (
-                    ctrl.sample_size,
-                    ctrl.conversions or 0,
-                    treat.sample_size,
-                    treat.conversions or 0,
+                    control.sample_size if control else 0,
+                    (control.conversions or 0) if control else 0,
+                    treatment.sample_size if treatment else 0,
+                    (treatment.conversions or 0) if treatment else 0,
                 )
             )
 
-        if len(segment_data) < 2:
+        tested = hte_tested_segments(rows)
+        if len(tested) < 2:
             return False
-
-        # Build a 2×N contingency table (rows: control/treatment, cols: segments)
-        # and run chi-squared test.  High chi-squared = heterogeneous effects.
-        ctrl_conv = np.array([d[1] for d in segment_data], dtype=float)
-        ctrl_total = np.array([d[0] for d in segment_data], dtype=float)
-        treat_conv = np.array([d[3] for d in segment_data], dtype=float)
-        treat_total = np.array([d[2] for d in segment_data], dtype=float)
-
-        # A variant can have no users in a segment (every variant is listed),
-        # so divide only where the total is positive; the rate is 0 elsewhere.
-        ctrl_rate = np.divide(
-            ctrl_conv,
-            ctrl_total,
-            out=np.zeros_like(ctrl_conv, dtype=float),
-            where=ctrl_total > 0,
-        )
-        treat_rate = np.divide(
-            treat_conv,
-            treat_total,
-            out=np.zeros_like(treat_conv, dtype=float),
-            where=treat_total > 0,
-        )
-        lift = treat_rate - ctrl_rate
-
-        # Chi-squared test on treatment conversion counts across segments
-        # If variances in conversion rates are large relative to their means, HTE detected.
-        # Create a 2xN contingency table for chi-squared
-        contingency = np.array(
-            [
-                [int(c) for c in treat_conv],
-                [int(c) for c in ctrl_conv],
-            ]
-        )
-
-        # Only test if cells are non-trivially small
-        total_treat = treat_total.sum()
-        total_ctrl = ctrl_total.sum()
-        if total_treat == 0 or total_ctrl == 0:
-            return False
-
-        try:
-            chi2_stat, p_value, dof, _ = stats.chi2_contingency(contingency)
-            # Use 0.05 as the HTE detection threshold
-            if p_value < 0.05 and dof > 0:
-                return True
-        except Exception as exc:
-            logger.debug("HTE chi-squared test failed: %s", exc)
-
-        # Secondary heuristic: compare lift variance to mean lift
-        if len(lift) >= 2:
-            lift_std = float(np.std(lift, ddof=1))
-            lift_mean = float(np.abs(np.mean(lift)))
-            # High coefficient of variation in lift across segments → HTE
-            if lift_mean > 0 and (lift_std / lift_mean) > 0.5:
-                return True
-            # Segments with opposing signs (positive and negative lift) → HTE
-            if any(l > 0 for l in lift) and any(l < 0 for l in lift):
-                return True
-
-        return False
+        n = [[rows[i][0] for i in tested], [rows[i][2] for i in tested]]
+        x = [[rows[i][1] for i in tested], [rows[i][3] for i in tested]]
+        result = interaction_analysis.interaction_test(n, x)
+        return bool(result.p_value < alpha)
 
     # ------------------------------------------------------------------
     # Private helpers

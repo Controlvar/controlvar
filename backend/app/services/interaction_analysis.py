@@ -16,6 +16,20 @@ A table is tested only when every cell has at least ``MIN_USERS_PER_CELL``
 users and at least ``MIN_EXPECTED_PER_CELL`` expected converters and
 non-converters at the table's pooled rate (``floor_reason``).  Below that
 floor the chi-squared approximation is not calibrated on skewed allocations.
+
+The segment breakdown's heterogeneity flag (#1969,
+``dimensional_analysis_service.detect_hte``) runs ``interaction_test`` on a
+2 x J table of segments, with a lower floor of its own:
+``HTE_MIN_EXPECTED_PER_CELL`` (10) expected converters and non-converters in
+each arm of a segment, at the pooled rate, and at least one user per arm.  A
+breakdown's segments are far smaller than an experiment's arms; under this
+module's floor the reported case would never be tested.  Its seeded
+simulations (``backend/tests/unit/stats_validation/
+test_golden_hte_false_positive_rate.py``) pin the share flagged at alpha .05:
+108 of 2,000 tables on the reported case (4 segments of 90 users per arm,
+the same lift in each).  The test is mildly liberal in one corner, many equal
+small segments at a high base rate: 22 segments of 50 users per arm at 50%
+flag 121 of 2,000, and 21 of 50 users at 30% -> 38% flag 139 of 2,000.
 """
 
 from dataclasses import dataclass

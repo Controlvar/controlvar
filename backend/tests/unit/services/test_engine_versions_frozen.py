@@ -126,6 +126,9 @@ FROZEN_DIGESTS: Dict[str, str] = {
     # now the winner: the characterisation's edges-* cases and the binomial
     # fingerprint.
     "1.11.0": "71c2e2348fd22c1b804a09939c9a2c90636d7caf14b5f7c75e650f979902eaa2",
+    # 1.12.0 (#1969): 1.11.0's entries, except ENGINE_FINGERPRINTS, whose
+    # dataset runs the breakdown's heterogeneity flag and adds the walk data.
+    "1.12.0": "a2f02f83762ab8c2dbb84320cf95a8c2c3e2a2701bcfabf514b0fae476ffbdf9",
 }
 
 
@@ -145,6 +148,7 @@ FROZEN_VERSIONS: Tuple[str, ...] = (
     "1.9.0",
     "1.10.0",
     "1.11.0",
+    "1.12.0",
 )
 
 
