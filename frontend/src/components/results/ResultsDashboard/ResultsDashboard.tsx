@@ -27,6 +27,8 @@ import { ConversionChart } from '@/components/results/Visualizations/ConversionC
 import { TrendChart } from '@/components/results/Visualizations/TrendChart';
 import { MetricComparisonTable } from '@/components/results/MetricComparison/MetricComparisonTable';
 import { SequentialMonitor } from '@/components/results/Sequential/SequentialMonitor';
+import { CupedResultsPanel } from '@/components/results/Cuped/CupedResultsPanel';
+import { useCupedResults } from '@/components/results/Cuped/useCupedResults';
 import {
   BALANCED_BREAKDOWN,
   BreakdownSelector,
@@ -77,6 +79,30 @@ interface ExperimentReading {
    * always was.
    */
   balanceWithin: BalanceWithin | null;
+  /**
+   * The stored variance-reduction method when it is `cuped` or `cuped_plus`:
+   * the only experiments whose results have a CUPED tab. Null for any other
+   * method, none stored, or an experiment that could not be read.
+   */
+  cupedMethod: 'cuped' | 'cuped_plus' | null;
+  /** Each variant's name by id (the CUPED tab's "vs {control}"). */
+  variantNames: Record<string, string>;
+}
+
+/** The method of the experiment's `variance_reduction_config`, when it uses CUPED. */
+function cupedMethodOf(config: unknown): 'cuped' | 'cuped_plus' | null {
+  const method =
+    config && typeof config === 'object' ? (config as { method?: unknown }).method : undefined;
+  return method === 'cuped' || method === 'cuped_plus' ? method : null;
+}
+
+/** Each variant's name by its id. */
+function variantNamesOf(variants: { id?: string; name?: string }[] | undefined): Record<string, string> {
+  const names: Record<string, string> = {};
+  for (const v of variants ?? []) {
+    if (typeof v.id === 'string' && typeof v.name === 'string' && v.name) names[v.id] = v.name;
+  }
+  return names;
 }
 
 /** Each metric's event name by its id; metrics without one are left out. */
@@ -123,6 +149,8 @@ async function readExperiment(experimentId: string): Promise<ExperimentReading> 
     const eventNames = eventNamesOf(metrics);
     const balance = experiment?.balance_within;
     const balanceWithin = balances(balance) ? balance : null;
+    const cupedMethod = cupedMethodOf(experiment?.variance_reduction_config);
+    const variantNames = variantNamesOf(experiment?.variants);
     if (experiment?.correction_method && typeof experiment.confidence_level === 'number') {
       return {
         settings: {
@@ -134,9 +162,20 @@ async function readExperiment(experimentId: string): Promise<ExperimentReading> 
         lowerIsBetter,
         eventNames,
         balanceWithin,
+        cupedMethod,
+        variantNames,
       };
     }
-    return { settings: null, bayesianEnabled, sequentialEnabled, lowerIsBetter, eventNames, balanceWithin };
+    return {
+      settings: null,
+      bayesianEnabled,
+      sequentialEnabled,
+      lowerIsBetter,
+      eventNames,
+      balanceWithin,
+      cupedMethod,
+      variantNames,
+    };
   } catch {
     // Fall through: the results request goes without settings.
   }
@@ -147,6 +186,8 @@ async function readExperiment(experimentId: string): Promise<ExperimentReading> 
     lowerIsBetter: undefined,
     eventNames: {},
     balanceWithin: null,
+    cupedMethod: null,
+    variantNames: {},
   };
 }
 
@@ -174,7 +215,7 @@ export function resultsErrorMessage(e: unknown): string {
   return RESULTS_LOAD_FAILED;
 }
 
-type Tab = 'overview' | 'trends' | 'sample-size' | 'sequential' | 'breakdowns' | 'live';
+type Tab = 'overview' | 'trends' | 'sample-size' | 'sequential' | 'cuped' | 'breakdowns' | 'live';
 export type ResultsTab = Tab;
 
 /**
@@ -276,6 +317,11 @@ export function ResultsDashboard({ experimentId, initialTab }: ResultsDashboardP
   const [stored, setStored] = useState<StoredAnalysisSettings | null>(null);
   const [bayesianEnabled, setBayesianEnabled] = useState<boolean | undefined>(undefined);
   const [eventNames, setEventNames] = useState<Record<string, string>>({});
+  // The CUPED tab exists only for an experiment whose stored method is cuped
+  // or cuped_plus, and asks for nothing until it is first opened.
+  const [cupedMethod, setCupedMethod] = useState<'cuped' | 'cuped_plus' | null>(null);
+  const [variantNames, setVariantNames] = useState<Record<string, string>>({});
+  const cuped = useCupedResults(experimentId, cupedMethod !== null && activeTab === 'cuped');
 
   const fetchSampleSize = useCallback(async (overrides: SampleSizeOverrides = {}) => {
     // Only the latest request may write state, so a slow answer for an
@@ -323,6 +369,8 @@ export function ResultsDashboard({ experimentId, initialTab }: ResultsDashboardP
         setBayesianEnabled(reading.bayesianEnabled);
         setEventNames(reading.eventNames);
         setBalanceWithin(reading.balanceWithin);
+        setCupedMethod(reading.cupedMethod);
+        setVariantNames(reading.variantNames);
         return settings
           ? ResultsService.getResults(experimentId, settings)
           : ResultsService.getResults(experimentId);
@@ -458,6 +506,7 @@ export function ResultsDashboard({ experimentId, initialTab }: ResultsDashboardP
     { id: 'trends', label: 'Trends' },
     { id: 'sample-size', label: 'Sample Size' },
     ...(sequential ? [{ id: 'sequential' as Tab, label: 'Sequential' }] : []),
+    ...(cupedMethod ? [{ id: 'cuped' as Tab, label: 'CUPED (beta)' }] : []),
     { id: 'breakdowns', label: 'Breakdowns' },
   ];
 
@@ -620,6 +669,14 @@ export function ResultsDashboard({ experimentId, initialTab }: ResultsDashboardP
               srmWarning={results.srm?.warning === true}
             />
           </section>
+        )}
+
+        {activeTab === 'cuped' && cupedMethod && (
+          <CupedResultsPanel
+            state={cuped.state}
+            onRetry={() => void cuped.retry()}
+            controlNames={variantNames}
+          />
         )}
 
         {/* Issue #28: Breakdowns tab */}

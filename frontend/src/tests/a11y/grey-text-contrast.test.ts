@@ -40,6 +40,8 @@ const FILES = [
   // #442: the results page's Download CSV button and the sentence under it.
   'components/results/ResultsCsvDownload.tsx',
   'pages/results/[id].tsx',
+  // #1959: the results page's CUPED (beta) tab.
+  'components/results/Cuped/CupedResultsPanel.tsx',
   // #442: the flag page's Manage this flag group (Archive, its dialog,
   // Unarchive), and the archived flag's note on both flag pages.
   'components/feature-flags/FlagManageSection.tsx',

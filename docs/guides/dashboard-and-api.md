@@ -48,7 +48,7 @@ The table lists each capability and where you do it today:
 | Global holdouts: create and activate; read their results (beta) | Dashboard | [Mutual exclusion groups and global holdout](../api/mutual-exclusion-groups.md) |
 | Mutual exclusion groups | Dashboard | [Mutual exclusion groups and global holdout](../api/mutual-exclusion-groups.md) |
 | Split-URL experiments (full profile) | API only | [Split URL testing](../api/split-url.md) |
-| CUPED-adjusted results (beta) | API only | [CUPED](../api/cuped.md) |
+| CUPED-adjusted results (beta) | Dashboard | [CUPED](../api/cuped.md) |
 | The interaction scan and the pair test (beta) | API only | [Interaction detection](../api/interaction-detection.md) |
 | Download results as CSV | Dashboard | [Exporting results](user-guide.md#exporting-results) |
 | The effect size in the metric comparison table | Dashboard | [Running experiments](user-guide.md) |
