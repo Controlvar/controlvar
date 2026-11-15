@@ -43,6 +43,7 @@ import type {
 } from './types';
 import { EvaluationCache } from './cache';
 import { callExposureHook, checkOnExposure, exposureError } from './exposure';
+import { eventIdFor } from './eventId';
 import { OfflineStorage } from './storage';
 
 const DEFAULT_TIMEOUT_MS = 5_000;
@@ -701,6 +702,8 @@ export class ExperimentationClient {
       event_type: event.eventType ?? event.eventName,
       event_name: event.eventName,
       user_id: event.userId,
+      // One id per event, on every entry it fans out to.
+      event_id: eventIdFor(event.eventId),
     };
     if (event.value !== undefined) base.value = event.value;
     if (event.properties !== undefined) base.metadata = event.properties;

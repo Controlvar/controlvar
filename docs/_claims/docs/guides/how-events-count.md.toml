@@ -219,6 +219,14 @@ by = [
 ]
 
 [[unit]]
+text = "The React and React Native SDKs give every event an event_id, from their next published version (React, React Native)."
+by = [
+    "test:sdk/react/src/__tests__/event-id.test.ts::sends a generated lowercase UUID v4 as event_id on a keyed track",
+    "test:sdk/react-native/__tests__/event-id.test.ts::track() with a key sends a generated lowercase UUID v4 as event_id",
+    "test:backend/tests/unit/api/test_how_events_count_rules.py::test_the_sdks_with_an_event_id_option_name_it",
+]
+
+[[unit]]
 text = "The .NET SDK gives every event an event_id, from its next published version (Event ids)."
 by = [
     "test:sdk/dotnet/tests/Controlvar.Tests/EventIdTests.cs::Track_WithAKey_SendsAGeneratedLowercaseUuidV4AsEventId",
