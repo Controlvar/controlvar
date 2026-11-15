@@ -88,7 +88,7 @@ using var client = new ExperimentationClient(config, httpClient);   // never mut
 |--------|--------------|---------|
 | `EvaluateFlagAsync(flagKey, userId, attributes?)` | `GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=…&context=…` (`attributes` sent as `context` on flag evaluation, as URL-encoded JSON; none sent when `null` or empty) | `FlagEvaluationResult { Key, Enabled, Config }`. Never throws; disabled on failure. |
 | `GetAssignmentAsync(experimentKey, userId, attributes?)` | `POST /api/v1/tracking/assign` (`attributes` sent as `context`) | `Assignment? { ExperimentKey, UserId, VariantId, VariantName, IsControl, Configuration }`. Never throws; `null` on failure. |
-| `TrackAsync(eventName, userId, properties?, experimentKey?, featureFlagKey?, value?, eventType?, timestamp?)` | `POST /api/v1/tracking/track` with a key, else `POST /api/v1/tracking/batch` fan-out | `bool` — `false` on any error. Never throws. |
+| `TrackAsync(eventName, userId, properties?, experimentKey?, featureFlagKey?, value?, eventType?, timestamp?, eventId?)` | `POST /api/v1/tracking/track` with a key, else `POST /api/v1/tracking/batch` fan-out | `bool` — `false` on any error. Never throws. |
 | `TrackAsync(TrackEvent)` | same rules | `bool` |
 | `TrackBatchAsync(IEnumerable<TrackEvent>)` | `POST /api/v1/tracking/batch`, ≤ 100 events per request | `bool` — `false` if any chunk failed. Never throws. |
 | `GetAssignments(userId)` | — | Cached (unexpired) assignments of the user |
@@ -121,6 +121,16 @@ experiment did not enrol, or an experiment that is not ACTIVE) is cached and ret
 control variant, and an event tracked without a key after the user's cache entries have expired
 (`CacheTtlSeconds`, 300 by default) is not sent, so pass `experimentKey` on a conversion that can
 come later.
+
+### Event ids
+
+Every event this SDK sends carries an `event_id`, and the server stores an event sent again with
+the same `event_id`, user, experiment, flag and event name only once. Without an `eventId`
+argument (or `TrackEvent.EventId`) the SDK makes a lowercase UUID v4 for each event it sends; an
+event fanned out to several experiments and flags carries one id in every entry. Pass the same
+`eventId` each time you send an event your code may send again. Use this from the next published
+version, and with a server that includes the `event_id` change.
+Full details: [Event ids](../../docs/sdk/dotnet.md#event-ids).
 
 ### `FeatureFlagEvaluator` (static)
 
@@ -166,7 +176,7 @@ Every request carries `X-API-Key` and `Accept: application/json`; POSTs carry
 |---|---|---|---|
 | `EvaluateFlagAsync` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=…` | `context`: the attributes as URL-encoded JSON, only when there are any | `{key, enabled, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
 | `GetAssignmentAsync` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
-| `TrackAsync` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
+| `TrackAsync` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?, event_id}` | ignored |
 | `TrackAsync` without keys, `TrackBatchAsync` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored (status only) |
 
 ---

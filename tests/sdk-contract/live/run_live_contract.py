@@ -260,6 +260,7 @@ EVENT_ID_SDKS: frozenset[str] = frozenset(
         "java",
         "js",
         "python",
+        "dotnet",
     ]
 )
 
