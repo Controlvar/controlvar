@@ -151,8 +151,11 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         lede("by adjusting for what each user did before the experiment"),
         lede("the dashboard and GET /results/{id} show the unadjusted numbers"),
     ),
-    "Thompson Sampling, UCB1, Epsilon-Greedy (create a bandit through the API)": (
+    "Thompson Sampling, UCB1, Epsilon-Greedy (create one from the new-experiment form or the API)": (
         lede("Multi-Armed Bandit"),
+        says(
+            "To create one in the dashboard, choose Bandit as the experiment type on the new-experiment form"
+        ),
         says(
             "Set optimization_type to one of thompson_sampling, ucb1 or epsilon_greedy when you create the experiment"
         ),

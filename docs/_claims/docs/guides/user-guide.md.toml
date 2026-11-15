@@ -163,11 +163,14 @@ text = "Step 1: Type"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Choose A/B Test or Multivariate."
-by = ["journey:experiment-results#new-experiment"]
+text = "Choose A/B Test, Multivariate or Bandit; a bandit also asks for its Optimization algorithm."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-bandit.test.tsx::guided setup has three radios in the order A/B Test, Multivariate, Bandit",
+    "test:frontend/src/tests/pages/experiment-new-bandit.test.tsx::a native select of three algorithms, Thompson sampling first and chosen, no fixed split",
+]
 
 [[unit]]
-text = "Create a split URL or bandit experiment through the API (POST /api/v1/experiments/)."
+text = "Create a split URL experiment through the API (POST /api/v1/experiments/)."
 by = ["exempt:instruction"]
 
 [[unit]]
@@ -1651,11 +1654,17 @@ text = "Use this when maximizing conversions during the experiment matters more 
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Set optimization_type to thompson_sampling, ucb1, or epsilon_greedy when creating an experiment."
+text = "In the dashboard, choose Bandit as the experiment type and pick the Optimization algorithm; through the API, set optimization_type to thompson_sampling, ucb1, or epsilon_greedy when creating an experiment."
 by = [
+    "test:frontend/src/tests/pages/experiment-new-bandit.test.tsx::a native select of three algorithms, Thompson sampling first and chosen, no fixed split",
+    "test:frontend/src/tests/pages/experiment-new-bandit.test.tsx::Bandit with UCB1 sends exactly the bandit literal, a valid ExperimentCreate",
     "test:backend/tests/unit/schemas/test_bandit_schemas.py::TestOptimizationType",
     "docex:docs/api/multi-armed-bandit.md#\"name\": \"CTA Button Bandit\"",
 ]
+
+[[unit]]
+text = "Until the first weight update, new users are split by the variants' allocations."
+by = ["test:backend/tests/unit/services/test_bandit_routing.py::TestBanditChooser::test_no_state_means_default_hashing"]
 
 [[unit]]
 text = "See the Multi-Armed Bandit Guide."

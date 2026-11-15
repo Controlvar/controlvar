@@ -28,10 +28,11 @@ const ERROR_ID = 'balance-error';
 
 /**
  * The line to show at the split: the API's refusal when it gave one about the
- * split, else the one the page finds as the shares are typed.
+ * split, else the one the page finds as the shares are typed (none for a
+ * bandit, which sends no balance setting).
  */
 export function splitProblemShown(
-  state: Pick<ExperimentFormState, 'balance' | 'variants'>,
+  state: Pick<ExperimentFormState, 'balance' | 'variants'> & Partial<Pick<ExperimentFormState, 'type'>>,
   issue: BalanceIssue | null | undefined,
 ): string | null {
   if (issue && issue.field === 'split') return issue.message;

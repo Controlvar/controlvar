@@ -46,6 +46,13 @@ const FILES = [
   'components/feature-flags/ArchivedFlag.tsx',
   // #442: the new-experiment form's analysis settings and Advanced Bayesian settings.
   'components/experiments/new/AnalysisSettingsFields.tsx',
+  // #1956: the Bandit type, its Optimization algorithm and its lines, in guided
+  // setup and the single-page form (the algorithm field itself is in
+  // ExperimentTypeField.tsx, above), and the page that holds both views.
+  'components/experiments/new/Wizard.tsx',
+  'components/experiments/new/AdvancedForm.tsx',
+  'components/experiments/new/BalanceWithinFields.tsx',
+  'pages/experiments/new.tsx',
 ];
 
 /**

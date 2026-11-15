@@ -734,6 +734,14 @@ STALE: Tuple[Tuple[str, str], ...] = (
         r"(dashboard|page) has no schedule screen",
         "the experiment page's Schedule sets a draft's start and end (#1454)",
     ),
+    (
+        r"split url or bandit experiments? through the api",
+        "the new-experiment form creates a bandit (#1956); only split URL is API only",
+    ),
+    (
+        r"guided setup offers only a/b test and multivariate",
+        "guided setup offers Bandit too (#1956)",
+    ),
 )
 
 _DROP = frozenset("*`")
@@ -826,6 +834,11 @@ def test_no_page_repeats_a_removed_dashboard_claim():
         "[which actions have a screen](dashboard-and-api.md))",
         "You can also schedule automatic start and end dates. The dashboard has no schedule\n"
         "screen yet, so this is an API call:",
+        # #1956: user-guide.md's Step 1 and experiment-wizard.md's list item.
+        "Choose **A/B Test** or **Multivariate**. Create a split URL or bandit experiment through the\n"
+        "API (`POST /api/v1/experiments/`).",
+        "- Guided setup offers only A/B Test and Multivariate. Create a split URL or bandit\n"
+        "  experiment through the API (`POST /api/v1/experiments/`).",
     ],
 )
 def test_the_sweep_catches_the_removed_wording(removed):
