@@ -8,7 +8,7 @@ such as creating, retrieving, updating, and deleting users.
 import uuid
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import EmailStr, TypeAdapter, ValidationError
 from sqlalchemy import func, text
 from sqlalchemy.exc import IntegrityError
@@ -17,10 +17,24 @@ from sqlalchemy.orm import Session
 from backend.app.api import deps
 from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.query_params import MAX_OFFSET, describe_as_int64
+from backend.app.api.two_factor_answers import (
+    ALREADY_ENABLED_DETAIL,
+    NO_PENDING_SECRET_DETAIL,
+    NOT_ENABLED_DETAIL,
+    REFUSALS,
+    refusal_answer,
+)
 from backend.app.core.config import settings
 from backend.app.core.security import get_password_hash, unwrap_secret
 from backend.app.models.audit_log import ActionType, EntityType
 from backend.app.models.user import User, UserRole
+from backend.app.schemas.two_factor import (
+    RecoveryCodesResponse,
+    TwoFactorCodeRequest,
+    TwoFactorDisableRequest,
+    TwoFactorEnrolResponse,
+    TwoFactorStatusResponse,
+)
 from backend.app.schemas.user import (
     PasswordChange,
     UserCreate,
@@ -42,6 +56,11 @@ from backend.app.services.local_auth_service import (
     InvalidCredentialsError,
     NoLocalPasswordError,
     local_auth_service,
+)
+from backend.app.services.two_factor_service import (
+    UNAVAILABLE_TEXT,
+    WRONG_CODE_TEXT,
+    two_factor_service,
 )
 
 router = APIRouter(route_class=OffLoopRoute)
@@ -606,6 +625,7 @@ async def get_user_me(
         "role": role.name if isinstance(role, UserRole) else "VIEWER",
         "created_at": current_user.created_at,
         "updated_at": current_user.updated_at,
+        "totp_enabled": current_user.totp_enabled,
     }
 
     # Add optional fields if they exist
@@ -699,6 +719,188 @@ def change_own_password(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+# ---------------------------------------------------------------------------
+# Your own two-step sign-in (#1812). Local provider only; any role.
+# ---------------------------------------------------------------------------
+
+_TWO_FACTOR_LOCAL_ONLY = {404: {"description": "AUTH_PROVIDER is not 'local'."}}
+_TWO_FACTOR_CODE_REFUSALS = {
+    403: {"description": f"{WRONG_CODE_TEXT} (wrong, used or malformed)"},
+    423: {
+        "description": (
+            "Too many failed attempts for this account, passwords and codes "
+            "counted together (see Retry-After); or two-step sign-in is locked "
+            "after too many wrong codes until an administrator resets it"
+        )
+    },
+    503: {"description": UNAVAILABLE_TEXT},
+}
+
+
+def _client_host(request: Request) -> Optional[str]:
+    return request.client.host if request.client else None
+
+
+@router.get(
+    "/me/2fa",
+    response_model=TwoFactorStatusResponse,
+    dependencies=[Depends(require_local_provider)],
+    responses=_TWO_FACTOR_LOCAL_ONLY,
+)
+def read_own_two_factor(
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user),
+) -> Any:
+    """
+    Whether your two-step sign-in is on, and how many recovery codes are left.
+
+    `required` is always false in this release.
+    """
+    found = two_factor_service.status(db, current_user)
+    return TwoFactorStatusResponse(
+        enabled=found.enabled,
+        required=False,
+        recovery_codes_remaining=found.recovery_codes_remaining,
+    )
+
+
+# The actions are declared in alphabetical order: confirm, disable, enroll,
+# recovery-codes.
+
+
+@router.post(
+    "/me/2fa/confirm",
+    response_model=RecoveryCodesResponse,
+    dependencies=[Depends(require_local_provider)],
+    responses={
+        409: {"description": NO_PENDING_SECRET_DETAIL},
+        **_TWO_FACTOR_CODE_REFUSALS,
+        **_TWO_FACTOR_LOCAL_ONLY,
+    },
+)
+def confirm_own_two_factor(
+    body: TwoFactorCodeRequest,
+    request: Request,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user),
+) -> Any:
+    """
+    Turn two-step sign-in on with the first code from your authenticator app.
+
+    Answers 10 recovery codes, shown this once: each signs in once when the
+    app is not at hand. A wrong code answers 403, leaves the secret waiting,
+    and counts toward the same lockout as a wrong password.
+    """
+    try:
+        codes = two_factor_service.confirm(
+            db, current_user, body.code, client_host=_client_host(request)
+        )
+    except REFUSALS as exc:
+        raise refusal_answer(
+            exc, signed_in=True, not_enabled_detail=NO_PENDING_SECRET_DETAIL
+        )
+    return RecoveryCodesResponse(recovery_codes=codes)
+
+
+@router.post(
+    "/me/2fa/disable",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    dependencies=[Depends(require_local_provider)],
+    responses={
+        409: {"description": NOT_ENABLED_DETAIL},
+        **_TWO_FACTOR_CODE_REFUSALS,
+        **_TWO_FACTOR_LOCAL_ONLY,
+    },
+)
+def disable_own_two_factor(
+    body: TwoFactorDisableRequest,
+    request: Request,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user),
+) -> Response:
+    """
+    Turn your two-step sign-in off, with a code from the app or a recovery
+    code (exactly one).
+
+    Answers 204. Sign-in then asks for the password alone. A wrong code
+    answers 403 and counts toward the same lockout as a wrong password.
+    """
+    try:
+        two_factor_service.disable(
+            db,
+            current_user,
+            code=body.code,
+            recovery_code=body.recovery_code,
+            client_host=_client_host(request),
+        )
+    except REFUSALS as exc:
+        raise refusal_answer(exc, signed_in=True)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/me/2fa/enroll",
+    response_model=TwoFactorEnrolResponse,
+    dependencies=[Depends(require_local_provider)],
+    responses={
+        409: {"description": ALREADY_ENABLED_DETAIL},
+        **_TWO_FACTOR_LOCAL_ONLY,
+    },
+)
+def enrol_own_two_factor(
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user),
+) -> Any:
+    """
+    Start setting up two-step sign-in: a new secret for your authenticator app.
+
+    Answers the secret in base32 (to type in) and as an `otpauth://` link (for
+    a QR code). Nothing changes at sign-in until a code from the app confirms
+    it (`POST /api/v1/users/me/2fa/confirm`). Asking again replaces a secret
+    that is still waiting, so a code from the earlier one no longer works.
+    409 once two-step sign-in is on.
+    """
+    try:
+        enrolment = two_factor_service.enrol(db, current_user)
+    except REFUSALS as exc:
+        raise refusal_answer(exc, signed_in=True)
+    return TwoFactorEnrolResponse(
+        secret=enrolment.secret, otpauth_uri=enrolment.otpauth_uri
+    )
+
+
+@router.post(
+    "/me/2fa/recovery-codes",
+    response_model=RecoveryCodesResponse,
+    dependencies=[Depends(require_local_provider)],
+    responses={
+        409: {"description": NOT_ENABLED_DETAIL},
+        **_TWO_FACTOR_CODE_REFUSALS,
+        **_TWO_FACTOR_LOCAL_ONLY,
+    },
+)
+def regenerate_own_recovery_codes(
+    body: TwoFactorCodeRequest,
+    request: Request,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user),
+) -> Any:
+    """
+    A new set of 10 recovery codes, for a code from your authenticator app.
+
+    Shown this once; every earlier recovery code stops working. A wrong code
+    answers 403 and counts toward the same lockout as a wrong password.
+    """
+    try:
+        codes = two_factor_service.regenerate_recovery_codes(
+            db, current_user, body.code, client_host=_client_host(request)
+        )
+    except REFUSALS as exc:
+        raise refusal_answer(exc, signed_in=True)
+    return RecoveryCodesResponse(recovery_codes=codes)
+
+
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(
     user_id: str,
@@ -723,6 +925,7 @@ async def get_user(
             "is_superuser": current_user.is_superuser,
             "created_at": current_user.created_at,
             "updated_at": current_user.updated_at,
+            "totp_enabled": current_user.totp_enabled,
         }
 
         # Add optional fields if they exist
@@ -759,6 +962,7 @@ async def get_user(
         "is_superuser": user.is_superuser,
         "created_at": user.created_at,
         "updated_at": user.updated_at,
+        "totp_enabled": user.totp_enabled,
     }
 
     # Add optional fields if they exist
@@ -865,6 +1069,7 @@ async def update_user(
         "is_superuser": user.is_superuser,
         "created_at": user.created_at,
         "updated_at": user.updated_at,
+        "totp_enabled": user.totp_enabled,
     }
 
     # Add optional fields if they exist

@@ -403,9 +403,10 @@ text = "One deployment is one environment: run staging and production as separat
 by = ["test:backend/tests/unit/api/test_documented_limits.py::test_flags_experiments_and_keys_carry_no_environment"]
 
 [[unit]]
-text = "Sign-in has no multi-factor step, and SAML sign-in is not available (OIDC is, with the sso module)."
+text = "A local account can turn on two-step sign-in, but nothing can require it for a role yet, and SAML sign-in is not available (OIDC is, with the sso module)."
 by = [
-    "test:backend/tests/unit/api/test_documented_limits.py::test_a_local_sign_in_takes_an_email_and_a_password_alone",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_local_account_can_turn_on_two_step_sign_in_but_no_role_requires_it",
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_every_role_manages_its_own_and_only_a_superuser_resets_others",
     "test:modules/backend/tests/integration/api/test_sso_provisioning_scope.py::test_a_saml_acs_token_is_still_not_a_session",
     "test:modules/backend/tests/unit/services/test_sso_service.py::TestNonceInTheAuthorizationURL::test_an_oidc_provider_gets_the_nonce",
 ]

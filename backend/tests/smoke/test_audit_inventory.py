@@ -71,6 +71,8 @@ INVENTORY = {
     ("DELETE", f"{V1}/admin/users/{{user_id}}"): Audited(A.USER_DELETE),
     ("PATCH", f"{V1}/admin/users/{{user_id}}"): ACCESS,
     ("PUT", f"{V1}/admin/users/{{user_id}}"): ACCESS,
+    # A superuser turning off someone else's two-step sign-in (#1812).
+    ("DELETE", f"{V1}/admin/users/{{user_id}}/2fa"): Audited(A.USER_2FA_RESET),
     # --- AI design helpers ---------------------------------------------------
     ("POST", f"{V1}/ai/design"): CALCULATION,
     ("POST", f"{V1}/ai/interpret/{{experiment_id}}"): CALCULATION,
@@ -84,6 +86,9 @@ INVENTORY = {
     ("POST", f"{V1}/auth/confirm"): COGNITO_ACCOUNT,
     ("POST", f"{V1}/auth/forgot-password"): COGNITO_ACCOUNT,
     ("POST", f"{V1}/auth/login"): Audited(A.USER_LOGIN),
+    # The code step of two-step sign-in (#1812): the sign-in, and a recovery
+    # code used for it. A wrong code writes a log line, never an entry.
+    ("POST", f"{V1}/auth/mfa/verify"): Audited(A.USER_LOGIN, A.USER_2FA_RECOVERY_USED),
     ("POST", f"{V1}/auth/logout"): NotAudited(
         "signing out is not on the audited event list: under local it changes "
         "nothing on the server (the tokens are stateless); under Cognito it "
@@ -207,6 +212,19 @@ INVENTORY = {
     ("POST", f"{V1}/users/me/password"): NotAudited(
         "a user changing their own password is not on the audited event list"
     ),
+    # Your own two-step sign-in (#1812). A wrong code writes a log line, never
+    # an entry.
+    ("POST", f"{V1}/users/me/2fa/enroll"): NotAudited(
+        "a secret waiting for its first code changes nothing at sign-in; "
+        "confirming it writes user_2fa_enable"
+    ),
+    ("POST", f"{V1}/users/me/2fa/confirm"): Audited(A.USER_2FA_ENABLE),
+    ("POST", f"{V1}/users/me/2fa/disable"): Audited(
+        A.USER_2FA_DISABLE, A.USER_2FA_RECOVERY_USED
+    ),
+    ("POST", f"{V1}/users/me/2fa/recovery-codes"): Audited(
+        A.USER_2FA_RECOVERY_REGENERATE
+    ),
     ("PUT", f"{V1}/users/{{user_id}}"): ACCESS,
     ("DELETE", f"{V1}/users/{{user_id}}"): Audited(A.USER_DELETE),
     # --- LLM experiments -----------------------------------------------------
@@ -303,7 +321,7 @@ def test_the_inventory_is_exact():
         f"unclassified: {sorted(found - set(INVENTORY))}; "
         f"gone: {sorted(set(INVENTORY) - found)}"
     )
-    assert len(INVENTORY) == 111
+    assert len(INVENTORY) == 117
 
 
 def test_every_mutating_route_is_under_backend_or_modules():

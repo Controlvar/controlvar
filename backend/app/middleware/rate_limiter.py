@@ -303,6 +303,9 @@ RATE_LIMIT_CONFIG: Dict[str, Tuple[int, int]] = {
     # Authentication endpoints — strict limits to slow brute-force attempts
     "/api/v1/auth/token": (10, 60),
     "/api/v1/auth/login": (10, 60),
+    # The code step of two-step sign-in: limited like the password step it
+    # follows. Its wrong codes also count toward the sign-in lockout.
+    "/api/v1/auth/mfa/verify": (10, 60),
     "/api/v1/auth/signup": (5, 60),
     # Where the 6-digit sign-up code is guessed; its own counter, apart from
     # sign-up's (#700).
