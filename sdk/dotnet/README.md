@@ -130,7 +130,7 @@ argument (or `TrackEvent.EventId`) the SDK makes a lowercase UUID v4 for each ev
 event fanned out to several experiments and flags carries one id in every entry. Pass the same
 `eventId` each time you send an event your code may send again. Use this from the next published
 version, and with a server that includes the `event_id` change.
-Full details: [Event ids](../../docs/sdk/dotnet.md#event-ids).
+Full details: [Event ids](https://github.com/Controlvar/controlvar/blob/main/docs/sdk/dotnet.md#event-ids).
 
 ### `FeatureFlagEvaluator` (static)
 
