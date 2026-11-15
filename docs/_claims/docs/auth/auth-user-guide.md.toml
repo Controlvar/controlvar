@@ -724,6 +724,10 @@ text = "Account Protection"
 by = ["exempt:baseline"]
 
 [[unit]]
+text = "With local sign-in, turn on two-step sign-in and keep its recovery codes somewhere safe"
+by = ["exempt:advice"]
+
+[[unit]]
 text = "Don't share your verification codes with anyone"
 by = ["exempt:baseline"]
 

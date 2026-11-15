@@ -1,0 +1,228 @@
+document = "docs/auth/two-factor.md"
+
+[[unit]]
+text = "Two-step sign-in"
+by = ["exempt:label"]
+
+[[unit]]
+text = "With local sign-in (AUTH_PROVIDER=local), each account can turn on two-step sign-in (2FA, using TOTP codes) for itself."
+by = [
+    "test:frontend/src/tests/components/AppShell.test.tsx::offers it to a local sign-in user, opening /account/two-factor",
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_every_role_manages_its_own_and_only_a_superuser_resets_others",
+]
+
+[[unit]]
+text = "Signing in then asks for the password and then for the 6-digit code an authenticator app on your phone shows, or for one of your recovery codes."
+by = [
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_sign_in_asks_for_a_code_and_a_code_is_used_once",
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_a_recovery_code_signs_in_once",
+    "test:frontend/src/tests/auth/two-step-sign-in.test.tsx::sends the mfa_token and the code as typed, then stores the token and goes on",
+]
+
+[[unit]]
+text = "Under Cognito, the dashboard does not offer it: Cognito's own sign-in applies."
+by = [
+    "test:frontend/src/tests/components/AppShell.test.tsx::hides it from a user who does not sign in locally: the routes answer 404 there",
+    "test:frontend/src/tests/pages/account-two-factor.test.tsx::under another provider, says where it is set up and asks the API nothing",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_under_cognito_every_route_answers_the_local_only_404",
+]
+
+[[unit]]
+text = "The API side, with every route and answer, is in Two-step sign-in."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Turn it on"
+by = ["exempt:label"]
+
+[[unit]]
+text = "In the dashboard, open More → Two-step sign-in and choose Set up two-step sign-in."
+by = [
+    "test:frontend/src/tests/components/AppShell.test.tsx::offers it to a local sign-in user, opening /account/two-factor",
+    "test:frontend/src/tests/pages/account-two-factor.test.tsx::says it is off and offers to set it up",
+]
+
+[[unit]]
+text = "Scan the QR code with your authenticator app, or type the key shown under it into the app."
+by = ["test:frontend/src/tests/pages/account-two-factor.test.tsx::U3: shows the key as text in groups of four, the QR with its alt, and the otpauth link"]
+
+[[unit]]
+text = "On the phone itself, Open in an authenticator app on this device adds it."
+by = ["test:frontend/src/tests/pages/account-two-factor.test.tsx::U3: shows the key as text in groups of four, the QR with its alt, and the otpauth link"]
+
+[[unit]]
+text = "Enter the code the app shows and choose Turn on two-step sign-in."
+by = ["test:frontend/src/tests/pages/account-two-factor.test.tsx::U4: the code field is text with the one-time-code hints, and keeps the zeros of 005924"]
+
+[[unit]]
+text = "Nothing changes at sign-in until a code is accepted."
+by = [
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_a_waiting_secret_changes_nothing_at_sign_in",
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_a_waiting_secret_changes_nothing_and_a_new_one_replaces_it",
+]
+
+[[unit]]
+text = "Save the 10 recovery codes: Download as a text file or Copy codes, tick I have saved these codes, then choose Done."
+by = [
+    "test:frontend/src/tests/pages/account-two-factor.test.tsx::U3: Done waits for \"I have saved these codes\", then the page says it is on",
+    "test:frontend/src/tests/pages/account-two-factor.test.tsx::offers the codes as a file, each grouped, never the secret",
+]
+
+[[unit]]
+text = "They are shown this once."
+by = [
+    "test:frontend/src/tests/pages/account-two-factor.test.tsx::U3: Done waits for \"I have saved these codes\", then the page says it is on",
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_confirm_gives_ten_recovery_codes_and_stores_only_their_hashes",
+]
+
+[[unit]]
+text = "A code is accepted in its own 30 seconds and in the 30 seconds either side."
+by = ["test:backend/tests/unit/core/test_totp.py::test_the_window_is_one_step_either_side"]
+
+[[unit]]
+text = "If the first code is refused, check that your phone sets its clock automatically."
+by = ["test:frontend/src/tests/pages/account-two-factor.test.tsx::a wrong first code shows the phone's clock hint and keeps the secret waiting"]
+
+[[unit]]
+text = "Sign in with a code"
+by = ["exempt:label"]
+
+[[unit]]
+text = "After your email and password, enter the code your app shows and choose Verify."
+by = ["test:frontend/src/tests/auth/two-step-sign-in.test.tsx::sends the mfa_token and the code as typed, then stores the token and goes on"]
+
+[[unit]]
+text = "Spaces and hyphens in a code are ignored, and each code works once."
+by = [
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_the_next_step_is_accepted_and_typed_spaces_are_ignored",
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_the_same_code_twice_is_refused",
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_sign_in_asks_for_a_code_and_a_code_is_used_once",
+]
+
+[[unit]]
+text = "Without your phone, choose Use a recovery code instead and enter one of your saved codes."
+by = ["test:frontend/src/tests/auth/two-step-sign-in.test.tsx::a recovery code: the same field relabelled, sent as recovery_code, its own wrong-code sentence"]
+
+[[unit]]
+text = "Each recovery code works once; More → Two-step sign-in says how many are left."
+by = [
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_a_recovery_code_signs_in_once",
+    "test:frontend/src/tests/pages/account-two-factor.test.tsx::says how many recovery codes are left",
+]
+
+[[unit]]
+text = "The code step lasts 5 minutes."
+by = ["docex:docs/api/auth.md#\"expires_in\": 300"]
+
+[[unit]]
+text = "After that, sign-in starts again at the password."
+by = ["test:frontend/src/tests/auth/two-step-sign-in.test.tsx::an expired step goes back to the password with its own sentence, and drops the token"]
+
+[[unit]]
+text = "Lost your phone and your recovery codes"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Ask an administrator to reset your two-step sign-in."
+by = ["test:frontend/src/tests/auth/two-step-sign-in.test.tsx::shows the lost-device path, and Back to sign-in drops the token and returns focus to the email"]
+
+[[unit]]
+text = "A superuser opens Admin → Users, edits your account and chooses Reset two-step sign-in."
+by = [
+    "test:frontend/src/tests/admin/EditUserModal.test.tsx::asks first, saying the session stays, then resets and says so; closing reloads the list",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_a_superuser_resets_someone_else",
+]
+
+[[unit]]
+text = "You then sign in with your password alone and can set two-step sign-in up again."
+by = ["test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_the_cap_refuses_the_right_code_until_a_superuser_resets_it"]
+
+[[unit]]
+text = "No one can reset their own."
+by = [
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_a_superuser_cannot_reset_their_own",
+    "test:frontend/src/tests/admin/EditUserModal.test.tsx::is not offered on your own row, which says who can reset yours",
+]
+
+[[unit]]
+text = "When no superuser can sign in, an operator resets accounts from the command line: Resetting two-step sign-in."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "New recovery codes, or turning it off"
+by = ["exempt:label"]
+
+[[unit]]
+text = "On More → Two-step sign-in, Make new recovery codes takes a code from your app and gives a new set of 10; the codes you had stop working."
+by = [
+    "test:frontend/src/tests/pages/account-two-factor.test.tsx::makes a new set of recovery codes, behind the same saved-codes check",
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_new_recovery_codes_void_the_old_set",
+]
+
+[[unit]]
+text = "Turn off two-step sign-in takes a code or a recovery code; signing in then asks for your password alone."
+by = [
+    "test:frontend/src/tests/pages/account-two-factor.test.tsx::turns it off with a code",
+    "test:frontend/src/tests/pages/account-two-factor.test.tsx::turns it off with a recovery code, and says so when it is wrong",
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_turning_it_off_and_new_recovery_codes",
+]
+
+[[unit]]
+text = "When a code is refused"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Wrong codes count with wrong passwords: after 10 within 15 minutes, sign-in to your email address is locked until the 15 minutes are up."
+by = ["test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_wrong_codes_share_the_password_lockout"]
+
+[[unit]]
+text = "Two answers last until an administrator resets your two-step sign-in:"
+by = [
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_a_reset_clears_the_cap_and_leaves_no_count",
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_the_cap_refuses_the_right_code_until_a_superuser_resets_it",
+]
+
+[[unit]]
+text = "What you see | Why"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Two-step sign-in is locked after too many wrong codes. Ask an administrator to reset it. | 100 wrong codes in a row: even the right code is refused"
+by = [
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_after_100_wrong_codes_even_the_right_one_is_refused",
+    "test:frontend/src/tests/auth/two-step-sign-in.test.tsx::U3: %s shows its fixed sentence",
+    "test:frontend/src/tests/pages/account-two-factor.test.tsx::U3: %s shows its fixed sentence and no response text",
+]
+
+[[unit]]
+text = "Two-step sign-in is unavailable for this account. Ask an administrator to reset it. | The server's SECRET_KEY changed, so your stored secret cannot be read"
+by = [
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_a_secret_sealed_under_another_secret_key_fails_closed",
+    "test:frontend/src/tests/auth/two-step-sign-in.test.tsx::U3: %s shows its fixed sentence",
+    "test:frontend/src/tests/pages/account-two-factor.test.tsx::U3: %s shows its fixed sentence and no response text",
+]
+
+[[unit]]
+text = "Known limits"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A session you already hold stays signed in until it expires, after two-step sign-in is turned on or off and after a reset."
+by = [
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_the_cap_refuses_the_right_code_until_a_superuser_resets_it",
+    "docex:docs/api/auth.md#{\"enabled\":false,\"required\":false,\"recovery_codes_remaining\":0}",
+]
+
+[[unit]]
+text = "Nothing can require two-step sign-in for a role yet."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_local_account_can_turn_on_two_step_sign_in_but_no_role_requires_it",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_reading_your_own_status",
+]
+
+[[unit]]
+text = "The count of wrong passwords and codes is kept by each API process; the count of 100 wrong codes is stored with the account."
+by = [
+    "test:backend/tests/unit/api/test_local_auth.py::TestLoginAttemptTracker",
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_a_new_service_reads_the_same_rows",
+]

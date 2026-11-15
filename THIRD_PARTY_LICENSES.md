@@ -207,7 +207,7 @@ Resolved with `license-checker-rseidelsohn --production`.
 
 These are the dashboard's **build-time** dependencies. The dashboard image runs nginx over the static Next.js export: `frontend/Dockerfile`'s runtime stage copies `frontend/out` and the nginx configuration and nothing else, so none of the packages below is redistributed in it. They are listed because anyone building the dashboard from source resolves them.
 
-#### MIT (39)
+#### MIT (40)
 
 | Package | Version |
 |---|---|
@@ -238,6 +238,7 @@ These are the dashboard's **build-time** dependencies. The dashboard image runs 
 | `nanoid` | 3.3.20 |
 | `next` | 16.4.1 |
 | `postcss` | 8.5.23 |
+| `qrcode-generator` | 2.0.4 |
 | `react` | 19.3.0 |
 | `react-dom` | 19.3.0 |
 | `react-is` | 19.2.4 |

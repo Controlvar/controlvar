@@ -200,6 +200,43 @@ def test_the_fixed_texts_are_the_apis_word_for_word():
     assert missing == {}
 
 
+#: The dashboard's copies of the API's texts, and the user guide.
+DASHBOARD_TEXTS = REPO_ROOT / "frontend" / "src" / "services" / "twoFactor.ts"
+USER_GUIDE = REPO_ROOT / "docs" / "auth" / "two-factor.md"
+
+
+def test_the_dashboard_and_the_guide_use_the_apis_texts_word_for_word():
+    """U7: the dashboard matches the API's refusals by their text (the cap's
+    423 against the address lock's, the 503, a wrong code against an expired
+    step), so each copy in ``frontend/src/services/twoFactor.ts`` is the API's
+    constant as one literal; the user guide quotes the 503 and the cap's 423.
+    Change one wording in the API and this names the copy that did not
+    follow."""
+    from backend.app.api.two_factor_answers import SIGN_IN_EXPIRED_DETAIL
+    from backend.app.services.two_factor_service import (
+        CODE_STEP_LOCKED_TEXT,
+        UNAVAILABLE_TEXT,
+        WRONG_CODE_TEXT,
+    )
+
+    source = DASHBOARD_TEXTS.read_text(encoding="utf-8")
+    literals = set(re.findall(r"'([^'\\\n]{1,300})'", source))
+    dashboard: Dict[str, str] = {
+        "WRONG_CODE_DETAIL": WRONG_CODE_TEXT,
+        "SIGN_IN_EXPIRED_DETAIL": SIGN_IN_EXPIRED_DETAIL,
+        "CODE_STEP_LOCKED_TEXT": CODE_STEP_LOCKED_TEXT,
+        "UNAVAILABLE_TEXT": UNAVAILABLE_TEXT,
+    }
+    missing = {name: text for name, text in dashboard.items() if text not in literals}
+    assert missing == {}
+    for name in dashboard:
+        assert re.search(rf"^export const {name} =", source, re.M), name
+
+    guide = " ".join(USER_GUIDE.read_text(encoding="utf-8").split())
+    quoted = {"cap": CODE_STEP_LOCKED_TEXT, "unavailable": UNAVAILABLE_TEXT}
+    assert {name: text for name, text in quoted.items() if text not in guide} == {}
+
+
 def test_rotating_the_jwt_secret_says_to_reset_two_step_sign_in():
     section = _section(
         ROTATION.read_text(encoding="utf-8"), "### Rotate JWT Secret Immediately"
