@@ -2,6 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import ExperimentsPage from '@/pages/experiments/index';
 import { apiFetch } from '@/services/api';
+import type { DemoMode } from '@/services/authConfig';
 import { docsUrl } from '@/services/docs';
 import { Experiment } from '@/types/experiments';
 import { apiError, makeRouter, routedApi } from './helpers/apiMock';
@@ -17,6 +18,13 @@ jest.mock('next/router', () => ({ useRouter: () => mockRouter }));
 // The page asks for the current role to decide whether to offer "+ New Experiment".
 const mockAuth = jest.fn().mockReturnValue(null);
 jest.mock('@/contexts/AuthContext', () => ({ useOptionalAuth: () => mockAuth() }));
+
+// Demo mode is off unless a test turns it on (the Interactions link, #1960).
+let mockDemo: DemoMode | null = null;
+jest.mock('@/contexts/AuthConfigContext', () => ({
+  ...jest.requireActual('@/contexts/AuthConfigContext'),
+  useDemoMode: () => mockDemo,
+}));
 
 jest.mock('next/head', () => {
   const Head = ({ children }: { children: React.ReactNode }) => <>{children}</>;
@@ -264,6 +272,85 @@ describe('ExperimentsPage — create button by role', () => {
     render(<ExperimentsPage />);
     expect(await screen.findByTestId('new-experiment-btn')).toBeInTheDocument();
     expect(screen.getByTestId('exclusion-groups-link')).toBeInTheDocument();
+  });
+});
+
+describe('ExperimentsPage — the Interactions link (#1960)', () => {
+  // The roles `interactions._require_developer` admits, or a superuser of any
+  // role; never the create block's, so an ANALYST sees it too.
+  const signIn = (role: string | null, is_superuser = false) =>
+    mockAuth.mockReturnValue({
+      user: { id: 'u1', email: 'u@example.com', username: 'u', role, is_superuser, is_active: true },
+      status: 'authenticated' as const,
+      login: jest.fn(),
+      logout: jest.fn(),
+      hasRole: (...roles: string[]) => roles.includes(String(role)),
+    });
+
+  beforeEach(() => {
+    mockedApiFetch.mockImplementation(
+      routedApi([{ path: '/api/v1/experiments', handler: () => listResponse([exp({})]) }]) as unknown as typeof apiFetch,
+    );
+  });
+
+  afterEach(() => {
+    mockAuth.mockReturnValue(null);
+    mockDemo = null;
+  });
+
+  /** The header's two children: the title block, and the right-hand wrapper holding the link. */
+  function headerOf(link: HTMLElement) {
+    const wrapper = link.parentElement!;
+    const header = wrapper.parentElement!;
+    expect(header.children).toHaveLength(2);
+    expect(header.children[1]).toBe(wrapper);
+    expect(header.children[0]).toHaveTextContent(/^Experiments/);
+    return wrapper;
+  }
+
+  it.each(['ANALYST', 'DEVELOPER', 'ADMIN'])('offers %s the "Interactions" link, underlined, beside the create block', async (role) => {
+    signIn(role);
+    render(<ExperimentsPage />);
+    const link = await screen.findByTestId('interactions-link');
+    expect(link).toHaveTextContent(/^Interactions$/);
+    expect(link).toHaveAttribute('href', '/experiments/interactions');
+    expect(Array.from(link.classList)).toContain('underline');
+    const wrapper = headerOf(link);
+    // Outside the create block: that block's children stay exactly its three.
+    expect(screen.queryByTestId('holdouts-link')?.parentElement ?? null).not.toBe(wrapper);
+  });
+
+  it('offers it to a superuser whose role is VIEWER', async () => {
+    signIn('VIEWER', true);
+    render(<ExperimentsPage />);
+    headerOf(await screen.findByTestId('interactions-link'));
+  });
+
+  it('offers it to an ANALYST in a read-only demo, beside the demo note', async () => {
+    signIn('ANALYST');
+    mockDemo = { account: null };
+    render(<ExperimentsPage />);
+    const link = await screen.findByTestId('interactions-link');
+    const wrapper = headerOf(link);
+    expect(within(wrapper).getByTestId('demo-note')).toBeInTheDocument();
+    expect(screen.queryByTestId('new-experiment-btn')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['VIEWER', 'VIEWER'],
+    ['an account with no role', null],
+  ])('shows %s no "Interactions" link', async (_, role) => {
+    signIn(role);
+    render(<ExperimentsPage />);
+    await screen.findByTestId('experiments-table');
+    expect(screen.queryByTestId('interactions-link')).not.toBeInTheDocument();
+  });
+
+  it('shows no link before the user is known', async () => {
+    mockAuth.mockReturnValue(null);
+    render(<ExperimentsPage />);
+    await screen.findByTestId('experiments-table');
+    expect(screen.queryByTestId('interactions-link')).not.toBeInTheDocument();
   });
 });
 

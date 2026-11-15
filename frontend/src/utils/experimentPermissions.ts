@@ -72,6 +72,29 @@ export function canAdministerEligibility(
 }
 
 /**
+ * Whether the API would let this user use interaction analysis (#1960): the
+ * scan (`GET /api/v1/interactions/scan`) and the pair test (beta,
+ * `GET /api/v1/interactions/{a}/{b}`).
+ *
+ * Mirrors `_require_developer` in `interactions.py`: a superuser, or one of
+ * the roles it names (`INTERACTION_ROLES`). Like `_require_admin` it checks
+ * the role, not the role table, so no custom role or direct grant can give
+ * it and it takes no effective map; `test_dashboard_experiment_roles.py`
+ * calls `_require_developer` for every role and holds the set it admits
+ * equal to this list.
+ *
+ * A null user (no session yet) answers FALSE: the Interactions link and the
+ * page's requests wait until the user is known to be allowed.
+ */
+const ROLES_THAT_ANALYSE_INTERACTIONS = ['ADMIN', 'ANALYST', 'DEVELOPER'] as const;
+
+export function canAnalyseInteractions(user: PermissionUser): boolean {
+  if (!user) return false;
+  if (user.is_superuser) return true;
+  return ROLES_THAT_ANALYSE_INTERACTIONS.includes(user.role as 'ADMIN' | 'ANALYST' | 'DEVELOPER');
+}
+
+/**
  * Whether the API would accept a change to an experiment from this user:
  * start, pause, complete, archive, schedule, and edit a draft's details,
  * variants and metrics.

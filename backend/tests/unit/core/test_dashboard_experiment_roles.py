@@ -14,6 +14,9 @@ the global holdout's admin actions. Its server side, ``_require_admin`` in
 ``mutual_exclusion_groups.py`` and ``global_holdout.py``, checks the role and
 not the role table, so its list is compared with what both functions do when
 called with each role (a behavioural twin), not with ``ROLE_PERMISSIONS``.
+``canAnalyseInteractions`` (#1960) gates the Interactions page; its server
+side, ``_require_developer`` in ``interactions.py``, names its roles too, so
+it gets the same behavioural twin.
 """
 
 from __future__ import annotations
@@ -25,7 +28,11 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from backend.app.api.v1.endpoints import global_holdout, mutual_exclusion_groups
+from backend.app.api.v1.endpoints import (
+    global_holdout,
+    interactions,
+    mutual_exclusion_groups,
+)
 from backend.app.core.permissions import ROLE_PERMISSIONS, Action, ResourceType
 from backend.app.models.user import UserRole
 
@@ -152,4 +159,46 @@ def test_require_admin_admits_a_superuser_of_any_role(module):
     assert body, "canAdministerEligibility not found"
     assert "if (user.is_superuser) return true;" in body.group(1)
     # A null user (no session yet) is refused, not admitted (fail closed).
+    assert "if (!user) return false;" in body.group(1)
+
+
+# canAnalyseInteractions (#1960) gates the Interactions link and every request
+# of /experiments/interactions. The server's `_require_developer` in
+# interactions.py names its roles (INTERACTION_ROLES) rather than reading
+# ROLE_PERMISSIONS, so, like `_require_admin` above, it is called with each
+# role and the roles it admits are held equal to the dashboard's list.
+def test_analyse_interactions_roles_match_require_developer():
+    assert {role.name for role in UserRole} >= {
+        "ADMIN",
+        "DEVELOPER",
+        "ANALYST",
+        "VIEWER",
+    }
+    admitted = _admitted_by(interactions._require_developer, superuser=False)
+    assert (
+        admitted
+        == _ts_roles("ROLES_THAT_ANALYSE_INTERACTIONS")
+        == {"ADMIN", "ANALYST", "DEVELOPER"}
+    )
+
+
+def test_require_developer_admits_a_superuser_of_any_role_and_refuses_no_role():
+    assert _admitted_by(interactions._require_developer, superuser=True) == {
+        role.name for role in UserRole
+    }
+    # An account with no base role is refused unless it is a superuser; the
+    # dashboard shows such a user the role note and sends nothing.
+    with pytest.raises(HTTPException) as refused:
+        interactions._require_developer(SimpleNamespace(role=None, is_superuser=False))
+    assert refused.value.status_code == 403
+    interactions._require_developer(SimpleNamespace(role=None, is_superuser=True))
+    helper = HELPER.read_text("utf-8")
+    body = re.search(
+        r"export function canAnalyseInteractions\([^)]*\)[^{]*\{(.{0,400}?)\n\}",
+        helper,
+        re.S,
+    )
+    assert body, "canAnalyseInteractions not found"
+    assert "if (user.is_superuser) return true;" in body.group(1)
+    # A null user (no session yet) is refused: no link, no request.
     assert "if (!user) return false;" in body.group(1)

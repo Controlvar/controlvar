@@ -601,7 +601,9 @@ starting allocation until then. The dashboard shows the current weights only, wi
 
 When multiple experiments run simultaneously on overlapping user populations, they can distort each other's results. Run an interaction scan to find the pairs that share users, then ask the pair route whether one experiment's effect differs across the other's arms (beta). The scan measures overlap only.
 
-Access via:
+In the dashboard, open **Experiments** and then **Interactions**: **Scan active experiments** lists the
+pairs that share many users, and the **Pair test** (beta) tests any two experiments. It needs the
+ANALYST, DEVELOPER or ADMIN role. Through the API:
 ```text
 GET /api/v1/interactions/scan
 GET /api/v1/interactions/{exp_a_id}/{exp_b_id}
