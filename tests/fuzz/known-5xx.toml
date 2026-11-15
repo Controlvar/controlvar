@@ -68,19 +68,16 @@
 # page at most 2**63, and a page whose (page - 1) * size is past 2**63 - 1
 # answers 422, so the entries of GET /api/v1/users/ (superuser) and
 # GET /api/v1/audit-logs/ (viewer) were removed.
+# #963 is not fixed: POST /api/v1/results/{experiment_id}/post-stratification
+# is deprecated and answers 501 for every existing experiment, so it is
+# excluded from every pass by name (exclusions.toml) and its two entries
+# (superuser and viewer) were removed.
 # #957 is fixed: a body value of the wrong type on POST /api/v1/api-keys,
 # POST and PUT /api/v1/mutual-exclusion-groups and POST and PUT
 # /api/v1/holdout answers 422, so their ten entries (superuser and viewer)
 # were removed.
 
 # --- superuser: the seeded demo administrator's bearer token ----------------
-
-[[known]]
-pass = "superuser"
-operation = "POST /api/v1/results/{experiment_id}/post-stratification"
-status = 501
-issue = 963
-reason = "Published, and always answers 501: not implemented."
 
 [[known]]
 pass = "superuser"
@@ -132,13 +129,6 @@ cause = "config"
 reason = "Needs PHI_ENCRYPTION_KEY, which the fuzz stack leaves unset, and answers 503."
 
 # --- viewer: the seeded VIEWER's bearer token ------------------------------
-
-[[known]]
-pass = "viewer"
-operation = "POST /api/v1/results/{experiment_id}/post-stratification"
-status = 501
-issue = 963
-reason = "Published, and always answers 501: not implemented."
 
 [[known]]
 pass = "viewer"
