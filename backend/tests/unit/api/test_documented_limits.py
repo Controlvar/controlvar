@@ -539,6 +539,13 @@ SENDS = {
         ],
         'query["context"]',
     ),
+    # Part of #1720: the attributes as compact JSON, through the same encode as
+    # user_id.
+    "ruby": (
+        "sdk/ruby/lib/controlvar/client.rb",
+        [("def evaluate_flag(", "data = {} unless data.is_a?(Hash)")],
+        '"&context=#{encode(context)}"',
+    ),
 }
 
 #: Every directory under sdk/ whose flag evaluation sends the user id alone, so
@@ -546,11 +553,6 @@ SENDS = {
 #: file, and its code from the evaluate signature through the request call as
 #: (the line that starts it, the first line after the call) pairs.
 DOES_NOT_SEND = {
-    "ruby": (
-        1720,
-        "sdk/ruby/lib/controlvar/client.rb",
-        [("def evaluate_flag(", "data = {} unless data.is_a?(Hash)")],
-    ),
     "php": (
         1720,
         "sdk/php/src/ExperimentationClient.php",

@@ -163,6 +163,56 @@ RSpec.describe Controlvar::HttpClient do
           .to raise_error(Controlvar::NetworkError)
       end
     end
+
+    # A flag evaluation's query holds the user's id and attributes (#1720).
+    context 'error messages and the query string' do
+      let(:query)       { 'user_id=u1&context=%7B%22plan%22%3A%22attrcanary7f3%22%7D' }
+      let(:path)        { "/api/v1/feature-flags/evaluate/my-flag?#{query}" }
+      let(:context_url) { "#{base_url}#{path}" }
+
+      it 'names no query string in the error for a base_url with a space' do
+        spaced = described_class.new(base_url: 'http://local host:8000', api_key: 'k')
+
+        expect { spaced.get(path) }.to raise_error(Controlvar::NetworkError) { |e|
+          expect(e.message).to eq(
+            'Unexpected network error: bad URI(is not URI?): ' \
+            '"http://local host:8000/api/v1/feature-flags/evaluate/my-flag"'
+          )
+        }
+      end
+
+      it 'removes the query string from the message of a timeout, a refused connection and any other failure' do
+        [Errno::ETIMEDOUT, SocketError, RuntimeError].each do |error_class|
+          stub_request(:get, context_url).to_raise(error_class.new("while fetching #{context_url}; again: #{query}"))
+
+          expect { client.get(path) }.to raise_error(Controlvar::NetworkError) { |e|
+            expect(e.message).to include('while fetching https://api.example.com/api/v1/feature-flags/evaluate/my-flag;')
+            expect(e.message).not_to include('attrcanary7f3')
+            expect(e.message).not_to include('user_id')
+          }
+        end
+      end
+
+      it 'removes the query string from an API error message that repeats the URL' do
+        stub_request(:get, context_url)
+          .to_return(status: 400, body: { detail: "Bad request: GET #{path}" }.to_json)
+
+        expect { client.get(path) }.to raise_error(Controlvar::APIError) { |e|
+          expect(e.status_code).to eq(400)
+          expect(e.message).to eq('Bad request: GET /api/v1/feature-flags/evaluate/my-flag')
+        }
+      end
+
+      it 'keeps a server message that is not valid UTF-8 as an APIError with its status' do
+        # As bytes (ASCII-8BIT), the way Net::HTTP reads a body.
+        stub_request(:get, context_url).to_return(status: 422, body: "{\"detail\":\"bad \xFF value\"}".b)
+
+        expect { client.get(path) }.to raise_error(Controlvar::APIError) { |e|
+          expect(e.status_code).to eq(422)
+          expect(e.message).to eq("bad � value")
+        }
+      end
+    end
   end
 
   # -------------------------------------------------------------------------
