@@ -53,6 +53,8 @@ LOGIN = "/api/v1/auth/login"
 TOKEN = "/api/v1/auth/token"
 VERIFY = "/api/v1/auth/mfa/verify"
 ME_2FA = "/api/v1/users/me/2fa"
+ME_PASSWORD = "/api/v1/users/me/password"
+WRONG_PASSWORD = "Not-The-Password-1812"
 LOCKED_PREFIX = "Too many failed login attempts; account temporarily locked."
 
 
@@ -346,6 +348,58 @@ def test_wrong_codes_share_the_password_lockout(client, make_user, clock):
     assert locked.json()["detail"].startswith(LOCKED_PREFIX)
     assert int(locked.headers["retry-after"]) > 0
     assert _password_step(client, user).status_code == 423
+
+
+def _prove_password(client, user, route, password):
+    """Send ``password`` as the current one: a change to the same password
+    (``POST /users/me/password``), or a start of setting up two-step sign-in."""
+    if route == "password":
+        return client.post(
+            ME_PASSWORD,
+            json={"current_password": password, "new_password": PASSWORD},
+            headers=_bearer(user),
+        )
+    return client.post(
+        f"{ME_2FA}/enroll", json={"current_password": password}, headers=_bearer(user)
+    )
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "two_step, route, status, left",
+    [
+        (False, "password", 204, 0),
+        (True, "password", 204, 9),
+        (True, "enroll", 409, 9),
+    ],
+    ids=["plain-password-change", "two-step-password-change", "two-step-enroll"],
+)
+def test_a_right_current_password_clears_the_count_only_without_two_step_sign_in(
+    client, make_user, clock, two_step, route, status, left
+):
+    """9 wrong current passwords, then the right one. An account with two-step
+    sign-in on keeps the 9, so one more wrong password locks its sign-in; one
+    without it goes to 0, as a right password at sign-in clears it."""
+    user = make_user()
+    if two_step:
+        _turn_on(client, user, clock)
+    for _ in range(9):
+        wrong = _prove_password(client, user, "password", WRONG_PASSWORD)
+        assert wrong.status_code == 403, wrong.text
+
+    right = _prove_password(client, user, route, PASSWORD)
+    assert right.status_code == status, right.text
+    assert login_attempt_tracker.status(_key(user)).failures == left
+
+    tenth = client.post(LOGIN, json={"email": user.email, "password": WRONG_PASSWORD})
+    assert tenth.status_code == 401
+    after = _password_step(client, user)
+    if two_step:
+        assert after.status_code == 423, after.text
+        assert after.json()["detail"].startswith(LOCKED_PREFIX)
+    else:
+        assert after.status_code == 200, after.text
+        assert "access_token" in after.json()
 
 
 @pytest.mark.regression

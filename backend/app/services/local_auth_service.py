@@ -398,7 +398,10 @@ class LocalAuthService:
            Not counted either;
         4. the password does not match: the failure is recorded, then
            ``InvalidCredentialsError``;
-        5. it matches: the counter is cleared.
+        5. it matches: the counter is cleared, unless the account has
+           two-step sign-in on. Its count is shared with its codes, so only a
+           code accepted at sign-in (``POST /auth/mfa/verify``) clears it, as
+           at ``/auth/login``.
 
         The counter is keyed on the database's ``lower()`` of the account's
         e-mail address -- the key ``authenticate`` uses for any spelling of
@@ -427,7 +430,10 @@ class LocalAuthService:
             self.tracker.record_failure(email_key)
             raise InvalidCredentialsError("The current password is incorrect.")
 
-        self.tracker.reset(email_key)
+        # For an account with two-step sign-in on, only an accepted code at
+        # sign-in clears the count it shares with its codes (#1812).
+        if not user.totp_enabled:
+            self.tracker.reset(email_key)
 
 
 # Process-wide tracker shared by /auth/login, /auth/token (local provider) and
