@@ -793,14 +793,30 @@ final class ExperimentationClientTests: XCTestCase {
         }
     }
 
+    /// No attribute, and no query at all, in anything the thrown error prints: its description,
+    /// its message, its userInfo, and the same for the error it wraps.
     private func assertNoCanary(_ error: Error, file: StaticString = #filePath, line: UInt = #line) {
-        for text in [String(describing: error), String(reflecting: error), error.localizedDescription] {
-            XCTAssertFalse(text.contains(Self.canary), text, file: file, line: line)
+        var errors = [error]
+        if case ExperimentationError.networkError(let inner) = error {
+            errors.append(inner)
+        }
+        for each in errors {
+            let texts = [
+                String(describing: each),
+                String(reflecting: each),
+                each.localizedDescription,
+                String(describing: (each as NSError).userInfo),
+            ]
+            for text in texts {
+                for marker in [Self.canary, "?", "context="] {
+                    XCTAssertFalse(text.contains(marker), "\(marker) in \(text)", file: file, line: line)
+                }
+            }
         }
     }
 
     /// P11: URLSession's error names the request's URL, query and attributes included, in its
-    /// userInfo; the error the SDK throws keeps the code and nothing else.
+    /// userInfo; the error the SDK throws keeps the code and the system's sentence, nothing else.
     func testEvaluateFlag_aNetworkErrorCarriesNoAttribute() async throws {
         MockURLProtocol.handler = { request in
             throw URLError(.cannotConnectToHost, userInfo: [
@@ -860,6 +876,35 @@ final class ExperimentationClientTests: XCTestCase {
             guard case ExperimentationError.networkError = error else {
                 return XCTFail("Expected networkError, got \(error)")
             }
+            assertNoCanary(error)
+        }
+    }
+
+    /// The error keeps the system's readable sentence for its code ("Could not connect to the
+    /// server."), taken here from a plain URLSession request to the same closed port rather than
+    /// typed, since a bare `URLError(code)` only reads "The operation couldn't be completed".
+    func testEvaluateFlag_aRealConnectionErrorKeepsTheSystemsSentence() async throws {
+        let systemSentence: String = await withCheckedContinuation { continuation in
+            URLSession(configuration: .ephemeral).dataTask(with: URL(string: "http://127.0.0.1:1/")!) { _, _, error in
+                continuation.resume(returning: error?.localizedDescription ?? "no error")
+            }.resume()
+        }
+        XCTAssertNotEqual(systemSentence, URLError(.cannotConnectToHost).localizedDescription,
+                          "the system's sentence is a readable one, not the bare code's")
+        let client = ExperimentationClient(
+            config: SdkConfig(baseURL: "http://127.0.0.1:1", apiKey: "k", timeout: 5, enableOfflineFallback: false),
+            session: URLSession(configuration: .ephemeral)
+        )
+
+        do {
+            _ = try await client.evaluateFlag("f", user: makeUser("u1", attributes: ["note": Self.canary]))
+            XCTFail("Expected networkError")
+        } catch {
+            guard case ExperimentationError.networkError(let inner) = error else {
+                return XCTFail("Expected networkError, got \(error)")
+            }
+            XCTAssertEqual((inner as? URLError)?.code, .cannotConnectToHost)
+            XCTAssertEqual(inner.localizedDescription, systemSentence)
             assertNoCanary(error)
         }
     }

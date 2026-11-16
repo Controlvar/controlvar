@@ -123,13 +123,17 @@ public class HTTPClient {
         } catch let urlError as URLError where urlError.code == .cancelled {
             throw ExperimentationError.cancelled
         } catch let urlError as URLError {
-            // The code alone. URLSession's error carries the request's URL, query included, in
-            // its userInfo (NSErrorFailingURLStringKey and NSErrorFailingURLKey), and a flag
-            // evaluation's query holds the user's attributes.
-            throw ExperimentationError.networkError(URLError(urlError.code))
+            // The code and the system's sentence for it ("Could not connect to the server."),
+            // nothing else. URLSession's error carries the request's URL, query included, in its
+            // userInfo (NSErrorFailingURLStringKey and NSErrorFailingURLKey), and a flag
+            // evaluation's query holds the user's attributes. The sentence names no URL (measured
+            // for -1001, -1002, -1003 and -1004 with the attributes in the query).
+            throw ExperimentationError.networkError(
+                URLError(urlError.code, userInfo: [NSLocalizedDescriptionKey: urlError.localizedDescription])
+            )
         } catch {
-            // Any other error (from an injected URLProtocol, say): its domain and code alone,
-            // for the same reason.
+            // Any other error (from an injected URLProtocol, say): its domain and code alone. Its
+            // text is not the system's and may name the URL.
             let nsError = error as NSError
             throw ExperimentationError.networkError(NSError(domain: nsError.domain, code: nsError.code))
         }
