@@ -552,7 +552,7 @@ CUPED reduces result noise by adjusting for each user's own events in the days b
 
 **When to use it:** When your users sent the metric's event before the experiment (returning customers who bought before, say). Send that history to the tracking API with no experiment key, before you start the experiment: history the server receives after a user was assigned is ignored for that user.
 
-The dashboard has no CUPED tab; it is available through the API:
+For an experiment whose method is `cuped` or `cuped_plus`, the results page has a **CUPED (beta)** tab: each conversion metric's change with and without CUPED, how much the variance shrank, and the share of users with history. The method is set through the API when the experiment is created or while it is a draft. The same numbers are at:
 ```text
 GET /api/v1/results/{experiment_id}/cuped
 ```

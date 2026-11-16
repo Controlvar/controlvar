@@ -188,7 +188,7 @@ text = "Split-URL experiments (full profile) | API only | Split URL testing"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "CUPED-adjusted results (beta) | API only | CUPED"
+text = "CUPED-adjusted results (beta) | Dashboard | CUPED"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]

@@ -1,6 +1,6 @@
 WITH exposures AS (
   SELECT CAST("user_id" AS VARCHAR(65535)) AS unit_id,
-    SUBSTR(CAST("variant" AS VARCHAR(65535)), 1, 64) AS variant,
+    SUBSTRING(CAST("variant" AS VARCHAR(65535)), 1, 64) AS variant,
     CAST("exposed_at" AS TIMESTAMPTZ) AS exposed_at
   FROM "analytics"."exposures"
   WHERE "experiment_key" = 'checkout-v2'
@@ -31,7 +31,7 @@ per_unit AS (
   LEFT JOIN events AS e
     ON e.unit_id = u.unit_id
     AND e.event_at >= u.first_exposed_at
-    AND e.event_at < LEAST(DATEADD(hour, 168, u.first_exposed_at), CAST('2026-09-27 12:30:00+00:00' AS TIMESTAMPTZ))
+    AND e.event_at < LEAST(CAST(DATEADD(hour, 168, CAST(u.first_exposed_at AS TIMESTAMP)) AS TIMESTAMPTZ), CAST('2026-09-27 12:30:00+00:00' AS TIMESTAMPTZ))
   WHERE u.n_variants = 1
   GROUP BY u.unit_id, u.variant
 ),

@@ -33,7 +33,11 @@ them, which is the order ``contract.valid_events`` reads them in. It then reads
   server stored anything, so the ledger refuses the run (``LedgerRefused``).
   ``server_errors`` counts every 5xx, the results reads' included.
 * **Results** are read with ``use_cache=false``: while an experiment runs a
-  cached answer can be 300 s old.
+  cached answer can be 300 s old. ``balanced_groups`` reads an experiment's
+  ``GET .../balanced-groups`` (#448), which is never cached.
+* **Balance within groups**: the create request carries the scenario's
+  ``balance_within``, and an answer that does not echo it stops the run (a
+  server without #448 ignores the field and answers 200).
 * **Credentials** go only into request headers. The ledger is given the token
   and the key as secrets, so a record that carried either is refused.
 
@@ -57,6 +61,8 @@ API_KEYS = "/api/v1/api-keys"
 EXPERIMENTS = "/api/v1/experiments/"
 #: The results route, as the statistics name it (one row for every experiment).
 RESULTS = "/api/v1/results/{experiment_id}"
+#: The groups of an experiment that balances within groups (#448).
+BALANCED_GROUPS = "/api/v1/results/{experiment_id}/balanced-groups"
 #: The scope ``/assign/batch`` requires (``backend/app/api/sdk_scope.py``).
 SDK_RULESET_SCOPE = "sdk:ruleset"
 #: Each lifecycle step after ``create``: the path under the experiment. A
@@ -104,7 +110,13 @@ class RouteStats:
 
 def create_body(scenario: generator.Scenario) -> dict[str, Any]:
     """``POST /api/v1/experiments/``'s body for *scenario*: its variants in the
-    plan's order, the first the control, and its metrics, the first primary."""
+    plan's order, the first the control, and its metrics, the first primary;
+    and, for a scenario that balances within groups, its ``balance_within``."""
+    balance = (
+        {}
+        if scenario.balance is None
+        else {"balance_within": scenario.balance.setting()}
+    )
     return {
         "name": f"Ground truth {scenario.name} {scenario.experiment_key}"[:100],
         "key": scenario.experiment_key,
@@ -128,6 +140,7 @@ def create_body(scenario: generator.Scenario) -> dict[str, Any]:
         ],
         "correction_method": scenario.correction_method,
         "confidence_level": scenario.confidence_level,
+        **balance,
     }
 
 
@@ -395,6 +408,16 @@ class Driver:
                 if not isinstance(created, str):
                     raise ReplayError(f"create of experiment {key} answered no id")
                 self.variant_ids = self._variant_ids(plan, answer)
+                balance = plan.scenario.balance
+                # A server without #448 ignores the field and answers 200
+                # (docs/guides/balance-within-groups.md: check the echo).
+                if balance is not None and answer.get("balance_within") != (
+                    balance.setting()
+                ):
+                    raise ReplayError(
+                        f"create of experiment {key} did not answer the"
+                        " balance_within it was sent"
+                    )
                 return created
             return None
 
@@ -563,21 +586,37 @@ class Driver:
 
     def results(self, experiment_id: str, *, label: str | None = None) -> Any:
         """``GET /api/v1/results/{experiment_id}?use_cache=false``, as JSON."""
+        return self._read(
+            RESULTS, experiment_id, label, "results", params={"use_cache": "false"}
+        )
+
+    def balanced_groups(self, experiment_id: str, *, label: str | None = None) -> Any:
+        """``GET /api/v1/results/{experiment_id}/balanced-groups``, as JSON:
+        computed on each request, never cached (#448)."""
+        return self._read(BALANCED_GROUPS, experiment_id, label, "balanced_groups")
+
+    def _read(
+        self,
+        route: str,
+        experiment_id: str,
+        label: str | None,
+        phase: str,
+        *,
+        params: Mapping[str, str] | None = None,
+    ) -> Any:
         started = self._clock()
         try:
             response = self._admin(
                 "GET",
-                RESULTS.format(experiment_id=experiment_id),
-                route=RESULTS,
+                route.format(experiment_id=experiment_id),
+                route=route,
                 headers=self._bearer(),
-                params={"use_cache": "false"},
+                params=params,
             )
         finally:
             if label is not None:
-                phase = (label, "results")
-                self.phases[phase] = (
-                    self.phases.get(phase, 0.0) + self._clock() - started
-                )
+                key = (label, phase)
+                self.phases[key] = self.phases.get(key, 0.0) + self._clock() - started
         return response.json()
 
     # -- what a run leaves ----------------------------------------------------------

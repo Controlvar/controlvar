@@ -51,7 +51,9 @@ JavaScript SDK sends the `eventId` you give it, and makes none itself
 ([Event ids](../sdk/javascript.md#event-ids)). The Python SDK sends the `event_id` you give it, and
 makes none itself ([Event ids](../sdk/python.md#event-ids)). The React and React Native SDKs give
 every event an `event_id`, from their next published version
-([React](../sdk/react.md#event-ids), [React Native](../sdk/react-native.md#event-ids)).
+([React](../sdk/react.md#event-ids), [React Native](../sdk/react-native.md#event-ids)). The .NET
+SDK gives every event an `event_id`, from its next published version
+([Event ids](../sdk/dotnet.md#event-ids)).
 No other
 SDK has an `event_id` option yet ([Limitations](../getting-started/limitations.md#sdks)): send an
 event that may be sent again to `POST /api/v1/tracking/track` or `POST /api/v1/tracking/batch`

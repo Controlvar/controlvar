@@ -118,7 +118,8 @@ def honest_results(scenario, experiment, *, compare=reference.compare):
     }
 
 
-@pytest.fixture(scope="module", params=sorted(SCENARIOS))
+#: G0 is O-ASSIGN's hash; S5's balanced gates are test_balanced_gates.py's.
+@pytest.fixture(scope="module", params=suite.HASHED)
 def honest(request):
     scenario = SCENARIOS[request.param]
     plan, records, experiment = _replayed(scenario)
@@ -506,15 +507,32 @@ def test_the_scenarios_are_section_3_4_s():
             [("click", "conversion")],
             "benjamini_hochberg",
         ),
+        "S5": (
+            [("control", 30), ("treatment", 70)],
+            6000,
+            [("purchase", "conversion")],
+            "benjamini_hochberg",
+        ),
     }
     s1 = SCENARIOS["S1"]
     assert s1.arms[0].conversion == s1.arms[1].conversion  # A/A
     s3 = SCENARIOS["S3"]
     assert all(a.repeat > 0 and a.values is not None for a in s3.arms)
+    # S5 balances within country, every user assigned one at a time and
+    # again; A/A in every group, since the plan cannot know a user's arm.
+    s5 = SCENARIOS["S5"]
+    assert s5.balance.setting() == {
+        "attribute": "country",
+        "values": ["US", "DE", "FR"],
+    }
+    assert (s5.single_share, s5.sticky_share) == (1.0, suite.S5_RETURNING)
+    assert s5.arms[0].conversion == s5.arms[1].conversion
+    assert s5.arms[0].repeat == s5.arms[1].repeat > 0
+    assert (suite.HASHED, suite.BALANCED) == (["S1", "S2", "S3", "S4"], ["S5"])
     assert {
         k: v.users for k, v in suite.scenarios(SEED, suite.SCALES["nightly"]).items()
     } == {name: 4 * s.users for name, s in SCENARIOS.items()}
-    assert len({s.experiment_key for s in SCENARIOS.values()}) == 4
+    assert len({s.experiment_key for s in SCENARIOS.values()}) == 5
     assert all(str(SEED) in s.experiment_key for s in SCENARIOS.values())
 
 

@@ -61,7 +61,7 @@ text = "Sequential testing with mSPRT"
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Variance reduction from each user's own pre-experiment events (API only)"
+text = "Variance reduction from each user's own pre-experiment events, on the results page and in the API"
 by = ["mechanism:docs-hub"]
 
 [[unit]]

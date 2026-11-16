@@ -687,7 +687,7 @@ describe('ExperimentDetailPage — where the SDK hint sends the reader for an AP
   });
 
   it.each(['ADMIN', 'DEVELOPER', 'ANALYST', 'VIEWER'])(
-    'gives %s, who cannot open that page, the route and the docs page instead',
+    'points %s, who cannot open that page, to More → Your API keys and the docs page instead',
     async (role) => {
       signInAs(role, false);
       const box = await sdkHint();
@@ -695,7 +695,13 @@ describe('ExperimentDetailPage — where the SDK hint sends the reader for an AP
       expect(box.querySelector('a[href="/admin/api-keys"]')).toBeNull();
       const route = within(box).getByTestId('sdk-hint-api-key-route');
       expect(route).toHaveTextContent(
-        'Create one for yourself with POST /api/v1/api-keys (see API Key Management) or ask an administrator.',
+        'Create one for yourself under More → Your API keys (see API Key Management).',
+      );
+      expect(route).not.toHaveTextContent('ask an administrator');
+      expect(route).not.toHaveTextContent('POST /api/v1/api-keys');
+      expect(within(route).getByRole('link', { name: 'Your API keys' })).toHaveAttribute(
+        'href',
+        '/account/api-keys',
       );
       expect(within(route).getByRole('link', { name: 'API Key Management' })).toHaveAttribute(
         'href',

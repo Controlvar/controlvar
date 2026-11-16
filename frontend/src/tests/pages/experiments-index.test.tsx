@@ -120,9 +120,9 @@ describe('ExperimentsPage', () => {
     const card = await screen.findByTestId('first-run-checklist');
     expect(within(card).getByTestId('checklist-create-experiment')).toHaveAttribute('href', '/experiments/new');
     // No account is known here (useOptionalAuth gives null), so step 2 names
-    // the route rather than the superuser-only Admin page (#920).
+    // the page every role can open rather than the superuser-only Admin page (#920, #1974).
     expect(within(card).queryByTestId('checklist-api-keys')).toBeNull();
-    expect(within(card).getByTestId('checklist-api-key-route')).toHaveTextContent('POST /api/v1/api-keys');
+    expect(within(card).getByTestId('checklist-api-key-route')).toHaveTextContent('More → Your API keys');
 
     const curl = within(card).getByTestId('checklist-curl').textContent ?? '';
     expect(curl).toContain('http://api.test/api/v1/tracking/assign');
@@ -298,7 +298,7 @@ describe("ExperimentsPage — the checklist's API-key step by account (#920)", (
   });
 
   it.each(['ADMIN', 'DEVELOPER', 'ANALYST', 'VIEWER'])(
-    'gives %s, who cannot open that page, the route and the docs page instead',
+    'points %s, who cannot open that page, to More → Your API keys and the docs page instead',
     async (role) => {
       signIn(role, false);
       const card = await checklist();
@@ -306,7 +306,13 @@ describe("ExperimentsPage — the checklist's API-key step by account (#920)", (
       expect(card.querySelector('a[href="/admin/api-keys"]')).toBeNull();
       const route = within(card).getByTestId('checklist-api-key-route');
       expect(route).toHaveTextContent(
-        'Create one for yourself with POST /api/v1/api-keys (see API Key Management) or ask an administrator.',
+        'Create one for yourself under More → Your API keys (see API Key Management).',
+      );
+      expect(route).not.toHaveTextContent('ask an administrator');
+      expect(route).not.toHaveTextContent('POST /api/v1/api-keys');
+      expect(within(route).getByRole('link', { name: 'Your API keys' })).toHaveAttribute(
+        'href',
+        '/account/api-keys',
       );
       expect(within(route).getByRole('link', { name: 'API Key Management' })).toHaveAttribute(
         'href',

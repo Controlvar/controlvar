@@ -70,7 +70,7 @@ const sections = [
       { label: 'Running Experiments', href: docsUrl('guides/user-guide'), desc: 'End-to-end experiment lifecycle' },
       { label: 'Dashboard and API', href: docsUrl('guides/dashboard-and-api'), desc: 'Which capabilities have a dashboard screen, and which work through the API only for now' },
       { label: 'Statistical Methods', href: docsUrl('api/sequential-testing'), desc: 'Sequential testing with mSPRT' },
-      { label: 'CUPED', href: docsUrl('api/cuped'), desc: "Variance reduction from each user's own pre-experiment events (API only)" },
+      { label: 'CUPED', href: docsUrl('api/cuped'), desc: "Variance reduction from each user's own pre-experiment events, on the results page and in the API" },
       { label: 'Multi-Armed Bandits', href: docsUrl('api/multi-armed-bandit'), desc: 'Thompson Sampling, UCB1, Epsilon-Greedy (create one from the new-experiment form or the API)' },
       { label: 'Split URL Testing', href: docsUrl('api/split-url'), desc: 'Full profile: give each variant its own URL. Your server or edge, or on AWS an optional CloudFront router, asks Controlvar where to send each visitor, and conversions count for the variant they saw.' },
       { label: 'Mutual Exclusion Groups', href: docsUrl('api/mutual-exclusion-groups'), desc: 'Keep users out of conflicting experiments, and a share of new users out of every experiment' },

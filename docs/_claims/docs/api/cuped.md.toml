@@ -16,10 +16,17 @@ text = "How much it narrows depends on how well that history predicts the outcom
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "The endpoint is GET /api/v1/results/{experiment_id}/cuped; the dashboard and GET /results/{id} show the unadjusted numbers."
+text = "The endpoint is GET /api/v1/results/{experiment_id}/cuped."
 by = [
     "docex:docs/api/cuped.md#\"analysis_status\": \"ga\"",
     "test:backend/tests/integration/api/test_cuped_results_api.py::test_s6_sizes_and_conversions_are_the_results_routes",
+]
+
+[[unit]]
+text = "In the dashboard, the results page of an experiment whose method is cuped or cuped_plus has a CUPED (beta) tab with these numbers; its other tabs and GET /results/{id} show the unadjusted ones."
+by = [
+    "test:frontend/src/tests/pages/results-cuped.test.tsx::sits after the Overview, Trends and Sample Size tabs and before Breakdowns",
+    "test:frontend/src/tests/pages/results-cuped.test.tsx::keeps the Overview table as it was: unadjusted, on its own tab",
 ]
 
 [[unit]]

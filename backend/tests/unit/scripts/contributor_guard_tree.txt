@@ -2385,11 +2385,6 @@
 100644 infrastructure/cdk/utils/redis_test_results.json
 100644 infrastructure/cdk/utils/test_dynamodb_connection.py
 100644 infrastructure/cdk/utils/test_redis_connection.py
-100644 infrastructure/cloudwatch/api-performance-dashboard.json
-100755 infrastructure/cloudwatch/deploy-dashboards.sh
-100644 infrastructure/cloudwatch/system-health-dashboard.json
-100644 infrastructure/cloudwatch/test_deploy_dashboards.sh
-100644 infrastructure/cloudwatch/test_log_insights_queries.sh
 100644 infrastructure/constructs/__init__.py
 100644 infrastructure/tests/__init__.py
 100644 infrastructure/tests/test_alarm_email.py
