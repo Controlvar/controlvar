@@ -301,6 +301,10 @@ public class ExperimentationClient : IDisposable
     /// <param name="value">Optional numeric value (revenue, duration, …).</param>
     /// <param name="eventType">Optional event type; defaults to <paramref name="eventName"/>.</param>
     /// <param name="timestamp">Optional event time; sent as ISO-8601 UTC.</param>
+    /// <param name="eventId">
+    /// Optional id of the event, sent as <c>event_id</c>; when <c>null</c> or empty the SDK makes a
+    /// new lowercase UUID. Pass the same id each time you send an event your code may send again.
+    /// </param>
     /// <returns>
     /// <c>true</c> when every request succeeded (or there was nothing to send); <c>false</c> on any
     /// network / HTTP error.
@@ -319,7 +323,8 @@ public class ExperimentationClient : IDisposable
         string? featureFlagKey = null,
         double? value = null,
         string? eventType = null,
-        DateTimeOffset? timestamp = null)
+        DateTimeOffset? timestamp = null,
+        string? eventId = null)
     {
         return TrackAsync(new TrackEvent
         {
@@ -330,7 +335,8 @@ public class ExperimentationClient : IDisposable
             FeatureFlagKey = featureFlagKey,
             Value = value,
             EventType = eventType,
-            Timestamp = timestamp
+            Timestamp = timestamp,
+            EventId = eventId
         });
     }
 
@@ -339,6 +345,9 @@ public class ExperimentationClient : IDisposable
     {
         if (trackEvent == null)
             return false;
+
+        // One id for the event, made here, so every fan-out entry of it carries the same one.
+        trackEvent = trackEvent.WithEventId();
 
         if (trackEvent.HasKey)
         {
@@ -368,10 +377,12 @@ public class ExperimentationClient : IDisposable
             return true;
 
         var expanded = new List<TrackEvent>();
-        foreach (var trackEvent in events)
+        foreach (var original in events)
         {
-            if (trackEvent == null)
+            if (original == null)
                 continue;
+            // Each event gets its own id; the entries it fans out to share it.
+            var trackEvent = original.WithEventId();
             if (trackEvent.HasKey)
                 expanded.Add(trackEvent);
             else
