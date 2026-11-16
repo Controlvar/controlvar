@@ -172,9 +172,9 @@ class HttpClient
     }
 
     /**
-     * $text without $path's query string, with or without its '?': the query of a flag
-     * evaluation holds the user's id and attributes. Every exception built from a request
-     * with a query goes through this and carries no previous exception.
+     * Removes the request's query from the message: $text without $path's query string,
+     * with or without its '?'. Every exception built from a request with a query goes
+     * through this and carries no previous exception.
      */
     private static function withoutQuery(string $text, #[\SensitiveParameter] string $path): string
     {

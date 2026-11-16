@@ -325,7 +325,7 @@ class ExperimentationClient
      *
      * The (object) cast makes a list-shaped array an object, never a JSON array, which
      * the server refuses with a 422. The encoder's error is dropped, not chained or
-     * logged, because its text can quote a value.
+     * logged.
      */
     private static function flagContext(array $attributes): ?string
     {

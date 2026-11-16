@@ -98,8 +98,8 @@ a string that is not valid UTF-8), `evaluateFlag` returns the disabled evaluatio
 
 The SDK keeps one cached answer per user and flag, together with the attributes it was asked with.
 A later call is answered from the cache only if its attributes are exactly the same; otherwise the
-SDK asks the server, and the new answer replaces the cached one. So two calls that differ only in
-attributes get two answers. The same attributes written in a different key order may cost one extra
+SDK asks the server, and a successful new answer replaces the cached one. So two calls that differ
+only in attributes get two answers. The same attributes written in a different key order may cost one extra
 request; they never return another call's answer.
 
 The change is in this repository ([#1720](https://github.com/Controlvar/controlvar/issues/1720)); it

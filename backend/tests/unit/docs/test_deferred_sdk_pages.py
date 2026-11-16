@@ -2328,10 +2328,10 @@ PHP_CONTEXT_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], ...] 
     (
         "The SDK keeps one cached answer per user and flag, together with the attributes"
         " it was asked with. A later call is answered from the cache only if its"
-        " attributes are exactly the same; otherwise the SDK asks the server, and the new"
-        " answer replaces the cached one. So two calls that differ only in attributes get"
-        " two answers. The same attributes written in a different key order may cost one"
-        " extra request; they never return another call's answer.",
+        " attributes are exactly the same; otherwise the SDK asks the server, and a"
+        " successful new answer replaces the cached one. So two calls that differ only in"
+        " attributes get two answers. The same attributes written in a different key order"
+        " may cost one extra request; they never return another call's answer.",
         _PHP_CACHE,
         (),
     ),
