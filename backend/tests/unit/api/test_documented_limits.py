@@ -539,6 +539,13 @@ SENDS = {
         ],
         'query["context"]',
     ),
+    # Part of #1720: the attributes as compact JSON, through the same encode as
+    # user_id.
+    "elixir": (
+        "sdk/elixir/lib/controlvar/client.ex",
+        [("def evaluate_flag(", "{:ok, data} when is_map(data) ->")],
+        '"&context=#{encode(context_json)}"',
+    ),
 }
 
 #: Every directory under sdk/ whose flag evaluation sends the user id alone, so
@@ -555,11 +562,6 @@ DOES_NOT_SEND = {
         1720,
         "sdk/php/src/ExperimentationClient.php",
         [("public function evaluateFlag(", "} catch (ExperimentationException) {")],
-    ),
-    "elixir": (
-        1720,
-        "sdk/elixir/lib/controlvar/client.ex",
-        [("def evaluate_flag(", "{:ok, data} when is_map(data) ->")],
     ),
     "edge": (
         1720,
