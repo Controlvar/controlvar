@@ -32,6 +32,10 @@ the other variants `0.1 / n`, for `n` variants: epsilon is 0.1, and it is not a 
 
 ## Creating a MAB Experiment
 
+To create one in the dashboard, choose **Bandit** as the experiment type on the new-experiment
+form (guided setup or the single-page form) and pick the **Optimization algorithm**. The rest of
+this section does the same through the API.
+
 Run the commands on this page in one terminal, in order, against the stack from the
 [Quick Start](../getting-started/quick-start.md). Each uses the shell variables set by the
 ones before it. Log in first; creating an experiment takes permission to create experiments,

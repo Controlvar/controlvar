@@ -168,7 +168,7 @@ text = "Archive and unarchive a feature flag | Dashboard | Archived flags"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Create a bandit experiment | API only | Multi-armed bandits"
+text = "Create a bandit experiment | Dashboard | Multi-armed bandits"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]

@@ -68,15 +68,15 @@ export default function NewExperimentPage() {
     if (router.isReady) shownViewRef.current = true;
   }, [router.isReady]);
 
-  // A refusal of the balance setting answers what was sent: once the setting or
-  // the split changes it is stale, and goes. What the same answer said about
-  // other fields stays.
+  // A refusal of the balance setting answers what was sent: once the setting,
+  // the split or the type changes it is stale, and goes (a bandit sends no
+  // setting, #1956). What the same answer said about other fields stays.
   useEffect(() => {
     setError((prev) => {
       if (!prev || !prev.balance) return prev;
       return prev.otherMessage ? { message: prev.otherMessage } : null;
     });
-  }, [state.balance, state.variants]);
+  }, [state.balance, state.variants, state.type]);
 
   const submit = async (view: CreateView) => {
     if (submittingRef.current) return;
