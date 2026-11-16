@@ -1,5 +1,6 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { ApiKeyTable, keyState } from '@/components/admin/api-keys/ApiKeyTable';
 import type { ApiKey } from '@/types/admin';
 
@@ -231,5 +232,136 @@ describe('ApiKeyTable', () => {
     await waitFor(() => expect(screen.getByTestId('create-api-key-button')).toBeInTheDocument());
     fireEvent.click(screen.getByTestId('create-api-key-button'));
     expect(onCreateKey).toHaveBeenCalled();
+  });
+});
+
+/** The DELETE calls a fetch mock has received. */
+const deleteCalls = (fetchMock: jest.Mock) =>
+  fetchMock.mock.calls.filter((call: [string, { method?: string }?]) => call[1]?.method === 'DELETE');
+
+/** A response the test releases by hand, so a request can be held in flight. */
+function held() {
+  let release: () => void = () => undefined;
+  const response = new Promise((resolve) => {
+    release = () => resolve({ ok: true, status: 204, json: async () => ({}) });
+  });
+  return { response, release: () => release() };
+}
+
+// #1797: the revoke question moves focus in, cancels on Escape and gives focus
+// back to that key's Revoke button; a revoke focuses the line that says it
+// happened. Its role, name and button order are what the docs journey
+// api-key-first-assignment asserts (step `delete`), so they are pinned here too.
+describe('ApiKeyTable — the revoke question and the keyboard (#1797)', () => {
+  const TWO_KEYS = [makeApiKey({ id: 'key-1', name: 'Alpha' }), makeApiKey({ id: 'key-2', name: 'Beta' })];
+
+  it('is the alertdialog the docs journey asserts: "Revoke API key {name}", then Cancel before Revoke key', async () => {
+    global.fetch = mockFetch(TWO_KEYS);
+    render(<ApiKeyTable onCreateKey={jest.fn()} />);
+    fireEvent.click(await screen.findByTestId('delete-button-key-2'));
+
+    const panel = screen.getByRole('alertdialog', { name: 'Revoke API key Beta' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(within(panel).getAllByRole('button').map((b) => b.textContent)).toEqual(['Cancel', 'Revoke key']);
+    // jsdom's name computation puts a space after the <strong> name; a browser does not.
+    expect(panel).toHaveAccessibleDescription(
+      /^Revoke Beta ?\? Applications using it stop working immediately\. This cannot be undone\.$/,
+    );
+    expect(panel).not.toHaveAttribute('aria-modal');
+  });
+
+  it("focus opens on Cancel, and Escape sends nothing and gives focus back to that key's Revoke button", async () => {
+    const fetchMock = mockFetch(TWO_KEYS);
+    global.fetch = fetchMock;
+    const user = userEvent.setup();
+    render(<ApiKeyTable onCreateKey={jest.fn()} />);
+    const revokeBeta = await screen.findByTestId('delete-button-key-2');
+    revokeBeta.focus();
+    await user.keyboard('{Enter}');
+    expect(screen.getByTestId('cancel-delete')).toHaveFocus();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByTestId('delete-confirm')).toBeNull();
+    expect(screen.getByTestId('delete-button-key-2')).toHaveFocus();
+
+    await user.keyboard('{Enter}');
+    await user.click(screen.getByTestId('cancel-delete'));
+    expect(screen.getByTestId('delete-button-key-2')).toHaveFocus();
+    expect(deleteCalls(fetchMock)).toHaveLength(0);
+  });
+
+  it('a revoke moves focus to the "Revoked {name}." line once the row is gone', async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => TWO_KEYS })
+      .mockResolvedValueOnce({ ok: true, status: 204, json: async () => ({}) })
+      .mockResolvedValueOnce({ ok: true, json: async () => [TWO_KEYS[0]] });
+    global.fetch = fetchMock;
+    const user = userEvent.setup();
+    render(<ApiKeyTable onCreateKey={jest.fn()} />);
+    await user.click(await screen.findByTestId('delete-button-key-2'));
+    await user.click(screen.getByTestId('confirm-delete'));
+
+    const line = await screen.findByRole('status');
+    expect(line).toHaveTextContent('Revoked Beta.');
+    await waitFor(() => expect(line).toHaveFocus());
+    await waitFor(() => expect(screen.queryByTestId('api-key-row-key-2')).toBeNull());
+    expect(line).toHaveFocus();
+    expect(deleteCalls(fetchMock)).toHaveLength(1);
+  });
+
+  it('a refused revoke keeps the question, announces the reason as an alert and keeps focus on Revoke key', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => TWO_KEYS })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        statusText: 'Forbidden',
+        json: async () => ({ detail: 'You do not have permission to delete api_key' }),
+      });
+    const user = userEvent.setup();
+    render(<ApiKeyTable onCreateKey={jest.fn()} />);
+    await user.click(await screen.findByTestId('delete-button-key-2'));
+    await user.click(screen.getByTestId('confirm-delete'));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('You do not have permission to delete api_key');
+    expect(screen.getByRole('alertdialog', { name: 'Revoke API key Beta' })).toContainElement(alert);
+    expect(screen.getByTestId('confirm-delete')).toHaveFocus();
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('while the revoke is in flight: Revoke key is aria-disabled, a second activation sends no second DELETE, and Cancel and Escape do nothing', async () => {
+    const pending = held();
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => TWO_KEYS })
+      .mockReturnValueOnce(pending.response)
+      .mockResolvedValue({ ok: true, json: async () => [TWO_KEYS[0]] });
+    global.fetch = fetchMock;
+    const user = userEvent.setup();
+    render(<ApiKeyTable onCreateKey={jest.fn()} />);
+    await user.click(await screen.findByTestId('delete-button-key-2'));
+    const confirm = screen.getByTestId('confirm-delete');
+    expect(confirm).not.toHaveAttribute('aria-disabled');
+
+    await user.click(confirm);
+    expect(screen.getByTestId('confirm-delete')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByTestId('confirm-delete')).not.toBeDisabled();
+    expect(screen.getByTestId('confirm-delete')).toHaveTextContent('Revoking…');
+    expect(screen.getByTestId('confirm-delete')).toHaveFocus();
+
+    await user.click(screen.getByTestId('confirm-delete'));
+    await user.keyboard('{Enter}');
+    expect(deleteCalls(fetchMock)).toHaveLength(1);
+
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByTestId('cancel-delete'));
+    expect(screen.getByRole('alertdialog', { name: 'Revoke API key Beta' })).toBeInTheDocument();
+
+    pending.release();
+    expect(await screen.findByRole('status')).toHaveTextContent('Revoked Beta.');
+    expect(deleteCalls(fetchMock)).toHaveLength(1);
   });
 });

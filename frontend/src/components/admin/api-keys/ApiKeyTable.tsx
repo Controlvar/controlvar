@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { ApiKey } from '@/types/admin';
 import { apiFetch } from '@/services/api';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
+import { InlineConfirm } from '@/components/ui/InlineConfirm';
 
 interface ApiKeyTableProps {
   onCreateKey: () => void;
@@ -50,6 +51,15 @@ export function ApiKeyTable({ onCreateKey, refreshToken = 0 }: ApiKeyTableProps)
   const [pendingDelete, setPendingDelete] = useState<ApiKey | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  // The key just revoked, shown and focused once the row is gone (#1797).
+  const [revoked, setRevoked] = useState<{ name: string } | null>(null);
+  const revokedLine = useRef<HTMLParagraphElement>(null);
+  const revokeButtons = useRef(new Map<string, HTMLButtonElement>());
+  const questionId = useId();
+
+  useEffect(() => {
+    if (revoked) revokedLine.current?.focus();
+  }, [revoked]);
 
   const fetchKeys = useCallback(async () => {
     setLoading(true);
@@ -75,19 +85,30 @@ export function ApiKeyTable({ onCreateKey, refreshToken = 0 }: ApiKeyTableProps)
     fetchKeys();
   }, [fetchKeys, refreshToken]);
 
+  // While a revoke is in flight its button is `aria-disabled`, which keeps
+  // focus on it but does not stop a second click: this return does.
   const confirmDelete = async () => {
-    if (!pendingDelete) return;
+    if (!pendingDelete || deleting) return;
+    const target = pendingDelete;
     setDeleting(true);
     setDeleteError(null);
     try {
-      await apiFetch<void>(`/api/v1/api-keys/${pendingDelete.id}`, { method: 'DELETE' });
+      await apiFetch<void>(`/api/v1/api-keys/${target.id}`, { method: 'DELETE' });
       setPendingDelete(null);
+      setRevoked({ name: target.name });
       await fetchKeys();
     } catch (err) {
       setDeleteError((err as Error).message || 'Failed to revoke API key');
     } finally {
       setDeleting(false);
     }
+  };
+
+  /** Cancel and Escape; neither does anything while the revoke is in flight. */
+  const cancelDelete = () => {
+    if (deleting) return;
+    setPendingDelete(null);
+    setDeleteError(null);
   };
 
   return (
@@ -133,30 +154,36 @@ export function ApiKeyTable({ onCreateKey, refreshToken = 0 }: ApiKeyTableProps)
         </div>
       </div>
 
-      {/* Delete confirmation (inline, no window.confirm) */}
+      {/* Delete confirmation (inline, no window.confirm). Its role, name and
+          button order are what the docs journey api-key-first-assignment
+          asserts; ApiKeyTable.test.tsx holds the same three. */}
       {pendingDelete && (
-        <div
-          data-testid="delete-confirm"
-          role="alertdialog"
-          aria-label={`Revoke API key ${pendingDelete.name}`}
-          className="flex flex-wrap items-center justify-between gap-3 px-6 py-3 bg-red-50 border-b border-red-200 text-sm text-red-800"
+        <InlineConfirm
+          alert
+          label={`Revoke API key ${pendingDelete.name}`}
+          describedBy={questionId}
+          onCancel={cancelDelete}
+          busy={deleting}
+          returnFocus={() => revokeButtons.current.get(pendingDelete.id)}
+          fallbackFocus={() => keys.map((key) => revokeButtons.current.get(key.id)).find(Boolean)}
+          tone="danger"
+          className="flex flex-wrap items-center justify-between gap-3 px-6 py-3 border-b text-sm text-red-800"
+          testId="delete-confirm"
         >
-          <span>
+          <span id={questionId}>
             Revoke <strong>{pendingDelete.name}</strong>? Applications using it stop working
             immediately. This cannot be undone.
           </span>
           <span className="flex items-center gap-3">
             {deleteError && (
-              <span data-testid="delete-error" className="text-red-700">
+              <span role="alert" data-testid="delete-error" className="text-red-700">
                 {deleteError}
               </span>
             )}
             <button
               data-testid="cancel-delete"
-              onClick={() => {
-                setPendingDelete(null);
-                setDeleteError(null);
-              }}
+              data-autofocus
+              onClick={cancelDelete}
               className="px-3 py-1 rounded-md border border-slate-300 bg-white text-slate-700"
             >
               Cancel
@@ -164,13 +191,25 @@ export function ApiKeyTable({ onCreateKey, refreshToken = 0 }: ApiKeyTableProps)
             <button
               data-testid="confirm-delete"
               onClick={confirmDelete}
-              disabled={deleting}
-              className="px-3 py-1 rounded-md bg-red-600 text-white font-medium disabled:opacity-60"
+              aria-disabled={deleting ? true : undefined}
+              className="px-3 py-1 rounded-md bg-red-600 text-white font-medium aria-disabled:opacity-60"
             >
               {deleting ? 'Revoking…' : 'Revoke key'}
             </button>
           </span>
-        </div>
+        </InlineConfirm>
+      )}
+
+      {revoked && (
+        <p
+          ref={revokedLine}
+          role="status"
+          tabIndex={-1}
+          className="px-6 py-3 border-b border-slate-200 text-sm text-green-800 focus:outline-none"
+          data-testid="api-key-revoked"
+        >
+          Revoked {revoked.name}.
+        </p>
       )}
 
       {/* Loading state */}
@@ -249,9 +288,14 @@ export function ApiKeyTable({ onCreateKey, refreshToken = 0 }: ApiKeyTableProps)
                     </td>
                     <td className="px-6 py-4">
                       <button
+                        ref={(el) => {
+                          if (el) revokeButtons.current.set(key.id, el);
+                          else revokeButtons.current.delete(key.id);
+                        }}
                         data-testid={`delete-button-${key.id}`}
                         onClick={() => {
                           setDeleteError(null);
+                          setRevoked(null);
                           setPendingDelete(key);
                         }}
                         className="text-red-600 hover:text-red-800 text-sm font-medium"

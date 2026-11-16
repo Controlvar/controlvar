@@ -62,6 +62,9 @@ const FILES = [
   'components/experiments/new/AdvancedForm.tsx',
   'components/experiments/new/BalanceWithinFields.tsx',
   'pages/experiments/new.tsx',
+  // #1797: the in-page confirmation's tone colours, moved out of the
+  // experiment and flag pages' panels (both listed above) and ApiKeyTable's.
+  'components/ui/InlineConfirm.tsx',
 ];
 
 /**

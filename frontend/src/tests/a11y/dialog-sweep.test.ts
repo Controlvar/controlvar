@@ -23,6 +23,24 @@
  * with no `modules/` and with a wrong modules path: the "Jest as the core
  * profile" step runs in a full checkout, so nothing else exercises either.
  * Test files are not read.
+ *
+ * In-page confirmations (#1797). `frontend/src/components/ui/InlineConfirm.tsx`
+ * moves focus in, cancels on Escape and gives focus back, so the same scan
+ * refuses a string literal equal to `dialog` or `alertdialog` (`role="dialog"`,
+ * `role={'alertdialog'}`, `role: 'dialog'`, a ternary, `createElement`, a
+ * template literal) anywhere but Dialog.tsx and InlineConfirm.tsx, each
+ * compared whole. InlineConfirm.tsx is exempt from that one rule only: it is
+ * read for `aria-modal`, `<dialog` and `fixed inset-0` like any other file. A
+ * panel not yet on InlineConfirm is listed in RAW_PANELS with its exact number
+ * of such literals, and leaves the list when it moves.
+ *
+ * Known limits of the role rule, which reads string literals and nothing else:
+ *   - a role built by concatenation (`'alert' + 'dialog'`) is not caught;
+ *   - nor is a role after a JSX text fragment opened by `'` (an apostrophe
+ *     after a space or at a line's start), or after a URL's `//` in JSX text,
+ *     earlier on the same line: the tokenizer reads past it as a string or a
+ *     comment;
+ *   - `aria-haspopup="dialog"`, a legitimate attribute, is refused too.
  */
 import fs from 'fs';
 import os from 'os';
@@ -66,6 +84,23 @@ export const MIGRATED: Record<string, number> = {
   'frontend/src/components/admin/users/InviteUserModal.tsx': 1,
 };
 
+/** The one file besides Dialog.tsx that may write a dialog role. Compared whole. */
+export const INLINE_CONFIRM_FILE = 'frontend/src/components/ui/InlineConfirm.tsx';
+
+/**
+ * The in-page confirmations not yet on InlineConfirm (#1797), with their exact
+ * number of `dialog` / `alertdialog` string literals. The list only shrinks:
+ * a count that moves, or a listed file that is gone, fails.
+ */
+export const RAW_PANELS: Record<string, number> = {
+  'frontend/src/components/experiments/ExperimentManageSection.tsx': 1,
+  'frontend/src/components/feature-flags/RolloutScheduleManager.tsx': 1,
+  'frontend/src/pages/experiments/holdouts.tsx': 1,
+  'frontend/src/components/account/OwnApiKeys.tsx': 1,
+  // Two panels: remove a member, and archive the group.
+  'frontend/src/pages/experiments/exclusion-groups/[id].tsx': 2,
+};
+
 /** Fewer files than this means the roots are wrong, not that the tree is clean. */
 export const FLOORS = { core: 150, modules: 26 };
 
@@ -79,6 +114,8 @@ export interface SweepRules {
   raw: Record<string, RawEntry>;
   migrated: Record<string, number>;
   floors: { core: number; modules: number };
+  /** RAW_PANELS; none when absent. */
+  panels?: Record<string, number>;
 }
 
 const SOURCE = /\.(tsx?|jsx?)$/;
@@ -168,12 +205,38 @@ export function dialogUses(source: string): number {
   return (source.match(/<Dialog[\s>/]/g) ?? []).length;
 }
 
+const DIALOG_ROLES = new Set(['dialog', 'alertdialog']);
+
+/**
+ * The 1-based line of every string literal in `source` equal to `dialog` or
+ * `alertdialog`, one entry per literal (a ternary on one line gives two).
+ */
+export function roleLiteralLines(source: string): number[] {
+  const out: number[] = [];
+  let line = 1;
+  let at = 0;
+  for (const literal of stringLiterals(source)) {
+    if (!DIALOG_ROLES.has(literal.text)) continue;
+    for (; at < literal.index; at += 1) if (source[at] === '\n') line += 1;
+    out.push(line);
+  }
+  return out;
+}
+
+/** Excluded from every rule: the modal Dialog itself. */
 export function isExcluded(rel: string): boolean {
   return rel === DIALOG_FILE;
 }
 
+/** May write a dialog role: Dialog.tsx and InlineConfirm.tsx, each by its whole path. */
+export function mayWriteDialogRole(rel: string): boolean {
+  return rel === DIALOG_FILE || rel === INLINE_CONFIRM_FILE;
+}
+
 export interface SweepResult {
   problems: string[];
+  /** The role rule's findings (#1797), apart so each rule is read on its own. */
+  roleProblems: string[];
   scanned: { core: number; modules: number };
   /** Repository-relative paths read, Dialog.tsx excluded. */
   files: string[];
@@ -195,13 +258,31 @@ export function sweep(roots: SweepRoots, rules: SweepRules): SweepResult {
     );
   }
 
+  const panels = rules.panels ?? {};
+  const roleProblems: string[] = [];
   const seen = new Set<string>();
+  const panelsSeen = new Set<string>();
   const files: string[] = [];
   for (const file of [...coreFiles, ...moduleFiles]) {
     const rel = path.relative(roots.repoRoot, file).split(path.sep).join('/');
     if (isExcluded(rel)) continue;
     files.push(rel);
     const source = fs.readFileSync(file, 'utf8');
+    if (!mayWriteDialogRole(rel)) {
+      const roleLines = roleLiteralLines(source);
+      if (rel in panels) {
+        panelsSeen.add(rel);
+        if (roleLines.length !== panels[rel]) {
+          roleProblems.push(
+            `${rel}: ${roleLines.length} dialog role literals (${roleLines.join(', ') || 'none'}), RAW_PANELS says ${panels[rel]}`,
+          );
+        }
+      } else {
+        for (const line of roleLines) {
+          roleProblems.push(`${rel}:${line} hand-written dialog role; use <InlineConfirm> (or <Dialog> for a modal)`);
+        }
+      }
+    }
     const lines = bannedLines(source);
     const uses = dialogUses(source);
     const raw = rules.raw[rel];
@@ -233,11 +314,16 @@ export function sweep(roots: SweepRoots, rules: SweepRules): SweepResult {
     if (rel.startsWith('modules/') && !modulesTreePresent) continue;
     problems.push(`${rel}: listed, but not found (a file leaves the list when it moves; the list only shrinks)`);
   }
-  return { problems, scanned: { core: coreFiles.length, modules: moduleFiles.length }, files };
+  for (const rel of Object.keys(panels)) {
+    if (panelsSeen.has(rel)) continue;
+    if (rel.startsWith('modules/') && !modulesTreePresent) continue;
+    roleProblems.push(`${rel}: in RAW_PANELS, but not found (a file leaves the list when it moves; the list only shrinks)`);
+  }
+  return { problems, roleProblems, scanned: { core: coreFiles.length, modules: moduleFiles.length }, files };
 }
 
 const REAL_ROOTS: SweepRoots = { repoRoot: REPO_ROOT, coreRoot: CORE_SRC, modulesRoot: MODULES_SRC };
-const RULES: SweepRules = { raw: RAW_DIALOGS, migrated: MIGRATED, floors: FLOORS };
+const RULES: SweepRules = { raw: RAW_DIALOGS, migrated: MIGRATED, floors: FLOORS, panels: RAW_PANELS };
 
 /** A scratch repository: `files` maps repository paths to their contents. */
 function scratchTree(files: Record<string, string>): string {
@@ -339,6 +425,159 @@ describe('dialog sweep: the patterns', () => {
     expect(isExcluded(DIALOG_FILE)).toBe(true);
     expect(isExcluded('modules/frontend/src/components/warehouse/runs/ViewSqlDialog.tsx')).toBe(false);
     expect(isExcluded('frontend/src/components/admin/Dialog.tsx')).toBe(false);
+  });
+});
+
+describe('dialog sweep: in-page confirmations (#1797)', () => {
+  const result = sweep(REAL_ROOTS, RULES);
+
+  it('writes no dialog role by hand outside Dialog.tsx, InlineConfirm.tsx and RAW_PANELS, and every count matches', () => {
+    expect(result.roleProblems).toEqual([]);
+  });
+
+  it('reads InlineConfirm.tsx for every other rule: it is exempt from the role rule only', () => {
+    expect(isExcluded(INLINE_CONFIRM_FILE)).toBe(false);
+    expect(result.files).toContain(INLINE_CONFIRM_FILE);
+    expect(mayWriteDialogRole(INLINE_CONFIRM_FILE)).toBe(true);
+    expect(mayWriteDialogRole(DIALOG_FILE)).toBe(true);
+    // The component writes the role itself, from its `alert` prop.
+    const source = fs.readFileSync(path.join(REPO_ROOT, INLINE_CONFIRM_FILE), 'utf8');
+    expect(roleLiteralLines(source).length).toBe(2);
+  });
+
+  it('lists only panels still to move: every RAW_PANELS entry counts at least one role', () => {
+    for (const [rel, count] of Object.entries(RAW_PANELS)) {
+      expect(`${rel} ${count >= 1}`).toBe(`${rel} true`);
+    }
+  });
+});
+
+describe('dialog sweep: the role literals', () => {
+  it.each([
+    ['role="dialog"', '<div role="dialog">'],
+    ["role='dialog'", "<div role='dialog'>"],
+    ["role={'dialog'}", "<div role={'dialog'}>"],
+    ['role="alertdialog"', '<div role="alertdialog" aria-label="x">'],
+    ['a template literal', '<div role={`dialog`}>'],
+    ['an object key', "const props = { role: 'dialog' };"],
+    ['createElement', "React.createElement('div', { role: 'dialog' });"],
+    ['a spread', "<div {...{ role: 'alertdialog' }} />"],
+    ['a role prop on InlineConfirm (its role comes from alert)', '<InlineConfirm role="alertdialog" label="x" onCancel={f} />'],
+  ])('refuses a dialog role written as %s', (_name, line) => {
+    expect(roleLiteralLines(`const a = 1;\n${line}\n`)).toEqual([2]);
+  });
+
+  it('refuses both literals of a ternary', () => {
+    expect(roleLiteralLines("const a = 1;\n<div role={ok ? 'alertdialog' : 'dialog'}>\n")).toEqual([2, 2]);
+  });
+
+  it.each([
+    ['a line comment', '// role="dialog" is written in Dialog.tsx'],
+    ['a block comment', '/* role="dialog" */'],
+    ['a longer word', '<div role="dialogue">'],
+    ['an id with the word in it', '<div aria-labelledby="dialog-title">'],
+    ['an apostrophe in JSX text', "<p>Don't use a dialog here: it's inline.</p>"],
+  ])('allows %s', (_name, line) => {
+    expect(roleLiteralLines(`const a = 1;\n${line}\n`)).toEqual([]);
+  });
+
+  // The rule reads string literals and nothing else; these are its limits.
+  it('known limit: a role built by concatenation is not caught', () => {
+    expect(roleLiteralLines("<div role={'dia' + 'log'}>\n")).toEqual([]);
+  });
+
+  it("known limit: a role after a JSX text fragment opened by ' on the same line is not caught", () => {
+    expect(roleLiteralLines("<p> 'quoted</p><div role=\"dialog\" />\n")).toEqual([]);
+  });
+
+  it("known limit: a role after a URL's // in JSX text on the same line is not caught", () => {
+    expect(roleLiteralLines('<p>See https://example.com</p><div role="dialog" />\n')).toEqual([]);
+  });
+
+  it('known limit: aria-haspopup="dialog", a legitimate attribute, is refused too', () => {
+    expect(roleLiteralLines('const a = 1;\n<button aria-haspopup="dialog">\n')).toEqual([2]);
+  });
+});
+
+describe('dialog sweep: the role rule on scratch trees', () => {
+  const NO_RULES: SweepRules = { raw: {}, migrated: {}, floors: { core: 0, modules: 0 } };
+  const PANEL = 'export const P = () => (\n  <div role="dialog" aria-label="x" />\n);\n';
+  const refusal = (rel: string, line: number) =>
+    `${rel}:${line} hand-written dialog role; use <InlineConfirm> (or <Dialog> for a modal)`;
+
+  it('a new hand-written role is refused with its line, in core and in modules', () => {
+    const roots = scratchRoots({
+      'frontend/src/components/New.tsx': PANEL,
+      'modules/frontend/src/components/Other.tsx': "export const o = { role: 'alertdialog' };\n",
+    });
+    expect(sweep(roots, NO_RULES).roleProblems.sort()).toEqual([
+      refusal('frontend/src/components/New.tsx', 2),
+      refusal('modules/frontend/src/components/Other.tsx', 1),
+    ]);
+  });
+
+  it('test files and comments are not read', () => {
+    const roots = scratchRoots({
+      'frontend/src/components/Commented.tsx': '// <div role="dialog">\n/* role="alertdialog" */\nexport const c = 1;\n',
+      'frontend/src/components/Panel.test.tsx': PANEL,
+      'frontend/src/tests/fixture.tsx': PANEL,
+      'frontend/src/components/__tests__/fixture.tsx': PANEL,
+    });
+    expect(sweep(roots, NO_RULES).roleProblems).toEqual([]);
+  });
+
+  it.each([
+    ['frontend/src/components/admin/InlineConfirm.tsx'],
+    ['frontend/src/components/admin/api-keys/ApiKeyInlineConfirm.tsx'],
+    ['modules/frontend/src/components/runs/ViewSqlInlineConfirm.tsx'],
+    ['frontend/src/components/ui/InlineConfirm.tsx.bak.tsx'],
+  ])('only the exact path of InlineConfirm.tsx may write the role: %s is refused', (rel) => {
+    const roots = scratchRoots({ [INLINE_CONFIRM_FILE]: PANEL, [rel]: PANEL });
+    expect(sweep(roots, NO_RULES).roleProblems).toEqual([refusal(rel, 2)]);
+  });
+
+  it('InlineConfirm.tsx is still refused aria-modal: its exemption is the role rule only', () => {
+    const roots = scratchRoots({
+      [INLINE_CONFIRM_FILE]: 'export const P = () => (\n  <div role="dialog" aria-modal="true" />\n);\n',
+    });
+    const result = sweep(roots, NO_RULES);
+    expect(result.roleProblems).toEqual([]);
+    expect(result.problems).toEqual([`${INLINE_CONFIRM_FILE}:2 raw dialog; use <Dialog>`]);
+  });
+
+  it('a listed panel whose count moved is refused, naming the file and both numbers', () => {
+    const rel = 'frontend/src/pages/experiments/holdouts.tsx';
+    const roots = scratchRoots({ [rel]: `${PANEL}export const Q = () => <div role="dialog" />;\n` });
+    expect(sweep(roots, { ...NO_RULES, panels: { [rel]: 1 } }).roleProblems).toEqual([
+      `${rel}: 2 dialog role literals (2, 4), RAW_PANELS says 1`,
+    ]);
+  });
+
+  it('a listed panel that moved to InlineConfirm, or is gone, is refused until it leaves RAW_PANELS', () => {
+    const moved = 'frontend/src/components/Moved.tsx';
+    const gone = 'frontend/src/components/Gone.tsx';
+    const roots = scratchRoots({ [moved]: 'export const M = () => <InlineConfirm label="x" onCancel={f} />;\n' });
+    expect(sweep(roots, { ...NO_RULES, panels: { [moved]: 1, [gone]: 1 } }).roleProblems).toEqual([
+      `${moved}: 0 dialog role literals (none), RAW_PANELS says 1`,
+      `${gone}: in RAW_PANELS, but not found (a file leaves the list when it moves; the list only shrinks)`,
+    ]);
+  });
+
+  it('roots pointed at the wrong directory fail on the floors and leave every RAW_PANELS entry not found', () => {
+    const wrong: SweepRoots = {
+      repoRoot: REPO_ROOT,
+      coreRoot: path.join(REPO_ROOT, 'frontend', 'source'),
+      modulesRoot: path.join(REPO_ROOT, 'modules', 'frontend', 'source'),
+    };
+    const result = sweep(wrong, RULES);
+    expect(result.problems).toEqual(
+      expect.arrayContaining([expect.stringMatching(/^scanned 0 core files under .*: the root is wrong$/)]),
+    );
+    expect(result.roleProblems).toEqual(
+      Object.keys(RAW_PANELS).map(
+        (rel) => `${rel}: in RAW_PANELS, but not found (a file leaves the list when it moves; the list only shrinks)`,
+      ),
+    );
   });
 });
 
@@ -444,6 +683,19 @@ describe('dialog sweep: with no modules/ (a core tree) and with a wrong modules 
     expect(result.problems).toEqual([]);
     expect(result.scanned.core).toBeGreaterThanOrEqual(FLOORS.core);
     expect(result.scanned.modules).toBe(0);
+  });
+
+  it('the core tree passes the role rule with the real RAW_PANELS, and still refuses a new role', () => {
+    expect(sweep(core, RULES).roleProblems).toEqual([]);
+    const file = path.join(core.coreRoot, 'components', 'PlantedPanel.tsx');
+    fs.writeFileSync(file, 'export const P = () => <div role="alertdialog" />;\n');
+    try {
+      expect(sweep(core, RULES).roleProblems).toEqual([
+        'frontend/src/components/PlantedPanel.tsx:1 hand-written dialog role; use <InlineConfirm> (or <Dialog> for a modal)',
+      ]);
+    } finally {
+      fs.rmSync(file);
+    }
   });
 
   it('a core overlay is still refused in the core tree', () => {

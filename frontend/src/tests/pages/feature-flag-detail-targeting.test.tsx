@@ -22,6 +22,7 @@ import fs from 'fs';
 import path from 'path';
 import axe from 'axe-core';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import FeatureFlagDetailPage from '@/pages/feature-flags/[id]';
 import { OUTSIDE_BUILDER_NOTE } from '@/components/experiments/TargetingSection';
 import { ApiError, ApiFetchOptions, apiFetch } from '@/services/api';
@@ -266,6 +267,41 @@ describe('stored rules the builder cannot show', () => {
     fireEvent.click(screen.getByTestId('save-flag'));
     await waitFor(() => expect(puts).toHaveLength(2));
     expect(puts[1]).toEqual({ rollout_percentage: 40 });
+  });
+
+  // #1797: the question moves focus in, cancels on Escape and gives focus back
+  // to Replace rules, which it replaces while open and which comes back.
+  it('replace: focus opens on Cancel, and Escape sends nothing and gives focus back to Replace rules', async () => {
+    const puts = install(NATIVE);
+    const user = userEvent.setup();
+    render(<FeatureFlagDetailPage />);
+    const s = await section();
+    within(s).getByRole('button', { name: 'Replace rules' }).focus();
+    await user.keyboard('{Enter}');
+
+    const dialog = within(s).getByRole('dialog', { name: 'Replace rules' });
+    expect(dialog).toHaveAccessibleDescription(
+      'These rules will be discarded when you save new ones. Until you save, nothing changes.',
+    );
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus();
+
+    await user.keyboard('{Escape}');
+    expect(within(s).queryByRole('dialog')).toBeNull();
+    expect(within(s).getByRole('button', { name: 'Replace rules' })).toHaveFocus();
+    await slideAndSave('30');
+    expect(puts).toEqual([{ rollout_percentage: 30 }]);
+  });
+
+  it('replace, confirm: focus moves to + Add Group, the empty builder\'s one control', async () => {
+    const puts = install(NATIVE);
+    const user = userEvent.setup();
+    render(<FeatureFlagDetailPage />);
+    const s = await section();
+    await user.click(within(s).getByRole('button', { name: 'Replace rules' }));
+    await user.click(within(s).getByRole('button', { name: 'Start with no rules' }));
+    expect(within(s).queryByRole('dialog')).toBeNull();
+    expect(within(s).getByTestId('add-group')).toHaveFocus();
+    expect(puts).toEqual([]);
   });
 
   it('replace, then "Keep the stored rules" goes back to the read-only view', async () => {
