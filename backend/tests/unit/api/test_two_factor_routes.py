@@ -691,6 +691,11 @@ def test_a_required_role_without_it_answers_enrol_and_no_access_token(
     )
     assert "access_token" not in body
     assert decode_mfa_token(body["mfa_token"], purpose=ENROL_PURPOSE) == user.id
+    # The token's own lifetime, not only the number the answer reports. The
+    # literal 600 is deliberate: a changed constant fails here too.
+    claims = jwt.decode(body["mfa_token"], options={"verify_signature": False})
+    assert claims["purpose"] == "enrol"
+    assert claims["exp"] - claims["iat"] == 600
     # Never a code-step token, never a session.
     with pytest.raises(InvalidMfaToken):
         decode_mfa_token(body["mfa_token"])

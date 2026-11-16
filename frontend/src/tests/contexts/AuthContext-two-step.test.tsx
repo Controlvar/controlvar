@@ -9,6 +9,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import { AuthProvider, SignInResult, useAuth } from '@/contexts/AuthContext';
 import * as api from '@/services/api';
 import { TOKEN_STORAGE_KEY, UserMe } from '@/services/api';
+import { startSignInEnrolment } from '@/services/twoFactor';
 
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
@@ -203,4 +204,47 @@ it('a turned-on answer with no access token is refused before anything is shown 
     });
   });
   expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBeNull();
+});
+
+// The setup steps' refusals, in the shape of the code step's test above.
+
+it('a refused first code of the setup changes nothing, and a 401 there signs no one out', async () => {
+  const setToken = jest.spyOn(api, 'setToken');
+  try {
+    localStorage.setItem(TOKEN_STORAGE_KEY, 'someone-elses-tab-token');
+    mockFetch.mockResolvedValueOnce(respond(401, { detail: 'Could not validate credentials' }));
+    await mount();
+    mockFetch.mockResolvedValueOnce(respond(401, { detail: 'That code is not correct.' }));
+    localStorage.setItem(TOKEN_STORAGE_KEY, 'a-token-stored-meanwhile');
+    setToken.mockClear();
+    await act(async () => {
+      await expect(captured!.confirmSignInEnrolment(MFA_TOKEN, '000000')).rejects.toMatchObject({ status: 401 });
+    });
+    // `auth: false`: this 401 is about the code, not a session.
+    expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('a-token-stored-meanwhile');
+    expect(setToken).not.toHaveBeenCalled();
+    expect(everythingStored()).not.toContain('full.jwt');
+  } finally {
+    setToken.mockRestore();
+  }
+});
+
+it('a refused request for the setup key changes nothing, and a 401 there signs no one out', async () => {
+  const setToken = jest.spyOn(api, 'setToken');
+  try {
+    localStorage.setItem(TOKEN_STORAGE_KEY, 'someone-elses-tab-token');
+    mockFetch.mockResolvedValueOnce(respond(401, { detail: 'Could not validate credentials' }));
+    await mount();
+    mockFetch.mockResolvedValueOnce(respond(401, { detail: 'Sign-in expired. Start again.' }));
+    localStorage.setItem(TOKEN_STORAGE_KEY, 'a-token-stored-meanwhile');
+    setToken.mockClear();
+    await act(async () => {
+      await expect(startSignInEnrolment(MFA_TOKEN)).rejects.toMatchObject({ status: 401 });
+    });
+    expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('a-token-stored-meanwhile');
+    expect(setToken).not.toHaveBeenCalled();
+    expect(screen.getByTestId('status')).toHaveTextContent('anonymous');
+  } finally {
+    setToken.mockRestore();
+  }
 });
