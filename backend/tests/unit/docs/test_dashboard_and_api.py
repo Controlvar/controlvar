@@ -132,6 +132,9 @@ WITNESSES: Dict[str, str] = {
     "Archive and unarchive a feature flag": "flag-archive",
     "Create a bandit experiment": "bandit-create",
     "Set a bandit's weights by hand": "bandit-weights-override",
+    # #1958: the API half (beta) ships first; the dashboard half flips the row
+    # when its Weight history section carries this id.
+    "A bandit's weight history (beta)": "bandit-weight-history",
     # #1446: only reading a holdout's results is beta. #1455's second half:
     # the page's loaded state (every holdout for an ADMIN, the active one for
     # a DEVELOPER), never loading, refused or error.
@@ -734,6 +737,23 @@ STALE: Tuple[Tuple[str, str], ...] = (
         r"(dashboard|page) has no schedule screen",
         "the experiment page's Schedule sets a draft's start and end (#1454)",
     ),
+    (
+        r"\| interaction detection \(beta\) \|[^|]{0,300}\(api only\)",
+        "Experiments → Interactions runs the scan and the pair test (#1960)",
+    ),
+    (
+        r"access via: (?:text )?get /api/v1/interactions/scan",
+        "the interactions routes are also a dashboard page, Experiments → "
+        "Interactions (#1960); say so before the API",
+    ),
+    (
+        r"split url or bandit experiments? through the api",
+        "the new-experiment form creates a bandit (#1956); only split URL is API only",
+    ),
+    (
+        r"guided setup offers only a/b test and multivariate",
+        "guided setup offers Bandit too (#1956)",
+    ),
     # #1959: the results page of a cuped or cuped_plus experiment has a
     # CUPED (beta) tab.
     (
@@ -850,6 +870,17 @@ def test_no_page_repeats_a_removed_dashboard_claim():
         "[which actions have a screen](dashboard-and-api.md))",
         "You can also schedule automatic start and end dates. The dashboard has no schedule\n"
         "screen yet, so this is an API call:",
+        # #1960: faq.md's analysis table row and user-guide.md's interaction section.
+        "| Interaction detection (beta) | Jaccard overlap between experiments; whether one "
+        "experiment's lift on its primary conversion metric differs across another's arms "
+        "(API only) |",
+        "Access via:\n```text\nGET /api/v1/interactions/scan\n"
+        "GET /api/v1/interactions/{exp_a_id}/{exp_b_id}\n```",
+        # #1956: user-guide.md's Step 1 and experiment-wizard.md's list item.
+        "Choose **A/B Test** or **Multivariate**. Create a split URL or bandit experiment through the\n"
+        "API (`POST /api/v1/experiments/`).",
+        "- Guided setup offers only A/B Test and Multivariate. Create a split URL or bandit\n"
+        "  experiment through the API (`POST /api/v1/experiments/`).",
         # #1959: user-guide.md, DEMO_GUIDE.md, cuped.md, faq.md, the ShopLab README
         # and capabilities.md.
         "The dashboard has no CUPED tab; it is available through the API:",
