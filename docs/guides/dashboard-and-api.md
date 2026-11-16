@@ -44,7 +44,7 @@ The table lists each capability and where you do it today:
 | Delete a feature flag | Dashboard | [Deleting a flag](../feature-flags/create.md#deleting-a-flag) |
 | Archive and unarchive a feature flag | Dashboard | [Archived flags](user-guide.md#archived-flags) |
 | Create a bandit experiment | Dashboard | [Multi-armed bandits](../api/multi-armed-bandit.md) |
-| Set a bandit's weights by hand | API only | [Multi-armed bandits](../api/multi-armed-bandit.md) |
+| Set a bandit's weights by hand | Dashboard | [Multi-armed bandits](../api/multi-armed-bandit.md) |
 | A bandit's weight history (beta) | Dashboard | [Multi-armed bandits](../api/multi-armed-bandit.md) |
 | Global holdouts: create and activate; read their results (beta) | Dashboard | [Mutual exclusion groups and global holdout](../api/mutual-exclusion-groups.md) |
 | Mutual exclusion groups | Dashboard | [Mutual exclusion groups and global holdout](../api/mutual-exclusion-groups.md) |

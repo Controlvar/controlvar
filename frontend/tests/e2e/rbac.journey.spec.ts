@@ -320,13 +320,24 @@ test.describe("Journey: RBAC", () => {
   }
 
   // Reading a bandit's current weights is allowed to every signed-in role
-  // (`GET /api/v1/bandit/{id}`), and the panel changes nothing, so all four
-  // roles get the same read-only panel. What it shows is compared with the
-  // server's own answer to the page's request, not with a value typed here:
-  // before the first update (`last_updated` null) the panel says so instead
-  // of showing the even split the server fills in.
+  // (`GET /api/v1/bandit/{id}`). Setting them by hand (#1957,
+  // `PUT /api/v1/bandit/{id}/weights`) is offered to an ADMIN or a superuser
+  // only: admin@demo.com is both, so it also sees "Set weights by hand"; the
+  // other three see Refresh alone. Nothing here clicks it, so the journey
+  // still only reads (no non-GET request). What the panel shows is compared
+  // with the server's own answer to the page's request, not with a value typed
+  // here: before the first update (`last_updated` null) the panel says so
+  // instead of showing the even split the server fills in.
+  const banditControls = {
+    admin: ["Refresh", "Set weights by hand"],
+    developer: ["Refresh"],
+    analyst: ["Refresh"],
+    viewer: ["Refresh"],
+  } as const;
   for (const role of ["admin", "developer", "analyst", "viewer"] as const) {
-    test(`${role} reads a bandit's current traffic weights and is offered no change`, async ({ sessions }) => {
+    test(`${role} reads a bandit's current traffic weights and is offered only its own controls`, async ({
+      sessions,
+    }) => {
       const page = await (await sessions(role)).newPage();
       const experiments = new ExperimentsPage(page);
       const writes: string[] = [];
@@ -358,7 +369,7 @@ test.describe("Journey: RBAC", () => {
         await expect(panel).toBeVisible();
         await expect(panel.getByTestId("bandit-weights-loading")).toHaveCount(0, { timeout: 15_000 });
         await expect(panel.getByTestId("bandit-weights-error")).toHaveCount(0);
-        await expect(panel.getByRole("button")).toHaveText(["Refresh"]);
+        await expect(panel.getByRole("button")).toHaveText([...banditControls[role]]);
 
         if (body.last_updated === null) {
           await expect(panel.getByTestId("bandit-weights-empty")).toBeVisible();
