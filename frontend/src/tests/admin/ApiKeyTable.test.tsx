@@ -290,6 +290,31 @@ describe('ApiKeyTable — the revoke question and the keyboard (#1797)', () => {
     expect(deleteCalls(fetchMock)).toHaveLength(0);
   });
 
+  it("opener gone: a refresh that drops the key while the question is open sends Escape's focus to the first key's Revoke button", async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => TWO_KEYS })
+      .mockResolvedValueOnce({ ok: true, json: async () => [TWO_KEYS[0]] });
+    global.fetch = fetchMock;
+    const onCreateKey = jest.fn();
+    const user = userEvent.setup();
+    const { rerender } = render(<ApiKeyTable onCreateKey={onCreateKey} refreshToken={0} />);
+    (await screen.findByTestId('delete-button-key-2')).focus();
+    await user.keyboard('{Enter}');
+    expect(screen.getByTestId('cancel-delete')).toHaveFocus();
+
+    // Another tab revoked Beta; the list refreshes under the open question.
+    rerender(<ApiKeyTable onCreateKey={onCreateKey} refreshToken={1} />);
+    await waitFor(() => expect(screen.getByTestId('api-key-row-key-1')).toBeInTheDocument());
+    expect(screen.queryByTestId('delete-button-key-2')).toBeNull();
+    expect(screen.getByTestId('cancel-delete')).toHaveFocus();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByTestId('delete-confirm')).toBeNull();
+    expect(screen.getByTestId('delete-button-key-1')).toHaveFocus();
+    expect(deleteCalls(fetchMock)).toHaveLength(0);
+  });
+
   it('a revoke moves focus to the "Revoked {name}." line once the row is gone', async () => {
     const fetchMock = jest
       .fn()
@@ -357,8 +382,9 @@ describe('ApiKeyTable — the revoke question and the keyboard (#1797)', () => {
     expect(deleteCalls(fetchMock)).toHaveLength(1);
 
     await user.keyboard('{Escape}');
+    expect(screen.queryByTestId('delete-confirm')).toBeInTheDocument();
     await user.click(screen.getByTestId('cancel-delete'));
-    expect(screen.getByRole('alertdialog', { name: 'Revoke API key Beta' })).toBeInTheDocument();
+    expect(screen.queryByTestId('delete-confirm')).toBeInTheDocument();
 
     pending.release();
     expect(await screen.findByRole('status')).toHaveTextContent('Revoked Beta.');

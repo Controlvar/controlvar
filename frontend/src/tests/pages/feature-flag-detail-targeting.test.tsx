@@ -23,6 +23,7 @@ import path from 'path';
 import axe from 'axe-core';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import * as AuthModule from '@/contexts/AuthContext';
 import FeatureFlagDetailPage from '@/pages/feature-flags/[id]';
 import { OUTSIDE_BUILDER_NOTE } from '@/components/experiments/TargetingSection';
 import { ApiError, ApiFetchOptions, apiFetch } from '@/services/api';
@@ -302,6 +303,33 @@ describe('stored rules the builder cannot show', () => {
     expect(within(s).queryByRole('dialog')).toBeNull();
     expect(within(s).getByTestId('add-group')).toHaveFocus();
     expect(puts).toEqual([]);
+  });
+
+  it('replace, opener gone: if the user loses the right to change the flag under the open question, Escape lands on the stored rules', async () => {
+    // Without FEATURE_FLAG UPDATE Replace rules is not offered, so it cannot
+    // come back; the stored rules beside the question are the fallback.
+    install(NATIVE);
+    const auth = jest.spyOn(AuthModule, 'useOptionalAuth');
+    auth.mockReturnValue({ user: { id: 'user-1', role: 'ADMIN' } } as unknown as ReturnType<typeof AuthModule.useOptionalAuth>);
+    try {
+      const user = userEvent.setup();
+      const { rerender } = render(<FeatureFlagDetailPage />);
+      const s = await section();
+      within(s).getByRole('button', { name: 'Replace rules' }).focus();
+      await user.keyboard('{Enter}');
+
+      auth.mockReturnValue({ user: { id: 'user-1', role: 'VIEWER' } } as unknown as ReturnType<typeof AuthModule.useOptionalAuth>);
+      rerender(<FeatureFlagDetailPage />);
+      expect(within(s).queryByRole('button', { name: 'Replace rules' })).toBeNull();
+      const dialog = within(s).getByRole('dialog', { name: 'Replace rules' });
+      expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus();
+
+      await user.keyboard('{Escape}');
+      expect(within(s).queryByRole('dialog')).toBeNull();
+      expect(within(s).getByRole('region', { name: 'Stored targeting rules' })).toHaveFocus();
+    } finally {
+      auth.mockRestore();
+    }
   });
 
   it('replace, then "Keep the stored rules" goes back to the read-only view', async () => {

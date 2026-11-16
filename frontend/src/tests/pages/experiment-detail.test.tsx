@@ -467,6 +467,37 @@ describe('ExperimentDetailPage — the lifecycle confirmation and the keyboard (
     await waitFor(() => expect(name).toHaveFocus());
   });
 
+  it('fallback: while a confirmed Complete runs nothing takes focus, since every lifecycle button is disabled', async () => {
+    // The opener-gone case is not reachable here: the button that asked stays
+    // rendered and enabled while the question is open, and only runAction
+    // disables or removes it, after closing the question. The fallback (the
+    // first enabled lifecycle button) acts only at confirm, and finds none.
+    let release: (value: unknown) => void = () => undefined;
+    mockedApiFetch.mockImplementation(
+      routedApi([
+        { path: '/api/v1/experiments/exp-1', handler: () => experiment({ status: 'active' }) },
+        {
+          method: 'POST',
+          path: '/api/v1/experiments/exp-1/complete',
+          handler: () => new Promise((resolve) => (release = resolve)),
+        },
+      ]) as unknown as typeof apiFetch,
+    );
+    const user = userEvent.setup();
+    render(<ExperimentDetailPage />);
+    await screen.findByTestId('experiment-detail');
+    await user.click(screen.getByTestId('action-complete'));
+    await user.click(screen.getByTestId('confirm-yes'));
+
+    expect(screen.queryByTestId('confirm-action')).toBeNull();
+    expect(screen.getByTestId('action-complete')).toBeDisabled();
+    expect(screen.getByTestId('action-pause')).toBeDisabled();
+    expect(document.activeElement).toBe(document.body);
+
+    release(experiment({ status: 'completed' }));
+    await waitFor(() => expect(screen.getByTestId('experiment-name')).toHaveFocus());
+  });
+
   it('a refused Complete puts focus back on the Complete button, enabled again, beside the alert', async () => {
     mockedApiFetch.mockImplementation(
       routedApi([

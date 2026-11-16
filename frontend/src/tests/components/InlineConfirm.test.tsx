@@ -199,6 +199,22 @@ describe('InlineConfirm: Escape', () => {
     }
   });
 
+  it('Escape while busy still stops at the panel: a document key handler never sees it', async () => {
+    const seen = jest.fn();
+    document.addEventListener('keydown', seen);
+    try {
+      const user = userEvent.setup();
+      renderInAppRoot(<Harness panel={{ busy: true }} />);
+      await openFromKeyboard(user);
+      seen.mockClear();
+      await user.keyboard('{Escape}');
+      expect(screen.getByTestId('panel')).toBeInTheDocument();
+      expect(seen).toHaveBeenCalledTimes(0);
+    } finally {
+      document.removeEventListener('keydown', seen);
+    }
+  });
+
   it('an Escape a child already prevented does nothing', async () => {
     const onCancel = jest.fn();
     const user = userEvent.setup();
