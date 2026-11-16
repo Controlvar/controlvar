@@ -141,7 +141,7 @@ The older `GET /api/v1/auth/sso/oidc/{provider}/login` still works without `retu
 
 ## API Endpoints
 
-All paths are under `/api/v1`. The configuration endpoints need a signed-in user whose role is `admin`, or a superuser; any other signed-in user gets 403.
+All paths are under `/api/v1`. Two of them, `GET /api/v1/auth/sso/login` and `POST /api/v1/auth/sso/exchange`, are **beta**: both are marked `x-stability: beta`, so their request and response may still change. The configuration endpoints need a signed-in user whose role is `admin`, or a superuser; any other signed-in user gets 403.
 
 | Method | Path | Description |
 |--------|------|-------------|
