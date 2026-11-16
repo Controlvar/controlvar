@@ -993,6 +993,47 @@ jobs:
           PLAYWRIGHT_API_URL: http://localhost:8000
         run: cd frontend && npx playwright test --project=journeys
 
+      # --- The visual experiments' browser script (sdk/visual, #1545). Built
+      # and packed as a release would pack it; the page-runtime specs load the
+      # files inside the tarball (tests/e2e/runtime/runtime.fixture.ts reads
+      # VISUAL_PACKAGE_DIR).
+      - name: Pack the browser script (sdk/visual)
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/visual-pack"
+          mkdir -p "$out"
+          cd sdk/visual
+          npm ci --no-audit --no-fund
+          npm run build
+          npm pack --pack-destination "$out"
+          tarballs=("$out"/*.tgz)
+          if [ "${#tarballs[@]}" -ne 1 ] || [ ! -f "${tarballs[0]}" ]; then
+            echo "expected exactly one tarball in $out"; ls -la "$out"; exit 1
+          fi
+          tar -xzf "${tarballs[0]}" -C "$out"
+          test -f "$out/package/dist/controlvar-visual.js"
+          echo "VISUAL_PACKAGE_DIR=$out/package" >> "$GITHUB_ENV"
+
+      # The project's listing, then the run, each as a JSON report (the run also
+      # prints the list reporter, for the log): Playwright exits 0 on a skipped
+      # test and on one that passed only on its retry, so the next step
+      # compares the two reports.
+      - name: Run the page-runtime specs
+        env:
+          PLAYWRIGHT_API_URL: http://localhost:8000
+        run: |
+          set -euo pipefail
+          cd frontend
+          PLAYWRIGHT_JSON_OUTPUT_NAME="$RUNNER_TEMP/page-runtime-list.json" \
+            npx playwright test --project=page-runtime --list --reporter=json
+          PLAYWRIGHT_JSON_OUTPUT_NAME="$RUNNER_TEMP/page-runtime-run.json" \
+            npx playwright test --project=page-runtime --reporter=list,json
+
+      - name: Check that every page-runtime spec ran and passed first time
+        run: |
+          python3 scripts/check_page_runtime_run.py "$RUNNER_TEMP/page-runtime-list.json" \
+            "$RUNNER_TEMP/page-runtime-run.json" frontend/tests/e2e
+
       # --- Sign in with SSO from the dashboard (C2b, launch-readiness
       # stream-c/c2b/spec-v3.md §12). A second API process on :8001 with
       # ENVIRONMENT=test and APP_ENV=test, so the fake provider may be plain
