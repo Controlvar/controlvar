@@ -1536,7 +1536,7 @@ reason = "K18: CI arming switches; a mismatch fails open (env-inventory.md)"
 [[keep]]
 path = ".github/workflows/nightly-qa.yml"
 literal = "EXPERIMENTLY_REQUIRE_"
-count = 2
+count = 3
 reason = "K18: CI arming switches; a mismatch fails open (env-inventory.md)"
 
 [[keep]]
@@ -1676,6 +1676,12 @@ path = "backend/tests/unit/scripts/test_check_test_shards.py"
 literal = "EXPERIMENTLY_TEST_SHARD"
 count = 3
 reason = "K18: CI plumbing (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/scripts/test_nightly_workflow.py"
+literal = "EXPERIMENTLY_REQUIRE_"
+count = 1
+reason = "K18: CI arming switches; a mismatch fails open (env-inventory.md)"
 
 [[keep]]
 path = "backend/tests/unit/scripts/test_nightly_workflow.py"
