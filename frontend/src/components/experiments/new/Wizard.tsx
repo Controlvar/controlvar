@@ -4,7 +4,7 @@ import { useRouter } from 'next/router';
 import { TargetingRuleBuilder } from '@/components/targeting';
 import { PageTitle } from '@/components/PageTitle';
 import { docsUrl } from '@/services/docs';
-import { EXPERIMENT_TYPE_LABELS, METRIC_TYPE_LABELS } from '@/types/experiments';
+import { EXPERIMENT_TYPE_LABELS, METRIC_TYPE_LABELS, OPTIMIZATION_TYPE_LABELS } from '@/types/experiments';
 import {
   bayesianConfigProblem,
   buildCreatePayload,
@@ -18,8 +18,14 @@ import {
   maxReachableStep,
   validateStep,
 } from './formState';
-import { BalanceWithinFields, focusBalanceField, splitProblemShown } from './BalanceWithinFields';
-import { balanceSummary } from './balanceWithin';
+import { BalanceUnavailable, BalanceWithinFields, focusBalanceField, splitProblemShown } from './BalanceWithinFields';
+import { BALANCE_BANDIT_LINE, balanceSummary } from './balanceWithin';
+import {
+  BANDIT_ALLOCATION_LINE,
+  BANDIT_DESCRIPTION,
+  BANDIT_ESTIMATE_LINE,
+  OptimizationTypeField,
+} from './ExperimentTypeField';
 import { useSegmentList } from '@/hooks/useSegmentList';
 import { BasicInfoFields } from './BasicInfoFields';
 import { VariantsEditor } from './VariantsEditor';
@@ -61,6 +67,7 @@ export const FRESH_LOAD_NOTICE =
 const TYPE_DESCRIPTIONS: Record<string, string> = {
   a_b: 'Compare a control with one or more alternatives.',
   mv: 'Compare several versions against a control, with each user seeing one version.',
+  bandit: BANDIT_DESCRIPTION,
 };
 
 /** Input types where Enter means "Next" on the first three steps. */
@@ -127,8 +134,10 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
   const step = FORM_STEPS[current];
 
   // The Review row names the saved segments the setting lists, never their ids.
+  // A bandit sends no setting (#1956), so there is nothing to name.
+  const bandit = state.type === 'bandit';
   const segmentList = useSegmentList(
-    state.balance.on && state.balance.groupBy === 'segments' && state.balance.segments.length > 0,
+    !bandit && state.balance.on && state.balance.groupBy === 'segments' && state.balance.segments.length > 0,
   );
   const segmentNames =
     segmentList.state === 'ready' ? new Map(segmentList.segments.map((s) => [s.id, s.name] as const)) : null;
@@ -382,16 +391,11 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
                   </label>
                 ))}
               </div>
+              {/* Under the radios, in DOM order; choosing Bandit moves no focus. */}
+              {bandit && <OptimizationTypeField value={state.optimizationType} dispatch={dispatch} />}
               <p className="text-sm text-slate-600 mt-3" data-testid="wizard-type-note">
                 <a href={docsUrl('api/split-url')} className="text-blue-700 underline hover:text-blue-900">
                   Split URL
-                </a>{' '}
-                and{' '}
-                <a
-                  href={docsUrl('api/multi-armed-bandit')}
-                  className="text-blue-700 underline hover:text-blue-900"
-                >
-                  bandit
                 </a>{' '}
                 experiments need settings this flow does not ask for. Create them through the API.
               </p>
@@ -420,11 +424,20 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
                 splitProblem={splitProblemShown(state, error?.balance)}
               />
               <div className="pt-2">
-                <BalanceWithinFields
-                  balance={state.balance}
-                  dispatch={dispatch}
-                  issue={error?.balance ?? null}
-                />
+                {bandit ? (
+                  <div className="space-y-3">
+                    <p className="text-sm text-slate-700" data-testid="bandit-allocation-line">
+                      {BANDIT_ALLOCATION_LINE}
+                    </p>
+                    <BalanceUnavailable line={BALANCE_BANDIT_LINE} />
+                  </div>
+                ) : (
+                  <BalanceWithinFields
+                    balance={state.balance}
+                    dispatch={dispatch}
+                    issue={error?.balance ?? null}
+                  />
+                )}
               </div>
               <div className="pt-2">
                 <TargetingRuleBuilder
@@ -455,6 +468,11 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
                 <h3 id="wizard-estimate-heading" className="text-base font-semibold text-slate-900">
                   Sample size estimate (optional)
                 </h3>
+                {bandit && (
+                  <p className="text-sm text-slate-700" data-testid="bandit-estimate-line">
+                    {BANDIT_ESTIMATE_LINE}
+                  </p>
+                )}
                 <SampleSizeEstimate
                   value={estimate}
                   onChange={setEstimate}
@@ -471,7 +489,10 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
           {step === 'review' && payload && (
             <dl className="divide-y divide-slate-200 text-sm" data-testid="wizard-review">
               <ReviewRow title="Type" onEdit={() => goTo(0)} editLabel="Edit type">
-                <span data-testid="review-type">{EXPERIMENT_TYPE_LABELS[payload.experiment_type]}</span>
+                <span data-testid="review-type">
+                  {EXPERIMENT_TYPE_LABELS[payload.experiment_type]}
+                  {payload.optimization_type ? ` (${OPTIMIZATION_TYPE_LABELS[payload.optimization_type]})` : ''}
+                </span>
               </ReviewRow>
               <ReviewRow title="Details" onEdit={() => goTo(1)} editLabel="Edit details">
                 <p data-testid="review-name">

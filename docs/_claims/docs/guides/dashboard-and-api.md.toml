@@ -168,7 +168,7 @@ text = "Archive and unarchive a feature flag | Dashboard | Archived flags"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Create a bandit experiment | API only | Multi-armed bandits"
+text = "Create a bandit experiment | Dashboard | Multi-armed bandits"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
@@ -196,7 +196,7 @@ text = "CUPED-adjusted results (beta) | Dashboard | CUPED"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "The interaction scan and the pair test (beta) | API only | Interaction detection"
+text = "The interaction scan and the pair test (beta) | Dashboard | Interaction detection"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]

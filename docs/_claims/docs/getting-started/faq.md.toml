@@ -300,10 +300,11 @@ by = [
 ]
 
 [[unit]]
-text = "Interaction detection (beta) | Jaccard overlap between experiments; whether one experiment's lift on its primary conversion metric differs across another's arms (API only)"
+text = "Interaction detection (beta) | Jaccard overlap between experiments; whether one experiment's lift on its primary conversion metric differs across another's arms (the Interactions page and the API)"
 by = [
     "test:backend/tests/unit/services/test_interaction_detection_service.py::TestOverlapDetection::test_compute_user_overlap_partial_overlap",
     "test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_every_treatment_has_a_row",
+    "test:frontend/src/tests/pages/interactions.test.tsx::sends one GET for the two chosen, with no query, and shows the answer the server gave",
 ]
 
 [[unit]]

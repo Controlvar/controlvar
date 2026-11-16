@@ -66,7 +66,7 @@ The platform supports a range of statistical approaches:
 | Bayesian (Beta-Binomial) | Posterior credible intervals, Bayes factors, probability of superiority, ROPE (the priors, loss threshold and credible level are set on the new-experiment form or through the API; the ROPE through the API only) |
 | Multi-armed bandit | Thompson Sampling, UCB1, and Epsilon-Greedy adaptive traffic allocation |
 | Dimensional analysis | Segment-level breakdowns with Bonferroni correction and heterogeneous treatment effect detection |
-| Interaction detection (beta) | Jaccard overlap between experiments; whether one experiment's lift on its primary conversion metric differs across another's arms (API only) |
+| Interaction detection (beta) | Jaccard overlap between experiments; whether one experiment's lift on its primary conversion metric differs across another's arms (the Interactions page and the API) |
 
 [What the dashboard does, and what is API only](../guides/dashboard-and-api.md) says which of these the
 dashboard shows.
