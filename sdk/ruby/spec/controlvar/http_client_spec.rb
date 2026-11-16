@@ -181,6 +181,16 @@ RSpec.describe Controlvar::HttpClient do
         }
       end
 
+      it 'raises a transport failure with no cause, so nothing it carries names the query' do
+        spaced = described_class.new(base_url: 'http://local host:8000', api_key: 'k')
+
+        expect { spaced.get(path) }.to raise_error(Controlvar::NetworkError) { |e|
+          expect(e.cause).to be_nil
+          expect(e.message).not_to include('attrcanary7f3')
+          expect(e.full_message(highlight: false)).not_to include('attrcanary7f3')
+        }
+      end
+
       it 'removes the query string from the message of a timeout, a refused connection and any other failure' do
         [Errno::ETIMEDOUT, SocketError, RuntimeError].each do |error_class|
           stub_request(:get, context_url).to_raise(error_class.new("while fetching #{context_url}; again: #{query}"))
@@ -189,6 +199,7 @@ RSpec.describe Controlvar::HttpClient do
             expect(e.message).to include('while fetching https://api.example.com/api/v1/feature-flags/evaluate/my-flag;')
             expect(e.message).not_to include('attrcanary7f3')
             expect(e.message).not_to include('user_id')
+            expect(e.cause).to be_nil
           }
         end
       end
