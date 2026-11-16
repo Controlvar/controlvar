@@ -136,3 +136,71 @@ it('a 200 with no access_token is never stored as the token', async () => {
   expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBeNull();
   expect(screen.getByTestId('status')).toHaveTextContent('anonymous');
 });
+
+// A role that requires two-step sign-in (#1812, PR 4): `enrol: true`.
+
+it('U1: the password step of a role that requires it resolves enrol-step and calls no setToken', async () => {
+  const setToken = jest.spyOn(api, 'setToken');
+  try {
+    await mount();
+    mockFetch.mockResolvedValueOnce(
+      respond(200, { mfa_required: true, mfa_token: MFA_TOKEN, enrol: true, expires_in: 600 }),
+    );
+    let result: SignInResult | null = null;
+    await act(async () => {
+      result = await captured!.login('ana@example.com', 'Secret123');
+    });
+    expect(result).toEqual({ status: 'enrol-step', mfaToken: MFA_TOKEN, expiresIn: 600 });
+    expect(setToken).not.toHaveBeenCalled();
+    expect(everythingStored()).not.toContain(MFA_TOKEN);
+    expect(screen.getByTestId('status')).toHaveTextContent('anonymous');
+  } finally {
+    setToken.mockRestore();
+  }
+});
+
+it('confirmSignInEnrolment stores nothing until finish, then signs in with the access token', async () => {
+  const setToken = jest.spyOn(api, 'setToken');
+  try {
+    await mount();
+    const codes = Array.from({ length: 10 }, (_, i) => `CODE${i}ABCDE`.slice(0, 10));
+    mockFetch.mockResolvedValueOnce(
+      respond(200, {
+        recovery_codes: codes,
+        login: { access_token: 'full.jwt', token_type: 'bearer', expires_in: 43200, user },
+      }),
+    );
+    let done: Awaited<ReturnType<NonNullable<typeof captured>['confirmSignInEnrolment']>> | null = null;
+    await act(async () => {
+      done = await captured!.confirmSignInEnrolment(MFA_TOKEN, '123456');
+    });
+    const [url, init] = mockFetch.mock.calls[0];
+    expect(url).toBe('/api/v1/auth/mfa/enroll/confirm');
+    expect(JSON.parse(init.body)).toEqual({ mfa_token: MFA_TOKEN, code: '123456' });
+    expect(init.headers.Authorization).toBeUndefined();
+    expect(done!.recoveryCodes).toEqual(codes);
+    expect(setToken).not.toHaveBeenCalled();
+    expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBeNull();
+    expect(screen.getByTestId('status')).toHaveTextContent('anonymous');
+
+    act(() => {
+      expect(done!.finish()).toEqual(user);
+    });
+    expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('full.jwt');
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'));
+    expect(everythingStored()).not.toContain(MFA_TOKEN);
+  } finally {
+    setToken.mockRestore();
+  }
+});
+
+it('a turned-on answer with no access token is refused before anything is shown or stored', async () => {
+  await mount();
+  mockFetch.mockResolvedValueOnce(respond(200, { recovery_codes: ['AAAAABBBBB'], login: { user } }));
+  await act(async () => {
+    await expect(captured!.confirmSignInEnrolment(MFA_TOKEN, '123456')).rejects.toMatchObject({
+      unreadableAnswer: true,
+    });
+  });
+  expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBeNull();
+});

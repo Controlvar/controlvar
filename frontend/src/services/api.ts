@@ -46,13 +46,22 @@ export interface LoginResponse {
 /**
  * `POST /api/v1/auth/login` for an account with two-step sign-in on (#1812):
  * the password was right and a code is needed. No `access_token`: the
- * `mfa_token` goes to `POST /api/v1/auth/mfa/verify` with the code.
+ * `mfa_token` goes to `POST /api/v1/auth/mfa/verify` with the code. With
+ * `enrol: true` the account's role requires two-step sign-in and it has not
+ * set it up: the `mfa_token` goes to `POST /api/v1/auth/mfa/enroll` and
+ * `/auth/mfa/enroll/confirm` instead.
  */
 export interface MfaRequiredResponse {
   mfa_required: true;
   mfa_token: string;
   enrol: boolean;
   expires_in: number;
+}
+
+/** `POST /api/v1/auth/mfa/enroll/confirm`: the recovery codes, and the sign-in. */
+export interface MfaEnrolConfirmResponse {
+  recovery_codes: string[];
+  login: LoginResponse;
 }
 
 // ---------------------------------------------------------------------------

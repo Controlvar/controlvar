@@ -692,8 +692,11 @@ by = [
 ]
 
 [[unit]]
-text = "Each account decides for itself; nothing can require it for a role yet."
-by = ["test:backend/tests/unit/api/test_documented_limits.py::test_a_local_account_can_turn_on_two_step_sign_in_but_no_role_requires_it"]
+text = "Each account can turn it on for itself, and an operator can require it for chosen roles: Requiring it for a role."
+by = [
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_every_role_manages_its_own_and_only_a_superuser_resets_others",
+    "test:backend/tests/integration/api/test_two_factor_required_roles_api.py::test_a_required_role_sets_it_up_at_its_first_sign_in",
+]
 
 [[unit]]
 text = "Turn it on as the viewer."
@@ -804,9 +807,10 @@ text = "Route | What it does"
 by = ["exempt:label"]
 
 [[unit]]
-text = "GET /api/v1/users/me/2fa | enabled, required (always false) and recovery_codes_remaining"
+text = "GET /api/v1/users/me/2fa | enabled, required (your role requires it) and recovery_codes_remaining"
 by = [
     "test:backend/tests/unit/api/test_two_factor_routes.py::test_reading_your_own_status",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_your_status_says_whether_your_role_requires_it",
     "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_a_recovery_code_signs_in_once",
 ]
 
@@ -829,10 +833,11 @@ text = "POST /api/v1/users/me/2fa/recovery-codes | {\"code\"}: 10 new recovery c
 by = ["test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_turning_it_off_and_new_recovery_codes"]
 
 [[unit]]
-text = "POST /api/v1/users/me/2fa/disable | {\"code\"} or {\"recovery_code\"}: turns it off. 409 while off"
+text = "POST /api/v1/users/me/2fa/disable | {\"code\"} or {\"recovery_code\"}: turns it off. 409 while off; 403 when your role requires it"
 by = [
     "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_turning_it_off_and_new_recovery_codes",
     "test:backend/tests/unit/api/test_two_factor_routes.py::test_the_wrong_state_answers_409",
+    "test:backend/tests/integration/api/test_two_factor_required_roles_api.py::test_a_required_role_cannot_turn_it_off_and_nothing_is_counted",
 ]
 
 [[unit]]
@@ -840,6 +845,20 @@ text = "POST /api/v1/auth/mfa/verify | {\"mfa_token\"} and {\"code\"} or {\"reco
 by = [
     "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_sign_in_asks_for_a_code_and_a_code_is_used_once",
     "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_a_recovery_code_signs_in_once",
+]
+
+[[unit]]
+text = "POST /api/v1/auth/mfa/enroll | {\"mfa_token\"} of a password step that answered enrol: true: a new secret, waiting for its first code"
+by = [
+    "test:backend/tests/integration/api/test_two_factor_required_roles_api.py::test_a_required_role_sets_it_up_at_its_first_sign_in",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_the_enrol_routes_take_only_an_enrol_token",
+]
+
+[[unit]]
+text = "POST /api/v1/auth/mfa/enroll/confirm | That {\"mfa_token\"} and {\"code\"}: turns it on and answers 10 recovery codes and the access token. 409 with no secret waiting"
+by = [
+    "test:backend/tests/integration/api/test_two_factor_required_roles_api.py::test_a_required_role_sets_it_up_at_its_first_sign_in",
+    "test:backend/tests/integration/api/test_two_factor_required_roles_api.py::test_the_first_code_before_a_secret_answers_409",
 ]
 
 [[unit]]
@@ -890,11 +909,13 @@ by = [
 ]
 
 [[unit]]
-text = "401 Sign-in expired. Start again. | The mfa_token is expired or not one; or the account was deactivated, or its two-step sign-in turned off, since the password step"
+text = "401 Sign-in expired. Start again. | The mfa_token is expired or not one; or the account was deactivated, or its two-step sign-in turned off, since the password step. At the two enrol routes, also when its role no longer requires it or it was turned on meanwhile"
 by = [
     "test:backend/tests/unit/api/test_two_factor_routes.py::test_a_bad_mfa_token_is_refused_before_any_lookup",
     "test:backend/tests/unit/api/test_two_factor_routes.py::test_an_account_that_can_no_longer_sign_in_starts_again",
     "test:backend/tests/unit/api/test_two_factor_routes.py::test_each_refusal_of_the_code_step",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_the_account_is_read_again_at_each_enrol_route",
+    "test:backend/tests/integration/api/test_two_factor_required_roles_api.py::test_the_account_is_read_again_between_the_steps",
 ]
 
 [[unit]]
@@ -919,9 +940,17 @@ by = [
 ]
 
 [[unit]]
-text = "POST /api/v1/auth/mfa/verify takes 10 requests a minute per address, like POST /api/v1/auth/login."
+text = "403 Two-step sign-in is required for your role, so it cannot be turned off. | POST /api/v1/users/me/2fa/disable for an account whose role requires it; no code is checked"
+by = [
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_a_required_role_cannot_turn_it_off",
+    "test:backend/tests/integration/api/test_two_factor_required_roles_api.py::test_a_required_role_cannot_turn_it_off_and_nothing_is_counted",
+]
+
+[[unit]]
+text = "POST /api/v1/auth/mfa/verify, POST /api/v1/auth/mfa/enroll and POST /api/v1/auth/mfa/enroll/confirm each take 10 requests a minute per address, like POST /api/v1/auth/login."
 by = [
     "test:backend/tests/unit/middleware/test_route_rate_limits.py::test_the_code_step_of_a_sign_in_takes_ten_a_minute",
+    "test:backend/tests/unit/middleware/test_route_rate_limits.py::test_setting_it_up_during_a_sign_in_takes_ten_a_minute",
     "test:backend/tests/unit/middleware/test_route_rate_limits.py::test_sign_in_takes_ten_requests_a_minute",
 ]
 
@@ -966,6 +995,98 @@ text = "The count of wrong passwords and codes is kept in each API process's mem
 by = [
     "test:backend/tests/unit/api/test_local_auth.py::TestLoginAttemptTracker",
     "test:backend/tests/integration/services/test_two_factor_service.py::test_a_new_service_reads_the_same_rows",
+]
+
+[[unit]]
+text = "Requiring it for a role"
+by = ["exempt:label"]
+
+[[unit]]
+text = "LOCAL_AUTH_2FA_REQUIRED_ROLES names the roles whose accounts must use two-step sign-in: one or more of ADMIN, DEVELOPER, ANALYST and VIEWER, in capitals and comma-separated, such as ADMIN,DEVELOPER."
+by = [
+    "test:backend/tests/unit/core/test_two_factor_required_roles.py::test_accepted_values_and_the_roles_they_mean",
+    "test:backend/tests/unit/core/test_two_factor_required_roles.py::test_the_names_are_the_roles",
+    "test:backend/tests/unit/core/test_two_factor_required_roles.py::test_exactly_the_listed_roles_are_required",
+]
+
+[[unit]]
+text = "Unset or empty, no role is required."
+by = [
+    "test:backend/tests/unit/core/test_two_factor_required_roles.py::test_accepted_values_and_the_roles_they_mean",
+    "test:backend/tests/unit/core/test_two_factor_required_roles.py::test_unset_is_no_role_by_default",
+    "test:backend/tests/unit/core/test_two_factor_required_roles.py::test_no_role_is_required_by_default",
+]
+
+[[unit]]
+text = "Any other entry, such as admin, ADMNI or the empty one in ADMIN,, stops the API starting with a message that names it."
+by = [
+    "test:backend/tests/unit/core/test_two_factor_required_roles.py::test_a_typo_stops_the_start_naming_the_entry_and_the_four_names",
+    "test:backend/tests/unit/core/test_two_factor_required_roles.py::test_the_start_up_check_refuses_the_same_in_every_environment",
+]
+
+[[unit]]
+text = "It applies to every account of a listed role that signs in with a password, superusers included."
+by = [
+    "test:backend/tests/unit/core/test_two_factor_required_roles.py::test_exactly_the_listed_roles_are_required",
+    "test:backend/tests/unit/core/test_two_factor_required_roles.py::test_a_superuser_of_a_listed_role_is_required_too",
+    "test:backend/tests/integration/api/test_two_factor_required_roles_api.py::test_a_superuser_of_a_required_role_is_asked_too",
+]
+
+[[unit]]
+text = "Such an account that has not set two-step sign-in up gets {\"mfa_required\": true, \"mfa_token\": \"...\", \"enrol\": true, \"expires_in\": 600} from the right password, with no access_token."
+by = [
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_a_required_role_without_it_answers_enrol_and_no_access_token",
+    "test:backend/tests/integration/api/test_two_factor_required_roles_api.py::test_a_required_role_sets_it_up_at_its_first_sign_in",
+]
+
+[[unit]]
+text = "It sets it up before it is signed in: POST /api/v1/auth/mfa/enroll with that mfa_token answers a new secret, as POST /api/v1/users/me/2fa/enroll does, and POST /api/v1/auth/mfa/enroll/confirm with the same mfa_token and the app's first code turns it on and answers {\"recovery_codes\": [...], \"login\": {...}}, where login is what POST /api/v1/auth/login answers an account without two-step sign-in."
+by = [
+    "test:backend/tests/integration/api/test_two_factor_required_roles_api.py::test_a_required_role_sets_it_up_at_its_first_sign_in",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_the_first_code_turns_it_on_and_signs_in",
+]
+
+[[unit]]
+text = "The dashboard does both as part of signing in."
+by = [
+    "test:frontend/src/tests/auth/two-step-enrol-sign-in.test.tsx::U3: Done waits for \"I have saved these codes\", then stores the access token and goes on",
+    "test:frontend/src/tests/auth/two-step-enrol-sign-in.test.tsx::asks the API for a secret with the enrol token and no bearer, and shows it three ways",
+]
+
+[[unit]]
+text = "From then on the account signs in with a code, and POST /api/v1/users/me/2fa/disable answers it 403."
+by = [
+    "test:backend/tests/integration/api/test_two_factor_required_roles_api.py::test_a_required_role_sets_it_up_at_its_first_sign_in",
+    "test:backend/tests/integration/api/test_two_factor_required_roles_api.py::test_a_required_role_cannot_turn_it_off_and_nothing_is_counted",
+]
+
+[[unit]]
+text = "GET /api/v1/users/me/2fa says required: true, except for an account with no password of its own."
+by = [
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_your_status_says_whether_your_role_requires_it",
+    "test:backend/tests/integration/api/test_two_factor_required_roles_api.py::test_an_account_without_a_password_reads_required_false",
+]
+
+[[unit]]
+text = "After a superuser's reset, the next sign-in asks for set-up again."
+by = ["test:backend/tests/integration/api/test_two_factor_required_roles_api.py::test_a_reset_account_of_a_required_role_sets_it_up_again"]
+
+[[unit]]
+text = "The Docker Compose file passes it from .env, and the Helm chart takes it in api.extraEnv (the chart's values.yaml shows how)."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestTwoStepRoles",
+    "test:backend/tests/unit/chart/test_chart_render.py::test_the_two_step_roles_example_reaches_both_api_containers",
+]
+
+[[unit]]
+text = "The AWS CDK app cannot set it yet."
+by = ["test:backend/tests/unit/api/test_documented_limits.py::test_a_role_can_require_two_step_sign_in_on_compose_and_helm_not_cdk_yet"]
+
+[[unit]]
+text = "Signing in with SSO (the sso module) asks for no code, for these roles too."
+by = [
+    "test:modules/backend/tests/unit/api/test_sso_asks_for_no_second_step.py::test_an_oidc_sign_in_issues_the_token_to_a_two_step_account_without_a_code",
+    "test:modules/backend/tests/unit/api/test_sso_asks_for_no_second_step.py::test_the_sso_module_reads_no_two_step_state",
 ]
 
 [[unit]]
@@ -1055,3 +1176,50 @@ by = ["mechanism:password-sign-ins"]
 [[unit]]
 text = "modules/backend/tests/realistic/scenarios/multi_tenant_isolation.py | Seeded accounts that never turn it on"
 by = ["mechanism:password-sign-ins-modules"]
+
+[[unit]]
+text = "Each also fails if LOCAL_AUTH_2FA_REQUIRED_ROLES names its account's role on the stack it signs in to: the password step then answers enrol: true and no access_token."
+by = [
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_a_required_role_without_it_answers_enrol_and_no_access_token",
+    "mechanism:password-sign-ins-required-roles",
+]
+
+[[unit]]
+text = "Keep the seeded accounts' roles unrequired on the stacks they sign in to."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The others:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Path | When its account's role is required"
+by = ["exempt:label"]
+
+[[unit]]
+text = "scripts/synthetic_check.py | Fails while ANALYST is required. Keep that role unrequired"
+by = [
+    "mechanism:password-sign-ins-required-roles",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_a_required_role_without_it_answers_enrol_and_no_access_token",
+]
+
+[[unit]]
+text = "scripts/scale_stack.py | Fails while ADMIN is required"
+by = [
+    "mechanism:password-sign-ins-required-roles",
+    "test:backend/tests/integration/api/test_two_factor_required_roles_api.py::test_a_superuser_of_a_required_role_is_asked_too",
+]
+
+[[unit]]
+text = "deploy/aws-installer/lib/steps.sh | Fails if ADMIN is required during the install: require it after the install"
+by = [
+    "mechanism:password-sign-ins-required-roles",
+    "test:backend/tests/integration/api/test_two_factor_required_roles_api.py::test_a_superuser_of_a_required_role_is_asked_too",
+]
+
+[[unit]]
+text = "deploy/demo/probe.py | A VIEWER requirement on a demo stops every demo sign-in"
+by = [
+    "mechanism:password-sign-ins-required-roles",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_demo_mode_refuses_the_code_step_and_every_two_step_write",
+]

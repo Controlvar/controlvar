@@ -46,13 +46,25 @@ ALREADY_ENABLED_DETAIL = (
     "Two-step sign-in is already on for this account. "
     "Turn it off first to set it up again."
 )
-#: ``POST /users/me/2fa/confirm`` with no secret waiting for its first code.
+#: ``POST /users/me/2fa/confirm`` with no secret waiting for its first code,
+#: which is also what an account that is already on answers there.
 NO_PENDING_SECRET_DETAIL = (
+    "No new secret is waiting for its first code, or two-step sign-in is "
+    "already on. While it is off, ask for a secret with "
+    "POST /api/v1/users/me/2fa/enroll."
+)
+#: ``POST /auth/mfa/enroll/confirm`` before ``/auth/mfa/enroll`` gave a secret.
+NO_PENDING_SIGN_IN_SECRET_DETAIL = (
     "No new secret is waiting for its first code. "
-    "Ask for one with POST /api/v1/users/me/2fa/enroll."
+    "Ask for one with POST /api/v1/auth/mfa/enroll."
 )
 #: ``disable`` and ``recovery-codes`` while two-step sign-in is off.
 NOT_ENABLED_DETAIL = "Two-step sign-in is not on for this account."
+#: ``disable`` for an account whose role must use two-step sign-in
+#: (``LOCAL_AUTH_2FA_REQUIRED_ROLES``).
+TWO_FACTOR_REQUIRED_FOR_ROLE = (
+    "Two-step sign-in is required for your role, so it cannot be turned off."
+)
 
 
 def locked_answer(exc: AccountLockedError) -> HTTPException:

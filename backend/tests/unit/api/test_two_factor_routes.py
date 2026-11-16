@@ -67,9 +67,11 @@ LOCKED_PREFIX = "Too many failed login attempts; account temporarily locked."
 LOGIN = "/api/v1/auth/login"
 TOKEN = "/api/v1/auth/token"
 VERIFY = "/api/v1/auth/mfa/verify"
+ENROL = "/api/v1/auth/mfa/enroll"
+ENROL_CONFIRM = "/api/v1/auth/mfa/enroll/confirm"
 ME_2FA = "/api/v1/users/me/2fa"
 
-#: Every route PR 2 adds, with a body that passes validation.
+#: Every two-step sign-in route, with a body that passes validation.
 ROUTES = [
     ("GET", ME_2FA, None),
     ("POST", f"{ME_2FA}/enroll", None),
@@ -77,6 +79,8 @@ ROUTES = [
     ("POST", f"{ME_2FA}/disable", {"code": "123456"}),
     ("POST", f"{ME_2FA}/recovery-codes", {"code": "123456"}),
     ("POST", VERIFY, {"mfa_token": "x", "code": "123456"}),
+    ("POST", ENROL, {"mfa_token": "x"}),
+    ("POST", ENROL_CONFIRM, {"mfa_token": "x", "code": "123456"}),
     ("DELETE", "/api/v1/admin/users/00000000-0000-4000-8000-000000001812/2fa", None),
 ]
 ROUTE_IDS = [
@@ -86,6 +90,8 @@ ROUTE_IDS = [
     "disable",
     "recovery-codes",
     "verify",
+    "sign-in-enroll",
+    "sign-in-enroll-confirm",
     "admin-reset",
 ]
 
@@ -629,6 +635,393 @@ def test_resetting_an_unknown_account_answers_404(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# A role that requires it: LOCAL_AUTH_2FA_REQUIRED_ROLES
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def require(monkeypatch):
+    """Set the roles that must use two-step sign-in, as the setting would."""
+    from backend.app.core.settings_rules import parse_two_factor_roles
+
+    def set_roles(value):
+        monkeypatch.setattr(
+            settings, "LOCAL_AUTH_2FA_REQUIRED_ROLES", parse_two_factor_roles(value)
+        )
+
+    return set_roles
+
+
+def _enrol_token(user, **kwargs):
+    from backend.app.core.mfa_token import ENROL_PURPOSE, ENROL_TTL_SECONDS
+
+    return create_mfa_token(
+        user, purpose=ENROL_PURPOSE, ttl_seconds=ENROL_TTL_SECONDS, **kwargs
+    )
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("path", [LOGIN, TOKEN])
+def test_a_required_role_without_it_answers_enrol_and_no_access_token(
+    path, require, audit
+):
+    """The required-not-enrolled password step (V5's PR 4 row)."""
+    from backend.app.core.mfa_token import (
+        ENROL_PURPOSE,
+        InvalidMfaToken,
+        decode_mfa_token,
+    )
+
+    require("DEVELOPER")
+    user = _user(role=UserRole.DEVELOPER)
+    client = _client(_db(user, enabled=False))
+    if path == LOGIN:
+        response = client.post(path, json={"email": user.email, "password": PASSWORD})
+    else:
+        response = client.post(
+            path, data={"username": user.email, "password": PASSWORD}
+        )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert set(body) == {"mfa_required", "mfa_token", "enrol", "expires_in"}
+    assert (body["mfa_required"], body["enrol"], body["expires_in"]) == (
+        True,
+        True,
+        600,
+    )
+    assert "access_token" not in body
+    assert decode_mfa_token(body["mfa_token"], purpose=ENROL_PURPOSE) == user.id
+    # Never a code-step token, never a session.
+    with pytest.raises(InvalidMfaToken):
+        decode_mfa_token(body["mfa_token"])
+    with pytest.raises(Exception):
+        decode_local_token(body["mfa_token"])
+    assert audit == []
+
+
+@pytest.mark.regression
+def test_the_password_alone_does_not_clear_the_count_for_a_required_role(require):
+    """Only the first code that turns it on clears it, as only an accepted
+    code does for an account that has it on."""
+    require("DEVELOPER")
+    user = _user(role=UserRole.DEVELOPER, email="required@example.com")
+    for _ in range(9):
+        login_attempt_tracker.record_failure(_key(user.email))
+    response = _client(_db(user)).post(
+        LOGIN, json={"email": user.email, "password": PASSWORD}
+    )
+    assert response.json()["enrol"] is True
+    assert login_attempt_tracker.status(_key(user.email)).failures == 9
+
+
+def test_a_required_role_with_it_on_takes_the_code_step(require):
+    require("DEVELOPER")
+    user = _user(role=UserRole.DEVELOPER)
+    body = (
+        _client(_db(user, enabled=True))
+        .post(LOGIN, json={"email": user.email, "password": PASSWORD})
+        .json()
+    )
+    assert (body["enrol"], body["expires_in"]) == (False, 300)
+
+
+@pytest.mark.parametrize("role", [UserRole.ADMIN, UserRole.ANALYST, UserRole.VIEWER])
+def test_a_role_not_listed_signs_in_with_the_password_alone(role, require, audit):
+    require("DEVELOPER")
+    user = _user(role=role)
+    body = (
+        _client(_db(user))
+        .post(LOGIN, json={"email": user.email, "password": PASSWORD})
+        .json()
+    )
+    assert set(body) == {"access_token", "token_type", "expires_in", "user"}
+
+
+@pytest.mark.regression
+def test_a_failed_lookup_for_a_required_role_is_a_500_never_a_token(
+    require, monkeypatch
+):
+    """V19's PR 4 row: the ``user_totp`` table missing never signs a required
+    role in with the password alone."""
+    require("DEVELOPER")
+    user = _user(role=UserRole.DEVELOPER)
+
+    def missing_table(db, user_id):
+        raise ProgrammingError(
+            "SELECT user_totp", {}, Exception('relation "user_totp" does not exist')
+        )
+
+    monkeypatch.setattr(two_factor_service, "is_enabled", missing_table)
+    response = _client(_db(user)).post(
+        LOGIN, json={"email": user.email, "password": PASSWORD}
+    )
+    assert response.status_code == 500
+    assert "access_token" not in response.text
+    assert "mfa_token" not in response.text
+
+
+def _enrol_bad_tokens(user):
+    from datetime import datetime, timedelta, timezone
+
+    long_ago = datetime.now(timezone.utc) - timedelta(minutes=11)
+    return {
+        "expired": _enrol_token(user, now=long_ago),
+        "access token": create_local_access_token(user),
+        "verify purpose": create_mfa_token(user),
+        "other key": jwt.encode(
+            {"sub": str(user.id), "iss": "controlvar-local-mfa", "purpose": "enrol"},
+            "a-key-that-is-not-the-mfa-token-key",
+            algorithm="HS256",
+        ),
+        "garbage": "garbage",
+    }
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("route", [ENROL, ENROL_CONFIRM])
+@pytest.mark.parametrize(
+    "kind", ["expired", "access token", "verify purpose", "other key", "garbage"]
+)
+def test_the_enrol_routes_take_only_an_enrol_token(route, kind, require, monkeypatch):
+    require("DEVELOPER")
+    user = _user(role=UserRole.DEVELOPER)
+    db = _db(user)
+    called = []
+    monkeypatch.setattr(two_factor_service, "enrol", lambda *a, **k: called.append(1))
+    monkeypatch.setattr(two_factor_service, "confirm", lambda *a, **k: called.append(1))
+    body = {"mfa_token": _enrol_bad_tokens(user)[kind]}
+    if route == ENROL_CONFIRM:
+        body["code"] = "123456"
+    response = _client(db).post(route, json=body)
+    assert response.status_code == 401, response.text
+    assert response.json() == {"detail": SIGN_IN_EXPIRED}
+    assert response.headers["www-authenticate"] == "Bearer"
+    db.query.assert_not_called()
+    assert called == []
+
+
+@pytest.mark.regression
+def test_an_enrol_token_is_refused_at_the_code_step(require, monkeypatch):
+    """Each route takes only its own purpose: an enrol token is no way past
+    an account's code step."""
+    require("DEVELOPER")
+    user = _user(role=UserRole.DEVELOPER)
+    called = []
+    monkeypatch.setattr(
+        two_factor_service, "verify_sign_in", lambda *a, **k: called.append(1)
+    )
+    response = _verify(_client(_db(user)), _enrol_token(user), code="123456")
+    assert response.status_code == 401
+    assert response.json() == {"detail": SIGN_IN_EXPIRED}
+    assert called == []
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("route", [ENROL, ENROL_CONFIRM])
+@pytest.mark.parametrize(
+    "state", ["gone", "deactivated", "role changed", "policy removed", "already on"]
+)
+def test_the_account_is_read_again_at_each_enrol_route(
+    route, state, require, monkeypatch
+):
+    """Re-evaluated from the database: an account that can no longer sign in,
+    whose role no longer requires it, or that turned it on elsewhere since the
+    password step, starts again."""
+    require("DEVELOPER")
+    user = _user(role=UserRole.DEVELOPER)
+    token = _enrol_token(user)
+    if state == "deactivated":
+        user.is_active = False
+    elif state == "role changed":
+        user.role = UserRole.VIEWER
+    elif state == "policy removed":
+        require("")
+    db = _db(None if state == "gone" else user, enabled=state == "already on")
+    called = []
+    monkeypatch.setattr(two_factor_service, "enrol", lambda *a, **k: called.append(1))
+    monkeypatch.setattr(two_factor_service, "confirm", lambda *a, **k: called.append(1))
+    body = {"mfa_token": token}
+    if route == ENROL_CONFIRM:
+        body["code"] = "123456"
+    response = _client(db).post(route, json=body)
+    assert response.status_code == 401, response.text
+    assert response.json() == {"detail": SIGN_IN_EXPIRED}
+    assert called == []
+
+
+def test_enrol_during_sign_in_answers_a_new_secret(require, monkeypatch):
+    require("DEVELOPER")
+    user = _user(role=UserRole.DEVELOPER)
+    seen = []
+
+    def enrol(db, account):
+        seen.append(account)
+        return Enrolment(secret="ABC", otpauth_uri="otpauth://totp/x")
+
+    monkeypatch.setattr(two_factor_service, "enrol", enrol)
+    response = _client(_db(user)).post(ENROL, json={"mfa_token": _enrol_token(user)})
+    assert response.status_code == 200, response.text
+    assert response.json() == {"secret": "ABC", "otpauth_uri": "otpauth://totp/x"}
+    assert seen == [user]
+
+
+def test_enrol_turned_on_meanwhile_starts_again(require, monkeypatch):
+    require("DEVELOPER")
+    user = _user(role=UserRole.DEVELOPER)
+    monkeypatch.setattr(two_factor_service, "enrol", _raising(AlreadyEnabledError()))
+    response = _client(_db(user)).post(ENROL, json={"mfa_token": _enrol_token(user)})
+    assert response.status_code == 401
+    assert response.json() == {"detail": SIGN_IN_EXPIRED}
+
+
+@pytest.mark.regression
+def test_the_first_code_turns_it_on_and_signs_in(require, monkeypatch, audit):
+    require("DEVELOPER")
+    user = _user(role=UserRole.DEVELOPER, email="first@example.com")
+    for _ in range(9):
+        login_attempt_tracker.record_failure(_key(user.email))
+    seen = {}
+
+    def confirm(db, account, code, client_host=None):
+        seen.update(account=account, code=code)
+        return ["CODE%06d" % i for i in range(10)]
+
+    monkeypatch.setattr(two_factor_service, "confirm", confirm)
+    response = _client(_db(user)).post(
+        ENROL_CONFIRM, json={"mfa_token": _enrol_token(user), "code": "123 456"}
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert set(body) == {"recovery_codes", "login"}
+    assert len(body["recovery_codes"]) == 10
+    assert set(body["login"]) == {"access_token", "token_type", "expires_in", "user"}
+    assert decode_local_token(body["login"]["access_token"])["sub"] == str(user.id)
+    assert seen == {"account": user, "code": "123 456"}
+    # The first code is the sign-in's second step: the count is cleared.
+    assert login_attempt_tracker.status(_key(user.email)).failures == 0
+    assert [entry["after"] for entry in audit] == [
+        {"provider": "local", "second_step": "totp"}
+    ]
+
+
+ENROL_CONFIRM_REFUSALS = {
+    "wrong code": (WrongCodeError(), 401, WRONG_CODE_TEXT, None),
+    "locked": (AccountLockedError(42), 423, None, "42"),
+    "capped": (CodeStepLockedError(), 423, CODE_STEP_LOCKED_TEXT, None),
+    "unreadable secret": (TwoFactorUnavailableError(), 503, UNAVAILABLE_TEXT, None),
+    "nothing waiting": (
+        NotEnabledError(),
+        409,
+        answers.NO_PENDING_SIGN_IN_SECRET_DETAIL,
+        None,
+    ),
+}
+
+
+@pytest.mark.parametrize("kind", sorted(ENROL_CONFIRM_REFUSALS))
+def test_each_refusal_of_the_first_code(kind, require, monkeypatch, audit):
+    require("DEVELOPER")
+    exc, status, detail, retry_after = ENROL_CONFIRM_REFUSALS[kind]
+    user = _user(role=UserRole.DEVELOPER, email="refused@example.com")
+    for _ in range(3):
+        login_attempt_tracker.record_failure(_key(user.email))
+    monkeypatch.setattr(two_factor_service, "confirm", _raising(exc))
+    response = _client(_db(user)).post(
+        ENROL_CONFIRM, json={"mfa_token": _enrol_token(user), "code": "123456"}
+    )
+    assert response.status_code == status, response.text
+    if detail is not None:
+        assert response.json() == {"detail": detail}
+    else:
+        assert response.json()["detail"].startswith(LOCKED_PREFIX)
+    assert response.headers.get("retry-after") == retry_after
+    assert "access_token" not in response.text
+    assert audit == []
+    # Nothing cleared the count.
+    assert login_attempt_tracker.status(_key(user.email)).failures == 3
+
+
+@pytest.mark.parametrize(
+    "body",
+    [{"code": "1" * 65}, {}, {"code": None}],
+    ids=["code-65", "no-code", "null-code"],
+)
+def test_the_first_code_that_is_not_a_code_answers_422(body, require, monkeypatch):
+    require("DEVELOPER")
+    user = _user(role=UserRole.DEVELOPER)
+    called = []
+    monkeypatch.setattr(two_factor_service, "confirm", lambda *a, **k: called.append(1))
+    response = _client(_db(user)).post(
+        ENROL_CONFIRM, json={"mfa_token": _enrol_token(user), **body}
+    )
+    assert response.status_code == 422, response.text
+    assert called == []
+
+
+@pytest.mark.regression
+def test_a_required_role_cannot_turn_it_off(require, monkeypatch):
+    """403 before any code is checked or counted."""
+    require("DEVELOPER")
+    user = _user(role=UserRole.DEVELOPER)
+    called = []
+    monkeypatch.setattr(two_factor_service, "disable", lambda *a, **k: called.append(1))
+    client = _client(_db(user), signed_in=user)
+    for body in ({"code": "123456"}, {"recovery_code": "ABCDEFGHJK"}):
+        response = client.post(f"{ME_2FA}/disable", json=body)
+        assert response.status_code == 403, response.text
+        assert response.json() == {"detail": answers.TWO_FACTOR_REQUIRED_FOR_ROLE}
+    assert called == []
+
+
+def test_a_role_not_listed_still_turns_it_off(require, monkeypatch):
+    require("ADMIN")
+    user = _user(role=UserRole.DEVELOPER)
+    called = []
+    monkeypatch.setattr(two_factor_service, "disable", lambda *a, **k: called.append(1))
+    response = _client(_db(user), signed_in=user).post(
+        f"{ME_2FA}/disable", json={"code": "123456"}
+    )
+    assert response.status_code == 204
+    assert called == [1]
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "roles, role, password, required",
+    [
+        ("", UserRole.ADMIN, PASSWORD_HASH, False),
+        ("ADMIN", UserRole.ADMIN, PASSWORD_HASH, True),
+        ("ADMIN", UserRole.VIEWER, PASSWORD_HASH, False),
+        ("ADMIN", UserRole.ADMIN, None, False),
+        ("", UserRole.ADMIN, None, False),
+    ],
+    ids=[
+        "no-policy",
+        "listed",
+        "not-listed",
+        "no-password-listed",
+        "no-password-no-policy",
+    ],
+)
+def test_your_status_says_whether_your_role_requires_it(
+    roles, role, password, required, require, monkeypatch
+):
+    """PE-S2-6: an account with no password of its own reads ``required:
+    false`` whether or not its role is listed: the requirement applies where
+    the password is checked."""
+    require(roles)
+    user = _user(role=role, hashed_password=password)
+    monkeypatch.setattr(
+        two_factor_service,
+        "status",
+        lambda db, account: TwoFactorStatus(enabled=False, recovery_codes_remaining=0),
+    )
+    response = _client(_db(user), signed_in=user).get(ME_2FA)
+    assert response.status_code == 200, response.text
+    assert response.json()["required"] is required
+
+
+# ---------------------------------------------------------------------------
 # Every route: local provider only
 # ---------------------------------------------------------------------------
 
@@ -647,8 +1040,8 @@ def test_under_cognito_every_route_answers_the_local_only_404(
     assert response.json() == {"detail": LOCAL_ONLY}
 
 
-def test_the_seven_routes_are_all_the_routes():
-    assert len(ROUTES) == len(ROUTE_IDS) == 7
+def test_the_nine_routes_are_all_the_routes():
+    assert len(ROUTES) == len(ROUTE_IDS) == 9
 
 
 # ---------------------------------------------------------------------------

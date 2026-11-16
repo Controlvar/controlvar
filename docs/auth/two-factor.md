@@ -20,6 +20,17 @@ The API side, with every route and answer, is in [Two-step sign-in](../api/auth.
 A code is accepted in its own 30 seconds and in the 30 seconds either side. If the first code is
 refused, check that your phone sets its clock automatically.
 
+## When your role requires it
+
+An operator can require two-step sign-in for chosen roles (`LOCAL_AUTH_2FA_REQUIRED_ROLES`,
+in [Requiring it for a role](../api/auth.md#requiring-it-for-a-role)). If your role is one of them
+and you have not set it up, signing in asks you to set it up after your password, with the same
+steps as above, before you are signed in: scan the QR code or type the key, enter the code the
+app shows and choose **Turn on two-step sign-in**, then save the recovery codes and choose
+**Done**. If the set-up takes more than 10 minutes, sign-in starts again at the password.
+
+While your role requires it, **More → Two-step sign-in** does not offer to turn it off.
+
 ## Sign in with a code
 
 After your email and password, enter the code your app shows and choose **Verify**. Spaces and
@@ -34,7 +45,8 @@ The code step lasts 5 minutes. After that, sign-in starts again at the password.
 
 Ask an administrator to reset your two-step sign-in. A superuser opens **Admin → Users**, edits
 your account and chooses **Reset two-step sign-in**. You then sign in with your password alone and
-can set two-step sign-in up again. No one can reset their own. When no superuser can sign in, an
+can set two-step sign-in up again; if your role requires it, your next sign-in asks you to set it
+up. No one can reset their own from the dashboard or the API. When no superuser can sign in, an
 operator resets accounts from the command line:
 [Resetting two-step sign-in](auth-user-guide.md#resetting-two-step-sign-in).
 
@@ -59,9 +71,8 @@ two-step sign-in:
 
 - A session you already hold stays signed in until it expires, after two-step sign-in is turned
   on or off and after a reset.
-- Nothing can require two-step sign-in for a role yet.
-- Signing in with SSO (OIDC, with the `sso` module) asks for no code: only the identity provider's
-  own checks apply.
+- Signing in with SSO (OIDC, with the `sso` module) asks for no code, for a role that requires two-step sign-in
+  too: only the identity provider's own checks apply.
 - An API rolled back to a release from before the code step asks for no code either:
   [Rolling back past two-step sign-in](../deployment/rollback-runbook.md#rolling-back-past-two-step-sign-in).
 - The count of wrong passwords and codes is kept by each API process; the count of 100 wrong

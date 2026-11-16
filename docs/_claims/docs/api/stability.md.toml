@@ -1365,9 +1365,11 @@ by = [
 ]
 
 [[unit]]
-text = "POST /api/v1/auth/login, POST /api/v1/auth/token | #1812 | For an account with two-step sign-in on, the right password answers 200 with {\"mfa_required\": true, \"mfa_token\", \"enrol\": false, \"expires_in\": 300} and no access_token; the access token comes from POST /api/v1/auth/mfa/verify. Every other account gets the answer it got before. The OpenAPI document changes: each 200 answer is an anyOf that adds MfaRequiredResponse, and the descriptions say so. See Two-step sign-in."
+text = "POST /api/v1/auth/login, POST /api/v1/auth/token | #1812 | For an account with two-step sign-in on, the right password answers 200 with {\"mfa_required\": true, \"mfa_token\", \"enrol\": false, \"expires_in\": 300} and no access_token; the access token comes from POST /api/v1/auth/mfa/verify. For an account whose role LOCAL_AUTH_2FA_REQUIRED_ROLES names and that has not set it up, it answers {\"mfa_required\": true, \"mfa_token\", \"enrol\": true, \"expires_in\": 600} and no access_token; the access token comes from POST /api/v1/auth/mfa/enroll/confirm. Every other account gets the answer it got before. The OpenAPI document changes: each 200 answer is an anyOf that adds MfaRequiredResponse, and the descriptions say so. See Two-step sign-in."
 by = [
     "test:backend/tests/unit/api/test_two_factor_routes.py::test_the_password_step_answers_mfa_required_and_no_access_token",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_a_required_role_without_it_answers_enrol_and_no_access_token",
+    "test:backend/tests/integration/api/test_two_factor_required_roles_api.py::test_a_required_role_sets_it_up_at_its_first_sign_in",
     "test:backend/tests/unit/api/test_two_factor_routes.py::test_no_2fa_user_login_unchanged",
     "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_sign_in_asks_for_a_code_and_a_code_is_used_once",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",

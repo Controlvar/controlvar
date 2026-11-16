@@ -22,10 +22,12 @@ from backend.app.api.two_factor_answers import (
     NO_PENDING_SECRET_DETAIL,
     NOT_ENABLED_DETAIL,
     REFUSALS,
+    TWO_FACTOR_REQUIRED_FOR_ROLE,
     refusal_answer,
 )
 from backend.app.core.config import settings
 from backend.app.core.security import get_password_hash, unwrap_secret
+from backend.app.core.two_factor_policy import two_factor_required
 from backend.app.models.audit_log import ActionType, EntityType
 from backend.app.models.user import User, UserRole
 from backend.app.schemas.two_factor import (
@@ -754,12 +756,15 @@ def read_own_two_factor(
     """
     Whether your two-step sign-in is on, and how many recovery codes are left.
 
-    `required` is always false in this release.
+    `required` is true when your role must use two-step sign-in
+    (`LOCAL_AUTH_2FA_REQUIRED_ROLES`): it cannot be turned off, and a sign-in
+    asks you to set it up while it is off. It is false for an account that
+    signs in without a password of its own.
     """
     found = two_factor_service.status(db, current_user)
     return TwoFactorStatusResponse(
         enabled=found.enabled,
-        required=False,
+        required=two_factor_required(current_user),
         recovery_codes_remaining=found.recovery_codes_remaining,
     )
 
@@ -810,6 +815,13 @@ def confirm_own_two_factor(
     responses={
         409: {"description": NOT_ENABLED_DETAIL},
         **_TWO_FACTOR_CODE_REFUSALS,
+        403: {
+            "description": (
+                f"{WRONG_CODE_TEXT} (wrong, used or malformed); or "
+                f"{TWO_FACTOR_REQUIRED_FOR_ROLE} (LOCAL_AUTH_2FA_REQUIRED_ROLES "
+                "names your role; no code is checked or counted)"
+            )
+        },
         **_TWO_FACTOR_LOCAL_ONLY,
     },
 )
@@ -825,7 +837,14 @@ def disable_own_two_factor(
 
     Answers 204. Sign-in then asks for the password alone. A wrong code
     answers 403 and counts toward the same lockout as a wrong password.
+    When your role must use two-step sign-in (`LOCAL_AUTH_2FA_REQUIRED_ROLES`)
+    it answers 403 without checking the code; an administrator's reset is
+    the way to start again.
     """
+    if two_factor_required(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail=TWO_FACTOR_REQUIRED_FOR_ROLE
+        )
     try:
         two_factor_service.disable(
             db,

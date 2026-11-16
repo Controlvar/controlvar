@@ -1,8 +1,8 @@
-import { createHmac } from "node:crypto";
 import { type Page } from "@playwright/test";
 import { test, expect } from "./fixtures/auth.fixture";
 import { LoginPage, RATE_LIMIT_RETRY_MS } from "./pages/login.page";
 import { API_URL, BASE_URL, TOKEN_STORAGE_KEY } from "./env";
+import { currentStep, nextCode, storedAndUrl, totp } from "./totp";
 
 /**
  * Journey: two-step sign-in (#1812, U9 of PR 3), against the real API.
@@ -13,72 +13,11 @@ import { API_URL, BASE_URL, TOKEN_STORAGE_KEY } from "./env";
  * refused, the lost-device path is on the page, the right code signs in, a
  * recovery code signs in, and a superuser resets it from Admin → Users, after
  * which the password alone signs in again. The account is created and deleted
- * here, so no seeded account ever has two-step sign-in on.
- *
- * Codes: the API accepts a code once, and a code of a step no later than the
- * last one it accepted never (the replay guard), so each code is computed for
- * the step after the last one used, which the one-step window accepts.
+ * here, so no seeded account ever has two-step sign-in on. The authenticator
+ * app is ./totp.ts.
  */
 
 const RATE_LIMITED = "Too many attempts. Please wait a moment and try again.";
-
-function base32Decode(text: string): Buffer {
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-  let bits = 0;
-  let value = 0;
-  const out: number[] = [];
-  for (const char of text.replace(/=+$/, "").toUpperCase()) {
-    const index = alphabet.indexOf(char);
-    if (index < 0) throw new Error(`not base32: ${char}`);
-    value = (value << 5) | index;
-    bits += 5;
-    if (bits >= 8) {
-      out.push((value >>> (bits - 8)) & 0xff);
-      bits -= 8;
-    }
-  }
-  return Buffer.from(out);
-}
-
-/** RFC 6238, HMAC-SHA1, 6 digits, the code of 30-second step `step`. */
-function totp(secret: string, step: number): string {
-  const counter = Buffer.alloc(8);
-  counter.writeUInt32BE(Math.floor(step / 2 ** 32), 0);
-  counter.writeUInt32BE(step >>> 0, 4);
-  const digest = createHmac("sha1", base32Decode(secret)).update(counter).digest();
-  const offset = digest[digest.length - 1] & 0x0f;
-  const number = digest.readUInt32BE(offset) & 0x7fffffff;
-  return String(number % 1_000_000).padStart(6, "0");
-}
-
-function currentStep(): number {
-  return Math.floor(Date.now() / 30_000);
-}
-
-/** The code for the first step after `lastStep` that the API still accepts. */
-async function nextCode(page: Page, secret: string, lastStep: number): Promise<{ code: string; step: number }> {
-  for (;;) {
-    const now = currentStep();
-    const step = Math.max(now, lastStep + 1);
-    if (step <= now + 1) return { code: totp(secret, step), step };
-    await page.waitForTimeout(1_000);
-  }
-}
-
-/** Everything in both storages and the URL, for "the mfa_token is nowhere". */
-async function storedAndUrl(page: Page): Promise<string> {
-  const stored = await page.evaluate(() => {
-    const values: string[] = [];
-    for (const storage of [window.localStorage, window.sessionStorage]) {
-      for (let i = 0; i < storage.length; i += 1) {
-        const key = storage.key(i) as string;
-        values.push(key, storage.getItem(key) ?? "");
-      }
-    }
-    return values.join("\n");
-  });
-  return `${stored}\n${page.url()}`;
-}
 
 /**
  * The password step of an account with two-step sign-in on: it lands on the

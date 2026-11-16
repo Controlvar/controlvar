@@ -177,6 +177,18 @@
         "summary": "Get User Info"
       }
     },
+    "/api/v1/auth/mfa/enroll": {
+      "post": {
+        "operationId": "enrol_during_sign_in_api_v1_auth_mfa_enroll_post",
+        "summary": "Enrol During Sign In"
+      }
+    },
+    "/api/v1/auth/mfa/enroll/confirm": {
+      "post": {
+        "operationId": "confirm_enrolment_during_sign_in_api_v1_auth_mfa_enroll_confirm_post",
+        "summary": "Confirm Enrolment During Sign In"
+      }
+    },
     "/api/v1/auth/mfa/verify": {
       "post": {
         "operationId": "verify_mfa_api_v1_auth_mfa_verify_post",

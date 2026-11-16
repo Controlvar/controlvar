@@ -66,6 +66,11 @@ CONSUMERS = {
     "tests/sdk-contract/live/run_live_contract.py",
 }
 
+#: Directories of scripts that run against a stack (load tests): a file here
+#: that names the routes is a consumer or is named in ``NAMED``, never
+#: classified by where it is.
+NAMED_ONLY = ("backend/tests/performance/",)
+
 #: Everything else that names the routes, by where it is (first match wins).
 BY_PREFIX = (
     (MODULES_PREFIX, "the modules' files, classified by their own test"),
@@ -118,6 +123,8 @@ def _hits() -> Set[str]:
 def _class(rel: str):
     if rel in CONSUMERS:
         return "consumer"
+    if rel.startswith(NAMED_ONLY):
+        return NAMED.get(rel)
     for prefix, name in BY_PREFIX:
         if rel.startswith(prefix):
             return name
@@ -166,6 +173,38 @@ def test_the_page_names_every_password_sign_in():
     assert core_rows == CONSUMERS
 
 
+#: The first table's text for an account a test or CI stack seeds.
+SEEDED = "Seeded accounts that never turn it on"
+
+
+def _row_tables():
+    """The section's tables in order, each as ``{path: text}``."""
+    section = _section(
+        PAGE.read_text(encoding="utf-8"), "#### Password sign-ins in this repository"
+    )
+    tables = []
+    for block in re.split(r"\n\s*\n", section):
+        rows = re.findall(r"^\| `([^`]{1,200})` \| ([^|\n]{1,300}) \|$", block, re.M)
+        if rows:
+            tables.append(dict(rows))
+    return tables
+
+
+def test_each_account_that_is_not_seeded_says_what_a_required_role_does():
+    """DESIGN 11's column B: the second table names exactly the consumers whose
+    account is not a seeded one, each with what ``LOCAL_AUTH_2FA_REQUIRED_ROLES``
+    does to it. Derived from the first table, so a new consumer with an
+    account of its own fails here until it says."""
+    accounts, required = _row_tables()
+    not_seeded = {
+        path
+        for path, text in accounts.items()
+        if text != SEEDED and not path.startswith(MODULES_PREFIX)
+    }
+    assert len(not_seeded) >= 4, not_seeded
+    assert set(required) == not_seeded
+
+
 def test_each_named_path_exists():
     for rel in sorted(_table_paths()):
         if rel.startswith(MODULES_PREFIX):
@@ -175,9 +214,12 @@ def test_each_named_path_exists():
 
 @pytest.mark.regression
 def test_the_fixed_texts_are_the_apis_word_for_word():
-    """The 503, the cap's 423, a wrong code and an expired sign-in: one
-    wording in the API and on the page."""
-    from backend.app.api.two_factor_answers import SIGN_IN_EXPIRED_DETAIL
+    """The 503, the cap's 423, a wrong code, an expired sign-in and a required
+    role's refused turn-off: one wording in the API and on the page."""
+    from backend.app.api.two_factor_answers import (
+        SIGN_IN_EXPIRED_DETAIL,
+        TWO_FACTOR_REQUIRED_FOR_ROLE,
+    )
     from backend.app.services.two_factor_service import (
         CODE_STEP_LOCKED_TEXT,
         UNAVAILABLE_TEXT,
@@ -195,6 +237,7 @@ def test_the_fixed_texts_are_the_apis_word_for_word():
         "cap": CODE_STEP_LOCKED_TEXT,
         "wrong code": WRONG_CODE_TEXT,
         "expired": SIGN_IN_EXPIRED_DETAIL,
+        "required for the role": TWO_FACTOR_REQUIRED_FOR_ROLE,
     }
     missing = {name: text for name, text in texts.items() if text not in page}
     assert missing == {}
@@ -208,11 +251,14 @@ USER_GUIDE = REPO_ROOT / "docs" / "auth" / "two-factor.md"
 def test_the_dashboard_and_the_guide_use_the_apis_texts_word_for_word():
     """U7: the dashboard matches the API's refusals by their text (the cap's
     423 against the address lock's, the 503, a wrong code against an expired
-    step), so each copy in ``frontend/src/services/twoFactor.ts`` is the API's
-    constant as one literal; the user guide quotes the 503 and the cap's 423.
-    Change one wording in the API and this names the copy that did not
-    follow."""
-    from backend.app.api.two_factor_answers import SIGN_IN_EXPIRED_DETAIL
+    step, a required role's refused turn-off), so each copy in
+    ``frontend/src/services/twoFactor.ts`` is the API's constant as one
+    literal; the user guide quotes the 503 and the cap's 423. Change one
+    wording in the API and this names the copy that did not follow."""
+    from backend.app.api.two_factor_answers import (
+        SIGN_IN_EXPIRED_DETAIL,
+        TWO_FACTOR_REQUIRED_FOR_ROLE,
+    )
     from backend.app.services.two_factor_service import (
         CODE_STEP_LOCKED_TEXT,
         UNAVAILABLE_TEXT,
@@ -226,6 +272,7 @@ def test_the_dashboard_and_the_guide_use_the_apis_texts_word_for_word():
         "SIGN_IN_EXPIRED_DETAIL": SIGN_IN_EXPIRED_DETAIL,
         "CODE_STEP_LOCKED_TEXT": CODE_STEP_LOCKED_TEXT,
         "UNAVAILABLE_TEXT": UNAVAILABLE_TEXT,
+        "TWO_FACTOR_REQUIRED_FOR_ROLE": TWO_FACTOR_REQUIRED_FOR_ROLE,
     }
     missing = {name: text for name, text in dashboard.items() if text not in literals}
     assert missing == {}

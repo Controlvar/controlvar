@@ -43,9 +43,11 @@ pytestmark = [pytest.mark.unit]
 #: /tracking/visual/preview (VisualPreviewRequest) and a preview link's create
 #: (PreviewLinkCreate). #1812 added 3 to both: the bodies of /auth/mfa/verify
 #: (MfaVerifyRequest), /users/me/2fa/confirm and /recovery-codes
-#: (TwoFactorCodeRequest) and /users/me/2fa/disable (TwoFactorDisableRequest).
-CORE_MODEL_COUNT = 96
-FULL_MODEL_COUNT = 140
+#: (TwoFactorCodeRequest) and /users/me/2fa/disable (TwoFactorDisableRequest);
+#: its required roles 2 more to both: /auth/mfa/enroll (MfaEnrolRequest) and
+#: /auth/mfa/enroll/confirm (MfaEnrolConfirmRequest).
+CORE_MODEL_COUNT = 98
+FULL_MODEL_COUNT = 142
 
 #: ``(model, field)`` pairs that a ``mode="before"`` field validator covers.
 CORE_BEFORE_COUNT = 46

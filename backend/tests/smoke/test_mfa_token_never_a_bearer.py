@@ -1,9 +1,11 @@
 """The token between the two sign-in steps is never an access token (#1812).
 
 ``POST /api/v1/auth/login`` answers an account with two-step sign-in on with
-an ``mfa_token``. If any route took it as a bearer token, the code step would
-be skipped altogether. This sends every HTTP route of the application three
-ways, as the same active superuser:
+an ``mfa_token`` (the ``verify`` purpose), and an account whose role requires
+it but has not set it up with one of the ``enrol`` purpose. If any route took
+either as a bearer token, the second step would be skipped altogether. For
+each purpose, this sends every HTTP route of the application three ways, as
+the same active superuser:
 
 * with a garbage bearer token;
 * with an ``mfa_token`` minted for that account;
@@ -37,7 +39,13 @@ from fastapi.testclient import TestClient
 from backend.app.api import deps
 from backend.app.api.v1.endpoints import websocket_results
 from backend.app.core.config import settings
-from backend.app.core.mfa_token import create_mfa_token
+from backend.app.core.mfa_token import (
+    ENROL_PURPOSE,
+    ENROL_TTL_SECONDS,
+    VERIFY_PURPOSE,
+    VERIFY_TTL_SECONDS,
+    create_mfa_token,
+)
 from backend.app.core.security import create_local_access_token
 from backend.app.db import session as session_module
 from backend.app.main import app
@@ -99,6 +107,14 @@ def _answer(response):
     return response.status_code, response.headers.get("www-authenticate"), body
 
 
+#: Each purpose an mfa_token is issued for, with its lifetime.
+PURPOSES = {VERIFY_PURPOSE: VERIFY_TTL_SECONDS, ENROL_PURPOSE: ENROL_TTL_SECONDS}
+
+
+def _mfa_token(account: User, purpose: str) -> str:
+    return create_mfa_token(account, purpose=purpose, ttl_seconds=PURPOSES[purpose])
+
+
 @pytest.fixture
 def account():
     return _account()
@@ -134,8 +150,9 @@ def _send(client, method, path, token):
     )
 
 
-def test_mfa_token_never_a_bearer(client, account):
-    mfa_token = create_mfa_token(account)
+@pytest.mark.parametrize("purpose", sorted(PURPOSES))
+def test_mfa_token_never_a_bearer(client, account, purpose):
+    mfa_token = _mfa_token(account, purpose)
     routes = _http_routes()
     assert len(routes) >= 150, len(routes)
     taken = {}
@@ -156,7 +173,8 @@ def test_the_real_token_gets_in_where_garbage_does_not(client, account):
     assert real.json()["email"] == account.email
 
 
-def test_the_results_websocket_refuses_an_mfa_token(monkeypatch, account):
+@pytest.mark.parametrize("purpose", sorted(PURPOSES))
+def test_the_results_websocket_refuses_an_mfa_token(monkeypatch, account, purpose):
     """The WebSocket's own check (``get_current_user`` on its token)."""
     monkeypatch.setattr(settings, "AUTH_PROVIDER", "local")
     monkeypatch.setattr(settings, "DEV_AUTH_BYPASS", False)
@@ -165,7 +183,7 @@ def test_the_results_websocket_refuses_an_mfa_token(monkeypatch, account):
     db = _session_answering(account)
 
     refused = websocket_results._admit_websocket(
-        socket, token=create_mfa_token(account), db=db
+        socket, token=_mfa_token(account, purpose), db=db
     )
     admitted = websocket_results._admit_websocket(
         socket, token=create_local_access_token(account), db=db
@@ -175,13 +193,14 @@ def test_the_results_websocket_refuses_an_mfa_token(monkeypatch, account):
     assert admitted is None
 
 
-def test_get_current_user_refuses_an_mfa_token(monkeypatch, account):
+@pytest.mark.parametrize("purpose", sorted(PURPOSES))
+def test_get_current_user_refuses_an_mfa_token(monkeypatch, account, purpose):
     monkeypatch.setattr(settings, "AUTH_PROVIDER", "local")
     monkeypatch.setattr(settings, "DEV_AUTH_BYPASS", False)
     monkeypatch.setattr(settings, "ENVIRONMENT", "test")
     db = _session_answering(account)
     with pytest.raises(Exception) as refused:
-        deps.get_current_user(token=create_mfa_token(account), db=db)
+        deps.get_current_user(token=_mfa_token(account, purpose), db=db)
     assert getattr(refused.value, "status_code", None) == 401
     assert deps.get_current_user(token=create_local_access_token(account), db=db) is (
         account

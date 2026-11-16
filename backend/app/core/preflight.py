@@ -16,7 +16,9 @@ What it refuses:
   environment name the settings do not know, or ``test``, which is the test
   runner's environment and not one the image runs in.  The image requires
   ENVIRONMENT to be set.  Also an ``ALLOWED_HOSTS`` entry that can never match
-  (``*example.com``), which the settings refuse in every environment, and a
+  (``*example.com``), which the settings refuse in every environment, a
+  ``LOCAL_AUTH_2FA_REQUIRED_ROLES`` entry that is not a role name (``admin``,
+  ``ADMIN,``; the settings refuse it in every environment too), and a
   ``FORWARDED_ALLOW_IPS`` entry that is not an IP address or a network written
   with its host bits zero, or is ``*`` (``proxy_trust.entry_problems``, one
   line per entry; read from the process environment only, as the entrypoint
@@ -59,6 +61,7 @@ from backend.app.core.settings_rules import (
     MIN_SECRET_KEY_LENGTH,
     MIN_SUPERUSER_PASSWORD_LENGTH,
     PUBLIC_BASE_URL_EXAMPLE,
+    TWO_FACTOR_ROLES_SETTING,
     allowed_host_pattern_error,
     canonical_environment_quiet,
     credential_keys_error,
@@ -67,6 +70,7 @@ from backend.app.core.settings_rules import (
     secret_is_weak,
     superuser_password_is_weak,
     testing_refusal,
+    two_factor_roles_error,
 )
 
 #: ``EX_CONFIG`` from sysexits.h: "something was found in an unconfigured or
@@ -201,6 +205,12 @@ def check(
         error = allowed_host_pattern_error(pattern)
         if error:
             problems.append(error)
+
+    # LOCAL_AUTH_2FA_REQUIRED_ROLES, in every environment: an entry that is not
+    # a role, which the settings refuse in every environment too.
+    roles_error = two_factor_roles_error(value(TWO_FACTOR_ROLES_SETTING))
+    if roles_error:
+        problems.append(roles_error)
 
     # FORWARDED_ALLOW_IPS, in every environment: an entry uvicorn would keep
     # as a literal that no peer address equals, and `*`. The process
