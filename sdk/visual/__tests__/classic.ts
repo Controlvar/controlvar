@@ -21,10 +21,20 @@ export interface ClassicPage {
   close(): void;
 }
 
+/** A stand-in for fetch's Response: what the script reads of one. */
+export interface Answer {
+  status: number;
+  body?: unknown;
+}
+
+/** Answers each request; undefined leaves it pending for ever. */
+export type Responder = (call: FetchCall) => Answer | undefined;
+
 export function runClassic(
   url: string,
   attributes: Record<string, string> = {},
   setup: (window: Window & typeof globalThis) => void = () => undefined,
+  respond: Responder = () => undefined,
 ): ClassicPage {
   const messages: string[] = [];
   const virtualConsole = new VirtualConsole();
@@ -40,8 +50,16 @@ export function runClassic(
   const window = dom.window as unknown as Window & typeof globalThis;
   const fetches: FetchCall[] = [];
   (window as unknown as { fetch: unknown }).fetch = (input: string, init: RequestInit) => {
-    fetches.push({ url: String(input), init });
-    return new window.Promise<Response>(() => undefined);
+    const call = { url: String(input), init };
+    fetches.push(call);
+    const answer = respond(call);
+    if (answer === undefined) return new window.Promise<Response>(() => undefined);
+    const text = JSON.stringify(answer.body ?? null);
+    return window.Promise.resolve({
+      ok: answer.status >= 200 && answer.status < 300,
+      status: answer.status,
+      json: () => window.Promise.resolve(window.JSON.parse(text)),
+    });
   };
   setup(window);
   const script = window.document.createElement('script');

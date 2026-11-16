@@ -212,7 +212,10 @@ test.describe("a fragment that is not an exact editor link", () => {
   ];
   for (const [name, value] of cases) {
     test(`is left alone: ${name}`, async ({ page, visualPackage }) => {
-      const site = await routeSite(page, visualPackage, { pages: { "/a/b": html(snippet()) } });
+      // Before consent nothing else sends either, so any request is the link's.
+      const site = await routeSite(page, visualPackage, {
+        pages: { "/a/b": html(snippet({ "data-require-consent": true })) },
+      });
       const url = `${SITE}${PATH}#controlvar-editor=${value(newTicket())}`;
       await page.goto(url, { waitUntil: "networkidle" });
       expect(site.api.length, `${name}: requests`).toBe(0);

@@ -59,7 +59,17 @@ describe('the sources', () => {
 describe('the send function', () => {
   const calls: string[] = [];
   const captures = { fetch: (url: string) => (calls.push(url), Promise.resolve({} as Response)) } as unknown as Captures;
-  const config: Config = { apiUrl: 'https://cv.example', apiKey: 'k', editorOrigin: null, requireConsent: true };
+  const config: Config = {
+    apiUrl: 'https://cv.example',
+    apiKey: 'k',
+    editorOrigin: null,
+    requireConsent: true,
+    timeoutMs: 1000,
+    userId: null,
+    cookieName: 'controlvar_uid',
+    attributes: null,
+    warnings: [],
+  };
   const storage = (backoff: string | null) => ({ getItem: () => backoff }) as unknown as Storage;
 
   beforeEach(() => {

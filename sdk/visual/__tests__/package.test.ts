@@ -1,7 +1,7 @@
 /**
  * What the package is and what its build writes: the classic script a site
- * loads with <script src>, and the ESM entry. The build runs once, here, from
- * package.json's own build script.
+ * loads with <script src>, and the ESM entry. The build runs once, before
+ * every test file (jest's globalSetup), from package.json's own build script.
  */
 import { execFileSync } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
@@ -14,8 +14,9 @@ const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
 const ESM = join(ROOT, 'dist', 'index.mjs');
 const TAG = { 'data-api-url': 'https://cv.example', 'data-api-key': 'test-website-key' };
 
-beforeAll(() => {
-  execFileSync('npm', ['run', '--silent', 'build'], { cwd: ROOT, stdio: 'pipe' });
+test("jest builds dist/ once, before every test file, from package.json's build script", () => {
+  expect(pkg.jest.globalSetup).toBe('<rootDir>/scripts/test-build.js');
+  expect(readFileSync(join(ROOT, 'scripts', 'test-build.js'), 'utf8')).toContain('["run", "--silent", "build"]');
 });
 
 describe('the package', () => {

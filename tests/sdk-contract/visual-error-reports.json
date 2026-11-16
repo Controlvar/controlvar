@@ -1,0 +1,41 @@
+{
+  "description": "The error reports the visual script (sdk/visual) sends to POST /api/v1/tracking/errors, each with exactly these keys. A report never carries feature_flag_key, user_id, the page's address or its text, so it never counts toward a feature flag. At most 5 reports per page view, all types together. `sent` says whether this version of the script sends the type.",
+  "endpoint": "/api/v1/tracking/errors",
+  "request_keys": ["error_type", "experiment_key", "message", "metadata"],
+  "max_per_page_view": 5,
+  "types": [
+    {
+      "error_type": "visual_change_not_applied",
+      "sent": true,
+      "metadata_keys": ["index", "reason"],
+      "index": "The change's position in the variant's changes, from 0; null when the whole experiment was skipped.",
+      "reasons": {
+        "invalid": "The variant's changes, or this change, failed the script's check, or the browser could not read its selector. The whole experiment is skipped when the changes fail.",
+        "unsupported_operation": "A change uses an operation this version of the script does not know. The whole experiment is skipped.",
+        "not_found": "The selector matched no element.",
+        "ambiguous": "The selector matched more than one element.",
+        "not_allowed": "The selector matched an element the script never changes this way (a script, style, frame or form element, or an element outside HTML).",
+        "reapply_limit": "The page kept undoing the change, and the script stopped re-applying it.",
+        "replaced_after_bound": "The page replaced the changed element after the script had stopped watching."
+      }
+    },
+    {
+      "error_type": "own_ui",
+      "sent": false,
+      "metadata_keys": ["index"],
+      "index": "The change's position in the variant's changes, from 0."
+    },
+    {
+      "error_type": "goal_not_found",
+      "sent": false,
+      "metadata_keys": null,
+      "index": null
+    },
+    {
+      "error_type": "goal_ambiguous",
+      "sent": false,
+      "metadata_keys": null,
+      "index": null
+    }
+  ]
+}

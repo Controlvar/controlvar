@@ -3,23 +3,16 @@
  * claim request and the panel frame. The browser tests (frontend/tests/e2e/
  * runtime) cover the hand-over and what later scripts can read.
  */
-import { execFileSync } from 'child_process';
 import { randomBytes } from 'crypto';
-import { join } from 'path';
 import { base64url } from '../src/base64url';
 import { runClassic } from './classic';
 
-const ROOT = join(__dirname, '..');
 const TAG = {
   'data-api-url': 'https://cv.example/',
   'data-api-key': 'test-website-key',
   'data-editor-origin': 'https://dash.example',
 };
 const PAGE = 'https://shop.example/a/b?x=1';
-
-beforeAll(() => {
-  execFileSync('npm', ['run', '--silent', 'build'], { cwd: ROOT, stdio: 'pipe' });
-});
 
 const ticket = () => randomBytes(32).toString('base64url');
 
@@ -102,7 +95,8 @@ describe('any other fragment', () => {
     const url = `${PAGE}#controlvar-editor=${make(ticket())}`;
     const page = runClassic(url, TAG);
     expect(page.window.location.href).toBe(url);
-    expect(page.fetches).toEqual([]);
+    // An ordinary page view: the only request is the one for the page's changes.
+    expect(page.fetches.map((call) => new URL(call.url).pathname)).toEqual(['/api/v1/tracking/visual']);
     expect(page.window.document.querySelectorAll('iframe').length).toBe(0);
     page.close();
   });

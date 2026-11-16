@@ -17,6 +17,11 @@ export interface Captures {
   messageData(event: MessageEvent): unknown;
   messageOrigin(event: MessageEvent): string;
   messageSource(event: MessageEvent): unknown;
+  /** CSSStyleDeclaration's methods, so a page that replaces them cannot keep itself hidden. */
+  setProperty(style: CSSStyleDeclaration, name: string, value: string, priority: string): void;
+  removeProperty(style: CSSStyleDeclaration, name: string): string;
+  getPropertyValue(style: CSSStyleDeclaration, name: string): string;
+  getPropertyPriority(style: CSSStyleDeclaration, name: string): string;
 }
 
 type Getter<T, R> = (target: T) => R;
@@ -30,7 +35,12 @@ export function capture(win: Window & typeof globalThis): Captures {
     }
     return call.bind(descriptor.get) as Getter<T, R>;
   }
+  const style = win.CSSStyleDeclaration.prototype;
   return {
+    setProperty: call.bind(style.setProperty) as Captures["setProperty"],
+    removeProperty: call.bind(style.removeProperty) as Captures["removeProperty"],
+    getPropertyValue: call.bind(style.getPropertyValue) as Captures["getPropertyValue"],
+    getPropertyPriority: call.bind(style.getPropertyPriority) as Captures["getPropertyPriority"],
     replaceState: win.History.prototype.replaceState.bind(win.history),
     getRandomValues: win.Crypto.prototype.getRandomValues.bind(win.crypto) as Captures["getRandomValues"],
     fetch: win.fetch.bind(win),

@@ -117,9 +117,14 @@ def _source(rel: str) -> str:
 
 
 #: Directories under sdk/ that are not SDKs and send no event, with where their
-#: source is: the MCP server reads flags, experiments and results only, and the
-#: visual experiments' browser script (#1545) does not send events yet.
-NOT_AN_SDK = {"mcp": "sdk/mcp/src", "visual": "sdk/visual/src"}
+#: source is: the MCP server reads flags, experiments and results only.
+NOT_AN_SDK = {"mcp": "sdk/mcp/src"}
+
+#: The visual experiments' browser script (#1545): not an SDK, and its events
+#: (``track()``) go to ``/tracking/batch`` only. It also asks for a page's
+#: changes and reports the ones it could not apply.
+VISUAL_SOURCE = "sdk/visual/src"
+VISUAL_ROUTE_LITERAL = re.compile(r"""["']/api/v1/tracking/([a-z_/]+)["']""")
 
 
 def test_every_sdk_directory_is_listed():
@@ -129,7 +134,14 @@ def test_every_sdk_directory_is_listed():
         for p in SDK.iterdir()
         if p.is_dir() and not p.name.startswith((".", "__"))
     )
-    assert found == sorted([*SDK_SOURCES, *NOT_AN_SDK])
+    assert found == sorted([*SDK_SOURCES, *NOT_AN_SDK, "visual"])
+
+
+def test_the_visual_script_sends_events_through_batch_only():
+    """Its quoted tracking routes are exactly the page's changes, the error
+    reports and the batch route: never /tracking/track or /tracking/events."""
+    routes = set(VISUAL_ROUTE_LITERAL.findall(_source(VISUAL_SOURCE)))
+    assert routes == {"visual", "errors", "batch"}, f"visual has quoted routes {routes}"
 
 
 @pytest.mark.parametrize("name", sorted(NOT_AN_SDK))
