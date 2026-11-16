@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { Browser } from "@playwright/test";
 import { expect, test as launchTest } from "../fixtures/launch.fixture";
 
 /**
@@ -54,7 +55,59 @@ function loadVisualPackage(): VisualPackage {
   };
 }
 
-export const test = launchTest.extend<object, { visualPackage: VisualPackage }>({
+const SENTINEL_PAGE = `<!doctype html><html><head><meta charset="utf-8"><title>sentinel</title>
+<script src="/controlvar-visual.js" data-api-url="${SITE_ORIGIN}" data-api-key="test-website-key"></script>
+</head><body><p id="sentinel">Original</p></body></html>`;
+
+const SENTINEL_ANSWER = {
+  experiments: [
+    {
+      experiment_key: "sentinel",
+      variant_id: "v1",
+      variant_name: "B",
+      assigned: true,
+      reason: "assigned",
+      changes: { version: 1, changes: [{ op: "set_text", selector: "#sentinel", text: "Changed" }] },
+      goals: [],
+    },
+  ],
+  pages: { host: "localhost", rules: [{ match: "exact", path: "/sentinel" }], max_age: 60 },
+};
+
+/**
+ * After every test, in a fresh browser context: the packed script loads, its
+ * version is the packed package.json's, and it applies a sentinel change. A
+ * test whose own page shows nothing (a script that never loaded, say) cannot
+ * pass while the script is broken.
+ */
+async function positiveControl(browser: Browser, visualPackage: VisualPackage): Promise<void> {
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    await page.route(`${SITE_ORIGIN}/**`, async (route) => {
+      const { pathname } = new URL(route.request().url());
+      if (pathname === "/controlvar-visual.js") {
+        await route.fulfill({ contentType: "text/javascript", body: visualPackage.classicScript });
+      } else if (pathname === "/sentinel") {
+        await route.fulfill({ contentType: "text/html", body: SENTINEL_PAGE });
+      } else if (pathname === "/api/v1/tracking/visual") {
+        await route.fulfill({ contentType: "application/json", body: JSON.stringify(SENTINEL_ANSWER) });
+      } else {
+        await route.fulfill({ status: 404, body: "" });
+      }
+    });
+    await page.goto(`${SITE_ORIGIN}/sentinel`);
+    await expect(page.locator("#sentinel"), "sentinel").toHaveText("Changed");
+    const version = await page.evaluate(
+      () => (window as unknown as { controlvar?: { visual?: { version?: string } } }).controlvar?.visual?.version,
+    );
+    expect(version, "the packed script's version").toBe(visualPackage.version);
+  } finally {
+    await context.close();
+  }
+}
+
+export const test = launchTest.extend<{ positiveControl: void }, { visualPackage: VisualPackage }>({
   visualPackage: [
     // Playwright reads a fixture's dependencies from this pattern; it has none.
     // eslint-disable-next-line no-empty-pattern
@@ -62,6 +115,13 @@ export const test = launchTest.extend<object, { visualPackage: VisualPackage }>(
       await use(loadVisualPackage());
     },
     { scope: "worker" },
+  ],
+  positiveControl: [
+    async ({ browser, visualPackage }, use) => {
+      await use();
+      await positiveControl(browser, visualPackage);
+    },
+    { auto: true },
   ],
 });
 

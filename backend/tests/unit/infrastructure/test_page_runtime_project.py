@@ -304,6 +304,27 @@ def runtime_spec_problems(spec_dir: Path, launch_fixture: Path) -> list[str]:
     return problems
 
 
+def test_the_sdk_contract_job_runs_the_visual_vector_test() -> None:
+    """V7's CI half: SDK Contract Tests runs the script against every vector,
+    with nothing that could let a failure through."""
+    workflow = yaml.safe_load(PR_QA_GATE.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["sdk-contracts"]["steps"]
+    hits = [s for s in steps if "__tests__/validate.test.ts" in s.get("run", "")]
+    assert len(hits) == 1, (
+        f"sdk-contracts has {len(hits)} steps running the visual vector test"
+    )
+    step = hits[0]
+    assert step.get("working-directory") == "sdk/visual"
+    assert _commands(step) == [
+        "npm ci --no-audit --no-fund",
+        "npx jest --ci __tests__/validate.test.ts",
+    ]
+    assert "if" not in step and not step.get("continue-on-error")
+    assert "validate.test.ts" in {
+        p.name for p in (REPO_ROOT / "sdk" / "visual" / "__tests__").iterdir()
+    }
+
+
 def test_every_runtime_spec_imports_test_from_the_launch_fixture() -> None:
     assert LAUNCH_FIXTURE.is_file()
     assert "export const test = base.extend" in LAUNCH_FIXTURE.read_text(

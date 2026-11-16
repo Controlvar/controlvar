@@ -75,6 +75,15 @@ export interface SiteOptions {
   files?: Record<string, { body: string | Buffer; contentType: string }>;
   /** Hold the claim request until releaseClaim(). */
   holdClaim?: boolean;
+  /** Answers every API request except the claim; without it they get 404. */
+  answer?: (call: ApiCall) => ApiAnswer | Promise<ApiAnswer>;
+  /** Extra response headers for the pages (a Content-Security-Policy, say). */
+  pageHeaders?: Record<string, string>;
+}
+
+export interface ApiAnswer {
+  status: number;
+  body?: unknown;
 }
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -106,10 +115,19 @@ export async function routeSite(page: Page, visualPackage: VisualPackage, option
       } catch {
         // not JSON: kept as text
       }
-      api.push({ url: request.url(), path: pathname, headers: await request.allHeaders(), body });
+      const call = { url: request.url(), path: pathname, headers: await request.allHeaders(), body };
+      api.push(call);
       if (pathname === CLAIM_PATH) {
         await held;
         await route.fulfill({ status: 201, contentType: "application/json", body: "{}" });
+      } else if (options.answer) {
+        const answer = await options.answer(call);
+        await route.fulfill({
+          status: answer.status,
+          contentType: "application/json",
+          headers: { "Access-Control-Allow-Origin": "*" },
+          body: JSON.stringify(answer.body ?? {}),
+        });
       } else {
         await route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
       }
@@ -121,7 +139,7 @@ export async function routeSite(page: Page, visualPackage: VisualPackage, option
     }
     const pageBody = options.pages[pathname];
     if (pageBody !== undefined) {
-      await route.fulfill({ contentType: contentType(".html"), body: pageBody });
+      await route.fulfill({ contentType: contentType(".html"), headers: options.pageHeaders, body: pageBody });
       return;
     }
     const file = options.files?.[pathname];
