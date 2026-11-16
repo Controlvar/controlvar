@@ -260,6 +260,30 @@ def test_the_arms_get_the_planted_direction():
         ({"assign_batch_size": 1001}, "assign_batch_size"),
         ({"event_batch_size": 101}, "event_batch_size"),
         ({"users": 0}, "at least one user"),
+        (
+            {"balance": g.Balance("country", ("US",), (g.Cohort("US", {}, 399),))},
+            "add up to the scenario's users",
+        ),
+        (
+            {
+                "balance": g.Balance(
+                    "country",
+                    ("US",),
+                    (g.Cohort("US", {"c": 1}, 200), g.Cohort("other", {"c": 1}, 200)),
+                )
+            },
+            "the same context",
+        ),
+        (
+            {
+                "balance": g.Balance(
+                    "country",
+                    ("US",),
+                    (g.Cohort("US", {}, 400), g.Cohort("other", {"c": 1}, 0)),
+                )
+            },
+            "at least one user",
+        ),
     ],
 )
 def test_a_scenario_the_api_cannot_take_is_refused(change, message):

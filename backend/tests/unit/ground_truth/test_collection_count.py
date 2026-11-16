@@ -37,14 +37,15 @@ LIBRARY_ROOT = REPO_ROOT / "tests" / "ground_truth"
 
 #: test node id count per module, as ``pytest --collect-only -q`` lists them.
 EXPECTED = {
+    "test_balanced_gates.py": 9,
     "test_collection_count.py": 4,
     "test_contract.py": 38,
     "test_contract_citations.py": 32,
-    "test_driver.py": 21,
+    "test_driver.py": 23,
     "test_fault_gates.py": 57,
     "test_fault_library.py": 135,
     "test_flag_rollout_use_cases.py": 2,
-    "test_generator.py": 21,
+    "test_generator.py": 24,
     "test_hashing.py": 23,
     "test_independence.py": 3,
     "test_ledger.py": 66,
@@ -126,14 +127,25 @@ REPLAY_SUITE = [
     *(f"test_faults.py::{test}[{fault}]" for test, fault in FAULT_GATES.items()),
     "test_replay.py::test_g6_the_replay_runs_the_core_profile",
     *(
-        f"test_replay.py::{test}[{scenario}]"
+        f"test_replay.py::test_g0_every_assignment_answer_is_o_assign[{scenario}]"
         for scenario in ("S1", "S2", "S3", "S4")
+    ),
+    *(
+        f"test_replay.py::{test}[S5]"
         for test in (
-            "test_g0_every_assignment_answer_is_o_assign",
+            "test_g0b1_each_group_is_balanced_at_every_prefix",
+            "test_g0b2_a_returning_user_keeps_their_variant",
+            "test_g0b3_the_server_s_groups_are_the_ledger_s",
+        )
+    ),
+    *(
+        f"test_replay.py::{test}[{scenario}]"
+        for test in (
             "test_g1_counts_and_means_equal_the_ledger",
             "test_g2_statistics_equal_the_reference",
             "test_z_no_answer_is_a_5xx",
         )
+        for scenario in ("S1", "S2", "S3", "S4", "S5")
     ),
 ]
 
