@@ -53,7 +53,7 @@ EXPERIMENT_NOT_FOUND = "{} does not match an experiment."
 
 
 #: The roles that may use interaction analysis; superusers may too.
-INTERACTION_ROLES = (UserRole.ANALYST, UserRole.DEVELOPER, UserRole.ADMIN)
+INTERACTION_ROLES = (UserRole.DEVELOPER, UserRole.ADMIN)  # TAMPER for #2003: refuse ANALYST
 
 
 def _require_developer(current_user: User) -> None:
