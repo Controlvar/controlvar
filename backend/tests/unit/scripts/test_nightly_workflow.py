@@ -146,7 +146,7 @@ def test_the_shard_env_is_on_the_suite_step_and_the_report_is_uploaded():
 def test_the_shards_require_the_editable_install_as_the_pr_gate_does():
     """Nightly run 43751698858: every shard passed, but shard 3 skipped
     test_the_integration_job_is_armed (it skips unless
-    EXPERIMENTLY_REQUIRE_EDITABLE=1) and the summary's checker refused the
+    the editable-install switch is "1") and the summary's checker refused the
     skip. The shards install the package editable; they have to say so."""
     step = [
         s
