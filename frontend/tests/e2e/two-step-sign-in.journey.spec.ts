@@ -170,7 +170,6 @@ test.describe("Journey: two-step sign-in", () => {
         const currentPassword = page.getByLabel("Current password");
         await expect(currentPassword).toHaveAttribute("type", "password");
         await expect(currentPassword).toHaveAttribute("autocomplete", "current-password");
-        await currentPassword.fill(password);
         const enrolled = page.waitForResponse(
           (r) => new URL(r.url()).pathname === "/api/v1/users/me/2fa/enroll" && r.request().method() === "POST",
         );
