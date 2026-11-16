@@ -1249,7 +1249,7 @@ def _frozen() -> Dict[str, str]:
 COUNTS = {
     "allowed": 2580,
     "chars": 0,
-    "location": 437,
+    "location": 432,
     "dot": 14,
     "scripts": 79,
     "claims": 125,
@@ -1262,7 +1262,7 @@ COUNTS = {
 
 def test_the_frozen_list_counts_are_exact():
     files = _frozen()
-    assert len(files) == sum(COUNTS.values()) == 3389
+    assert len(files) == sum(COUNTS.values()) == 3384
     tree = dict(files)
     for path in files:
         tree.update({d: "040000" for d in cg._prefixes(path) if d != path})
