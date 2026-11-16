@@ -12,8 +12,9 @@ use Controlvar\Errors\ExperimentationException;
  * Flag evaluation and experiment assignment are decided by the server; the SDK
  * never buckets users locally. Successful results are cached per user + key for
  * SdkConfig::$cacheTtl seconds (within the current request); failures are never cached.
+ * A cached flag evaluation answers only a call with the same attributes.
  *
- *   - evaluateFlag   : GET  /api/v1/feature-flags/evaluate/{key}?user_id=...
+ *   - evaluateFlag   : GET  /api/v1/feature-flags/evaluate/{key}?user_id=...&context=...
  *   - getAssignment  : POST /api/v1/tracking/assign   (sticky on the server)
  *   - track          : POST /api/v1/tracking/track    (with a key)
  *                      POST /api/v1/tracking/batch    (fan-out without a key)
@@ -53,17 +54,26 @@ class ExperimentationClient
      * Evaluate a feature flag for the given user. The server decides.
      *
      * On a network/HTTP failure (including 404 for an unknown flag key) the
-     * flag is reported as disabled; a cached evaluation, when present, is
-     * returned instead. A flag that is not ACTIVE is a normal answer with
-     * enabled false. Never throws.
+     * flag is reported as disabled; a cached evaluation for the same user, key
+     * and attributes, when present, is returned instead. A flag that is not
+     * ACTIVE is a normal answer with enabled false. Attributes that cannot be
+     * written as JSON send nothing and report the flag as disabled. Never throws.
      *
-     * @param string $flagKey Feature flag key (e.g. 'dark-mode')
-     * @param string $userId  Stable user identifier
+     * @param string $flagKey    Feature flag key (e.g. 'dark-mode')
+     * @param string $userId     Stable user identifier
+     * @param array  $attributes User attributes, sent as `context` (compact JSON) so the
+     *                           flag's targeting rules match against them; an empty array
+     *                           sends no `context`
      */
-    public function evaluateFlag(string $flagKey, string $userId): FlagEvaluation
+    public function evaluateFlag(string $flagKey, string $userId, array $attributes = []): FlagEvaluation
     {
+        $context = self::flagContext($attributes);
+        if ($context === null) {
+            return FlagEvaluation::disabled($flagKey);
+        }
+
         $cacheKey = $this->flagCacheKey($userId, $flagKey);
-        $cached   = $this->cache->get($cacheKey);
+        $cached   = $this->cache->get($cacheKey, $context);
         if ($cached instanceof FlagEvaluation) {
             return $cached;
         }
@@ -71,6 +81,9 @@ class ExperimentationClient
         try {
             $path = '/api/v1/feature-flags/evaluate/' . rawurlencode($flagKey)
                 . '?user_id=' . rawurlencode($userId);
+            if ($context !== '') {
+                $path .= '&context=' . rawurlencode($context);
+            }
             $data = $this->httpClient->get($path);
         } catch (ExperimentationException) {
             return FlagEvaluation::disabled($flagKey);
@@ -81,17 +94,19 @@ class ExperimentationClient
             enabled: ($data['enabled'] ?? false) === true,
             config: $data['config'] ?? null,
         );
-        $this->cache->set($cacheKey, $evaluation);
+        $this->cache->set($cacheKey, $evaluation, null, $context);
 
         return $evaluation;
     }
 
     /**
      * Boolean convenience around evaluateFlag(). false on any failure.
+     *
+     * @param array $attributes User attributes, sent as `context` like evaluateFlag() does
      */
-    public function isFeatureEnabled(string $flagKey, string $userId): bool
+    public function isFeatureEnabled(string $flagKey, string $userId, array $attributes = []): bool
     {
-        return $this->evaluateFlag($flagKey, $userId)->enabled;
+        return $this->evaluateFlag($flagKey, $userId, $attributes)->enabled;
     }
 
     /**
@@ -301,6 +316,31 @@ class ExperimentationClient
     private function assignmentCacheKey(string $userId, string $experimentKey): string
     {
         return self::userPrefix('assignment', $userId) . $experimentKey;
+    }
+
+    /**
+     * The attributes as the compact JSON sent as a flag evaluation's `context`:
+     * '' when there are none to send, and null when they cannot be written as JSON
+     * (NAN or INF, a string that is not valid UTF-8, a value the encoder refuses, ...).
+     *
+     * The (object) cast makes a list-shaped array an object, never a JSON array, which
+     * the server refuses with a 422. The encoder's error is dropped, not chained or
+     * logged, because its text can quote a value.
+     */
+    private static function flagContext(array $attributes): ?string
+    {
+        if ($attributes === []) {
+            return '';
+        }
+
+        try {
+            return json_encode(
+                (object) $attributes,
+                JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR
+            );
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**

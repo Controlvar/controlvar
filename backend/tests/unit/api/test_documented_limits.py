@@ -539,6 +539,13 @@ SENDS = {
         ],
         'query["context"]',
     ),
+    # Part of #1720: the attributes as compact JSON, through rawurlencode, the
+    # encoder user_id already goes through.
+    "php": (
+        "sdk/php/src/ExperimentationClient.php",
+        [("public function evaluateFlag(", "} catch (ExperimentationException) {")],
+        "'&context=' . rawurlencode($context)",
+    ),
 }
 
 #: Every directory under sdk/ whose flag evaluation sends the user id alone, so
@@ -550,11 +557,6 @@ DOES_NOT_SEND = {
         1720,
         "sdk/ruby/lib/controlvar/client.rb",
         [("def evaluate_flag(", "data = {} unless data.is_a?(Hash)")],
-    ),
-    "php": (
-        1720,
-        "sdk/php/src/ExperimentationClient.php",
-        [("public function evaluateFlag(", "} catch (ExperimentationException) {")],
     ),
     "elixir": (
         1720,
