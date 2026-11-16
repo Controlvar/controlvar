@@ -28,9 +28,10 @@ import { launchOptions } from "./tests/e2e/launch";
  *     (`*.runtime.spec.ts`, #1545), under the same launch override as
  *     `launch`. Its specs load the script from the packed package, so they
  *     need VISUAL_PACKAGE_DIR: the `package/` directory of sdk/visual's
- *     `npm pack` tarball, unpacked (see tests/e2e/runtime/runtime.fixture.ts).
- *     Browser E2E runs it after the journeys and checks its counts; no other
- *     workflow step does.
+ *     `npm pack` tarball, unpacked (see tests/e2e/runtime/runtime.fixture.ts),
+ *     and the framework sites under tests/e2e/runtime/fixtures built (`node
+ *     tests/e2e/runtime/fixtures/build.mjs`). Browser E2E runs it after the
+ *     journeys and checks its counts; no other workflow step does.
  *   - `extended` — everything else under tests/e2e (accessibility and the
  *     older specs); nightly territory, not a PR gate, but a failure there
  *     fails the night.

@@ -115,6 +115,31 @@ def test_browser_e2e_runs_the_project_with_a_listing_and_a_json_report() -> None
     assert run > pack, "the page-runtime run comes before the script is packed"
 
 
+def test_browser_e2e_builds_the_framework_fixtures_before_the_run() -> None:
+    """The App Router site's static export is built where the specs read it,
+    after the packed script and before the run."""
+    steps = _browser_e2e_steps()
+    pack = _one_step(steps, "npm pack", "packs sdk/visual")
+    build = _one_step(
+        steps, "node tests/e2e/runtime/fixtures/build.mjs", "builds the fixtures"
+    )
+    run = _one_step(
+        steps,
+        "npx playwright test --project=page-runtime --reporter=",
+        "runs --project=page-runtime",
+    )
+    assert _commands(steps[build]) == [
+        "cd frontend && node tests/e2e/runtime/fixtures/build.mjs"
+    ]
+    assert pack < build < run, (pack, build, run)
+    script = (SPEC_DIR / "runtime" / "fixtures" / "build.mjs").read_text(
+        encoding="utf-8"
+    )
+    assert 'export const FIXTURES = ["app-router"];' in script
+    for name in ("app-router",):
+        assert (SPEC_DIR / "runtime" / "fixtures" / name / "next.config.mjs").is_file()
+
+
 def test_the_counts_are_checked_after_the_run() -> None:
     steps = _browser_e2e_steps()
     run = _one_step(
@@ -135,6 +160,7 @@ def test_no_page_runtime_step_can_be_skipped_or_ignored() -> None:
     steps = _browser_e2e_steps()
     for needle in (
         "npm pack",
+        "node tests/e2e/runtime/fixtures/build.mjs",
         "--project=page-runtime",
         "scripts/check_page_runtime_run.py",
     ):
