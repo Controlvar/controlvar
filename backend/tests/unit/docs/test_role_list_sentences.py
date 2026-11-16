@@ -249,6 +249,15 @@ CLASS_B: Dict[Tuple[str, str], str] = {
         "docs/api/interaction-detection.md",
         "`Interaction analysis needs the ANALYST, DEVELOPER or ADMIN role.` |",
     ): "interaction analysis stays with the built-in role",
+    # #1960: the interactions page's role note and the user guide's line.
+    (
+        "frontend/src/utils/interactions.ts",
+        "Interaction analysis needs the ANALYST, DEVELOPER or ADMIN role'",
+    ): "interaction analysis stays with the built-in role",
+    (
+        "docs/guides/user-guide.md",
+        "It needs the ANALYST, DEVELOPER or ADMIN role.",
+    ): "interaction analysis stays with the built-in role",
     (
         "docs/api/split-url.md",
         "It is for ADMIN and DEVELOPER users (and superusers), and in a core "

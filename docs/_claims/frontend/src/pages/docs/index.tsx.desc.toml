@@ -65,7 +65,7 @@ text = "Variance reduction from each user's own pre-experiment events, on the re
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Thompson Sampling, UCB1, Epsilon-Greedy (create a bandit through the API)"
+text = "Thompson Sampling, UCB1, Epsilon-Greedy (create one from the new-experiment form or the API)"
 by = ["mechanism:docs-hub"]
 
 [[unit]]

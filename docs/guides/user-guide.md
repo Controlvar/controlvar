@@ -58,8 +58,8 @@ your answers carry over.
 
 **Step 1: Type**
 
-Choose **A/B Test** or **Multivariate**. Create a split URL or bandit experiment through the
-API (`POST /api/v1/experiments/`).
+Choose **A/B Test**, **Multivariate** or **Bandit**; a bandit also asks for its **Optimization
+algorithm**. Create a split URL experiment through the API (`POST /api/v1/experiments/`).
 
 **Step 2: Details**
 
@@ -587,7 +587,7 @@ balanced groups, from `GET /api/v1/results/{experiment_id}/balanced-groups` (bet
 
 A bandit experiment automatically shifts traffic toward the better-performing variant as data accumulates. Use this when maximizing conversions during the experiment matters more than getting precise effect size estimates.
 
-Set `optimization_type` to `thompson_sampling`, `ucb1`, or `epsilon_greedy` when creating an experiment. See the [Multi-Armed Bandit Guide](../api/multi-armed-bandit.md).
+In the dashboard, choose **Bandit** as the experiment type and pick the **Optimization algorithm**; through the API, set `optimization_type` to `thompson_sampling`, `ucb1`, or `epsilon_greedy` when creating an experiment. Until the first weight update, new users are split by the variants' allocations. See the [Multi-Armed Bandit Guide](../api/multi-armed-bandit.md).
 
 A bandit experiment's page has a **Current traffic weights** panel: each variant's share of new
 users, with its pulls, successes and conversion rate, and when the weights were last computed.
@@ -601,7 +601,9 @@ starting allocation until then. The dashboard shows the current weights only, wi
 
 When multiple experiments run simultaneously on overlapping user populations, they can distort each other's results. Run an interaction scan to find the pairs that share users, then ask the pair route whether one experiment's effect differs across the other's arms (beta). The scan measures overlap only.
 
-Access via:
+In the dashboard, open **Experiments** and then **Interactions**: **Scan active experiments** lists the
+pairs that share many users, and the **Pair test** (beta) tests any two experiments. It needs the
+ANALYST, DEVELOPER or ADMIN role. Through the API:
 ```text
 GET /api/v1/interactions/scan
 GET /api/v1/interactions/{exp_a_id}/{exp_b_id}

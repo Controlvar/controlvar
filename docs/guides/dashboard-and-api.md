@@ -43,13 +43,14 @@ The table lists each capability and where you do it today:
 | Set a rollout schedule's own start and end dates, maximum percentage and minimum stage duration | Dashboard | [Gradual rollouts](../feature-flags/rollouts.md#in-the-dashboard) |
 | Delete a feature flag | Dashboard | [Deleting a flag](../feature-flags/create.md#deleting-a-flag) |
 | Archive and unarchive a feature flag | Dashboard | [Archived flags](user-guide.md#archived-flags) |
-| Create a bandit experiment | API only | [Multi-armed bandits](../api/multi-armed-bandit.md) |
+| Create a bandit experiment | Dashboard | [Multi-armed bandits](../api/multi-armed-bandit.md) |
 | Set a bandit's weights by hand | API only | [Multi-armed bandits](../api/multi-armed-bandit.md) |
+| A bandit's weight history (beta) | API only | [Multi-armed bandits](../api/multi-armed-bandit.md) |
 | Global holdouts: create and activate; read their results (beta) | Dashboard | [Mutual exclusion groups and global holdout](../api/mutual-exclusion-groups.md) |
 | Mutual exclusion groups | Dashboard | [Mutual exclusion groups and global holdout](../api/mutual-exclusion-groups.md) |
 | Split-URL experiments (full profile) | API only | [Split URL testing](../api/split-url.md) |
 | CUPED-adjusted results (beta) | Dashboard | [CUPED](../api/cuped.md) |
-| The interaction scan and the pair test (beta) | API only | [Interaction detection](../api/interaction-detection.md) |
+| The interaction scan and the pair test (beta) | Dashboard | [Interaction detection](../api/interaction-detection.md) |
 | Download results as CSV | Dashboard | [Exporting results](user-guide.md#exporting-results) |
 | The effect size in the metric comparison table | Dashboard | [Running experiments](user-guide.md) |
 | Each variant's confidence interval on the results page | Dashboard | [Running experiments](user-guide.md) |

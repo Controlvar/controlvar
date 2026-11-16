@@ -67,6 +67,11 @@
   "administer_eligibility_roles": [
     "ADMIN"
   ],
+  "analyse_interactions_roles": [
+    "ADMIN",
+    "DEVELOPER",
+    "ANALYST"
+  ],
   "grantable": [
     [
       "audit_log",
