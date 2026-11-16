@@ -90,7 +90,7 @@ to persist results across process restarts.
 
 | Method | Returns | On failure |
 |---|---|---|
-| `suspend evaluateFlag(flagKey, user)` | `EvalResult(key, enabled, config)` | Last offline value if any, else throws `FlagNotFoundException` (404) / `ServerException` / `NetworkException` |
+| `suspend evaluateFlag(flagKey, user)` | `EvalResult(key, enabled, config)` | Last offline value if any (not after a 404), else throws `FlagNotFoundException` (404) / `ServerException` / `NetworkException` |
 | `suspend getAssignment(experimentKey, user)` | `Assignment(experimentKey, userId, variantId, variantName, isControl, configuration)` | Last offline value if any, else throws `ServerException` (404: no experiment has the key, or a draft has no control variant) / `NetworkException` |
 | `suspend track(event)` | `Unit` | Never throws; runs in the background |
 | `suspend trackBatch(events)` | `Unit` | Never throws; ≤ 100 events per request |
@@ -102,9 +102,11 @@ to persist results across process restarts.
 
 - Successful evaluations and assignments are cached in memory per **user + key** for
   `cacheTtlMs` and written to the `OfflineStore`. A cache hit makes no request.
-- **Failures are never cached.** On a network/HTTP failure the last successful value from the
-  offline store is returned (not re-cached, so the next call retries); with nothing stored the
-  call throws, exactly as the SDK did before the rewire.
+- **Failures are never cached.** The SDK stores the last answer the server gave for each user and
+  flag, and serves it only when the server cannot answer: on a network or HTTP failure other than
+  a 404 it is returned (not re-cached, so the next call retries); with nothing stored the call
+  throws, exactly as the SDK did before the rewire. A 404 removes the stored answer, and the call
+  throws `FlagNotFoundException`.
 - `track` / `trackBatch` never throw: the request is launched on a background `Dispatchers.IO`
   scope and failures are swallowed.
 

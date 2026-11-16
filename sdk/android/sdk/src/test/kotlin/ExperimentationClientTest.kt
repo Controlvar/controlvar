@@ -356,6 +356,64 @@ class ExperimentationClientTest {
     }
 
     @Test
+    fun `evaluateFlag removes the stored answer on 404 and reports not found`() = runTest {
+        val user = User("user-1")
+        // 1. A 200 with enabled:true is stored.
+        server.enqueue(json(200, flagJson("f", true)))
+        assertTrue(client.evaluateFlag("f", user).enabled)
+        assertNotNull(offlineStore.loadFlag("user-1", "f"))
+
+        // 2. After the memory cache is gone, a 404 throws and does not serve the stored answer.
+        client.clearCache()
+        server.enqueue(json(404, """{"detail":"Feature flag not found"}"""))
+        assertThrows<ExperimentationException.FlagNotFoundException> {
+            client.evaluateFlag("f", user)
+        }
+    }
+
+    @Test
+    fun `evaluateFlag 404 leaves nothing stored, so a later disconnect is a NetworkException`() = runTest {
+        val user = User("user-1")
+        server.enqueue(json(200, flagJson("f", true)))
+        client.evaluateFlag("f", user)
+        client.clearCache()
+        server.enqueue(json(404, """{"detail":"Feature flag not found"}"""))
+        runCatching { client.evaluateFlag("f", user) }
+
+        // 3. The stored answer is gone.
+        assertNull(offlineStore.loadFlag("user-1", "f"))
+
+        // 4. A disconnect afterwards gives NetworkException, not the removed answer.
+        val offline = ExperimentationClient(
+            SdkConfig(baseUrl = "http://127.0.0.1:1", apiKey = "k", timeoutMs = 500L),
+            HttpClient("http://127.0.0.1:1", "k", 500L),
+            ResultCache(maxSize = 100, ttlMs = 300_000L),
+            ResultCache(maxSize = 100, ttlMs = 300_000L),
+            offlineStore,
+        )
+        try {
+            assertThrows<ExperimentationException.NetworkException> {
+                offline.evaluateFlag("f", user)
+            }
+        } finally {
+            offline.close()
+        }
+    }
+
+    @Test
+    fun `evaluateFlag still serves the stored answer after a 500`() = runTest {
+        val user = User("user-1")
+        server.enqueue(json(200, flagJson("f", true)))
+        assertTrue(client.evaluateFlag("f", user).enabled)
+
+        client.clearCache()
+        server.enqueue(json(500, """{"detail":"boom"}"""))
+        val result = client.evaluateFlag("f", user)
+        assertTrue(result.enabled, "A 500 keeps serving the stored answer")
+        assertNotNull(offlineStore.loadFlag("user-1", "f"))
+    }
+
+    @Test
     fun `evaluateFlag persists successful results to the offline store`() = runTest {
         server.enqueue(json(200, flagJson("persist-flag", true, """{"x":1}""")))
         client.evaluateFlag("persist-flag", User("user-1"))
