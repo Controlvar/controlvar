@@ -1139,16 +1139,13 @@ describe('attributes that cannot be written as JSON (#1720)', () => {
     }
   });
 
-  test('attributes that cannot be written as JSON print one fixed warning that names no attribute', async () => {
+  test('attributes that cannot be written as JSON log nothing', async () => {
     for (const make of unencodable) {
-      spies.forEach((spy) => spy.mockClear());
-      await makeClient().evaluateFlag('f', 'u1', make());
-      const warn = spies[2];
-      expect(warn).toHaveBeenCalledTimes(1);
-      expect(warn.mock.calls[0]).toEqual([
-        'controlvar edge sdk: the attributes cannot be written as JSON, so nothing was sent and the flag is reported as disabled',
-      ]);
-      for (const spy of spies) expect(JSON.stringify(spy.mock.calls)).not.toContain(CANARY);
+      const client = makeClient();
+      await client.evaluateFlag('f', 'u1', make());
+      await client.isFeatureEnabled('f', 'u1', make());
+      await client.getAllFlags('u1', make());
+      for (const spy of spies) expect(spy).not.toHaveBeenCalled();
     }
   });
 });

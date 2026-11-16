@@ -78,21 +78,16 @@ function contextQuery(attributes: Record<string, unknown> | undefined): string {
 
 /**
  * The `contextQuery` for a flag call, or `null` when the attributes cannot be
- * written as JSON (a BigInt, a cycle). Nothing is then sent or cached, and the
- * one fixed warning names no attribute: the serialiser's own error is dropped
- * because its message can quote a value.
+ * written as JSON (a BigInt, a cycle). Nothing is then sent, cached or logged:
+ * the serialiser's own error is dropped because its message can quote a value.
  */
 function contextQueryOrNull(attributes: Record<string, unknown> | undefined): string | null {
   try {
     return contextQuery(attributes);
   } catch {
-    console.warn(UNENCODABLE_WARNING);
     return null;
   }
 }
-
-const UNENCODABLE_WARNING =
-  'controlvar edge sdk: the attributes cannot be written as JSON, so nothing was sent and the flag is reported as disabled';
 
 /**
  * A request path without its query string, as a request error message names it:

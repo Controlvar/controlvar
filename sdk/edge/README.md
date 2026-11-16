@@ -47,8 +47,8 @@ The flag calls are
 JSON, percent-encoded: `{ plan: 'pro' }` travels as `context=%7B%22plan%22%3A%22pro%22%7D`. With no
 attributes or an empty object, no `context` is sent and the request carries the user id alone.
 If the attributes cannot be written as JSON (a BigInt, or an object that refers to itself), nothing
-is sent, the call returns the disabled answer (`{}` for `getAllFlags`), and a warning that names no
-attribute is logged.
+is sent, the call returns the disabled answer (`{}` for `getAllFlags`), and nothing is
+logged.
 
 The SDK keeps one cached answer per user and flag, together with the attributes it was asked with.
 A later call is answered from the cache only if its attributes are exactly the same; otherwise the

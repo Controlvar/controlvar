@@ -2286,8 +2286,7 @@ _EDGE_NONE = (
 _EDGE_UNSENDABLE = (
     "attributes that cannot be written as JSON send nothing, cache nothing and"
     " report the flag as disabled",
-    "attributes that cannot be written as JSON print one fixed warning that names no"
-    " attribute",
+    "attributes that cannot be written as JSON log nothing",
 )
 _EDGE_CACHE = (
     "(a) A then B: two requests, two answers",
@@ -2337,7 +2336,7 @@ EDGE_CONTEXT_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], ...]
     (
         "If the attributes cannot be written as JSON (a BigInt, or an object that refers"
         " to itself), nothing is sent, the call returns the disabled answer (`{}` for"
-        " `getAllFlags`), and a warning that names no attribute is logged.",
+        " `getAllFlags`), and nothing is logged.",
         _EDGE_UNSENDABLE,
         (),
     ),
