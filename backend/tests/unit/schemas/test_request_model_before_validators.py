@@ -44,8 +44,10 @@ pytestmark = [pytest.mark.unit]
 #: (PreviewLinkCreate). #1812 added 3 to both: the bodies of /auth/mfa/verify
 #: (MfaVerifyRequest), /users/me/2fa/confirm and /recovery-codes
 #: (TwoFactorCodeRequest) and /users/me/2fa/disable (TwoFactorDisableRequest).
-CORE_MODEL_COUNT = 96
-FULL_MODEL_COUNT = 140
+#: Then 1 more to both: the current password at /users/me/2fa/enroll
+#: (TwoFactorEnrolRequest).
+CORE_MODEL_COUNT = 97
+FULL_MODEL_COUNT = 141
 
 #: ``(model, field)`` pairs that a ``mode="before"`` field validator covers.
 CORE_BEFORE_COUNT = 46

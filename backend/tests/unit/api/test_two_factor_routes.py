@@ -72,7 +72,7 @@ ME_2FA = "/api/v1/users/me/2fa"
 #: Every route PR 2 adds, with a body that passes validation.
 ROUTES = [
     ("GET", ME_2FA, None),
-    ("POST", f"{ME_2FA}/enroll", None),
+    ("POST", f"{ME_2FA}/enroll", {"current_password": PASSWORD}),
     ("POST", f"{ME_2FA}/confirm", {"code": "123456"}),
     ("POST", f"{ME_2FA}/disable", {"code": "123456"}),
     ("POST", f"{ME_2FA}/recovery-codes", {"code": "123456"}),
@@ -480,7 +480,7 @@ def test_the_answers_that_succeed(monkeypatch):
     )
     client = _client(_db(user), signed_in=user)
 
-    enrol = client.post(f"{ME_2FA}/enroll")
+    enrol = client.post(f"{ME_2FA}/enroll", json={"current_password": PASSWORD})
     confirm = client.post(f"{ME_2FA}/confirm", json={"code": "123456"})
     regenerate = client.post(f"{ME_2FA}/recovery-codes", json={"code": "123456"})
     disable = client.post(f"{ME_2FA}/disable", json={"recovery_code": "ABCDEFGHJK"})
@@ -533,7 +533,7 @@ def test_a_signed_in_route_refuses_a_wrong_code_with_403(route, kind, monkeypatc
         (
             "enrol",
             f"{ME_2FA}/enroll",
-            None,
+            {"current_password": PASSWORD},
             AlreadyEnabledError(),
             answers.ALREADY_ENABLED_DETAIL,
         ),
@@ -577,6 +577,128 @@ def test_disable_takes_exactly_one_of_code_and_recovery_code(monkeypatch):
     for body in ({}, {"code": "1", "recovery_code": "A"}, {"code": "1" * 65}):
         assert client.post(f"{ME_2FA}/disable", json=body).status_code == 422
     assert called == []
+
+
+# ---------------------------------------------------------------------------
+# Setting it up asks for the current password: POST /users/me/2fa/enroll
+# ---------------------------------------------------------------------------
+
+ENROL = f"{ME_2FA}/enroll"
+WRONG_PASSWORD = "Not-The-Password-1812"
+#: The password change's 423, which setting up two-step sign-in answers too.
+PASSWORD_LOCKED_PREFIX = "Too many failed attempts; account temporarily locked."
+MISSING = users_endpoints.TWO_FACTOR_PASSWORD_MISSING_DETAIL
+NO_PASSWORD = users_endpoints.TWO_FACTOR_NO_PASSWORD_DETAIL
+INCORRECT = users_endpoints.CURRENT_PASSWORD_INCORRECT_DETAIL
+
+
+@pytest.fixture
+def enrolments(monkeypatch):
+    """The accounts each call that reached ``two_factor_service.enrol`` was for."""
+    reached = []
+
+    def enrol(db, account):
+        reached.append(account)
+        return Enrolment(secret="ABC", otpauth_uri="otpauth://totp/x")
+
+    monkeypatch.setattr(two_factor_service, "enrol", enrol)
+    return reached
+
+
+def _failures(user) -> int:
+    return login_attempt_tracker.status(_key(user.email)).failures
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "locked, hashed, body, status, detail, counted",
+    [
+        (True, None, None, 423, None, 0),
+        (True, PASSWORD_HASH, {"current_password": PASSWORD}, 423, None, 0),
+        (False, None, None, 403, NO_PASSWORD, 0),
+        (False, None, {"current_password": WRONG_PASSWORD}, 403, NO_PASSWORD, 0),
+        (False, PASSWORD_HASH, None, 403, MISSING, 0),
+        (False, PASSWORD_HASH, {}, 403, MISSING, 0),
+        (False, PASSWORD_HASH, {"current_password": None}, 403, MISSING, 0),
+        (False, PASSWORD_HASH, {"current_password": ""}, 403, MISSING, 0),
+        (False, PASSWORD_HASH, {"current_password": WRONG_PASSWORD}, 403, INCORRECT, 1),
+    ],
+    ids=[
+        "locked-before-no-password",
+        "locked-even-with-the-right-password",
+        "no-password-before-missing",
+        "no-password-not-counted",
+        "no-body",
+        "empty-body",
+        "null",
+        "empty",
+        "wrong-counted",
+    ],
+)
+def test_setting_it_up_checks_the_current_password_first_in_this_order(
+    locked, hashed, body, status, detail, counted, enrolments
+):
+    """Locked (423), no password of its own, none sent, then wrong (counted):
+    each refused before any secret is made, and never 422."""
+    user = _user(hashed_password=hashed)
+    if locked:
+        for _ in range(login_attempt_tracker.max_attempts):
+            login_attempt_tracker.record_failure(_key(user.email))
+    before = _failures(user)
+
+    response = _client(_db(user), signed_in=user).post(ENROL, json=body)
+
+    assert response.status_code == status, response.text
+    if detail is None:
+        assert response.json()["detail"].startswith(PASSWORD_LOCKED_PREFIX)
+        assert int(response.headers["retry-after"]) > 0
+    else:
+        assert response.json() == {"detail": detail}
+    assert _failures(user) - before == counted
+    assert enrolments == []
+
+
+@pytest.mark.regression
+def test_the_right_password_reaches_the_secret_and_clears_the_count(enrolments):
+    user = _user()
+    for _ in range(3):
+        login_attempt_tracker.record_failure(_key(user.email))
+    response = _client(_db(user), signed_in=user).post(
+        ENROL, json={"current_password": PASSWORD}
+    )
+    assert response.status_code == 200, response.text
+    assert response.json() == {"secret": "ABC", "otpauth_uri": "otpauth://totp/x"}
+    assert enrolments == [user]
+    assert _failures(user) == 0
+
+
+def test_the_password_comes_before_the_409_of_an_account_already_on(monkeypatch):
+    user = _user()
+    monkeypatch.setattr(two_factor_service, "enrol", _raising(AlreadyEnabledError()))
+    client = _client(_db(user), signed_in=user)
+    assert client.post(ENROL, json={"current_password": WRONG_PASSWORD}).json() == {
+        "detail": INCORRECT
+    }
+    right = client.post(ENROL, json={"current_password": PASSWORD})
+    assert right.status_code == 409
+    assert right.json() == {"detail": answers.ALREADY_ENABLED_DETAIL}
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "body",
+    [None, {}, {"current_password": 12345}],
+    ids=["no-body", "empty-body", "schema-invalid-body"],
+)
+def test_under_cognito_enroll_answers_the_local_only_404_whatever_its_body(
+    body, monkeypatch
+):
+    """V13 for the route's new body, #516's shape: no token, and the provider
+    check answers before the body is validated."""
+    monkeypatch.setattr(settings, "AUTH_PROVIDER", "cognito")
+    response = TestClient(app, raise_server_exceptions=False).post(ENROL, json=body)
+    assert response.status_code == 404, response.text
+    assert response.json() == {"detail": LOCAL_ONLY}
 
 
 # ---------------------------------------------------------------------------

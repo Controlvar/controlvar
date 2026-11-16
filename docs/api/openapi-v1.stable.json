@@ -13467,6 +13467,27 @@
         "title": "TwoFactorDisableRequest",
         "type": "object"
       },
+      "TwoFactorEnrolRequest": {
+        "description": "``POST /api/v1/users/me/2fa/enroll``: your current password, as\nchanging your password asks for it.",
+        "properties": {
+          "current_password": {
+            "anyOf": [
+              {
+                "format": "password",
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Your current password. Required: a request without it, or with an empty one, is refused with 403.",
+            "title": "Current Password"
+          }
+        },
+        "title": "TwoFactorEnrolRequest",
+        "type": "object"
+      },
       "TwoFactorEnrolResponse": {
         "description": "``POST /api/v1/users/me/2fa/enroll``: a new secret for the\nauthenticator app, waiting for its first code.",
         "properties": {
@@ -29331,8 +29352,25 @@
     },
     "/api/v1/users/me/2fa/enroll": {
       "post": {
-        "description": "Start setting up two-step sign-in: a new secret for your authenticator app.\n\nAnswers the secret in base32 (to type in) and as an `otpauth://` link (for\na QR code). Nothing changes at sign-in until a code from the app confirms\nit (`POST /api/v1/users/me/2fa/confirm`). Asking again replaces a secret\nthat is still waiting, so a code from the earlier one no longer works.\n409 once two-step sign-in is on.",
+        "description": "Start setting up two-step sign-in: a new secret for your authenticator app.\n\nAsks for your current password (`current_password`), as changing your\npassword does. Without it, or with an empty one, it answers 403. A wrong\none answers 403 and counts toward the same lockout as sign-in; after too\nmany failures it answers 423 until `Retry-After` has passed. An account\nwith no password of its own answers 403: it does not sign in with a\npassword, so two-step sign-in does not apply to it.\n\nAnswers the secret in base32 (to type in) and as an `otpauth://` link (for\na QR code). Nothing changes at sign-in until a code from the app confirms\nit (`POST /api/v1/users/me/2fa/confirm`). Asking again replaces a secret\nthat is still waiting, so a code from the earlier one no longer works.\n409 once two-step sign-in is on.",
         "operationId": "enrol_own_two_factor_api_v1_users_me_2fa_enroll_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/TwoFactorEnrolRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
@@ -29344,11 +29382,27 @@
             },
             "description": "Successful Response"
           },
+          "403": {
+            "description": "The current password is missing or incorrect, or the account has no password of its own."
+          },
           "404": {
             "description": "AUTH_PROVIDER is not 'local'."
           },
           "409": {
             "description": "Two-step sign-in is already on for this account. Turn it off first to set it up again."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "423": {
+            "description": "Too many failed attempts for this account (counted together with sign-in); see Retry-After."
           }
         },
         "security": [

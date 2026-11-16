@@ -21,6 +21,11 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import sessionmaker
 
 from backend.app.api import deps
+from backend.app.api.v1.endpoints.users import (
+    CURRENT_PASSWORD_INCORRECT_DETAIL,
+    TWO_FACTOR_NO_PASSWORD_DETAIL,
+    TWO_FACTOR_PASSWORD_MISSING_DETAIL,
+)
 from backend.app.core import totp
 from backend.app.core.config import settings
 from backend.app.core.mfa_token import create_mfa_token
@@ -56,6 +61,8 @@ ME_2FA = "/api/v1/users/me/2fa"
 ME_PASSWORD = "/api/v1/users/me/password"
 WRONG_PASSWORD = "Not-The-Password-1812"
 LOCKED_PREFIX = "Too many failed login attempts; account temporarily locked."
+#: The password change's 423, which setting up two-step sign-in answers too.
+PASSWORD_LOCKED_PREFIX = "Too many failed attempts; account temporarily locked."
 
 
 @pytest.fixture(autouse=True)
@@ -86,13 +93,19 @@ def session_factory(test_db):
 
 @pytest.fixture
 def make_user(session_factory):
-    def make(role=UserRole.DEVELOPER, is_superuser=False, email=None) -> User:
+    def make(
+        role=UserRole.DEVELOPER,
+        is_superuser=False,
+        email=None,
+        password_hash=PASSWORD_HASH,
+    ) -> User:
+        """``password_hash=None`` makes an account with no password of its own."""
         session = session_factory()
         suffix = uuid.uuid4().hex[:10]
         user = User(
             username=f"tfa_api_{suffix}",
             email=email or f"Two.Step.Api.{suffix}@Example.com",
-            hashed_password=PASSWORD_HASH,
+            hashed_password=password_hash,
             is_active=True,
             is_superuser=is_superuser,
             role=role,
@@ -148,10 +161,17 @@ def _secret(text_: str) -> bytes:
     return base64.b32decode(text_ + "=" * (-len(text_) % 8))
 
 
+def _enrol(client, user, password=PASSWORD):
+    """``POST /users/me/2fa/enroll`` with ``password`` as the current one."""
+    return client.post(
+        f"{ME_2FA}/enroll", json={"current_password": password}, headers=_bearer(user)
+    )
+
+
 def _turn_on(client, user, clock):
     """Two-step sign-in on through the routes: (secret, recovery codes). The
     confirm code's step is used up; the clock moves one step on."""
-    enrol = client.post(f"{ME_2FA}/enroll", headers=_bearer(user))
+    enrol = _enrol(client, user)
     assert enrol.status_code == 200, enrol.text
     secret = _secret(enrol.json()["secret"])
     confirm = client.post(
@@ -264,15 +284,11 @@ def test_a_waiting_secret_changes_nothing_and_a_new_one_replaces_it(
     client, make_user, clock
 ):
     user = make_user()
-    first = _secret(
-        client.post(f"{ME_2FA}/enroll", headers=_bearer(user)).json()["secret"]
-    )
+    first = _secret(_enrol(client, user).json()["secret"])
     plain = _password_step(client, user)
     assert "access_token" in plain.json()
 
-    second = _secret(
-        client.post(f"{ME_2FA}/enroll", headers=_bearer(user)).json()["secret"]
-    )
+    second = _secret(_enrol(client, user).json()["secret"])
     stale = client.post(
         f"{ME_2FA}/confirm",
         json={"code": code_at(first, clock.step())},
@@ -286,7 +302,7 @@ def test_a_waiting_secret_changes_nothing_and_a_new_one_replaces_it(
         headers=_bearer(user),
     )
     assert fresh.status_code == 200, fresh.text
-    assert client.post(f"{ME_2FA}/enroll", headers=_bearer(user)).status_code == 409
+    assert _enrol(client, user).status_code == 409
     twice = client.post(
         f"{ME_2FA}/confirm",
         json={"code": code_at(second, clock.step() + 1)},
@@ -370,9 +386,15 @@ def _prove_password(client, user, route, password):
     [
         (False, "password", 204, 0),
         (True, "password", 204, 9),
+        (False, "enroll", 200, 0),
         (True, "enroll", 409, 9),
     ],
-    ids=["plain-password-change", "two-step-password-change", "two-step-enroll"],
+    ids=[
+        "plain-password-change",
+        "two-step-password-change",
+        "plain-enroll",
+        "two-step-enroll",
+    ],
 )
 def test_a_right_current_password_clears_the_count_only_without_two_step_sign_in(
     client, make_user, clock, two_step, route, status, left
@@ -400,6 +422,60 @@ def test_a_right_current_password_clears_the_count_only_without_two_step_sign_in
     else:
         assert after.status_code == 200, after.text
         assert "access_token" in after.json()
+
+
+@pytest.mark.regression
+def test_setting_it_up_checks_the_password_before_any_secret_is_stored(
+    client, make_user, read
+):
+    """A refused call stores no secret and leaves a waiting one as it was.
+    Only a wrong password is counted, and the right one clears the count of
+    an account without two-step sign-in."""
+    user = make_user()
+    missing = [
+        client.post(f"{ME_2FA}/enroll", headers=_bearer(user)),
+        client.post(f"{ME_2FA}/enroll", json={}, headers=_bearer(user)),
+        _enrol(client, user, None),
+        _enrol(client, user, ""),
+    ]
+    assert [r.status_code for r in missing] == [403] * 4
+    assert {r.json()["detail"] for r in missing} == {TWO_FACTOR_PASSWORD_MISSING_DETAIL}
+    wrong = _enrol(client, user, WRONG_PASSWORD)
+    assert wrong.status_code == 403
+    assert wrong.json() == {"detail": CURRENT_PASSWORD_INCORRECT_DETAIL}
+    assert _totp_row(read, user.id) is None
+    assert login_attempt_tracker.status(_key(user)).failures == 1
+
+    assert _enrol(client, user).status_code == 200
+    waiting = _totp_row(read, user.id).secret_enc
+    assert login_attempt_tracker.status(_key(user)).failures == 0
+    assert _enrol(client, user, WRONG_PASSWORD).status_code == 403
+    assert _totp_row(read, user.id).secret_enc == waiting
+
+
+@pytest.mark.regression
+def test_an_account_with_no_password_cannot_set_it_up(client, make_user, read):
+    """Refused before the password is looked at, and not counted."""
+    user = make_user(password_hash=None)
+    for password in (None, "", "Anything-1a"):
+        refused = _enrol(client, user, password)
+        assert refused.status_code == 403, refused.text
+        assert refused.json() == {"detail": TWO_FACTOR_NO_PASSWORD_DETAIL}
+    assert _totp_row(read, user.id) is None
+    assert login_attempt_tracker.status(_key(user)).failures == 0
+
+
+@pytest.mark.regression
+def test_wrong_passwords_at_set_up_lock_it_and_sign_in(client, make_user, read):
+    user = make_user()
+    answers = [_enrol(client, user, WRONG_PASSWORD).status_code for _ in range(10)]
+    assert answers == [403] * 10
+    locked = _enrol(client, user)
+    assert locked.status_code == 423, locked.text
+    assert locked.json()["detail"].startswith(PASSWORD_LOCKED_PREFIX)
+    assert int(locked.headers["retry-after"]) > 0
+    assert _password_step(client, user).status_code == 423
+    assert _totp_row(read, user.id) is None
 
 
 @pytest.mark.regression
@@ -543,7 +619,7 @@ def test_the_admin_list_says_who_has_two_step_sign_in_on(client, make_user, cloc
         make_user(),
     )
     _turn_on(client, on, clock)
-    client.post(f"{ME_2FA}/enroll", headers=_bearer(off))
+    _enrol(client, off)
     for user, expected in ((on, True), (off, False)):
         one = client.get(f"/api/v1/admin/users/{user.id}", headers=_bearer(admin))
         assert one.json()["totp_enabled"] is expected
@@ -568,7 +644,11 @@ def test_no_entry_log_line_or_answer_holds_a_secret_code_or_token(
 ):
     caplog.set_level(logging.DEBUG)
     user, admin = make_user(), make_user(role=UserRole.ADMIN, is_superuser=True)
-    enrol = client.post(f"{ME_2FA}/enroll", headers=_bearer(user))
+    refused = _enrol(client, user, WRONG_PASSWORD)
+    assert refused.status_code == 403
+    enrol = _enrol(client, user)
+    # The current password is never repeated, not even beside the secret.
+    assert PASSWORD not in enrol.text
     secret_text = enrol.json()["secret"]
     secret = _secret(secret_text)
     first_code = code_at(secret, clock.step())
@@ -580,13 +660,22 @@ def test_no_entry_log_line_or_answer_holds_a_secret_code_or_token(
     mfa_token = _mfa_token(client, user)
     second_code = code_at(secret, clock.step())
     answers = [
+        refused,
         client.post(VERIFY, json={"mfa_token": mfa_token, "code": "000000"}),
         client.post(VERIFY, json={"mfa_token": mfa_token, "code": second_code}),
         client.post(VERIFY, json={"mfa_token": mfa_token, "recovery_code": codes[0]}),
         client.get(ME_2FA, headers=_bearer(user)),
         client.delete(f"/api/v1/admin/users/{user.id}/2fa", headers=_bearer(admin)),
     ]
-    secrets = [secret_text, first_code, second_code, mfa_token, *codes]
+    secrets = [
+        secret_text,
+        first_code,
+        second_code,
+        mfa_token,
+        *codes,
+        PASSWORD,
+        WRONG_PASSWORD,
+    ]
 
     for answer in answers:
         for value in secrets:

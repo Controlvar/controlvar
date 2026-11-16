@@ -36,10 +36,25 @@ text = "Turn it on"
 by = ["exempt:label"]
 
 [[unit]]
-text = "In the dashboard, open More → Two-step sign-in and choose Set up two-step sign-in."
+text = "In the dashboard, open More → Two-step sign-in, enter your current password and choose Set up two-step sign-in."
 by = [
     "test:frontend/src/tests/components/AppShell.test.tsx::offers it to a local sign-in user, opening /account/two-factor",
     "test:frontend/src/tests/pages/account-two-factor.test.tsx::says it is off and offers to set it up",
+    "test:frontend/src/tests/pages/account-two-factor.test.tsx::the field is a labelled current-password field, with why it is asked for",
+]
+
+[[unit]]
+text = "It asks for your password, as changing your password does."
+by = [
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_setting_it_up_checks_the_password_before_any_secret_is_stored",
+    "test:frontend/src/tests/pages/account-two-factor.test.tsx::U1: the password is sent in the body only, never kept in storage or the URL, and cleared once answered",
+]
+
+[[unit]]
+text = "An account with no password of its own is told that two-step sign-in does not apply to it."
+by = [
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_an_account_with_no_password_cannot_set_it_up",
+    "test:frontend/src/tests/pages/account-two-factor.test.tsx::an account with no password of its own sees why, in place of the form, with no retry",
 ]
 
 [[unit]]

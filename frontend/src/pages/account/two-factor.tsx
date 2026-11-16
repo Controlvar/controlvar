@@ -5,7 +5,10 @@ import { TwoStepCodeInput } from '@/components/account/TwoStepCodeInput';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { useDemoMode } from '@/contexts/AuthConfigContext';
 import {
+  ENROL_PASSWORD_HINT,
+  ENROL_PASSWORD_MESSAGE,
   NOT_LOCAL_TWO_FACTOR,
+  NO_PASSWORD_TWO_FACTOR,
   QR_ALT,
   TwoFactorEnrolment,
   TwoFactorFailure,
@@ -50,6 +53,8 @@ const buttonSecondary =
   'px-4 py-2 rounded-md text-sm font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 disabled:opacity-60';
 const buttonDanger =
   'px-4 py-2 rounded-md text-sm font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed';
+const inputClass =
+  'mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500';
 
 function recoveryCodesLeft(count: number): string {
   if (count === 0) return 'No recovery codes left. Make a new set below.';
@@ -66,6 +71,11 @@ function recoveryCodesLeft(count: number): string {
  * response text reaches the screen. The secret and the recovery codes live in
  * this page's state only, and a reload starts again (a new secret replaces one
  * still waiting).
+ *
+ * Setting it up asks for the current password, as changing the password does.
+ * It is held in this page's state only until the API answers, and then
+ * cleared, whatever the answer. An account with no password of its own is
+ * told that two-step sign-in does not apply to it, in place of the form.
  */
 export default function TwoFactorPage() {
   const auth = useOptionalAuth();
@@ -76,6 +86,8 @@ export default function TwoFactorPage() {
   const codeId = useId();
   const messageId = useId();
   const savedId = useId();
+  const passwordId = useId();
+  const passwordHintId = useId();
 
   const [current, setCurrent] = useState<TwoFactorStatus | null>(null);
   const [loadFailure, setLoadFailure] = useState<string | null>(null);
@@ -91,6 +103,10 @@ export default function TwoFactorPage() {
   const [action, setAction] = useState<Action>(null);
   const [recovery, setRecovery] = useState(false);
   const [code, setCode] = useState('');
+  // The current password for setting it up: never stored anywhere else.
+  const [password, setPassword] = useState('');
+  const [passwordRefused, setPasswordRefused] = useState(false);
+  const [noPassword, setNoPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<Message | null>(null);
   const [copied, setCopied] = useState('');
@@ -136,6 +152,11 @@ export default function TwoFactorPage() {
     if (action) codeRef.current?.focus();
   }, [action, recovery]);
 
+  // The form is gone for an account with no password: focus goes to the heading.
+  useEffect(() => {
+    if (noPassword) headingRef.current?.focus();
+  }, [noPassword]);
+
   if (!auth || auth.status === 'loading') {
     return (
       <div className="flex-1 bg-slate-50 p-8" data-testid="two-factor-loading">
@@ -156,12 +177,19 @@ export default function TwoFactorPage() {
     }
   };
 
-  const startEnrolment = async () => {
+  const startEnrolment = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (busy) return;
+    if (!password) {
+      setPasswordRefused(true);
+      setMessage({ tone: 'error', text: ENROL_PASSWORD_MESSAGE });
+      return;
+    }
     setBusy(true);
     setMessage(null);
+    setPasswordRefused(false);
     try {
-      const started = await startTwoFactorEnrolment();
+      const started = await startTwoFactorEnrolment(password);
       setEnrolment(started);
       setQr(null);
       setCode('');
@@ -179,8 +207,17 @@ export default function TwoFactorPage() {
         () => undefined,
       );
     } catch (err) {
-      fail(classifyTwoFactorError(err));
+      const failure = classifyTwoFactorError(err);
+      if (failure.outcome === 'no-password') {
+        // Nothing to set up: the form gives way to the sentence, with no retry.
+        setNoPassword(true);
+      } else {
+        setPasswordRefused(failure.outcome === 'password-incorrect' || failure.outcome === 'password-missing');
+        fail(failure);
+      }
     } finally {
+      // The API has answered: the password is not kept, whatever the answer.
+      setPassword('');
       setBusy(false);
     }
   };
@@ -478,7 +515,19 @@ export default function TwoFactorPage() {
         </div>
       </section>
     );
+  } else if (!current.enabled && noPassword) {
+    body = (
+      <section className="mt-6 flex flex-col gap-4" data-testid="two-factor-no-password">
+        <h2 ref={headingRef} tabIndex={-1} className="text-lg font-semibold text-slate-900 focus:outline-none">
+          Two-step sign-in is off
+        </h2>
+        <p role="status" className="text-sm text-slate-700" data-testid="two-factor-no-password-text">
+          {NO_PASSWORD_TWO_FACTOR}
+        </p>
+      </section>
+    );
   } else if (!current.enabled) {
+    const describedBy = [passwordHintId, passwordRefused ? errorId : null].filter(Boolean).join(' ');
     body = (
       <section className="mt-6 flex flex-col gap-4" data-testid="two-factor-off">
         <h2 ref={headingRef} tabIndex={-1} className="text-lg font-semibold text-slate-900 focus:outline-none">
@@ -489,11 +538,33 @@ export default function TwoFactorPage() {
           When it is on, signing in asks for your password and then a 6-digit code from an authenticator app on
           your phone. If the phone is lost, a recovery code signs you in instead.
         </p>
-        <div>
-          <button type="button" data-testid="two-factor-start" onClick={() => void startEnrolment()} disabled={busy} className={buttonPrimary}>
-            {busy ? 'Starting…' : 'Set up two-step sign-in'}
-          </button>
-        </div>
+        <form className="flex flex-col gap-3" onSubmit={startEnrolment} noValidate data-testid="two-factor-start-form">
+          <div>
+            <label htmlFor={passwordId} className="block text-sm font-medium text-slate-700">
+              Current password
+            </label>
+            <p id={passwordHintId} className="text-sm text-slate-600">
+              {ENROL_PASSWORD_HINT}
+            </p>
+            <input
+              id={passwordId}
+              type="password"
+              autoComplete="current-password"
+              aria-describedby={describedBy}
+              aria-invalid={passwordRefused ? true : undefined}
+              data-testid="two-factor-current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              readOnly={busy}
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <button type="submit" data-testid="two-factor-start" disabled={busy} className={buttonPrimary}>
+              {busy ? 'Starting…' : 'Set up two-step sign-in'}
+            </button>
+          </div>
+        </form>
       </section>
     );
   } else {

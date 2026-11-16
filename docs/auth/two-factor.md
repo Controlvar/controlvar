@@ -9,7 +9,9 @@ The API side, with every route and answer, is in [Two-step sign-in](../api/auth.
 
 ## Turn it on
 
-1. In the dashboard, open **More → Two-step sign-in** and choose **Set up two-step sign-in**.
+1. In the dashboard, open **More → Two-step sign-in**, enter your current password and choose
+   **Set up two-step sign-in**. It asks for your password, as changing your password does. An
+   account with no password of its own is told that two-step sign-in does not apply to it.
 2. Scan the QR code with your authenticator app, or type the key shown under it into the app.
    On the phone itself, **Open in an authenticator app on this device** adds it.
 3. Enter the code the app shows and choose **Turn on two-step sign-in**. Nothing changes at

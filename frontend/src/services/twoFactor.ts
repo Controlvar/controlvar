@@ -41,6 +41,15 @@ export const CODE_STEP_LOCKED_TEXT =
 /** The stored secret cannot be read (after SECRET_KEY changed): 503. */
 export const UNAVAILABLE_TEXT =
   'Two-step sign-in is unavailable for this account. Ask an administrator to reset it.';
+/**
+ * Setting it up asks for the current password, as changing the password does
+ * (backend/app/api/v1/endpoints/users.py): its three 403 details.
+ */
+export const ENROL_PASSWORD_MISSING_DETAIL =
+  'Enter your current password (current_password) to set up two-step sign-in.';
+export const CURRENT_PASSWORD_INCORRECT_DETAIL = 'The current password is incorrect.';
+export const ENROL_NO_PASSWORD_DETAIL =
+  'This account does not sign in with a password, so two-step sign-in does not apply to it.';
 
 // ---------------------------------------------------------------------------
 // The dashboard's own sentences.
@@ -54,6 +63,13 @@ export const CONFIRM_CLOCK_HINT =
   "That code did not match. Make sure your phone's clock is set automatically, then try again.";
 /** The sign-in page's answer for an account that lost its app and its codes. */
 export const LOST_DEVICE_HELP = 'Ask an administrator to reset your two-step sign-in.';
+/** Beside the current-password field of the set-up step. */
+export const ENROL_PASSWORD_HINT = 'Setting up two-step sign-in asks for your current password, as changing your password does.';
+/** The set-up step sent without a current password. */
+export const ENROL_PASSWORD_MESSAGE = 'Enter your current password to set up two-step sign-in.';
+/** In place of the set-up step, for an account with no password of its own. */
+export const NO_PASSWORD_TWO_FACTOR =
+  'This account signs in through single sign-on and has no password, so two-step sign-in does not apply to it.';
 /** The account page under any provider but local. */
 export const NOT_LOCAL_TWO_FACTOR =
   'Your account signs in through your identity provider, so two-step sign-in is set up there, not in Controlvar.';
@@ -85,9 +101,15 @@ export function readTwoFactorStatus(): Promise<TwoFactorStatus> {
   return apiFetch<TwoFactorStatus>(TWO_FACTOR_STATUS_PATH);
 }
 
-/** A new secret; asking again replaces one that is still waiting. 409 once on. */
-export function startTwoFactorEnrolment(): Promise<TwoFactorEnrolment> {
-  return apiFetch<TwoFactorEnrolment>(TWO_FACTOR_ENROL_PATH, { method: 'POST' });
+/**
+ * A new secret, for the current password; asking again replaces one that is
+ * still waiting. 409 once on. The password goes in the request body only.
+ */
+export function startTwoFactorEnrolment(currentPassword: string): Promise<TwoFactorEnrolment> {
+  return apiFetch<TwoFactorEnrolment>(TWO_FACTOR_ENROL_PATH, {
+    method: 'POST',
+    json: { current_password: currentPassword },
+  });
 }
 
 /** Turn it on with the app's first code; resolves with the 10 recovery codes, shown once. */
@@ -170,6 +192,10 @@ export type TwoFactorOutcome =
   | 'changed'
   | 'not-waiting'
   | 'invalid'
+  | 'password-missing'
+  | 'password-incorrect'
+  | 'no-password'
+  | 'rate-limited'
   | 'session-ended'
   | 'forbidden'
   | 'not-local'
@@ -212,6 +238,10 @@ export function classifyTwoFactorError(err: unknown, context: TwoFactorErrorCont
         if (context.confirming) return { outcome: 'clock' };
         return { outcome: context.recovery ? 'wrong-recovery-code' : 'wrong-code' };
       }
+      // Setting it up: the current password's three refusals.
+      if (err.detail === CURRENT_PASSWORD_INCORRECT_DETAIL) return { outcome: 'password-incorrect' };
+      if (err.detail === ENROL_PASSWORD_MISSING_DETAIL) return { outcome: 'password-missing' };
+      if (err.detail === ENROL_NO_PASSWORD_DETAIL) return { outcome: 'no-password' };
       return { outcome: 'forbidden' };
     case 404:
       return { outcome: 'not-local' };
@@ -225,6 +255,9 @@ export function classifyTwoFactorError(err: unknown, context: TwoFactorErrorCont
       // The cap first: it has no Retry-After, and waiting does not end it.
       if (err.detail === CODE_STEP_LOCKED_TEXT) return { outcome: 'capped' };
       return { outcome: 'locked', retryAfter: err.retryAfter };
+    case 429:
+      // Setting it up takes 5 a minute, like the password change.
+      return { outcome: 'rate-limited' };
     case 503:
       if (err.detail === UNAVAILABLE_TEXT) return { outcome: 'unavailable' };
       return { outcome: 'failed' };
@@ -243,6 +276,10 @@ const SENTENCES: Record<Exclude<TwoFactorOutcome, 'locked' | 'timed-out' | 'read
   'not-waiting':
     'No new secret is waiting for its first code, or two-step sign-in is already on. The page now shows how it is.',
   invalid: 'Enter the code as your authenticator app shows it, or a recovery code as you saved it.',
+  'password-missing': ENROL_PASSWORD_MESSAGE,
+  'password-incorrect': 'The current password is not correct. Check it and try again.',
+  'no-password': NO_PASSWORD_TWO_FACTOR,
+  'rate-limited': 'Too many attempts. Wait a minute, then try again.',
   'session-ended': 'Your session has ended. Sign in again.',
   forbidden: 'Two-step sign-in could not be changed. Ask an administrator to check your account.',
   'not-local': 'This server does not manage sign-in, so there is no two-step sign-in to set up here.',
