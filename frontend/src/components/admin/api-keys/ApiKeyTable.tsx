@@ -51,7 +51,7 @@ export function ApiKeyTable({ onCreateKey, refreshToken = 0 }: ApiKeyTableProps)
   const [pendingDelete, setPendingDelete] = useState<ApiKey | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
-  // The key just revoked, shown and focused once the row is gone (#1797).
+  // The key just revoked: shown, and focused, once the DELETE succeeds (#1797).
   const [revoked, setRevoked] = useState<{ name: string } | null>(null);
   const revokedLine = useRef<HTMLParagraphElement>(null);
   const revokeButtons = useRef(new Map<string, HTMLButtonElement>());
