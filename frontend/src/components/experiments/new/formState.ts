@@ -20,6 +20,7 @@ import {
   ExperimentType,
   ExperimentVariant,
   MetricType,
+  OptimizationType,
   CreateExperimentRequest,
 } from '@/types/experiments';
 import { CorrectionMethod } from '@/types/results';
@@ -105,6 +106,12 @@ export interface ExperimentFormState {
   description: string;
   hypothesis: string;
   type: ExperimentType;
+  /**
+   * The bandit's algorithm (#1956), sent as `optimization_type` only while
+   * `type` is `bandit`. Kept when the type changes, so choosing Bandit again
+   * finds it, but an A/B or multivariate request never carries it.
+   */
+  optimizationType: BanditOptimizationType;
   rules: TargetingRules;
   variants: VariantFormData[];
   metrics: MetricFormData[];
@@ -256,6 +263,16 @@ export function buildBayesianConfig(config: BayesianConfigFormState): BayesianCo
   return atDefaults ? undefined : sent;
 }
 
+// --- a bandit's algorithm (#1956) --------------------------------------------
+
+/** A bandit's algorithm: every `optimization_type` but `fixed`, which is a plain split. */
+export type BanditOptimizationType = Exclude<OptimizationType, 'fixed'>;
+
+/** The algorithms the form offers for a bandit, in order; the first is the default. */
+export const BANDIT_OPTIMIZATION_TYPES: BanditOptimizationType[] = ['thompson_sampling', 'ucb1', 'epsilon_greedy'];
+
+export const DEFAULT_OPTIMIZATION_TYPE: BanditOptimizationType = 'thompson_sampling';
+
 const DEFAULT_VARIANTS: VariantFormData[] = [
   { name: 'Control', description: '', traffic_allocation: 50, is_control: true },
   { name: 'Treatment', description: '', traffic_allocation: 50, is_control: false },
@@ -274,6 +291,7 @@ export function createInitialFormState(): ExperimentFormState {
     description: '',
     hypothesis: '',
     type: 'a_b',
+    optimizationType: DEFAULT_OPTIMIZATION_TYPE,
     rules: createEmptyRules(),
     variants: DEFAULT_VARIANTS,
     metrics: DEFAULT_METRICS,
@@ -290,15 +308,16 @@ export function createInitialFormState(): ExperimentFormState {
 export const INITIAL_FORM_STATE: ExperimentFormState = createInitialFormState();
 
 /**
- * Types this form can fully configure.
+ * Types this form can fully configure, in the order both views offer them.
  *
  * `split_url` needs a `split_url_config` (without it the split-URL path has no
- * URLs to route to) and `bandit` needs `optimization_type != "fixed"` (with the
- * default `fixed` the bandit scheduler skips the experiment forever, so traffic
- * never adapts). This form sends neither field, so it must not offer them —
- * see `backend/app/schemas/experiment.py::ExperimentCreate`.
+ * URLs to route to), which this form does not ask for, so it is not offered —
+ * see `backend/app/schemas/experiment.py::ExperimentCreate`. `bandit` (#1956)
+ * is offered last: the form asks for its algorithm and always sends one,
+ * because with the API's default `optimization_type` of `fixed` the bandit
+ * scheduler skips the experiment for ever and traffic never adapts.
  */
-export const FORM_EXPERIMENT_TYPES: ExperimentType[] = ['a_b', 'mv'];
+export const FORM_EXPERIMENT_TYPES: ExperimentType[] = ['a_b', 'mv', 'bandit'];
 
 /** Sum of the variants' traffic allocations, counting a blank or invalid entry as 0. */
 export function allocationTotalOf(variants: VariantFormData[]): number {
@@ -446,11 +465,15 @@ export function validateForm(
 
 /**
  * The API's refusal of the split for a balanced experiment (every share must
- * be a multiple of 5), or null: nothing while the switch is off, and nothing
- * until the shares add up to 100.
+ * be a multiple of 5), or null: nothing while the switch is off, nothing
+ * until the shares add up to 100, and nothing for a bandit, which sends no
+ * balance setting (#1956). A state without `type` (the design edit's
+ * callers) is read as before.
  */
-export function balanceSplitProblem(state: Pick<ExperimentFormState, 'balance' | 'variants'>): string | null {
-  if (!state.balance.on) return null;
+export function balanceSplitProblem(
+  state: Pick<ExperimentFormState, 'balance' | 'variants'> & Partial<Pick<ExperimentFormState, 'type'>>,
+): string | null {
+  if (!state.balance.on || state.type === 'bandit') return null;
   return splitProblem(state.variants.map((v) => Number(v.traffic_allocation) || 0));
 }
 
@@ -526,6 +549,13 @@ export function maxReachableStep(state: ExperimentFormState): number {
  *
  * A usable planned effect goes on the primary metric only, as
  * `expected_effect`; with none, no metric carries the key at all.
+ *
+ * A bandit (#1956) is the same body with `experiment_type: "bandit"`, no
+ * `balance_within` (the API refuses balancing for a bandit, whatever the
+ * switch says) and its algorithm appended as `optimization_type`. No other
+ * type carries `optimization_type`, not even "fixed": the A/B and
+ * multivariate bodies are byte for byte the ones sent before
+ * (experiment-new-ab-body.test.tsx).
  */
 export function buildCreatePayload(state: ExperimentFormState): CreateExperimentRequest {
   const { name, key, description, hypothesis, type, rules, variants, metrics } = state;
@@ -573,6 +603,10 @@ export function buildCreatePayload(state: ExperimentFormState): CreateExperiment
     if (bayesianConfig) payload.bayesian_config = bayesianConfig;
   }
   if (state.sequentialEnabled) payload.sequential_testing_enabled = true;
+  if (type === 'bandit') {
+    payload.optimization_type = state.optimizationType;
+    return payload;
+  }
   // Sent only when on: a draft that does not balance is created as before.
   const balance = buildBalancePayload(state.balance);
   if (balance) payload.balance_within = balance;
@@ -773,6 +807,7 @@ export type ExperimentFormAction =
   | { type: 'setDescription'; description: string }
   | { type: 'setHypothesis'; hypothesis: string }
   | { type: 'setType'; experimentType: ExperimentType }
+  | { type: 'setOptimizationType'; optimizationType: BanditOptimizationType }
   | { type: 'setRules'; rules: TargetingRules }
   | { type: 'setConfidenceLevel'; confidenceLevel: number }
   | { type: 'setCorrectionMethod'; correctionMethod: CorrectionMethod }
@@ -823,6 +858,8 @@ export function experimentFormReducer(
       return { ...state, hypothesis: action.hypothesis };
     case 'setType':
       return { ...state, type: action.experimentType };
+    case 'setOptimizationType':
+      return { ...state, optimizationType: action.optimizationType };
     case 'setRules':
       return { ...state, rules: action.rules };
     case 'setConfidenceLevel':

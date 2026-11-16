@@ -32,6 +32,10 @@ the other variants `0.1 / n`, for `n` variants: epsilon is 0.1, and it is not a 
 
 ## Creating a MAB Experiment
 
+To create one in the dashboard, choose **Bandit** as the experiment type on the new-experiment
+form (guided setup or the single-page form) and pick the **Optimization algorithm**. The rest of
+this section does the same through the API.
+
 Run the commands on this page in one terminal, in order, against the stack from the
 [Quick Start](../getting-started/quick-start.md). Each uses the shell variables set by the
 ones before it. Log in first; creating an experiment takes permission to create experiments,
@@ -219,6 +223,26 @@ It prints the new weights:
 
 ---
 
+### GET /api/v1/bandit/{experiment_id}/history
+
+Returns the bandit's past weight updates, newest first: each update's time (`tick_at`) and
+each variant's weight, keyed by variant id. Anyone who may view the experiment can read it.
+A weight override is not an update and is not listed. `limit` (default 200, 1 to 1000,
+otherwise `422`) is the number of updates. It answers `[]` before the first update, and
+`404` for an unknown experiment or one whose `optimization_type` is `fixed`. Updates older
+than `ANALYSIS_HISTORY_RETENTION_DAYS` (default 90) are deleted. It is beta
+(`x-stability: beta`); the shape may still change.
+
+```{.bash exec}
+curl -s "localhost:8000/api/v1/bandit/$EXP_ID/history" \
+  -H "Authorization: Bearer $TOKEN" | jq -c '{updates: length, variants: (.[0].weights | length)}'
+```
+<!-- expect: {"updates":1,"variants":3} -->
+
+It prints one update, the one triggered above; the override is not listed.
+
+---
+
 ## Scheduler
 
 The bandit scheduler (`BanditSchedulerRunner` in `backend/app/core/bandit_scheduler.py`) starts with the API
@@ -262,5 +286,6 @@ split by the variants' `traffic_allocation`.
 | Action | Minimum Role |
 |--------|-------------|
 | View bandit status | VIEWER |
+| View weight history | VIEWER |
 | Trigger weight update | DEVELOPER |
 | Override weights | ADMIN |

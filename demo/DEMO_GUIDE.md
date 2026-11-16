@@ -169,9 +169,9 @@ See `demo/streampulse/README.md`.
 - The Bayesian analysis: if the end of the **Overview** tab has a **Bayesian analysis (primary metric)** panel,
   show it there. A version without that panel has it in the API only (`GET /api/v1/results/{id}/bayesian`, see
   `docs/api/bayesian.md`); show it from http://localhost:8000/api/v1/docs if the audience asks.
-- CUPED has no tab in the dashboard; it is in the API (`GET /api/v1/results/{id}/cuped`). On ShopLab's checkout it
-  adjusts almost nothing, because the simulator's visitors are new and have no history; the Quick Start's
-  `checkout_button_color` has history and shows the reduction (see `docs/api/cuped.md`).
+- **Checkout Button Color**'s results have a **CUPED (beta)** tab (`GET /api/v1/results/{id}/cuped` in the API),
+  where its history narrows the interval. On ShopLab's checkout it adjusts almost nothing, because the simulator's
+  visitors are new and have no history (see `docs/api/cuped.md`).
 - `docs/guides/dashboard-and-api.md` lists which capabilities have a screen and which are API only.
 
 **Key talking points:**

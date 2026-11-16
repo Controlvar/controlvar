@@ -176,6 +176,10 @@ jobs:
           # makes its tests skip green, with them it fails the job.
           EXPERIMENTLY_REQUIRE_REDIS: "1"
           EXPERIMENTLY_REQUIRE_REDIS_AUTH: "1"
+          # The editable install above is what test_the_integration_job_is_armed
+          # (test_core_tree_isolation.py) checks; without this it skips, and the
+          # shard checker refuses a skip nothing allows, as integration-tests.yml.
+          EXPERIMENTLY_REQUIRE_EDITABLE: "1"
           # This shard's slice of the suite, and where it records what it
           # collected, selected and ran (outside the checkout, under a name
           # unique to the shard).

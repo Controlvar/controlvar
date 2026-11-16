@@ -132,6 +132,9 @@ WITNESSES: Dict[str, str] = {
     "Archive and unarchive a feature flag": "flag-archive",
     "Create a bandit experiment": "bandit-create",
     "Set a bandit's weights by hand": "bandit-weights-override",
+    # #1958: the API half (beta) ships first; the dashboard half flips the row
+    # when its Weight history section carries this id.
+    "A bandit's weight history (beta)": "bandit-weight-history",
     # #1446: only reading a holdout's results is beta. #1455's second half:
     # the page's loaded state (every holdout for an ADMIN, the active one for
     # a DEVELOPER), never loading, refused or error.
@@ -739,6 +742,47 @@ STALE: Tuple[Tuple[str, str], ...] = (
         "an Admin or a superuser sets a bandit's weights by hand from the "
         "Current traffic weights panel (#1957)",
     ),
+    (
+        r"\| interaction detection \(beta\) \|[^|]{0,300}\(api only\)",
+        "Experiments → Interactions runs the scan and the pair test (#1960)",
+    ),
+    (
+        r"access via: (?:text )?get /api/v1/interactions/scan",
+        "the interactions routes are also a dashboard page, Experiments → "
+        "Interactions (#1960); say so before the API",
+    ),
+    (
+        r"split url or bandit experiments? through the api",
+        "the new-experiment form creates a bandit (#1956); only split URL is API only",
+    ),
+    (
+        r"guided setup offers only a/b test and multivariate",
+        "guided setup offers Bandit too (#1956)",
+    ),
+    # #1959: the results page of a cuped or cuped_plus experiment has a
+    # CUPED (beta) tab.
+    (
+        r"no cuped (tab|section|panel|screen)|cuped has no tab",
+        "the results page of an experiment whose method is cuped or cuped_plus "
+        "has a CUPED (beta) tab (#1959)",
+    ),
+    (
+        r"the dashboard and get /results/\{id\} show the unadjusted",
+        "the results page's CUPED (beta) tab shows the adjusted numbers (#1959)",
+    ),
+    (
+        r"\| cuped \|[^|]{0,200}\(api only\)|cuped \(api only",
+        "CUPED-adjusted results are on the results page, not API only (#1959)",
+    ),
+    (
+        r"no cuped toggle in the dashboard",
+        "the results page's CUPED (beta) tab shows the adjustment (#1959)",
+    ),
+    (
+        r"pre-experiment history, through the api",
+        "narrower intervals from pre-experiment history are on the results "
+        "page as well as in the API (#1959)",
+    ),
 )
 
 _DROP = frozenset("*`")
@@ -833,6 +877,26 @@ def test_no_page_repeats_a_removed_dashboard_claim():
         "screen yet, so this is an API call:",
         # #1957: user-guide.md's bandit panel paragraph.
         "Every role can read it, and nothing in it changes the experiment. It loads once and again when you",
+        # #1960: faq.md's analysis table row and user-guide.md's interaction section.
+        "| Interaction detection (beta) | Jaccard overlap between experiments; whether one "
+        "experiment's lift on its primary conversion metric differs across another's arms "
+        "(API only) |",
+        "Access via:\n```text\nGET /api/v1/interactions/scan\n"
+        "GET /api/v1/interactions/{exp_a_id}/{exp_b_id}\n```",
+        # #1956: user-guide.md's Step 1 and experiment-wizard.md's list item.
+        "Choose **A/B Test** or **Multivariate**. Create a split URL or bandit experiment through the\n"
+        "API (`POST /api/v1/experiments/`).",
+        "- Guided setup offers only A/B Test and Multivariate. Create a split URL or bandit\n"
+        "  experiment through the API (`POST /api/v1/experiments/`).",
+        # #1959: user-guide.md, DEMO_GUIDE.md, cuped.md, faq.md, the ShopLab README
+        # and capabilities.md.
+        "The dashboard has no CUPED tab; it is available through the API:",
+        "- CUPED has no tab in the dashboard; it is in the API (`GET /api/v1/results/{id}/cuped`).",
+        "`GET /api/v1/results/{experiment_id}/cuped`; the dashboard and `GET /results/{id}` show the\nunadjusted numbers.",
+        "| CUPED | Variance reduction from each user's own events before assignment (API only) |",
+        "**CUPED** (API only; the simulator's visitors are new, so they have no history)",
+        "There is no CUPED toggle in the dashboard.",
+        "[CUPED](api/cuped.md) (beta): narrower intervals from each user's pre-experiment history, through the API.",
     ],
 )
 def test_the_sweep_catches_the_removed_wording(removed):

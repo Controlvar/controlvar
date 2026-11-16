@@ -186,8 +186,10 @@ const NEED_NOT_ASK: Record<string, string> = {
   'services/api.ts': 'defines ApiError.isForbidden',
   'utils/demoMode.ts': 'is the check',
   'components/results/ResultsDashboard/ResultsDashboard.tsx': 'a results load (GET), which demo mode never refuses',
+  'components/results/Cuped/useCupedResults.ts': 'a CUPED results load (GET), which demo mode never refuses',
   'hooks/useExperimentEligibility.ts': 'eligibility loads (GET)',
   'pages/experiments/holdouts.tsx': 'the holdout load (GET); its saves use holdoutErrorCopy',
+  'pages/experiments/interactions.tsx': 'the interaction scan and pair test (GET), which demo mode never refuses',
   'pages/auth/callback.tsx': 'GET /users/me after the Hosted UI sign-in',
   'modules/frontend/src/components/warehouse/runs/WarehouseAnalysisSection.tsx':
     "a runs load (GET), shown in the API's own words",

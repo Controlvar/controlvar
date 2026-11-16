@@ -68,32 +68,30 @@ describe('NewExperimentPage', () => {
     expect(screen.getByTestId('allocation-total')).toHaveTextContent('Currently 100%');
   });
 
-  it('offers only the experiment types this form can fully configure', () => {
+  it('offers only the experiment types this form can fully configure, Bandit last', () => {
     render(<NewExperimentPage />);
     const select = screen.getByTestId('experiment-type') as HTMLSelectElement;
     const options = Array.from(select.options).map((o) => ({ value: o.value, label: o.textContent }));
-    // `split_url` needs `split_url_config` and `bandit` needs a non-`fixed`
-    // `optimization_type`; this form sends neither, so they must not be offered.
+    // `split_url` needs `split_url_config`, which this form does not send, so
+    // it is not offered. Bandit (#1956) asks for its algorithm and is last, so
+    // the docs journeys' partial templates of the first two still match.
     expect(options).toEqual([
       { value: 'a_b', label: 'A/B Test' },
       { value: 'mv', label: 'Multivariate' },
+      { value: 'bandit', label: 'Bandit' },
     ]);
     expect(select.value).toBe('a_b');
   });
 
-  it('explains where split URL and bandit experiments come from', () => {
+  it('explains where split URL experiments come from, and no longer sends bandits to the API', () => {
     render(<NewExperimentPage />);
     const note = screen.getByTestId('experiment-type-note');
-    expect(note).toHaveTextContent(/split url/i);
-    expect(note).toHaveTextContent(/bandit/i);
-    expect(within(note).getByRole('link', { name: /split url/i })).toHaveAttribute(
-      'href',
-      docsUrl('api/split-url'),
+    expect(note).toHaveTextContent(
+      'Split URL experiments need a URL configuration, which this form cannot set up yet, so create them through the API.',
     );
-    expect(within(note).getByRole('link', { name: /bandit/i })).toHaveAttribute(
-      'href',
-      docsUrl('api/multi-armed-bandit'),
-    );
+    expect(within(note).getByRole('link', { name: 'Split URL' })).toHaveAttribute('href', docsUrl('api/split-url'));
+    expect(within(note).getAllByRole('link')).toHaveLength(1);
+    expect(note.textContent).not.toMatch(/bandit/i);
     // No SDK creates an experiment: they are created through the API (#393).
     expect(note).toHaveTextContent(/create them through the API\.$/);
     expect(note.textContent).not.toMatch(/sdk/i);

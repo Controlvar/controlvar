@@ -252,18 +252,6 @@ source venv/bin/activate && pytest -m "unit" -v
 
 ## Monitoring & Deployment
 
-### CloudWatch Integration
-```bash
-# Create log groups
-aws logs create-log-group --log-group-name /experimentation-platform/api
-aws logs create-log-group --log-group-name /experimentation-platform/services
-aws logs create-log-group --log-group-name /experimentation-platform/errors
-
-# Deploy monitoring dashboards
-cd infrastructure/cloudwatch
-./deploy-dashboards.sh
-```
-
 ### Application URLs
 - Backend API: http://localhost:8000
 - Frontend (dashboard, `npm run dev` = `next dev -p 3100`): http://localhost:3100

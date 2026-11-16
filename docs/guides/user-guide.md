@@ -58,8 +58,8 @@ your answers carry over.
 
 **Step 1: Type**
 
-Choose **A/B Test** or **Multivariate**. Create a split URL or bandit experiment through the
-API (`POST /api/v1/experiments/`).
+Choose **A/B Test**, **Multivariate** or **Bandit**; a bandit also asks for its **Optimization
+algorithm**. Create a split URL experiment through the API (`POST /api/v1/experiments/`).
 
 **Step 2: Details**
 
@@ -552,7 +552,7 @@ CUPED reduces result noise by adjusting for each user's own events in the days b
 
 **When to use it:** When your users sent the metric's event before the experiment (returning customers who bought before, say). Send that history to the tracking API with no experiment key, before you start the experiment: history the server receives after a user was assigned is ignored for that user.
 
-The dashboard has no CUPED tab; it is available through the API:
+For an experiment whose method is `cuped` or `cuped_plus`, the results page has a **CUPED (beta)** tab: each conversion metric's change with and without CUPED, how much the variance shrank, and the share of users with history. The method is set through the API when the experiment is created or while it is a draft. The same numbers are at:
 ```text
 GET /api/v1/results/{experiment_id}/cuped
 ```
@@ -587,7 +587,7 @@ balanced groups, from `GET /api/v1/results/{experiment_id}/balanced-groups` (bet
 
 A bandit experiment automatically shifts traffic toward the better-performing variant as data accumulates. Use this when maximizing conversions during the experiment matters more than getting precise effect size estimates.
 
-Set `optimization_type` to `thompson_sampling`, `ucb1`, or `epsilon_greedy` when creating an experiment. See the [Multi-Armed Bandit Guide](../api/multi-armed-bandit.md).
+In the dashboard, choose **Bandit** as the experiment type and pick the **Optimization algorithm**; through the API, set `optimization_type` to `thompson_sampling`, `ucb1`, or `epsilon_greedy` when creating an experiment. Until the first weight update, new users are split by the variants' allocations. See the [Multi-Armed Bandit Guide](../api/multi-armed-bandit.md).
 
 A bandit experiment's page has a **Current traffic weights** panel: each variant's share of new
 users, with its pulls, successes and conversion rate, and when the weights were last computed.
@@ -603,7 +603,9 @@ starting allocation until then. The dashboard shows the current weights only, wi
 
 When multiple experiments run simultaneously on overlapping user populations, they can distort each other's results. Run an interaction scan to find the pairs that share users, then ask the pair route whether one experiment's effect differs across the other's arms (beta). The scan measures overlap only.
 
-Access via:
+In the dashboard, open **Experiments** and then **Interactions**: **Scan active experiments** lists the
+pairs that share many users, and the **Pair test** (beta) tests any two experiments. It needs the
+ANALYST, DEVELOPER or ADMIN role. Through the API:
 ```text
 GET /api/v1/interactions/scan
 GET /api/v1/interactions/{exp_a_id}/{exp_b_id}

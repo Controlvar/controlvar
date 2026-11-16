@@ -13,6 +13,8 @@ run by both profiles' Jest) holds every permission helper to:
 * ``override_bandit_weights_roles``: which may set a bandit's weights by hand
   (what ``override_bandit_weights``, ``PUT /api/v1/bandit/{id}/weights``,
   admits; #1957);
+* ``analyse_interactions_roles``: which may run the interaction scan and pair
+  test (what ``interactions._require_developer`` admits, #1960);
 * ``grantable``: the eleven pairs a custom role or direct grant can hold
   (``GRANTABLE``).
 
@@ -35,7 +37,12 @@ from typing import Any, Dict, List
 import pytest
 from fastapi import HTTPException
 
-from backend.app.api.v1.endpoints import bandit, global_holdout, mutual_exclusion_groups
+from backend.app.api.v1.endpoints import (
+    bandit,
+    global_holdout,
+    interactions,
+    mutual_exclusion_groups,
+)
 from backend.app.core.permissions import (
     AUDIT_LOG_READ_ALL_ROLES,
     GRANTABLE,
@@ -127,6 +134,7 @@ def build_table() -> Dict[str, Any]:
         ],
         "administer_eligibility_roles": holdout_admins,
         "override_bandit_weights_roles": _admitted_by_override(),
+        "analyse_interactions_roles": _admitted_by(interactions._require_developer),
         "grantable": [list(pair) for pair in sorted(GRANTABLE)],
     }
 
@@ -153,6 +161,7 @@ def test_the_table_is_not_empty():
     assert table["audit_log_read_roles"] == ["ADMIN", "ANALYST"]
     assert table["administer_eligibility_roles"] == ["ADMIN"]
     assert table["override_bandit_weights_roles"] == ["ADMIN"]
+    assert table["analyse_interactions_roles"] == ["ADMIN", "DEVELOPER", "ANALYST"]
 
 
 def test_a_changed_role_list_is_a_difference():
