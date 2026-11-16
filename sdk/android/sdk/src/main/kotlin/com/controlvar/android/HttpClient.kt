@@ -4,6 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Call
 import okhttp3.Callback
+import okhttp3.HttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -106,11 +107,38 @@ class HttpClient(
         } catch (e: ExperimentationException) {
             throw e
         } catch (e: IOException) {
+            // A flag evaluation's query holds the user's attributes: the message names the
+            // request without it, and the cause is kept only if no message in its chain repeats it.
+            val url = request.url
             throw ExperimentationException.NetworkException(
-                "Network error: ${e.message}",
-                e
+                "Network error: ${withoutQuery(e.message, url)}",
+                if (repeatsQuery(e, url)) null else e
             )
         }
+    }
+
+    /** [message] with [url]'s query removed, wherever the message names it. */
+    private fun withoutQuery(message: String?, url: HttpUrl): String? {
+        val query = url.encodedQuery
+        if (message == null || query.isNullOrEmpty()) return message
+        return message
+            .replace(url.toString(), url.newBuilder().query(null).build().toString())
+            .replace("?$query", "")
+            .replace(query, "")
+    }
+
+    /** True when a message in [error]'s cause chain contains [url]'s query, encoded or decoded. */
+    private fun repeatsQuery(error: Throwable, url: HttpUrl): Boolean {
+        val queries = listOfNotNull(url.encodedQuery, url.query, url.queryParameter("context"))
+            .filter { it.isNotEmpty() }
+        var cause: Throwable? = error
+        var depth = 0
+        while (cause != null && depth++ < 20) {
+            val text = cause.message
+            if (text != null && queries.any { text.contains(it) }) return true
+            cause = cause.cause
+        }
+        return false
     }
 
     /** Prefers the API's `detail` field, then the HTTP reason phrase, for error messages. */
