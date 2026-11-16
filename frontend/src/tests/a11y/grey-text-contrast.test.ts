@@ -42,6 +42,9 @@ const FILES = [
   'pages/results/[id].tsx',
   // #1959: the results page's CUPED (beta) tab.
   'components/results/Cuped/CupedResultsPanel.tsx',
+  // #1958: the experiment page's bandit panel and its Weight history.
+  'components/experiments/BanditWeightsSection.tsx',
+  'components/experiments/BanditWeightHistory.tsx',
   // #442: the flag page's Manage this flag group (Archive, its dialog,
   // Unarchive), and the archived flag's note on both flag pages.
   'components/feature-flags/FlagManageSection.tsx',

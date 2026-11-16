@@ -380,6 +380,51 @@ test.describe("Journey: RBAC", () => {
     });
   }
 
+  // The bandit's weight history (#1958, beta route): the read rule is every
+  // role's, so a VIEWER opens it. Nothing is requested until it is opened; the
+  // rows are compared with the server's own answer, not a value typed here.
+  test("viewer opens a bandit's weight history and it only reads", async ({ sessions }) => {
+    const page = await (await sessions("viewer")).newPage();
+    const experiments = new ExperimentsPage(page);
+    const writes: string[] = [];
+    page.on("request", (request) => {
+      const { pathname } = new URL(request.url());
+      if (pathname.startsWith("/api/v1/bandit/") && request.method() !== "GET") {
+        writes.push(`${request.method()} ${pathname}`);
+      }
+    });
+    try {
+      await experiments.goto();
+      await expect(experiments.experimentList).toBeVisible({ timeout: 15_000 });
+      // Seeded ACTIVE with Thompson sampling by seed_demo_data.py.
+      await experiments.clickExperiment("Recommendation Algorithm MAB");
+      const section = page.getByTestId("bandit-weight-history-section");
+      await expect(section).toBeVisible({ timeout: 15_000 });
+      const answer = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname.endsWith("/history") &&
+          new URL(response.url()).pathname.startsWith("/api/v1/bandit/") &&
+          response.request().method() === "GET",
+        { timeout: 20_000 },
+      );
+      await section.getByRole("button", { name: "Show weight history" }).click();
+      const response = await answer;
+      expect(response.status(), "a viewer may read the weight history").toBe(200);
+      const ticks = (await response.json()) as { tick_at: string; weights: Record<string, number> }[];
+
+      await expect(section.getByTestId("bandit-weight-history-error")).toHaveCount(0);
+      await expect(section.getByTestId("bandit-weight-history")).toBeVisible();
+      if (ticks.length === 0) {
+        await expect(section.getByTestId("bandit-weight-history-table")).toHaveCount(0);
+      } else {
+        await expect(section.getByTestId("bandit-weight-history-row")).toHaveCount(Math.min(ticks.length, 200));
+      }
+      expect(writes, "the history only reads").toEqual([]);
+    } finally {
+      await page.close();
+    }
+  });
+
   // #1960: interaction analysis is for a superuser or the ANALYST, DEVELOPER
   // and ADMIN roles (`interactions._require_developer`). An ANALYST -- not a
   // superuser, so this is the role's own evidence -- follows the Experiments

@@ -593,7 +593,7 @@ A bandit experiment's page has a **Current traffic weights** panel: each variant
 users, with its pulls, successes and conversion rate, and when the weights were last computed.
 Every role can read it, and nothing in it changes the experiment. It loads once and again when you
 press **Refresh**. Before the first update it says so, and new users follow each variant's
-starting allocation until then. The dashboard shows the current weights only, with no history.
+starting allocation until then. Under it, **Weight history** lists the bandit's past updates, newest first, when you open it.
 
 ---
 

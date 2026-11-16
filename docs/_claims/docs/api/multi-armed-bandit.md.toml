@@ -331,6 +331,10 @@ by = [
 ]
 
 [[unit]]
+text = "The dashboard shows the same updates under Weight history on the experiment's page."
+by = ["test:frontend/src/tests/pages/experiment-detail-bandit-history.test.tsx::shows the server weights as shares, columns in the variant order"]
+
+[[unit]]
 text = "Scheduler"
 by = ["exempt:baseline"]
 
