@@ -20,6 +20,7 @@ const mockGetResults = ResultsService.getResults as jest.Mock;
 const mockGetDailyResults = ResultsService.getDailyResults as jest.Mock;
 const mockGetSampleSize = ResultsService.getSampleSize as jest.Mock;
 const mockGetExperiment = ExperimentsService.get as jest.Mock;
+const mockGetCuped = ResultsService.getCupedResults as jest.Mock;
 
 const mockResults: ExperimentResultsResponse = {
   experiment_id: 'exp-1',
@@ -181,18 +182,52 @@ describe('ResultsDashboard', () => {
     expect(screen.getByRole('tab', { name: /sample size/i })).toBeInTheDocument();
   });
 
-  it('offers no CUPED tab, toggle or control: CUPED-adjusted results are API only', async () => {
+  it.each([
+    ['none', { method: 'none' }],
+    ['not stored', null],
+  ])(
+    'offers no CUPED tab, toggle or control for an experiment whose variance reduction is %s',
+    async (_name, config) => {
+      mockGetExperiment.mockResolvedValue({ id: 'exp-1', variance_reduction_config: config });
+      mockGetResults.mockResolvedValue(mockResults);
+      mockGetDailyResults.mockResolvedValue(mockDaily);
+      mockGetSampleSize.mockResolvedValue(mockSampleSize);
+
+      render(<ResultsDashboard experimentId="exp-1" />);
+      await waitFor(() => screen.getByRole('tablist'));
+
+      for (const role of ['tab', 'switch', 'checkbox', 'button', 'radio'] as const) {
+        expect(screen.queryByRole(role, { name: /cuped/i })).toBeNull();
+      }
+      expect(screen.queryByText(/cuped/i)).toBeNull();
+      expect(mockGetCuped).not.toHaveBeenCalled();
+    },
+  );
+
+  it('offers the CUPED (beta) tab for an experiment whose method is cuped, and asks nothing until it opens', async () => {
+    mockGetExperiment.mockResolvedValue({ id: 'exp-1', variance_reduction_config: { method: 'cuped' } });
     mockGetResults.mockResolvedValue(mockResults);
     mockGetDailyResults.mockResolvedValue(mockDaily);
     mockGetSampleSize.mockResolvedValue(mockSampleSize);
+    mockGetCuped.mockResolvedValue({
+      experiment_id: 'exp-1',
+      method: 'cuped',
+      confidence_level: 0.95,
+      correction_method: 'none',
+      covariate_lookback_days: 7,
+      metrics: [],
+      computed_at: '2026-11-15T12:00:00+00:00',
+    });
 
     render(<ResultsDashboard experimentId="exp-1" />);
-    await waitFor(() => screen.getByRole('tablist'));
-
-    for (const role of ['tab', 'switch', 'checkbox', 'button', 'radio'] as const) {
-      expect(screen.queryByRole(role, { name: /cuped/i })).toBeNull();
-    }
-    expect(screen.queryByText(/cuped/i)).toBeNull();
+    const tab = await screen.findByRole('tab', { name: 'CUPED (beta)' });
+    expect(mockGetCuped).not.toHaveBeenCalled();
+    await userEvent.click(tab);
+    expect(await screen.findByTestId('cuped-results')).toHaveTextContent(
+      'This experiment has no metrics to adjust.',
+    );
+    expect(mockGetCuped).toHaveBeenCalledTimes(1);
+    expect(mockGetCuped).toHaveBeenCalledWith('exp-1');
   });
 
   it('switches to trends tab when clicked', async () => {

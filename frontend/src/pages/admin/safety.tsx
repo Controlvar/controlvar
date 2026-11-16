@@ -77,7 +77,15 @@ export function SafetyDashboard() {
   const [rollbackReason, setRollbackReason] = useState('');
   const [rollbackSuccess, setRollbackSuccess] = useState(false);
   const [rollbackError, setRollbackError] = useState<string | null>(null);
-  const [rolling, setRolling] = useState(false);
+  /** The flag whose rollback request is in flight (the dialog may be closed or on another flag). */
+  const [rollingFlagId, setRollingFlagId] = useState<string | null>(null);
+  /** A result or error that arrived after its dialog had closed, shown outside it. */
+  const [rollbackNotice, setRollbackNotice] = useState<{
+    kind: 'success' | 'error';
+    text: string;
+  } | null>(null);
+  /** The flag the open dialog is for (null when closed), readable from a late answer. */
+  const openRollbackFlagIdRef = useRef<string | null>(null);
   /** The control that opened the dialog; focus goes back to it on close. */
   const rollbackTriggerRef = useRef<HTMLElement | null>(null);
   /** The flag the dialog is about, for the fallback when that control has gone. */
@@ -118,6 +126,8 @@ export function SafetyDashboard() {
     rollbackTriggerRef.current =
       active instanceof HTMLElement && active.closest('[data-flag-id]') ? active : null;
     rollbackFlagIdRef.current = flagId;
+    openRollbackFlagIdRef.current = flagId;
+    setRollbackNotice(null);
     setRollbackModal({ flagId, flagName: flag.flag_name });
     setRollbackReason('');
     setRollbackSuccess(false);
@@ -126,10 +136,11 @@ export function SafetyDashboard() {
 
   const handleConfirmRollback = async () => {
     if (!rollbackModal) return;
-    setRolling(true);
+    const { flagId, flagName } = rollbackModal;
+    setRollingFlagId(flagId);
     setRollbackError(null);
     try {
-      const result = await AdminService.rollbackFlag(rollbackModal.flagId, rollbackReason);
+      const result = await AdminService.rollbackFlag(flagId, rollbackReason);
       if (!result.success) {
         throw new Error(result.message || 'Rollback failed');
       }
@@ -137,7 +148,7 @@ export function SafetyDashboard() {
         {
           id: result.rollback_record_id ?? `${result.feature_flag_id}-${result.timestamp}`,
           flag_id: result.feature_flag_id,
-          flag_name: rollbackModal.flagName,
+          flag_name: flagName,
           rolled_back_by: user?.email ?? user?.username ?? 'you',
           reason: rollbackReason.trim() || result.message,
           timestamp: result.timestamp,
@@ -146,19 +157,35 @@ export function SafetyDashboard() {
         },
         ...prev,
       ]);
-      setRollbackSuccess(true);
+      // Only a dialog still open for this same flag shows the result; a late
+      // answer goes to the page's status area, naming its flag (#1798).
+      if (openRollbackFlagIdRef.current === flagId) {
+        setRollbackSuccess(true);
+      } else {
+        setRollbackNotice({
+          kind: 'success',
+          text: `${flagName} is off. Turn it on from its page when the cause is fixed.`,
+        });
+      }
       void refreshFlags();
     } catch (err) {
-      setRollbackError((err as Error).message || 'Rollback failed');
+      const message = (err as Error).message || 'Rollback failed';
+      if (openRollbackFlagIdRef.current === flagId) {
+        setRollbackError(message);
+      } else {
+        setRollbackNotice({ kind: 'error', text: `Rollback of ${flagName} failed: ${message}` });
+      }
     } finally {
-      setRolling(false);
+      setRollingFlagId((current) => (current === flagId ? null : current));
     }
   };
+  const rolling = rollbackModal !== null && rollingFlagId === rollbackModal.flagId;
 
   const rateLimitedKeys = failedChecks.filter((f) => f.rateLimited).map((f) => f.key);
   const erroredKeys = failedChecks.filter((f) => !f.rateLimited).map((f) => f.key);
 
   const handleCloseModal = () => {
+    openRollbackFlagIdRef.current = null;
     setRollbackModal(null);
     setRollbackReason('');
     setRollbackSuccess(false);
@@ -208,6 +235,20 @@ export function SafetyDashboard() {
               {flagsLoading ? 'Checking…' : 'Re-check'}
             </button>
           </div>
+
+          {rollbackNotice && (
+            <div
+              role={rollbackNotice.kind === 'error' ? 'alert' : 'status'}
+              data-testid="rollback-notice"
+              className={
+                rollbackNotice.kind === 'error'
+                  ? 'bg-red-50 border border-red-200 rounded p-3 text-red-700 text-sm mb-3'
+                  : 'bg-green-50 border border-green-200 rounded p-3 text-green-700 text-sm mb-3'
+              }
+            >
+              {rollbackNotice.text}
+            </div>
+          )}
 
           {flagsError && (
             <div

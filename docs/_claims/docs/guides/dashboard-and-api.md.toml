@@ -168,11 +168,15 @@ text = "Archive and unarchive a feature flag | Dashboard | Archived flags"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Create a bandit experiment | API only | Multi-armed bandits"
+text = "Create a bandit experiment | Dashboard | Multi-armed bandits"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
 text = "Set a bandit's weights by hand | API only | Multi-armed bandits"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "A bandit's weight history (beta) | API only | Multi-armed bandits"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
@@ -188,7 +192,7 @@ text = "Split-URL experiments (full profile) | API only | Split URL testing"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "CUPED-adjusted results (beta) | API only | CUPED"
+text = "CUPED-adjusted results (beta) | Dashboard | CUPED"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]

@@ -1,7 +1,7 @@
 import { readFileSync } from "fs";
 import { test, expect, TEST_USERS, type UserRole } from "./fixtures/auth.fixture";
 import { API_URL, TOKEN_STORAGE_KEY } from "./env";
-import { ExperimentsPage } from "./pages/experiments.page";
+import { ESTIMATE_STEP_HEADING, ExperimentsPage } from "./pages/experiments.page";
 import { FeatureFlagsPage } from "./pages/feature-flags.page";
 
 /**
@@ -470,6 +470,75 @@ test.describe("Journey: RBAC", () => {
       await page.reload();
       await expect(experiments.detail).toBeVisible({ timeout: 15_000 });
     } finally {
+      await page.close();
+    }
+  });
+
+  // #1956: an ordinary DEVELOPER (not a superuser) creates a bandit from guided
+  // setup against the real API. The create's own answer is the evidence: 201,
+  // a bandit with the algorithm chosen. The page it lands on is the new
+  // bandit's, whose weights panel says no weights yet. The name is this
+  // attempt's own, and the draft is deleted at the end: the journey database
+  // is shared.
+  test("developer creates a bandit experiment from guided setup", async ({ sessions }) => {
+    const page = await (await sessions("developer")).newPage();
+    const experiments = new ExperimentsPage(page);
+    const name = `j442-bandit-${Date.now()}`;
+    let createdId: string | null = null;
+    try {
+      await experiments.gotoGuided();
+      await expect(experiments.stepHeading).toHaveText("What kind of experiment?", { timeout: 15_000 });
+      await page.getByTestId("wizard-type-bandit").check();
+      const algorithm = page.getByLabel("Optimization algorithm");
+      await expect(algorithm).toHaveValue("thompson_sampling");
+      await algorithm.selectOption("ucb1");
+      await experiments.nextStep("Name it and choose what to measure");
+      await experiments.nameInput.fill(name);
+      await experiments.nextStep("Set up the versions users will see");
+      await expect(page.getByTestId("balance-unavailable")).toBeVisible();
+      await expect(page.getByTestId("balance-switch")).toHaveCount(0);
+      await experiments.nextStep(ESTIMATE_STEP_HEADING);
+      await experiments.nextStep("Check and create");
+      await expect(page.getByTestId("review-type")).toHaveText("Bandit (UCB1)");
+
+      // The create itself, not the redirect the API may answer first for the
+      // path without its trailing slash.
+      const answer = page.waitForResponse(
+        (response) =>
+          response.request().method() === "POST" &&
+          /^\/api\/v1\/experiments\/?$/.test(new URL(response.url()).pathname) &&
+          (response.status() < 300 || response.status() >= 400),
+        { timeout: 20_000 },
+      );
+      await experiments.createStepButton.click();
+      const response = await answer;
+      expect(response.status(), "POST /api/v1/experiments/ creates the bandit").toBe(201);
+      const created = (await response.json()) as { id: string; experiment_type: string; optimization_type: string };
+      createdId = created.id;
+      expect(created.experiment_type).toBe("bandit");
+      expect(created.optimization_type).toBe("ucb1");
+
+      await page.waitForURL((url) => url.pathname === `/experiments/${created.id}`, { timeout: 15_000 });
+      await expect(experiments.detail).toBeVisible({ timeout: 15_000 });
+      await expect(experiments.detailName).toContainText(name);
+      const panel = page.getByTestId("bandit-weights");
+      await expect(panel).toBeVisible({ timeout: 15_000 });
+      await expect(panel).toContainText("Current traffic weights");
+      await expect(panel.getByTestId("bandit-weights-empty")).toHaveText(
+        "No weights yet. Weights appear after the first update; until then new users are split by each variant's starting allocation.",
+        { timeout: 15_000 },
+      );
+    } finally {
+      // Its own draft only, deleted even when a step above failed. Only a
+      // draft can be deleted, and the route takes its id again as `experiment_key`.
+      if (createdId) {
+        const token = await page.evaluate((key) => window.localStorage.getItem(key), TOKEN_STORAGE_KEY);
+        const removed = await page.request.delete(
+          `${API_URL}/api/v1/experiments/${createdId}?experiment_key=${createdId}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        expect.soft(removed.status(), `DELETE the journey's bandit ${createdId}`).toBe(204);
+      }
       await page.close();
     }
   });

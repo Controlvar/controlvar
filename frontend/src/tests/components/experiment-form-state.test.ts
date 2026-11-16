@@ -35,6 +35,8 @@ describe('INITIAL_FORM_STATE', () => {
       description: '',
       hypothesis: '',
       type: 'a_b',
+      // #1956: a bandit's algorithm, sent only while the type is bandit.
+      optimizationType: 'thompson_sampling',
       rules: { logical_operator: 'AND', groups: [] },
       variants: [
         { name: 'Control', description: '', traffic_allocation: 50, is_control: true },

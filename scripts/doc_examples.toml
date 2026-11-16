@@ -13,7 +13,7 @@
 
 [meta]
 documents = 60
-exec = 334
+exec = 335
 universe = [
     ".github/pull_request_template.md",
     ".github/qa-templates/README.md",
@@ -303,9 +303,9 @@ expects = 3
 [[document]]
 path = "docs/api/multi-armed-bandit.md"
 environment = "stack"
-exec = 5
+exec = 6
 skip = 0
-expects = 8
+expects = 9
 
 [[document]]
 path = "docs/api/mutual-exclusion-groups.md"

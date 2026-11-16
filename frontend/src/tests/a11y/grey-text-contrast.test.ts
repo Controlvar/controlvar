@@ -40,6 +40,8 @@ const FILES = [
   // #442: the results page's Download CSV button and the sentence under it.
   'components/results/ResultsCsvDownload.tsx',
   'pages/results/[id].tsx',
+  // #1959: the results page's CUPED (beta) tab.
+  'components/results/Cuped/CupedResultsPanel.tsx',
   // #442: the flag page's Manage this flag group (Archive, its dialog,
   // Unarchive), and the archived flag's note on both flag pages.
   'components/feature-flags/FlagManageSection.tsx',
@@ -50,6 +52,13 @@ const FILES = [
   // does not visit them, so this is their only pin.
   'pages/experiments/interactions.tsx',
   'components/experiments/InteractionPairResult.tsx',
+  // #1956: the Bandit type, its Optimization algorithm and its lines, in guided
+  // setup and the single-page form (the algorithm field itself is in
+  // ExperimentTypeField.tsx, above), and the page that holds both views.
+  'components/experiments/new/Wizard.tsx',
+  'components/experiments/new/AdvancedForm.tsx',
+  'components/experiments/new/BalanceWithinFields.tsx',
+  'pages/experiments/new.tsx',
 ];
 
 /**

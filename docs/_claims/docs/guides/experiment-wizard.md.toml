@@ -224,14 +224,14 @@ text = "If your session has ended, sign in again in another tab, then press Crea
 by = ["test:frontend/src/tests/pages/experiment-new-create-errors.test.tsx"]
 
 [[unit]]
-text = "Guided setup offers only A/B Test and Multivariate."
+text = "Guided setup offers A/B Test, Multivariate and Bandit."
 by = [
     "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::offers exactly the types the single-page form offers",
-    "journey:experiment-wizard#new-experiment",
+    "test:frontend/src/tests/pages/experiment-new-bandit.test.tsx::guided setup has three radios in the order A/B Test, Multivariate, Bandit",
 ]
 
 [[unit]]
-text = "Create a split URL or bandit experiment through the API (POST /api/v1/experiments/)."
+text = "Create a split URL experiment through the API (POST /api/v1/experiments/)."
 by = ["exempt:instruction"]
 
 [[unit]]

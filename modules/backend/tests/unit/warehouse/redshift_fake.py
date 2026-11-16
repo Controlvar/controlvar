@@ -247,12 +247,19 @@ def sub_statements(
     statement_id: str = STATEMENT_ID,
     has_result: Sequence[bool] = (False, False, False, True, True),
 ) -> List[Dict[str, Any]]:
+    """Each sub-statement as DescribeStatement reports it.
+
+    ``RedshiftQueryId`` is 0, as a real workgroup reported it for every SET,
+    the probe and a statement that reads no table; for a sub-statement that
+    did not end FINISHED it reported 0 or -1 (and a cluster -1 throughout).
+    So nothing here can pass by taking it for an id that names a statement.
+    """
     return [
         {
             "Id": f"{statement_id}:{n}",
             "Status": status,
             "HasResultSet": result,
-            "RedshiftQueryId": 9000 + n,
+            "RedshiftQueryId": 0,
         }
         for n, (status, result) in enumerate(zip(statuses, has_result), start=1)
     ]

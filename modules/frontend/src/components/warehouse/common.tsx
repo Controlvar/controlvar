@@ -51,7 +51,7 @@ export function BetaChip() {
       <span
         id={id}
         role="tooltip"
-        className={`${open ? 'block' : 'sr-only'} absolute left-0 top-full z-30 mt-1 w-72 rounded-md border border-slate-200 bg-white p-3 text-xs font-normal text-slate-700 shadow-lg`}
+        className={`${open ? 'absolute block w-72 max-w-[calc(100vw-2rem)]' : 'sr-only'} left-0 top-full z-30 mt-1 rounded-md border border-slate-200 bg-white p-3 text-xs font-normal text-slate-700 shadow-lg`}
       >
         {BETA_TEXT}
       </span>
