@@ -158,7 +158,9 @@ describe('mounting and requests', () => {
     await within(box).findByTestId('bandit-weight-history-table');
     const panel = screen.getByTestId('bandit-weights');
     expect(panel.contains(box)).toBe(false);
-    expect(within(panel).getAllByRole('button').map((b) => b.textContent)).toEqual(['Refresh']);
+    // The signed-in user here may set weights by hand (#1957); that button is the panel's, not the history's.
+    expect(within(panel).getAllByRole('button').map((b) => b.textContent)).toEqual(['Refresh', 'Set weights by hand']);
+    expect(within(box).queryByRole('button', { name: 'Set weights by hand' })).toBeNull();
     expect(panel.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(
       mockedApiFetch.mock.calls.every(([, options]) => (options?.method ?? 'GET').toUpperCase() === 'GET'),
