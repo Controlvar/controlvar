@@ -1586,7 +1586,18 @@ by = [
 ]
 
 [[unit]]
-text = "The dashboard has no CUPED tab; it is available through the API:"
+text = "For an experiment whose method is cuped or cuped_plus, the results page has a CUPED (beta) tab: each conversion metric's change with and without CUPED, how much the variance shrank, and the share of users with history."
+by = [
+    "test:frontend/src/tests/pages/results-cuped.test.tsx::sits after the Overview, Trends and Sample Size tabs and before Breakdowns",
+    "test:frontend/src/tests/pages/results-cuped.test.tsx::shows variance reduction and users with history as the API sent them, a negative one with a real minus",
+]
+
+[[unit]]
+text = "The method is set through the API when the experiment is created or while it is a draft."
+by = ["test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_draft_takes_each_analysis_setting"]
+
+[[unit]]
+text = "The same numbers are at:"
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
