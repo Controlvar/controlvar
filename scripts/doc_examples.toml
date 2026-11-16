@@ -178,6 +178,7 @@ universe = [
     "sdk/react-native/README.md",
     "sdk/react/README.md",
     "sdk/ruby/README.md",
+    "sdk/visual/README.md",
     "tests/sdk-contract/README.md",
 ]
 

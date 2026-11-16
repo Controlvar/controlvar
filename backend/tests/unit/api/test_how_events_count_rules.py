@@ -117,8 +117,9 @@ def _source(rel: str) -> str:
 
 
 #: Directories under sdk/ that are not SDKs and send no event, with where their
-#: source is: the MCP server reads flags, experiments and results only.
-NOT_AN_SDK = {"mcp": "sdk/mcp/src"}
+#: source is: the MCP server reads flags, experiments and results only, and the
+#: visual experiments' browser script (#1545) does not send events yet.
+NOT_AN_SDK = {"mcp": "sdk/mcp/src", "visual": "sdk/visual/src"}
 
 
 def test_every_sdk_directory_is_listed():

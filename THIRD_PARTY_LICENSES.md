@@ -1072,6 +1072,12 @@ Resolved with `license-checker-rseidelsohn --production`.
 |---|---|
 | `caniuse-lite` | 1.0.30001810 |
 
+## Node — Visual experiments browser script (`sdk/visual`)
+
+Resolved with `license-checker-rseidelsohn --production`.
+
+No third-party runtime dependencies: this package declares none.
+
 ## Other SDK ecosystems — declared direct dependencies
 
 These ecosystems have no resolver in this repository, so the list below is read from the manifests and the licence column is the upstream project's published licence. Regenerate by hand when a manifest changes.

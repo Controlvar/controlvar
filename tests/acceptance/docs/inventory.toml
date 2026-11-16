@@ -725,7 +725,7 @@ note = "sign-in per role and a password change, a first API key used for an assi
 # above says what each field means.
 # ---------------------------------------------------------------------------
 [meta]
-walked = 164
+walked = 165
 
 # The front door, the policy beside it, and the plan.
 
@@ -991,6 +991,11 @@ reason = "the index of the contributor pages"
 scope = "out"
 out = "contributor"
 reason = "how to develop and build the dashboard from a checkout"
+
+[documents."sdk/visual/README.md"]
+scope = "out"
+out = "contributor"
+reason = "how to build and test the visual experiments' browser script from a checkout; it is not published"
 
 [documents."tests/sdk-contract/README.md"]
 scope = "out"
