@@ -412,11 +412,6 @@ def test_only_analysis_history_and_evaluation_counters_are_deleted_by_age():
 #: that evaluates a flag and the code that assigns a user to an experiment,
 #: each as (the line that starts it, the line after it) pairs.
 NATIVE_SDKS = {
-    "ios": (
-        "sdk/ios/Sources/Controlvar/ExperimentationClient.swift",
-        [("public func evaluateFlag(", "// MARK: - Experiments")],
-        [("public func getAssignment(", "// MARK: - Tracking")],
-    ),
     "android": (
         "sdk/android/sdk/src/main/kotlin/com/controlvar/android/ExperimentationClient.kt",
         [
@@ -454,12 +449,12 @@ def _native_code(rel: str, bounds) -> str:
 
 @pytest.mark.parametrize("sdk", sorted(NATIVE_SDKS))
 def test_the_native_sdks_send_no_context_on_flag_evaluation(sdk):
-    """iOS, Android and Flutter evaluate a flag with the user id alone (#438;
-    React Native sends the attributes since #1520), so a flag rule on
-    attributes cannot match from them; each sends the attributes as the context
-    of an experiment assignment. When this fails, the SDK has started to send a
-    context on flag evaluation: say so on the pages whose registries name this
-    test."""
+    """Android and Flutter evaluate a flag with the user id alone (#438; React
+    Native sends the attributes since #1520, iOS since its #438 change, and
+    both are in SENDS), so a flag rule on attributes cannot match from them;
+    each sends the attributes as the context of an experiment assignment. When
+    this fails, the SDK has started to send a context on flag evaluation: say
+    so on the pages whose registries name this test."""
     rel, evaluate, assign = NATIVE_SDKS[sdk]
     evaluation = _native_code(rel, evaluate)
     assert "feature-flags/evaluate" in evaluation, f"{sdk}: no evaluate request read"
@@ -539,6 +534,13 @@ SENDS = {
         ],
         'query["context"]',
     ),
+    # Since #438's iOS change: evaluateFlag builds the query itself, so that
+    # `user_id` comes before `context`.
+    "ios": (
+        "sdk/ios/Sources/Controlvar/ExperimentationClient.swift",
+        [("public func evaluateFlag(", "// MARK: - Experiments")],
+        '"&context=\\(HTTPClient.encodeComponent(context))"',
+    ),
 }
 
 #: Every directory under sdk/ whose flag evaluation sends the user id alone, so
@@ -565,11 +567,6 @@ DOES_NOT_SEND = {
         1720,
         "sdk/edge/src/client.ts",
         [("async evaluateFlag(", "const evaluation: FlagEvaluation = {")],
-    ),
-    "ios": (
-        438,
-        "sdk/ios/Sources/Controlvar/ExperimentationClient.swift",
-        [("public func evaluateFlag(", "let result = EvalResult(")],
     ),
     "android": (
         438,

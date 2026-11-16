@@ -1000,7 +1000,6 @@ SENDS_NO_CONTEXT = {
     "edge",
     "elixir",
     "flutter",
-    "ios",
     "php",
     "ruby",
 }
@@ -1160,6 +1159,19 @@ def test_the_claim_patterns_find_the_true_sentence_on_the_dotnet_pages():
     assert sends_context("dotnet")
     for page in ("docs/sdk/dotnet.md", "sdk/dotnet/README.md"):
         assert "sent as context on flag evaluation" in attribute_claims(text(page)), (
+            page
+        )
+
+
+def test_the_claim_patterns_find_the_true_sentence_on_the_ios_pages():
+    # iOS sends the context since its #438 change, and both its pages say so:
+    # ios put back in SENDS_NO_CONTEXT fails
+    # test_a_page_claims_no_attribute_targeting_its_client_does_not_send on
+    # docs/sdk/ios.md and sdk/ios/README.md as well as here.
+    assert "ios" not in SENDS_NO_CONTEXT
+    assert sends_context("ios")
+    for page in IOS_PAGES:
+        assert "flag evaluation sends the attributes" in attribute_claims(text(page)), (
             page
         )
 
@@ -2257,3 +2269,109 @@ def test_each_java_context_sentence_is_on_its_page_and_held_by_a_test(
     assert missing == [], f"no JUnit test in {JAVA_TESTS.name} has these display names"
     gone = [node for node in server if not _python_test_exists(node)]
     assert gone == [], "these backend tests are gone"
+
+
+# ---------------------------------------------------------------------------
+# 8. The iOS SDK's targeting context (#438)
+# ---------------------------------------------------------------------------
+
+IOS_PAGES = ("docs/sdk/ios.md", "sdk/ios/README.md")
+#: The iOS SDK's client tests: each iOS test named below is one of its XCTest
+#: methods.
+IOS_TESTS = SDK_DIR / "ios/Tests/ControlvarTests/ExperimentationClientTests.swift"
+_IOS_SENDS = "testRegression438_evaluateFlag_sendsAttributesAsContextAfterUserId"
+_IOS_MATCHES = "testRegression438_aTargetingRuleOnAttributesMatches"
+_IOS_READS_BACK = "testEvaluateFlag_contextReadsBackAsTheAttributesWithTheServersRules"
+_IOS_NONE = "testEvaluateFlag_noOrEmptyAttributesSendTheUserIdAlone"
+_IOS_CACHE = (
+    "testEvaluateFlag_cache_otherAttributesAskTheServerAgain",
+    "testEvaluateFlag_cache_oneEntryPerUserAndFlag",
+    "testEvaluateFlag_cache_sameAttributesAreOneRequest",
+)
+_IOS_SORTED = "testEvaluateFlag_cache_sameAttributesInAnotherOrderAreOneRequest"
+_IOS_OFFLINE = (
+    "testEvaluateFlag_offlineStoreKeyIsUserAndFlagAsBefore",
+    "testEvaluateFlag_a404UnderOtherAttributesRemovesTheStoredAnswer",
+)
+_IOS_NOT_JSON = "testEvaluateFlag_attributesThatAreNotJSONThrowAndSendNothing"
+
+#: Each sentence both iOS pages state about the targeting context (as written,
+#: folded to one line) and the XCTest methods that fail when it stops being
+#: true. The pages are in ``CLAIMS_DEFERRED``, so no claims registry binds
+#: them; this does.
+IOS_CONTEXT_SENTENCES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
+    (
+        "**Flag evaluation sends the user's attributes.** `evaluateFlag(_:user:)` sends"
+        " `user.attributes` as `context` on"
+        " `GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=<URL-encoded JSON object>`,"
+        " so the flag's targeting rules are evaluated against them.",
+        (_IOS_SENDS, _IOS_READS_BACK, _IOS_MATCHES),
+    ),
+    (
+        "With no attributes, or an empty map, no `context` is sent and the request carries"
+        " the user id alone.",
+        (_IOS_NONE,),
+    ),
+    (
+        "The change is in this repository"
+        " ([#438](https://github.com/Controlvar/controlvar/issues/438)); it reaches a"
+        " registry at this SDK's first publish, so a build from a clone of `main` has it and"
+        " a copy installed earlier does not.",
+        (_IOS_SENDS,),
+    ),
+    (
+        "The SDK keeps one cached answer per user and flag, together with the attributes it"
+        " was asked with. A later call is answered from the cache only if its attributes are"
+        " exactly the same; otherwise the SDK asks the server, and the new answer replaces the"
+        " cached one. So two calls that differ only in attributes get two answers.",
+        _IOS_CACHE,
+    ),
+    (
+        "The attributes are written with their keys sorted, so the same attributes always"
+        " find the same cached answer.",
+        (_IOS_SORTED,),
+    ),
+    (
+        "stores the last answer the server gave for each user and flag, whatever attributes"
+        " it was asked with, and serves it only when the server cannot answer",
+        _IOS_OFFLINE,
+    ),
+    (
+        "If the attributes cannot be written as JSON (a `Date`, say, or a NaN),"
+        ' `evaluateFlag` throws `invalidConfig` ("user.attributes cannot be sent as JSON")'
+        " and sends nothing.",
+        (_IOS_NOT_JSON,),
+    ),
+)
+#: What the pages said before iOS sent the attributes: none of it may stay.
+IOS_OLD_NOTE = (
+    "Flag evaluation sends only the user id.",
+    "carries none of the user's attributes",
+    "To evaluate a flag with attributes, call the evaluate endpoint",
+    "attributes = assignment context",
+    "attributes → assignment `context`",
+)
+
+
+def _xctest_methods() -> Set[str]:
+    return set(re.findall(r"\bfunc (test\w{1,200})\(", IOS_TESTS.read_text("utf-8")))
+
+
+@pytest.mark.parametrize(
+    "sentence, tests",
+    IOS_CONTEXT_SENTENCES,
+    ids=[s[:60] for s, _ in IOS_CONTEXT_SENTENCES],
+)
+def test_each_ios_context_sentence_is_on_both_pages_and_held_by_a_test(sentence, tests):
+    unsaid = [page for page in IOS_PAGES if sentence not in fold(text(page))]
+    assert unsaid == [], f"no longer said on {unsaid}: {sentence}"
+    methods = _xctest_methods()
+    missing = [name for name in tests if name not in methods]
+    assert missing == [], f"no XCTest method in {IOS_TESTS.name} has these names"
+
+
+def test_the_old_ios_note_is_gone_from_both_pages():
+    for page in IOS_PAGES:
+        folded = fold(text(page))
+        kept = [old for old in IOS_OLD_NOTE if old in folded]
+        assert kept == [], f"{page} still says: {kept}"
