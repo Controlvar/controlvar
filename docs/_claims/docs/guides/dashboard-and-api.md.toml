@@ -196,7 +196,7 @@ text = "CUPED-adjusted results (beta) | Dashboard | CUPED"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "The interaction scan and the pair test (beta) | API only | Interaction detection"
+text = "The interaction scan and the pair test (beta) | Dashboard | Interaction detection"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]

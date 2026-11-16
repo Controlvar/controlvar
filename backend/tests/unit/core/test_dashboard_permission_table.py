@@ -10,6 +10,8 @@ run by both profiles' Jest) holds every permission helper to:
   (``AUDIT_LOG_READ_ALL_ROLES``);
 * ``administer_eligibility_roles``: which may archive exclusion groups and run
   global holdouts (what both ``_require_admin`` functions admit);
+* ``analyse_interactions_roles``: which may run the interaction scan and pair
+  test (what ``interactions._require_developer`` admits, #1960);
 * ``grantable``: the eleven pairs a custom role or direct grant can hold
   (``GRANTABLE``).
 
@@ -31,7 +33,11 @@ from typing import Any, Dict, List
 import pytest
 from fastapi import HTTPException
 
-from backend.app.api.v1.endpoints import global_holdout, mutual_exclusion_groups
+from backend.app.api.v1.endpoints import (
+    global_holdout,
+    interactions,
+    mutual_exclusion_groups,
+)
 from backend.app.core.permissions import (
     AUDIT_LOG_READ_ALL_ROLES,
     GRANTABLE,
@@ -91,6 +97,7 @@ def build_table() -> Dict[str, Any]:
             n for n in ROLE_ORDER if UserRole[n] in AUDIT_LOG_READ_ALL_ROLES
         ],
         "administer_eligibility_roles": holdout_admins,
+        "analyse_interactions_roles": _admitted_by(interactions._require_developer),
         "grantable": [list(pair) for pair in sorted(GRANTABLE)],
     }
 
@@ -116,6 +123,7 @@ def test_the_table_is_not_empty():
     assert table["role_permissions"]["feature_flag"]["update"] == ["ADMIN", "DEVELOPER"]
     assert table["audit_log_read_roles"] == ["ADMIN", "ANALYST"]
     assert table["administer_eligibility_roles"] == ["ADMIN"]
+    assert table["analyse_interactions_roles"] == ["ADMIN", "DEVELOPER", "ANALYST"]
 
 
 def test_a_changed_role_list_is_a_difference():

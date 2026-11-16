@@ -50,7 +50,7 @@ The table lists each capability and where you do it today:
 | Mutual exclusion groups | Dashboard | [Mutual exclusion groups and global holdout](../api/mutual-exclusion-groups.md) |
 | Split-URL experiments (full profile) | API only | [Split URL testing](../api/split-url.md) |
 | CUPED-adjusted results (beta) | Dashboard | [CUPED](../api/cuped.md) |
-| The interaction scan and the pair test (beta) | API only | [Interaction detection](../api/interaction-detection.md) |
+| The interaction scan and the pair test (beta) | Dashboard | [Interaction detection](../api/interaction-detection.md) |
 | Download results as CSV | Dashboard | [Exporting results](user-guide.md#exporting-results) |
 | The effect size in the metric comparison table | Dashboard | [Running experiments](user-guide.md) |
 | Each variant's confidence interval on the results page | Dashboard | [Running experiments](user-guide.md) |

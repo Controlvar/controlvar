@@ -738,6 +738,15 @@ STALE: Tuple[Tuple[str, str], ...] = (
         "the experiment page's Schedule sets a draft's start and end (#1454)",
     ),
     (
+        r"\| interaction detection \(beta\) \|[^|]{0,300}\(api only\)",
+        "Experiments → Interactions runs the scan and the pair test (#1960)",
+    ),
+    (
+        r"access via: (?:text )?get /api/v1/interactions/scan",
+        "the interactions routes are also a dashboard page, Experiments → "
+        "Interactions (#1960); say so before the API",
+    ),
+    (
         r"split url or bandit experiments? through the api",
         "the new-experiment form creates a bandit (#1956); only split URL is API only",
     ),
@@ -861,6 +870,12 @@ def test_no_page_repeats_a_removed_dashboard_claim():
         "[which actions have a screen](dashboard-and-api.md))",
         "You can also schedule automatic start and end dates. The dashboard has no schedule\n"
         "screen yet, so this is an API call:",
+        # #1960: faq.md's analysis table row and user-guide.md's interaction section.
+        "| Interaction detection (beta) | Jaccard overlap between experiments; whether one "
+        "experiment's lift on its primary conversion metric differs across another's arms "
+        "(API only) |",
+        "Access via:\n```text\nGET /api/v1/interactions/scan\n"
+        "GET /api/v1/interactions/{exp_a_id}/{exp_b_id}\n```",
         # #1956: user-guide.md's Step 1 and experiment-wizard.md's list item.
         "Choose **A/B Test** or **Multivariate**. Create a split URL or bandit experiment through the\n"
         "API (`POST /api/v1/experiments/`).",

@@ -1504,6 +1504,7 @@ by = [
 [[unit]]
 text = "Through the API:"
 by = ["exempt:instruction"]
+count = 2
 
 [[unit]]
 text = "CSV export: GET /api/v1/export/variants downloads per-variant results as CSV (?format=json for JSON); see Data Export"
@@ -1732,8 +1733,21 @@ by = [
 ]
 
 [[unit]]
-text = "Access via:"
-by = ["exempt:baseline"]
+text = "In the dashboard, open Experiments and then Interactions: Scan active experiments lists the pairs that share many users, and the Pair test (beta) tests any two experiments."
+by = [
+    "test:frontend/src/tests/pages/interactions.test.tsx::sends GET /interactions/scan with no query and shows the server’s totals and pairs",
+    "test:frontend/src/tests/pages/interactions.test.tsx::sends one GET for the two chosen, with no query, and shows the answer the server gave",
+    "test:frontend/src/tests/pages/interactions.test.tsx::is headed \"Pair test\" with a Beta chip; the scan is not marked beta",
+    "test:frontend/src/tests/pages/experiments-index.test.tsx::offers %s the \"Interactions\" link, underlined, beside the create block",
+]
+
+[[unit]]
+text = "It needs the ANALYST, DEVELOPER or ADMIN role."
+by = [
+    "test:backend/tests/unit/core/test_dashboard_experiment_roles.py::test_analyse_interactions_roles_match_require_developer",
+    "test:frontend/src/tests/pages/interactions.test.tsx::%s (not a superuser) reads the list once, and nothing else until asked",
+    "test:frontend/src/tests/pages/interactions.test.tsx::%s is told who can, and no request is sent",
+]
 
 [[unit]]
 text = "If high-risk pairs are found, add the experiments to a Mutual Exclusion Group to prevent overlap in future runs."

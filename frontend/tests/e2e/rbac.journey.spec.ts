@@ -380,6 +380,79 @@ test.describe("Journey: RBAC", () => {
     });
   }
 
+  // #1960: interaction analysis is for a superuser or the ANALYST, DEVELOPER
+  // and ADMIN roles (`interactions._require_developer`). An ANALYST -- not a
+  // superuser, so this is the role's own evidence -- follows the Experiments
+  // page's Interactions link and runs the scan against the real API; what the
+  // page shows is compared with the server's own answer. The page only reads,
+  // so no request but a GET is sent. A VIEWER is offered no link, and opening
+  // the page by URL sends no interactions request.
+  test("analyst scans the active experiments for shared users; a viewer has no Interactions link", async ({
+    sessions,
+  }) => {
+    const page = await (await sessions("analyst")).newPage();
+    const nonGets: string[] = [];
+    page.on("request", (request) => {
+      const { pathname } = new URL(request.url());
+      if (pathname.startsWith("/api/") && request.method() !== "GET") nonGets.push(`${request.method()} ${pathname}`);
+    });
+    try {
+      await page.goto("/experiments");
+      await expect(page.getByTestId("experiments-table")).toBeVisible({ timeout: 15_000 });
+      await page.getByTestId("interactions-link").click();
+      await expect(page).toHaveURL(/\/experiments\/interactions\/?$/);
+      await expect(page.getByTestId("interactions-page")).toBeVisible({ timeout: 15_000 });
+
+      const answer = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === "/api/v1/interactions/scan" && response.request().method() === "GET",
+        { timeout: 30_000 },
+      );
+      await page.getByTestId("interactions-scan-button").click();
+      const response = await answer;
+      expect(response.status(), "an ANALYST may run the scan").toBe(200);
+      const body = (await response.json()) as { total_active_experiments: number; analyses: unknown[] };
+
+      if (body.total_active_experiments < 2) {
+        await expect(page.getByTestId("interactions-scan-too-few")).toBeVisible();
+      } else if (body.analyses.length === 0) {
+        await expect(page.getByTestId("interactions-scan-empty")).toBeVisible();
+      } else {
+        await expect(page.getByTestId("interactions-scan-summary")).toContainText(
+          `${body.total_active_experiments} active experiments.`,
+        );
+        await expect(page.getByTestId("interactions-scan-row")).toHaveCount(body.analyses.length);
+      }
+      await expect(page.getByTestId("interactions-scan-error")).toHaveCount(0);
+      await expect(page.getByTestId("interactions-scan-refused")).toHaveCount(0);
+      expect(nonGets, "the page only reads").toEqual([]);
+    } finally {
+      await page.close();
+    }
+
+    const viewer = await (await sessions("viewer")).newPage();
+    const interactionRequests: string[] = [];
+    viewer.on("request", (request) => {
+      const { pathname } = new URL(request.url());
+      if (pathname.startsWith("/api/v1/interactions")) interactionRequests.push(`${request.method()} ${pathname}`);
+    });
+    try {
+      await viewer.goto("/experiments");
+      await expect(viewer.getByTestId("experiments-table")).toBeVisible({ timeout: 15_000 });
+      await expect(viewer.getByTestId("interactions-link")).toHaveCount(0);
+
+      await viewer.goto("/experiments/interactions");
+      await expect(viewer.getByTestId("interactions-refused")).toHaveText(
+        "Interaction analysis needs the ANALYST, DEVELOPER or ADMIN role; you are VIEWER.",
+        { timeout: 15_000 },
+      );
+      await expect(viewer.getByTestId("interactions-page")).toHaveCount(0);
+      expect(interactionRequests, "no interactions request for a VIEWER").toEqual([]);
+    } finally {
+      await viewer.close();
+    }
+  });
+
   // The reported path end to end: guided setup redirects to the new
   // experiment's page, and its creator -- an ordinary DEVELOPER -- must be able
   // to open it. `createExperiment` resolves only once the detail has rendered.
