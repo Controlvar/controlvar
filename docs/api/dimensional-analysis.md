@@ -371,8 +371,8 @@ The answer has the fields of `GET /api/v1/results/{experiment_id}` that describe
   `experiment_srm_warning`) and `is_exploratory`;
 - `metrics`, `summary`, `sample_size_adequate` and `srm`, for the segment's users;
 - `summary.recommendation`, computed for them, with the sample-ratio rule applied to their check
-  and to the whole experiment's: it is `INCONCLUSIVE` when either warns. Do not automate a decision
-  from it;
+  and to the whole experiment's: it is `INCONCLUSIVE` when either warns. The dashboard does not show
+  it. Do not automate a decision from it;
 - no `sequential_testing`, `bayesian_results` or `breakdown`.
 
 Only `GET /api/v1/results/{experiment_id}/segments/{segment_id}` filters by a saved segment. Its
