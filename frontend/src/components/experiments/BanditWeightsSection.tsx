@@ -26,7 +26,7 @@ export const BANDIT_ERROR = 'Current weights could not be loaded. Use Refresh to
 
 export const BANDIT_FOOTNOTE =
   'Weights are recomputed on a schedule, and this panel does not refresh by itself. ' +
-  'Past weights are not shown.';
+  'Past weights are under Weight history.';
 
 /** A fraction in [0, 1] as a percentage with one decimal, e.g. 0.4567 → "45.7%". */
 export function formatShare(value: number): string {
@@ -37,7 +37,8 @@ function formatCount(value: number): string {
   return value.toLocaleString('en-US');
 }
 
-function formatWhen(value: string): string {
+/** A server timestamp in the reader's locale; the raw text when it does not parse. */
+export function formatWhen(value: string): string {
   const d = parseApiTimestamp(value);
   return Number.isNaN(d.getTime()) ? value : d.toLocaleString();
 }

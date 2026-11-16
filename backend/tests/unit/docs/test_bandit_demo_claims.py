@@ -4,7 +4,8 @@
 told a presenter to open a "Bandit view", show an "allocation history chart"
 and "watch the live updates". None of those existed. A bandit experiment's
 page now has one read-only panel, "Current traffic weights", that loads once
-and on Refresh and shows no history (#442).
+and on Refresh, and below it a "Weight history" section: a table of past
+weights, not a chart (#442, #1958).
 
 Two checks:
 
@@ -40,6 +41,7 @@ PANEL_SOURCE = (
     / "experiments"
     / "BanditWeightsSection.tsx"
 )
+HISTORY_SOURCE = PANEL_SOURCE.with_name("BanditWeightHistory.tsx")
 
 #: (pattern, why it is false), matched against lower-cased text with markup
 #: dropped and whitespace collapsed, so a claim that wraps lines still matches.
@@ -48,8 +50,14 @@ STALE_BANDIT: Tuple[Tuple[str, str], ...] = (
         r"bandit view",
         "there is no separate bandit view; the panel is on the experiment's page",
     ),
-    (r"allocation (history )?chart", "the dashboard has no chart of bandit weights"),
-    (r"history chart", "the dashboard shows the current weights only"),
+    (
+        r"allocation (history )?chart",
+        "the dashboard has no chart of bandit weights; its Weight history is a table",
+    ),
+    (
+        r"history chart",
+        "the dashboard's Weight history is a table of past weights, not a chart",
+    ),
     (
         r"watch the live updates?",
         "the panel loads once and on Refresh; it does not update by itself",
@@ -106,8 +114,9 @@ def _panel_heading() -> str:
 def test_no_page_promises_a_bandit_chart_or_live_updates():
     hits = [hit for path in _files() for hit in _hits(path)]
     assert not hits, (
-        "these describe a bandit screen the dashboard does not have; it has one "
-        "read-only 'Current traffic weights' panel on the experiment's page:\n"
+        "these describe a bandit screen the dashboard does not have; it has a "
+        "read-only 'Current traffic weights' panel and a 'Weight history' table "
+        "(a table of past weights, not a chart) on the experiment's page:\n"
         + "\n".join(hits)
     )
 
@@ -119,4 +128,23 @@ def test_demo_guides_name_the_panel_the_dashboard_renders(guide: Path):
     flat, _ = _normalise(guide.read_text(encoding="utf-8"))
     assert heading.lower() in flat, (
         f"{guide.relative_to(REPO_ROOT)} does not name the panel {heading!r}"
+    )
+
+
+def _history_heading() -> str:
+    source = HISTORY_SOURCE.read_text(encoding="utf-8")
+    match = re.search(
+        r'id="bandit-weight-history-heading"[^>]*>\s*([^<{]+?)\s*</h2>', source, re.S
+    )
+    assert match, f"no bandit-weight-history-heading <h2> in {HISTORY_SOURCE}"
+    return match.group(1)
+
+
+@pytest.mark.parametrize("guide", [DEMO_GUIDE, SHOPLAB_README], ids=lambda p: p.name)
+def test_demo_guides_name_the_history_the_dashboard_renders(guide: Path):
+    heading = _history_heading()
+    assert heading == "Weight history"
+    flat, _ = _normalise(guide.read_text(encoding="utf-8"))
+    assert heading.lower() in flat, (
+        f"{guide.relative_to(REPO_ROOT)} does not name the section {heading!r}"
     )
