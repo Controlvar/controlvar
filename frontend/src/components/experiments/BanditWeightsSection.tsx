@@ -78,6 +78,8 @@ export function BanditWeightsSection({ experiment, user }: { experiment: Experim
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [overriding, setOverriding] = useState(false);
   const [saved, setSaved] = useState(false);
+  // A hand-set save is in flight: Refresh would close the form and lose a later failure.
+  const [saving, setSaving] = useState(false);
   const overrideButton = useRef<HTMLButtonElement>(null);
 
   const load = useCallback(async () => {
@@ -129,7 +131,7 @@ export function BanditWeightsSection({ experiment, user }: { experiment: Experim
           <button
             type="button"
             onClick={() => void load()}
-            disabled={state.kind === 'loading'}
+            disabled={state.kind === 'loading' || saving}
             className="px-3 py-1.5 rounded-md text-sm font-medium bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 disabled:opacity-50"
             data-testid="bandit-weights-refresh"
           >
@@ -178,6 +180,7 @@ export function BanditWeightsSection({ experiment, user }: { experiment: Experim
           formId={OVERRIDE_FORM_ID}
           onSaved={onSaved}
           onCancel={closeOverride}
+          onSavingChange={setSaving}
         />
       )}
 

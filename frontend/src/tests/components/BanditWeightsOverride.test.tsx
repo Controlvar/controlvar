@@ -396,6 +396,31 @@ describe('Save', () => {
     fireEvent.submit(form);
     expect(calls('PUT')).toHaveLength(1);
   });
+
+  it('holds Refresh while the save is in flight, so a later 500 still shows on the open form', async () => {
+    let reject: (reason: unknown) => void = () => undefined;
+    install(
+      UPDATED,
+      () =>
+        new Promise((_resolve, rej) => {
+          reject = rej;
+        }),
+    );
+    const { form } = await openForm();
+    fireEvent.click(saveButton(form));
+    await waitFor(() => expect(saveButton(form)).toHaveTextContent('Saving…'));
+    const refresh = screen.getByTestId('bandit-weights-refresh');
+    expect(refresh).toBeDisabled();
+    fireEvent.click(refresh);
+    expect(calls('GET')).toHaveLength(1);
+    expect(screen.getByTestId('bandit-weights-override')).toBeInTheDocument();
+
+    reject(new ApiError({ status: 500, detail: PLANTED }));
+    expect((await within(form).findByTestId('bandit-override-error')).textContent).toBe(OVERRIDE_ERROR_COPY.server);
+    expect(screen.getByTestId('bandit-weights-override')).toBeInTheDocument();
+    // The save ended, so Refresh works again.
+    await waitFor(() => expect(screen.getByTestId('bandit-weights-refresh')).toBeEnabled());
+  });
 });
 
 describe('Cancel and Escape', () => {

@@ -125,9 +125,18 @@ export interface BanditWeightsOverrideProps {
   formId: string;
   onSaved: (status: BanditStatus) => void;
   onCancel: () => void;
+  /** Told whether a save is in flight, so the panel can hold Refresh until it ends. */
+  onSavingChange?: (saving: boolean) => void;
 }
 
-export function BanditWeightsOverride({ experiment, status, formId, onSaved, onCancel }: BanditWeightsOverrideProps) {
+export function BanditWeightsOverride({
+  experiment,
+  status,
+  formId,
+  onSaved,
+  onCancel,
+  onSavingChange,
+}: BanditWeightsOverrideProps) {
   const variants = experiment.variants;
   const [values, setValues] = useState<string[]>(() => prefillPercents(variants, status));
   const [saving, setSaving] = useState(false);
@@ -137,6 +146,13 @@ export function BanditWeightsOverride({ experiment, status, formId, onSaved, onC
   useEffect(() => {
     firstInput.current?.focus();
   }, []);
+
+  useEffect(() => {
+    onSavingChange?.(saving);
+  }, [saving, onSavingChange]);
+
+  // The form leaving (saved, or closed) ends the save as far as the panel is concerned.
+  useEffect(() => () => onSavingChange?.(false), [onSavingChange]);
 
   const parsed = values.map(parsePercent);
   const total = parsed.reduce<number>((sum, n) => sum + (n ?? 0), 0);
