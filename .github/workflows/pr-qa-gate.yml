@@ -570,8 +570,9 @@ jobs:
   # up to about 75.5 minutes and four runs were cancelled at the old 75-minute
   # limit, one 3 s after its script printed OK; the limit went to 120. On
   # 2026-11-16 the last eight passing runs took 76-116 minutes (median 98) and
-  # one was cancelled at 120 with every pytest session passed: the same
-  # sessions as a 98-minute run four hours earlier, on a runner about 1.25x
+  # one was cancelled at 120 with every test session it reached passed: the
+  # same sessions as a 98-minute run that started under 2 hours earlier, on a
+  # runner about 1.25x
   # slower (unit 42:48 vs 32:26, integration 71:06 vs 59:10). GitHub's
   # runners vary up to 1.6x in speed for the same commit (measured 11-03).
   # 180 gives a 98-minute run room for a 1.6x runner (about 157). The time

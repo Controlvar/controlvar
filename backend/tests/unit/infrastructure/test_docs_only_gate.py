@@ -520,8 +520,8 @@ class TestBuildJobSteps:
         # 180, not 120 or 75: on 2026-11-03 core-build's passing runs reached
         # about 75.5 minutes and four were cancelled at 75 (one 3 s after its
         # script printed OK); on 2026-11-16 passing runs took up to 116
-        # minutes and one was cancelled at 120 with every pytest session
-        # passed, on a runner about 1.25x slower. A different number is a
+        # minutes and one was cancelled at 120 with every test session it
+        # reached passed, on a runner about 1.25x slower. A different number is a
         # decision about the slowest required check.
         assert core["timeout-minutes"] == 180
         assert core["needs"] == "changes"
