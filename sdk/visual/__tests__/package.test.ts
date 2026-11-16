@@ -7,23 +7,16 @@ import { execFileSync } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { pathToFileURL } from 'url';
-import { runInNewContext } from 'vm';
+import { CLASSIC, runClassic } from './classic';
 
 const ROOT = join(__dirname, '..');
 const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
-const CLASSIC = join(ROOT, 'dist', 'controlvar-visual.js');
 const ESM = join(ROOT, 'dist', 'index.mjs');
+const TAG = { 'data-api-url': 'https://cv.example', 'data-api-key': 'test-website-key' };
 
 beforeAll(() => {
   execFileSync('npm', ['run', '--silent', 'build'], { cwd: ROOT, stdio: 'pipe' });
 });
-
-/** Run the classic script with `window` as its global object; return that object. */
-function runClassic(window: Record<string, unknown>): Record<string, unknown> {
-  window.window = window;
-  runInNewContext(readFileSync(CLASSIC, 'utf8'), window, { filename: CLASSIC });
-  return window;
-}
 
 describe('the package', () => {
   test('is @controlvar/visual, MIT, a 0.x version', () => {
@@ -65,14 +58,35 @@ describe('the build', () => {
   });
 
   test("the classic script publishes window.controlvar.visual with package.json's version", () => {
-    const window = runClassic({});
-    expect(window.controlvar).toEqual({ visual: { version: pkg.version } });
+    const page = runClassic('https://shop.example/', TAG);
+    expect(JSON.parse(JSON.stringify((page.window as unknown as { controlvar: unknown }).controlvar))).toEqual({
+      visual: { version: pkg.version },
+    });
+    expect(page.console).toEqual([]);
+    page.close();
   });
 
   test('the classic script keeps what the page already has under window.controlvar', () => {
-    const other = { mine: true };
-    const window = runClassic({ controlvar: { other } });
-    expect(window.controlvar).toEqual({ other, visual: { version: pkg.version } });
+    const page = runClassic('https://shop.example/', TAG, (window) => {
+      (window as unknown as { controlvar: unknown }).controlvar = { other: { mine: true } };
+    });
+    expect(JSON.parse(JSON.stringify((page.window as unknown as { controlvar: unknown }).controlvar))).toEqual({
+      other: { mine: true },
+      visual: { version: pkg.version },
+    });
+    page.close();
+  });
+
+  test('a tag without data-api-url or data-api-key gets one console error and sends nothing', () => {
+    const tags: Record<string, string>[] = [{}, { 'data-api-key': 'k' }, { 'data-api-url': 'https://cv.example' }];
+    for (const attributes of tags) {
+      const page = runClassic('https://shop.example/', attributes);
+      expect(page.console).toEqual([
+        'error: Controlvar: the script tag needs data-api-url (an http or https URL) and data-api-key; the script does nothing without them.',
+      ]);
+      expect(page.fetches).toEqual([]);
+      page.close();
+    }
   });
 
   test("the ESM entry exports package.json's version", () => {
