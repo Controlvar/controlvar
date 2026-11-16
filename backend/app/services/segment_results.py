@@ -44,8 +44,8 @@ segment row, so no key could tell a stale answer), and no Bayesian analysis
 
 ``COMPUTE_SLOT`` lets one computation run per API process. In #1933's review a
 reimplementation of this design took 23 to 36 s and about 440 MB more memory
-for a 1,000,000-id list on a laptop, so two at once could exceed the API
-container's 1 GiB, and the dashboard's latest-wins does not cancel a request
+for a 1,000,000-id list on a laptop, so two at once could exceed the Helm
+chart's default 1 GiB limit, and the dashboard's latest-wins does not cancel a request
 on the server. The route answers 503 with ``Retry-After`` while the slot is
 taken.
 """

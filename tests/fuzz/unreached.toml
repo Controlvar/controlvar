@@ -190,6 +190,18 @@
 # the superuser pass at this seed on the pull request's head, which gave the
 # counts of its fuzz.yml run.
 
+# Then #1997 (#1933) added GET /api/v1/results/{experiment_id}/segments/{segment_id}
+# (beta). As #1607 found, a new operation changes the ids reused by the
+# operations after it: the superuser pass no longer sends the segment id that
+# named a stored segment to the five segment operations after it, so it reaches
+# none of GET /api/v1/segments/{segment_id}/experiments and
+# POST /api/v1/segments/{segment_id}/evaluate, /members, /members/remove and
+# /preview, and they are listed again. The new route is unreached in both
+# bearer passes: no request names a stored segment, so it answers 404 or 422.
+# The lists are 117 for superuser, 186 for viewer and 9 for sdk. Read from
+# fuzz_check's evaluation of local runs of the superuser and viewer passes at
+# this seed on the pull request's head (7e4591cc).
+
 # --- superuser: the seeded demo administrator's bearer token ----------------
 
 [[unreached]]
@@ -389,6 +401,11 @@ reason = "No request names a stored experiment: an id that names no stored row a
 
 [[unreached]]
 pass = "superuser"
+operation = "GET /api/v1/results/{experiment_id}/segments/{segment_id}"
+reason = "No request names a stored ID-list segment: an id that names no stored row answers 404, and the other requests fail validation (422)."
+
+[[unreached]]
+pass = "superuser"
 operation = "POST /api/v1/rollout-schedules/"
 reason = "The handler refuses the generated values (400); ids that name no stored row answer 404 and invalid requests answer 422."
 
@@ -431,6 +448,31 @@ reason = "Generated ids never name a stored row (404); the other requests fail v
 pass = "superuser"
 operation = "GET /api/v1/feature-flags/{flag_id}/history"
 reason = "Generated ids never name a stored row (404); the other requests fail validation (422)."
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/segments/{segment_id}/evaluate"
+reason = "Generated ids never name a stored segment (404); the other requests fail validation (422), and one the handler refuses (400)."
+
+[[unreached]]
+pass = "superuser"
+operation = "GET /api/v1/segments/{segment_id}/experiments"
+reason = "Generated ids never name a stored segment (404); the other requests fail validation (422)."
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/segments/{segment_id}/preview"
+reason = "Generated ids never name a stored segment (404); the other requests fail validation (422)."
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/segments/{segment_id}/members"
+reason = "Generated ids never name a stored segment (404); the other requests fail validation (422), and one the handler refuses (400)."
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/segments/{segment_id}/members/remove"
+reason = "Generated ids never name a stored segment (404); the other requests fail validation (422), and one the handler refuses (400)."
 
 [[unreached]]
 pass = "superuser"
@@ -1033,6 +1075,11 @@ reason = "The VIEWER role may not use it, so the role check answers 403."
 pass = "viewer"
 operation = "POST /api/v1/results/{experiment_id}/invalidate-cache"
 reason = "The VIEWER role may not use it, so the role check answers 403."
+
+[[unreached]]
+pass = "viewer"
+operation = "GET /api/v1/results/{experiment_id}/segments/{segment_id}"
+reason = "No request names a stored ID-list segment (the seed has none, and the VIEWER role may not create one): an id that names no stored row answers 404, and the other requests fail validation (422)."
 
 [[unreached]]
 pass = "viewer"

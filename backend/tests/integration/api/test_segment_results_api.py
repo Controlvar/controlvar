@@ -488,6 +488,12 @@ def _m_all_events() -> List[tuple]:
         # (iv) c19 converts on nothing else: a conversion tagged with T1.
         ("c19", "purchase", "purchase", 1.0, "T1"),
         ("x14", "purchase", "purchase", 1.0, "untagged"),  # no assignment
+        # A second valued event: the user's total.
+        ("c01", "revenue", "revenue", 7.0, None),
+        # A value tagged with an arm c02 is not in.
+        ("c02", "revenue", "revenue", 4.0, "T1"),
+        # A count tagged with an arm c03 is not in.
+        ("c03", "session", "session", 1.0, "T1"),
     ]
     return events
 
