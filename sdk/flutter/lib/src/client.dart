@@ -1,16 +1,46 @@
 /// Main ExperimentationClient for the Flutter SDK.
 library controlvar_client;
 
+import 'dart:collection';
+import 'dart:convert';
+
 import 'cache.dart';
 import 'http_client.dart';
 import 'models.dart';
 import 'offline_store.dart';
 
+/// The attributes as the JSON text that goes in `context`, with the keys of
+/// every object sorted so that the same attributes always give the same text
+/// (the cache compares it); `''` for none; `null` when they cannot be written
+/// as JSON. The error's own text is dropped: it names the offending value.
+///
+/// The attributes are written once to find out (a cycle, a `DateTime` or a NaN
+/// throws there) and read back, so that the sort runs over plain maps and
+/// lists only.
+String? _contextOf(Map<String, dynamic>? attributes) {
+  if (attributes == null || attributes.isEmpty) return '';
+  try {
+    return json.encode(_sorted(json.decode(json.encode(attributes))));
+  } catch (_) {
+    return null;
+  }
+}
+
+Object? _sorted(Object? value) {
+  if (value is Map) {
+    final sorted = SplayTreeMap<String, Object?>();
+    value.forEach((key, item) => sorted[key as String] = _sorted(item));
+    return sorted;
+  }
+  if (value is List) return [for (final item in value) _sorted(item)];
+  return value;
+}
+
 /// Flutter/Dart client for Controlvar.
 ///
 /// ## How it works
 /// - **The server decides.** [evaluateFlag] calls
-///   `GET /api/v1/feature-flags/evaluate/{key}?user_id=…` and [getAssignment]
+///   `GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=…` and [getAssignment]
 ///   calls `POST /api/v1/tracking/assign`; nothing is bucketed on device.
 /// - **Caching.** Successful results are cached in memory per user + key for
 ///   [SdkConfig.cacheTtl] and, when [SdkConfig.offlineFallback] is on, written
@@ -86,12 +116,20 @@ class ExperimentationClient {
   // ---------------------------------------------------------------------------
 
   /// Evaluates [flagKey] for [userId] via
-  /// `GET /api/v1/feature-flags/evaluate/{flagKey}?user_id={userId}`.
+  /// `GET /api/v1/feature-flags/evaluate/{flagKey}?user_id={userId}&context={attributes}`.
+  ///
+  /// [attributes] are sent as `context` (a URL-encoded JSON object, after
+  /// `user_id`), so the flag's targeting rules are evaluated against them.
+  /// With none, or an empty map, no `context` is sent.
   ///
   /// Never throws: on failure returns the cached/offline value when present,
-  /// otherwise [EvalResult.disabled]. [attributes] are accepted for API
-  /// compatibility and not sent: the evaluate endpoint takes a context, which
-  /// this SDK does not send yet.
+  /// otherwise [EvalResult.disabled]. Attributes that cannot be written as
+  /// JSON (a `DateTime`, say, or a NaN) also give [EvalResult.disabled], and
+  /// nothing is sent, cached or read from the offline store.
+  ///
+  /// There is one cached answer per user + flag, kept with the attributes it
+  /// was asked with: a call with other attributes asks the server again and
+  /// replaces it.
   Future<EvalResult> evaluateFlag(
     String flagKey,
     String userId, {
@@ -99,14 +137,17 @@ class ExperimentationClient {
   }) async {
     _assertInitialised();
 
-    final cached = _flagCache.get(userId, flagKey);
+    final context = _contextOf(attributes);
+    if (context == null) return EvalResult.disabled(flagKey);
+
+    final cached = _flagCache.get(userId, flagKey, context: context);
     if (cached != null) return cached;
 
-    final inflightKey = '$userId\u0000$flagKey';
+    final inflightKey = '$userId\u0000$flagKey\u0000$context';
     final pending = _inflightFlags[inflightKey];
     if (pending != null) return pending;
 
-    final future = _fetchFlag(flagKey, userId);
+    final future = _fetchFlag(flagKey, userId, context);
     _inflightFlags[inflightKey] = future;
     try {
       return await future;
@@ -115,14 +156,14 @@ class ExperimentationClient {
     }
   }
 
-  Future<EvalResult> _fetchFlag(String flagKey, String userId) async {
+  Future<EvalResult> _fetchFlag(String flagKey, String userId, String context) async {
     try {
       final json = await _http.get(
         '/api/v1/feature-flags/evaluate/${Uri.encodeComponent(flagKey)}',
-        query: {'user_id': userId},
+        query: {'user_id': userId, if (context.isNotEmpty) 'context': context},
       );
       final result = EvalResult.fromJson(json, fallbackKey: flagKey);
-      _flagCache.set(userId, flagKey, result);
+      _flagCache.set(userId, flagKey, result, context: context);
       if (_config.offlineFallback) {
         await _offlineStore.setFlag(userId, result);
       }
@@ -150,8 +191,12 @@ class ExperimentationClient {
   }
 
   /// Convenience: `(await evaluateFlag(...)).enabled`.
-  Future<bool> isEnabled(String flagKey, String userId) async =>
-      (await evaluateFlag(flagKey, userId)).enabled;
+  Future<bool> isEnabled(
+    String flagKey,
+    String userId, {
+    Map<String, dynamic>? attributes,
+  }) async =>
+      (await evaluateFlag(flagKey, userId, attributes: attributes)).enabled;
 
   // ---------------------------------------------------------------------------
   // Experiments

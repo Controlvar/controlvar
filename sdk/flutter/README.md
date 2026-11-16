@@ -8,15 +8,19 @@ Flag evaluation and experiment assignment are decided **by the server**: every c
 public API with your `X-API-Key`, the server buckets the user (sticky per user + experiment), and
 the SDK caches the answer per user + key. Nothing is bucketed on the device.
 
-> **Flag evaluation sends only the user id.** `GET /api/v1/feature-flags/evaluate/{key}?user_id=…`
-> carries none of the user's attributes, so the server evaluates a flag's targeting rules against
-> an empty context. Experiment assignment sends them: `getAssignment` sends the attributes as
-> `context`. To evaluate a flag with attributes, call the evaluate endpoint with a `context`
-> query parameter (a URL-encoded JSON object of the attributes).
+> **Flag evaluation sends the user's attributes.** `evaluateFlag(flagKey, userId, {attributes})`
+> sends `attributes:` as `context` on
+> `GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=<URL-encoded JSON object>`,
+> so the flag's targeting rules are evaluated against them. With no attributes, or an empty map,
+> no `context` is sent and the request carries the user id alone. The change is in this
+> repository ([#438](https://github.com/Controlvar/controlvar/issues/438)); it reaches a registry
+> at this SDK's first publish, so a build from a clone of `main` has it and a copy installed
+> earlier does not.
 
 - **Server-decided** — `GET /api/v1/feature-flags/evaluate/{key}` and `POST /api/v1/tracking/assign`
 - **Per-user TTL cache** — successful results are reused for `cacheTtl` (default 5 minutes);
-  failures are never cached; concurrent calls for the same user + key share one request
+  failures are never cached; concurrent calls for the same user + key (for a flag, with the same
+  attributes) share one request
 - **Offline fallback** — the last known server result is persisted (SharedPreferences in Flutter,
   in-memory elsewhere) and served when the API is unreachable
 - **Never throws** — `evaluateFlag`, `getAssignment`, `track` and `trackBatch` degrade gracefully
@@ -53,8 +57,9 @@ final client = ExperimentationClient(
 );
 await client.init();   // opens the offline store; makes no network request
 
-// Feature flag (GET /api/v1/feature-flags/evaluate/{key}?user_id=…)
-final flag = await client.evaluateFlag('dark-mode', 'user-123');
+// Feature flag (GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=…)
+final flag = await client.evaluateFlag('dark-mode', 'user-123',
+    attributes: {'country': 'US', 'plan': 'pro'});   // sent as context
 flag.enabled;   // bool — false on any failure with nothing cached
 flag.config;    // always null: the evaluate endpoint returns config: null
 await client.isEnabled('dark-mode', 'user-123');   // bool shorthand
@@ -93,8 +98,8 @@ a `package:http` `Client` — inject `MockClient` in tests) and an `offlineStore
 
 | Method | Returns | Failure value |
 |--------|---------|---------------|
-| `evaluateFlag(flagKey, userId)` | `EvalResult{key, enabled, config}` | cached/offline value, else `EvalResult.disabled(key)` |
-| `isEnabled(flagKey, userId)` | `bool` | `false` |
+| `evaluateFlag(flagKey, userId, {attributes})` | `EvalResult{key, enabled, config}` | cached/offline value, else `EvalResult.disabled(key)` |
+| `isEnabled(flagKey, userId, {attributes})` | `bool` | `false` |
 | `getAssignment(experimentKey, userId, {attributes})` | `Assignment?{experimentKey, userId, variantId, variantName, isControl, configuration}` | cached/offline value, else `null` |
 | `getVariant(experimentKey, userId)` | `String?` (`variantName`) | `null` |
 | `track(eventName, userId, {properties, experimentKey, featureFlagKey, value, eventType, timestamp})` | `bool` | `false` |
@@ -108,6 +113,19 @@ experiment that is not ACTIVE is not a failure: it answers its control variant.
 `evaluateFlag`, `getAssignment`, `trackEvent` and `trackBatch` (and `isEnabled`, `getVariant` and
 `track`, which call them) throw `StateError` when called before `init()` — that is the only
 exception the public API raises.
+
+The SDK keeps one cached answer per user and flag, together with the attributes it was asked with.
+A later call is answered from the cache only if its attributes are exactly the same; otherwise the
+SDK asks the server, and the new answer replaces the cached one. So two calls that differ only in
+attributes get two answers. The attributes are written with their keys sorted, so the same
+attributes always find the same cached answer.
+
+With `offlineFallback` the SDK stores the last answer the server gave for each user and flag,
+whatever attributes it was asked with, and serves it only when the server cannot answer. A 404
+removes the stored answer, and the call returns the disabled answer.
+
+If the attributes cannot be written as JSON (a `DateTime`, say, or a NaN), `evaluateFlag` returns
+the disabled answer and sends nothing.
 
 **Fan-out rule.** With `experimentKey` and/or `featureFlagKey`, `track` sends one
 `POST /api/v1/tracking/track`. Without a key it sends one `POST /api/v1/tracking/batch`
@@ -128,7 +146,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
-| `evaluateFlag`, `isEnabled` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
+| `evaluateFlag`, `isEnabled` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=…` | `context`: the user's attributes as JSON, left out when there are none | `{key, enabled, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
 | `getAssignment`, `getVariant` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
 | `track` without keys, `trackBatch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored |

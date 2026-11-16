@@ -408,66 +408,8 @@ def test_only_analysis_history_and_evaluation_counters_are_deleted_by_age():
 # ---------------------------------------------------------------------------
 # SDKs
 # ---------------------------------------------------------------------------
-#: Where each native mobile SDK builds two requests: its file, then the code
-#: that evaluates a flag and the code that assigns a user to an experiment,
-#: each as (the line that starts it, the line after it) pairs.
-NATIVE_SDKS = {
-    "ios": (
-        "sdk/ios/Sources/Controlvar/ExperimentationClient.swift",
-        [("public func evaluateFlag(", "// MARK: - Experiments")],
-        [("public func getAssignment(", "// MARK: - Tracking")],
-    ),
-    "android": (
-        "sdk/android/sdk/src/main/kotlin/com/controlvar/android/ExperimentationClient.kt",
-        [
-            ("suspend fun evaluateFlag(", "suspend fun getAssignment("),
-            ("private fun evaluateFlagPath(", "private fun send("),
-        ],
-        [("suspend fun getAssignment(", "suspend fun track(")],
-    ),
-    "flutter": (
-        "sdk/flutter/lib/src/client.dart",
-        [("Future<EvalResult> evaluateFlag(", "Future<bool> isEnabled(")],
-        [("Future<Assignment?> getAssignment(", "Future<String?> getVariant(")],
-    ),
-}
-
 #: A block comment, or a line comment (not the `//` of a URL's scheme).
 _COMMENT = re.compile(r"/\*.*?\*/|(?<![:\w])//[^\n]*", re.S)
-#: Any word that starts with "context": `context`, and a helper such as
-#: `contextQuery(` that builds it (#1520), which `\bcontext\b` did not see.
-_CONTEXT = re.compile(r"\bcontext", re.I)
-
-
-def _native_code(rel: str, bounds) -> str:
-    text = (ROOT / rel).read_text(encoding="utf-8")
-    parts = []
-    for start, end in bounds:
-        assert text.count(start) == 1, f"{rel}: {start!r} is not there once"
-        assert text.count(end) == 1, f"{rel}: {end!r} is not there once"
-        head = text.index(start)
-        tail = text.index(end)
-        assert head < tail, f"{rel}: {end!r} comes before {start!r}"
-        parts.append(_COMMENT.sub("", text[head:tail]))
-    return "\n".join(parts)
-
-
-@pytest.mark.parametrize("sdk", sorted(NATIVE_SDKS))
-def test_the_native_sdks_send_no_context_on_flag_evaluation(sdk):
-    """iOS, Android and Flutter evaluate a flag with the user id alone (#438;
-    React Native sends the attributes since #1520), so a flag rule on
-    attributes cannot match from them; each sends the attributes as the context
-    of an experiment assignment. When this fails, the SDK has started to send a
-    context on flag evaluation: say so on the pages whose registries name this
-    test."""
-    rel, evaluate, assign = NATIVE_SDKS[sdk]
-    evaluation = _native_code(rel, evaluate)
-    assert "feature-flags/evaluate" in evaluation, f"{sdk}: no evaluate request read"
-    assert not _CONTEXT.search(evaluation), f"{sdk} sends a context on flag evaluation"
-    # The same scan finds the context the SDK does send, so it reads real code.
-    assignment = _native_code(rel, assign)
-    assert "tracking/assign" in assignment, f"{sdk}: no assign request read"
-    assert _CONTEXT.search(assignment), f"{sdk}: no context on assignment"
 
 
 #: Every directory under sdk/ whose flag evaluation sends the user's attributes
@@ -539,6 +481,13 @@ SENDS = {
         ],
         'query["context"]',
     ),
+    # Since #438's Flutter change: evaluateFlag hands the attributes to the
+    # evaluate request as `context`, after `user_id`.
+    "flutter": (
+        "sdk/flutter/lib/src/client.dart",
+        [("Future<EvalResult> evaluateFlag(", "Future<bool> isEnabled(")],
+        "if (context.isNotEmpty) 'context': context",
+    ),
 }
 
 #: Every directory under sdk/ whose flag evaluation sends the user id alone, so
@@ -578,11 +527,6 @@ DOES_NOT_SEND = {
             ("suspend fun evaluateFlag(", "} catch (e: ExperimentationException) {"),
             ("private fun evaluateFlagPath(", 'return "${url.encodedPath}'),
         ],
-    ),
-    "flutter": (
-        438,
-        "sdk/flutter/lib/src/client.dart",
-        [("Future<EvalResult> evaluateFlag(", "final result = EvalResult.fromJson(")],
     ),
 }
 
