@@ -39,6 +39,32 @@ interface ExperimentSummaryProps {
    * while it loads, null when it could not be loaded.
    */
   plannedSample?: SampleSizeResult | null;
+  /**
+   * Set when `experiment` is a saved segment's results (#1933). The card is
+   * then labelled exploratory and shows no recommendation, winner or leading
+   * variant: a decision is made on the results for all users.
+   */
+  segment?: SummarySegment;
+}
+
+/** The saved segment a summary card shows results for (#1933). */
+export interface SummarySegment {
+  name: string;
+  /**
+   * True when the segment's own sample ratio check, the all-users check or
+   * the whole experiment's check warns: the impact lines carry the qualifier.
+   */
+  srmWarning: boolean;
+}
+
+export const SEGMENT_PILL = 'Exploratory';
+export const SEGMENT_NO_RECOMMENDATION =
+  'No recommendation for a segment. Decide on the results for all users.';
+export function segmentCardLine(name: string): string {
+  return `Saved segment: ${name} · exploratory`;
+}
+export function segmentCorrectionLine(name: string): string {
+  return `The correction covers the comparisons inside ${name}, not the choice of segment.`;
 }
 
 /**
@@ -177,12 +203,16 @@ export interface SummaryImpactRow {
  */
 export function summaryImpact(
   experiment: ExperimentResultsResponse,
+  segment?: SummarySegment,
 ): { metricName: string; rows: SummaryImpactRow[] } | null {
   const metric = experiment.metrics.find((m) => m.is_primary) ?? experiment.metrics[0];
   if (!metric || !metric.variants.some(carriesImpact)) return null;
   const k = comparisonsOf(metric);
   const rows = metric.variants
     .filter((v) => !v.is_control)
+    // Under a saved segment, a variant none of its members is in has no impact
+    // line: the engine reports such an arm as -100%, which is not a finding.
+    .filter((v) => !segment || v.sample_size > 0)
     .map((v) => ({
       variantId: v.variant_id,
       variantName: v.variant_name,
@@ -202,12 +232,16 @@ export function ExperimentSummary({
   stored,
   onOpenSampleSize,
   plannedSample,
+  segment,
 }: ExperimentSummaryProps) {
   const { summary } = experiment;
   const planned = plannedSampleStatus(plannedSample);
   const plannedEffect = plannedEffectSentence(plannedSample);
-  const rec = RECOMMENDATION_CONFIG[summary.recommendation];
-  const impact = summaryImpact(experiment);
+  const rec = segment
+    ? { label: SEGMENT_PILL, className: 'bg-slate-100 text-slate-800' }
+    : RECOMMENDATION_CONFIG[summary.recommendation];
+  const impact = summaryImpact(experiment, segment);
+  const impactWarning = segment ? segment.srmWarning : experiment.srm?.warning === true;
 
   // Find the winning variant name if there is one
   let winnerName = '';
@@ -223,9 +257,13 @@ export function ExperimentSummary({
     }
   }
 
+  // Under a saved segment there is no winner and no leading variant.
   const isWinner =
-    summary.recommendation === 'SHIP_VARIANT' && summary.has_winner && winnerName !== '';
-  const isLeading = !isWinner && summary.has_winner && winnerName !== '';
+    !segment &&
+    summary.recommendation === 'SHIP_VARIANT' &&
+    summary.has_winner &&
+    winnerName !== '';
+  const isLeading = !segment && !isWinner && summary.has_winner && winnerName !== '';
 
   return (
     <div
@@ -244,6 +282,11 @@ export function ExperimentSummary({
               {summary.duration_days} day{summary.duration_days !== 1 ? 's' : ''}
             </span>
           </div>
+          {segment && (
+            <p className="mt-1 text-sm text-slate-700" data-testid="summary-segment-line">
+              {segmentCardLine(segment.name)}
+            </p>
+          )}
         </div>
         {/* Recommendation pill */}
         <span
@@ -256,13 +299,20 @@ export function ExperimentSummary({
 
       {/* Stats grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <Stat label="Total Users" value={summary.total_users.toLocaleString()} />
-        <Stat label="Total Events" value={summary.total_events.toLocaleString()} />
+        <Stat
+          label={segment ? 'Users in segment' : 'Total Users'}
+          value={summary.total_users.toLocaleString()}
+        />
+        <Stat
+          label={segment ? 'Events in segment' : 'Total Events'}
+          value={summary.total_events.toLocaleString()}
+        />
         <Stat label="Duration" value={`${summary.duration_days}d`} />
         {/* The planned sample per variant, as on the Sample Size tab (#1244).
-            The smaller floor the recommendation needs is in its reason. */}
+            The smaller floor the recommendation needs is in its reason. It is
+            the plan for all users, also under a saved segment. */}
         <Stat
-          label="Planned sample"
+          label={segment ? 'Planned sample (all users)' : 'Planned sample'}
           value={planned.value}
           valueClass={planned.valueClass}
           detail={planned.detail}
@@ -283,6 +333,9 @@ export function ExperimentSummary({
           <span className="font-medium text-slate-900">Analysis:</span>{' '}
           <span data-testid="analysis-summary-text">{analysisSentence(experiment)}</span>
         </p>
+        {segment && (
+          <p data-testid="analysis-summary-segment">{segmentCorrectionLine(segment.name)}</p>
+        )}
         {stored &&
           (stored.correction_method !== experiment.correction_method ||
             Math.abs(stored.confidence_level - experiment.confidence_level) > 1e-9) && (
@@ -307,17 +360,27 @@ export function ExperimentSummary({
       )}
 
       {/* Why: the engine's own sentence, so the pill is never unexplained. */}
-      {summary.recommendation_reason && (
+      {segment ? (
         <p className="text-sm text-slate-700" data-testid="recommendation-reason">
-          {summary.recommendation_reason}
+          {SEGMENT_NO_RECOMMENDATION}
         </p>
+      ) : (
+        summary.recommendation_reason && (
+          <p className="text-sm text-slate-700" data-testid="recommendation-reason">
+            {summary.recommendation_reason}
+          </p>
+        )
       )}
 
       {/* What the primary metric's change amounts to over each treatment's
           own users (#1496). Plain paragraphs: no live region, no tooltip. */}
       {impact && (
         <div className="text-sm text-slate-700" data-testid="summary-impact">
-          <p className="font-medium text-slate-900">Impact on {impact.metricName}:</p>
+          <p className="font-medium text-slate-900">
+            {segment
+              ? `Impact on ${impact.metricName} in ${segment.name}:`
+              : `Impact on ${impact.metricName}:`}
+          </p>
           {impact.rows.map((row) => (
             <p key={row.variantId} data-testid="summary-impact-line">
               {`${row.variantName}: `}
@@ -335,7 +398,7 @@ export function ExperimentSummary({
             </p>
           ))}
           {/* The server's verdict only: a null check is not a mismatch. */}
-          {experiment.srm?.warning === true && (
+          {impactWarning && (
             <p className="mt-1 font-medium text-amber-900" data-testid="summary-impact-srm">
               <span aria-hidden="true">⚠ </span>
               {SRM_QUALIFIER}

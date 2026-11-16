@@ -35,6 +35,7 @@ import { SCHEDULE_ERROR_COPY, scheduleErrorCopy } from '@/components/experiments
 import { flagManageErrorCopy } from '@/components/feature-flags/FlagManageSection';
 import { rolloutErrorCopy } from '@/components/feature-flags/RolloutScheduleManager';
 import { resultsErrorMessage } from '@/components/results/ResultsDashboard/ResultsDashboard';
+import { segmentResultsErrorMessage } from '@/components/results/ResultsDashboard/SavedSegment';
 import { sessionErrorMessage } from '@/contexts/AuthContext';
 import { demoEnterErrorMessage, loginErrorMessage, signInNoticeMessage } from '@/pages/login';
 import { DEMO_UNREACHABLE } from '@/utils/demoMode';
@@ -774,7 +775,7 @@ describe("the caller's own signal (#1040 D4)", () => {
 const EXPECTED_OVERRIDES: Record<string, string[]> = {
   // GET /api/v1/auth/config, which /login and the session check wait for (#708).
   'services/authConfig.ts': ['AUTH_CONFIG_TIMEOUT_MS'],
-  'services/results.ts': Array(6).fill('LONG_REQUEST_TIMEOUT_MS'),
+  'services/results.ts': Array(7).fill('LONG_REQUEST_TIMEOUT_MS'),
   ...(fs.existsSync(MODULES_SRC_ROOT)
     ? {
         'modules/frontend/src/services/warehouse.ts': [
@@ -916,6 +917,8 @@ const STATUS_ZERO_SITES: Record<string, { count: number; kind: string }> = {
   'components/feature-flags/FlagManageSection.tsx': { count: 1, kind: 'write' },
   // Returns `e.message` for every status 0, so the time-out text already shows.
   'components/results/ResultsDashboard/ResultsDashboard.tsx': { count: 1, kind: 'passes-message' },
+  // segmentResultsErrorMessage (#1933): `e.message` for every status 0, too.
+  'components/results/ResultsDashboard/SavedSegment.tsx': { count: 1, kind: 'passes-message' },
   'contexts/AuthContext.tsx': { count: 1, kind: 'read' },
   // loginErrorMessage, and demoEnterErrorMessage (the read-only demo's button).
   'pages/login.tsx': { count: 2, kind: 'sign-in' },
@@ -1104,6 +1107,10 @@ describe('each status-0 place says what a time-out means (#1040 D7)', () => {
     'components/results/ResultsDashboard/ResultsDashboard.tsx': (_write, read) => {
       expect(resultsErrorMessage(read)).toBe(READ_TEXT);
       expect(resultsErrorMessage(unreachable())).toBe(unreachableMessage());
+    },
+    'components/results/ResultsDashboard/SavedSegment.tsx': (_write, read) => {
+      expect(segmentResultsErrorMessage(read, 'Pilot')).toBe(READ_TEXT);
+      expect(segmentResultsErrorMessage(unreachable(), 'Pilot')).toBe(unreachableMessage());
     },
     'contexts/AuthContext.tsx': (_write, read) => {
       expect(sessionErrorMessage(read)).toBe(READ_TEXT);

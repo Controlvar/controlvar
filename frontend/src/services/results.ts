@@ -5,6 +5,7 @@ import {
   DailyResultsResponse,
   SampleSizeOverrides,
   SampleSizeResult,
+  SegmentResultsResponse,
 } from '@/types/results';
 import { SequentialTestingResponse } from '@/types/sequential';
 import { LONG_REQUEST_TIMEOUT_MS, apiDownload, apiFetch, type ApiDownload } from '@/services/api';
@@ -33,6 +34,27 @@ export class ResultsService {
       },
       timeoutMs: LONG_REQUEST_TIMEOUT_MS,
     });
+  }
+
+  /**
+   * One experiment's results for one ID-list segment's members (#1933, beta).
+   * It takes the stored settings like `getResults`, and never a breakdown.
+   */
+  static async getSegmentResults(
+    experimentId: string,
+    segmentId: string,
+    settings?: { correction_method?: CorrectionMethod; confidence_level?: number }
+  ): Promise<SegmentResultsResponse> {
+    return apiFetch<SegmentResultsResponse>(
+      `/api/v1/results/${experimentId}/segments/${segmentId}`,
+      {
+        query: {
+          correction_method: settings?.correction_method,
+          confidence_level: settings?.confidence_level,
+        },
+        timeoutMs: LONG_REQUEST_TIMEOUT_MS,
+      }
+    );
   }
 
   static async getDailyResults(
