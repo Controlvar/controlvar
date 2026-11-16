@@ -36,6 +36,18 @@ def test_a_trailing_newline_gets_the_message_any_invalid_slug_gets():
     assert len(set(messages)) == 1
 
 
+@pytest.mark.regression
+def test_the_service_refuses_a_slug_with_a_trailing_newline():
+    from modules.backend.app.services.workspace_service import (
+        WorkspaceSlugInvalid,
+        _validate_slug,
+    )
+
+    with pytest.raises(WorkspaceSlugInvalid, match="Slug must be 3–50 characters"):
+        _validate_slug("my-team\n")
+    _validate_slug("my-team")
+
+
 @pytest.mark.parametrize("slug", ["my-team", "abc", "a1-b2-c3", "a" * 50])
 def test_a_valid_slug_still_passes_and_is_kept_as_given(slug):
     assert CreateWorkspaceRequest(name="n", slug=slug).slug == slug
