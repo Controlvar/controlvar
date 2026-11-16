@@ -2365,15 +2365,21 @@ def test_each_elixir_context_sentence_is_on_both_pages_and_held_by_a_test(
     assert gone == [], "these backend tests are gone"
 
 
-def test_the_elixir_page_says_which_function_takes_the_options_that_send_attributes():
-    # The facade's feature_enabled?/3 has no options; Client.feature_enabled?/4
-    # passes them through (held by the _ELIXIR_PASS test).
+def test_the_elixir_page_says_feature_enabled_passes_its_options_through():
+    # The facade's feature_enabled?/4 forwards its options to the client's
+    # (held by the _ELIXIR_PASS test and by the facade test named below).
     page = fold(text("docs/sdk/elixir.md"))
-    assert "`Controlvar.feature_enabled?/3` takes no options." in page
     assert (
-        "`Controlvar.Client.feature_enabled?/4`, which takes the same options" in page
+        "`opts` are those of `evaluate_flag/4` (`:attributes`, `:skip_cache`) and are"
+        " passed through to it." in page
     )
+    assert "takes no options" not in page
     assert f'test "{_ELIXIR_PASS}"' in ELIXIR_TESTS.read_text("utf-8")
+    facade = SDK_DIR / "elixir/test/controlvar_test.exs"
+    assert (
+        'test "the facade forwards attributes: the request carries &context= after'
+        ' user_id"' in facade.read_text("utf-8")
+    )
 
 
 def test_the_old_elixir_note_is_gone_from_both_pages():

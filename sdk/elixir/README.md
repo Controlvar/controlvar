@@ -79,7 +79,7 @@ Controlvar.stop(client)
 | Function | Returns |
 |----------|---------|
 | `evaluate_flag(client, flag_key, user_id, opts \\ [])` | `{:ok, %FlagEvaluation{key, enabled, config}}` or `{:error, reason}`; opts `:attributes`, `:skip_cache` |
-| `feature_enabled?(client, flag_key, user_id)` | `true`/`false` (`false` on any failure); `Controlvar.Client.feature_enabled?/4` takes the `evaluate_flag` opts |
+| `feature_enabled?(client, flag_key, user_id, opts \\ [])` | `true`/`false` (`false` on any failure); opts as `evaluate_flag` |
 | `get_assignment(client, experiment_key, user_id, attributes \\ %{})` | `{:ok, %Assignment{experiment_key, variant_id, variant_name, is_control, configuration}}` or `{:error, reason}` |
 | `track(client, event_name, user_id, properties \\ %{}, opts \\ [])` | `:ok` (fire-and-forget; opts `:experiment_key`, `:feature_flag_key`, `:value`, `:event_type`, `:timestamp`) |
 | `track_batch(client, events)` | `{:ok, %BatchResult{success_count, failure_count, errors}}` or `{:error, reason}` (max 100 per request) |
@@ -103,7 +103,7 @@ as compact JSON, percent-encoded like `user_id`: `%{plan: "pro"}` travels as
 
 ```elixir
 Controlvar.evaluate_flag(client, "dark-mode", "user-123", attributes: %{plan: "pro"})
-Controlvar.Client.feature_enabled?(client, "dark-mode", "user-123", attributes: %{plan: "pro"})
+Controlvar.feature_enabled?(client, "dark-mode", "user-123", attributes: %{plan: "pro"})
 ```
 
 With no attributes, an empty map or anything that is not a map, no `context` is sent and the

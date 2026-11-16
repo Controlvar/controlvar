@@ -138,12 +138,11 @@ the server (for the same attributes, see below); failures are never cached, so t
 retries. Options: `skip_cache: true` to skip the cache; `attributes: %{...}` to send the user's
 attributes (see [Attributes on flag evaluation](#attributes-on-flag-evaluation)).
 
-### `feature_enabled?(client, flag_key, user_id)`
+### `feature_enabled?(client, flag_key, user_id, opts \\ [])`
 
 `true` when the server enables the flag for the user, `false` otherwise — including on any
-failure. `Controlvar.feature_enabled?/3` takes no options. To send attributes, call
-`Controlvar.evaluate_flag/4` with `attributes:`, or `Controlvar.Client.feature_enabled?/4`, which
-takes the same options as `evaluate_flag/4` and passes them through.
+failure. `opts` are those of `evaluate_flag/4` (`:attributes`, `:skip_cache`) and are passed
+through to it.
 
 ### Attributes on flag evaluation
 
@@ -155,7 +154,7 @@ as compact JSON, percent-encoded like `user_id`: `%{plan: "pro"}` travels as
 
 ```elixir
 Controlvar.evaluate_flag(client, "dark-mode", "user-456", attributes: %{plan: "pro"})
-Controlvar.Client.feature_enabled?(client, "dark-mode", "user-456", attributes: %{plan: "pro"})
+Controlvar.feature_enabled?(client, "dark-mode", "user-456", attributes: %{plan: "pro"})
 ```
 
 With no attributes, an empty map or anything that is not a map, no `context` is sent and the
