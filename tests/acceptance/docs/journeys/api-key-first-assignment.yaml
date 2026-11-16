@@ -174,7 +174,7 @@ steps:
               - rowgroup:
                 - row "Name Scopes Created Last used Expires Status Actions"
               - rowgroup:
-                - row /^Docs journey first key — .* — — active Delete$/
+                - row /^Docs journey first key — .* — — active Revoke$/
     fail: the key is not listed, with no scopes, never used, active
   - id: evaluate
     doc: using-an-api-key
@@ -277,19 +277,21 @@ steps:
     do:
       click:
         role: button
-        name: Delete
+        name: Revoke
+        quote: false
+        reason: the dashboard's button for the guide's "Deleting a Key" (both call DELETE /api/v1/api-keys/{id})
     expect:
       aria: |
-        - alertdialog "Delete API key Docs journey first key":
+        - alertdialog "Revoke API key Docs journey first key":
           - button "Cancel"
-          - button "Delete key"
-    fail: Delete does not ask to confirm, naming the key
+          - button "Revoke key"
+    fail: Revoke does not ask to confirm, naming the key
   - id: confirm-delete
     doc: deleting-a-key
     do:
       click:
         role: button
-        name: Delete key
+        name: Revoke key
         quote: false
         reason: the confirmation's button; the guide says the key is deleted permanently
     expect:
