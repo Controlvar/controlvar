@@ -311,13 +311,23 @@ export function ExperimentSummary({
         {/* The planned sample per variant, as on the Sample Size tab (#1244).
             The smaller floor the recommendation needs is in its reason. It is
             the plan for all users, also under a saved segment. */}
-        <Stat
-          label={segment ? 'Planned sample (all users)' : 'Planned sample'}
-          value={planned.value}
-          valueClass={planned.valueClass}
-          detail={planned.detail}
-          testId="planned-sample"
-        />
+        {segment ? (
+          <Stat
+            label="Planned sample (all users)"
+            value={planned.value}
+            valueClass={planned.valueClass}
+            detail={planned.detail}
+            testId="planned-sample"
+          />
+        ) : (
+          <Stat
+            label="Planned sample"
+            value={planned.value}
+            valueClass={planned.valueClass}
+            detail={planned.detail}
+            testId="planned-sample"
+          />
+        )}
       </div>
 
       {/* Which effect the Planned sample is for (#1257), full width: the
