@@ -595,7 +595,7 @@ Every role can read it. An Admin or a superuser can also set the weights by hand
 by hand**, as whole percentages that add up to 100; while the experiment is active, the bandit
 replaces them at its next update. It loads once and again when you
 press **Refresh**. Before the first update it says so, and new users follow each variant's
-starting allocation until then. The dashboard shows the current weights only, with no history.
+starting allocation until then. Under it, **Weight history** lists the bandit's past updates, newest first, when you open it.
 
 ---
 

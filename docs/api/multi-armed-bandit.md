@@ -241,6 +241,8 @@ curl -s "localhost:8000/api/v1/bandit/$EXP_ID/history" \
 
 It prints one update, the one triggered above; the override is not listed.
 
+The dashboard shows the same updates under **Weight history** on the experiment's page.
+
 ---
 
 ## Scheduler

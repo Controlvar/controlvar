@@ -1714,8 +1714,11 @@ text = "Before the first update it says so, and new users follow each variant's 
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "The dashboard shows the current weights only, with no history."
-by = ["test:frontend/src/tests/components/BanditWeightsSection.test.tsx::reads GET /api/v1/bandit/{id} once on load, with no options, and again on Refresh"]
+text = "Under it, Weight history lists the bandit's past updates, newest first, when you open it."
+by = [
+    "test:frontend/src/tests/pages/experiment-detail-bandit-history.test.tsx::sends no history request on load; one per opening, with no options",
+    "test:frontend/src/tests/pages/experiment-detail-bandit-history.test.tsx::shows the server weights as shares, columns in the variant order",
+]
 
 [[unit]]
 text = "Interaction Detection — Are Your Experiments Interfering?"

@@ -1,11 +1,11 @@
 import { apiFetch } from '@/services/api';
-import { BanditStatus } from '@/types/bandit';
+import { BanditHistoryTick, BanditStatus } from '@/types/bandit';
 
 /**
  * A bandit experiment's weights: read by any signed-in role, and set by hand
  * by a superuser or the ADMIN role ("Set weights by hand", offered only to
- * them by `canOverrideBanditWeights`). The dashboard never calls the update
- * route (`POST /api/v1/bandit/{id}/update`).
+ * them by `canOverrideBanditWeights`). Their past updates are read too. The
+ * dashboard never calls the update route (`POST /api/v1/bandit/{id}/update`).
  */
 export const BanditService = {
   /** `GET /api/v1/bandit/{id}`: any signed-in role may read it. */
@@ -24,5 +24,14 @@ export const BanditService = {
       method: 'PUT',
       json: { weights },
     });
+  },
+
+  /**
+   * `GET /api/v1/bandit/{id}/history` (beta): the bandit's past weight updates,
+   * newest first. Sent with no query, so the server's default (the 200 newest)
+   * applies; any role that may view the experiment may read it.
+   */
+  async history(experimentId: string): Promise<BanditHistoryTick[]> {
+    return apiFetch<BanditHistoryTick[]>(`/api/v1/bandit/${experimentId}/history`);
   },
 };

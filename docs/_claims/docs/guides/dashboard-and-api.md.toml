@@ -176,7 +176,7 @@ text = "Set a bandit's weights by hand | Dashboard | Multi-armed bandits"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "A bandit's weight history (beta) | API only | Multi-armed bandits"
+text = "A bandit's weight history (beta) | Dashboard | Multi-armed bandits"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
