@@ -9,7 +9,7 @@ with stubbed KV and request objects, not on the three platforms.
 Flag evaluation and experiment assignment are decided **by the server**: every call goes to the
 public API with your `X-API-Key`, the server buckets the user (sticky per user + experiment), and the
 SDK caches the answer per user + key — in memory and, optionally, in a shared KV store so other
-isolates can reuse it. Nothing is bucketed locally.
+isolates can reuse it (a flag call with attributes is not stored; see Attributes on flag evaluation). Nothing is bucketed locally.
 
 Source: `sdk/edge`.
 
@@ -75,7 +75,8 @@ await client.track('page_view', userId, { path: '/' }); // no key: fanned out, s
 Every `evaluateFlag` / `getAssignment` call resolves in this order:
 
 1. **In-memory cache** (per user + key, `cacheTtlMs`, default 60 s) — zero latency.
-2. **Shared store** (`config.store`; Cloudflare KV / Deno KV via the adapters) — one KV read.
+2. **Shared store** (`config.store`; Cloudflare KV / Deno KV via the adapters) — one KV read; a
+   flag call with attributes skips it (see [Attributes on flag evaluation](#attributes-on-flag-evaluation)).
 3. **Network** — one request to the backend; the result is written to both caches.
 
 Failures (network errors, timeouts, and a 404: an unknown experiment or flag key, or a draft
@@ -148,7 +149,8 @@ read `env`; when `config.kvNamespace` is not set it uses the `env.KV` binding.
 
 ### KV caching
 
-When a `kvNamespace` is provided the SDK stores each **server result** under
+When a `kvNamespace` is provided the SDK stores each **server result** (a flag call with attributes
+is not stored; see Attributes on flag evaluation) under
 `ep:flag:{userId}:{flagKey}` / `ep:assign:{userId}:{experimentKey}` with `expirationTtl` derived from
 `cacheTtlMs` (Cloudflare enforces a 60 s minimum; override with `kvTtlSeconds`). Another instance
 serving the same user reads the value from KV instead of calling the API. No bootstrap payload is
@@ -198,7 +200,8 @@ In a Next.js project the adapter's own note says to pass the same headers with
 across isolates) and `kvTtlMs` (default `cacheTtlMs`).
 
 `createDenoHandler` creates one client per isolate so the in-memory cache is reused across
-requests. With `kv`, results are stored under `["ep", "flag:{userId}:{flagKey}"]` /
+requests. With `kv`, results (a flag call with attributes is not stored; see Attributes on flag
+evaluation) are stored under `["ep", "flag:{userId}:{flagKey}"]` /
 `["ep", "assign:{userId}:{experimentKey}"]` as JSON strings with `expireIn`.
 
 ---

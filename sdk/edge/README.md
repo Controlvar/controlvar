@@ -5,7 +5,8 @@ declares Node >= 18. Zero runtime dependencies, no Node.js built-ins. Its tests 
 run it under Node, with the adapters' KV and request objects stubbed.
 
 Flag evaluation and experiment assignment are **decided by the server**; results are cached per
-user + key in memory (and optionally in Cloudflare KV / Deno KV). Nothing is bucketed locally.
+user + key in memory (and optionally in Cloudflare KV / Deno KV; a flag call with attributes is not
+stored; see Attributes on flag evaluation). Nothing is bucketed locally.
 
 Full documentation: [`docs/sdk/edge.md`](https://github.com/Controlvar/controlvar/blob/main/docs/sdk/edge.md).
 

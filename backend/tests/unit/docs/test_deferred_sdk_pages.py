@@ -2357,6 +2357,11 @@ EDGE_CONTEXT_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], ...]
         (),
     ),
     (
+        "a flag call with attributes is not stored; see Attributes on flag evaluation",
+        (_EDGE_STORE,),
+        (),
+    ),
+    (
         "`evaluateFlagSync` and `getCachedFlag` return the last answer cached for this"
         " user and flag, whatever attributes it was asked with; call `evaluateFlag` with"
         " the attributes when the answer must match them.",
