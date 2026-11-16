@@ -151,7 +151,7 @@ Failures are never cached, so the next call retries. A 404 (an unknown flag key)
 definitive answer: the flag is reported disabled and any persisted offline value is removed.
 Concurrent calls for the same user + key and the same attributes share a single request.
 If the attributes cannot be written as JSON (a `DateTime`, say, or a NaN), `evaluateFlag` returns
-the disabled answer and sends nothing.
+the disabled answer and sends nothing, and logs nothing, so the disabled answer is the only sign.
 
 ### `isEnabled(String flagKey, String userId, {Map<String, dynamic>? attributes}): Future<bool>`
 

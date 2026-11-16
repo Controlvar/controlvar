@@ -125,7 +125,7 @@ whatever attributes it was asked with, and serves it only when the server cannot
 removes the stored answer, and the call returns the disabled answer.
 
 If the attributes cannot be written as JSON (a `DateTime`, say, or a NaN), `evaluateFlag` returns
-the disabled answer and sends nothing.
+the disabled answer and sends nothing, and logs nothing, so the disabled answer is the only sign.
 
 **Fan-out rule.** With `experimentKey` and/or `featureFlagKey`, `track` sends one
 `POST /api/v1/tracking/track`. Without a key it sends one `POST /api/v1/tracking/batch`

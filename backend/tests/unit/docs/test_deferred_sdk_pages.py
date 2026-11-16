@@ -2350,7 +2350,8 @@ FLUTTER_CONTEXT_SENTENCES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
     ),
     (
         "If the attributes cannot be written as JSON (a `DateTime`, say, or a NaN),"
-        " `evaluateFlag` returns the disabled answer and sends nothing.",
+        " `evaluateFlag` returns the disabled answer and sends nothing, and logs nothing,"
+        " so the disabled answer is the only sign.",
         (_FLUTTER_NOT_JSON,),
     ),
 )
