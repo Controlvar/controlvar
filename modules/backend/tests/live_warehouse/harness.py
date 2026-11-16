@@ -616,9 +616,9 @@ NOT_VERIFIED_ROWS: Dict[str, Dict[str, Any]] = {
     },
     "redshift_wire_format": {
         "item": "Redshift DOUBLE PRECISION digits over the Data API with "
-        "extra_float_digits set in the batch (and fewer without it)",
+        "extra_float_digits set in the batch: a table read round-trips exactly",
         "warehouse": "redshift",
-        "checks": ["rs_wire_probe", "rs_mean_parity"],
+        "checks": ["rs_wire_probe", "rs_load_fidelity", "rs_mean_parity"],
     },
     "redshift_time_zone": {
         "item": "Redshift session time zone set in the batch, its name, and a "
@@ -652,10 +652,12 @@ NOT_VERIFIED_ROWS: Dict[str, Dict[str, Any]] = {
             "rs_missing_cluster",
         ],
     },
-    "redshift_history": {
-        "item": "The batch's StatementName in SYS_QUERY_HISTORY",
+    "redshift_preview": {
+        "item": "Both source previews through the connector on a table read "
+        "(SUBSTRING, EXTRACT(EPOCH) of a TIMESTAMPTZ), against counts and bounds "
+        "computed from the fixture",
         "warehouse": "redshift",
-        "checks": ["rs_statement_name_in_history"],
+        "checks": ["rs_preview"],
     },
 }
 
@@ -931,10 +933,10 @@ EXPECTED_CHECKS: Dict[str, Tuple[str, ...]] = {
         "rs_table_columns",
         "rs_upper_case_column",
         "rs_load_fidelity",
+        "rs_preview",
         "rs_mean_parity",
         "rs_runner_parity",
         "rs_runner_parity_cluster",
-        "rs_statement_name_in_history",
         "rs_missing_table",
         "rs_missing_grant",
         "rs_missing_workgroup",
@@ -1295,6 +1297,141 @@ def wire_probe_sql(dialect: Any) -> str:
     if dialect.session_offset:
         sql += f", {dialect.session_offset} AS session_offset"
     return sql
+
+
+# -- the Redshift verdicts (each planted in test_live_check_harness.py) -------------
+
+
+def wire_probe_verdict(probe: Any, time_zone: Any) -> List[str]:
+    """What is wrong with the connector's own probe reading, or nothing.
+
+    The probe must parse to binary64's ``0.1 + 0.2`` exactly and the session's
+    time zone must read ``UTC``: what the connector itself refuses otherwise.
+    """
+    from modules.backend.app.services.warehouse_sufficient_stats import (
+        WarehouseResultRefused,
+        parse_float,
+    )
+
+    problems: List[str] = []
+    try:
+        value, _ = parse_float(probe, "probe")
+    except WarehouseResultRefused:
+        problems.append(f"the probe {probe!r} is not a number")
+    else:
+        if value != WIRE_PROBE_VALUE:
+            problems.append(f"the probe {probe!r} is not {WIRE_PROBE_TEXT}")
+    if time_zone != "UTC":
+        problems.append(f"the session's time zone is {time_zone!r}, not UTC")
+    return problems
+
+
+def failed_statement_verdict(
+    refusal: Mapping[str, Any], seen: Mapping[str, Any]
+) -> List[str]:
+    """What is wrong with a FAILED batch's refusal, or nothing.
+
+    ``refusal`` is what the connector raised (code, vendor code, request id);
+    ``seen`` is an independent DescribeStatement of the same batch, as
+    :func:`~modules.backend.app.warehouse.redshift.described` returns it.  The
+    request id must be the Data API ``Id`` of the first sub-statement that
+    reading shows ``FAILED``.
+    """
+    problems: List[str] = []
+    if refusal.get("refused") != "unrecognised_warehouse_error":
+        problems.append(f"refused as {refusal.get('refused')!r}")
+    if refusal.get("vendor_code") != "FAILED":
+        problems.append(f"vendor code {refusal.get('vendor_code')!r}")
+    subs = seen.get("SubStatements") or []
+    failed = [s.get("Id") for s in subs if s.get("Status") == "FAILED"]
+    if seen.get("Status") != "FAILED" or not failed:
+        problems.append("the independent reading shows no FAILED sub-statement")
+    elif refusal.get("request_id") != failed[0]:
+        problems.append(
+            f"request id {refusal.get('request_id')!r} is not the FAILED "
+            f"sub-statement's Id {failed[0]!r}"
+        )
+    return problems
+
+
+def _utc_datetime(text: str) -> datetime:
+    return datetime.strptime(text, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+
+
+def expected_previews(
+    control: np.ndarray, treatment: np.ndarray
+) -> Dict[str, Dict[str, Any]]:
+    """What the two source previews must report for the fixture.
+
+    Worked out here, in Python, from the rows the tables are loaded with
+    (:func:`fixture_rows`), with no SQL engine and no query builder: the
+    assignment preview of :data:`EXPERIMENT_KEY` and the mean metric preview
+    of ``amount``, both over ``[WINDOW_START, WINDOW_END)``, in the shape
+    ``warehouse_runner.execute_preview`` returns.
+    """
+    from modules.backend.app.services.warehouse_query_builder import (
+        LABEL_MAX_CHARS,
+        VARIANT_ROW_LIMIT,
+    )
+
+    exposure_rows, event_rows = fixture_rows(control, treatment)
+    exposed = [
+        (unit or None, variant or None, _utc_datetime(at))
+        for unit, key, variant, at in exposure_rows
+        if key == EXPERIMENT_KEY and WINDOW_START <= _utc_datetime(at) < WINDOW_END
+    ]
+    units: Dict[str, set] = {}
+    for unit, variant, _ in exposed:
+        if variant is not None:
+            units.setdefault(variant, set()).update([unit] if unit else [])
+    labels = sorted(units, key=lambda v: (-len(units[v]), v))[:VARIANT_ROW_LIMIT]
+    exposed_at = [at for _, _, at in exposed]
+    events = [
+        (unit or None, amount or None, _utc_datetime(at))
+        for unit, at, amount, _ in event_rows
+        if WINDOW_START <= _utc_datetime(at) < WINDOW_END
+    ]
+    event_at = [at for _, _, at in events]
+    return {
+        "assignment": {
+            "total_rows": len(exposed),
+            "null_unit_rows": sum(1 for unit, _, _ in exposed if unit is None),
+            "null_variant_rows": sum(1 for _, v, _ in exposed if v is None),
+            "earliest": min(exposed_at, default=None),
+            "latest": max(exposed_at, default=None),
+            "variants": [
+                {"label": v[:LABEL_MAX_CHARS], "units": len(units[v])} for v in labels
+            ],
+        },
+        "metric": {
+            "total_rows": len(events),
+            "null_unit_rows": sum(1 for unit, _, _ in events if unit is None),
+            "null_value_rows": sum(1 for _, amount, _ in events if amount is None),
+            "earliest": min(event_at, default=None),
+            "latest": max(event_at, default=None),
+        },
+    }
+
+
+def preview_verdict(
+    summaries: Mapping[str, Mapping[str, Any]],
+    expected: Mapping[str, Mapping[str, Any]],
+) -> List[str]:
+    """Every difference between what the previews returned and what they must."""
+    problems: List[str] = []
+    if set(summaries) != set(expected):
+        problems.append(f"previews {sorted(summaries)} != {sorted(expected)}")
+    for kind, want in expected.items():
+        got = summaries.get(kind)
+        if not isinstance(got, Mapping):
+            continue
+        if set(got) != set(want):
+            problems.append(f"{kind}: keys {sorted(got)} != {sorted(want)}")
+            continue
+        for key, value in want.items():
+            if got[key] != value:
+                problems.append(f"{kind}.{key}: {got[key]!r} != {value!r}")
+    return problems
 
 
 class NullSession:

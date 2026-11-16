@@ -1,6 +1,6 @@
 WITH exposures AS (
   SELECT CAST("user_id" AS VARCHAR(65535)) AS unit_id,
-    SUBSTR(CAST("variant" AS VARCHAR(65535)), 1, 64) AS variant,
+    SUBSTRING(CAST("variant" AS VARCHAR(65535)), 1, 64) AS variant,
     CAST("exposed_at" AS TIMESTAMPTZ) AS exposed_at
   FROM "analytics"."exposures"
   WHERE "experiment_key" = 'checkout-v2'
