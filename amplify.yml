@@ -8,13 +8,15 @@
 # /api/v1/auth/login` returns this site's own HTML with a 404 status -- and a
 # visitor evaluating the project met a login form that silently fails.
 #
-# `build:marketing` builds the homepage, the docs hub and the power calculator
-# (which computes in the browser), then prunes the dashboard from the export.
-# See frontend/src/utils/site-mode.ts.
+# `build:marketing` builds the homepage, the docs hub, the books page, the
+# walkthroughs page, the power calculator (which computes in the browser) and
+# the privacy page, then prunes the dashboard from the export. See
+# frontend/src/utils/site-mode.ts and frontend/scripts/prune-marketing-site.mjs.
 #
-# Its last step downloads the walkthrough videos from the public repository's
-# `media` release and fails the build when one is missing or differs from its
-# pin in frontend/src/content/videos.json (frontend/scripts/fetch-site-media.mjs).
+# Its last step downloads the walkthrough videos (the walkthroughs page plays
+# them; the homepage shows their posters) from the public repository's `media`
+# release and fails the build when one is missing or differs from its pin in
+# frontend/src/content/videos.json (frontend/scripts/fetch-site-media.mjs).
 version: 1
 frontend:
   phases:

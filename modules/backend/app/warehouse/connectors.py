@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import AbstractSet, Final, Optional
 
 #: Every connector the code knows about, enabled or not.
-KNOWN_CONNECTORS: Final = ("bigquery", "snowflake", "athena")
+KNOWN_CONNECTORS: Final = ("bigquery", "snowflake", "athena", "redshift")
 
 #: The connectors a deployment may use; see the module docstring.
 #:
@@ -23,13 +23,15 @@ KNOWN_CONNECTORS: Final = ("bigquery", "snowflake", "athena")
 #: * ``bigquery`` -- the real-account check passed on 2026-10-05, run
 #:   ``wl-bigquery-20261005T150837Z-7782e712`` (10 checks, all passed).
 #:
-#: Amazon Athena stays disabled until after launch.
+#: Amazon Athena stays disabled until after launch.  Amazon Redshift stays
+#: disabled until its client exists and its real-account check has passed.
 ENABLED_CONNECTORS: Final[frozenset[str]] = frozenset({"snowflake", "bigquery"})
 
 _NAMES: Final = {
     "bigquery": "BigQuery",
     "snowflake": "Snowflake",
     "athena": "Amazon Athena",
+    "redshift": "Amazon Redshift",
 }
 
 

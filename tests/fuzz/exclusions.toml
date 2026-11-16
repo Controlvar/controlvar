@@ -149,3 +149,10 @@ reason = "Changes an identity provider's stored endpoints, which the sign-in cal
 operation = "GET /api/v1/auth/sso/oidc/{provider}/callback"
 passes = ["superuser", "viewer", "sdk"]
 reason = "Exchanges the sign-in code at the identity provider's stored token endpoint: a connection to that host."
+
+# --- Deprecated and unimplemented -------------------------------------------
+
+[[exclude]]
+operation = "POST /api/v1/results/{experiment_id}/post-stratification"
+passes = ["superuser", "viewer", "sdk"]
+reason = "Deprecated and not implemented: answers 501 for every existing experiment (#963), so fuzzing it finds nothing. Excluded by name; the other deprecated routes work and stay fuzzed."

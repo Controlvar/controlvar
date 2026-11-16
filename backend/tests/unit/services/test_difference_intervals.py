@@ -67,6 +67,9 @@ from backend.tests.unit.services import (
     test_binomial_metric_result_characterisation as characterisation,
 )
 from backend.tests.unit.services import (
+    test_lower_is_better_fingerprint as lower_is_better,
+)
+from backend.tests.unit.services import (
     test_revenue_per_user_routing as routing,
 )
 from backend.tests.unit.services import (
@@ -837,9 +840,15 @@ def _sha(output: Any) -> str:
 
 
 def test_without_the_new_fields_the_binomial_output_is_the_one_before_them():
-    outputs = sufficient_stats._binomial_outputs()
+    """Also with 1.11.0's winner against a control at 0 checked and set back
+    (``test_lower_is_better_fingerprint._undo_the_zero_control_winner``)."""
+    outputs = _without(sufficient_stats._binomial_outputs(), DIFFERENCE_FIELDS)
+    undone = sum(
+        lower_is_better._undo_the_zero_control_winner(o) for o in outputs.values()
+    )
+    assert undone == lower_is_better._ZERO_CONTROL_WINNERS
     assert (
-        _sha(_without(outputs, DIFFERENCE_FIELDS))
+        _sha(outputs)
         == sufficient_stats.SUFFICIENT_STATS_FINGERPRINTS[BEFORE_DIFFERENCE_FIELDS][
             "binomial_metric_result"
         ]
@@ -848,11 +857,15 @@ def test_without_the_new_fields_the_binomial_output_is_the_one_before_them():
 
 @pytest.mark.parametrize("case", sorted(characterisation.CHARACTERISATION))
 def test_without_the_new_fields_results_are_the_ones_before_them(case, monkeypatch):
+    """Also with 1.11.0's winner and summary against a control at 0 checked
+    and set back for the edges cases."""
     fixture_name, confidence, correction = case.split("-")
     output = characterisation.results_output(
         fixture_name, float(confidence), correction, monkeypatch
     )
-    actual, _ = characterisation._fingerprint(_without(output, DIFFERENCE_FIELDS))
+    stripped = _without(output, DIFFERENCE_FIELDS)
+    lower_is_better._undo_the_zero_control_summary(case, stripped)
+    actual, _ = characterisation._fingerprint(stripped)
     assert actual == characterisation.CHARACTERISATIONS[BEFORE_DIFFERENCE_FIELDS][case]
 
 

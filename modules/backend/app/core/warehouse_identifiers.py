@@ -9,9 +9,9 @@ value is the same: it must **fully match** a strict per-dialect pattern, or it
 is refused.  Nothing is escaped.
 
 * **Identifiers** (table parts, column names) fully match their dialect's
-  part pattern and are then quoted by us: double quotes for Snowflake and
-  Athena, backticks for BigQuery.  None of the patterns admits a quote
-  character, so a quoted identifier cannot be closed early.
+  part pattern and are then quoted by us: double quotes for Snowflake, Athena
+  and Amazon Redshift, backticks for BigQuery.  None of the patterns admits a
+  quote character, so a quoted identifier cannot be closed early.
 * **String literals** in filters fully match ``[A-Za-z0-9 _.:@/+-]{1,256}``
   and are wrapped in single quotes by us.  The class has no quote, backslash,
   semicolon, asterisk, control character or line separator.
@@ -41,7 +41,7 @@ FilterLiteral = Union[str, bool, int]
 MAX_FILTERS: Final = 5
 MAX_IN_VALUES: Final = 50
 #: The range a filter integer may carry: a signed 64-bit value, the widest
-#: integer type all three warehouses share.
+#: integer type all four warehouses share (Redshift's BIGINT is 64-bit).
 MIN_INT_LITERAL: Final = -(2**63)
 MAX_INT_LITERAL: Final = 2**63 - 1
 
@@ -56,6 +56,11 @@ _SNOWFLAKE_PART: Final = re.compile(r"[A-Za-z_][A-Za-z0-9_$]{0,254}")
 _BIGQUERY_PROJECT: Final = re.compile(r"[a-z][a-z0-9-]{4,28}[a-z0-9]")
 _BIGQUERY_NAME: Final = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,1023}")
 _ATHENA_PART: Final = re.compile(r"[a-z0-9_]{1,255}")
+#: A Redshift identifier: a letter or _, then letters, digits, _ and $ (at
+#: most 127, Redshift's limit).  Redshift reads a quoted identifier in lower
+#: case unless the cluster enables case-sensitive identifiers; a source's
+#: names are matched to the table's own (DescribeTable) when it is validated.
+_REDSHIFT_PART: Final = re.compile(r"[A-Za-z_][A-Za-z0-9_$]{0,126}")
 
 
 class WarehouseQueryRefused(ValueError):
@@ -78,7 +83,7 @@ class IdentifierRules:
 
     name: str
     #: One pattern per part of a table reference, in order; the count is
-    #: exact (Snowflake and BigQuery 3, Athena 2).
+    #: exact (Snowflake and BigQuery 3, Athena and Redshift 2).
     table_parts: tuple[re.Pattern[str], ...]
     table_part_names: tuple[str, ...]
     column: re.Pattern[str]
@@ -110,10 +115,19 @@ ATHENA: Final = IdentifierRules(
     quote_open='"',
     quote_close='"',
 )
+#: Amazon Redshift: ``schema.table``, in the connection's own database.
+REDSHIFT: Final = IdentifierRules(
+    name="redshift",
+    table_parts=(_REDSHIFT_PART, _REDSHIFT_PART),
+    table_part_names=("schema", "table"),
+    column=_REDSHIFT_PART,
+    quote_open='"',
+    quote_close='"',
+)
 
 #: The dialects a connection can have.  The DuckDB rules the tests use are
 #: defined in the tests, not here.
-IDENTIFIER_RULES: Final = {r.name: r for r in (SNOWFLAKE, BIGQUERY, ATHENA)}
+IDENTIFIER_RULES: Final = {r.name: r for r in (SNOWFLAKE, BIGQUERY, ATHENA, REDSHIFT)}
 
 
 def _fully_matches(pattern: re.Pattern[str], value: object) -> bool:

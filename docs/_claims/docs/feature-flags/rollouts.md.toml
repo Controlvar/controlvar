@@ -180,14 +180,38 @@ by = [
 ]
 
 [[unit]]
-text = "A schedule made in the dashboard has no start or end date of its own, a maximum of 100% and no minimum stage duration."
-by = ["test:frontend/src/tests/pages/feature-flag-rollout-schedule.test.tsx::sends one POST with the stages numbered from 1 in list order, and shows the draft"]
+text = "A schedule has four settings of its own, in the Schedule settings group of the form: a start date, an end date, a maximum percentage and a minimum stage duration in whole hours."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-rollout-schedule.test.tsx::creating sends the chosen maximum, both dates with Z, and min_stage_duration",
+    "test:frontend/src/tests/pages/feature-flag-rollout-schedule.test.tsx::editing shows the stored values, and Save sends only what changed, dates with Z",
+    "test:frontend/src/tests/pages/feature-flag-rollout-schedule.test.tsx::the witness rollout-schedule-settings is in the create form and the edit form, and for no VIEWER",
+]
 
 [[unit]]
-text = "Those are set through the API only."
+text = "The dates are in UTC, the maximum is 100% and there is no minimum until you change them."
 by = [
-    "test:frontend/src/tests/pages/feature-flag-rollout-schedule.test.tsx::sends one POST with the stages numbered from 1 in list order, and shows the draft",
-    "docex:docs/feature-flags/rollouts.md#\"status\":\"draft\"",
+    "test:frontend/src/tests/pages/feature-flag-rollout-schedule.test.tsx::the four fields say what they do, in these words",
+    "test:frontend/src/tests/pages/feature-flag-rollout-schedule.test.tsx::creating sends the chosen maximum, both dates with Z, and min_stage_duration",
+]
+
+[[unit]]
+text = "On a draft or paused schedule, Edit stages shows them too, with Save schedule settings."
+by = ["test:frontend/src/tests/pages/feature-flag-rollout-schedule.test.tsx::editing shows the stored values, and Save sends only what changed, dates with Z"]
+
+[[unit]]
+text = "The form refuses an end date that is not after the start date, a stage target above the maximum, and a maximum or a minimum outside its range, before it sends anything."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-rollout-schedule.test.tsx::creating: an end date before the start date is refused before any request",
+    "test:frontend/src/tests/pages/feature-flag-rollout-schedule.test.tsx::creating: a stage above the field’s maximum is refused before any request",
+    "test:frontend/src/tests/pages/feature-flag-rollout-schedule.test.tsx::creating: a maximum or a minimum out of range is refused before any request",
+    "test:frontend/src/tests/pages/feature-flag-rollout-schedule.test.tsx::editing: a maximum below a stage’s target is refused before any request",
+]
+
+[[unit]]
+text = "A maximum below a stage's target is refused by the API too, and the page then says to lower that stage's target first."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-rollout-schedule.test.tsx::editing: a 409 shows the fixed copy, never the server’s detail",
+    "test:backend/tests/integration/api/test_rollout_stage_targets_api.py::test_lowering_max_percentage_below_a_target_answers_409",
 ]
 
 [[unit]]

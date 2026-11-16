@@ -40,7 +40,16 @@ def test_the_tree_is_apache_and_the_sdks_are_mit():
     licences = {
         tuple(a["path"]): a["SPDX-License-Identifier"] for a in reuse["annotations"]
     }
-    assert licences == {("**",): "Apache-2.0", ("sdk/**",): "MIT"}
+    # One third-party file besides: GitHub's mark in the public site's header,
+    # Primer Octicons' mark-github-16, MIT, GitHub Inc. (NOTICE). Exactly that
+    # path, so a second exception has to be added here on purpose.
+    mark = ("frontend/src/components/GitHubMark.tsx",)
+    assert licences == {("**",): "Apache-2.0", ("sdk/**",): "MIT", mark: "MIT"}
+    owners = {
+        tuple(a["path"]): a["SPDX-FileCopyrightText"] for a in reuse["annotations"]
+    }
+    assert owners[mark] == "GitHub Inc."
+    assert "Primer Octicons" in _text(mark[0]) and "GitHub Inc." in _text("NOTICE")
     assert "Apache License" in _text("LICENSE").split("\n", 3)[1]
     assert _text("sdk/LICENSE").startswith("MIT License")
 
@@ -359,7 +368,8 @@ def test_the_ruff_hooks_cover_the_lint_trees_at_the_pinned_version(precommit):
     ruff = precommit["https://github.com/astral-sh/ruff-pre-commit"]
     assert [h["id"] for h in ruff["hooks"]] == ["ruff", "ruff-format"]
     assert {h["files"] for h in ruff["hooks"]} == {
-        "^(backend|modules|scripts|tests/acceptance|tests/ground_truth|tests/usecases)/"
+        "^(backend|modules|scripts|tests/acceptance|tests/ground_truth"
+        "|tests/usecases|tests/personas)/"
     }
     (pin,) = re.findall(r"^ruff==(\S+)", _text("backend/requirements.txt"), re.M)
     assert ruff["rev"] == f"v{pin}"
@@ -417,7 +427,7 @@ def test_make_lint_and_the_lint_job_run_the_same_checks():
         assert needle in job, needle
     trees = (
         "backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/"
-        " tests/usecases/"
+        " tests/usecases/ tests/personas/"
     )
     assert f"ruff check {trees}" in job and f"ruff format --check {trees}" in job
 

@@ -39,6 +39,8 @@ interface AdvancedFormProps {
   onSubmit: (e: React.FormEvent) => void;
   /** Changed each time a create was refused before sending; see `VariantsEditor`. */
   revealProblems?: number;
+  /** Changed each time a create was refused for an Advanced Bayesian setting; see `AnalysisSettingsFields`. */
+  revealBayesianProblems?: number;
 }
 
 /** Every field of a new experiment on one page, submitted with one button. */
@@ -49,6 +51,7 @@ export function AdvancedForm({
   isSubmitting,
   onSubmit,
   revealProblems = 0,
+  revealBayesianProblems = 0,
 }: AdvancedFormProps) {
   // The key field is on this page: take the user straight to it.
   // A targeting problem is shown at the rules; anything else the error says goes here.
@@ -107,7 +110,9 @@ export function AdvancedForm({
             dispatch={dispatch}
             variantCount={state.variants.length}
             bayesianEnabled={state.bayesianEnabled}
+            bayesianConfig={state.bayesianConfig}
             sequentialEnabled={state.sequentialEnabled}
+            revealProblems={revealBayesianProblems}
           />
         </div>
       </details>

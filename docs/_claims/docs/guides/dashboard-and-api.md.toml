@@ -156,15 +156,15 @@ text = "Activate, pause, resume or cancel a rollout schedule, and advance a manu
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Set a rollout schedule's own start and end dates, maximum percentage and minimum stage duration | API only | Gradual rollouts"
+text = "Set a rollout schedule's own start and end dates, maximum percentage and minimum stage duration | Dashboard | Gradual rollouts"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Delete a feature flag | API only | Deleting a flag"
+text = "Delete a feature flag | Dashboard | Deleting a flag"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Archive and unarchive a feature flag | API only | Running experiments"
+text = "Archive and unarchive a feature flag | Dashboard | Archived flags"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
@@ -196,19 +196,19 @@ text = "The interaction scan and the pair test (beta) | API only | Interaction d
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Download results as CSV | API only | Data export"
+text = "Download results as CSV | Dashboard | Exporting results"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "The effect size in the metric comparison table | API only | Running experiments"
+text = "The effect size in the metric comparison table | Dashboard | Running experiments"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Each variant's confidence interval on the results page | API only | Running experiments"
+text = "Each variant's confidence interval on the results page | Dashboard | Running experiments"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Bayesian priors, loss threshold and credible level | API only | Bayesian analysis"
+text = "Bayesian priors, loss threshold and credible level | Dashboard | Bayesian analysis"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]

@@ -12,7 +12,12 @@ from uuid import UUID
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
 
 from backend.app.api.datetime_bounds import storable_offset
-from backend.app.core.api_key_scopes import normalise_scope_list, parse_scopes
+from backend.app.core.api_key_scopes import (
+    SCOPES_MAX_LENGTH,
+    format_scopes,
+    normalise_scope_list,
+    parse_scopes,
+)
 
 # Length of the visible prefix (``eptk_`` + first 4 hex chars) shown in lists.
 KEY_PREFIX_LENGTH = 9
@@ -52,6 +57,22 @@ class APIKeyCreate(BaseModel):
             if "," in scope:
                 raise ValueError("scope names may not contain commas")
         return cleaned
+
+    @field_validator("scopes", mode="after")
+    @classmethod
+    def _bound_stored_scopes(cls, v):
+        # The stored form is the names joined with commas, in a column of
+        # SCOPES_MAX_LENGTH characters: a longer one failed at the insert and
+        # answered 500 (#1936). This runs on the final list, whichever shape
+        # (list, comma string, object) the before validator was given, and
+        # measures exactly what the route stores.
+        length = len(format_scopes(v) or "")
+        if length > SCOPES_MAX_LENGTH:
+            raise ValueError(
+                f"scopes joined with commas may be at most {SCOPES_MAX_LENGTH} "
+                f"characters; these are {length}"
+            )
+        return v
 
 
 class APIKeyRead(BaseModel):

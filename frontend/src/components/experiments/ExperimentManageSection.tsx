@@ -6,6 +6,7 @@ import {
   SCHEDULE_SAVED,
 } from '@/components/experiments/ExperimentScheduleSection';
 import { isApiError } from '@/services/api';
+import { demoRefusalMessage } from '@/utils/demoMode';
 import { ExperimentDetailsUpdate, ExperimentsService } from '@/services/experiments';
 import { Experiment } from '@/types/experiments';
 import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
@@ -103,6 +104,8 @@ export function errorCopy(action: ManageAction, err: unknown): string {
   if (!isApiError(err)) return ERROR_COPY[action].fallback;
   if (err.timedOut) return err.message;
   if (err.status === 0) return UNREACHABLE;
+  const demo = demoRefusalMessage(err);
+  if (demo) return demo;
   if (action === 'design' && err.status === 422 && firstErrorType(err.detail) === 'split_url_config') {
     return DESIGN_SPLIT_URL_COPY;
   }

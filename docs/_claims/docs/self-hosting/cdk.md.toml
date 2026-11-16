@@ -8,6 +8,47 @@ text = "AWS CDK Deployment"
 by = ["exempt:label"]
 
 [[unit]]
+text = "Known issue: prod and demo deploys fail at the Redis stack until v0.46.0"
+by = ["exempt:label"]
+
+[[unit]]
+text = "In every release up to and including v0.45.0, cdk deploy fails for the prod and demo environments at the stack experimentation-redis-<env>."
+by = [
+    "test:backend/tests/unit/infrastructure/test_cdk_known_issue_redis_name.py::test_the_stack_ids_are_experimentation_redis_env",
+    "test:backend/tests/unit/infrastructure/test_cdk_known_issue_redis_name.py::test_v0450_ends_in_a_hyphen_for_prod_and_demo_only",
+]
+
+[[unit]]
+text = "The stack cuts the name of its Redis subnet group to 40 characters, and for those two environments the cut ends in a hyphen."
+by = ["test:backend/tests/unit/infrastructure/test_cdk_known_issue_redis_name.py::test_v0450_ends_in_a_hyphen_for_prod_and_demo_only"]
+
+[[unit]]
+text = "ElastiCache refuses it with The parameter CacheSubnetGroupName is not a valid identifier."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "staging and dev are not affected, and neither is the one-command installer, which installs staging's shape."
+by = [
+    "test:backend/tests/unit/infrastructure/test_cdk_known_issue_redis_name.py::test_v0450_ends_in_a_hyphen_for_prod_and_demo_only",
+    "test:backend/tests/unit/infrastructure/test_cdk_known_issue_redis_name.py::test_the_installer_builds_stagings_shape",
+]
+
+[[unit]]
+text = "As of v0.45.0, on 2026-11-11, the fix is planned for v0.46.0."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "Until then, to deploy prod or demo, change [:40] to [:40].rstrip(\"-\") in the cache_subnet_group_name of infrastructure/cdk/stacks/elasticache_redis_stack.py, and leave the [:40] on replication_group_id as it is:"
+by = [
+    "test:backend/tests/unit/infrastructure/test_cdk_known_issue_redis_name.py::test_the_documented_change_gives_a_valid_name_in_every_environment",
+    "test:backend/tests/unit/infrastructure/test_cdk_known_issue_redis_name.py::test_the_stacks_expression_is_the_v0450_form_or_the_fixed_form",
+]
+
+[[unit]]
+text = "The change is a single line, so it is safe to apply by hand."
+by = ["exempt:advice"]
+
+[[unit]]
 text = "To have a script run this page's steps for you, see Install on AWS with one command (beta)."
 by = ["exempt:navigation"]
 

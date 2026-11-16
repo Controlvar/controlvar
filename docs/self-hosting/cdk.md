@@ -8,6 +8,16 @@ The platform's AWS infrastructure is defined as code using **AWS CDK v2**, in **
 
 ---
 
+## Known issue: `prod` and `demo` deploys fail at the Redis stack until v0.46.0
+
+In every release up to and including v0.45.0, `cdk deploy` fails for the `prod` and `demo` environments at the stack `experimentation-redis-<env>`. The stack cuts the name of its Redis subnet group to 40 characters, and for those two environments the cut ends in a hyphen. ElastiCache refuses it with `The parameter CacheSubnetGroupName is not a valid identifier`. `staging` and `dev` are not affected, and neither is the [one-command installer](aws-install.md), which installs `staging`'s shape. As of v0.45.0, on 2026-11-11, the fix is planned for v0.46.0. The change is a single line, so it is safe to apply by hand. Until then, to deploy `prod` or `demo`, change `[:40]` to `[:40].rstrip("-")` in the `cache_subnet_group_name` of `infrastructure/cdk/stacks/elasticache_redis_stack.py`, and leave the `[:40]` on `replication_group_id` as it is:
+
+```python
+cache_subnet_group_name=f"{construct_id}-redis-subnet-group".lower().replace("_", "-")[:40].rstrip("-"),
+```
+
+---
+
 ## Prerequisites
 
 | Tool | Version | Install |

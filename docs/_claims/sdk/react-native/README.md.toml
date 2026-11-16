@@ -169,6 +169,54 @@ text = "Map AsyncStorage to an in-memory mock as well: the Jest setup on the SDK
 by = ["exempt:navigation"]
 
 [[unit]]
+text = "Event ids"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Every event the SDK sends carries an event_id, so the server stores an event sent again with the same event_id, user, experiment, flag and event name only once."
+by = [
+    "test:sdk/react-native/__tests__/event-id.test.ts::track() with a key sends a generated lowercase UUID v4 as event_id",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r1_a_purchase_sent_again_with_its_event_id_is_stored_and_counted_once",
+]
+
+[[unit]]
+text = "Use this from the next published version, not from the version on npm now."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It needs a Controlvar server that includes the event_id change (#1640, in the first platform release after it merged): an older server ignores the field."
+by = [
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r8_without_an_event_id_two_identical_purchases_are_both_stored",
+]
+
+[[unit]]
+text = "Without an eventId option, each track() call and each event of trackBatch() makes a new lowercase UUID v4."
+by = [
+    "test:sdk/react-native/__tests__/event-id.test.ts::two events get two different ids",
+    "test:sdk/react-native/__tests__/event-id.test.ts::trackBatch: each event has its own id, shared by that event's entries",
+]
+
+[[unit]]
+text = "For an event your code may send again, make the id once, when the event happens, and pass the same eventId each time."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "undefined, null and '' mean none, so the SDK makes one."
+by = ["test:sdk/react-native/__tests__/event-id.test.ts::null and an empty string are no id of the caller: the SDK makes one"]
+
+[[unit]]
+text = "The server refuses an id of more than 255 characters or one holding NUL with 422; the SDK does not check it."
+by = ["test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r12_an_invalid_event_id_is_refused_and_a_batch_with_one_stores_nothing"]
+
+[[unit]]
+text = "An event fanned out to several experiments and flags carries the same id in every entry."
+by = ["test:sdk/react-native/__tests__/event-id.test.ts::a key-less track() sends one id on every fan-out entry"]
+
+[[unit]]
+text = "The SDK does not send a request again."
+by = ["test:sdk/react-native/__tests__/event-id.test.ts::a request that fails is not sent again by the SDK"]
+
+[[unit]]
 text = "Development"
 by = ["exempt:label"]
 

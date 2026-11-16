@@ -184,7 +184,7 @@ describe('the marketing build, rendered with its docs URL', () => {
     const dir = docsPage.replace(/(^|\/)README$/, '');
     expect(expected).toBe(dir ? `https://docs.controlvar.com/${dir}/` : 'https://docs.controlvar.com/');
     // The marketing build really rendered: its CTA, not the sign-in.
-    expect(html).toContain('Try the power calculator');
+    expect(html).toContain('Try the live demo');
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const anchors = doc.querySelectorAll(`[data-quote="${id}"] a`);
     expect(anchors).toHaveLength(1);

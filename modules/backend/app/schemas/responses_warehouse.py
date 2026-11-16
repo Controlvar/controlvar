@@ -20,7 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class ConnectorOut(BaseModel):
-    warehouse_type: Literal["bigquery", "snowflake", "athena"]
+    warehouse_type: Literal["bigquery", "snowflake", "athena", "redshift"]
     name: str
     enabled: bool
 
@@ -39,7 +39,8 @@ class ConnectionOut(BaseModel):
     warehouse_type: str
     #: The non-secret parameters (account, user, role, warehouse; billing
     #: project, location, service-account e-mail; region, role ARN,
-    #: workgroup, database).
+    #: workgroup, database; for Amazon Redshift, workgroup_name or
+    #: cluster_identifier and db_user).
     parameters: Dict[str, str]
     credentials_status: Literal[
         "ok", "unavailable", "needs_new_credentials", "pending_key"

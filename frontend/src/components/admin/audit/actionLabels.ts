@@ -42,10 +42,17 @@ export const ACTIONS: Readonly<Record<string, { label: string; group: ActionGrou
   experiment_start: { label: 'Experiment started', group: 'Experiments' },
   experiment_pause: { label: 'Experiment paused', group: 'Experiments' },
   experiment_complete: { label: 'Experiment completed', group: 'Experiments' },
+  experiment_preview_link_create: { label: 'Preview link created', group: 'Experiments' },
+  experiment_preview_links_revoke: { label: 'Preview links revoked', group: 'Experiments' },
   user_create: { label: 'User created', group: 'Users and access' },
   user_delete: { label: 'User deleted', group: 'Users and access' },
   user_activate: { label: 'User reactivated', group: 'Users and access' },
   user_deactivate: { label: 'User deactivated', group: 'Users and access' },
+  user_2fa_enable: { label: 'Two-step sign-in turned on', group: 'Users and access' },
+  user_2fa_disable: { label: 'Two-step sign-in turned off', group: 'Users and access' },
+  user_2fa_reset: { label: 'Two-step sign-in reset', group: 'Users and access' },
+  user_2fa_recovery_used: { label: 'Recovery code used', group: 'Users and access' },
+  user_2fa_recovery_regenerate: { label: 'New recovery codes', group: 'Users and access' },
   role_assign: { label: 'Role changed', group: 'Users and access' },
   role_unassign: { label: 'Custom role removed', group: 'Users and access' },
   role_create: { label: 'Custom role created', group: 'Users and access' },
@@ -76,6 +83,7 @@ export const ACTIONS: Readonly<Record<string, { label: string; group: ActionGrou
   segment_update: { label: 'Segment changed', group: 'Holdouts, groups and segments' },
   segment_archive: { label: 'Segment archived', group: 'Holdouts, groups and segments' },
   safety_rollback: { label: 'Safety rollback', group: 'Safety' },
+  safety_config_update: { label: 'Safety settings changed', group: 'Safety' },
 };
 
 /** The label for an action type; an unknown type (an older entry) shows as itself. */
@@ -103,6 +111,7 @@ export const ENTITY_LABELS: Readonly<Record<string, string>> = {
   holdout: 'Holdout',
   mutual_exclusion_group: 'Exclusion group',
   segment: 'Segment',
+  safety_config: 'Safety settings',
 };
 
 /** The label for an entity type; an unknown one shows as itself. */
@@ -120,6 +129,7 @@ export const SYSTEM_ACTORS: Readonly<Record<string, string>> = {
   'system:safety-monitor': 'Safety monitor',
   'system:cognito-sync': 'Cognito sync',
   'system:sso-sync': 'SSO sync',
+  'system:operator-cli': 'Operator command',
 };
 
 /**

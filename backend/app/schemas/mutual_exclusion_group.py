@@ -12,6 +12,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from backend.app.schemas.finite_number import FiniteFloat
+
 
 class MutualExclusionGroupStatus(str, Enum):
     """Status of a mutual exclusion group."""
@@ -34,7 +36,7 @@ class MutualExclusionGroupCreate(BaseModel):
         max_length=2000,
         description="Description of the group's purpose.",
     )
-    traffic_allocation: float = Field(
+    traffic_allocation: FiniteFloat = Field(
         default=1.0,
         ge=0.0,
         le=1.0,
@@ -66,7 +68,7 @@ class MutualExclusionGroupUpdate(BaseModel):
         max_length=2000,
         description="Updated description.",
     )
-    traffic_allocation: Optional[float] = Field(
+    traffic_allocation: Optional[FiniteFloat] = Field(
         None,
         ge=0.0,
         le=1.0,

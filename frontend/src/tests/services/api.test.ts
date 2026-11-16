@@ -32,10 +32,12 @@ import { ResultsService } from '@/services/results';
 import { UserTable, deleteTimedOutMessage } from '@/components/admin/users/UserTable';
 import { UNREACHABLE, errorCopy } from '@/components/experiments/ExperimentManageSection';
 import { SCHEDULE_ERROR_COPY, scheduleErrorCopy } from '@/components/experiments/ExperimentScheduleSection';
+import { flagManageErrorCopy } from '@/components/feature-flags/FlagManageSection';
 import { rolloutErrorCopy } from '@/components/feature-flags/RolloutScheduleManager';
 import { resultsErrorMessage } from '@/components/results/ResultsDashboard/ResultsDashboard';
 import { sessionErrorMessage } from '@/contexts/AuthContext';
-import { loginErrorMessage, signInNoticeMessage } from '@/pages/login';
+import { demoEnterErrorMessage, loginErrorMessage, signInNoticeMessage } from '@/pages/login';
+import { DEMO_UNREACHABLE } from '@/utils/demoMode';
 import { signInFailureNotice } from '@/services/hostedUi';
 import { classifyPasswordError, passwordOutcomeSentence } from '@/services/password';
 import { groupErrorCopy } from '@/utils/exclusionGroups';
@@ -772,7 +774,7 @@ describe("the caller's own signal (#1040 D4)", () => {
 const EXPECTED_OVERRIDES: Record<string, string[]> = {
   // GET /api/v1/auth/config, which /login and the session check wait for (#708).
   'services/authConfig.ts': ['AUTH_CONFIG_TIMEOUT_MS'],
-  'services/results.ts': Array(5).fill('LONG_REQUEST_TIMEOUT_MS'),
+  'services/results.ts': Array(6).fill('LONG_REQUEST_TIMEOUT_MS'),
   ...(fs.existsSync(MODULES_SRC_ROOT)
     ? {
         'modules/frontend/src/services/warehouse.ts': [
@@ -822,6 +824,12 @@ describe('long routes wait longer (#1040 D5)', () => {
       'ResultsService.getSequentialResults',
       () => ResultsService.getSequentialResults('e1'),
       '/api/v1/results/e1/sequential',
+      TWO_MINUTES,
+    ],
+    [
+      'ResultsService.getBalancedGroups',
+      () => ResultsService.getBalancedGroups('e1'),
+      '/api/v1/results/e1/balanced-groups',
       TWO_MINUTES,
     ],
     [
@@ -904,10 +912,13 @@ const STATUS_ZERO_SITES: Record<string, { count: number; kind: string }> = {
   // SCHEDULE_ERROR_COPY's `0:` entry.
   'components/experiments/ExperimentScheduleSection.tsx': { count: 1, kind: 'write' },
   'components/feature-flags/RolloutScheduleManager.tsx': { count: 1, kind: 'write' },
+  // flagManageErrorCopy: archive and unarchive a flag (#442).
+  'components/feature-flags/FlagManageSection.tsx': { count: 1, kind: 'write' },
   // Returns `e.message` for every status 0, so the time-out text already shows.
   'components/results/ResultsDashboard/ResultsDashboard.tsx': { count: 1, kind: 'passes-message' },
   'contexts/AuthContext.tsx': { count: 1, kind: 'read' },
-  'pages/login.tsx': { count: 1, kind: 'sign-in' },
+  // loginErrorMessage, and demoEnterErrorMessage (the read-only demo's button).
+  'pages/login.tsx': { count: 2, kind: 'sign-in' },
   // signInFailureNotice: the Cognito Hosted UI callback's exchange (#708).
   'services/hostedUi.ts': { count: 1, kind: 'sign-in' },
   // classifyPasswordError's `case 0:`.
@@ -1084,6 +1095,12 @@ describe('each status-0 place says what a time-out means (#1040 D7)', () => {
       expect(rolloutErrorCopy(write)).toBe(WRITE_TEXT);
       expect(rolloutErrorCopy(unreachable())).toBe(UNREACHABLE);
     },
+    'components/feature-flags/FlagManageSection.tsx': (write) => {
+      for (const action of ['archive', 'unarchive'] as const) {
+        expect(flagManageErrorCopy(action, write)).toBe(WRITE_TEXT);
+        expect(flagManageErrorCopy(action, unreachable())).toBe(UNREACHABLE);
+      }
+    },
     'components/results/ResultsDashboard/ResultsDashboard.tsx': (_write, read) => {
       expect(resultsErrorMessage(read)).toBe(READ_TEXT);
       expect(resultsErrorMessage(unreachable())).toBe(unreachableMessage());
@@ -1095,6 +1112,8 @@ describe('each status-0 place says what a time-out means (#1040 D7)', () => {
     'pages/login.tsx': (write) => {
       expect(loginErrorMessage(write)).toBe(SIGN_IN_TEXT);
       expect(loginErrorMessage(unreachable())).toBe(unreachableMessage());
+      expect(demoEnterErrorMessage(write)).toBe(SIGN_IN_TEXT);
+      expect(demoEnterErrorMessage(unreachable())).toBe(DEMO_UNREACHABLE);
     },
     'services/hostedUi.ts': (write) => {
       expect(signInNoticeMessage(signInFailureNotice(write, '/'))).toBe(SIGN_IN_TEXT);

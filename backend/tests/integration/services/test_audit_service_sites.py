@@ -949,14 +949,17 @@ def test_a_refused_entry_still_applies_the_role_change(
 # --- system actors --------------------------------------------------------------
 
 
-def test_the_reserved_actors_are_exactly_five():
-    # The fifth, system:sso-sync, is written by the modules' SSO sign-in.
+def test_the_reserved_actors_are_exactly_six():
+    # The fifth, system:sso-sync, is written by the modules' SSO sign-in; the
+    # sixth, system:operator-cli, by `python -m backend.app.db.two_factor_reset`
+    # (#1812).
     assert SYSTEM_ACTOR_EMAILS == {
         EXPERIMENT_SCHEDULER,
         ROLLOUT_SCHEDULER,
         SAFETY_MONITOR,
         COGNITO_SYNC,
         "system:sso-sync",
+        "system:operator-cli",
     }
 
 

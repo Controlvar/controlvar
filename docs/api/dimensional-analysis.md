@@ -31,7 +31,7 @@ All segment results are marked `is_exploratory: true` — they should be treated
 
 ### HTE Detection
 
-Heterogeneous treatment effect detection compares the first treatment with the control. It flags the experiment when a chi-squared test on their conversion counts across the segments gives p < 0.05, when the lift varies widely between segments, or when the lift is positive in one segment and negative in another.
+Heterogeneous treatment effect detection compares the first treatment (the non-control variant whose name sorts first) with the control. It tests whether that treatment's difference from the control, in percentage points, is the same in every segment, and flags the experiment when the test rejects at 1 minus the confidence level the results were computed at. A segment is tested only when, in both arms, its users times the pooled conversion rate, and times one minus that rate, are at least 10. With fewer than two such segments it never flags, so no flag means either that the segments' effects look alike or that there was too little data to tell. Each dimension is tested on its own, with no correction across dimensions, so the more dimensions you open, the likelier one flags by chance; treat a flag as a lead to confirm with a follow-up experiment.
 
 ---
 
@@ -146,7 +146,9 @@ An experiment that balances its split within groups also answers
 with each user in the group stored when they were assigned instead of their first value, and it
 adds one estimate over the groups.
 [Balance the split within groups](../guides/balance-within-groups.md#results-by-group) says what
-it returns and where the two differ.
+it returns and where the two differ. On the results page, the **Breakdowns** tab of such an
+experiment lists its balanced groups first and opens on them; its other choices are breakdowns
+as above.
 
 ---
 

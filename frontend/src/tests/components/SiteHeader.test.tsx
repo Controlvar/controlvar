@@ -19,10 +19,12 @@ import React from 'react';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AuthProvider } from '@/contexts/AuthContext';
-import { SITE_MENU_ID, SOURCE_URL, SiteHeader } from '@/components/SiteHeader';
+import { SITE_MENU_ID, SOURCE_URL, SiteHeader, siteLinks } from '@/components/SiteHeader';
 import { AppShell } from '@/components/AppShell';
 import HomePage from '@/pages/index';
 import DocsPage from '@/pages/docs/index';
+import BooksPage from '@/pages/books';
+import WalkthroughsPage from '@/pages/walkthroughs';
 import PowerCalculatorPage from '@/pages/power-calculator';
 import PrivacyPage from '@/pages/privacy';
 import { isMarketingSite } from '@/utils/site-mode';
@@ -58,25 +60,51 @@ beforeEach(() => {
   global.fetch = jest.fn(() => Promise.reject(new Error('no API'))) as unknown as typeof fetch;
 });
 
+/**
+ * The links (site design 2026-11-11, item 0): on the marketing build Docs,
+ * Books, Walkthroughs and Power calculator, the first two pages and the last
+ * its own; on a platform build, which has no /books or /walkthroughs page,
+ * Docs and Power calculator. The call to action is outside the menu, at every
+ * width (the competitor study's BORROW 7: GitHub's mark and "Source", kept on
+ * a phone), or "Sign in" on a platform build.
+ */
+const NAV: Record<string, Array<[string, string]>> = {
+  marketing: [
+    ['Docs', '/docs'],
+    ['Books', '/books'],
+    ['Walkthroughs', '/walkthroughs'],
+    ['Power calculator', '/power-calculator'],
+  ],
+  platform: [
+    ['Docs', '/docs'],
+    ['Power calculator', '/power-calculator'],
+  ],
+};
+
 describe.each([
-  ['marketing', true, 'Source', SOURCE_URL],
-  ['platform', false, 'Sign in', '/login'],
-])('SiteHeader on the %s build', (_build, marketing, last, lastHref) => {
+  ['marketing', true, 'Source', SOURCE_URL, 'nav-source'],
+  ['platform', false, 'Sign in', '/login', 'nav-sign-in'],
+])('SiteHeader on the %s build', (build, marketing, last, lastHref, lastId) => {
   beforeEach(() => mode.mockReturnValue(marketing));
 
-  it('has the wordmark, then Docs, Power calculator and one call to action', () => {
+  it('has the wordmark, then its links, then one call to action outside the nav', () => {
     render(<SiteHeader />);
     const nav = screen.getByRole('navigation', { name: 'Main' });
     const links = within(nav).getAllByRole('link');
-    expect(links.map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
-      ['Docs', '/docs'],
-      ['Power calculator', '/power-calculator'],
-      [last, lastHref],
-    ]);
+    expect(links.map((a) => [a.textContent, a.getAttribute('href')])).toEqual(NAV[build]);
+    expect(siteLinks(marketing).map((l) => [l.label, l.href])).toEqual(NAV[build]);
+    const cta = screen.getByTestId(lastId);
+    expect([cta.textContent, cta.getAttribute('href')]).toEqual([last, lastHref]);
+    expect(cta).toHaveAccessibleName(last);
+    expect(cta.closest('nav')).toBeNull();
+    // After the nav, before the menu button, in the same row.
+    const row = screen.getByTestId('site-header-row');
+    const order = Array.from(row.querySelectorAll('nav[aria-label="Main"] a, [data-testid="nav-source"], [data-testid="nav-sign-in"], button'));
+    expect(order.map((el) => el.textContent?.trim() || el.getAttribute('aria-label'))).toEqual([...NAV[build].map(([label]) => label), last, 'Menu']);
     expect(screen.getByRole('link', { name: 'Controlvar home' })).toHaveAttribute('href', '/');
   });
 
-  it('puts the links behind the button below md, all three at one breakpoint', () => {
+  it('puts the links behind the button below md, at one breakpoint, and keeps the call to action at every width', () => {
     render(<SiteHeader />);
     const nav = screen.getByRole('navigation', { name: 'Main' });
     const button = screen.getByRole('button', { name: 'Menu' });
@@ -86,6 +114,11 @@ describe.each([
     expect(classesOf(menu)).toContain('md:hidden');
     // Each link keeps to one line: "Power calculator" wrapped at 390 px.
     within(nav).getAllByRole('link').forEach((a) => expect(classesOf(a)).toContain('whitespace-nowrap'));
+    const cta = screen.getByTestId(lastId);
+    expect(classesOf(cta)).toContain('whitespace-nowrap');
+    expect(classesOf(cta).filter((c) => /^(hidden|[a-z]+:hidden)$/.test(c))).toEqual([]);
+    // A tap target on a phone.
+    expect(classesOf(cta)).toContain('min-h-11');
   });
 
   it('opens and closes the menu from the keyboard, and Escape returns focus to the button', async () => {
@@ -106,7 +139,8 @@ describe.each([
     await user.keyboard('{Enter}');
     expect(button).toHaveAttribute('aria-expanded', 'true');
     expect(menu).toBeVisible();
-    expect(within(menu).getAllByRole('link').map((a) => a.textContent)).toEqual(['Docs', 'Power calculator', last]);
+    // The call to action is not in the menu: it is in the row at every width.
+    expect(within(menu).getAllByRole('link').map((a) => [a.textContent, a.getAttribute('href')])).toEqual(NAV[build]);
 
     await user.keyboard('{Escape}');
     expect(button).toHaveAttribute('aria-expanded', 'false');
@@ -142,6 +176,17 @@ describe.each([
   });
 });
 
+it("shows GitHub's mark beside \"Source\", hides the word only below 360 px, and keeps the name (BORROW 7)", () => {
+  mode.mockReturnValue(true);
+  render(<SiteHeader />);
+  const source = screen.getByTestId('nav-source');
+  const mark = source.querySelector('svg') as SVGElement;
+  expect(mark).toHaveAttribute('aria-hidden', 'true');
+  const word = within(source).getByText('Source');
+  expect(classesOf(word)).toEqual(['max-[359px]:sr-only']);
+  expect(source).toHaveAccessibleName('Source');
+});
+
 it('does not link the wordmark to the page it is on', () => {
   mockPathname = '/';
   render(<SiteHeader />);
@@ -157,6 +202,8 @@ describe('one header on the marketing site', () => {
   const PAGES: Array<[string, () => React.ReactElement]> = [
     ['/', () => <HomePage />],
     ['/docs', () => <AppShell><DocsPage /></AppShell>],
+    ['/books', () => <AppShell><BooksPage /></AppShell>],
+    ['/walkthroughs', () => <AppShell><WalkthroughsPage /></AppShell>],
     ['/power-calculator', () => <AppShell><PowerCalculatorPage /></AppShell>],
     ['/privacy', () => <AppShell><PrivacyPage /></AppShell>],
   ];
@@ -175,7 +222,7 @@ describe('one header on the marketing site', () => {
     return result;
   };
 
-  it('renders SiteHeader, with one row layout, on all four', async () => {
+  it('renders SiteHeader, with one row layout, on all of them', async () => {
     const rows: Array<Awaited<ReturnType<typeof rowOf>>> = [];
     for (const [pathname, make] of PAGES) rows.push(await rowOf(pathname, make));
     expect(rows[0].first).toBe('CControlvar');

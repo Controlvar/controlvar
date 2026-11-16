@@ -261,7 +261,7 @@ class TestDetectHTE:
             segments=homogeneous_segments,
             base_alpha=0.05,
         )
-        assert service.detect_hte(segment_results) is False
+        assert service.detect_hte(segment_results, alpha=0.05) is False
 
     def test_hte_detected_when_effects_differ_strongly(self, service):
         """
@@ -276,7 +276,7 @@ class TestDetectHTE:
             segments=divergent_segments,
             base_alpha=0.05,
         )
-        assert service.detect_hte(segment_results) is True
+        assert service.detect_hte(segment_results, alpha=0.05) is True
 
     def test_single_segment_never_has_hte(self, service, single_segment):
         """HTE requires at least 2 segments; single-segment always returns False."""
@@ -284,7 +284,7 @@ class TestDetectHTE:
             segments=single_segment,
             base_alpha=0.05,
         )
-        assert service.detect_hte(segment_results) is False
+        assert service.detect_hte(segment_results, alpha=0.05) is False
 
     def test_hte_returns_bool(self, service, platform_segments):
         """detect_hte must always return a bool, not None or other falsy value."""
@@ -292,7 +292,7 @@ class TestDetectHTE:
             segments=platform_segments,
             base_alpha=0.05,
         )
-        result = service.detect_hte(segment_results)
+        result = service.detect_hte(segment_results, alpha=0.05)
         assert isinstance(result, bool)
 
 
@@ -351,4 +351,4 @@ class TestControlIsNeverGuessed:
         with warnings.catch_warnings():
             warnings.simplefilter("error")
             results = service.compute_segment_results(segments, base_alpha=0.05)
-            assert isinstance(service.detect_hte(results), bool)
+            assert isinstance(service.detect_hte(results, alpha=0.05), bool)

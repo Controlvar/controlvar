@@ -20,6 +20,10 @@ text = "(full profile) marks a capability of the optional modules (Modules & Pro
 by = ["exempt:navigation"]
 
 [[unit]]
+text = "What Controlvar does not do is in Limitations, and what is planned, Now, Next and Later, is in the roadmap."
+by = ["exempt:navigation"]
+
+[[unit]]
 text = "Experiments and statistics"
 by = ["exempt:label"]
 
@@ -109,6 +113,15 @@ by = [
 ]
 
 [[unit]]
+text = "Balanced split within groups (beta): each group of users, by an attribute or a saved segment, gets the experiment's split among themselves, with results for each group."
+by = [
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_create_stores_and_echoes_the_setting",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_segments_are_stored_and_echoed",
+    "test:backend/tests/integration/api/test_balanced_assignment.py::test_a_sticky_user_keeps_their_variant_and_group",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_the_rows_are_the_stored_groups_and_add_up_to_every_user",
+]
+
+[[unit]]
 text = "Split URL experiments (full profile, beta): each variant is its own page, and your server or edge sends each visitor to theirs."
 by = [
     "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_a_split_url_experiment_splits_its_visitors",
@@ -173,6 +186,14 @@ text = "Stale flags: the flag list marks a flag that looks ready to remove, and 
 by = [
     "test:backend/tests/integration/api/test_stale_flags_api.py::test_v14_stale_true_false_and_omitted_are_exact_sets",
     "test:backend/tests/integration/api/test_stale_flags_api.py::test_v19_listing_changes_no_flag_and_records_nothing",
+]
+
+[[unit]]
+text = "Archiving and deleting a flag: an archived flag answers every evaluation as off and can be unarchived; a delete removes it for good; the dashboard does both."
+by = [
+    "test:backend/tests/integration/api/test_archived_flag_verbs.py::test_unarchive_is_the_way_back",
+    "test:backend/tests/integration/api/test_archived_flag_verbs.py::test_bulk_enable_refuses_only_the_archived_flag",
+    "test:backend/tests/integration/api/test_flag_delete_and_recreate.py::test_a_deleted_flag_leaves_nothing_behind_and_its_key_starts_clean",
 ]
 
 [[unit]]
@@ -275,6 +296,35 @@ by = [
 ]
 
 [[unit]]
+text = "Effect size and intervals: the results table gives each variant's effect size, its own interval, and the interval of its change from the control."
+by = [
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::f4: the treatment reads \"0.34% to 4.66%\" and \"0.32 (small)\", the control \"Control\"",
+    "test:frontend/src/tests/pages/results-reading.test.tsx::are in the table on the page, with the numbers the server sent in each row",
+]
+
+[[unit]]
+text = "Results as CSV: the results page saves an experiment's variant rows as a CSV file."
+by = [
+    "test:frontend/src/tests/pages/results-export-csv.test.tsx::the results page has a Download CSV button with the sentence under it",
+    "test:frontend/src/tests/pages/results-export-csv.test.tsx::saves the response body byte for byte, as results-{id}.csv",
+]
+
+[[unit]]
+text = "Bayesian priors at creation: the prior alpha and beta, loss threshold and credible level, set when you create an experiment with Bayesian analysis on."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::%s: shown only while the box is ticked, closed by default, and opens to four fields at their defaults with their helps",
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::%s: %s set to %s, changed alone, sends the five-field object with prior_family \"beta\"",
+    "test:backend/tests/integration/api/test_experiment_bayesian_config_api.py::TestTurningBayesianOn::test_create_enabled_without_config_stores_defaults",
+]
+
+[[unit]]
+text = "Rollout schedule settings: a schedule's dates, maximum percentage and minimum stage duration, set when you create it and edited while it is a draft or paused."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-rollout-schedule.test.tsx::creating sends the chosen maximum, both dates with Z, and min_stage_duration",
+    "test:frontend/src/tests/pages/feature-flag-rollout-schedule.test.tsx::editing shows the stored values, and Save sends only what changed, dates with Z",
+]
+
+[[unit]]
 text = "Experiment pages: start, pause, resume and complete an experiment, clone it, and edit, schedule or delete a draft."
 by = [
     "test:frontend/src/tests/pages/experiment-detail-manage.test.tsx::POSTs /clone with no body and goes to the NEW experiment",
@@ -341,6 +391,20 @@ text = "Two profiles: core, and full with the optional modules; GET /api/v1/modu
 by = [
     "test:backend/tests/unit/api/test_modules_endpoint.py::TestModulesEndpointShape::test_profile_matches_the_loader",
     "test:backend/tests/smoke/test_core_boundary.py::test_register_core_routers_mounts_no_module_route",
+]
+
+[[unit]]
+text = "Upgrading Docker Compose: move a running stack to a newer release and keep its database; CI rehearses it from the previous release's images."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::test_compose_upgrade_keeps_the_postgres_volume",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestWorkflow::test_the_upgrade_starts_from_a_clone_at_the_previous_release",
+]
+
+[[unit]]
+text = "Demo mode: DEMO_MODE=true makes the API read-only for a public demo install, off by default."
+by = [
+    "test:backend/tests/smoke/test_demo_mode_routes.py::test_the_refusal_is_exactly_the_published_body",
+    "test:backend/tests/smoke/test_demo_mode_routes.py::test_the_allow_list_is_exact",
 ]
 
 [[unit]]
@@ -421,7 +485,3 @@ by = [
     "test:modules/backend/tests/unit/services/test_workspace_service.py::TestCreateWorkspace::test_create_workspace_owner_added_as_member",
     "test:backend/tests/unit/api/test_documented_limits.py::test_the_permission_check_reads_grants_only_through_the_capability",
 ]
-
-[[unit]]
-text = "What Controlvar does not do is in Limitations, and what is planned, Now, Next and Later, is in the roadmap."
-by = ["exempt:navigation"]

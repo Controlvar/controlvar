@@ -28,6 +28,55 @@ export interface DimensionalBreakdownResponse {
   segments: SegmentBreakdown[];
 }
 
+/** Why a balanced experiment's estimate over its groups is null (#448). */
+export type BalancedGroupsNoEstimateReason = 'mean_metric' | 'sequential_testing' | 'too_few_users';
+
+/** `BalancedGroupsEstimate`: one treatment against the control, over every group. */
+export interface BalancedGroupsEstimate {
+  variant_id: string;
+  variant_name: string;
+  /** A difference of shares (0.02 is 2 percentage points); null when the treatment has no users. */
+  absolute_difference: number | null;
+  /** At the response's confidence_level, not adjusted; null when standard_error is 0 or null. */
+  absolute_difference_ci: [number, number] | null;
+  standard_error: number | null;
+  relative_improvement_pct: number | null;
+  /** Null when standard_error is 0 or null, never 0.0. */
+  p_value: number | null;
+  /** Corrected across the treatments; null with no correction. */
+  adjusted_p_value: number | null;
+  /** Not a verdict: the experiment's results carry its decision. */
+  is_significant: boolean;
+}
+
+/** `MergedGroup`: a group with too few users, counted in the estimate with a larger one. */
+export interface MergedGroup {
+  group: string;
+  into: string;
+}
+
+/**
+ * `GET /results/{id}/balanced-groups` (beta, #448): an experiment that
+ * balances its split within groups, by the group each user was balanced in
+ * when they were assigned, and one estimate over the groups.
+ */
+export interface BalancedGroupsResponse {
+  experiment_id: string;
+  confidence_level: number;
+  correction_method: CorrectionMethod;
+  /** One row per stored group: the breakdown's rows, `other` and `unknown` last. */
+  groups: DimensionalBreakdownResponse;
+  /** One entry per treatment; null with `reason`. */
+  overall: BalancedGroupsEstimate[] | null;
+  reason: BalancedGroupsNoEstimateReason | null;
+  merged_groups: MergedGroup[];
+  /** Users split without balancing, those whose row stored no group included. */
+  users_outside_blocks: number;
+  /** The share in `unknown` of the users whose group was stored; null when none was. */
+  unknown_share: number | null;
+  engine_version: string;
+}
+
 export type RecommendationAction =
   | 'SHIP_VARIANT'
   | 'KEEP_CONTROL'

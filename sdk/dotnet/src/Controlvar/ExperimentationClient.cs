@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Controlvar.Exceptions;
 using Controlvar.Models;
 
 namespace Controlvar;
@@ -10,7 +11,10 @@ namespace Controlvar;
 ///
 /// <para><b>The server decides.</b> <see cref="EvaluateFlagAsync"/> calls
 /// <c>GET /api/v1/feature-flags/evaluate/{key}?user_id=…&amp;context=…</c> and <see cref="GetAssignmentAsync"/>
-/// calls <c>POST /api/v1/tracking/assign</c>; no bucketing happens in the SDK.</para>
+/// calls <c>POST /api/v1/tracking/assign</c>; no bucketing happens in the SDK. The typed getters
+/// (<see cref="GetStringValueAsync"/>, <see cref="GetNumberValueAsync"/>,
+/// <see cref="GetJsonValueAsync"/>) read the value a flag serves from the same request and
+/// cache as <see cref="EvaluateFlagAsync"/>.</para>
 ///
 /// <para><b>Caching.</b> Successful results are cached per user + key for
 /// <see cref="SdkConfig.CacheTtlSeconds"/>; failures are never cached. On a network or HTTP
@@ -33,6 +37,7 @@ public class ExperimentationClient : IDisposable
     private readonly UserKeyCache<FlagEvaluationResult> _flagCache;
     private readonly UserKeyCache<Assignment> _assignmentCache;
     private readonly Action<Exposure>? _onExposure;
+    private readonly Action<ExperimentationException, string>? _onError;
     private bool _disposed;
 
     /// <summary>
@@ -56,6 +61,7 @@ public class ExperimentationClient : IDisposable
         _flagCache = new UserKeyCache<FlagEvaluationResult>(config.MaxCacheSize, ttl);
         _assignmentCache = new UserKeyCache<Assignment>(config.MaxCacheSize, ttl);
         _onExposure = config.OnExposure;
+        _onError = config.OnError;
     }
 
     // -----------------------------------------------------------------
@@ -92,23 +98,117 @@ public class ExperimentationClient : IDisposable
 
         try
         {
-            var path = $"/api/v1/feature-flags/evaluate/{Uri.EscapeDataString(flagKey)}";
-            var query = new Dictionary<string, string> { ["user_id"] = userId };
-            var context = ContextParam(attributes);
-            if (context != null)
-                query["context"] = context;
-            var result = await _httpClient.GetAsync<FlagEvaluationResult>(path, query).ConfigureAwait(false);
-            if (string.IsNullOrEmpty(result.Key))
-                result.Key = flagKey;
-
-            _flagCache.Set(userId, flagKey, result);
-            return result;
+            return await FetchFlagAsync(flagKey, userId, attributes).ConfigureAwait(false);
         }
         catch (Exception)
         {
             // Never throw — failures are not cached; report the flag as disabled.
             return FlagEvaluationResult.Disabled(flagKey);
         }
+    }
+
+    /// <summary>
+    /// The request of <see cref="EvaluateFlagAsync"/> and the typed getters for an answer that is
+    /// not cached: it caches a successful answer and returns it, and throws what the request
+    /// failed with (which <see cref="EvaluateFlagAsync"/> hides and the getters report).
+    /// </summary>
+    private async Task<FlagEvaluationResult> FetchFlagAsync(
+        string flagKey,
+        string userId,
+        Dictionary<string, object>? attributes)
+    {
+        var path = $"/api/v1/feature-flags/evaluate/{Uri.EscapeDataString(flagKey)}";
+        var query = new Dictionary<string, string> { ["user_id"] = userId };
+        var context = ContextParam(attributes);
+        if (context != null)
+            query["context"] = context;
+        var result = await _httpClient.GetAsync<FlagEvaluationResult>(path, query).ConfigureAwait(false);
+        if (string.IsNullOrEmpty(result.Key))
+            result.Key = flagKey;
+
+        _flagCache.Set(userId, flagKey, result);
+        return result;
+    }
+
+    // -----------------------------------------------------------------
+    // Flag values
+    // -----------------------------------------------------------------
+
+    /// <summary>
+    /// The string a string flag serves this user: its on value when the flag is on for them, its
+    /// off value otherwise. Evaluated as <see cref="EvaluateFlagAsync"/> evaluates, with the same
+    /// request, attributes and cache: reading a value records no exposure.
+    /// </summary>
+    /// <param name="flagKey">The feature flag key.</param>
+    /// <param name="userId">The user ID.</param>
+    /// <param name="defaultValue">What to return when there is no string value to return.</param>
+    /// <param name="attributes">Optional user attributes, sent as <see cref="EvaluateFlagAsync"/> sends them.</param>
+    /// <returns>
+    /// The flag's string value, or <paramref name="defaultValue"/>. Never throws: it returns
+    /// <paramref name="defaultValue"/>, and passes the reason to <see cref="SdkConfig.OnError"/>
+    /// with the operation <c>"value"</c>, when the request fails, the flag is unknown (404), the
+    /// server sends no value (a server without flag values), the flag serves another type
+    /// (<see cref="FlagValueException.TypeMismatch"/>), the value is not of its own type
+    /// (<see cref="FlagValueException.InvalidResponse"/>), or <paramref name="userId"/> or
+    /// <paramref name="flagKey"/> is <c>null</c> or empty (then nothing is sent;
+    /// <see cref="FlagValueException.InvalidResponse"/>).
+    /// </returns>
+    public async Task<string> GetStringValueAsync(
+        string flagKey,
+        string userId,
+        string defaultValue,
+        Dictionary<string, object>? attributes = null)
+    {
+        var value = await TypedValueAsync(flagKey, userId, attributes, "string", nameof(GetStringValueAsync)).ConfigureAwait(false);
+        return value.HasValue ? value.Value.GetString()! : defaultValue;
+    }
+
+    /// <summary>
+    /// The number a number flag serves this user, as a <see cref="double"/>: an integer as saved
+    /// (<c>10</c> is <c>10.0</c>) or a decimal. Evaluated as <see cref="GetStringValueAsync"/> is.
+    /// </summary>
+    /// <param name="flagKey">The feature flag key.</param>
+    /// <param name="userId">The user ID.</param>
+    /// <param name="defaultValue">What to return when there is no number value to return.</param>
+    /// <param name="attributes">Optional user attributes, sent as <see cref="EvaluateFlagAsync"/> sends them.</param>
+    /// <returns>
+    /// The flag's number value, or <paramref name="defaultValue"/> in the cases
+    /// <see cref="GetStringValueAsync"/> names; a number beyond ±(2^53−1), which no server sends,
+    /// is one of them (<see cref="FlagValueException.InvalidResponse"/>). Never throws.
+    /// </returns>
+    public async Task<double> GetNumberValueAsync(
+        string flagKey,
+        string userId,
+        double defaultValue,
+        Dictionary<string, object>? attributes = null)
+    {
+        var value = await TypedValueAsync(flagKey, userId, attributes, "number", nameof(GetNumberValueAsync)).ConfigureAwait(false);
+        return value.HasValue ? value.Value.GetDouble() : defaultValue;
+    }
+
+    /// <summary>
+    /// The JSON object or array a json flag serves this user, as a <see cref="JsonElement"/>
+    /// (read-only, so nothing done with it reaches the answer the client keeps). Evaluated as
+    /// <see cref="GetStringValueAsync"/> is.
+    /// </summary>
+    /// <param name="flagKey">The feature flag key.</param>
+    /// <param name="userId">The user ID.</param>
+    /// <param name="defaultValue">What to return when there is no JSON value to return.</param>
+    /// <param name="attributes">Optional user attributes, sent as <see cref="EvaluateFlagAsync"/> sends them.</param>
+    /// <returns>
+    /// The flag's JSON value (its <see cref="JsonElement.ValueKind"/> is
+    /// <see cref="JsonValueKind.Object"/> or <see cref="JsonValueKind.Array"/>), or
+    /// <paramref name="defaultValue"/> in the cases <see cref="GetStringValueAsync"/> names. Never
+    /// throws.
+    /// </returns>
+    public async Task<JsonElement> GetJsonValueAsync(
+        string flagKey,
+        string userId,
+        JsonElement defaultValue,
+        Dictionary<string, object>? attributes = null)
+    {
+        var value = await TypedValueAsync(flagKey, userId, attributes, "json", nameof(GetJsonValueAsync)).ConfigureAwait(false);
+        return value ?? defaultValue;
     }
 
     // -----------------------------------------------------------------
@@ -179,8 +279,8 @@ public class ExperimentationClient : IDisposable
         if (exposure != null)
         {
             // Last, outside the request's try block, with no cache lock held. What the function
-            // throws is dropped (this SDK has no error channel): the answer below is returned
-            // whatever it did.
+            // throws is dropped (OnError hears only the typed getters' fallbacks): the answer
+            // below is returned whatever it did.
             ExposureHook.Call(_onExposure!, exposure);
         }
         return assignment;
@@ -345,6 +445,111 @@ public class ExperimentationClient : IDisposable
             return null;
         return JsonSerializer.Serialize(attributes, ExperimentationHttpClient.JsonOptions);
     }
+
+    /// <summary>2^53−1: the largest integer every SDK's numbers hold exactly.</summary>
+    private const double MaxSafeInteger = 9007199254740991;
+
+    /// <summary>
+    /// The typed getters' one body, as the JavaScript SDK's: the value the flag serves this user
+    /// when it is of <paramref name="type"/>, and otherwise <c>null</c>, with the reason passed to
+    /// <see cref="SdkConfig.OnError"/> once. The order of the checks is the contract
+    /// (<c>tests/sdk-contract/value-vectors.json</c>): no value; a served type other than
+    /// <paramref name="type"/> (<c>value_type</c> when the answer has one, else the value's own
+    /// JSON type); a value that is not of <paramref name="type"/>. Never throws.
+    /// </summary>
+    private async Task<JsonElement?> TypedValueAsync(
+        string flagKey,
+        string userId,
+        Dictionary<string, object>? attributes,
+        string type,
+        string method)
+    {
+        ExperimentationException reason;
+        try
+        {
+            if (string.IsNullOrEmpty(userId))
+                throw new FlagValueException(
+                    $"userId is null or empty; {method} sent nothing and returned your default",
+                    FlagValueException.InvalidResponse);
+            if (string.IsNullOrEmpty(flagKey))
+                throw new FlagValueException(
+                    $"flagKey is null or empty; {method} sent nothing and returned your default",
+                    FlagValueException.InvalidResponse);
+
+            var evaluation = _flagCache.Get(userId, flagKey)
+                ?? await FetchFlagAsync(flagKey, userId, attributes).ConfigureAwait(false);
+            var flag = $"Flag '{flagKey}'";
+            if (evaluation.Value is not { } value
+                || value.ValueKind == JsonValueKind.Null
+                || value.ValueKind == JsonValueKind.Undefined)
+                throw new FlagValueException(
+                    $"{flag} came back without a value (from a server without flag values, or one that " +
+                    $"cannot serve this flag's stored value); {method} returned your default",
+                    FlagValueException.InvalidResponse);
+            string served = evaluation.ValueType ?? JsonTypeOf(value);
+            if (served != type)
+                throw new FlagValueException(
+                    $"{flag} serves {DescribeType(served)}; {method} returned your default",
+                    FlagValueException.TypeMismatch);
+            if (!IsValueOfType(value, type))
+                throw new FlagValueException(
+                    $"{flag} serves {DescribeType(type)}, but the server's value is not one; {method} " +
+                    "returned your default",
+                    FlagValueException.InvalidResponse);
+            return value;
+        }
+        catch (ExperimentationException e)
+        {
+            reason = e;
+        }
+        catch (Exception e)
+        {
+            // Not the SDK's own kind (a base URL that is no URL, attributes that cannot be
+            // serialised): reported as one, with what was thrown as its cause.
+            reason = new ExperimentationException(
+                $"Could not evaluate flag '{flagKey}' ({e.GetType().FullName}); {method} returned your default", e);
+        }
+
+        if (_onError != null)
+            ExposureHook.CallOnError(_onError, reason, "value");
+        return null;
+    }
+
+    /// <summary>A JSON value's type as the server names value types.</summary>
+    private static string JsonTypeOf(JsonElement value) => value.ValueKind switch
+    {
+        JsonValueKind.String => "string",
+        JsonValueKind.True or JsonValueKind.False => "boolean",
+        JsonValueKind.Number => "number",
+        JsonValueKind.Object or JsonValueKind.Array => "json",
+        _ => value.ValueKind.ToString(),
+    };
+
+    /// <summary>A value type as the typed getters' messages name it.</summary>
+    private static string DescribeType(string type) => type switch
+    {
+        "boolean" => "a boolean",
+        "string" => "a string",
+        "number" => "a number",
+        "json" => "a JSON value",
+        _ => $"a value of type \"{(type.Length > 64 ? type.Substring(0, 64) : type)}\"",
+    };
+
+    /// <summary>
+    /// Whether <paramref name="value"/> is a value of <paramref name="type"/> as the server serves
+    /// one: a string; a number that is finite and within ±(2^53−1); a JSON object or array.
+    /// </summary>
+    private static bool IsValueOfType(JsonElement value, string type) => type switch
+    {
+        "string" => value.ValueKind == JsonValueKind.String,
+        "number" => value.ValueKind == JsonValueKind.Number
+            && value.TryGetDouble(out double number)
+            && !double.IsNaN(number)
+            && !double.IsInfinity(number)
+            && Math.Abs(number) <= MaxSafeInteger,
+        "json" => value.ValueKind == JsonValueKind.Object || value.ValueKind == JsonValueKind.Array,
+        _ => false,
+    };
 
     /// <summary>
     /// True only when the <c>/assign</c> answer's <c>assigned</c> is the JSON literal

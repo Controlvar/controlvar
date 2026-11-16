@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { CorrectionMethod, MetricResult, VariantResult } from '@/types/results';
 import { StatisticalBadge } from '@/components/results/shared/StatisticalBadge';
 import {
@@ -194,6 +194,54 @@ export const IMPACT_FOOTNOTE =
   "control's rate or mean. Users and events are rounded to whole numbers. Values are added as " +
   'sent; no currency or unit is read.';
 
+/** What the Effect size column says it is, under the table (#442). */
+export const EFFECT_SIZE_HELP =
+  "How large the difference from the control is, in a standardised unit (Cohen's h for a rate, Cohen's d for an average).";
+
+/** What the Interval column says it is, under the table (#442). */
+export const INTERVAL_HELP =
+  "This variant's own rate or average with its confidence interval. The interval of the change is in the Change column.";
+
+/**
+ * The Effect size cell: the control has none ("Control"), a missing one is
+ * "Not computed", otherwise two places with a real minus and the server's
+ * label: "0.32 (small)", "−0.93 (large)". It shows only what the response holds.
+ */
+export function effectSizeText(variant: VariantResult): string {
+  if (variant.is_control) return 'Control';
+  if (!isFiniteNumber(variant.effect_size)) return 'Not computed';
+  const size = formatAmount(variant.effect_size);
+  return variant.effect_size_label ? `${size} (${variant.effect_size_label})` : size;
+}
+
+/**
+ * The Interval cell: this variant's own interval, first rule that applies.
+ * (1) Fewer than 2 users: too few (the server gives such an arm no interval,
+ * or one collapsed onto its mean). (2) A std_dev of exactly 0 with 2 or more
+ * users: every user has the same value, so the interval collapsed on purpose
+ * and says why rather than printing "0.00% to 0.00%" as if it were measured.
+ * (3) No std_dev, or a bound that is not a finite number: "Not computed".
+ * (4) "{lower} to {upper}", as a rate or as an amount like the Value cell.
+ */
+export function variantIntervalText(metric: MetricResult, variant: VariantResult): string {
+  if (variant.sample_size < 2) return 'Not enough data yet';
+  if (variant.std_dev === 0) {
+    return `No interval: all ${variant.sample_size.toLocaleString('en-US')} users have the same value`;
+  }
+  const bounds = variant.confidence_interval;
+  if (
+    !isFiniteNumber(variant.std_dev) ||
+    !Array.isArray(bounds) ||
+    !isFiniteNumber(bounds[0]) ||
+    !isFiniteNumber(bounds[1])
+  ) {
+    return 'Not computed';
+  }
+  const write = (v: number) =>
+    analysedAsRate(metric) ? formatRate(v, variant.sample_size) : formatAmount(v);
+  return `${write(bounds[0])} to ${write(bounds[1])}`;
+}
+
 /** Sort key for a possibly non-finite number: unknowns sort first ascending. */
 function sortable(v: number | null | undefined): number {
   return isFiniteNumber(v) ? v : -Infinity;
@@ -360,6 +408,10 @@ export function MetricComparisonTable({
 }: MetricComparisonTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>('metric');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+  // One pair of ids per table, so two tables on a page never share a description.
+  const helpId = useId();
+  const effectSizeHelpId = `${helpId}-effect-size`;
+  const intervalHelpId = `${helpId}-interval`;
 
   if (!metrics.length) {
     return (
@@ -460,6 +512,27 @@ export function MetricComparisonTable({
                     <span aria-hidden="true">{sortIcon(key)}</span>
                   </button>
                 </th>
+                {/* Not sortable: the effect size and the interval are read beside the value. */}
+                {key === 'mean' && (
+                  <>
+                    <th
+                      scope="col"
+                      className="px-4 py-3 text-left font-medium text-slate-600"
+                      data-testid="effect-size-column"
+                      aria-describedby={effectSizeHelpId}
+                    >
+                      Effect size
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-4 py-3 text-left font-medium text-slate-600"
+                      data-testid="variant-interval-column"
+                      aria-describedby={intervalHelpId}
+                    >
+                      {`Interval (${formatConfidence(confidenceLevel)})`}
+                    </th>
+                  </>
+                )}
                 {/* Not sortable: impacts of metrics in different units do not compare. */}
                 {key === 'improvement' && impactShown && (
                   <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600">
@@ -515,6 +588,12 @@ export function MetricComparisonTable({
                     )}
                   </span>
                 </td>
+                <td className="px-4 py-3 text-slate-700" data-testid="effect-size-cell">
+                  {effectSizeText(variant)}
+                </td>
+                <td className="px-4 py-3 text-slate-700" data-testid="variant-interval-cell">
+                  {variantIntervalText(metric, variant)}
+                </td>
                 <td className={`px-4 py-3 font-medium ${changeClass(verdict, variant)}`}>
                   <span data-testid="change">{view.change}</span>
                   {verdict && <span> · {verdict}</span>}
@@ -555,6 +634,12 @@ export function MetricComparisonTable({
           })}
         </tbody>
       </table>
+      <p id={effectSizeHelpId} className="mt-3 text-xs text-slate-600" data-testid="effect-size-help">
+        {EFFECT_SIZE_HELP}
+      </p>
+      <p id={intervalHelpId} className="mt-3 text-xs text-slate-600" data-testid="variant-interval-help">
+        {INTERVAL_HELP}
+      </p>
       {adjustedHeader && correctionMethod && (
         <p className="mt-3 text-xs text-slate-600" data-testid="adjusted-p-footnote">
           {adjustedFootnote(correctedKs, correctionMethod, confidenceLevel)}

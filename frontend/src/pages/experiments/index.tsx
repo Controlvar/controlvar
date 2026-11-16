@@ -13,6 +13,9 @@ import { PageTitle } from '@/components/PageTitle';
 import { FirstRunChecklist } from '@/components/experiments/FirstRunChecklist';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
+import { useDemoMode } from '@/contexts/AuthConfigContext';
+import { DemoNote } from '@/components/DemoNote';
+import { DEMO_EXPERIMENTS_ACTION } from '@/utils/demoMode';
 import { canCreateExperiment, canReadEligibility } from '@/utils/experimentPermissions';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
@@ -38,6 +41,8 @@ export default function ExperimentsPage() {
   // names the group routes' own question, so the link follows them if the two
   // ever differ.
   const canManageEligibility = canReadEligibility(auth?.user, effective);
+  // A read-only demo puts the demo note where "+ New Experiment" would be.
+  const demo = useDemoMode();
 
   const { data, loading: isLoading, error } = useApi<ExperimentListResponse>(
     () => ExperimentsService.list(statusFilter !== 'all' ? { status: statusFilter } : undefined),
@@ -62,7 +67,9 @@ export default function ExperimentsPage() {
               Manage and monitor your A/B tests and feature experiments
             </p>
           </div>
-          {canCreate && (
+          {demo ? (
+            <DemoNote action={DEMO_EXPERIMENTS_ACTION} className="text-sm text-slate-600 max-w-md" />
+          ) : canCreate && (
             <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
               {/* Secondary links (#1455): the same roles as the API's group
                   routes (canReadEligibility, EXPERIMENT CREATE). */}

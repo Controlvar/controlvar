@@ -4,9 +4,11 @@
  *
  * The page shows only the fixed sentences below, one per outcome. It never
  * shows the text of a response: the three 403 details are matched to choose a
- * sentence, and every other answer is classed by its status alone.
+ * sentence, and every other answer is classed by its status alone. The one
+ * exception is a read-only demo's refusal, told apart by its code.
  */
 import { apiFetch, isApiError } from '@/services/api';
+import { DEMO_READ_ONLY_MESSAGE, demoRefusalMessage } from '@/utils/demoMode';
 
 export const OWN_PASSWORD_PATH = '/api/v1/users/me/password';
 
@@ -31,6 +33,7 @@ export type PasswordChangeOutcome =
   | 'unavailable'
   | 'network'
   | 'timed-out'
+  | 'read-only'
   | 'failed';
 
 /** The rules, stated on the page before the user types. */
@@ -41,7 +44,7 @@ export const PASSWORD_RULES =
 export const NOT_LOCAL_SENTENCE =
   'Your account signs in through your identity provider, so its password is changed there, not in Controlvar.';
 
-const SENTENCES: Record<Exclude<PasswordChangeOutcome, 'locked' | 'timed-out'>, string> = {
+const SENTENCES: Record<Exclude<PasswordChangeOutcome, 'locked' | 'timed-out' | 'read-only'>, string> = {
   changed:
     'Your password has been changed. Use the new one the next time you sign in. ' +
     'Anywhere else you are signed in stays signed in until that session expires.',
@@ -61,7 +64,10 @@ export interface PasswordChangeResult {
   outcome: PasswordChangeOutcome;
   /** Seconds from the 423's `Retry-After` header, when it sent one. */
   retryAfter?: number;
-  /** For `timed-out`: the dashboard's own time-out sentence, from the error. */
+  /**
+   * For `timed-out`: the dashboard's own time-out sentence, from the error.
+   * For `read-only`: a read-only demo's refusal sentence.
+   */
   message?: string;
 }
 
@@ -81,6 +87,8 @@ export async function changeOwnPassword(currentPassword: string, newPassword: st
 export function classifyPasswordError(err: unknown): PasswordChangeResult {
   if (!isApiError(err)) return { outcome: 'failed' };
   if (err.timedOut) return { outcome: 'timed-out', message: err.message };
+  const demo = demoRefusalMessage(err);
+  if (demo) return { outcome: 'read-only', message: demo };
   switch (err.status) {
     case 0:
       return { outcome: 'network' };
@@ -113,5 +121,6 @@ export function passwordOutcomeSentence(result: PasswordChangeResult): string {
     return `Too many failed attempts. Try again in ${seconds} ${seconds === 1 ? 'second' : 'seconds'}.`;
   }
   if (result.outcome === 'timed-out') return result.message ?? SENTENCES.failed;
+  if (result.outcome === 'read-only') return result.message ?? DEMO_READ_ONLY_MESSAGE;
   return SENTENCES[result.outcome];
 }
