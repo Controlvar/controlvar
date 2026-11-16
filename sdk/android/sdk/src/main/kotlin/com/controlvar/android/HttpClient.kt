@@ -117,20 +117,32 @@ class HttpClient(
         }
     }
 
-    /** [message] with [url]'s query removed, wherever the message names it. */
-    private fun withoutQuery(message: String?, url: HttpUrl): String? {
-        val query = url.encodedQuery
-        if (message == null || query.isNullOrEmpty()) return message
-        return message
-            .replace(url.toString(), url.newBuilder().query(null).build().toString())
-            .replace("?$query", "")
-            .replace(query, "")
+    /**
+     * What a message must not repeat of [url]: its query and its `context` value, each encoded
+     * and decoded, longest first. Empty strings are left out (they would match everything).
+     */
+    private fun queryForms(url: HttpUrl): List<String> {
+        val encoded = url.encodedQuery ?: return emptyList()
+        return listOfNotNull(
+            encoded,
+            url.query,
+            encoded.substringAfter("context=", ""),
+            url.queryParameter("context")
+        ).filter { it.isNotEmpty() }.distinct().sortedByDescending { it.length }
     }
 
-    /** True when a message in [error]'s cause chain contains [url]'s query, encoded or decoded. */
+    /** [message] with [url]'s query removed, wherever the message names it, in any form. */
+    private fun withoutQuery(message: String?, url: HttpUrl): String? {
+        val forms = queryForms(url)
+        if (message == null || forms.isEmpty()) return message
+        var cut = message.replace(url.toString(), url.newBuilder().query(null).build().toString())
+        for (form in forms) cut = cut.replace("?$form", "").replace(form, "")
+        return cut
+    }
+
+    /** True when a message in [error]'s cause chain contains [url]'s query or `context` value. */
     private fun repeatsQuery(error: Throwable, url: HttpUrl): Boolean {
-        val queries = listOfNotNull(url.encodedQuery, url.query, url.queryParameter("context"))
-            .filter { it.isNotEmpty() }
+        val queries = queryForms(url)
         var cause: Throwable? = error
         var depth = 0
         while (cause != null && depth++ < 20) {

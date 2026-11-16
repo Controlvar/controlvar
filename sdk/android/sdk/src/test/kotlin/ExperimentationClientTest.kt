@@ -891,6 +891,35 @@ class ExperimentationClientTest {
         assertEquals(1, transport(noQuery).size)
     }
 
+    @Test
+    fun `errors - a transport message with the decoded query or the context value alone is cut and its cause dropped`() = runTest {
+        // The context is {"plan":"a b+c","c":"attrcanary7f3"}, so each form below is the one
+        // an exception message could carry.
+        val path = "/api/v1/feature-flags/evaluate/f?user_id=u1&context=" +
+            "%7B%22c%22%3A%22$canary%22%2C%22plan%22%3A%22a%20b%2Bc%22%7D"
+        val forms = mapOf<String, (okhttp3.HttpUrl) -> String>(
+            "the decoded query" to { it.query!! },
+            "the decoded context value" to { it.queryParameter("context")!! },
+            "the encoded context value alone" to { it.encodedQuery!!.substringAfter("context=") }
+        )
+        for ((name, form) in forms) {
+            val client = HttpClient(
+                "http://localhost:1", "k", 500L,
+                OkHttpClient.Builder().addInterceptor(Interceptor { chain ->
+                    throw IOException("x ${form(chain.request().url)} y", IOException("inner ${form(chain.request().url)}"))
+                }).build()
+            )
+            val error = assertThrows<ExperimentationException.NetworkException> { client.get(path) }
+            assertNoCanary(error)
+            val text = chainText(error)
+            assertFalse(text.contains("%7B"), "$name: $text")
+            assertFalse(text.contains("{\"c\""), "$name: $text")
+            assertTrue(error.message!!.startsWith("Network error: x "), "$name: ${error.message}")
+            val transport = generateSequence(error as Throwable) { it.cause }.take(20).filter { it is IOException }.toList()
+            assertEquals(emptyList<Throwable>(), transport, "$name: the cause that repeats the value is dropped")
+        }
+    }
+
     // ---- The two writers agree, and what cannot be written as JSON ----
 
     @Test

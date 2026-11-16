@@ -182,10 +182,9 @@ keeps one cached answer per user and flag, together with the attributes it was a
 call is answered from the cache only if its attributes are exactly the same; otherwise the SDK asks
 the server, and the new answer replaces the cached one. So two calls that differ only in
 attributes get two answers. The attributes are written with their keys sorted, so the same
-attributes always find the same cached answer. The SDK
-stores the last answer the server gave for each user and flag, whatever attributes it was asked
-with, and serves it only when the server cannot answer. A 404 removes the stored answer, and the
-call throws `FlagNotFoundException`. If the attributes cannot be written as JSON (a NaN or an
+attributes always find the same cached answer. The SDK stores the last answer the server gave for
+each user and flag, whatever attributes it was asked with, and serves it only when the server
+cannot answer. A 404 removes the stored answer, and the call throws `FlagNotFoundException`. If the attributes cannot be written as JSON (a NaN or an
 infinite number, at any depth), `evaluateFlag` throws `IllegalArgumentException`
 ("user.attributes cannot be sent as JSON") and sends nothing.
 Failures are never cached; an offline fallback is returned without being re-cached, so the next
