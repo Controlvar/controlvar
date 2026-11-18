@@ -1053,6 +1053,12 @@
         "summary": "Get Sample Size Status"
       }
     },
+    "/api/v1/results/{experiment_id}/segments/{segment_id}": {
+      "get": {
+        "operationId": "get_segment_results_api_v1_results__experiment_id__segments__segment_id__get",
+        "summary": "Beta: an experiment's results for the members of one ID-list segment"
+      }
+    },
     "/api/v1/results/{experiment_id}/sequential": {
       "get": {
         "operationId": "get_sequential_results_api_v1_results__experiment_id__sequential_get",

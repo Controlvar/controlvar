@@ -15,6 +15,7 @@ What Controlvar does not do is in [Limitations](getting-started/limitations.md),
 - [Multi-armed bandits](api/multi-armed-bandit.md): new users go more often to the variants that perform better.
 - [Mutual exclusion groups and a global holdout](api/mutual-exclusion-groups.md): a user joins at most one experiment of a group, and the holdout keeps a share of new users out of every experiment (its results are beta).
 - [Breakdowns](api/dimensional-analysis.md): results by a user attribute such as device or country, flagged when the effect differs between segments.
+- [Results for one saved segment](api/dimensional-analysis.md#results-for-one-saved-segment) (beta, exploratory): an experiment's results counted only for the users in one ID-list segment.
 - [Interaction detection](api/interaction-detection.md): a scan for running experiments that share users, and a test of one pair of them (beta).
 - [Live results](websocket-streaming.md): a WebSocket that sends an experiment's results every 30 seconds by default.
 - [Scheduling](guides/user-guide.md#creating-an-experiment): start and end dates that the scheduler acts on, and a scheduled resume after a pause.

@@ -1298,6 +1298,13 @@ text = "A clone is a draft and starts with its source's values."
 by = ["test:backend/tests/integration/api/test_experiment_correction_settings_api.py::test_a_clone_of_an_active_experiment_is_a_draft_with_the_sources_settings"]
 
 [[unit]]
+text = "GET /api/v1/results/{experiment_id}/segments/{segment_id} (beta), the results for one ID-list segment's users, takes ?correction_method= and ?confidence_level= as the results route does and applies the correction across each metric's treatments within the segment (Results for one saved segment)."
+by = [
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_the_correction_runs_across_the_segments_treatments",
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_a_segment_of_every_assigned_user_answers_the_unfiltered_numbers",
+]
+
+[[unit]]
 text = "Not affected: the breakdown (?breakdown=) applies its own Bonferroni correction over segments, and sequential testing uses its own alpha."
 by = [
     "test:backend/tests/unit/api/test_dimensional_analysis_api.py::TestBreakdownQueryParam::test_breakdown_adjusted_alpha_is_bonferroni_corrected",

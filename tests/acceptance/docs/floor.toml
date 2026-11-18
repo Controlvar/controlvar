@@ -159,6 +159,7 @@ routes = [
   "/api/v1/results/{experiment_id}/invalidate-cache",
   "/api/v1/results/{experiment_id}/post-stratification",
   "/api/v1/results/{experiment_id}/sample-size",
+  "/api/v1/results/{experiment_id}/segments/{segment_id}",
   "/api/v1/results/{experiment_id}/sequential",
   "/api/v1/rollout-schedules/",
   "/api/v1/rollout-schedules/stages/{stage_id}",
