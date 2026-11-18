@@ -38,10 +38,11 @@ import { rolloutErrorCopy } from '@/components/feature-flags/RolloutScheduleMana
 import { resultsErrorMessage } from '@/components/results/ResultsDashboard/ResultsDashboard';
 import { cupedErrorMessage } from '@/components/results/Cuped/useCupedResults';
 import { sessionErrorMessage } from '@/contexts/AuthContext';
-import { demoEnterErrorMessage, loginErrorMessage, signInNoticeMessage } from '@/pages/login';
+import { codeStepErrorMessage, demoEnterErrorMessage, loginErrorMessage, signInNoticeMessage } from '@/pages/login';
 import { DEMO_UNREACHABLE } from '@/utils/demoMode';
 import { signInFailureNotice } from '@/services/hostedUi';
 import { classifyPasswordError, passwordOutcomeSentence } from '@/services/password';
+import { classifyTwoFactorError, twoFactorFailureSentence } from '@/services/twoFactor';
 import { groupErrorCopy } from '@/utils/exclusionGroups';
 import { holdoutErrorCopy, loadErrorCopy, resultsErrorCopy } from '@/utils/holdouts';
 import { pairErrorCopy, scanErrorCopy } from '@/utils/interactions';
@@ -925,12 +926,15 @@ const STATUS_ZERO_SITES: Record<string, { count: number; kind: string }> = {
   // cupedErrorMessage: the same, for the CUPED tab (#1959).
   'components/results/Cuped/useCupedResults.ts': { count: 1, kind: 'passes-message' },
   'contexts/AuthContext.tsx': { count: 1, kind: 'read' },
-  // loginErrorMessage, and demoEnterErrorMessage (the read-only demo's button).
-  'pages/login.tsx': { count: 2, kind: 'sign-in' },
+  // loginErrorMessage, demoEnterErrorMessage (the read-only demo's button) and
+  // codeStepErrorMessage (the code step of a two-step sign-in, #1812).
+  'pages/login.tsx': { count: 3, kind: 'sign-in' },
   // signInFailureNotice: the Cognito Hosted UI callback's exchange (#708).
   'services/hostedUi.ts': { count: 1, kind: 'sign-in' },
   // classifyPasswordError's `case 0:`.
   'services/password.ts': { count: 1, kind: 'write' },
+  // classifyTwoFactorError's `case 0:` (the two-step sign-in account page, #1812).
+  'services/twoFactor.ts': { count: 1, kind: 'write' },
   'utils/exclusionGroups.ts': { count: 1, kind: 'write' },
   // holdoutErrorCopy's `case 0:`, loadErrorCopy, resultsErrorCopy.
   'utils/holdouts.ts': { count: 3, kind: 'write' },
@@ -1133,6 +1137,10 @@ describe('each status-0 place says what a time-out means (#1040 D7)', () => {
       expect(loginErrorMessage(unreachable())).toBe(unreachableMessage());
       expect(demoEnterErrorMessage(write)).toBe(SIGN_IN_TEXT);
       expect(demoEnterErrorMessage(unreachable())).toBe(DEMO_UNREACHABLE);
+      for (const recovery of [false, true]) {
+        expect(codeStepErrorMessage(write, recovery)).toBe(SIGN_IN_TEXT);
+        expect(codeStepErrorMessage(unreachable(), recovery)).toBe(unreachableMessage());
+      }
     },
     'services/hostedUi.ts': (write) => {
       expect(signInNoticeMessage(signInFailureNotice(write, '/'))).toBe(SIGN_IN_TEXT);
@@ -1142,6 +1150,11 @@ describe('each status-0 place says what a time-out means (#1040 D7)', () => {
       expect(classifyPasswordError(write)).toEqual({ outcome: 'timed-out', message: WRITE_TEXT });
       expect(passwordOutcomeSentence(classifyPasswordError(write))).toBe(WRITE_TEXT);
       expect(classifyPasswordError(unreachable())).toEqual({ outcome: 'network' });
+    },
+    'services/twoFactor.ts': (write) => {
+      expect(classifyTwoFactorError(write)).toEqual({ outcome: 'timed-out', message: WRITE_TEXT });
+      expect(twoFactorFailureSentence(classifyTwoFactorError(write))).toBe(WRITE_TEXT);
+      expect(classifyTwoFactorError(unreachable())).toEqual({ outcome: 'network' });
     },
     'utils/exclusionGroups.ts': (write, read) => {
       for (const action of ['save', 'archive', 'add', 'remove'] as const) {

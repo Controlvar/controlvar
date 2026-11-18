@@ -316,6 +316,8 @@ To keep your account secure:
 
 ### Account Protection
 
+- With local sign-in, turn on [two-step sign-in](two-factor.md) and keep its recovery codes
+  somewhere safe
 - Don't share your verification codes with anyone
 - Log out when using shared or public computers
 - Check for HTTPS in the browser address bar before logging in

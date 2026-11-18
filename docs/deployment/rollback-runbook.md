@@ -242,6 +242,15 @@ Segment targeting (`in_segment` and `not_in_segment`) arrived in v0.22.0.
 experiments whose rules mention a segment, and the experiments that balance
 within it.
 
+### Rolling back past two-step sign-in
+
+An API rolled back to a release that does not serve
+`POST /api/v1/auth/mfa/verify` asks for no code: every local account signs in
+with its password alone, two-step sign-in on or not, for as long as that
+release serves. Each account's secret and recovery codes stay in `user_totp`
+and work again once a release that serves the code step is back, unless the
+database was also downgraded below `t1812_user_totp`, which drops them (above).
+
 ### Step 1: Find the Previous Task Definition ARN
 
 > **Two producers write to this family, and only one of them is runnable.**

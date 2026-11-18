@@ -43,6 +43,18 @@ export interface LoginResponse {
   user: UserMe;
 }
 
+/**
+ * `POST /api/v1/auth/login` for an account with two-step sign-in on (#1812):
+ * the password was right and a code is needed. No `access_token`: the
+ * `mfa_token` goes to `POST /api/v1/auth/mfa/verify` with the code.
+ */
+export interface MfaRequiredResponse {
+  mfa_required: true;
+  mfa_token: string;
+  enrol: boolean;
+  expires_in: number;
+}
+
 // ---------------------------------------------------------------------------
 // Base URL
 // ---------------------------------------------------------------------------
