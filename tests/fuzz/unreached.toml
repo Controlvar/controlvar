@@ -218,6 +218,19 @@
 # #2000, gave 113 for superuser, 187 for viewer and 9 for sdk; merged with
 # #2000 the lists are 109, 187 and 9.
 
+# Then #2008 made POST /api/v1/users/me/2fa/enroll ask for the current
+# password, as POST /api/v1/users/me/password does. No generated
+# current_password is the account's own, so the superuser and viewer passes
+# get 403 (none, an empty one or a wrong one), 422 for a body that fails
+# validation, and 429 once its 5 a minute are spent; their wrong passwords
+# stay below the 10 that lock the address (423). It is reached in neither, so
+# it is listed for both, and the sentence above that it answers 200 to every
+# account no longer holds. The lists are 110 for superuser, 188 for viewer and
+# 9 for sdk: this pull request's fuzz.yml run at seed 20261006, on a head
+# without #2000, counted one more operation unreached and not listed in each
+# of those two passes, and no other change; merged with #2000 that is one more
+# than the 109, 187 and 9 above.
+
 # --- superuser: the seeded demo administrator's bearer token ----------------
 
 [[unreached]]
@@ -259,6 +272,11 @@ reason = "The Cognito Hosted UI's code exchange: the stack signs in with the loc
 pass = "superuser"
 operation = "POST /api/v1/users/"
 reason = "Every generated request fails the operation's own validation (422)."
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/users/me/2fa/enroll"
+reason = "Asks for the current password: no generated current_password is the account's own, so it answers 403 (none, an empty one or a wrong one), 422 for a body that fails validation, and 429 once its 5 a minute are spent."
 
 [[unreached]]
 pass = "superuser"
@@ -806,6 +824,11 @@ reason = "The Cognito Hosted UI's code exchange: the stack signs in with the loc
 pass = "viewer"
 operation = "POST /api/v1/users/"
 reason = "The VIEWER role may not use it, so the role check answers 403; requests that fail validation first answer 422."
+
+[[unreached]]
+pass = "viewer"
+operation = "POST /api/v1/users/me/2fa/enroll"
+reason = "Asks for the current password: no generated current_password is the account's own, so it answers 403 (none, an empty one or a wrong one), 422 for a body that fails validation, and 429 once its 5 a minute are spent."
 
 [[unreached]]
 pass = "viewer"

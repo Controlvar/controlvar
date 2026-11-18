@@ -663,7 +663,9 @@ ALLOWED: Dict[Tuple[str, str, str], Tuple[int, str]] = {
     (f"{E}/tracking.py", "track_events_batch", "ValidationError"): (1, FIELD_NAMES),
     (f"{E}/tracking.py", "track_events_batch", "ValueError"): (1, SERVICE_VALUEERROR),
     (f"{E}/users.py", "apply_password_change", "ValueError"): (1, PASSWORD_RULE),
-    (f"{E}/users.py", "change_own_password", "AccountLockedError"): (1, LOCKED),
+    # The current password's check, shared by POST /users/me/password and
+    # POST /users/me/2fa/enroll.
+    (f"{E}/users.py", "_check_own_password", "AccountLockedError"): (1, LOCKED),
     (
         "backend/app/services/experiment_wizard_service.py",
         "ExperimentWizardService.validate_and_submit",

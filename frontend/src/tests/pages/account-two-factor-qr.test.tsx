@@ -54,11 +54,16 @@ it('shows only the QR drawn for the secret on the page', async () => {
   render(<TwoFactorPage />);
   await screen.findByTestId('two-factor-off');
 
+  // Each set-up asks for the current password; it is cleared once answered.
+  const typePassword = () =>
+    fireEvent.change(screen.getByTestId('two-factor-current-password'), { target: { value: 'Current-Passw0rd' } });
+  typePassword();
   mockFetch.mockResolvedValueOnce(response({ secret: 'AAAAAAAA', otpauth_uri: uri('AAAAAAAA') }));
   await act(async () => {
     fireEvent.click(screen.getByTestId('two-factor-start'));
   });
   fireEvent.click(screen.getByTestId('two-factor-cancel'));
+  typePassword();
   mockFetch.mockResolvedValueOnce(response({ secret: 'BBBBBBBB', otpauth_uri: uri('BBBBBBBB') }));
   await act(async () => {
     fireEvent.click(screen.getByTestId('two-factor-start'));

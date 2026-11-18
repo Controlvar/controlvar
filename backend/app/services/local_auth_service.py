@@ -28,8 +28,8 @@ clears the counter; for an account with two-step sign-in on, only a code (or
 recovery code) accepted at ``POST /auth/mfa/verify`` clears it, never the
 password alone, and every wrong code counts against the same address
 (``two_factor_service``).  A wrong current password on ``POST /users/me/password``
-counts against the same address and is locked by the same counter (see
-``LocalAuthService.verify_current_password``).
+or ``POST /users/me/2fa/enroll`` counts against the same address and is locked
+by the same counter (see ``LocalAuthService.verify_current_password``).
 
 The counter is an **in-process** dictionary.  That is deliberate: it
 needs no extra infrastructure and is correct for the default single-worker
@@ -383,8 +383,9 @@ class LocalAuthService:
         """
         Check that *password* is *user*'s current password, or raise.
 
-        Used by a signed-in user's own password change. It draws on the SAME
-        failure budget as ``/auth/login`` (``self.tracker``), so a session
+        Used by a signed-in user's own password change, and when they set up
+        two-step sign-in (``POST /users/me/2fa/enroll``). It draws on the
+        SAME failure budget as ``/auth/login`` (``self.tracker``), so a session
         cannot be used to guess the password faster than the sign-in form
         allows, and a lockout from either place applies to both.
 
@@ -398,7 +399,10 @@ class LocalAuthService:
            Not counted either;
         4. the password does not match: the failure is recorded, then
            ``InvalidCredentialsError``;
-        5. it matches: the counter is cleared.
+        5. it matches: the counter is cleared, unless the account has
+           two-step sign-in on. Its count is shared with its codes, so only a
+           code accepted at sign-in (``POST /auth/mfa/verify``) clears it, as
+           at ``/auth/login``.
 
         The counter is keyed on the database's ``lower()`` of the account's
         e-mail address -- the key ``authenticate`` uses for any spelling of
@@ -427,11 +431,14 @@ class LocalAuthService:
             self.tracker.record_failure(email_key)
             raise InvalidCredentialsError("The current password is incorrect.")
 
-        self.tracker.reset(email_key)
+        # For an account with two-step sign-in on, only an accepted code at
+        # sign-in clears the count it shares with its codes (#1812).
+        if not user.totp_enabled:
+            self.tracker.reset(email_key)
 
 
-# Process-wide tracker shared by /auth/login, /auth/token (local provider) and
-# POST /users/me/password.
+# Process-wide tracker shared by /auth/login, /auth/token (local provider),
+# POST /users/me/password and POST /users/me/2fa/enroll.
 login_attempt_tracker = LoginAttemptTracker(
     max_attempts=settings.LOCAL_AUTH_MAX_FAILED_ATTEMPTS,
     window_seconds=settings.LOCAL_AUTH_LOCKOUT_MINUTES * 60,
