@@ -6,7 +6,9 @@ Provides validation for each wizard step and builds the final experiment
 payload ready for submission to ExperimentService.
 """
 
+import json
 import logging
+import threading
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -155,8 +157,122 @@ def check_step_field_types(data: Dict[str, Any]) -> None:
             raise WizardStepDataError(step_field_type_error(name)) from None
 
 
-# In-memory draft store (production would use Redis or DB).
+# Limits on what one draft may hold. A text limit is never below the matching
+# ``ExperimentCreate`` limit (name 100, hypothesis and description 2000), so a
+# draft that could be submitted can always be saved.
+STEP_TEXT_LIMITS: Dict[str, int] = {
+    "experiment_type": 200,
+    "primary_metric_id": 200,
+    "name": 200,
+    "hypothesis": 2000,
+    "description": 2000,
+}
+GUARDRAIL_MAX_ITEMS = 20
+GUARDRAIL_ITEM_MAX_CHARS = 200
+TARGETING_MAX_ITEMS = 50
+TARGETING_MAX_BYTES = 8192
+TARGETING_MAX_DEPTH = 32
+TARGETING_MAX_VALUES = 500
+
+
+def step_field_limit_error(name: str) -> str:
+    """The fixed 422 message for a step field over its limit.
+
+    It names the field and the limit, and never the submitted value.
+    """
+    if name in STEP_TEXT_LIMITS:
+        return f"Step field '{name}' is limited to {STEP_TEXT_LIMITS[name]} characters."
+    if name == "guardrail_metric_ids":
+        return (
+            f"Step field '{name}' is limited to {GUARDRAIL_MAX_ITEMS} items "
+            f"of {GUARDRAIL_ITEM_MAX_CHARS} characters."
+        )
+    return (
+        f"Step field '{name}' is limited to {TARGETING_MAX_ITEMS} items "
+        f"and {TARGETING_MAX_BYTES} bytes when serialised, "
+        f"nested at most {TARGETING_MAX_DEPTH} levels, "
+        f"with at most {TARGETING_MAX_VALUES} values in all."
+    )
+
+
+def _targeting_rules_shape_too_large(value: List[Any]) -> bool:
+    """True when *value* nests deeper than the depth limit or holds more than
+    the value limit (containers, dict keys and scalars each count one).
+
+    An iterative walk that stops at the first limit it passes, so the work is
+    bounded whatever the value.
+    """
+    seen = 0
+    stack: List[Any] = [(value, 1)]
+    while stack:
+        node, depth = stack.pop()
+        seen += 1
+        if seen > TARGETING_MAX_VALUES or depth > TARGETING_MAX_DEPTH:
+            return True
+        if isinstance(node, dict):
+            seen += len(node)
+            children = node.values()
+        elif isinstance(node, list):
+            children = node
+        else:
+            continue
+        if seen + len(children) > TARGETING_MAX_VALUES:
+            return True
+        stack.extend((child, depth + 1) for child in children)
+    return False
+
+
+def _targeting_rules_too_large(value: List[Any]) -> bool:
+    if len(value) > TARGETING_MAX_ITEMS:
+        return True
+    if _targeting_rules_shape_too_large(value):
+        return True
+    try:
+        return len(json.dumps(value, separators=(",", ":"))) > TARGETING_MAX_BYTES
+    except (TypeError, ValueError, RecursionError):
+        # Too deep or not plain JSON: not something a rule is.
+        return True
+
+
+def check_step_field_limits(data: Dict[str, Any]) -> None:
+    """Refuse a step value larger than a draft may hold.
+
+    Runs after :func:`check_step_field_types`, so each value has the right
+    type.
+
+    Raises:
+        WizardStepDataError: with :func:`step_field_limit_error` for the first
+            field over its limit, in alphabetical order. The value is never
+            repeated.
+    """
+    for name in sorted(STEP_FIELDS & set(data)):
+        value = data[name]
+        if value is None or (name in _LIST_STEP_FIELDS and not value):
+            # Null, and the falsy values a list field holds as ``[]``.
+            continue
+        if name in STEP_TEXT_LIMITS:
+            too_big = len(value) > STEP_TEXT_LIMITS[name]
+        elif name == "guardrail_metric_ids":
+            too_big = len(value) > GUARDRAIL_MAX_ITEMS or any(
+                len(item) > GUARDRAIL_ITEM_MAX_CHARS for item in value
+            )
+        elif name == "targeting_rules":
+            too_big = _targeting_rules_too_large(value)
+        else:
+            continue
+        if too_big:
+            raise WizardStepDataError(step_field_limit_error(name))
+
+
+# In-memory draft store (production would use Redis or DB). Insertion order is
+# creation order, so the first entry is the oldest.
 _drafts: Dict[str, WizardDraft] = {}
+_drafts_lock = threading.Lock()
+
+# At most this many drafts per user, and in all. Creating one more drops the
+# oldest, so the caps never refuse a create.
+MAX_DRAFTS_PER_USER = 20
+MAX_DRAFTS_TOTAL = 350
 
 
 class ExperimentWizardService:
@@ -220,14 +336,25 @@ class ExperimentWizardService:
 
         Returns:
             A new WizardDraft starting at the 'choose_type' step.
+
+        Raises:
+            WizardStepDataError: *experiment_type* is over its limit
+                (:func:`check_step_field_limits`). Nothing is stored.
         """
+        check_step_field_limits({"experiment_type": experiment_type})
         draft = WizardDraft(
             id=str(uuid.uuid4()),
             user_id=user_id,
             current_step="choose_type",
             experiment_type=experiment_type,
         )
-        _drafts[draft.id] = draft
+        with _drafts_lock:
+            own = [key for key, held in _drafts.items() if held.user_id == user_id]
+            for key in own[: max(0, len(own) - MAX_DRAFTS_PER_USER + 1)]:
+                del _drafts[key]
+            while len(_drafts) >= MAX_DRAFTS_TOTAL:
+                del _drafts[next(iter(_drafts))]
+            _drafts[draft.id] = draft
         return draft
 
     @staticmethod
@@ -254,7 +381,8 @@ class ExperimentWizardService:
         """Drop one of *user_id*'s drafts. Returns True when one was removed."""
         if cls.get_draft(draft_id, user_id) is None:
             return False
-        return _drafts.pop(draft_id, None) is not None
+        with _drafts_lock:
+            return _drafts.pop(draft_id, None) is not None
 
     @classmethod
     def update_draft(
@@ -276,7 +404,8 @@ class ExperimentWizardService:
         Raises:
             WizardStepDataError: *data* names a key outside
                 :data:`STEP_FIELDS`, or gives a step field a value of the
-                wrong type (:func:`check_step_field_types`). The draft is left
+                wrong type (:func:`check_step_field_types`) or over its limit
+                (:func:`check_step_field_limits`). The draft is left
                 unchanged.
         """
         draft = cls.get_draft(draft_id, user_id)
@@ -286,6 +415,7 @@ class ExperimentWizardService:
         if not set(data) <= STEP_FIELDS:
             raise WizardStepDataError()
         check_step_field_types(data)
+        check_step_field_limits(data)
 
         for key in STEP_FIELDS & set(data):
             setattr(draft, key, data[key])
@@ -309,7 +439,8 @@ class ExperimentWizardService:
         Returns:
             List of WizardDraft objects owned by the user.
         """
-        return [d for d in _drafts.values() if d.user_id == user_id]
+        with _drafts_lock:
+            return [d for d in _drafts.values() if d.user_id == user_id]
 
     @staticmethod
     def build_experiment_payload(draft: WizardDraft) -> Dict[str, Any]:

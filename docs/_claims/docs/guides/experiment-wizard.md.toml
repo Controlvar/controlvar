@@ -277,6 +277,34 @@ by = [
 ]
 
 [[unit]]
+text = "A user keeps at most 20 drafts, so creating one more drops that user's oldest."
+by = [
+    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_the_draft_after_the_limit_drops_the_users_oldest",
+    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_the_numbers_the_docs_state_are_the_limits",
+]
+
+[[unit]]
+text = "All users together keep at most 350, and the oldest is dropped first."
+by = [
+    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_drafts_of_all_users_together_are_capped_oldest_first",
+    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_the_numbers_the_docs_state_are_the_limits",
+]
+
+[[unit]]
+text = "A step field larger than its limit, such as a description over 2000 characters, answers 422 and leaves the draft unchanged, as PUT /api/v1/wizard/drafts/{draft_id}/step says below."
+by = [
+    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_a_text_field_over_its_limit_is_refused_and_not_stored",
+    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_the_numbers_the_docs_state_are_the_limits",
+]
+
+[[unit]]
+text = "So does a step field over its limit, such as a description over 2000 characters."
+by = [
+    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_a_text_field_over_its_limit_is_refused_and_not_stored",
+    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_the_numbers_the_docs_state_are_the_limits",
+]
+
+[[unit]]
 text = "Steps Overview"
 by = ["exempt:baseline"]
 
