@@ -67,12 +67,13 @@ text = "Dashboard sign-in when Controlvar uses Amazon Cognito (#708)."
 by = ["exempt:policy"]
 
 [[unit]]
-text = "Warehouse analysis on Redshift, then Databricks (#826, #1605)."
+text = "Warehouse analysis on Databricks (#1605)."
 by = ["exempt:policy"]
 
 [[unit]]
-text = "The Redshift connector type is in 0.47.0, switched off (#1943)."
+text = "Amazon Redshift is available (#826)."
 by = [
+    "test:modules/backend/tests/unit/warehouse/test_connectors.py::test_enabled_connectors_exact",
     "test:modules/backend/tests/integration/warehouse/test_connections_api.py::test_the_connector_list_follows_the_enabled_set",
 ]
 

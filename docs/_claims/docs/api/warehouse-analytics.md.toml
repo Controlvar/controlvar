@@ -530,7 +530,7 @@ text = "Use a database user made for this connection, with SELECT on the source 
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "Serverless: the role signs in as the database user IAMR: followed by the role's name, for example IAMR:controlvar-rs-sitting for a role named controlvar-rs-sitting."
+text = "Serverless: the role signs in as the database user IAMR: followed by the role's name, for example IAMR:controlvar-reader for a role named controlvar-reader."
 by = ["exempt:third-party"]
 
 [[unit]]

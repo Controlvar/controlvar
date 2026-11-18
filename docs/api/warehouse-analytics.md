@@ -275,8 +275,8 @@ test or a run.
    only, never a superuser or the admin user.
 
     - Serverless: the role signs in as the database user `IAMR:` followed by
-      the role's name, for example `IAMR:controlvar-rs-sitting` for a role
-      named `controlvar-rs-sitting`. Create it with no password, and do not
+      the role's name, for example `IAMR:controlvar-reader` for a role
+      named `controlvar-reader`. Create it with no password, and do not
       give it the `sys:superuser` role:
 
         ```sql

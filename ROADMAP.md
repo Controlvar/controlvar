@@ -20,10 +20,9 @@ to Next if something more urgent comes up.
   ([#448](https://github.com/Controlvar/controlvar/issues/448)).
 - **Dashboard sign-in when Controlvar uses Amazon Cognito**
   ([#708](https://github.com/Controlvar/controlvar/issues/708)).
-- **Warehouse analysis on Redshift, then Databricks**
-  ([#826](https://github.com/Controlvar/controlvar/issues/826),
-  [#1605](https://github.com/Controlvar/controlvar/issues/1605)). The Redshift connector type is
-  in 0.47.0, switched off ([#1943](https://github.com/Controlvar/controlvar/pull/1943)).
+- **Warehouse analysis on Databricks**
+  ([#1605](https://github.com/Controlvar/controlvar/issues/1605)). Amazon Redshift is available
+  ([#826](https://github.com/Controlvar/controlvar/issues/826)).
 - **SDKs that do the same things:** every SDK reads a flag's value, not only on or off
   ([#1810](https://github.com/Controlvar/controlvar/issues/1810)), and sends user attributes on
   flag evaluation ([#438](https://github.com/Controlvar/controlvar/issues/438),

@@ -348,10 +348,8 @@ def test_as_shipped_a_redshift_connection_is_created_with_an_external_id(wh, bod
     assert created.json()["enabled"] is True
     assert re.fullmatch(r"exp-[0-9a-f]{32}", created.json()["external_id"])
     assert _connection_count(wh) == before + 1
-    assert (
-        wh.db.query(WarehouseConnection).filter_by(warehouse_type="redshift").count()
-        == 1
-    )
+    row = wh.db.get(WarehouseConnection, uuid.UUID(created.json()["id"]))
+    assert row.warehouse_type == "redshift"
 
 
 @pytest.mark.regression
