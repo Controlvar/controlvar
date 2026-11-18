@@ -43,11 +43,11 @@ $client = new ExperimentationClient(new SdkConfig(
     apiKey:  getenv('CONTROLVAR_API_KEY'),                             // sent as X-API-Key
 ));
 
-// Feature flag (GET /api/v1/feature-flags/evaluate/{key}?user_id=…)
-$flag = $client->evaluateFlag('dark-mode', 'user-123');
+// Feature flag (GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=…)
+$flag = $client->evaluateFlag('dark-mode', 'user-123', ['plan' => 'pro']);
 $flag->enabled;   // bool
 $flag->config;    // always null: the evaluate endpoint returns config: null
-$client->isFeatureEnabled('dark-mode', 'user-123');   // bool
+$client->isFeatureEnabled('dark-mode', 'user-123', ['plan' => 'pro']);   // bool
 
 // Experiment assignment (POST /api/v1/tracking/assign — sticky on the server)
 $assignment = $client->getAssignment('checkout-flow', 'user-123', ['country' => 'US']);
@@ -74,18 +74,37 @@ $client->track('page_view', 'user-123', ['page' => '/']);   // no key: fanned ou
 
 ## API
 
-### `evaluateFlag(string $flagKey, string $userId): FlagEvaluation`
+### `evaluateFlag(string $flagKey, string $userId, array $attributes = []): FlagEvaluation`
 
-`GET /api/v1/feature-flags/evaluate/{flagKey}?user_id={userId}`: the user id alone, so the server
-evaluates the flag's targeting rules against an empty context. Returns a `FlagEvaluation` with
-`key`, `enabled` and `config`. A cached evaluation is returned before any request is made; on any
-network/HTTP failure (transport error, 401, 404 for an unknown flag key, 429, ...) the flag is
-reported as **disabled** (`config: null`). Failures are never cached. Never throws on
-network/HTTP errors.
+`GET /api/v1/feature-flags/evaluate/{flagKey}?user_id={userId}&context=…`; the `context` is
+`$attributes` (see below). Returns a `FlagEvaluation` with `key`, `enabled` and `config`. A cached
+evaluation for the same attributes is returned before any request is made; on any network/HTTP
+failure (transport error, 401, 404 for an unknown flag key, 429, ...) the flag is reported as
+**disabled** (`config: null`). Failures are never cached. Never throws on network/HTTP errors.
 
-### `isFeatureEnabled(string $flagKey, string $userId): bool`
+### `isFeatureEnabled(string $flagKey, string $userId, array $attributes = []): bool`
 
-`evaluateFlag(...)->enabled`.
+`evaluateFlag(...)->enabled`, with the same `$attributes`.
+
+### Attributes on flag evaluation
+
+Flag evaluation sends the user's attributes as `context`, so a flag's targeting rules match against
+them. `evaluateFlag` and `isFeatureEnabled` call
+`GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=…`, where `context` is the attributes
+as compact JSON, percent-encoded like `user_id`: `['plan' => 'pro']` travels as
+`context=%7B%22plan%22%3A%22pro%22%7D`. With no attributes, or an empty array, no `context` is sent
+and the request carries the user id alone. If the attributes cannot be written as JSON (a `NAN`, or
+a string that is not valid UTF-8), `evaluateFlag` returns the disabled evaluation and sends nothing.
+
+The SDK keeps one cached answer per user and flag, together with the attributes it was asked with.
+A later call is answered from the cache only if its attributes are exactly the same; otherwise the
+SDK asks the server, and a successful new answer replaces the cached one. So two calls that differ
+only in attributes get two answers. The same attributes written in a different key order may cost one extra
+request; they never return another call's answer.
+
+The change is in this repository ([#1720](https://github.com/Controlvar/controlvar/issues/1720)); it
+reaches a registry at this SDK's first publish, so a build from a clone of `main` has it and a copy
+installed earlier does not.
 
 ### `getAssignment(string $experimentKey, string $userId, array $attributes = []): ?Assignment`
 
@@ -135,7 +154,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
-| `evaluateFlag`, `isFeatureEnabled` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
+| `evaluateFlag`, `isFeatureEnabled` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=…` | `context`: the user's attributes as JSON, left out when there are none | `{key, enabled, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
 | `getAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
 | `track` without keys, `trackBatch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | `{success_count, failure_count, errors}` |

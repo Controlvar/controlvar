@@ -11,7 +11,9 @@ use Controlvar\Errors\AuthException;
 use Controlvar\Errors\NetworkException;
 use Controlvar\ExperimentationClient;
 use Controlvar\FlagEvaluation;
+use Controlvar\HttpClient;
 use Controlvar\SdkConfig;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -333,6 +335,308 @@ class ExperimentationClientTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
+    // evaluateFlag — the user's attributes as `context` (part of #1720)
+    // -------------------------------------------------------------------------
+
+    /** V0 and V1: no attributes, and an empty array. */
+    private const NO_CONTEXT_PATH = '/api/v1/feature-flags/evaluate/f?user_id=u1';
+    /** V2: {"plan":"pro"}, after user_id. */
+    private const PLAN_PRO_PATH = '/api/v1/feature-flags/evaluate/f?user_id=u1&context=%7B%22plan%22%3A%22pro%22%7D';
+
+    private function clientFor(HttpClient $http): ExperimentationClient
+    {
+        return new ExperimentationClient(
+            new SdkConfig(baseUrl: 'https://api.example.com', apiKey: 'test-api-key', cacheTtl: 300, timeout: 5),
+            $http
+        );
+    }
+
+    #[Group('regression')]
+    public function testEvaluateFlagSendsTheAttributesAsContextAfterUserId(): void
+    {
+        $server = new RuleServerHttpClient();
+        $this->clientFor($server)->evaluateFlag('f', 'u1', ['plan' => 'pro']);
+
+        $this->assertSame([self::PLAN_PRO_PATH], $server->paths);
+    }
+
+    #[Group('regression')]
+    public function testEvaluateFlagMatchesATargetingRuleOnAnAttribute(): void
+    {
+        // The server enables the flag only when `context` decodes to plan = pro.
+        $client = $this->clientFor(new RuleServerHttpClient());
+
+        $this->assertTrue($client->evaluateFlag('f', 'u1', ['plan' => 'pro'])->enabled);
+        $this->assertFalse($client->evaluateFlag('f', 'u2')->enabled, 'no attributes, no match');
+    }
+
+    public function testIsFeatureEnabledSendsTheAttributesToo(): void
+    {
+        $server = new RuleServerHttpClient();
+
+        $this->assertTrue($this->clientFor($server)->isFeatureEnabled('f', 'u1', ['plan' => 'pro']));
+        $this->assertSame([self::PLAN_PRO_PATH], $server->paths);
+    }
+
+    public function testTheContextDecodesToTheAttributesTheServerReads(): void
+    {
+        // The server reads a query by splitting on `&`, taking `+` as a space and
+        // percent-decoding as UTF-8, then parses `context` as JSON. + & = # a space,
+        // / and non-ASCII must arrive as the object that was sent.
+        $vectors = [
+            'V3'  => ['q' => "a+b&c=d#e f/é😀!'()*~"],
+            'V3a' => ['q' => 'a+b&c=d#e fé'],
+            'V4'  => [
+                'age'    => 30,
+                'beta'   => true,
+                'device' => ['os' => 'ios', 'version' => '17.4.0'],
+                'tags'   => ['a', 'b'],
+            ],
+        ];
+
+        foreach ($vectors as $name => $attributes) {
+            $server = new RuleServerHttpClient();
+            $this->clientFor($server)->evaluateFlag('f', 'u1', $attributes);
+
+            $this->assertCount(1, $server->paths, $name);
+            $pairs = ServerQuery::pairs($server->paths[0]);
+            $this->assertSame(['user_id', 'context'], array_column($pairs, 0), $name);
+            $this->assertSame('u1', $pairs[0][1], $name);
+            $this->assertSame($attributes, json_decode($pairs[1][1], true, 512, JSON_THROW_ON_ERROR), $name);
+        }
+    }
+
+    public function testTheContextIsPinnedAsAnExactUrl(): void
+    {
+        // #1720's own vector, {"q":"a+b&c=d#e fé"}. The string is rawurlencode's output
+        // for the compact JSON (RFC 3986, uppercase %XX), written out here and first run
+        // by CI; the correctness check is the decode test above, not this copy.
+        $server = new RuleServerHttpClient();
+        $this->clientFor($server)->evaluateFlag('f', 'u1', ['q' => 'a+b&c=d#e fé']);
+
+        $this->assertSame(
+            ['/api/v1/feature-flags/evaluate/f?user_id=u1&context=%7B%22q%22%3A%22a%2Bb%26c%3Dd%23e%20f%C3%A9%22%7D'],
+            $server->paths
+        );
+    }
+
+    public function testNoAttributesOrAnEmptyArraySendNoContext(): void
+    {
+        $none = new RuleServerHttpClient();
+        $this->clientFor($none)->evaluateFlag('f', 'u1');
+        $empty = new RuleServerHttpClient();
+        $this->clientFor($empty)->evaluateFlag('f', 'u1', []);
+
+        $this->assertSame([self::NO_CONTEXT_PATH], $none->paths, 'V0');
+        $this->assertSame([self::NO_CONTEXT_PATH], $empty->paths, 'V1: [] is not sent as %5B%5D');
+    }
+
+    public function testAListShapedAttributesArrayGoesOutAsAJsonObject(): void
+    {
+        $server = new RuleServerHttpClient();
+        $this->clientFor($server)->evaluateFlag('f', 'u1', ['a', 'b']);
+
+        $this->assertSame('{"0":"a","1":"b"}', ServerQuery::value($server->paths[0], 'context'));
+    }
+
+    public function testTwoCallsThatDifferOnlyInAttributesGetTwoRequestsAndTwoAnswers(): void
+    {
+        $pairs = [
+            'plan pro / plan free' => [['plan' => 'pro'], ['plan' => 'free']],
+            'plan pro / tier pro'  => [['plan' => 'pro'], ['tier' => 'pro']],
+            'n 1 / n "1"'          => [['n' => 1], ['n' => '1']],
+        ];
+
+        foreach ($pairs as $name => [$first, $second]) {
+            $server = new RuleServerHttpClient();
+            $client = $this->clientFor($server);
+
+            $answers = [
+                $client->evaluateFlag('f', 'u1', $first)->enabled,
+                $client->evaluateFlag('f', 'u1', $second)->enabled,
+            ];
+
+            $this->assertSame([true, false], $answers, $name);
+            $this->assertCount(2, $server->paths, $name);
+        }
+    }
+
+    public function testOneCachedAnswerPerUserAndFlagSoABAMakesThreeRequests(): void
+    {
+        $server = new RuleServerHttpClient();
+        $client = $this->clientFor($server);
+        $a = ['plan' => 'pro'];
+        $b = ['plan' => 'free'];
+
+        $answers = [
+            $client->evaluateFlag('f', 'u1', $a)->enabled,
+            $client->evaluateFlag('f', 'u1', $b)->enabled,
+            $client->evaluateFlag('f', 'u1', $a)->enabled,
+        ];
+
+        $this->assertSame([true, false, true], $answers);
+        $this->assertCount(3, $server->paths, 'the slot holds B when A comes back');
+    }
+
+    public function testTheSameAttributesAreServedFromTheCache(): void
+    {
+        $server = new RuleServerHttpClient();
+        $client = $this->clientFor($server);
+
+        $client->evaluateFlag('f', 'u1', ['plan' => 'pro']);
+        $client->evaluateFlag('f', 'u1', ['plan' => 'pro']);
+
+        $this->assertCount(1, $server->paths);
+    }
+
+    public function testAnAnswerCachedWithAttributesIsNotServedToACallWithoutThem(): void
+    {
+        $server = new RuleServerHttpClient();
+        $client = $this->clientFor($server);
+
+        $this->assertTrue($client->evaluateFlag('f', 'u1', ['plan' => 'pro'])->enabled);
+        $this->assertFalse($client->evaluateFlag('f', 'u1')->enabled);
+        $this->assertSame([self::PLAN_PRO_PATH, self::NO_CONTEXT_PATH], $server->paths);
+    }
+
+    public function testNoAttributesAndAnEmptyArrayShareOneCachedAnswer(): void
+    {
+        $server = new RuleServerHttpClient();
+        $client = $this->clientFor($server);
+
+        $client->evaluateFlag('f', 'u1', []);
+        $client->evaluateFlag('f', 'u1', []);
+        $client->evaluateFlag('f', 'u1');
+
+        $this->assertCount(1, $server->paths);
+    }
+
+    public function testTheSameAttributesInAnotherKeyOrderCostOneExtraRequest(): void
+    {
+        $server = new RuleServerHttpClient();
+        $client = $this->clientFor($server);
+
+        $client->evaluateFlag('f', 'u1', ['a' => 1, 'b' => 2]);
+        $client->evaluateFlag('f', 'u1', ['b' => 2, 'a' => 1]);
+
+        $this->assertCount(2, $server->paths);
+    }
+
+    public function testChangedAttributesStillListTheFlagOnceAndTrackFansOutOnce(): void
+    {
+        $server = new RuleServerHttpClient();
+        $client = $this->clientFor($server);
+
+        $client->evaluateFlag('f', 'u1', ['plan' => 'pro']);
+        $client->evaluateFlag('f', 'u1', ['plan' => 'free']);
+
+        $this->assertSame(['f'], $client->getEvaluatedFlags('u1'));
+        $this->assertTrue($client->track('page_view', 'u1'));
+        $this->assertCount(1, $server->posts);
+        $this->assertSame(self::BATCH_PATH, $server->posts[0]['path']);
+        $events = $server->posts[0]['body']['events'];
+        $this->assertCount(1, $events);
+        $this->assertSame('f', $events[0]['feature_flag_key']);
+    }
+
+    public function testAFailedEvaluationWithAttributesIsNotCached(): void
+    {
+        $http = new FakeHttpClient();
+        $http->on('GET', self::PLAN_PRO_PATH, new ApiException('boom', 500));
+        $client = $this->clientFor($http);
+
+        $this->assertFalse($client->evaluateFlag('f', 'u1', ['plan' => 'pro'])->enabled);
+        $this->assertFalse($client->evaluateFlag('f', 'u1', ['plan' => 'pro'])->enabled);
+
+        $this->assertCount(2, $http->requests);
+        $this->assertSame([], $client->getEvaluatedFlags('u1'));
+    }
+
+    public function testEvaluateFlagSendsNothingWhenTheAttributesCannotBeWrittenAsJson(): void
+    {
+        $canary = 'attrcanary7f3';
+        $cases = [
+            'invalid UTF-8' => ['plan' => $canary . "\xFF"],
+            'NAN'           => ['n' => NAN, 'plan' => $canary],
+            'INF'           => ['n' => INF, 'plan' => $canary],
+            'an object that refuses' => ['o' => new class ($canary) implements \JsonSerializable {
+                public function __construct(private readonly string $canary)
+                {
+                }
+
+                public function jsonSerialize(): mixed
+                {
+                    throw new \RuntimeException($this->canary);
+                }
+            }],
+        ];
+
+        foreach ($cases as $name => $attributes) {
+            $server = new RuleServerHttpClient();
+            $client = $this->clientFor($server);
+
+            ob_start();
+            $result = $client->evaluateFlag('f', 'u1', $attributes);
+            $output = (string) ob_get_clean();
+
+            $this->assertFalse($result->enabled, $name);
+            $this->assertSame('f', $result->key, $name);
+            $this->assertSame([], $server->paths, "$name: no request is made");
+            $this->assertSame([], $client->getEvaluatedFlags('u1'), "$name: nothing is cached");
+            $this->assertSame('', $output, "$name: nothing is printed");
+            $this->assertStringNotContainsString($canary, (string) json_encode($result->toArray()), $name);
+
+            // Nothing was cached for the slot, so the next call, with sendable
+            // attributes, asks the server.
+            $this->assertTrue($client->evaluateFlag('f', 'u1', ['plan' => 'pro'])->enabled, $name);
+            $this->assertCount(1, $server->paths, $name);
+        }
+    }
+
+    public function testNoOutputOrLogNamesTheAttributesWhenARequestFails(): void
+    {
+        $canary = 'attrcanary7f3';
+        // An HttpClient that fails the way cURL can, with the request path (query
+        // included) in the exception's text: the probe, so that a canary in the output
+        // or the log would show.
+        $http = new class (new SdkConfig(baseUrl: 'https://api.example.com', apiKey: 'k')) extends HttpClient {
+            /** @var list<string> */
+            public array $messages = [];
+
+            public function get(string $path, array $headers = []): array
+            {
+                $error = new NetworkException('cURL error: failed for ' . $path);
+                $this->messages[] = $error->getMessage();
+                throw $error;
+            }
+        };
+        $client = $this->clientFor($http);
+
+        $log = (string) tempnam(sys_get_temp_dir(), 'a1php');
+        $oldLog = ini_set('error_log', $log);
+        $oldLogErrors = ini_set('log_errors', '1');
+        ob_start();
+        try {
+            $flag = $client->evaluateFlag('f', 'u1', ['plan' => $canary]);
+            $enabled = $client->isFeatureEnabled('f', 'u1', ['plan' => $canary]);
+        } finally {
+            $output = (string) ob_get_clean();
+            ini_set('error_log', (string) $oldLog);
+            ini_set('log_errors', (string) $oldLogErrors);
+        }
+        $logged = (string) file_get_contents($log);
+        unlink($log);
+
+        $this->assertCount(2, $http->messages);
+        $this->assertStringContainsString($canary, $http->messages[0], 'the probe: the exception text did carry the query');
+        $this->assertFalse($flag->enabled);
+        $this->assertFalse($enabled);
+        $this->assertSame('', $output);
+        $this->assertSame('', $logged);
+        $this->assertStringNotContainsString($canary, (string) json_encode($flag->toArray()));
+    }
+
+    // -------------------------------------------------------------------------
     // track — with a key: POST /api/v1/tracking/track
     // -------------------------------------------------------------------------
 
@@ -609,5 +913,109 @@ class ExperimentationClientTest extends TestCase
         $client->evaluateFlag('dark-mode', 'user-123');
 
         $this->assertCount(2, $this->http->requests);
+    }
+}
+
+/**
+ * How the server reads a request path's query: split on `&`, then on the first `=`,
+ * `+` is a space, then percent-decode as UTF-8. This is the decode helper of the
+ * attribute tests. `urldecode` reads `+` as a space and `rawurldecode` does not;
+ * the server (Starlette) does, so a client that leaves `+` raw reads as a space here.
+ */
+final class ServerQuery
+{
+    /**
+     * @return list<array{0: string, 1: string}> (name, value) pairs in order of appearance
+     */
+    public static function pairs(string $path): array
+    {
+        $mark = strpos($path, '?');
+        if ($mark === false) {
+            return [];
+        }
+
+        $pairs = [];
+        foreach (explode('&', substr($path, $mark + 1)) as $part) {
+            [$name, $value] = array_pad(explode('=', $part, 2), 2, '');
+            $pairs[] = [self::decode($name), self::decode($value)];
+        }
+
+        return $pairs;
+    }
+
+    public static function value(string $path, string $name): string
+    {
+        foreach (self::pairs($path) as [$pairName, $value]) {
+            if ($pairName === $name) {
+                return $value;
+            }
+        }
+
+        throw new \OutOfBoundsException("no {$name} parameter in the query");
+    }
+
+    private static function decode(string $part): string
+    {
+        $decoded = urldecode($part);
+        if (preg_match('//u', $decoded) !== 1) {
+            throw new \UnexpectedValueException('the query does not decode to valid UTF-8');
+        }
+
+        return $decoded;
+    }
+}
+
+/**
+ * A fake server for the attribute tests. It records the raw path it is handed (the
+ * capture point), and answers a flag evaluation as the real route does for a rule on
+ * `plan` (or on the number `n`): enabled only when `context` decodes, with the
+ * server's rules, to an object with plan = "pro" (n = 1). A `context` that is not a
+ * JSON object is a 422, as on the server.
+ */
+final class RuleServerHttpClient extends HttpClient
+{
+    private const EVALUATE_PREFIX = '/api/v1/feature-flags/evaluate/';
+
+    /** @var list<string> */
+    public array $paths = [];
+
+    /** @var list<array{path: string, body: array<mixed>}> */
+    public array $posts = [];
+
+    public function __construct()
+    {
+        parent::__construct(new SdkConfig(baseUrl: 'https://api.example.com', apiKey: 'test-api-key'));
+    }
+
+    public function get(string $path, array $headers = []): array
+    {
+        $this->paths[] = $path;
+
+        $context = [];
+        foreach (ServerQuery::pairs($path) as [$name, $value]) {
+            if ($name !== 'context') {
+                continue;
+            }
+            try {
+                $context = json_decode($value, true, 512, JSON_THROW_ON_ERROR);
+            } catch (\JsonException) {
+                $context = null;
+            }
+            if (!is_array($context)) {
+                throw new ApiException('Query parameter context must be a JSON object', 422);
+            }
+        }
+
+        $key = rawurldecode(substr(explode('?', $path, 2)[0], strlen(self::EVALUATE_PREFIX)));
+        $enabled = ($context['plan'] ?? null) === 'pro' || ($context['n'] ?? null) === 1;
+
+        return ['key' => $key, 'enabled' => $enabled, 'config' => null];
+    }
+
+    public function post(string $path, array $body, array $headers = []): array
+    {
+        $this->posts[] = ['path' => $path, 'body' => $body];
+
+        return ['success_count' => count($body['events'] ?? []), 'failure_count' => 0, 'errors' => null];
     }
 }

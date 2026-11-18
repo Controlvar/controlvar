@@ -294,6 +294,13 @@ class UserResponse(BaseModel):
     # Make all optional fields truly optional
     last_login: Optional[datetime] = None
     preferences: Optional[Dict[str, Any]] = None
+    # Read from ``User.totp_enabled`` (the ``user_totp`` table), never stored
+    # on ``users``. Required, so no operation can leave it out and say false.
+    totp_enabled: bool = Field(
+        ...,
+        description="The account has two-step sign-in on (an authenticator app "
+        "confirmed with a code)",
+    )
 
     @field_validator("role", mode="before")
     @classmethod

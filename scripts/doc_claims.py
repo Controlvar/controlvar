@@ -1974,6 +1974,36 @@ MECHANISMS: Dict[str, Mechanism] = {
             ),
         ),
     ),
+    # The auth page's table of the repository's password sign-ins (#1812): its
+    # rows, each a path, against every file that names the sign-in routes; a
+    # core test may not name a module's path, so the modules' rows are their
+    # own test's.
+    "password-sign-ins": Mechanism(
+        "backend/tests/unit/docs/test_two_step_sign_in_docs.py"
+        "::test_the_page_names_every_password_sign_in",
+        holds=(
+            (
+                "docs/api/auth.md",
+                r"^(?:\.github|backend|demo|deploy|scripts|tests)/"
+                r"[A-Za-z0-9_./-]{1,100} \| [^|]{1,200}$",
+            ),
+        )
+        + _whole(
+            "docs/api/auth.md",
+            "These sign in with a password and read access_token.",
+            "Each fails if its account turns two-step sign-in on:",
+        ),
+    ),
+    "password-sign-ins-modules": Mechanism(
+        "modules/backend/tests/unit/test_password_sign_ins_modules.py"
+        "::test_the_page_names_the_full_profiles_password_sign_ins",
+        holds=(
+            (
+                "docs/api/auth.md",
+                r"^modules/[A-Za-z0-9_./-]{1,100} \| [^|]{1,200}$",
+            ),
+        ),
+    ),
 }
 
 #: The mobile and not-yet-published SDK pages (#1107): their registries wait

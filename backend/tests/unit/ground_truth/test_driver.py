@@ -379,6 +379,14 @@ def test_the_results_are_read_past_the_cache(signed_in, server, clock):
     assert ("D1", "results") in signed_in.phases
 
 
+def test_a_breakdown_is_read_past_the_cache_by_its_dimension(signed_in, server, clock):
+    signed_in.breakdown("1234", "country", label="D1")
+    (_, request) = server.requests_to("/api/v1/results/1234")[0]
+    assert request.method == "GET"
+    assert dict(request.url.params) == {"use_cache": "false", "breakdown": "country"}
+    assert ("D1", "breakdown") in signed_in.phases
+
+
 def test_an_administrative_429_is_waited_out(signed_in, server, clock):
     server.script["/api/v1/results/99"] = [
         httpx.Response(429, json={"detail": "slow down"}, headers={"Retry-After": "3"})

@@ -291,6 +291,17 @@ Step 3: Restart the API so new tasks read the new value:
 is done when that procedure confirms the new revision is serving, not when the secret is
 updated.
 
+Step 4, if any local account uses [two-step sign-in](../api/auth.md#two-step-sign-in): each
+account's authenticator secret is stored sealed with a key derived from the JWT secret, so on
+the new secret those accounts are refused at sign-in with `503` (two-step sign-in unavailable
+for this account). While the traffic shift runs, tasks on the old and the new secret answer side
+by side, so a sign-in can pass on one and fail on the other. Once the shift has completed, reset
+every account
+([Resetting two-step sign-in](../auth/auth-user-guide.md#resetting-two-step-sign-in), with
+`--all`): each then signs in with its password alone and sets two-step sign-in up again. If you
+are rotating because the secret may have leaked, reset those accounts' passwords first, since
+the reset leaves them with the password alone.
+
 ### Rotate Database Password Immediately
 
 Step 1: Generate a new password, into a file only you can read. `token_urlsafe` uses only letters, digits, `-` and `_`, none of which Aurora refuses in a master password:

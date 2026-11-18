@@ -435,8 +435,8 @@ COUNTS = {
         "strict": 0,
         "fields by class": 47,
         "classes": 24,
-        "query parameters": 20,
-        "query operations": 7,
+        "query parameters": 21,
+        "query operations": 8,
     },
     "full": {
         "body fields": 65,
@@ -445,8 +445,8 @@ COUNTS = {
         "strict": 3,
         "fields by class": 50,
         "classes": 27,
-        "query parameters": 20,
-        "query operations": 7,
+        "query parameters": 21,
+        "query operations": 8,
     },
 }
 

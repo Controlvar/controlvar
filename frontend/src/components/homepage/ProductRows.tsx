@@ -34,7 +34,7 @@ const ROWS: Row[] = [
     id: 'rollouts',
     icon: icon(['M4 22V4', 'M4 4h12l-2 4 2 4H4']),
     heading: 'Roll features out gradually, with automatic rollback',
-    body: 'Sticky assignment, gradual rollouts with configurable stages, and automated safety rollback on error-rate and latency thresholds.',
+    body: 'Sticky assignment, gradual rollouts with configurable stages, and automated safety rollback on error-rate and latency thresholds once you turn it on.',
     bullets: [
       'Targeting with 20+ operators: semantic version comparison, geo-distance, time windows and array operations',
       'Switch a flag on and off, and find each change in the audit log',
@@ -50,10 +50,10 @@ const ROWS: Row[] = [
     body: "Work out a test's sample size in the power calculator, which needs no account.",
     bullets: [
       'Frequentist and Bayesian analysis',
-      'Sequential testing with mSPRT for early stopping',
+      'Sequential testing with mSPRT for early stopping (beta)',
       'Multi-armed bandits',
       'Per-segment breakdowns with a Bonferroni correction across segments',
-      'Mutual-exclusion groups and a global holdout',
+      'Mutual-exclusion groups and a global holdout, whose results are beta',
     ],
     // A <Quote> is a sentence from content/home-quotes.json, held to the docs
     // page it quotes (tests/content/home-quotes.test.tsx).
@@ -65,7 +65,7 @@ const ROWS: Row[] = [
     icon: icon(['M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z', 'M9 12l2 2 4-4']),
     heading: 'Invite teammates, each with a role',
     body: 'Admins and developers change experiments and flags; analysts and viewers read them.',
-    bullets: ['An audit log you can filter by action, entity and date', 'Download it as CSV or JSON'],
+    bullets: ['An audit log you can filter by action, entity and date', 'Download it as CSV or JSON (the download is beta)'],
     link: { text: 'Role-based access control in the docs', href: docsUrl('rbac/README') },
     screen: 'audit-log',
   },

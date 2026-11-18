@@ -1,0 +1,300 @@
+/**
+ * Two-step sign-in (#1812): an authenticator app's 6-digit code, or a
+ * single-use recovery code, after the password. Local sign-in only; under any
+ * other `AUTH_PROVIDER` every route here answers 404.
+ *
+ * The account page (`/account/two-factor`) shows only the fixed sentences
+ * below, one per outcome, as the password page does: the status, the header
+ * and a few known details choose the sentence, and no other response text
+ * reaches the screen. The sign-in page's code step has its own mapper beside
+ * `loginErrorMessage` in `pages/login.tsx`.
+ *
+ * A code is sent exactly as typed: the API drops spaces and hyphens and reads
+ * a recovery code in any letter case (`two_factor_service.normalise_code`).
+ */
+import { apiFetch, isApiError } from '@/services/api';
+import { passwordOutcomeSentence } from '@/services/password';
+import { demoRefusalMessage } from '@/utils/demoMode';
+
+export const TWO_FACTOR_STATUS_PATH = '/api/v1/users/me/2fa';
+export const TWO_FACTOR_ENROL_PATH = '/api/v1/users/me/2fa/enroll';
+export const TWO_FACTOR_CONFIRM_PATH = '/api/v1/users/me/2fa/confirm';
+export const TWO_FACTOR_DISABLE_PATH = '/api/v1/users/me/2fa/disable';
+export const TWO_FACTOR_RECOVERY_CODES_PATH = '/api/v1/users/me/2fa/recovery-codes';
+/** The code step of a sign-in: no session yet. */
+export const MFA_VERIFY_PATH = '/api/v1/auth/mfa/verify';
+
+// ---------------------------------------------------------------------------
+// The API's fixed texts, word for word (backend/app/services/two_factor_service.py
+// and backend/app/api/two_factor_answers.py). backend/tests/unit/docs/
+// test_two_step_sign_in_docs.py holds each to the API's constant: change one
+// there and that test names the copy here.
+// ---------------------------------------------------------------------------
+
+/** A wrong, used or malformed code: 401 at the code step, 403 when signed in. */
+export const WRONG_CODE_DETAIL = 'That code is not correct.';
+/** The code step's 401 when the mfa_token is no longer good. */
+export const SIGN_IN_EXPIRED_DETAIL = 'Sign-in expired. Start again.';
+/** 100 wrong codes in a row: 423 with no Retry-After until a reset. */
+export const CODE_STEP_LOCKED_TEXT =
+  'Two-step sign-in is locked after too many wrong codes. Ask an administrator to reset it.';
+/** The stored secret cannot be read (after SECRET_KEY changed): 503. */
+export const UNAVAILABLE_TEXT =
+  'Two-step sign-in is unavailable for this account. Ask an administrator to reset it.';
+/**
+ * Setting it up asks for the current password, as changing the password does
+ * (backend/app/api/v1/endpoints/users.py): its three 403 details.
+ */
+export const ENROL_PASSWORD_MISSING_DETAIL =
+  'Enter your current password (current_password) to set up two-step sign-in.';
+export const CURRENT_PASSWORD_INCORRECT_DETAIL = 'The current password is incorrect.';
+export const ENROL_NO_PASSWORD_DETAIL =
+  'This account does not sign in with a password, so two-step sign-in does not apply to it.';
+
+// ---------------------------------------------------------------------------
+// The dashboard's own sentences.
+// ---------------------------------------------------------------------------
+
+export const WRONG_CODE_MESSAGE = 'That code is not correct. Check your authenticator app and try again.';
+export const WRONG_RECOVERY_CODE_MESSAGE = 'That recovery code is not correct, or it has already been used.';
+export const SIGN_IN_TIMED_OUT_MESSAGE = 'Your sign-in timed out. Enter your email and password again.';
+/** The one place a phone's clock is mentioned: where a wrong clock is first met. */
+export const CONFIRM_CLOCK_HINT =
+  "That code did not match. Make sure your phone's clock is set automatically, then try again.";
+/** The sign-in page's answer for an account that lost its app and its codes. */
+export const LOST_DEVICE_HELP = 'Ask an administrator to reset your two-step sign-in.';
+/** Beside the current-password field of the set-up step. */
+export const ENROL_PASSWORD_HINT = 'Setting up two-step sign-in asks for your current password, as changing your password does.';
+/** The set-up step sent without a current password. */
+export const ENROL_PASSWORD_MESSAGE = 'Enter your current password to set up two-step sign-in.';
+/** In place of the set-up step, for an account with no password of its own. */
+export const NO_PASSWORD_TWO_FACTOR =
+  'This account signs in through single sign-on and has no password, so two-step sign-in does not apply to it.';
+/** The account page under any provider but local. */
+export const NOT_LOCAL_TWO_FACTOR =
+  'Your account signs in through your identity provider, so two-step sign-in is set up there, not in Controlvar.';
+/** The QR image's text alternative: the same key is always written beside it. */
+export const QR_ALT = 'QR code for adding Controlvar to an authenticator app. The same key is written below.';
+
+export const CODE_HINT = '6 digits, from your authenticator app. Spaces and hyphens are ignored.';
+export const RECOVERY_CODE_HINT =
+  'One of the recovery codes you saved. Spaces, hyphens and letter case are ignored.';
+
+/** `GET /api/v1/users/me/2fa`. */
+export interface TwoFactorStatus {
+  enabled: boolean;
+  /** Always false until a role can require it. */
+  required: boolean;
+  recovery_codes_remaining: number;
+}
+
+/** `POST /api/v1/users/me/2fa/enroll`: a new secret, waiting for its first code. */
+export interface TwoFactorEnrolment {
+  secret: string;
+  otpauth_uri: string;
+}
+
+/** A code from the app, or one recovery code: exactly one is sent. */
+export type SecondStepAnswer = { code: string } | { recovery_code: string };
+
+export function readTwoFactorStatus(): Promise<TwoFactorStatus> {
+  return apiFetch<TwoFactorStatus>(TWO_FACTOR_STATUS_PATH);
+}
+
+/**
+ * A new secret, for the current password; asking again replaces one that is
+ * still waiting. 409 once on. The password goes in the request body only.
+ */
+export function startTwoFactorEnrolment(currentPassword: string): Promise<TwoFactorEnrolment> {
+  return apiFetch<TwoFactorEnrolment>(TWO_FACTOR_ENROL_PATH, {
+    method: 'POST',
+    json: { current_password: currentPassword },
+  });
+}
+
+/** Turn it on with the app's first code; resolves with the 10 recovery codes, shown once. */
+export async function confirmTwoFactor(code: string): Promise<string[]> {
+  const answer = await apiFetch<{ recovery_codes: string[] }>(TWO_FACTOR_CONFIRM_PATH, {
+    method: 'POST',
+    json: { code },
+  });
+  return answer.recovery_codes;
+}
+
+/** Turn it off with a code or a recovery code (204). */
+export async function disableTwoFactor(answer: SecondStepAnswer): Promise<void> {
+  await apiFetch<void>(TWO_FACTOR_DISABLE_PATH, { method: 'POST', json: answer });
+}
+
+/** A new set of 10 recovery codes for a code from the app; the old set stops working. */
+export async function regenerateRecoveryCodes(code: string): Promise<string[]> {
+  const answer = await apiFetch<{ recovery_codes: string[] }>(TWO_FACTOR_RECOVERY_CODES_PATH, {
+    method: 'POST',
+    json: { code },
+  });
+  return answer.recovery_codes;
+}
+
+/** The key as people type it: groups of four, for reading off the screen. */
+export function groupKey(secret: string): string {
+  return (secret.match(/.{1,4}/g) ?? []).join(' ');
+}
+
+/** A recovery code as shown: two groups of five (spaces are ignored when typed back). */
+export function groupRecoveryCode(code: string): string {
+  return code.length === 10 ? `${code.slice(0, 5)} ${code.slice(5)}` : code;
+}
+
+/** The text of the recovery-codes file the page offers to download. */
+export function recoveryCodesFileText(codes: string[]): string {
+  return (
+    'Controlvar recovery codes. Each signs in once, in place of a code from your authenticator app.\n\n' +
+    codes.map((code, i) => `${i + 1}. ${groupRecoveryCode(code)}`).join('\n') +
+    '\n'
+  );
+}
+
+interface QrCode {
+  addData(data: string): void;
+  make(): void;
+  createDataURL(cellSize?: number, margin?: number): string;
+}
+type QrFactory = (typeNumber: 0, errorCorrectionLevel: 'L' | 'M' | 'Q' | 'H') => QrCode;
+
+/**
+ * The `otpauth://` link as a QR image (a GIF data URL; the image's CSP allows
+ * `data:`). The QR library is loaded only here, so only the two-step pages
+ * fetch it. The key and the link are always shown as well: the QR is never the
+ * only way to add the account.
+ */
+export async function qrCodeDataUrl(text: string): Promise<string> {
+  const loaded: unknown = await import('qrcode-generator');
+  const factory = (
+    typeof loaded === 'function' ? loaded : (loaded as { default?: unknown }).default
+  ) as QrFactory;
+  const qr = factory(0, 'M');
+  qr.addData(text);
+  qr.make();
+  return qr.createDataURL(4, 4);
+}
+
+// ---------------------------------------------------------------------------
+// The account page's outcomes
+// ---------------------------------------------------------------------------
+
+export type TwoFactorOutcome =
+  | 'wrong-code'
+  | 'wrong-recovery-code'
+  | 'clock'
+  | 'locked'
+  | 'capped'
+  | 'unavailable'
+  | 'changed'
+  | 'not-waiting'
+  | 'invalid'
+  | 'password-missing'
+  | 'password-incorrect'
+  | 'no-password'
+  | 'rate-limited'
+  | 'session-ended'
+  | 'forbidden'
+  | 'not-local'
+  | 'network'
+  | 'timed-out'
+  | 'read-only'
+  | 'failed';
+
+export interface TwoFactorFailure {
+  outcome: TwoFactorOutcome;
+  /** Seconds from a 423's `Retry-After`, when it sent one. */
+  retryAfter?: number;
+  /** For `timed-out` and `read-only`: the dashboard's own sentence, from the error. */
+  message?: string;
+}
+
+export interface TwoFactorErrorContext {
+  /** The answer was a recovery code. */
+  recovery?: boolean;
+  /** The first code of a new secret (where a phone's wrong clock shows). */
+  confirming?: boolean;
+}
+
+/**
+ * Class a failed request of the account page. Reads the status, the
+ * `Retry-After` header and the API's fixed texts only.
+ */
+export function classifyTwoFactorError(err: unknown, context: TwoFactorErrorContext = {}): TwoFactorFailure {
+  if (!isApiError(err)) return { outcome: 'failed' };
+  if (err.timedOut) return { outcome: 'timed-out', message: err.message };
+  const demo = demoRefusalMessage(err);
+  if (demo) return { outcome: 'read-only', message: demo };
+  switch (err.status) {
+    case 0:
+      return { outcome: 'network' };
+    case 401:
+      return { outcome: 'session-ended' };
+    case 403:
+      if (err.detail === WRONG_CODE_DETAIL) {
+        if (context.confirming) return { outcome: 'clock' };
+        return { outcome: context.recovery ? 'wrong-recovery-code' : 'wrong-code' };
+      }
+      // Setting it up: the current password's three refusals.
+      if (err.detail === CURRENT_PASSWORD_INCORRECT_DETAIL) return { outcome: 'password-incorrect' };
+      if (err.detail === ENROL_PASSWORD_MISSING_DETAIL) return { outcome: 'password-missing' };
+      if (err.detail === ENROL_NO_PASSWORD_DETAIL) return { outcome: 'no-password' };
+      return { outcome: 'forbidden' };
+    case 404:
+      return { outcome: 'not-local' };
+    case 409:
+      // At confirm: the secret is no longer waiting, which is also what an
+      // account that is already on answers there.
+      return { outcome: context.confirming ? 'not-waiting' : 'changed' };
+    case 422:
+      return { outcome: 'invalid' };
+    case 423:
+      // The cap first: it has no Retry-After, and waiting does not end it.
+      if (err.detail === CODE_STEP_LOCKED_TEXT) return { outcome: 'capped' };
+      return { outcome: 'locked', retryAfter: err.retryAfter };
+    case 429:
+      // Setting it up takes 5 a minute, like the password change.
+      return { outcome: 'rate-limited' };
+    case 503:
+      if (err.detail === UNAVAILABLE_TEXT) return { outcome: 'unavailable' };
+      return { outcome: 'failed' };
+    default:
+      return { outcome: 'failed' };
+  }
+}
+
+const SENTENCES: Record<Exclude<TwoFactorOutcome, 'locked' | 'timed-out' | 'read-only'>, string> = {
+  'wrong-code': WRONG_CODE_MESSAGE,
+  'wrong-recovery-code': WRONG_RECOVERY_CODE_MESSAGE,
+  clock: CONFIRM_CLOCK_HINT,
+  capped: CODE_STEP_LOCKED_TEXT,
+  unavailable: UNAVAILABLE_TEXT,
+  changed: 'Two-step sign-in changed since this page was opened. The page now shows how it is.',
+  'not-waiting':
+    'No new secret is waiting for its first code, or two-step sign-in is already on. The page now shows how it is.',
+  invalid: 'Enter the code as your authenticator app shows it, or a recovery code as you saved it.',
+  'password-missing': ENROL_PASSWORD_MESSAGE,
+  'password-incorrect': 'The current password is not correct. Check it and try again.',
+  'no-password': NO_PASSWORD_TWO_FACTOR,
+  'rate-limited': 'Too many attempts. Wait a minute, then try again.',
+  'session-ended': 'Your session has ended. Sign in again.',
+  forbidden: 'Two-step sign-in could not be changed. Ask an administrator to check your account.',
+  'not-local': 'This server does not manage sign-in, so there is no two-step sign-in to set up here.',
+  network: 'The API could not be reached. Check your connection and try again.',
+  failed: 'Two-step sign-in could not be changed. Try again; if it keeps failing, ask an administrator.',
+};
+
+/** The fixed sentence for a failure. */
+export function twoFactorFailureSentence(failure: TwoFactorFailure): string {
+  if (failure.outcome === 'locked') {
+    // The same lock as the password's: one count of wrong passwords and codes.
+    return passwordOutcomeSentence({ outcome: 'locked', retryAfter: failure.retryAfter });
+  }
+  if (failure.outcome === 'timed-out' || failure.outcome === 'read-only') {
+    return failure.message ?? SENTENCES.failed;
+  }
+  return SENTENCES[failure.outcome];
+}

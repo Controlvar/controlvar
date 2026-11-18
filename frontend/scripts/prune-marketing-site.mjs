@@ -23,8 +23,9 @@
  * Last, it copies each kept page to `<page>/index.html`, so `/docs/` is the
  * docs hub as well as `/docs` (the comment above that step says why a copy).
  */
-import { copyFileSync, existsSync, mkdirSync, rmSync, readdirSync, statSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, rmSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { KEPT_PAGES, robotsTxt, sitemapXml } from './marketing-seo.mjs';
 
 const PLATFORM_ONLY = [
   'admin',
@@ -40,7 +41,8 @@ const PLATFORM_ONLY = [
 // Kept deliberately: all of them work with no backend. `books` and
 // `walkthroughs` exist in the marketing build only (src/utils/marketing-only.ts),
 // so their absence here is a build that went wrong.
-const KEEP = ['docs', 'books', 'walkthroughs', 'power-calculator', 'privacy'];
+// The list lives in marketing-seo.mjs, which writes the sitemap from it too.
+const KEEP = KEPT_PAGES;
 
 const outDir = resolve(process.argv[2] ?? 'out');
 
@@ -133,3 +135,10 @@ for (const name of KEEP) {
 }
 console.log(`prune-marketing-site: copied ${aliased.length} page(s) to their trailing-slash path`);
 for (const n of aliased) console.log(`  + ${n}`);
+
+// What crawlers are told: the sitemap, and robots.txt with its `Sitemap:` line
+// (replacing the plain one public/ copied in). Written here, never from
+// public/, which every export gets (see marketing-seo.mjs).
+writeFileSync(join(outDir, 'sitemap.xml'), sitemapXml());
+writeFileSync(join(outDir, 'robots.txt'), robotsTxt());
+console.log('prune-marketing-site: wrote sitemap.xml and robots.txt');

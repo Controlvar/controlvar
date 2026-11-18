@@ -1687,10 +1687,19 @@ text = "A bandit experiment's page has a Current traffic weights panel: each var
 by = ["test:frontend/src/tests/pages/experiment-detail-bandit.test.tsx"]
 
 [[unit]]
-text = "Every role can read it, and nothing in it changes the experiment."
+text = "Every role can read it."
 by = [
     "test:frontend/src/tests/pages/experiment-detail-bandit.test.tsx",
     "test:backend/tests/unit/api/test_bandit_endpoints.py::TestBanditStatusForTheDashboard::test_every_role_reads_the_weights",
+]
+
+[[unit]]
+text = "An Admin or a superuser can also set the weights by hand with Set weights by hand, as whole percentages that add up to 100; while the experiment is active, the bandit replaces them at its next update."
+by = [
+    "test:frontend/src/tests/pages/experiment-detail-bandit.test.tsx",
+    "test:frontend/src/tests/components/BanditWeightsOverride.test.tsx::sends each whole percentage divided by 100, keyed by the experiment's own variant ids",
+    "test:backend/tests/unit/core/test_dashboard_experiment_roles.py::test_override_bandit_weights_roles_match_the_dashboard",
+    "test:backend/tests/integration/api/test_bandit_weights_routes.py::test_the_scheduler_replaces_an_override_while_the_experiment_is_active",
 ]
 
 [[unit]]
@@ -1705,8 +1714,11 @@ text = "Before the first update it says so, and new users follow each variant's 
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "The dashboard shows the current weights only, with no history."
-by = ["test:frontend/src/tests/components/BanditWeightsSection.test.tsx::reads GET /api/v1/bandit/{id} once on load, with no options, and again on Refresh"]
+text = "Under it, Weight history lists the bandit's past updates, newest first, when you open it."
+by = [
+    "test:frontend/src/tests/pages/experiment-detail-bandit-history.test.tsx::sends no history request on load; one per opening, with no options",
+    "test:frontend/src/tests/pages/experiment-detail-bandit-history.test.tsx::shows the server weights as shares, columns in the variant order",
+]
 
 [[unit]]
 text = "Interaction Detection — Are Your Experiments Interfering?"
