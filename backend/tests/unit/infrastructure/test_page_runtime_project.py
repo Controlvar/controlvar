@@ -115,6 +115,28 @@ def test_browser_e2e_runs_the_project_with_a_listing_and_a_json_report() -> None
     assert run > pack, "the page-runtime run comes before the script is packed"
 
 
+def test_the_run_points_the_real_api_spec_at_the_jobs_api() -> None:
+    """real-api.runtime.spec.ts passes the script's requests on to
+    PLAYWRIGHT_API_URL: the run must name the API the job started, after it
+    started."""
+    steps = _browser_e2e_steps()
+    api = _named(steps, "Start the API")
+    assert any(
+        "uvicorn backend.app.main:app --host 127.0.0.1 --port 8000" in c
+        for c in _commands(steps[api])
+    ), _commands(steps[api])
+    run = _one_step(
+        steps,
+        "npx playwright test --project=page-runtime --reporter=",
+        "runs --project=page-runtime",
+    )
+    assert steps[run].get("env", {}).get("PLAYWRIGHT_API_URL") == (
+        "http://localhost:8000"
+    ), steps[run].get("env")
+    assert run > api, "the page-runtime run comes before the API is started"
+    assert (SPEC_DIR / "runtime" / "real-api.runtime.spec.ts").is_file()
+
+
 def test_browser_e2e_builds_the_framework_fixtures_before_the_run() -> None:
     """The App Router site's static export is built where the specs read it,
     after the packed script and before the run."""
@@ -135,9 +157,32 @@ def test_browser_e2e_builds_the_framework_fixtures_before_the_run() -> None:
     script = (SPEC_DIR / "runtime" / "fixtures" / "build.mjs").read_text(
         encoding="utf-8"
     )
-    assert 'export const FIXTURES = ["app-router"];' in script
-    for name in ("app-router",):
+    assert 'export const FIXTURES = ["app-router", "pages-router"];' in script
+    for name in ("app-router", "pages-router"):
         assert (SPEC_DIR / "runtime" / "fixtures" / name / "next.config.mjs").is_file()
+    # The standalone React pages: React 18.3.1 from sdk/visual, and the
+    # dashboard's React 19.3 with two Suspense boundaries.
+    assert (
+        'export const STANDALONE = { react18: [sdkVisual, "0"], '
+        '"react19-suspense": [frontend, "1"] };'
+    ) in script
+    assert (SPEC_DIR / "runtime" / "fixtures" / "standalone" / "build.mjs").is_file()
+
+
+def test_the_react_18_fixture_takes_sdk_reacts_exact_version() -> None:
+    """The React 18 page is built from sdk/visual's devDependencies, pinned
+    exactly to the React that sdk/react's dependency file resolves, never to
+    a range; the package itself still depends on nothing."""
+    package = json.loads(
+        (REPO_ROOT / "sdk" / "visual" / "package.json").read_text("utf-8")
+    )
+    react_lock = json.loads(
+        (REPO_ROOT / "sdk" / "react" / "package-lock.json").read_text("utf-8")
+    )["packages"]
+    assert package["dependencies"] == {}
+    for name in ("react", "react-dom"):
+        assert package["devDependencies"][name] == "18.3.1"
+        assert react_lock[f"node_modules/{name}"]["version"] == "18.3.1"
 
 
 def test_the_counts_are_checked_after_the_run() -> None:

@@ -104,11 +104,32 @@ for (const [path, name] of [
         if (frames.length < 500) requestAnimationFrame(sample);
       };
       requestAnimationFrame(sample);
+      // Every write of the change's text, through either way the script
+      // writes a text: a text node's nodeValue, or a new text node. Written
+      // once the element is closed, it is written once; written on first
+      // sight, the rest of the element arrives after it and the script has
+      // to write it again.
+      const counter = window as unknown as { __writes: number };
+      counter.__writes = 0;
+      const nodeValue = Object.getOwnPropertyDescriptor(Node.prototype, "nodeValue")!;
+      Object.defineProperty(Node.prototype, "nodeValue", {
+        ...nodeValue,
+        set(value: string | null) {
+          if (value === "CHANGED2") counter.__writes += 1;
+          nodeValue.set!.call(this, value);
+        },
+      });
+      const createTextNode = Document.prototype.createTextNode;
+      Document.prototype.createTextNode = function (data: string) {
+        if (data === "CHANGED2") counter.__writes += 1;
+        return createTextNode.call(this, data);
+      };
     });
     await page.goto(`${ORIGIN}${path}`);
     await page.waitForLoadState("load");
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     expect(await page.locator("#t").textContent()).toBe(CHANGED);
+    expect(await page.evaluate(() => (window as unknown as { __writes: number }).__writes), "writes of the change").toBe(1);
     const frames = await page.evaluate(() => (window as unknown as { __frames: (string | null)[] }).__frames);
     expect(frames.length, "frames sampled after the page showed").toBeGreaterThan(0);
     expect(frames.filter((text) => text !== CHANGED), "frames after the page showed with another value").toEqual([]);

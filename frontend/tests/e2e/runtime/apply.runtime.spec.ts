@@ -178,14 +178,16 @@ test.describe("matching", () => {
         ],
       }),
     });
-    await second.goto(`${SITE}/`);
-    await expect.poll(() => reports(site).length).toBe(2);
+    // A selector that matches nothing is reported at the bound (load + 5 s), on the page clock.
+    await second.clock.install({ time: new Date("2026-11-16T12:00:00Z") });
+    await second.goto(`${SITE}/`, { waitUntil: "load" });
     await expect.poll(() => shown(second)).toBe(true);
+    await expect.poll(() => reports(site).length).toBe(1);
+    expect(reports(site)[0].metadata, "reported at once").toEqual({ index: 1, reason: "invalid" });
+    await second.clock.runFor(6000);
+    await expect.poll(() => reports(site).length).toBe(2);
     expect(await second.evaluate(() => document.body.innerHTML)).toBe(before);
-    expect(reports(site).map((report) => report.metadata)).toEqual([
-      { index: 0, reason: "not_found" },
-      { index: 1, reason: "invalid" },
-    ]);
+    expect(reports(site)[1].metadata, "reported at the bound").toEqual({ index: 0, reason: "not_found" });
     expect(errors).toEqual([]);
   });
 
@@ -260,9 +262,10 @@ test.describe("requests", () => {
       pages: { "/": sitePage(BODY) },
       answer: answering({ experiments: [experiment("misses", misses)] }),
     });
-    await page.goto(`${SITE}/`);
+    await page.clock.install({ time: new Date("2026-11-16T12:00:00Z") });
+    await page.goto(`${SITE}/`, { waitUntil: "load" });
+    await page.clock.runFor(6000);
     await expect.poll(() => reports(site).length).toBe(5);
-    await page.waitForLoadState("load");
     expect(reports(site).map((report) => report.metadata.index)).toEqual([0, 1, 2, 3, 4]);
   });
 

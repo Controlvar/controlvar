@@ -1022,9 +1022,12 @@ jobs:
           test -f "$out/package/dist/controlvar-visual.js"
           echo "VISUAL_PACKAGE_DIR=$out/package" >> "$GITHUB_ENV"
 
-      # The customer sites the specs load that a framework builds (a Next App
-      # Router site), from the dashboard's own next and react, each a static
-      # export in its own out/ under tests/e2e/runtime/fixtures.
+      # The customer sites the specs load that a framework builds, each in its
+      # own out/ under tests/e2e/runtime/fixtures: Next App Router and Pages
+      # Router static exports from the dashboard's own next and react, and two
+      # pages rendered with react-dom/server (React 18.3.1 from sdk/visual's
+      # devDependencies, installed by the step above, and the dashboard's
+      # React 19.3).
       - name: Build the page-runtime fixtures
         env:
           NEXT_TELEMETRY_DISABLED: '1'
@@ -1033,7 +1036,8 @@ jobs:
       # The project's listing, then the run, each as a JSON report (the run also
       # prints the list reporter, for the log): Playwright exits 0 on a skipped
       # test and on one that passed only on its retry, so the next step
-      # compares the two reports.
+      # compares the two reports. real-api.runtime.spec.ts passes the script's
+      # requests on to the API started above, at PLAYWRIGHT_API_URL.
       - name: Run the page-runtime specs
         env:
           PLAYWRIGHT_API_URL: http://localhost:8000
