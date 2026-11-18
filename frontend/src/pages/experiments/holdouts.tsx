@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import Link from 'next/link';
 import { PageTitle } from '@/components/PageTitle';
 import { HoldoutForm } from '@/components/experiments/HoldoutForm';
 import { HoldoutResultsPanel } from '@/components/experiments/HoldoutResultsPanel';
+import { InlineConfirm } from '@/components/ui/InlineConfirm';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
 import { holdoutAnswer } from '@/hooks/useExperimentEligibility';
@@ -88,10 +89,15 @@ export default function HoldoutsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<HoldoutDetail | null>(null);
-  const confirmRef = useRef<HTMLDivElement>(null);
   const errorRef = useRef<HTMLDivElement>(null);
-  // The control that opened the confirmation: Cancel and Escape return focus to it.
+  // The control that opened the confirmation: Cancel and Escape return focus to
+  // it (the question's `returnFocus`).
   const opener = useRef<HTMLElement | null>(null);
+  // "New holdout", the question's fallback when its opener has left the page
+  // (the form it was in was closed). It is disabled while a change runs, so
+  // after a confirm nothing takes focus until the answer.
+  const newHoldoutButton = useRef<HTMLButtonElement>(null);
+  const confirmTextId = useId();
   // The active holdout's heading (focusable, tabIndex -1). Focus goes there once
   // a confirmed Activate or End has landed: the confirmation has gone, and so,
   // often, has the button that asked (#1465's pattern).
@@ -102,10 +108,8 @@ export default function HoldoutsPage() {
     setConfirm(next);
   };
 
-  const cancelConfirm = () => {
-    setConfirm(null);
-    opener.current?.focus();
-  };
+  // Focus goes back through the question's `returnFocus`, once it has unmounted.
+  const cancelConfirm = () => setConfirm(null);
 
   const load = useCallback(async (admin: boolean) => {
     try {
@@ -133,10 +137,6 @@ export default function HoldoutsPage() {
     setState({ kind: 'loading' });
     void load(isAdmin);
   }, [mayRead, isAdmin, load]);
-
-  useEffect(() => {
-    if (confirm) confirmRef.current?.focus();
-  }, [confirm]);
 
   useEffect(() => {
     if (error) errorRef.current?.focus();
@@ -346,21 +346,23 @@ export default function HoldoutsPage() {
             </section>
 
             {confirm && (
-              <div
-                ref={confirmRef}
-                role="dialog"
-                aria-label={confirm.kind === 'end' ? 'Confirm End holdout' : 'Confirm Activate'}
-                tabIndex={-1}
-                onKeyDown={(event) => {
-                  if (event.key === 'Escape') cancelConfirm();
-                }}
-                className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-3 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                data-testid="holdout-confirm"
+              <InlineConfirm
+                label={confirm.kind === 'end' ? 'Confirm End holdout' : 'Confirm Activate'}
+                describedBy={confirmTextId}
+                onCancel={cancelConfirm}
+                returnFocus={opener}
+                fallbackFocus={newHoldoutButton}
+                tone="warning"
+                className="rounded-lg border p-3 space-y-3"
+                testId="holdout-confirm"
               >
-                <p className="text-sm text-amber-900">{confirmText(confirm)}</p>
+                <p id={confirmTextId} className="text-sm text-amber-900">
+                  {confirmText(confirm)}
+                </p>
                 <div className="flex gap-2">
                   <button
                     type="button"
+                    data-autofocus
                     className={SECONDARY}
                     onClick={cancelConfirm}
                     data-testid="holdout-confirm-cancel"
@@ -376,7 +378,7 @@ export default function HoldoutsPage() {
                     {confirm.kind === 'end' ? 'End holdout' : 'Activate'}
                   </button>
                 </div>
-              </div>
+              </InlineConfirm>
             )}
 
             {error && (
@@ -402,6 +404,7 @@ export default function HoldoutsPage() {
                   </h2>
                   {!creating && (
                     <button
+                      ref={newHoldoutButton}
                       type="button"
                       className={PRIMARY}
                       disabled={busy}

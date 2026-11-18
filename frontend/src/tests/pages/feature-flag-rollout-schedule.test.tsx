@@ -6,6 +6,7 @@ import {
   CREATED,
   DISCARD_AND_CLOSE,
   ROLLOUT_ERROR_COPY,
+  RolloutScheduleManager,
   SCHEDULE_NAME_REQUIRED,
   TARGET_RANGE,
   localInputToNaiveUtc,
@@ -932,11 +933,85 @@ describe('a paused schedule and the other confirmations', () => {
     expect(screen.getByTestId('rollout-schedule-confirm-text').textContent).toBe(
       "Activate “Gradual rollout”? Its stages then set this flag's rollout percentage.",
     );
-    await waitFor(() => expect(dialog).toHaveFocus());
+    // Focus lands on the safe answer, "Go back", not on the region (#1797).
+    await waitFor(() => expect(screen.getByTestId('rollout-schedule-confirm-no')).toHaveFocus());
+    expect(dialog).toHaveAccessibleDescription(
+      "Activate “Gradual rollout”? Its stages then set this flag's rollout percentage.",
+    );
     fireEvent.keyDown(dialog, { key: 'Escape' });
     expect(screen.queryByTestId('rollout-schedule-confirm')).toBeNull();
     await waitFor(() => expect(screen.getByTestId('rollout-schedule-activate')).toHaveFocus());
     expect(writes()).toEqual([]);
+  });
+
+  describe.each<[string, () => RolloutSchedule, string]>([
+    ['Activate', () => schedule(), 'rollout-schedule-activate'],
+    ['Resume', () => schedule({ status: 'paused' }), 'rollout-schedule-resume'],
+    ['Cancel schedule', () => schedule(), 'rollout-schedule-cancel'],
+    ['Start stage', () => schedule({ status: 'active' }), 'rollout-stage-start'],
+    [
+      'Complete stage',
+      () =>
+        schedule({
+          status: 'active',
+          stages: [stage('s-1', 1, { name: 'Canary', status: 'in_progress' }), stage('s-2', 2)],
+        }),
+      'rollout-stage-complete',
+    ],
+  ])('the %s question', (_kind, make, opener) => {
+    it('opens on Go back; Escape from it, and Go back itself, send nothing and return to the button', async () => {
+      install({ schedules: [make()] });
+      await renderPage();
+      fireEvent.click(screen.getByTestId(opener));
+      const no = screen.getByTestId('rollout-schedule-confirm-no');
+      await waitFor(() => expect(no).toHaveFocus());
+
+      fireEvent.keyDown(no, { key: 'Escape' });
+      expect(screen.queryByTestId('rollout-schedule-confirm')).toBeNull();
+      await waitFor(() => expect(screen.getByTestId(opener)).toHaveFocus());
+
+      fireEvent.click(screen.getByTestId(opener));
+      fireEvent.click(screen.getByTestId('rollout-schedule-confirm-no'));
+      await waitFor(() => expect(screen.getByTestId(opener)).toHaveFocus());
+      expect(writes()).toEqual([]);
+    });
+  });
+
+  it('opener gone: when the schedule moves on under the open question, Go back lands on the first button still offered', () => {
+    // The page never reloads the schedule under an open question today, so this
+    // drives the section directly with the schedule it would be given then.
+    const props = { flagId: 'flag-1', flagPercentage: 0, canChange: true, onChanged: jest.fn() };
+    const view = render(<RolloutScheduleManager {...props} schedule={schedule()} />);
+    fireEvent.click(screen.getByTestId('rollout-schedule-activate'));
+    view.rerender(<RolloutScheduleManager {...props} schedule={schedule({ status: 'active' })} />);
+    expect(screen.queryByTestId('rollout-schedule-activate')).toBeNull();
+    fireEvent.click(screen.getByTestId('rollout-schedule-confirm-no'));
+    expect(screen.queryByTestId('rollout-schedule-confirm')).toBeNull();
+    expect(screen.getByTestId('rollout-schedule-pause')).toHaveFocus();
+  });
+
+  it('fallback: while a confirmed Activate runs nothing takes focus, since every action button is disabled', async () => {
+    let release: (value?: unknown) => void = () => {};
+    install({ schedules: [schedule()] }, [
+      {
+        method: 'POST',
+        path: '/api/v1/rollout-schedules/sched-1/activate',
+        handler: () => new Promise((resolve) => (release = resolve)),
+      },
+    ]);
+    await renderPage();
+    fireEvent.click(screen.getByTestId('rollout-schedule-activate'));
+    fireEvent.click(screen.getByTestId('rollout-schedule-confirm-yes'));
+    await waitFor(() => expect(writes()).toHaveLength(1));
+    expect(screen.queryByTestId('rollout-schedule-confirm')).toBeNull();
+    expect(screen.getByTestId('rollout-schedule-activate')).toBeDisabled();
+    expect(document.activeElement).toBe(document.body);
+    await act(async () => {
+      release({ ...schedule(), status: 'active' });
+    });
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 2, name: 'Rollout schedule' })).toHaveFocus(),
+    );
   });
 
   it('Activate, confirmed, POSTs /activate and the schedule reads Active', async () => {
