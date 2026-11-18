@@ -3,6 +3,8 @@ Unit tests for Bandit API endpoints — Issue #22 Batch C.
 
 Covers:
     GET  /api/v1/bandit/{experiment_id}
+    GET  /api/v1/bandit/{experiment_id}/history (the grouping step only; the
+         query is backend/tests/integration/api/test_bandit_history_api.py's)
     POST /api/v1/bandit/{experiment_id}/update
     PUT  /api/v1/bandit/{experiment_id}/weights
 
@@ -11,6 +13,7 @@ PostgreSQL server.
 """
 
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional
 from unittest.mock import MagicMock, patch
 
@@ -18,6 +21,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.api import deps
+from backend.app.api.v1.endpoints.bandit import group_history_rows
 from backend.app.main import app
 from backend.app.models.bandit_state import BanditState
 from backend.app.models.experiment import Experiment, ExperimentStatus
@@ -577,3 +581,72 @@ class TestBanditStatusForTheDashboard:
             app.dependency_overrides.clear()
         assert response.status_code == 200
         assert response.json()["last_updated"] == state.last_computed_at
+
+
+#: A database session whose TimeZone is America/Los_Angeles returns
+#: ``tick_at`` with a -08:00 offset (the PE saw it, #1958).
+PACIFIC = timezone(timedelta(hours=-8))
+
+
+class TestBanditHistoryTicks:
+    """GET /api/v1/bandit/{experiment_id}/history: grouping rows into ticks.
+
+    The rows come from the database newest first; the handler groups them by
+    ``tick_at`` and answers each tick's time in UTC, whatever the database
+    session's TimeZone, so the public answer never depends on database
+    configuration.
+    """
+
+    def _rows(self, variant_ids):
+        newest = datetime(2026, 11, 15, 12, 38, 20, 844343, tzinfo=PACIFIC)
+        oldest = newest - timedelta(minutes=5)
+        a, b = variant_ids
+        return [
+            (newest, a, 0.25),
+            (newest, b, 0.75),
+            (oldest, a, 0.5),
+            (oldest, b, 0.5),
+        ]
+
+    def test_rows_group_into_ticks_in_the_order_given(self):
+        a, b = uuid.uuid4(), uuid.uuid4()
+        ticks = group_history_rows(self._rows((a, b)))
+        assert [t.weights for t in ticks] == [
+            {str(a): 0.25, str(b): 0.75},
+            {str(a): 0.5, str(b): 0.5},
+        ]
+        assert ticks[0].tick_at > ticks[1].tick_at
+
+    def test_tick_at_is_utc_whatever_the_database_time_zone(self, client, viewer_user):
+        """A row read at -08:00 is answered as the same instant ending in Z."""
+        exp = _make_experiment()
+        ids = [v.id for v in exp.variants]
+        app.dependency_overrides[deps.get_current_active_user] = lambda: viewer_user
+        db_mock = MagicMock()
+        db_mock.query.return_value.filter.return_value.first.return_value = exp
+        db_mock.execute.return_value.all.return_value = self._rows(ids)
+        app.dependency_overrides[deps.get_db] = lambda: db_mock
+        try:
+            response = client.get(f"/api/v1/bandit/{exp.id}/history")
+        finally:
+            app.dependency_overrides.clear()
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert [t["tick_at"] for t in body] == [
+            "2026-11-15T20:38:20.844343Z",
+            "2026-11-15T20:33:20.844343Z",
+        ]
+        assert body[0]["weights"] == {str(ids[0]): 0.25, str(ids[1]): 0.75}
+
+    def test_a_fixed_experiment_reads_no_rows(self, client, viewer_user):
+        exp = _make_experiment(optimization_type="fixed")
+        app.dependency_overrides[deps.get_current_active_user] = lambda: viewer_user
+        db_mock = MagicMock()
+        db_mock.query.return_value.filter.return_value.first.return_value = exp
+        app.dependency_overrides[deps.get_db] = lambda: db_mock
+        try:
+            response = client.get(f"/api/v1/bandit/{exp.id}/history")
+        finally:
+            app.dependency_overrides.clear()
+        assert response.status_code == 404
+        db_mock.execute.assert_not_called()

@@ -299,6 +299,16 @@ SITES: Dict[Key, Tuple[int, str, str]] = {
         "which no grantable pair names",
     ),
     (
+        _EXP_PERMS,
+        "return ROLES_THAT_OVERRIDE_BANDIT_WEIGHTS.includes(user.role as 'ADMIN');",
+    ): (
+        1,
+        BASE,
+        "canOverrideBanditWeights (#1957) mirrors override_bandit_weights "
+        "(backend/app/api/v1/endpoints/bandit.py:255-256: ADMIN or a superuser), "
+        "which consults no grantable pair",
+    ),
+    (
         "frontend/src/contexts/AuthContext.tsx",
         "(...roles: Role[]): boolean => !!user && roles.includes(user.role),",
     ): (
@@ -362,7 +372,21 @@ SITES: Dict[Key, Tuple[int, str, str]] = {
         BASE,
         f"an owner's role is shown, not offered for change: {_WORKSPACE}",
     ),
+    (
+        _EXP_PERMS,
+        "return ROLES_THAT_ANALYSE_INTERACTIONS.includes("
+        "user.role as 'ADMIN' | 'ANALYST' | 'DEVELOPER');",
+    ): (
+        1,
+        BASE,
+        "canAnalyseInteractions mirrors interactions._require_developer (ANALYST, "
+        "DEVELOPER, ADMIN or a superuser), which no grantable pair names",
+    ),
     # --- decides nothing ----------------------------------------------------
+    (
+        "frontend/src/pages/experiments/interactions.tsx",
+        "const role = user?.role ?? null;",
+    ): (1, NOTHING, "the interactions page's role note names the user's role (#1960)"),
     ("frontend/src/contexts/AuthContext.tsx", "role: me.role ?? 'VIEWER',"): (
         1,
         NOTHING,
@@ -473,8 +497,8 @@ SITES: Dict[Key, Tuple[int, str, str]] = {
 }
 
 #: Reads per class, and in all: a classification that loses or gains one fails.
-EXPECTED_READS = {CONVERTED: 7, BASE: 15, NOTHING: 30}
-EXPECTED_TOTAL = 52
+EXPECTED_READS = {CONVERTED: 7, BASE: 17, NOTHING: 31}
+EXPECTED_TOTAL = 55
 
 
 # ---------------------------------------------------------------------------

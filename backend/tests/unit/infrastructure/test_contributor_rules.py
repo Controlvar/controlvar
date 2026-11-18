@@ -132,7 +132,7 @@ def test_make_format_formats_and_fixes_the_python_in_place():
     ]
     paths = (
         "backend/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/"
-        " modules/"
+        " tests/personas/ modules/"
     )
     assert lines == [
         f"venv/bin/ruff format {paths}",

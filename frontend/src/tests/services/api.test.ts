@@ -30,11 +30,13 @@ import {
 import { AdminService } from '@/services/admin';
 import { ResultsService } from '@/services/results';
 import { UserTable, deleteTimedOutMessage } from '@/components/admin/users/UserTable';
+import { overrideErrorCopy } from '@/components/experiments/BanditWeightsOverride';
 import { UNREACHABLE, errorCopy } from '@/components/experiments/ExperimentManageSection';
 import { SCHEDULE_ERROR_COPY, scheduleErrorCopy } from '@/components/experiments/ExperimentScheduleSection';
 import { flagManageErrorCopy } from '@/components/feature-flags/FlagManageSection';
 import { rolloutErrorCopy } from '@/components/feature-flags/RolloutScheduleManager';
 import { resultsErrorMessage } from '@/components/results/ResultsDashboard/ResultsDashboard';
+import { cupedErrorMessage } from '@/components/results/Cuped/useCupedResults';
 import { sessionErrorMessage } from '@/contexts/AuthContext';
 import { codeStepErrorMessage, demoEnterErrorMessage, loginErrorMessage, signInNoticeMessage } from '@/pages/login';
 import { DEMO_UNREACHABLE } from '@/utils/demoMode';
@@ -43,6 +45,7 @@ import { classifyPasswordError, passwordOutcomeSentence } from '@/services/passw
 import { classifyTwoFactorError, twoFactorFailureSentence } from '@/services/twoFactor';
 import { groupErrorCopy } from '@/utils/exclusionGroups';
 import { holdoutErrorCopy, loadErrorCopy, resultsErrorCopy } from '@/utils/holdouts';
+import { pairErrorCopy, scanErrorCopy } from '@/utils/interactions';
 import { segmentErrorCopy } from '@/utils/segmentErrors';
 import { MODULES_SRC_ROOT, allMatches, listSourceFiles, SRC_ROOT, sourceLabel } from '../helpers/api-literals';
 
@@ -775,7 +778,7 @@ describe("the caller's own signal (#1040 D4)", () => {
 const EXPECTED_OVERRIDES: Record<string, string[]> = {
   // GET /api/v1/auth/config, which /login and the session check wait for (#708).
   'services/authConfig.ts': ['AUTH_CONFIG_TIMEOUT_MS'],
-  'services/results.ts': Array(6).fill('LONG_REQUEST_TIMEOUT_MS'),
+  'services/results.ts': Array(7).fill('LONG_REQUEST_TIMEOUT_MS'),
   ...(fs.existsSync(MODULES_SRC_ROOT)
     ? {
         'modules/frontend/src/services/warehouse.ts': [
@@ -909,6 +912,9 @@ describe('without AbortSignal.any (#1040 D6)', () => {
 const STATUS_ZERO_SITES: Record<string, { count: number; kind: string }> = {
   // The definition: ApiError.isNetworkError and its comparison.
   'services/api.ts': { count: 2, kind: 'definition' },
+  // overrideErrorCopy ("Set weights by hand", #1957): returns `err.message` for
+  // every status 0, so a timed-out PUT says its outcome is unknown.
+  'components/experiments/BanditWeightsOverride.tsx': { count: 1, kind: 'passes-message' },
   'components/experiments/ExperimentManageSection.tsx': { count: 1, kind: 'write' },
   // SCHEDULE_ERROR_COPY's `0:` entry.
   'components/experiments/ExperimentScheduleSection.tsx': { count: 1, kind: 'write' },
@@ -917,6 +923,8 @@ const STATUS_ZERO_SITES: Record<string, { count: number; kind: string }> = {
   'components/feature-flags/FlagManageSection.tsx': { count: 1, kind: 'write' },
   // Returns `e.message` for every status 0, so the time-out text already shows.
   'components/results/ResultsDashboard/ResultsDashboard.tsx': { count: 1, kind: 'passes-message' },
+  // cupedErrorMessage: the same, for the CUPED tab (#1959).
+  'components/results/Cuped/useCupedResults.ts': { count: 1, kind: 'passes-message' },
   'contexts/AuthContext.tsx': { count: 1, kind: 'read' },
   // loginErrorMessage, demoEnterErrorMessage (the read-only demo's button) and
   // codeStepErrorMessage (the code step of a two-step sign-in, #1812).
@@ -930,6 +938,9 @@ const STATUS_ZERO_SITES: Record<string, { count: number; kind: string }> = {
   'utils/exclusionGroups.ts': { count: 1, kind: 'write' },
   // holdoutErrorCopy's `case 0:`, loadErrorCopy, resultsErrorCopy.
   'utils/holdouts.ts': { count: 3, kind: 'write' },
+  // scanErrorCopy and pairErrorCopy (#1960): two reads that return `err.message`
+  // for every status 0, so the time-out text already shows.
+  'utils/interactions.ts': { count: 2, kind: 'passes-message' },
   'utils/segmentErrors.ts': { count: 1, kind: 'write' },
   // `if (!status)` on an experiment's status label: not an HTTP status.
   'types/experiments.ts': { count: 1, kind: 'not-http' },
@@ -1085,6 +1096,10 @@ describe('each status-0 place says what a time-out means (#1040 D7)', () => {
   // modules/frontend/src/tests/services/request-timeouts.test.ts). Each says
   // the time-out text exactly, and keeps its own unreachable line otherwise.
   const CHECKS: Record<string, (write: ApiError, read: ApiError) => void> = {
+    'components/experiments/BanditWeightsOverride.tsx': (write) => {
+      expect(overrideErrorCopy(write)).toBe(WRITE_TEXT);
+      expect(overrideErrorCopy(unreachable())).toBe(unreachableMessage());
+    },
     'components/experiments/ExperimentManageSection.tsx': (write) => {
       for (const action of ['clone', 'edit', 'delete', 'design'] as const) {
         expect(errorCopy(action, write)).toBe(WRITE_TEXT);
@@ -1108,6 +1123,10 @@ describe('each status-0 place says what a time-out means (#1040 D7)', () => {
     'components/results/ResultsDashboard/ResultsDashboard.tsx': (_write, read) => {
       expect(resultsErrorMessage(read)).toBe(READ_TEXT);
       expect(resultsErrorMessage(unreachable())).toBe(unreachableMessage());
+    },
+    'components/results/Cuped/useCupedResults.ts': (_write, read) => {
+      expect(cupedErrorMessage(read)).toBe(READ_TEXT);
+      expect(cupedErrorMessage(unreachable())).toBe(unreachableMessage());
     },
     'contexts/AuthContext.tsx': (_write, read) => {
       expect(sessionErrorMessage(read)).toBe(READ_TEXT);
@@ -1152,6 +1171,12 @@ describe('each status-0 place says what a time-out means (#1040 D7)', () => {
       expect(loadErrorCopy(unreachable())).toBe(UNREACHABLE);
       expect(resultsErrorCopy(read)).toBe(READ_TEXT);
       expect(resultsErrorCopy(unreachable())).toBe(UNREACHABLE);
+    },
+    'utils/interactions.ts': (_write, read) => {
+      expect(scanErrorCopy(read)).toBe(READ_TEXT);
+      expect(scanErrorCopy(unreachable())).toBe(unreachableMessage());
+      expect(pairErrorCopy(read)).toBe(READ_TEXT);
+      expect(pairErrorCopy(unreachable())).toBe(unreachableMessage());
     },
     'utils/segmentErrors.ts': (write, read) => {
       expect(segmentErrorCopy(write, 'create')).toBe(WRITE_TEXT);

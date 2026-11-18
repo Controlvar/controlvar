@@ -16,6 +16,18 @@ export interface BanditVariantWeight {
   conversion_rate: number;
 }
 
+/**
+ * One entry of `GET /api/v1/bandit/{experiment_id}/history` (beta;
+ * `BanditHistoryTick` in `backend/app/schemas/bandit.py`): one weight update by
+ * the bandit. The route answers a bare array, newest first.
+ */
+export interface BanditHistoryTick {
+  /** When the update ran (ISO-8601, UTC). */
+  tick_at: string;
+  /** Each variant's weight in [0, 1], keyed by variant id. */
+  weights: Record<string, number>;
+}
+
 export interface BanditStatus {
   experiment_id: string;
   algorithm: string;

@@ -283,6 +283,67 @@ def test_redshift_averages_a_double_precision_value(kind: str) -> None:
         assert "AVG(y.y) AS k" in sql
 
 
+#: Redshift refused ``SUBSTR()`` ("not supported (Hint: use SUBSTRING
+#: instead)") and ``DATEADD`` on a TIMESTAMPTZ (no such function) on a real
+#: workgroup (#826).  The checks read the SQL text, not a parse: sqlglot reads
+#: SUBSTR and SUBSTRING as one node, and DATEADD as TsOrDsAdd.
+_SUBSTR_CALL = re.compile(r"\bSUBSTR\(", re.IGNORECASE)
+_DATEADD_CALL = re.compile(r"\bDATEADD\s*\(", re.IGNORECASE)
+#: ``DATEADD(hour, <n>, CAST(<column> AS TIMESTAMP))``: the third argument is
+#: a TIMESTAMP cast of a column, never a TIMESTAMPTZ.
+_DATEADD_ON_A_TIMESTAMP = re.compile(
+    r"\bDATEADD\(hour, \d+, "
+    r'CAST\((?:[a-z_][a-z0-9_]*\.)?(?:"[^"]+"|[a-z_][a-z0-9_]*) AS TIMESTAMP\)\)'
+)
+
+
+def _redshift_function_problems(kind: str, sql: str) -> list[str]:
+    problems = []
+    if _SUBSTR_CALL.search(sql):
+        problems.append("SUBSTR(")
+    calls = len(_DATEADD_CALL.findall(sql))
+    expected = 1 if kind.startswith("metric") else 0
+    if calls != expected:
+        problems.append(f"{calls} DATEADD calls, expected {expected}")
+    on_a_timestamp = len(_DATEADD_ON_A_TIMESTAMP.findall(sql))
+    if on_a_timestamp != calls:
+        problems.append(
+            f"{calls - on_a_timestamp} DATEADD not on CAST(.. AS TIMESTAMP)"
+        )
+    return problems
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("kind", KINDS)
+def test_redshift_statements_use_functions_redshift_runs(kind: str) -> None:
+    for sql in _golden_and_built("redshift", kind):
+        assert _redshift_function_problems(kind, sql) == [], sql
+
+
+def test_the_redshift_function_check_fires_on_what_redshift_refused() -> None:
+    """The two shapes the real workgroup refused, and a TIMESTAMPTZ cast."""
+    label = 'SUBSTR(CAST("variant" AS VARCHAR(65535)), 1, 64) AS variant'
+    assert _redshift_function_problems("diagnostics", label) == ["SUBSTR("]
+    for third in (
+        "u.first_exposed_at",
+        "CAST(u.first_exposed_at AS TIMESTAMPTZ)",
+    ):
+        cut = f"LEAST(DATEADD(hour, 168, {third}), x)"
+        assert _redshift_function_problems("metric_mean", cut) == [
+            "1 DATEADD not on CAST(.. AS TIMESTAMP)"
+        ]
+    fixed = (
+        "CAST(DATEADD(hour, 168, CAST(u.first_exposed_at AS TIMESTAMP)) AS TIMESTAMPTZ)"
+    )
+    assert _redshift_function_problems("metric_mean", fixed) == []
+    assert _redshift_function_problems("diagnostics", fixed) == [
+        "1 DATEADD calls, expected 0"
+    ]
+    assert _redshift_function_problems("metric_mean", "SELECT 1") == [
+        "0 DATEADD calls, expected 1"
+    ]
+
+
 def test_snowflake_statements_report_the_session_offset() -> None:
     for kind in KINDS:
         for sql in _golden_and_built("snowflake", kind):

@@ -1850,6 +1850,66 @@ def test_writer_log_lines_carry_no_values(db_session, caplog):
     db_session.commit()
 
 
+# --- #1970: the global safety settings ----------------------------------------
+
+
+@pytest.mark.regression
+def test_saving_the_global_safety_settings_writes_one_entry(
+    client, fresh, db_session, superuser, developer
+):
+    """#1970: a save wrote nothing; a refused or invalid save still writes nothing."""
+    had_row = db_session.execute(
+        text(f"SELECT count(*) FROM {SCHEMA}.safety_settings")
+    ).scalar()
+    try:
+        # A developer is refused (superuser only): no entry.
+        w = Written(fresh)
+        response = client.post(
+            f"{V1}/safety/settings",
+            json={"enable_automatic_rollbacks": True},
+            headers=_auth(developer),
+        )
+        assert response.status_code == 403, response.text
+        assert w.rows() == []
+
+        # An invalid body is refused: no entry.
+        w = Written(fresh)
+        response = client.post(
+            f"{V1}/safety/settings",
+            json={"enable_automatic_rollbacks": "not-a-bool"},
+            headers=_auth(superuser),
+        )
+        assert response.status_code == 422, response.text
+        assert w.rows() == []
+
+        # A save writes exactly one entry, with the values before and after.
+        h = _auth(superuser)
+        first = {
+            "enable_automatic_rollbacks": False,
+            "default_metrics": {"error_rate": {"critical_threshold": 0.05}},
+        }
+        response = client.post(f"{V1}/safety/settings", json=first, headers=h)
+        assert response.status_code == 200, response.text
+        sid = response.json()["id"]
+
+        w = Written(fresh)
+        response = client.post(
+            f"{V1}/safety/settings",
+            json={"enable_automatic_rollbacks": True},
+            headers=h,
+        )
+        assert response.status_code == 200, response.text
+        row = _one(w, "safety_config_update", "safety_config", sid, superuser)
+        old, new = _values(row)
+        assert old["enable_automatic_rollbacks"] is False
+        assert new["enable_automatic_rollbacks"] is True
+    finally:
+        db_session.rollback()
+        if not had_row:
+            db_session.execute(text(f"DELETE FROM {SCHEMA}.safety_settings"))
+            db_session.commit()
+
+
 # --- G7: who reads the log (the role rules are in test_audit_log_reads.py) ----
 
 

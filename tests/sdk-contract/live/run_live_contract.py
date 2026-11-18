@@ -260,6 +260,9 @@ EVENT_ID_SDKS: frozenset[str] = frozenset(
         "java",
         "js",
         "python",
+        "react",
+        "react-native",
+        "dotnet",
     ]
 )
 

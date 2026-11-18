@@ -108,7 +108,7 @@ HOC that injects `flagEvaluation: FeatureFlagEvaluation` into `Component`.
 `trackEvent` (and `useTrackEvent`) sends:
 
 - **with** `experimentKey` and/or `featureFlagKey` → one `POST /api/v1/tracking/track` with
-  `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata, timestamp?}`;
+  `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata, timestamp?, event_id}`;
 - **without** keys → one `POST /api/v1/tracking/batch` containing one entry per experiment
   (`experiment_key`) **plus** one per flag (`feature_flag_key`) the client answered for the user in
   the last 24 hours, whether or not the answer is still cached. An experiment whose latest answer
@@ -124,6 +124,21 @@ reload starts with none, and the page's hooks record them again as they answer.
 Pass `experimentKey` for an event that is the outcome of one experiment's surface (a click in the
 sorted list). Leave it out for an outcome of the whole visit (a purchase), which counts for every
 experiment the user is in.
+
+## Event ids
+
+Every event the SDK sends carries an `event_id`, so the server stores an event sent again with the
+same `event_id`, user, experiment, flag and event name only once. Use this from the next published
+version, not from the version on npm now. It needs a Controlvar server that includes the
+`event_id` change (#1640, in the first platform release after it merged): an older server ignores
+the field.
+
+- Without an `eventId` option, each call makes a new lowercase UUID v4. For an event your code may
+  send again, make the id once, when the event happens, and pass the same `eventId` each time.
+- `undefined`, `null` and `''` mean none, so the SDK makes one. The server refuses an id of more
+  than 255 characters or one holding NUL with `422`; the SDK does not check it.
+- An event fanned out to several experiments and flags carries the same id in every entry. The
+  SDK does not send a request again.
 
 ## Clients
 
@@ -217,7 +232,7 @@ Every request carries `X-API-Key: <key>` and `Content-Type: application/json`.
 |---|---|---|---|
 | `evaluateFeatureFlag*`, `useFeatureFlag`, `useVariant`, `useMultipleFlags`, `ServerClient.getAll` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=<url-encoded JSON>` | `context` = `user.attributes` (omitted when empty) | `{key, enabled, config, reason}` (off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key) |
 | `assignExperiment`, `useExperiment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason}` (404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false`) |
-| `trackEvent` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
+| `trackEvent` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?, event_id}` | ignored |
 | `trackEvent` without keys | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (≤ 100 per request) | ignored |
 
 ## Development
