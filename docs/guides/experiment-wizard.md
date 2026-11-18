@@ -81,7 +81,11 @@ do not survive a restart and are not shared between replicas.
 
 **The wizard endpoints are deprecated** and may be removed in a later release. Drafts are
 per user: a draft that belongs to another user is answered exactly as one that does not
-exist (`404`).
+exist (`404`). A user keeps at most 20 drafts, so creating one more drops that user's
+oldest. All users together keep at most 350, and the oldest is dropped first. A step
+field larger than its limit, such as a `description` over 2000 characters, answers `422`
+and leaves the draft unchanged, as `PUT /api/v1/wizard/drafts/{draft_id}/step` says
+below.
 
 ---
 
@@ -187,7 +191,8 @@ only contain step fields (`experiment_type`, `hypothesis`, `primary_metric_id`,
 any other key answers `422` and the draft is left unchanged. So does a step field of the
 wrong type: `guardrail_metric_ids` takes a list of strings, `targeting_rules` a list of
 objects, `baseline_rate` and `mde` numbers, and the other fields strings (any of them may
-be `null`). The answer names the field, for example
+be `null`). So does a step field over its limit, such as a `description` over 2000
+characters. The answer names the field, for example
 `Step field 'hypothesis' must be a string or null.`
 
 **Step 1: type.**

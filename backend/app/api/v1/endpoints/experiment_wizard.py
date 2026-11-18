@@ -102,10 +102,16 @@ def create_draft(
 ) -> WizardDraftResponse:
     """Create a new wizard draft."""
     user_id = str(current_user.id)
-    draft = ExperimentWizardService.create_draft(
-        user_id=user_id,
-        experiment_type=body.experiment_type,
-    )
+    try:
+        draft = ExperimentWizardService.create_draft(
+            user_id=user_id,
+            experiment_type=body.experiment_type,
+        )
+    except WizardStepDataError as exc:
+        # A fixed message naming the field and its limit, never the value.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from None
     logger.info(
         "Wizard draft created",
         extra={"draft_id": draft.id, "user_id": user_id},
@@ -187,7 +193,8 @@ def update_draft_step(
         )
     except WizardStepDataError as exc:
         # A fixed message: it lists the accepted fields, or names the one step
-        # field of the wrong type; never a submitted key or value.
+        # field of the wrong type or over its limit; never a submitted key or
+        # value.
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         ) from None

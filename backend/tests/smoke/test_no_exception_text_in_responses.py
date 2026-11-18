@@ -476,6 +476,10 @@ ALLOWED: Dict[Tuple[str, str, str], Tuple[int, str]] = {
         1,
         FIELD_NAMES,
     ),
+    (f"{E}/experiment_wizard.py", "create_draft", "WizardStepDataError"): (
+        1,
+        WIZARD_STEP,
+    ),
     (f"{E}/experiment_wizard.py", "update_draft_step", "WizardStepDataError"): (
         1,
         WIZARD_STEP,
