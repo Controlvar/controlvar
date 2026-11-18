@@ -12,6 +12,8 @@ the row links it.
 | A flag targeted on a value inside a JSON attribute | Flag targeting refuses the `json_path` operator with `422`, because flag evaluation does not implement it. Experiment targeting accepts it. |
 | A flag targeted on a percentage bucket of an attribute | Flag targeting refuses the `percentage_bucket` operator with `422`, because flag evaluation does not implement it. Experiment targeting accepts it. |
 | A flag turned off for every user at once | Each client keeps the answer it has until its cache expires; a React or React Native component already on screen keeps its answer until it mounts again; and an iOS, Android, Flutter or React Native app that cannot reach the API keeps serving the last answer it stored. See [Turning a Flag Off](../feature-flags/kill-switch.md). |
+| Error reports from every SDK reaching automatic safety rollback | Only the JavaScript SDK (`reportError`) and the Python SDK (`report_error`) send error reports to `POST /api/v1/tracking/errors`; no other SDK has its own call for it, and neither OpenFeature provider has one of its own (its `client` property is the JavaScript or Python client, which does). See [Which errors count](../feature-flags/safety.md#which-errors-count). |
+| Every SDK retrying after a 429 | Only the JavaScript and Python SDKs retry, once, after the `Retry-After` the API sends (the JavaScript SDK waits up to its `timeoutMs`, the Python SDK up to 5 seconds). The two OpenFeature providers retry because they call those clients; no other SDK retries: a call that was answered `429` does not complete, and the Go SDK's error carries the header in `RetryAfter`. |
 
 ## Experiments and results
 
