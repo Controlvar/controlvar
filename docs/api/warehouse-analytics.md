@@ -107,14 +107,17 @@ a key pair it generates. There is no password field.
 
     A connection whose role is ACCOUNTADMIN or another of Snowflake's
     built-in administrative roles is refused.
+
 2. **Create the connection** in Warehouse › Connections (ADMIN). The account
    is the organisation-account identifier, for example `MYORG-MYACCOUNT`
    (Snowsight › Admin › Accounts), not a locator or a URL. Saving generates
    the key pair and shows the statement that registers its public key, for
    example `ALTER USER CONTROLVAR SET RSA_PUBLIC_KEY='…';`. Run it as an
    administrator. The private key never leaves Controlvar.
+
 3. **Test the connection.** The test signs in and runs one statement that
    reads no table.
+
 4. **Name tables in full** in a source: `DATABASE.SCHEMA.TABLE`, each part
    as Snowflake stores it (upper case unless it was created quoted).
 
@@ -185,8 +188,9 @@ test or a run.
    database user. Saving generates the connection's external ID and shows it.
    There is no field for a password or a secret ARN, and a connection cannot
    be tested before it is saved.
-3. **Create the role in IAM.** Its trust policy lets the identity the API runs
-   as assume it, and only with the connection's external ID:
+3. **Create the role in IAM**, under the path `/controlvar-warehouse/`. Its
+   trust policy lets the identity the API runs as assume it, and only with the
+   connection's external ID:
 
     ```json
     {
@@ -268,8 +272,18 @@ test or a run.
     ```
 
     `OwnStatementsOnly` lets the role read, fetch and cancel only the
-    statements its own session started. Scope `GetClusterCredentials` to exactly
-    one database user, never `dbuser:<cluster-identifier>/*`.
+    statements started by this role under the same session name (the condition
+    compares `aws:userid`, which includes it). Scope `GetClusterCredentials` to
+    exactly one database user, never `dbuser:<cluster-identifier>/*`.
+
+    Save the two policies as `trust.json` and `permissions.json`, then create
+    the role and attach the permissions:
+
+    ```text
+    aws iam create-role --role-name <role-name> --path /controlvar-warehouse/ --assume-role-policy-document file://trust.json
+    aws iam put-role-policy --role-name <role-name> --policy-name controlvar-warehouse --policy-document file://permissions.json
+    ```
+
 4. **Give the database user read access**, as a Redshift administrator. Use a
    database user made for this connection, with `SELECT` on the source tables
    only, never a superuser or the admin user.
@@ -292,6 +306,7 @@ test or a run.
         GRANT USAGE ON SCHEMA <schema> TO <database-user>;
         GRANT SELECT ON <schema>.<table> TO <database-user>;
         ```
+
 5. **Test the saved connection** once the role and the grants exist. The test
    assumes the role and runs one statement that reads no table. Then name
    tables as `schema.table` in a source: the table is in the connection's own
@@ -486,18 +501,18 @@ a route that answers with the code directly.
 | `bytes_limit` | 502 | The query would read more than the connection's bytes cap, by Controlvar's dry-run check or BigQuery's own limit, so it was not run. | Raise "Most data a query may read" (up to `WAREHOUSE_MAX_BYTES_PER_QUERY`), or point the source at a smaller or partitioned table. Snowflake has no byte limit. |
 | `time_limit` | 504 | The warehouse did not finish within `query_timeout_seconds`. | Raise it (up to `WAREHOUSE_MAX_QUERY_TIMEOUT_SECONDS`), or give the source a smaller table or a shorter window. |
 | `cancelled` | 502 | The warehouse cancelled the query. | Whether someone, or a resource monitor, cancelled it: see the warehouse's own query history. |
-| `workgroup_unsafe` | 502 | Not raised for Snowflake or BigQuery. | Nothing. |
+| `workgroup_unsafe` | 502 | Not raised for Snowflake, BigQuery or Amazon Redshift. | Nothing. |
 | `role_trust_unsafe` | 502 | The trust policy of a connection's AWS role admits this deployment without the connection's external ID, so the role is refused. Not raised for Snowflake or BigQuery, which use no AWS role. | The role's trust policy has a condition that requires `sts:ExternalId` to equal the external ID shown on the connection's page. |
-| `timezone_not_utc` | 502 | Snowflake reported a session time zone other than UTC, after Controlvar set it. The run is refused because times would be compared in another zone. | Start the analysis again; if it recurs, report it. BigQuery does not report this. |
+| `timezone_not_utc` | 502 | Snowflake or Redshift reported a session time zone other than UTC, after Controlvar set it. The run is refused because times would be compared in another zone. | Start the analysis again; if it recurs, report it. BigQuery does not report this. |
 | `result_invalid` | 502 | The warehouse returned a result in a shape Controlvar does not accept, or one that was too large. | Start the analysis again; if it recurs, check that the source maps the columns you mean, and report it. |
 | `too_many_variant_values` | 502 | The variant column has more distinct values than allowed. | The assignment source's variant column holds a variant label, not an id that differs per unit. |
 | `join_key_mismatch` | 502 | The metric source has rows in the window, but none has the unit id of an exposed unit. | Both sources map the same identifier, with the same type and form. |
 | `no_units` | 502 | No exposed units were found in the window. | The experiment key in the assignment source, the window, and the source's filters. |
 | `fewer_than_2_units` | 502 | A variant has fewer than 2 units, so a mean cannot be compared. | Wait for more exposures, or widen the window. |
 | `abandoned` | 502 | The run stopped reporting progress and was marked as failed. | Start the analysis again. The run still counts toward the daily limit. |
-| `warehouse_busy` | 429 | This deployment is already running as many warehouse jobs as it allows. | Try again after the `Retry-After` seconds; see [Limits and cost](#limits-and-cost). |
+| `warehouse_busy` | 429 | This deployment is already running as many warehouse jobs as it allows. For Redshift, Controlvar also answers it for the Data API's `ActiveStatementsExceededException`, `ActiveSessionsExceededException`, `ActiveWaitingRequestsExceededException` and `ThrottlingException`, and for STS `Throttling` when it assumes your role; those are how the code maps them, and none of them was provoked in the live check. | Try again after the `Retry-After` seconds; see [Limits and cost](#limits-and-cost). |
 | `run_in_progress` | 409 | An analysis or preview on this connection has not finished. | Wait for it to finish, then start yours. |
-| `destination_not_allowed` | 502 | The warehouse address is not one this deployment connects to. | Snowflake: the account is the organisation-account identifier, not a locator or a URL. An address that resolves to a private network is refused. |
+| `destination_not_allowed` | 502 | The warehouse address is not one this deployment connects to. | Snowflake: the account is the organisation-account identifier, not a locator or a URL. An address that resolves to a private network is refused. Redshift: `redshift-data.<region>.amazonaws.com` and `sts.<region>.amazonaws.com` must resolve to public addresses, so an interface VPC endpoint with private DNS, which resolves them to private ones, is refused. |
 | `redirect_refused` | 502 | The warehouse answered with a redirect, which Controlvar does not follow. | The account identifier or the location in the connection. |
 | `unreachable` | 502 | The warehouse could not be reached. | That the API can open an outbound HTTPS connection to the warehouse, and that its firewall or network policy allows the API's address. Redshift: Data API not offered in that region; the endpoint is `redshift-data.<region>.amazonaws.com`, so pick a region where AWS offers the Data API. |
 | `unrecognised_warehouse_error` | 502 | The warehouse sent an error code that Controlvar has no entry for. | The vendor code, as described below. |
@@ -509,19 +524,22 @@ Snowflake its error `code`. Look that code up in the warehouse's documentation,
 and find the statement in its query or job history. Controlvar never repeats
 the warehouse's own error text.
 
-For Redshift the `vendor_code` is the Data API's own code. A workgroup that
-does not exist in the region answers `ValidationException`. `FAILED` means
+For Redshift the `vendor_code` is the Data API's own code. With the policy
+above, a workgroup that does not exist in the region answers
+`ValidationException`. `FAILED` means
 Redshift ran the batch and a statement in it failed; a table the database user
 may not read is one such case. For `FAILED`, take the log field `request_id`
 to `aws redshift-data describe-statement --id <request_id>`, signed as the
-connection's role with the role session name `controlvar-warehouse`: the
-policy above lets a role describe only the statements its own session ran. The
-answer's `Status` is `FAILED`, and its `Error` is Redshift's own text, which
-Controlvar never reads. The `request_id` is the Data API id of the first
-sub-statement that failed (`<statement id>:<n>`); it is logged and never
-returned. We have not measured whether a principal other than the
-connection's own session can describe it, or for how long after the run it can
-be described, so treat both as suggestions.
+connection's role with the role session name `controlvar-warehouse`: assume the
+role from the API's identity with the connection's external ID and
+`--role-session-name controlvar-warehouse`. The statement-owner condition keys
+on `aws:userid`, which includes the session name. The answer's `Status` is
+`FAILED`, and its `Error` is Redshift's own text, which Controlvar never reads.
+The `request_id` is the Data API id of the first sub-statement that failed
+(`<statement id>:<n>`); it is logged and never returned. We have not measured
+whether a principal other than the connector's own live session can describe
+it, or for how long after the run it can be described, so treat both as
+suggestions.
 
 ## If you ran an earlier full-profile release
 

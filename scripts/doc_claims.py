@@ -982,14 +982,17 @@ MECHANISMS: Dict[str, Mechanism] = {
     # condition, the statement-owner condition and the named resources.
     "warehouse-redshift-policy": Mechanism(
         "modules/backend/tests/unit/test_warehouse_docs_availability.py"
-        "::test_the_redshift_setup_json_parses_and_keeps_what_the_run_proved",
+        "::test_the_redshift_setup_json_is_exactly_the_proven_policies",
         holds=_whole(
             "docs/api/warehouse-analytics.md",
             "Its trust policy lets the identity the API runs as assume it, and only"
             " with the connection's external ID:",
             "Give the role this permissions policy.",
             "OwnStatementsOnly lets the role read, fetch and cancel only the"
-            " statements its own session started.",
+            " statements started by this role under the same session name (the"
+            " condition compares aws:userid, which includes it).",
+            "The statement-owner condition keys on aws:userid, which includes"
+            " the session name.",
             "Scope GetClusterCredentials to exactly one database user, never"
             " dbuser:<cluster-identifier>/.",
         ),

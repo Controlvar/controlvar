@@ -9,7 +9,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "Beta: Snowflake, BigQuery and Amazon Redshift are available"
-by = ["exempt:label"]
+by = ["test:modules/backend/tests/unit/warehouse/test_connectors.py::test_enabled_connectors_exact"]
 
 [[unit]]
 text = "Warehouse analysis runs an experiment's analysis on tables in your own data warehouse instead of on events sent to Controlvar."
@@ -487,7 +487,11 @@ by = [
 ]
 
 [[unit]]
-text = "Create the role in IAM."
+text = "Create the role in IAM, under the path /controlvar-warehouse/."
+by = ["test:modules/backend/tests/unit/warehouse/test_request_schemas.py::test_a_redshift_body_outside_the_contract_is_refused"]
+
+[[unit]]
+text = "Save the two policies as trust.json and permissions.json, then create the role and attach the permissions:"
 by = ["exempt:instruction"]
 
 [[unit]]
@@ -514,7 +518,7 @@ text = "The workgroup in the first Resource list is named by its ID, not its nam
 by = ["exempt:third-party"]
 
 [[unit]]
-text = "OwnStatementsOnly lets the role read, fetch and cancel only the statements its own session started."
+text = "OwnStatementsOnly lets the role read, fetch and cancel only the statements started by this role under the same session name (the condition compares aws:userid, which includes it)."
 by = ["mechanism:warehouse-redshift-policy"]
 
 [[unit]]
@@ -1062,7 +1066,7 @@ text = "cancelled | 502 | The warehouse cancelled the query. | Whether someone, 
 by = ["mechanism:warehouse-troubleshooting"]
 
 [[unit]]
-text = "workgroup_unsafe | 502 | Not raised for Snowflake or BigQuery. | Nothing."
+text = "workgroup_unsafe | 502 | Not raised for Snowflake, BigQuery or Amazon Redshift. | Nothing."
 by = ["mechanism:warehouse-troubleshooting"]
 
 [[unit]]
@@ -1070,7 +1074,7 @@ text = "role_trust_unsafe | 502 | The trust policy of a connection's AWS role ad
 by = ["mechanism:warehouse-troubleshooting"]
 
 [[unit]]
-text = "timezone_not_utc | 502 | Snowflake reported a session time zone other than UTC, after Controlvar set it. The run is refused because times would be compared in another zone. | Start the analysis again; if it recurs, report it. BigQuery does not report this."
+text = "timezone_not_utc | 502 | Snowflake or Redshift reported a session time zone other than UTC, after Controlvar set it. The run is refused because times would be compared in another zone. | Start the analysis again; if it recurs, report it. BigQuery does not report this."
 by = ["mechanism:warehouse-troubleshooting"]
 
 [[unit]]
@@ -1098,7 +1102,7 @@ text = "abandoned | 502 | The run stopped reporting progress and was marked as f
 by = ["mechanism:warehouse-troubleshooting"]
 
 [[unit]]
-text = "warehouse_busy | 429 | This deployment is already running as many warehouse jobs as it allows. | Try again after the Retry-After seconds; see Limits and cost."
+text = "warehouse_busy | 429 | This deployment is already running as many warehouse jobs as it allows. For Redshift, Controlvar also answers it for the Data API's ActiveStatementsExceededException, ActiveSessionsExceededException, ActiveWaitingRequestsExceededException and ThrottlingException, and for STS Throttling when it assumes your role; those are how the code maps them, and none of them was provoked in the live check. | Try again after the Retry-After seconds; see Limits and cost."
 by = ["mechanism:warehouse-troubleshooting"]
 
 [[unit]]
@@ -1106,7 +1110,7 @@ text = "run_in_progress | 409 | An analysis or preview on this connection has no
 by = ["mechanism:warehouse-troubleshooting"]
 
 [[unit]]
-text = "destination_not_allowed | 502 | The warehouse address is not one this deployment connects to. | Snowflake: the account is the organisation-account identifier, not a locator or a URL. An address that resolves to a private network is refused."
+text = "destination_not_allowed | 502 | The warehouse address is not one this deployment connects to. | Snowflake: the account is the organisation-account identifier, not a locator or a URL. An address that resolves to a private network is refused. Redshift: redshift-data.<region>.amazonaws.com and sts.<region>.amazonaws.com must resolve to public addresses, so an interface VPC endpoint with private DNS, which resolves them to private ones, is refused."
 by = ["mechanism:warehouse-troubleshooting"]
 
 [[unit]]
@@ -1145,7 +1149,7 @@ by = [
 ]
 
 [[unit]]
-text = "A workgroup that does not exist in the region answers ValidationException."
+text = "With the policy above, a workgroup that does not exist in the region answers ValidationException."
 by = ["test:modules/backend/tests/unit/warehouse/test_redshift_recorded.py::test_a_recorded_missing_workgroup_is_unrecognised_with_its_code"]
 
 [[unit]]
@@ -1153,13 +1157,20 @@ text = "FAILED means Redshift ran the batch and a statement in it failed; a tabl
 by = ["test:modules/backend/tests/unit/warehouse/test_redshift_recorded.py::test_a_recorded_failed_statement_names_the_failed_sub_statement"]
 
 [[unit]]
-text = "For FAILED, take the log field request_id to aws redshift-data describe-statement --id <request_id>, signed as the connection's role with the role session name controlvar-warehouse: the policy above lets a role describe only the statements its own session ran."
-by = ["test:modules/backend/tests/unit/warehouse/test_redshift.py::test_a_failed_batch_names_the_failed_sub_statements_id"]
+text = "For FAILED, take the log field request_id to aws redshift-data describe-statement --id <request_id>, signed as the connection's role with the role session name controlvar-warehouse: assume the role from the API's identity with the connection's external ID and --role-session-name controlvar-warehouse."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_redshift.py::test_a_failed_batch_names_the_failed_sub_statements_id",
+    "test:modules/backend/tests/unit/warehouse/test_aws.py::test_assume_role_session_checks_the_trust_policy_then_assumes_the_role",
+]
+
+[[unit]]
+text = "The statement-owner condition keys on aws:userid, which includes the session name."
+by = ["mechanism:warehouse-redshift-policy"]
 
 [[unit]]
 text = "The answer's Status is FAILED, and its Error is Redshift's own text, which Controlvar never reads."
 by = [
-    "test:modules/backend/tests/unit/warehouse/test_redshift_recorded.py::test_a_recorded_failed_statement_names_the_failed_sub_statement",
+    "test:modules/backend/tests/unit/warehouse/test_redshift_recorded.py::test_a_recorded_describe_of_the_request_id_answers_failed",
     "test:modules/backend/tests/unit/warehouse/test_redshift.py::test_the_error_text_of_a_failed_statement_is_never_read",
 ]
 
@@ -1171,7 +1182,7 @@ by = [
 ]
 
 [[unit]]
-text = "We have not measured whether a principal other than the connection's own session can describe it, or for how long after the run it can be described, so treat both as suggestions."
+text = "We have not measured whether a principal other than the connector's own live session can describe it, or for how long after the run it can be described, so treat both as suggestions."
 by = ["exempt:advice"]
 
 [[unit]]

@@ -94,11 +94,19 @@ def test_a_recorded_connection_test_passes(aws_env, monkeypatch, clock):
 def test_a_recorded_failed_statement_names_the_failed_sub_statement(
     aws_env, monkeypatch, clock
 ):
-    """A real FAILED batch (a table the user may not read): unrecognised, vendor
+    """A real FAILED batch (a table the user may not read), as the connector's
+    poll reads it: five sub-statements, the fifth FAILED. Unrecognised, vendor
     code FAILED, and the request id is the failed sub-statement's Data API id.
     RedshiftQueryId was 0 on it, so it could not have named the statement."""
-    statement_id, failed = _describe("real_failed_statement.json")
+    statement_id, failed = _describe("real_failed_batch.json")
     assert failed.response["RedshiftQueryId"] == 0
+    assert [s["Status"] for s in failed.response["SubStatements"]] == [
+        "FINISHED",
+        "FINISHED",
+        "FINISHED",
+        "FINISHED",
+        "FAILED",
+    ]
     script = _script(
         monkeypatch,
         clock,
@@ -111,6 +119,14 @@ def test_a_recorded_failed_statement_names_the_failed_sub_statement(
     assert err.value.code is _C.UNRECOGNISED_WAREHOUSE_ERROR
     assert err.value.vendor_code == "FAILED"
     assert err.value.request_id == f"{statement_id}:5"
+
+
+def test_a_recorded_describe_of_the_request_id_answers_failed():
+    """DescribeStatement of ``<id>:5`` (what an operator is told to run): its
+    Status is FAILED and it lists exactly that sub-statement."""
+    statement_id, step = _describe("real_describe_request_id.json")
+    assert step.response["Status"] == "FAILED"
+    assert [s["Id"] for s in step.response["SubStatements"]] == [f"{statement_id}:5"]
 
 
 def test_a_recorded_missing_workgroup_is_unrecognised_with_its_code(

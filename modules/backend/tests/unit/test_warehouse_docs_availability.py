@@ -126,6 +126,84 @@ def _redshift_setup_json() -> list[object]:
     return [json.loads("\n".join(block)) for block in blocks]
 
 
+_ACCOUNT = "<your-account-id>"
+_WORKGROUP = f"arn:aws:redshift-serverless:<region>:{_ACCOUNT}:workgroup/<workgroup-id>"
+_CLUSTER = f"arn:aws:redshift:<region>:{_ACCOUNT}:cluster:<cluster-identifier>"
+
+#: The trust policy of the green run (its trust-customer.json), with the run's
+#: identity and external ID replaced by placeholders and a neutral Sid.
+EXPECTED_TRUST = {
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "ControlvarWithThisExternalId",
+            "Effect": "Allow",
+            "Principal": {"AWS": "<ARN of the identity the API runs as>"},
+            "Action": "sts:AssumeRole",
+            "Condition": {
+                "StringEquals": {
+                    "sts:ExternalId": "<the external ID shown on the connection>"
+                }
+            },
+        }
+    ],
+}
+
+#: The permissions policy of the green run (its policy-customer.json), with the
+#: run's resources replaced by placeholders and neutral Sids.
+EXPECTED_PERMISSIONS = {
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "RunInTheWarehouse",
+            "Effect": "Allow",
+            "Action": [
+                "redshift-data:BatchExecuteStatement",
+                "redshift-data:DescribeTable",
+            ],
+            "Resource": [_WORKGROUP, _CLUSTER],
+        },
+        {
+            "Sid": "OwnStatementsOnly",
+            "Effect": "Allow",
+            "Action": [
+                "redshift-data:DescribeStatement",
+                "redshift-data:GetStatementResult",
+                "redshift-data:CancelStatement",
+            ],
+            "Resource": "*",
+            "Condition": {
+                "StringEquals": {
+                    "redshift-data:statement-owner-iam-userid": "${aws:userid}"
+                }
+            },
+        },
+        {
+            "Sid": "ServerlessSignIn",
+            "Effect": "Allow",
+            "Action": "redshift-serverless:GetCredentials",
+            "Resource": _WORKGROUP,
+        },
+        {
+            "Sid": "ClusterSignIn",
+            "Effect": "Allow",
+            "Action": "redshift:GetClusterCredentials",
+            "Resource": [
+                f"arn:aws:redshift:<region>:{_ACCOUNT}:dbuser:<cluster-identifier>/<database-user>",
+                f"arn:aws:redshift:<region>:{_ACCOUNT}:dbname:<cluster-identifier>/<database>",
+            ],
+        },
+    ],
+}
+
+
+def test_the_redshift_setup_json_is_exactly_the_proven_policies():
+    """Every key, action, resource and condition on the page is the run's."""
+    trust, permissions = _redshift_setup_json()
+    assert trust == EXPECTED_TRUST
+    assert permissions == EXPECTED_PERMISSIONS
+
+
 def test_the_redshift_setup_json_parses_and_keeps_what_the_run_proved():
     """The trust policy needs the external ID; the permissions policy lets a
     role touch only its own statements and signs in to exactly what it names.
