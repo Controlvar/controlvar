@@ -370,7 +370,8 @@ def test_script_narrowing_is_recognised(tokens, narrowed):
 # ---------------------------------------------------------------------------
 
 NIGHTLY = wg.WORKFLOWS / "nightly-qa.yml"
-NIGHTLY_JOB = "integration-tests"
+#: The matrix job that runs the suite; `integration-tests` there is the summary.
+NIGHTLY_JOB = "integration-shard"
 
 
 def _nightly_job() -> Dict[str, Any]:

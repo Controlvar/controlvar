@@ -101,8 +101,9 @@ function safety(overrides: Partial<SafetyCheckResponse> = {}): SafetyCheckRespon
     feature_flag_id: 'flag-1',
     is_healthy: true,
     metrics: [
-      { name: 'error_rate', current_value: 0.4, threshold: 5, unit: '%', is_healthy: true },
-      { name: 'latency_p95', current_value: 180, threshold: 500, unit: 'ms', is_healthy: true },
+      // What the API sends: raw numbers (a 0-1 fraction, milliseconds), unit null.
+      { name: 'error_rate', current_value: 0.004, threshold: 0.05, unit: null, is_healthy: true },
+      { name: 'latency', current_value: 0.0014190214226044804, threshold: 1500, unit: null, is_healthy: true },
     ],
     last_checked: '2026-09-11T08:00:00Z',
     ...overrides,
@@ -224,8 +225,9 @@ describe('FeatureFlagDetailPage', () => {
     const metrics = within(screen.getByTestId('safety-metrics')).getAllByTestId('safety-metric');
     expect(metrics).toHaveLength(2);
     expect(metrics[0]).toHaveTextContent('Error rate');
-    expect(metrics[0]).toHaveTextContent('0.4 %');
-    expect(metrics[1]).toHaveTextContent('180 ms');
+    // Formatted as Admin > Safety does: a percentage, and ms, never raw numbers (#1972).
+    expect(metrics[0]).toHaveTextContent(/^Error rate0\.40% \/ 5\.00%/);
+    expect(metrics[1]).toHaveTextContent(/^Latency0 ms \/ 1500 ms/);
     expect(screen.getByTestId('safety-last-checked')).toBeInTheDocument();
 
     const paths = mockedApiFetch.mock.calls.map(([p]) => String(p).split('?')[0]);

@@ -692,7 +692,9 @@ pytest_session() {
     # -rs lists every skipped test with its reason at the end of the log: a
     # skip counts as a pass in the exit status, so the log is where a test
     # that did not run shows.
-    (cd "$COPY" && "$PYTHON" -m pytest "$@" -p no:cov -q --tb=short -rs)
+    # --durations=30 prints the 30 slowest tests of the session at the end of
+    # the log; it only reports, it selects nothing.
+    (cd "$COPY" && "$PYTHON" -m pytest "$@" -p no:cov -q --tb=short -rs --durations=30)
 }
 
 step_unit() {

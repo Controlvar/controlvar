@@ -230,3 +230,85 @@ def compare(
             )
         )
     return comparisons
+
+
+@dataclass(frozen=True)
+class Stratified:
+    """One treatment's stratified estimate over every group (#448)."""
+
+    absolute_difference: float
+    standard_error: float
+    #: None when the standard error is 0.
+    absolute_difference_ci: tuple[float, float] | None
+    #: In percent; None when the weighted control rate is 0.
+    relative_improvement_pct: float | None
+    #: Two-sided normal; None when the standard error is 0.
+    p_value: float | None
+
+
+def stratified(
+    groups: Sequence[Mapping[str, tuple[int, int]]],
+    control: str,
+    treatment: str,
+    confidence_level: float,
+) -> Stratified:
+    """The stratified difference in conversion rates of *treatment* from
+    *control* (Cochran, *Sampling Techniques*, chapter 5; the method of
+    ``docs/guides/balance-within-groups.md``), from each group's counts.
+
+    *groups* holds one mapping per group, variant -> (users, converting
+    users). With ``N_s`` the users of every variant in group ``s`` and ``N``
+    the users of every group, ``w_s = N_s / N`` and ``p_vs`` the share of
+    variant ``v``'s users in ``s`` who converted:
+
+    * the difference is the sum over groups of ``w_s * (p_ts - p_cs)``;
+    * its variance is the sum of ``w_s**2 * (u_ts / n_ts + u_cs / n_cs)``, with
+      ``u = p * (1 - p) * n / (n - 1)``, the unbiased variance of a 0/1 value;
+    * the relative change is the difference over ``sum w_s * p_cs``, in percent;
+    * the interval is the difference plus or minus the normal quantile times
+      the standard error, and the p-value the two-sided normal one.
+
+    Every group needs 2 users in *control* and *treatment* (a smaller one is
+    merged by the product, which this reference does not model); a refused
+    group raises ``ValueError``. The sums are ``math.fsum``, so the order of
+    the groups changes nothing, and the p-value is ``erfc``, not scipy's.
+    """
+    if not 0 < confidence_level < 1:
+        raise ValueError("the confidence level is strictly between 0 and 1")
+    total = sum(sum(users for users, _ in g.values()) for g in groups)
+    if total <= 0:
+        raise ValueError("no group has a user")
+    differences, variances, control_rates = [], [], []
+    for g in groups:
+        (n_t, c_t), (n_c, c_c) = g.get(treatment, (0, 0)), g.get(control, (0, 0))
+        if n_t < 2 or n_c < 2:
+            raise ValueError(
+                "a group has fewer than 2 users in the control or treatment"
+            )
+        weight = sum(users for users, _ in g.values()) / total
+        p_t, p_c = c_t / n_t, c_c / n_c
+        differences.append(weight * (p_t - p_c))
+        variances.append(
+            weight
+            * weight
+            * (
+                p_t * (1 - p_t) / (n_t - 1)  # u_t / n_t, with u = p(1-p)n/(n-1)
+                + p_c * (1 - p_c) / (n_c - 1)
+            )
+        )
+        control_rates.append(weight * p_c)
+    difference = math.fsum(differences)
+    error = math.sqrt(math.fsum(variances))
+    base = math.fsum(control_rates)
+    z = float(stats.norm.ppf((1 + confidence_level) / 2))
+    return Stratified(
+        absolute_difference=difference,
+        standard_error=error,
+        absolute_difference_ci=(
+            (difference - z * error, difference + z * error) if error > 0 else None
+        ),
+        relative_improvement_pct=difference / base * 100.0 if base > 0 else None,
+        p_value=math.erfc(abs(difference) / error / math.sqrt(2))
+        if error > 0
+        else None,
+    )

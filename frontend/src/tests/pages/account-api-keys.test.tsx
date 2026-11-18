@@ -224,6 +224,16 @@ describe('V-UI2: the page acts only on the caller\'s own keys, through the exist
     expect(screen.getByRole('heading', { level: 1, name: 'Your API keys' })).toBeInTheDocument();
   });
 
+  it('keeps the table inside a positioned scroller, so no phone-width page scroll (#1971)', async () => {
+    keys = [makeKey({ id: 'k-mine', name: 'my-key' })];
+    await openPage();
+    const table = await screen.findByTestId('own-key-table');
+    // jsdom measures nothing, so pin the class. The table's sr-only header is
+    // absolutely positioned; an unpositioned overflow-x-auto does not clip it,
+    // and the page grew to 694 px at 390 px (measured in a browser).
+    expect(table.parentElement).toHaveClass('overflow-x-auto', 'relative');
+  });
+
   it('lists with GET /api/v1/api-keys and no `all` parameter', async () => {
     keys = [makeKey({ id: 'k-mine', name: 'my-key' })];
     await openPage();

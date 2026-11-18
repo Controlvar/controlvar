@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, SecretStr, model_validator
 
 from backend.app.schemas.auth import LoginResponse
 from backend.app.services.two_factor_service import RAW_INPUT_MAX
@@ -129,6 +129,19 @@ class TwoFactorStatusResponse(BaseModel):
     )
     recovery_codes_remaining: int = Field(
         ..., description="Unused recovery codes; 0 while two-step sign-in is off"
+    )
+
+
+class TwoFactorEnrolRequest(BaseModel):
+    """``POST /api/v1/users/me/2fa/enroll``: your current password, as
+    changing your password asks for it."""
+
+    current_password: Optional[SecretStr] = Field(
+        None,
+        description=(
+            "Your current password. Required: a request without it, or with "
+            "an empty one, is refused with 403."
+        ),
     )
 
 

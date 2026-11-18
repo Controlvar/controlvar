@@ -17,6 +17,9 @@
  * twitter: tag. The titles are the page's <title>, the descriptions its
  * <meta name="description">, og:url the page's address on controlvar.com, and
  * both images the absolute https URL of a file in out/: a PNG of 1200 x 630.
+ * Each page also has exactly one <link rel="canonical">, equal to its og:url;
+ * the homepage's title is the descriptive one; and out/sitemap.xml lists the
+ * pages below, each once, and nothing else.
  */
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
@@ -35,6 +38,8 @@ const PAGES = [
   { file: 'power-calculator.html', url: `${ORIGIN}/power-calculator` },
   { file: 'privacy.html', url: `${ORIGIN}/privacy` },
 ];
+
+const HOME_TITLE = 'Controlvar: open-source A/B testing and feature flags you run yourself';
 
 const KEYS = [
   'og:type',
@@ -78,7 +83,11 @@ function head(html, name) {
   const share = metas
     .map((a) => [a.get('property') ?? a.get('name') ?? '', a.get('content') ?? ''])
     .filter(([key]) => key.startsWith('og:') || key.startsWith('twitter:'));
-  return { titles, descriptions, share };
+  const canonicals = [...match[1].matchAll(/<link\b([^>]*)>/gi)]
+    .map((m) => attributes(m[1]))
+    .filter((a) => (a.get('rel') ?? '').toLowerCase() === 'canonical')
+    .map((a) => a.get('href'));
+  return { titles, descriptions, share, canonicals };
 }
 
 /** A PNG's width and height from its IHDR chunk, or null when it is not a PNG. */
@@ -91,12 +100,15 @@ function pngSize(buf) {
 describe('the marketing export carries link-preview tags', () => {
   for (const page of PAGES) {
     it(`out/${page.file}`, () => {
-      const { titles, descriptions, share } = head(readOut(page.file).toString('utf8'), page.file);
+      const { titles, descriptions, share, canonicals } = head(readOut(page.file).toString('utf8'), page.file);
       assert.equal(titles.length, 1, `out/${page.file} has ${titles.length} <title>`);
       assert.equal(descriptions.length, 1, `out/${page.file} has ${descriptions.length} <meta name="description">`);
       const [title] = titles;
       const [description] = descriptions;
       assert.ok(description, `out/${page.file} has an empty description`);
+
+      assert.deepEqual(canonicals, [page.url], `out/${page.file}: exactly one canonical, equal to og:url`);
+      if (page.file === 'index.html') assert.equal(title, HOME_TITLE);
 
       const keys = share.map(([key]) => key).sort();
       assert.deepEqual(keys, [...KEYS].sort(), `out/${page.file}: the og:/twitter: tags, each once`);
@@ -128,5 +140,16 @@ describe('the image the tags point at', () => {
   it(`is a PNG of ${IMAGE.width} x ${IMAGE.height}`, () => {
     const file = new URL(IMAGE.url).pathname.slice(1);
     assert.deepEqual(pngSize(readOut(file)), { width: IMAGE.width, height: IMAGE.height });
+  });
+});
+
+describe('out/sitemap.xml', () => {
+  it('lists every page of the export, each once, with its absolute address', () => {
+    const xml = readOut('sitemap.xml').toString('utf8');
+    const locs = [...xml.matchAll(/<loc>([^<]*)<\/loc>/g)].map((m) => m[1]);
+    assert.deepEqual(
+      [...locs].sort(),
+      PAGES.map((p) => p.url).sort(),
+    );
   });
 });

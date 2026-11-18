@@ -142,22 +142,27 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         lede("The table lists each capability and where you do it today"),
         lede("API only: it works through the API, with no screen yet"),
     ),
-    "Sequential testing with mSPRT": (
+    "Sequential testing with mSPRT (beta)": (
         lede("Sequential Testing"),
         says("### mSPRT (mixture Sequential Probability Ratio Test)"),
+        says("Beta: the stop/continue decision is mSPRT alone"),
     ),
-    "Variance reduction from each user's own pre-experiment events (API only)": (
+    "Variance reduction from each user's own pre-experiment events, on the results page and in the API (beta)": (
         lede("CUPED Variance Reduction"),
         lede("by adjusting for what each user did before the experiment"),
-        lede("the dashboard and GET /results/{id} show the unadjusted numbers"),
+        lede("has a CUPED (beta) tab with these numbers"),
+        says("CUPED is beta"),
     ),
-    "Thompson Sampling, UCB1, Epsilon-Greedy (create a bandit through the API)": (
+    "Thompson Sampling, UCB1, Epsilon-Greedy (create one from the new-experiment form or the API)": (
         lede("Multi-Armed Bandit"),
+        says(
+            "To create one in the dashboard, choose Bandit as the experiment type on the new-experiment form"
+        ),
         says(
             "Set optimization_type to one of thompson_sampling, ucb1 or epsilon_greedy when you create the experiment"
         ),
     ),
-    "Full profile: give each variant its own URL. Your server or edge, or on AWS an optional CloudFront router, asks Controlvar where to send each visitor, and conversions count for the variant they saw.": (
+    "Full profile (beta): give each variant its own URL. Your server or edge, or on AWS an optional CloudFront router, asks Controlvar where to send each visitor, and conversions count for the variant they saw.": (
         lede("present in the full profile"),
         lede("A split URL experiment gives each variant its own page"),
         lede("your server or edge asks Controlvar which variant the visitor is in"),
@@ -168,16 +173,22 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         says(
             "A conversion counts for a variant only when it is tracked with the same visitor id"
         ),
+        says(
+            "The CloudFront edge router (beta) puts a CloudFront distribution in front of your site"
+        ),
     ),
     "Give each group of users the same split as the whole experiment, set through the API (beta)": (
         lede("Balance the split within groups (beta)"),
         lede("gives each group of users the same split as the whole experiment"),
         says("PUT /api/v1/experiments/{id}"),
     ),
-    "Keep users out of conflicting experiments, and a share of new users out of every experiment": (
+    "Keep users out of conflicting experiments, and a share of new users out of every experiment, whose results are beta": (
         lede("prevent users from being enrolled in multiple conflicting experiments"),
         lede(
             "A global holdout keeps a percentage of new users out of every experiment"
+        ),
+        says(
+            "Beta: this measures the combined effect of running experiments' treatment arms"
         ),
     ),
     "Live experiment results over WebSocket: a snapshot on connect, then a fresh one every 30 seconds (by default), whatever the client sends.": (

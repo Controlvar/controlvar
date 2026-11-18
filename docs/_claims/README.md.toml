@@ -260,8 +260,9 @@ by = [
 ]
 
 [[unit]]
-text = "Sequential testing: mSPRT with always-valid confidence intervals, so you can read results at any time."
+text = "Sequential testing (beta): mSPRT with always-valid confidence intervals, so you can read results at any time."
 by = [
+    "test:backend/tests/unit/core/test_analysis_status.py::test_the_table_holds_exactly_the_expected_statuses",
     "test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_aa_false_rejections_under_peeking",
     "test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_cs_anytime_coverage",
 ]

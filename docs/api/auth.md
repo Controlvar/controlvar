@@ -292,11 +292,14 @@ after the password, sign-in also asks for the 6-digit code an authenticator app 
 one of the account's recovery codes. Each account can turn it on for itself, and an operator
 can require it for chosen roles: [Requiring it for a role](#requiring-it-for-a-role).
 
-Turn it on as the viewer. Ask for a secret for the authenticator app:
+Turn it on as the viewer. Ask for a secret for the authenticator app. It asks for your current
+password, as changing your password does:
 
 ```{.bash exec}
 ENROL=$(curl -s -X POST localhost:8000/api/v1/users/me/2fa/enroll \
-  -H "Authorization: Bearer $VIEWER_TOKEN")
+  -H "Authorization: Bearer $VIEWER_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"current_password": "Viewer5678!"}')
 SECRET=$(jq -r .secret <<<"$ENROL")
 
 jq -r .otpauth_uri <<<"$ENROL" | cut -d '?' -f 1
@@ -385,7 +388,7 @@ throughout: a token stays valid until it expires.
 | Route | What it does |
 |---|---|
 | `GET /api/v1/users/me/2fa` | `enabled`, `required` (your role requires it) and `recovery_codes_remaining` |
-| `POST /api/v1/users/me/2fa/enroll` | A new secret, waiting for its first code; a waiting one is replaced. `409` once on |
+| `POST /api/v1/users/me/2fa/enroll` | `{"current_password"}`: a new secret, waiting for its first code; a waiting one is replaced. `409` once on |
 | `POST /api/v1/users/me/2fa/confirm` | `{"code"}`: turns it on and answers 10 recovery codes. `409` with no secret waiting |
 | `POST /api/v1/users/me/2fa/recovery-codes` | `{"code"}`: 10 new recovery codes; the earlier ones stop working |
 | `POST /api/v1/users/me/2fa/disable` | `{"code"}` or `{"recovery_code"}`: turns it off. `409` while off; `403` when your role requires it |
@@ -408,9 +411,20 @@ a wrong one.
 | `503` `Two-step sign-in is unavailable for this account. Ask an administrator to reset it.` | The stored secret cannot be read, as after `SECRET_KEY` changes |
 | `403` `Two-step sign-in is required for your role, so it cannot be turned off.` | `POST /api/v1/users/me/2fa/disable` for an account whose role requires it; no code is checked |
 
+`POST /api/v1/users/me/2fa/enroll` answers as `POST /api/v1/users/me/password` does about the
+current password, in this order:
+
+| Answer | When |
+|---|---|
+| `423` with `Retry-After` | The address is locked by wrong passwords and codes, even for the right password |
+| `403` `This account does not sign in with a password, so two-step sign-in does not apply to it.` | The account has no password of its own; not counted |
+| `403` `Enter your current password (current_password) to set up two-step sign-in.` | No body, no `current_password` or an empty one; not counted |
+| `403` `The current password is incorrect.` | A wrong password; it counts toward the same limit as failed logins |
+
 `POST /api/v1/auth/mfa/verify`, `POST /api/v1/auth/mfa/enroll` and
 `POST /api/v1/auth/mfa/enroll/confirm` each take 10 requests a minute per address, like
-`POST /api/v1/auth/login`. `POST /api/v1/auth/token` answers `mfa_required` too, so the
+`POST /api/v1/auth/login`, and `POST /api/v1/users/me/2fa/enroll` 5, like
+`POST /api/v1/users/me/password`. `POST /api/v1/auth/token` answers `mfa_required` too, so the
 **Authorize** button of the interactive documentation cannot sign in such an account: sign in
 with the two calls above and paste the access token. A script should use an
 [API key](#api-key-authentication), not a person's password.

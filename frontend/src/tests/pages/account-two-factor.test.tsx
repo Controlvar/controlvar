@@ -5,6 +5,11 @@
  *       with its text alternative, Done held back until "I have saved these
  *       codes" is ticked; 401/403/423 (both)/503 each map to a fixed sentence;
  *   U4  the code field's attributes, and a code's leading zeros survive;
+ *   setting it up asks for the current password: a current-password field
+ *       whose value goes in the request body only and is cleared once the
+ *       API answers; each refusal (wrong, missing, the lock, 429) has its own
+ *       sentence, and an account with no password sees why in place of the
+ *       form;
  *   axe over every state.
  *
  * No response text reaches the screen: a planted detail never appears.
@@ -24,7 +29,13 @@ import { TOKEN_STORAGE_KEY, navigation } from '@/services/api';
 import {
   CODE_STEP_LOCKED_TEXT,
   CONFIRM_CLOCK_HINT,
+  CURRENT_PASSWORD_INCORRECT_DETAIL,
+  ENROL_NO_PASSWORD_DETAIL,
+  ENROL_PASSWORD_HINT,
+  ENROL_PASSWORD_MESSAGE,
+  ENROL_PASSWORD_MISSING_DETAIL,
   NOT_LOCAL_TWO_FACTOR,
+  NO_PASSWORD_TWO_FACTOR,
   QR_ALT,
   REQUIRED_FOR_ROLE_MESSAGE,
   TWO_FACTOR_REQUIRED_FOR_ROLE,
@@ -129,10 +140,30 @@ async function openOn(status = ON) {
   return view;
 }
 
+/** The account's current password, as typed at the set-up step. */
+const CURRENT_PASSWORD = 'Current-Passw0rd-1812';
+
+function typePassword(value: string) {
+  fireEvent.change(screen.getByTestId('two-factor-current-password'), { target: { value } });
+}
+
 async function startEnrolment() {
+  typePassword(CURRENT_PASSWORD);
   respond(200, { secret: SECRET, otpauth_uri: URI });
   await click('two-factor-start');
   await screen.findByTestId('two-factor-enrol');
+}
+
+/** Everything in both storages and the URL, for "the password is nowhere". */
+function storedAndUrl(): string {
+  const values: string[] = [];
+  for (const storage of [window.localStorage, window.sessionStorage]) {
+    for (let i = 0; i < storage.length; i += 1) {
+      const key = storage.key(i) as string;
+      values.push(key, storage.getItem(key) ?? '');
+    }
+  }
+  return `${values.join('\n')}\n${window.location.href}`;
 }
 
 const axeOptions: axe.RunOptions = { rules: { 'color-contrast': { enabled: false } } };
@@ -164,6 +195,7 @@ describe('TwoFactorPage: off, and setting it up', () => {
     const { container } = await openOff();
     await startEnrolment();
     expect(callsTo(ENROL)[0][1].method).toBe('POST');
+    expect(JSON.parse(callsTo(ENROL)[0][1].body)).toEqual({ current_password: CURRENT_PASSWORD });
 
     const key = screen.getByTestId('two-factor-key');
     expect(key.tagName).toBe('CODE');
@@ -301,6 +333,94 @@ describe('TwoFactorPage: off, and setting it up', () => {
     fireEvent.click(screen.getByTestId('two-factor-cancel'));
     expect(screen.getByTestId('two-factor-off')).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('JBSW');
+  });
+});
+
+describe('TwoFactorPage: setting it up asks for the current password', () => {
+  it('the field is a labelled current-password field, with why it is asked for', async () => {
+    const { container } = await openOff();
+    const field = screen.getByLabelText('Current password');
+    expect(field).toBe(screen.getByTestId('two-factor-current-password'));
+    expect(field).toHaveAttribute('type', 'password');
+    expect(field).toHaveAttribute('autocomplete', 'current-password');
+    expect(field).toHaveAccessibleDescription(ENROL_PASSWORD_HINT);
+    await expectNoAxeViolations(container);
+  });
+
+  it('with no password typed, it says so and sends nothing', async () => {
+    const { container } = await openOff();
+    await click('two-factor-start');
+    expect(await outcome()).toHaveTextContent(ENROL_PASSWORD_MESSAGE);
+    expect(callsTo(ENROL)).toHaveLength(0);
+    expect(screen.getByTestId('two-factor-current-password')).toHaveAttribute('aria-invalid', 'true');
+    await expectNoAxeViolations(container);
+  });
+
+  it('U1: the password is sent in the body only, never kept in storage or the URL, and cleared once answered', async () => {
+    await openOff();
+    await startEnrolment();
+    expect(String(callsTo(ENROL)[0][0])).not.toContain(CURRENT_PASSWORD);
+    expect(storedAndUrl()).not.toContain(CURRENT_PASSWORD);
+    expect(document.body.innerHTML).not.toContain(CURRENT_PASSWORD);
+    fireEvent.click(screen.getByTestId('two-factor-cancel'));
+    expect(screen.getByTestId('two-factor-current-password')).toHaveValue('');
+  });
+
+  it.each([
+    [
+      'a wrong current password (403)',
+      403,
+      CURRENT_PASSWORD_INCORRECT_DETAIL,
+      {},
+      'The current password is not correct. Check it and try again.',
+      true,
+    ],
+    ['no current password (403)', 403, ENROL_PASSWORD_MISSING_DETAIL, {}, ENROL_PASSWORD_MESSAGE, true],
+    [
+      'the address lock (423 with Retry-After)',
+      423,
+      PLANTED,
+      { 'Retry-After': '840' },
+      'Too many failed attempts. Try again in 14 minutes.',
+      false,
+    ],
+    ['too many attempts (429)', 429, PLANTED, { 'Retry-After': '60' }, 'Too many attempts. Wait a minute, then try again.', false],
+    ['another 403', 403, PLANTED, {}, 'Two-step sign-in could not be changed. Ask an administrator to check your account.', false],
+  ])(
+    '%s at set-up shows its own sentence, keeps the form, and clears the password',
+    async (_name, status, detail, headers, expected, fieldInvalid) => {
+      const { container } = await openOff();
+      typePassword(CURRENT_PASSWORD);
+      respond(status, { detail }, headers);
+      await click('two-factor-start');
+      expect(await outcome()).toHaveTextContent(expected);
+      expect(document.body.innerHTML).not.toContain('PLANTED-SERVER-TEXT');
+      expect(screen.getByTestId('two-factor-off')).toBeInTheDocument();
+      const field = screen.getByTestId('two-factor-current-password');
+      expect(field).toHaveValue('');
+      if (fieldInvalid) {
+        expect(field).toHaveAttribute('aria-invalid', 'true');
+      } else {
+        expect(field).not.toHaveAttribute('aria-invalid');
+      }
+      await expectNoAxeViolations(container);
+    },
+  );
+
+  it('an account with no password of its own sees why, in place of the form, with no retry', async () => {
+    const { container } = await openOff();
+    typePassword(CURRENT_PASSWORD);
+    respond(403, { detail: ENROL_NO_PASSWORD_DETAIL });
+    await click('two-factor-start');
+    const text = await screen.findByTestId('two-factor-no-password-text');
+    expect(text).toHaveTextContent(NO_PASSWORD_TWO_FACTOR);
+    expect(screen.queryByTestId('two-factor-off')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('two-factor-start')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('two-factor-current-password')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('two-factor-outcome')).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('could not be changed');
+    expect(callsTo(ENROL)).toHaveLength(1);
+    await expectNoAxeViolations(container);
   });
 });
 

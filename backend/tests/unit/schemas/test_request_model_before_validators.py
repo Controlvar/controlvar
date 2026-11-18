@@ -45,9 +45,10 @@ pytestmark = [pytest.mark.unit]
 #: (MfaVerifyRequest), /users/me/2fa/confirm and /recovery-codes
 #: (TwoFactorCodeRequest) and /users/me/2fa/disable (TwoFactorDisableRequest);
 #: its required roles 2 more to both: /auth/mfa/enroll (MfaEnrolRequest) and
-#: /auth/mfa/enroll/confirm (MfaEnrolConfirmRequest).
-CORE_MODEL_COUNT = 98
-FULL_MODEL_COUNT = 142
+#: /auth/mfa/enroll/confirm (MfaEnrolConfirmRequest). Then 1 more to both: the
+#: current password at /users/me/2fa/enroll (TwoFactorEnrolRequest).
+CORE_MODEL_COUNT = 99
+FULL_MODEL_COUNT = 143
 
 #: ``(model, field)`` pairs that a ``mode="before"`` field validator covers.
 CORE_BEFORE_COUNT = 46

@@ -703,8 +703,16 @@ text = "Turn it on as the viewer."
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "Ask for a secret for the authenticator app:"
+text = "Ask for a secret for the authenticator app."
 by = ["exempt:instruction"]
+
+[[unit]]
+text = "It asks for your current password, as changing your password does:"
+by = [
+    "docex:docs/api/auth.md#otpauth://totp/Controlvar:viewer@example.com",
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_setting_it_up_checks_the_password_before_any_secret_is_stored",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_setting_it_up_checks_the_current_password_first_in_this_order",
+]
 
 [[unit]]
 text = "It prints the start of the otpauth:// link a QR code carries."
@@ -815,9 +823,10 @@ by = [
 ]
 
 [[unit]]
-text = "POST /api/v1/users/me/2fa/enroll | A new secret, waiting for its first code; a waiting one is replaced. 409 once on"
+text = "POST /api/v1/users/me/2fa/enroll | {\"current_password\"}: a new secret, waiting for its first code; a waiting one is replaced. 409 once on"
 by = [
     "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_a_waiting_secret_changes_nothing_and_a_new_one_replaces_it",
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_setting_it_up_checks_the_password_before_any_secret_is_stored",
     "test:backend/tests/unit/api/test_two_factor_routes.py::test_the_wrong_state_answers_409",
 ]
 
@@ -900,6 +909,7 @@ by = [
 [[unit]]
 text = "Answer | When"
 by = ["exempt:label"]
+count = 2
 
 [[unit]]
 text = "401 That code is not correct. | A wrong code at POST /api/v1/auth/mfa/verify; 403 with the same text on the /api/v1/users/me/2fa routes"
@@ -947,11 +957,47 @@ by = [
 ]
 
 [[unit]]
-text = "POST /api/v1/auth/mfa/verify, POST /api/v1/auth/mfa/enroll and POST /api/v1/auth/mfa/enroll/confirm each take 10 requests a minute per address, like POST /api/v1/auth/login."
+text = "POST /api/v1/users/me/2fa/enroll answers as POST /api/v1/users/me/password does about the current password, in this order:"
+by = [
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_setting_it_up_checks_the_current_password_first_in_this_order",
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_setting_it_up_checks_the_password_before_any_secret_is_stored",
+]
+
+[[unit]]
+text = "423 with Retry-After | The address is locked by wrong passwords and codes, even for the right password"
+by = [
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_wrong_passwords_at_set_up_lock_it_and_sign_in",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_setting_it_up_checks_the_current_password_first_in_this_order",
+]
+
+[[unit]]
+text = "403 This account does not sign in with a password, so two-step sign-in does not apply to it. | The account has no password of its own; not counted"
+by = [
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_an_account_with_no_password_cannot_set_it_up",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_setting_it_up_checks_the_current_password_first_in_this_order",
+]
+
+[[unit]]
+text = "403 Enter your current password (current_password) to set up two-step sign-in. | No body, no current_password or an empty one; not counted"
+by = [
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_setting_it_up_checks_the_password_before_any_secret_is_stored",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_setting_it_up_checks_the_current_password_first_in_this_order",
+]
+
+[[unit]]
+text = "403 The current password is incorrect. | A wrong password; it counts toward the same limit as failed logins"
+by = [
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_wrong_passwords_at_set_up_lock_it_and_sign_in",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_setting_it_up_checks_the_current_password_first_in_this_order",
+]
+
+[[unit]]
+text = "POST /api/v1/auth/mfa/verify, POST /api/v1/auth/mfa/enroll and POST /api/v1/auth/mfa/enroll/confirm each take 10 requests a minute per address, like POST /api/v1/auth/login, and POST /api/v1/users/me/2fa/enroll 5, like POST /api/v1/users/me/password."
 by = [
     "test:backend/tests/unit/middleware/test_route_rate_limits.py::test_the_code_step_of_a_sign_in_takes_ten_a_minute",
     "test:backend/tests/unit/middleware/test_route_rate_limits.py::test_setting_it_up_during_a_sign_in_takes_ten_a_minute",
     "test:backend/tests/unit/middleware/test_route_rate_limits.py::test_sign_in_takes_ten_requests_a_minute",
+    "test:backend/tests/unit/middleware/test_route_rate_limits.py::test_setting_up_two_step_sign_in_takes_five_a_minute_like_the_password_change",
 ]
 
 [[unit]]

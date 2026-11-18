@@ -1498,7 +1498,8 @@ def test_the_stand_in_safety_check_is_the_apis_answer():
     """``check_answer`` is what ``GET .../check`` answers at the recorded
     release: the schema accepts it, ``details`` is ``_error_window``'s counts
     with no rate in them, and the flag page draws the ``error_rate`` metric's
-    ``current_value`` (the number B9's rate check compares)."""
+    ``current_value`` (the number B9's rate check compares), formatted by
+    ``formatSafetyMetricValue`` (a percentage for ``error_rate``, #1972)."""
     from backend.app.schemas.safety import SafetyCheckResponse
 
     answer = check_answer(240)
@@ -1520,7 +1521,10 @@ def test_the_stand_in_safety_check_is_the_apis_answer():
         REPO / "frontend" / "src" / "pages" / "feature-flags" / "[id].tsx"
     ).read_text(encoding="utf-8")
     row = page[page.index('data-testid="safety-metric"') :]
-    assert "{m.current_value}" in row[: row.index("</li>")]
+    assert (
+        "formatSafetyMetricValue(m.name, m.current_value, m.unit)"
+        in row[: row.index("</li>")]
+    )
 
 
 def test_b_is_the_apis_count_less_the_senders():

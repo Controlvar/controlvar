@@ -320,6 +320,9 @@ RATE_LIMIT_CONFIG: Dict[str, Tuple[int, int]] = {
     # so it is limited like the other password endpoints. The failures also
     # count toward the sign-in lockout (LocalAuthService).
     "/api/v1/users/me/password": (5, 60),
+    # Setting up two-step sign-in checks the current password as the password
+    # change does, so it is limited like it, with the same lockout (#1812).
+    "/api/v1/users/me/2fa/enroll": (5, 60),
     # SSO hand-off exchange (the modules' SSO routes): a public route that
     # mints an access token, limited like the password login.
     "/api/v1/auth/sso/exchange": (10, 60),

@@ -49,8 +49,11 @@ or an HTTP API renders a FLOAT: Snowflake ``CAST(CAST(x AS DECFLOAT) AS
 VARCHAR)``, BigQuery ``FORMAT('%.17g', x)``, Athena ``format('%.17g', x)``.
 Amazon Redshift has no such format function: its statement is ``CAST(x AS
 VARCHAR)``, and the digits come from the session's ``extra_float_digits``,
-which the connector sets before every statement and checks with a probe in
-the same batch (:mod:`modules.backend.app.warehouse.redshift`).
+which the connector sets in the same batch, one transaction, before every
+statement (:mod:`modules.backend.app.warehouse.redshift`).  The probe in that
+batch checks the session's time zone and a constant's digits; it reads no
+table, so it is not the check of a table read's digits.  The live check's
+``rs_load_fidelity`` is: with the SET, a table read round-trips exactly.
 Counts are integers.
 
 Dialects
@@ -120,6 +123,10 @@ METRIC_PREVIEW_CTES: Final = frozenset({"events"})
 MetricType = Literal["proportion", "mean"]
 
 
+def _substr(expr: str, n: int) -> str:
+    return f"SUBSTR({expr}, 1, {n})"
+
+
 @dataclass(frozen=True)
 class SqlDialect:
     """One dialect's tokens.  Every callable takes SQL we already rendered."""
@@ -142,6 +149,9 @@ class SqlDialect:
     #: A time expression -> whole seconds since 1970-01-01 UTC, an integer.
     #: Used by the previews only; a dialect without it cannot preview.
     epoch_seconds: Optional[Callable[[str], str]] = None
+    #: (string expression, n) -> its first n characters.  Only the exposures
+    #: CTE calls it, to cut a variant label to LABEL_MAX_CHARS.
+    first_chars: Callable[[str, int], str] = _substr
 
 
 def _identity(expr: str) -> str:
@@ -203,9 +213,19 @@ ATHENA_SQL: Final = SqlDialect(
 
 #: Amazon Redshift, through the Data API (:mod:`modules.backend.app.warehouse.redshift`).
 #: The connector runs every statement in a batch that first sets the session's
-#: time zone to UTC and ``extra_float_digits`` to 2, then checks both with a
-#: probe; so ``serialise`` is a plain cast to text, ``time_column`` reads a
-#: ``TIMESTAMP`` column in UTC, and there is no per-row session offset.
+#: time zone to UTC and ``extra_float_digits`` to 2, then checks the time zone
+#: (and a constant's digits) with a probe; so ``serialise`` is a plain cast to
+#: text, ``time_column`` reads a ``TIMESTAMP`` column in UTC, and there is no
+#: per-row session offset.
+#:
+#: Two tokens differ from the other dialects because a real Redshift refused
+#: them (live run 1): ``SUBSTR()`` ("SUBSTR() function is not supported
+#: (Hint: use SUBSTRING instead)"), and ``DATEADD`` on a TIMESTAMPTZ
+#: ("function pg_catalog.date_add("unknown", integer, timestamp with time
+#: zone) does not exist").  So a label is cut with ``SUBSTRING``, and hours are
+#: added to the TIMESTAMP form of the time and the sum cast back, which keeps
+#: the instant only because the session is in UTC (set and probed in every
+#: batch).
 REDSHIFT_SQL: Final = SqlDialect(
     name="redshift",
     identifiers=REDSHIFT,
@@ -214,10 +234,13 @@ REDSHIFT_SQL: Final = SqlDialect(
     string_type="VARCHAR(65535)",
     double_type="DOUBLE PRECISION",
     timestamp_literal=lambda t: f"CAST('{t}+00:00' AS TIMESTAMPTZ)",
-    add_hours=lambda e, h: f"DATEADD(hour, {h}, {e})",
+    add_hours=lambda e, h: (
+        f"CAST(DATEADD(hour, {h}, CAST({e} AS TIMESTAMP)) AS TIMESTAMPTZ)"
+    ),
     serialise=lambda x: f"CAST({x} AS VARCHAR)",
     time_column=lambda c: f"CAST({c} AS TIMESTAMPTZ)",
     epoch_seconds=lambda e: f"CAST(FLOOR(EXTRACT(EPOCH FROM {e})) AS BIGINT)",
+    first_chars=lambda e, n: f"SUBSTRING({e}, 1, {n})",
 )
 
 #: The dialects a connection can have (the DuckDB set lives in the tests).
@@ -317,10 +340,11 @@ def _exposures_cte(
         *render_filters(rules, assignment.filters, "filters"),
     ]
     s = dialect.string_type
+    label = dialect.first_chars(f"CAST({variant} AS {s})", LABEL_MAX_CHARS)
     return (
         "exposures AS (\n"  # nosec B608 - names pass render_column/render_table (fullmatch, then quoted), key and times are rendered literals, verify_generated_sql re-parses
         f"  SELECT CAST({unit} AS {s}) AS unit_id,\n"
-        f"    SUBSTR(CAST({variant} AS {s}), 1, {LABEL_MAX_CHARS}) AS variant,\n"
+        f"    {label} AS variant,\n"
         f"    {exposed} AS exposed_at\n"
         f"  FROM {table}\n"
         f"  WHERE {_where(conditions)}\n"

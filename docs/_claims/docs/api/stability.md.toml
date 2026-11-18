@@ -551,6 +551,18 @@ by = [
 ]
 
 [[unit]]
+text = "POST /api/v1/wizard/drafts, PUT /api/v1/wizard/drafts/{draft_id}/step | #2024 | A user keeps at most 20 drafts: creating one more drops that user's oldest, and the create still answers 201. All users together keep at most 350; the oldest is dropped first. A step field larger than its limit answers 422 at POST /drafts (for experiment_type) or PUT .../step with a fixed message that names the field and the limit, and the draft is left unchanged. The OpenAPI document does not change. See Guided experiment builder."
+by = [
+    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_the_draft_after_the_limit_drops_the_users_oldest",
+    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_a_text_field_over_its_limit_is_refused_and_not_stored",
+    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_a_list_field_over_its_limit_is_refused_and_not_stored",
+    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_a_create_with_an_over_long_experiment_type_is_refused_and_stores_nothing",
+    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_drafts_of_all_users_together_are_capped_oldest_first",
+    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_the_numbers_the_docs_state_are_the_limits",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
 text = "POST /api/v1/wizard/drafts/{draft_id}/submit | #1257 | The experiment it creates carries the draft's mde as its primary metric's expected_effect, which the results page plans the sample for; the mde used to be dropped, leaving expected_effect null. The guardrail metrics carry none, and a draft with no mde creates the experiment as before. The OpenAPI document does not change. See Guided experiment builder."
 by = [
     "test:backend/tests/integration/api/test_wizard_submit_builds.py::test_a_submitted_draft_creates_the_documented_experiment",

@@ -420,6 +420,10 @@ ROLE_READS = {
         "a decider: honours grants",
     ),
     ("core/permissions.py", "check_permission"): ("A", "a decider: honours grants"),
+    ("core/permissions.py", "feature_flag_roles_for"): (
+        "N",
+        "names the built-in roles for a refusal message; decides nothing",
+    ),
     ("core/permissions.py", "has_permission"): (
         "A",
         "the built-in role table the deciders read first",

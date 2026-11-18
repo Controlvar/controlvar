@@ -21,6 +21,18 @@ export function formatLatency(value: number | null): string {
   return value === null ? 'n/a' : `${Math.round(value)} ms`;
 }
 
+/**
+ * One safety-check reading or threshold as Admin → Safety writes it: the
+ * error rate as a percentage, a latency in ms, anything else as the API sent
+ * it (with its `unit`, when it names one). The check endpoint returns raw
+ * numbers with `unit: null` (#1972).
+ */
+export function formatSafetyMetricValue(name: string, value: number, unit?: string | null): string {
+  if (name === 'error_rate') return formatErrorRate(value);
+  if (name.includes('latency')) return formatLatency(value);
+  return unit ? `${value} ${unit}` : String(value);
+}
+
 export function SafetyStatusCard({ flag, onRollback }: SafetyStatusCardProps) {
   const badgeClass = STATUS_BADGE_CLASSES[flag.health];
   const showRollback = flag.is_on && (flag.health === 'warning' || flag.health === 'critical');

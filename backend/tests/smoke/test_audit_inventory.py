@@ -145,9 +145,7 @@ INVENTORY = {
     ("DELETE", f"{V1}/rollout-schedules/stages/{{stage_id}}"): ROLLOUT,
     ("POST", f"{V1}/rollout-schedules/stages/{{stage_id}}/advance"): ROLLOUT,
     # --- safety --------------------------------------------------------------
-    ("POST", f"{V1}/safety/settings"): NotAudited(
-        "safety settings are not on the audited event list"
-    ),
+    ("POST", f"{V1}/safety/settings"): Audited(A.SAFETY_CONFIG_UPDATE),
     ("POST", f"{V1}/safety/feature-flags/{{feature_flag_id}}/config"): NotAudited(
         "a flag's safety config is not on the audited event list"
     ),

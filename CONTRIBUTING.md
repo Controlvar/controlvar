@@ -193,7 +193,7 @@ make lint
 make format
 ```
 
-`make lint` runs `ruff check backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/`, `ruff format --check`,
+`make lint` runs `ruff check backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/ tests/personas/`, `ruff format --check`,
 `lint-imports` (the core/modules import contracts), `reuse lint` (every file
 carries a licence: `REUSE.toml` covers the tree by directory, the texts live in
 `LICENSES/`), the requirements-lock check, `npm run lint` and `npx tsc --noEmit`

@@ -48,6 +48,16 @@ def test_sign_up_and_the_password_reset_routes_take_five_a_minute():
         assert RATE_LIMIT_CONFIG[path] == (5, MINUTE), path
 
 
+def test_setting_up_two_step_sign_in_takes_five_a_minute_like_the_password_change():
+    """It checks the current password too (#1812). The key is the route's own
+    path, read from the application: a limit keyed on any other path limits
+    nothing."""
+    from backend.app.main import app
+
+    assert app.url_path_for("enrol_own_two_factor") == "/api/v1/users/me/2fa/enroll"
+    assert RATE_LIMIT_CONFIG["/api/v1/users/me/2fa/enroll"] == (5, MINUTE)
+
+
 def test_the_sso_routes_take_ten_and_thirty_a_minute():
     assert RATE_LIMIT_CONFIG["/api/v1/auth/sso/exchange"] == (10, MINUTE)
     assert RATE_LIMIT_CONFIG["/api/v1/auth/sso/login"] == (30, MINUTE)
@@ -77,6 +87,7 @@ def test_these_are_all_the_routes_with_a_limit_of_their_own():
         "/api/v1/auth/forgot-password",
         "/api/v1/auth/reset-password",
         "/api/v1/users/me/password",
+        "/api/v1/users/me/2fa/enroll",
         "/api/v1/auth/sso/exchange",
         "/api/v1/auth/sso/login",
         "/api/v1/auth/cognito/exchange",

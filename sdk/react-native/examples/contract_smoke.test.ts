@@ -92,6 +92,15 @@ describe('react-native SDK against a live backend', () => {
     expect(batch.failureCount).toBe(0);
     expect(batch.successCount).toBe(2);
 
+    // 4c. One keyed event sent twice with one fixed eventId (#1543, C4). The server is to store it
+    //     once: the runner counts the rows for this user and event name.
+    const dedupName = `contract_dedup_${randomUUID()}`;
+    const dedupId = `contract-${randomUUID()}`;
+    for (let i = 0; i < 2; i++) {
+      await client.track(dedupName, userId, undefined, { experimentKey, eventId: dedupId });
+    }
+    expect(swallowed).toEqual([]);
+
     // 5. The attributes reach flag evaluation (#1520). The seeded targeted flag is at 0% with
     //    one rule, plan equals pro, at 100%. A NEW client with offlineFallback off (so the
     //    fan-out above is untouched, and nothing is kept in AsyncStorage) asks for it with
@@ -162,6 +171,7 @@ describe('react-native SDK against a live backend', () => {
         track: { ok: true },
         fanout: { ok: true },
         targeted: { pro: pro.enabled, free: free.enabled, reason: reasons[0] },
+        event_id: { user_id: userId, event_name: dedupName, id: dedupId, sends: 2 },
         exposure: {
           calls: exposures.length,
           payload: exposures[0]

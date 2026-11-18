@@ -1873,6 +1873,31 @@
         "title": "BalancedGroupsResponse",
         "type": "object"
       },
+      "BanditHistoryTick": {
+        "description": "One weight update of a bandit: the time it ran and each variant's weight.\n\nRead from ``bandit_state_history``, whose rows for one update share one\n``tick_at``. A manual override (``PUT /bandit/{id}/weights``) writes no\nrow, so it is never a tick.",
+        "properties": {
+          "tick_at": {
+            "description": "When the update ran, in UTC (ISO-8601, ending in Z)",
+            "format": "date-time",
+            "title": "Tick At",
+            "type": "string"
+          },
+          "weights": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "description": "Mapping of variant_id to the weight that update gave it; the variants recorded in that update",
+            "title": "Weights",
+            "type": "object"
+          }
+        },
+        "required": [
+          "tick_at",
+          "weights"
+        ],
+        "title": "BanditHistoryTick",
+        "type": "object"
+      },
       "BanditStatusResponse": {
         "description": "Full bandit status snapshot for an experiment.\n\nAttributes\n----------\nexperiment_id:\n    Identifier of the parent experiment.\nalgorithm:\n    Algorithm currently driving traffic allocation.\ncurrent_weights:\n    Per-variant allocation weights.\ntotal_pulls:\n    Total pulls across all variants.\nregret_reduction_pct:\n    Estimated regret reduction vs. uniform allocation (may be None early on).\nrecommendation:\n    Narrative recommendation: one of ``\"EXPLORING\"``, ``\"CONVERGING\"``,\n    or ``\"DEPLOYING_<VariantName>\"``.\nlast_updated:\n    ISO-8601 timestamp of the last weight update (None if never updated).\nseed:\n    Deterministic RNG seed used by the last Thompson-sampling tick\n    (``blake2b(experiment_id | tick day | n_samples)``); ``None`` for\n    deterministic algorithms or before the first tick.\nn_samples:\n    Monte Carlo draws per variant used by the last Thompson-sampling\n    tick; ``None`` for deterministic algorithms or before the first tick.\nengine_version:\n    Version of the statistics engine that computed the current weights.",
         "properties": {
@@ -18014,6 +18039,27 @@
         "title": "TwoFactorDisableRequest",
         "type": "object"
       },
+      "TwoFactorEnrolRequest": {
+        "description": "``POST /api/v1/users/me/2fa/enroll``: your current password, as\nchanging your password asks for it.",
+        "properties": {
+          "current_password": {
+            "anyOf": [
+              {
+                "format": "password",
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Your current password. Required: a request without it, or with an empty one, is refused with 403.",
+            "title": "Current Password"
+          }
+        },
+        "title": "TwoFactorEnrolRequest",
+        "type": "object"
+      },
       "TwoFactorEnrolResponse": {
         "description": "``POST /api/v1/users/me/2fa/enroll``: a new secret for the\nauthenticator app, waiting for its first code.",
         "properties": {
@@ -23956,6 +24002,72 @@
         "tags": [
           "Bandit"
         ]
+      }
+    },
+    "/api/v1/bandit/{experiment_id}/history": {
+      "get": {
+        "description": "Return the bandit's past weight updates, newest first (beta).\n\nEach update is its time (``tick_at``, UTC) and each variant's weight,\nkeyed by variant id. ``limit`` (default 200, 1 to 1000) counts updates,\nnot variants. A manual weight override is not an update and is not\nlisted. ``[]`` before the first update; ``404`` for an unknown experiment\nor one whose ``optimization_type`` is ``fixed``. Requires permission to\nview the experiment, as GET /api/v1/bandit/{experiment_id} does; every\nrole has it.",
+        "operationId": "get_bandit_history_api_v1_bandit__experiment_id__history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BanditHistoryTick"
+                  },
+                  "title": "Response Get Bandit History Api V1 Bandit  Experiment Id  History Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Bandit History",
+        "tags": [
+          "Bandit"
+        ],
+        "x-stability": "beta"
       }
     },
     "/api/v1/bandit/{experiment_id}/update": {
@@ -36986,8 +37098,25 @@
     },
     "/api/v1/users/me/2fa/enroll": {
       "post": {
-        "description": "Start setting up two-step sign-in: a new secret for your authenticator app.\n\nAnswers the secret in base32 (to type in) and as an `otpauth://` link (for\na QR code). Nothing changes at sign-in until a code from the app confirms\nit (`POST /api/v1/users/me/2fa/confirm`). Asking again replaces a secret\nthat is still waiting, so a code from the earlier one no longer works.\n409 once two-step sign-in is on.",
+        "description": "Start setting up two-step sign-in: a new secret for your authenticator app.\n\nAsks for your current password (`current_password`), as changing your\npassword does. Without it, or with an empty one, it answers 403. A wrong\none answers 403 and counts toward the same lockout as sign-in; after too\nmany failures it answers 423 until `Retry-After` has passed. An account\nwith no password of its own answers 403: it does not sign in with a\npassword, so two-step sign-in does not apply to it.\n\nAnswers the secret in base32 (to type in) and as an `otpauth://` link (for\na QR code). Nothing changes at sign-in until a code from the app confirms\nit (`POST /api/v1/users/me/2fa/confirm`). Asking again replaces a secret\nthat is still waiting, so a code from the earlier one no longer works.\n409 once two-step sign-in is on.",
         "operationId": "enrol_own_two_factor_api_v1_users_me_2fa_enroll_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/TwoFactorEnrolRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
@@ -36999,11 +37128,27 @@
             },
             "description": "Successful Response"
           },
+          "403": {
+            "description": "The current password is missing or incorrect, or the account has no password of its own."
+          },
           "404": {
             "description": "AUTH_PROVIDER is not 'local'."
           },
           "409": {
             "description": "Two-step sign-in is already on for this account. Turn it off first to set it up again."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "423": {
+            "description": "Too many failed attempts for this account (counted together with sign-in); see Retry-After."
           }
         },
         "security": [

@@ -8,7 +8,8 @@ import { currentStep, nextCode, storedAndUrl, totp } from "./totp";
  * Journey: two-step sign-in (#1812, U9 of PR 3), against the real API.
  *
  * A fresh VIEWER account turns two-step sign-in on from its account page,
- * with this file standing in for the authenticator app (RFC 6238 over the key
+ * giving its current password at the set-up step, with this file standing in
+ * for the authenticator app (RFC 6238 over the key
  * the page shows as text). Then sign-in asks for the code, a wrong code is
  * refused, the lost-device path is on the page, the right code signs in, a
  * recovery code signs in, and a superuser resets it from Admin → Users, after
@@ -104,8 +105,18 @@ test.describe("Journey: two-step sign-in", () => {
 
         await page.goto("/account/two-factor");
         await expect(page.getByTestId("two-factor-off")).toBeVisible({ timeout: 15_000 });
+        // Setting it up asks for the current password, as changing it does.
+        const currentPassword = page.getByLabel("Current password");
+        await expect(currentPassword).toHaveAttribute("type", "password");
+        await expect(currentPassword).toHaveAttribute("autocomplete", "current-password");
+        await currentPassword.fill(password);
+        const enrolled = page.waitForResponse(
+          (r) => new URL(r.url()).pathname === "/api/v1/users/me/2fa/enroll" && r.request().method() === "POST",
+        );
         await page.getByTestId("two-factor-start").click();
+        expect((await enrolled).status(), "the set-up step with the current password").toBe(200);
         await expect(page.getByTestId("two-factor-enrol")).toBeVisible();
+        expect(await storedAndUrl(page)).not.toContain(password);
         await expect(page.getByTestId("two-factor-qr")).toHaveAttribute(
           "alt",
           "QR code for adding Controlvar to an authenticator app. The same key is written below.",

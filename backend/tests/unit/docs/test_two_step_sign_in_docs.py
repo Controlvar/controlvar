@@ -214,11 +214,17 @@ def test_each_named_path_exists():
 
 @pytest.mark.regression
 def test_the_fixed_texts_are_the_apis_word_for_word():
-    """The 503, the cap's 423, a wrong code, an expired sign-in and a required
-    role's refused turn-off: one wording in the API and on the page."""
+    """The 503, the cap's 423, a wrong code, an expired sign-in, a required
+    role's refused turn-off and the three refusals of the current password at
+    set-up: one wording in the API and on the page."""
     from backend.app.api.two_factor_answers import (
         SIGN_IN_EXPIRED_DETAIL,
         TWO_FACTOR_REQUIRED_FOR_ROLE,
+    )
+    from backend.app.api.v1.endpoints.users import (
+        CURRENT_PASSWORD_INCORRECT_DETAIL,
+        TWO_FACTOR_NO_PASSWORD_DETAIL,
+        TWO_FACTOR_PASSWORD_MISSING_DETAIL,
     )
     from backend.app.services.two_factor_service import (
         CODE_STEP_LOCKED_TEXT,
@@ -238,6 +244,9 @@ def test_the_fixed_texts_are_the_apis_word_for_word():
         "wrong code": WRONG_CODE_TEXT,
         "expired": SIGN_IN_EXPIRED_DETAIL,
         "required for the role": TWO_FACTOR_REQUIRED_FOR_ROLE,
+        "set-up, no password sent": TWO_FACTOR_PASSWORD_MISSING_DETAIL,
+        "set-up, wrong password": CURRENT_PASSWORD_INCORRECT_DETAIL,
+        "set-up, no password of its own": TWO_FACTOR_NO_PASSWORD_DETAIL,
     }
     missing = {name: text for name, text in texts.items() if text not in page}
     assert missing == {}
@@ -251,13 +260,19 @@ USER_GUIDE = REPO_ROOT / "docs" / "auth" / "two-factor.md"
 def test_the_dashboard_and_the_guide_use_the_apis_texts_word_for_word():
     """U7: the dashboard matches the API's refusals by their text (the cap's
     423 against the address lock's, the 503, a wrong code against an expired
-    step, a required role's refused turn-off), so each copy in
+    step, a required role's refused turn-off, and the current password's
+    three refusals at set-up), so each copy in
     ``frontend/src/services/twoFactor.ts`` is the API's constant as one
     literal; the user guide quotes the 503 and the cap's 423. Change one
     wording in the API and this names the copy that did not follow."""
     from backend.app.api.two_factor_answers import (
         SIGN_IN_EXPIRED_DETAIL,
         TWO_FACTOR_REQUIRED_FOR_ROLE,
+    )
+    from backend.app.api.v1.endpoints.users import (
+        CURRENT_PASSWORD_INCORRECT_DETAIL,
+        TWO_FACTOR_NO_PASSWORD_DETAIL,
+        TWO_FACTOR_PASSWORD_MISSING_DETAIL,
     )
     from backend.app.services.two_factor_service import (
         CODE_STEP_LOCKED_TEXT,
@@ -273,6 +288,9 @@ def test_the_dashboard_and_the_guide_use_the_apis_texts_word_for_word():
         "CODE_STEP_LOCKED_TEXT": CODE_STEP_LOCKED_TEXT,
         "UNAVAILABLE_TEXT": UNAVAILABLE_TEXT,
         "TWO_FACTOR_REQUIRED_FOR_ROLE": TWO_FACTOR_REQUIRED_FOR_ROLE,
+        "ENROL_PASSWORD_MISSING_DETAIL": TWO_FACTOR_PASSWORD_MISSING_DETAIL,
+        "CURRENT_PASSWORD_INCORRECT_DETAIL": CURRENT_PASSWORD_INCORRECT_DETAIL,
+        "ENROL_NO_PASSWORD_DETAIL": TWO_FACTOR_NO_PASSWORD_DETAIL,
     }
     missing = {name: text for name, text in dashboard.items() if text not in literals}
     assert missing == {}
