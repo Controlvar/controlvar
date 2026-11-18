@@ -1336,6 +1336,8 @@ describe('safeNextPath applies one check on every sign-in page', () => {
     ['a double slash after decoding', '/%2f/host'],
     ['a double slash after decoding (upper case)', '/%2F/host'],
     ['a scheme', 'https://host/x'],
+    ['more than 2048 characters', '/' + 'a'.repeat(2048)],
+    ['a character outside the URL set', '/x?a=<b>'],
   ];
   const KEPT: Array<[string, string]> = [
     ['a plain path', '/experiments'],
@@ -1343,6 +1345,7 @@ describe('safeNextPath applies one check on every sign-in page', () => {
     ['an encoded space', '/experiments?q=a%20b'],
     ['a fragment', '/experiments#results'],
     ['a path with an id', '/experiments/6f1c2a52-3b1e-4f43-9d0e-0a1b2c3d4e5f'],
+    ['2048 characters', '/' + 'a'.repeat(2047)],
   ];
 
   it.each(REFUSED)('refuses %s and returns the fallback', (_label, path) => {
