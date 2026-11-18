@@ -126,14 +126,24 @@ describe('the reports', () => {
     p.close();
   });
 
-  test('name a selector that matched nothing, or several, by its index', async () => {
+  test('name a selector that matched several at once, and one that matched nothing only at the bound', async () => {
     const changes = { version: 1, changes: [{ op: 'hide', selector: '#missing' }, { op: 'hide', selector: '.many' }, { op: 'hide', selector: 'div[' }] };
-    const p = page(answering([experiment('headline', changes)]));
+    const early = page(answering([experiment('headline', changes)]));
     await settle();
-    expect(reports(p.fetches).map((report) => report.metadata)).toEqual([
-      { index: 0, reason: 'not_found' },
+    expect(reports(early.fetches).map((report) => report.metadata)).toEqual([
       { index: 1, reason: 'ambiguous' },
       { index: 2, reason: 'invalid' },
+    ]);
+    early.close();
+    // A page 20 s after its navigation started is past every bound.
+    const p = page(answering([experiment('headline', changes)]), {}, (window) => {
+      window.performance.now = () => 20000;
+    });
+    await settle();
+    expect(reports(p.fetches).map((report) => report.metadata)).toEqual([
+      { index: 1, reason: 'ambiguous' },
+      { index: 2, reason: 'invalid' },
+      { index: 0, reason: 'not_found' },
     ]);
     expect([...p.window.document.querySelectorAll<HTMLElement>('.many')].map((el) => el.style.display)).toEqual(['', '']);
     p.close();

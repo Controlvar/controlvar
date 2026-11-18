@@ -7,6 +7,7 @@
  * tag waits for consent. It publishes `window.controlvar.visual`, next to
  * whatever else the page keeps under `window.controlvar`.
  */
+import { pageBound } from "./bound";
 import { capture } from "./captures";
 import { configured, MISSING_CONFIG, readConfig } from "./config";
 import { runEditorLink } from "./editor-link";
@@ -54,7 +55,9 @@ function firstRun(): Runtime | null {
   );
 
   const link = runEditorLink({ window: win, captures, config, send });
+  const bound = pageBound(win, captures);
   const runtime = createRuntime({
+    bound,
     window: win,
     captures,
     config,

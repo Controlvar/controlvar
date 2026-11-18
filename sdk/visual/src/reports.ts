@@ -30,14 +30,19 @@ export const MESSAGES: Record<NotApplied, string> = {
   replaced_after_bound: "A visual change was lost: the page replaced the element after the script stopped watching.",
 };
 
+export interface ReportOptions {
+  /** Sent as the page goes away: the request outlives it (fetch keepalive). */
+  keepalive?: boolean;
+}
+
 export interface Reporter {
-  notApplied(experimentKey: string, index: number | null, reason: NotApplied): void;
+  notApplied(experimentKey: string, index: number | null, reason: NotApplied, options?: ReportOptions): void;
 }
 
 export function createReporter(send: Send): Reporter {
   let sent = 0;
   return {
-    notApplied(experimentKey, index, reason) {
+    notApplied(experimentKey, index, reason, options = {}) {
       if (sent >= MAX_REPORTS) return;
       const request = send(
         ERRORS_PATH,
@@ -47,7 +52,7 @@ export function createReporter(send: Send): Reporter {
           message: MESSAGES[reason],
           metadata: { index, reason },
         },
-        { apiKey: true },
+        { apiKey: true, keepalive: options.keepalive === true },
       );
       if (request === null) return;
       sent += 1;

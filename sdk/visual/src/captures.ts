@@ -12,7 +12,10 @@ export interface Captures {
   /** Called in exactly one place, send.ts (a unit test counts the sites). */
   fetch: (url: string, init: RequestInit) => Promise<Response>;
   setTimeout(callback: () => void, ms: number): unknown;
-  addEventListener(type: string, listener: (event: MessageEvent) => void): void;
+  /** Milliseconds since the page's navigation started (performance.now). */
+  now(): number;
+  /** addEventListener on the window. */
+  addEventListener<E extends Event>(type: string, listener: (event: E) => void): void;
   contentWindow(frame: HTMLIFrameElement): Window | null;
   messageData(event: MessageEvent): unknown;
   messageOrigin(event: MessageEvent): string;
@@ -45,6 +48,7 @@ export function capture(win: Window & typeof globalThis): Captures {
     getRandomValues: win.Crypto.prototype.getRandomValues.bind(win.crypto) as Captures["getRandomValues"],
     fetch: win.fetch.bind(win),
     setTimeout: win.setTimeout.bind(win) as Captures["setTimeout"],
+    now: win.performance.now.bind(win.performance),
     addEventListener: win.EventTarget.prototype.addEventListener.bind(win) as Captures["addEventListener"],
     contentWindow: getter<HTMLIFrameElement, Window | null>(win.HTMLIFrameElement.prototype, "contentWindow"),
     messageData: getter<MessageEvent, unknown>(win.MessageEvent.prototype, "data"),

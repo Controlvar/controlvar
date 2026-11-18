@@ -6,13 +6,26 @@
  * A change applies only when its selector matches exactly one element. While
  * the page is still loading, a change is applied as soon as its element
  * exists (a text change once its element is closed: a node follows it that
- * it does not contain); at DOMContentLoaded every change is checked once
- * more, and one whose selector no longer matches exactly one element is
- * undone and reported. The page is hidden until then.
+ * it does not contain). At DOMContentLoaded every change is checked once
+ * more: one whose selector matches several elements is undone and reported.
+ * The page is hidden until then.
+ *
+ * Until the bound (bound.ts) one MutationObserver keeps the changes: when the
+ * page replaces a changed element, or writes over a change, the change is
+ * written again, at most 20 times in any second for each change. A change
+ * whose element has not appeared by the bound is reported then. After the
+ * bound no observer is left; `lost()` (at pagehide, or when the tab is
+ * hidden) reports, once each, the changes whose element the page replaced
+ * since.
  */
+import type { Bound } from "./bound";
 import type { Captures } from "./captures";
 import type { NotApplied, Reporter } from "./reports";
 import type { Change } from "./validate";
+
+/** More re-applies than this within one second stop that change. */
+export const MAX_REAPPLIES = 20;
+export const REAPPLY_WINDOW_MS = 1000;
 
 const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 
@@ -43,12 +56,20 @@ interface Item {
   state: "pending" | "applied" | "failed";
   target: Element | null;
   undo: (() => void) | null;
+  /** What the change's values read as right after the script wrote them. */
+  written: string;
+  /** When each re-apply of the last second happened. */
+  reapplies: number[];
+  /** Reported as replaced after the bound. */
+  lost: boolean;
 }
 
 export interface ApplyEnv {
   window: Window & typeof globalThis;
   captures: Captures;
   reporter: Reporter;
+  /** Every element the script has written to on this page. */
+  written: WeakSet<Element>;
 }
 
 /** Whether the script refuses to apply *change* to *element*. */
@@ -176,16 +197,64 @@ function write(env: ApplyEnv, element: Element, change: Change): (() => void) | 
   }
 }
 
+/**
+ * What *change*'s values read as on *element* now, as the browser serialises
+ * them (a colour written as `#FF0000` reads back as `rgb(255, 0, 0)`), so that
+ * a change is written again only when something else has changed them.
+ */
+function readBack(captures: Captures, element: Element, change: Change): string {
+  const style = (element as HTMLElement).style;
+  const property = (name: string) =>
+    style ? `${captures.getPropertyValue(style, name)}!${captures.getPropertyPriority(style, name)}` : "";
+  switch (change.op) {
+    case "set_text":
+      return JSON.stringify(element.textContent);
+    case "set_attribute":
+      return JSON.stringify(element.getAttribute(change.name));
+    case "set_image": {
+      const picture = element.parentElement;
+      const sources = picture && picture.localName === "picture" ? picture.getElementsByTagName("source").length : 0;
+      return JSON.stringify([
+        element.getAttribute("src"),
+        element.getAttribute("alt"),
+        element.getAttribute("srcset"),
+        element.getAttribute("sizes"),
+        sources,
+      ]);
+    }
+    case "hide":
+      return property("display");
+    case "set_style":
+      return JSON.stringify(Object.keys(change.styles).map(property));
+    default:
+      return "";
+  }
+}
+
 export interface Applier {
   add(experimentKey: string, changes: Change[]): void;
   readonly empty: boolean;
-  /** Applies what it can now and, while the page loads, as its elements arrive; calls *done* once every change is settled. */
-  start(done: () => void): void;
+  /**
+   * Applies what it can now and, while the page loads, as its elements
+   * arrive; calls *done* at DOMContentLoaded (or now, if it has passed),
+   * when every change that can be applied by then is. Keeps the changes
+   * until *bound*.
+   */
+  start(done: () => void, bound: Bound): void;
+  /** Undoes every change and stops watching, reporting nothing (the page moved to another path). */
+  stop(): void;
+  /** Reports, once each, the applied changes whose element the page has replaced since the bound. */
+  lost(): void;
 }
+
+type Pass = "parsing" | "loaded" | "watching" | "bound";
 
 export function createApplier(env: ApplyEnv): Applier {
   const doc = env.window.document;
   const items: Item[] = [];
+
+  let observer: MutationObserver | null = null;
+  let stopped = false;
 
   function fail(item: Item, reason: NotApplied): void {
     if (item.undo) item.undo();
@@ -204,12 +273,24 @@ export function createApplier(env: ApplyEnv): Applier {
       return fail(item, "invalid");
     }
     if (undo === null) return fail(item, "not_allowed");
+    env.written.add(element);
     item.undo = undo;
     item.target = element;
+    item.written = readBack(env.captures, element, item.change);
     item.state = "applied";
   }
 
-  function visit(item: Item, final: boolean): void {
+  /** Writes an applied change again (its element was replaced, or written over), within the cap. */
+  function reapply(item: Item, element: Element): void {
+    const now = env.captures.now();
+    item.reapplies = item.reapplies.filter((at) => now - at < REAPPLY_WINDOW_MS);
+    if (item.reapplies.length >= MAX_REAPPLIES) return fail(item, "reapply_limit");
+    item.reapplies.push(now);
+    if (element !== item.target) item.undo = null;
+    applyTo(item, element);
+  }
+
+  function visit(item: Item, pass: Pass): void {
     if (item.state === "failed") return;
     let matches: NodeListOf<Element>;
     try {
@@ -217,61 +298,119 @@ export function createApplier(env: ApplyEnv): Applier {
     } catch {
       return fail(item, "invalid");
     }
-    if (!final) {
-      if (matches.length !== 1 || item.state === "applied") return;
-      const element = matches[0];
-      if (item.change.op === "set_text" && !closed(element) && !notAllowed(element, item.change)) return;
+    const count = matches.length;
+    if (pass === "loaded" && count > 1) return fail(item, "ambiguous");
+    if (pass === "bound" && item.state === "pending" && count !== 1) {
+      return fail(item, count === 0 ? "not_found" : "ambiguous");
+    }
+    if (count !== 1) return;
+    const element = matches[0];
+    const waiting = pass === "parsing" && item.change.op === "set_text" && !closed(element);
+    if (item.state === "pending") {
+      if (waiting && !notAllowed(element, item.change)) return;
       return applyTo(item, element);
     }
-    if (matches.length === 0) return fail(item, "not_found");
-    if (matches.length > 1) return fail(item, "ambiguous");
-    const element = matches[0];
-    if (item.state === "applied" && item.target === element) return;
-    if (item.undo) item.undo();
-    item.undo = null;
-    applyTo(item, element);
+    if (element === item.target && readBack(env.captures, element, item.change) === item.written) return;
+    if (waiting && element !== item.target) return;
+    reapply(item, element);
   }
 
-  function pass(final: boolean): void {
+  function run(pass: Pass): void {
     for (const item of items) {
       try {
-        visit(item, final);
+        visit(item, pass);
       } catch {
         if (item.state !== "failed") fail(item, "invalid");
       }
     }
   }
 
+  function disconnect(): void {
+    if (observer) observer.disconnect();
+    observer = null;
+  }
+
   return {
     add(experimentKey, changes) {
       changes.forEach((change, index) => {
-        items.push({ experimentKey, index, change, state: "pending", target: null, undo: null });
+        items.push({
+          experimentKey,
+          index,
+          change,
+          state: "pending",
+          target: null,
+          undo: null,
+          written: "",
+          reapplies: [],
+          lost: false,
+        });
       });
     },
     get empty() {
       return items.length === 0;
     },
-    start(done) {
-      let finished = false;
-      let observer: MutationObserver | null = null;
-      const finish = (): void => {
-        if (finished) return;
-        finished = true;
-        if (observer) observer.disconnect();
+    start(done, bound) {
+      let loaded = doc.readyState !== "loading";
+      let revealed = false;
+      const reveal = (): void => {
+        if (revealed) return;
+        revealed = true;
+        loaded = true;
         try {
-          pass(true);
+          if (!stopped) run("loaded");
         } finally {
           done();
         }
       };
-      if (doc.readyState !== "loading") return finish();
       try {
-        observer = new env.window.MutationObserver(() => pass(false));
-        observer.observe(doc, { childList: true, subtree: true });
-        doc.addEventListener("DOMContentLoaded", finish);
-        pass(false);
+        if (!bound.passed) {
+          observer = new env.window.MutationObserver(() => {
+            if (!stopped) run(loaded ? "watching" : "parsing");
+          });
+          observer.observe(doc, { childList: true, subtree: true, attributes: true, characterData: true });
+        }
+        if (loaded) {
+          reveal();
+        } else {
+          doc.addEventListener("DOMContentLoaded", reveal);
+          run("parsing");
+        }
       } catch {
-        finish();
+        reveal();
+      }
+      bound.whenPassed(() => {
+        disconnect();
+        if (!stopped) run("bound");
+      });
+    },
+    stop() {
+      stopped = true;
+      disconnect();
+      for (let index = items.length - 1; index >= 0; index -= 1) {
+        const item = items[index];
+        try {
+          if (item.undo) item.undo();
+        } catch {
+          // An undo that fails leaves that element as it is.
+        }
+        item.undo = null;
+        item.target = null;
+        item.state = "failed";
+      }
+    },
+    lost() {
+      if (observer || stopped) return;
+      for (const item of items) {
+        if (item.state !== "applied" || item.lost) continue;
+        let matches: NodeListOf<Element>;
+        try {
+          matches = doc.querySelectorAll(item.change.selector);
+        } catch {
+          continue;
+        }
+        if (matches.length !== 1 || env.written.has(matches[0])) continue;
+        item.lost = true;
+        env.reporter.notApplied(item.experimentKey, item.index, "replaced_after_bound", { keepalive: true });
       }
     },
   };

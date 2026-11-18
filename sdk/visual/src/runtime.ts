@@ -7,8 +7,16 @@
  *
  * Whatever goes wrong, the page is shown: every path that hid it ends by
  * showing it, and the hide has its own timer.
+ *
+ * On a single-page app the script follows the path: after each
+ * history.pushState or replaceState (it wraps both, calling the page's own
+ * first) and each popstate, it reads the kept page rules once against the
+ * current path. When the path has changed it undoes the changes it made and
+ * asks again for the new path, unless fresh rules cover nothing there. A
+ * change of the part after `#` alone asks nothing.
  */
-import { createApplier } from "./apply";
+import { createApplier, type Applier } from "./apply";
+import { answerBound, type Bound } from "./bound";
 import type { Captures } from "./captures";
 import type { Config } from "./config";
 import { hidePage, type Hider } from "./hide";
@@ -44,7 +52,11 @@ export interface RuntimeEnv {
   now(): number;
   /** Set when this page must send nothing more (a refused or failed call). */
   silence(): void;
+  /** The page's bound (bound.ts), made in the first run. */
+  bound: Bound;
 }
+
+const NO_HIDE: Hider = { show: () => undefined, hidden: false };
 
 export interface Runtime {
   /** Asks for this page's changes and applies them. Runs once. */
@@ -78,7 +90,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function createRuntime(env: RuntimeEnv): Runtime {
   const { window: win, captures, config, send } = env;
   const reporter = createReporter(send);
+  const written = new WeakSet<Element>();
   let started = false;
+  /** The changes applied for the current path. */
+  let current: Applier | null = null;
+  /** The path last asked about, and how many times the script has asked. */
+  let askedPath: string | null = null;
+  let asked = 0;
 
   function remember(keys: string[]): void {
     if (keys.length === 0) return;
@@ -98,12 +116,12 @@ export function createRuntime(env: RuntimeEnv): Runtime {
     if (status === 401 || status === 403) win.console.warn(KEY_REFUSED);
   }
 
-  function answer(body: unknown, hider: Hider): void {
-    if (!isRecord(body)) return hider.show();
+  function answer(body: unknown, hider: Hider, which: number): void {
+    if (!isRecord(body) || which !== asked) return hider.show();
     const rules = readAnswerRules(body.pages, env.now());
     if (rules) keepRules(env.local(), rules);
     const experiments = Array.isArray(body.experiments) ? body.experiments.slice(0, MAX_EXPERIMENTS) : [];
-    const applier = createApplier({ window: win, captures, reporter });
+    const applier = createApplier({ window: win, captures, reporter, written });
     const assigned: string[] = [];
     for (const experiment of experiments) {
       if (!isRecord(experiment) || experiment.assigned !== true) continue;
@@ -117,15 +135,16 @@ export function createRuntime(env: RuntimeEnv): Runtime {
     }
     remember(assigned);
     if (applier.empty) return hider.show();
-    applier.start(() => hider.show());
+    current = applier;
+    applier.start(() => hider.show(), which === 1 ? env.bound : answerBound(captures));
   }
 
-  function ask(hider: Hider, userId: string): void {
+  function ask(hider: Hider, userId: string, path: string, which: number): void {
     const location = win.location;
     const body: Record<string, unknown> = {
       user_id: userId,
       host: location.host,
-      path: location.pathname,
+      path,
       format_version: FORMAT_VERSION,
     };
     if (config.attributes !== null) body.context = config.attributes;
@@ -139,7 +158,7 @@ export function createRuntime(env: RuntimeEnv): Runtime {
             return hider.show();
           }
           return response.json().then(
-            (parsed: unknown) => answer(parsed, hider),
+            (parsed: unknown) => answer(parsed, hider, which),
             () => hider.show(),
           );
         },
@@ -151,21 +170,76 @@ export function createRuntime(env: RuntimeEnv): Runtime {
       .then(undefined, () => hider.show());
   }
 
+  /**
+   * One re-evaluation: one read of the kept page rules against the current
+   * path. A new path undoes the current changes and asks for its own, unless
+   * fresh rules cover nothing there. Only the first one hides the page.
+   */
+  function evaluate(first: boolean): void {
+    const location = win.location;
+    const path = location.pathname;
+    const skip = rulesSkip(env.local(), location.host, path, env.now());
+    if (path === askedPath) return;
+    askedPath = path;
+    asked += 1;
+    const which = asked;
+    if (current) {
+      const leaving = current;
+      current = null;
+      leaving.stop();
+    }
+    if (skip || location.host.length > MAX_HOST_LENGTH || path.length > MAX_PATH_LENGTH) return;
+    const userId = visitorId(win, config, captures);
+    const hider = first ? hidePage(win.document, captures, config.timeoutMs) : NO_HIDE;
+    try {
+      ask(hider, userId, path, which);
+    } catch {
+      hider.show();
+    }
+  }
+
+  /** Follows the path of a single-page app, and reports changes lost after the bound as the page goes away. */
+  function follow(): void {
+    const later = (): void => {
+      captures.setTimeout(() => {
+        try {
+          evaluate(false);
+        } catch {
+          // The page carries on as it is.
+        }
+      }, 0);
+    };
+    const history = win.history;
+    for (const name of ["pushState", "replaceState"] as const) {
+      const original = history[name];
+      if (typeof original !== "function") continue;
+      history[name] = function (this: History, ...args: Parameters<History["pushState"]>): void {
+        const result = original.apply(this, args);
+        later();
+        return result;
+      };
+    }
+    captures.addEventListener("popstate", later);
+    const lost = (): void => {
+      if (current) current.lost();
+    };
+    captures.addEventListener("pagehide", lost);
+    captures.addEventListener("visibilitychange", () => {
+      if (win.document.visibilityState === "hidden") lost();
+    });
+  }
+
   return {
     start() {
       if (started) return;
       started = true;
-      const location = win.location;
       if (backoffActive(env.session(), env.now())) return;
-      if (location.host.length > MAX_HOST_LENGTH || location.pathname.length > MAX_PATH_LENGTH) return;
-      if (rulesSkip(env.local(), location.host, location.pathname, env.now())) return;
-      const userId = visitorId(win, config, captures);
-      const hider = hidePage(win.document, captures, config.timeoutMs);
       try {
-        ask(hider, userId);
+        follow();
       } catch {
-        hider.show();
+        // A page whose history cannot be wrapped still gets this page's changes.
       }
+      evaluate(true);
     },
     track(event, options) {
       if (typeof event !== "string" || event.length < 1 || event.length > MAX_EVENT_LENGTH) {
