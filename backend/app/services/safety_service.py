@@ -529,10 +529,17 @@ class SafetyService:
     async_get_safety_settings = get_safety_settings
 
     async def create_or_update_safety_settings(
-        self, settings: SafetySettingsCreate
+        self, settings: SafetySettingsCreate, actor: Optional[User] = None
     ) -> SafetySettingsResponse:
-        """Create or update the global settings."""
+        """Create or update the global settings.
+
+        With ``actor`` (the route passes the signed-in superuser), one
+        ``safety_config_update`` entry follows the commit, recording the
+        values before and after (``before`` is None when the row is created).
+        Nothing is written when the save raises (#1970).
+        """
         existing = self.db.query(SafetySettings).first()
+        before = _settings_audit_value(existing) if existing else None
         payload = _settings_columns(settings.model_dump(exclude_unset=True))
 
         if existing:
@@ -544,6 +551,17 @@ class SafetyService:
 
         self.db.commit()
         self.db.refresh(existing)
+        if actor is not None:
+            AuditService.record_after_commit(
+                self.db,
+                actor=actor,
+                action=ActionType.SAFETY_CONFIG_UPDATE,
+                entity_type=EntityType.SAFETY_CONFIG,
+                entity_id=existing.id,
+                entity_name="Global safety settings",
+                before=before,
+                after=_settings_audit_value(existing),
+            )
         return SafetySettingsResponse.model_validate(existing)
 
     # ------------------------------------------------------------------
@@ -1017,6 +1035,14 @@ class SafetyService:
 # ----------------------------------------------------------------------
 # Schema -> column mapping helpers
 # ----------------------------------------------------------------------
+
+
+def _settings_audit_value(row: SafetySettings) -> Dict[str, Any]:
+    """The global settings an audit entry records: both columns, as plain JSON."""
+    return {
+        "enable_automatic_rollbacks": row.enable_automatic_rollbacks,
+        "default_metrics": row.default_metrics,
+    }
 
 
 def _settings_columns(data: Dict[str, Any]) -> Dict[str, Any]:

@@ -83,6 +83,7 @@ export const ACTIONS: Readonly<Record<string, { label: string; group: ActionGrou
   segment_update: { label: 'Segment changed', group: 'Holdouts, groups and segments' },
   segment_archive: { label: 'Segment archived', group: 'Holdouts, groups and segments' },
   safety_rollback: { label: 'Safety rollback', group: 'Safety' },
+  safety_config_update: { label: 'Safety settings changed', group: 'Safety' },
 };
 
 /** The label for an action type; an unknown type (an older entry) shows as itself. */
@@ -110,6 +111,7 @@ export const ENTITY_LABELS: Readonly<Record<string, string>> = {
   holdout: 'Holdout',
   mutual_exclusion_group: 'Exclusion group',
   segment: 'Segment',
+  safety_config: 'Safety settings',
 };
 
 /** The label for an entity type; an unknown one shows as itself. */

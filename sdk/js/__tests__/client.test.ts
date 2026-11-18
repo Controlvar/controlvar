@@ -1251,6 +1251,25 @@ describe('track fan-out (no key)', () => {
     expect(call(fetchMock, 1).body.events).toHaveLength(1);
   });
 
+  // #1815: the answer to a key-less track() is not inspected.
+  it('does not call onError for an entry a 200 batch answer refuses', async () => {
+    mockFetchSequence(
+      { body: assignment },
+      {
+        body: {
+          success_count: 0,
+          failure_count: 1,
+          errors: [{ index: 0, message: 'Experiment not found' }],
+        },
+      },
+    );
+    const onError = jest.fn();
+    const client = new ExperimentationClient({ ...baseConfig, onError });
+    await client.getAssignment('checkout', user);
+    await expect(client.track('user-123', 'click')).resolves.toBeUndefined();
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it('never rejects when the batch request fails', async () => {
     mockFetchSequence({ body: assignment }, new Error('Network failure'));
     const client = new ExperimentationClient(baseConfig);

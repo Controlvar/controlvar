@@ -110,7 +110,7 @@ step: [Guided examples](docs/guides/guided-examples.md).
 
 - **A/B Testing & Multivariate Experiments**: Frequentist, sequential (mSPRT) and Bayesian analysis
   in the API; [which of them the dashboard shows](docs/guides/dashboard-and-api.md)
-- **Sequential testing**: mSPRT with always-valid confidence intervals, so you can read results at
+- **Sequential testing (beta)**: mSPRT with always-valid confidence intervals, so you can read results at
   any time. There are no O'Brien-Fleming or Pocock boundaries.
 - **Multiple-comparison correction**: Benjamini-Hochberg by default, or Bonferroni, across each experiment's variants; stored with the experiment alongside its confidence level
 - **Sample Size Calculations**: Automatic power analysis

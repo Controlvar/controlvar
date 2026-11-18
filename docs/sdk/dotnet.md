@@ -178,7 +178,7 @@ control variant.
 
 ## Event Tracking
 
-### `Task<bool> TrackAsync(string eventName, string userId, Dictionary<string, object>? properties = null, string? experimentKey = null, string? featureFlagKey = null, double? value = null, string? eventType = null, DateTimeOffset? timestamp = null)`
+### `Task<bool> TrackAsync(string eventName, string userId, Dictionary<string, object>? properties = null, string? experimentKey = null, string? featureFlagKey = null, double? value = null, string? eventType = null, DateTimeOffset? timestamp = null, string? eventId = null)`
 
 Never throws. Returns `true` when every request succeeded (or nothing had to be sent), `false`
 otherwise. A `TrackAsync(TrackEvent)` overload takes a prebuilt event with the same fields.
@@ -206,7 +206,8 @@ come later.
 Conversions are matched to metrics by **event name**: an experiment metric whose `event_name` is
 `purchase` counts every `purchase` event, whatever `event_type` was sent. `properties` is sent as
 `metadata`; `eventType` defaults to `eventName`; `timestamp` is sent as ISO-8601 UTC when given
-(the server stamps the event otherwise).
+(the server stamps the event otherwise); `eventId` is sent as `event_id` (see
+[Event ids](#event-ids)).
 
 Because the cache lives in the `ExperimentationClient` instance, the key-less fan-out only sees
 assignments and flags evaluated through that instance within `CacheTtlSeconds`. Pass the key
@@ -225,6 +226,28 @@ bool ok = await client.TrackBatchAsync(new[]
     new TrackEvent { UserId = "user-123", EventName = "search",   FeatureFlagKey = "new-search" },
 });
 ```
+
+### Event ids
+
+Every event this SDK sends carries an `event_id`. The server stores an event sent again with the
+same `event_id`, user, experiment, flag and event name only once (see
+[How events count](../guides/how-events-count.md#sending-an-event-again)). Use this from the next
+published version of this package, not from the version on NuGet now. It also needs a Controlvar
+server that includes the `event_id` change ([#1640](https://github.com/Controlvar/controlvar/pull/1640)):
+an older server ignores the field and stores an event sent again a second time.
+
+- Without an `eventId`, each `TrackAsync` call, and each event of `TrackBatchAsync`, makes a new
+  id, a lowercase UUID v4, so two calls are two events. For an event your code may send again (a
+  retried checkout, a handler that runs twice), make the id once, when the event happens, and
+  pass the same `eventId` (or `TrackEvent.EventId`) each time. The `TrackEvent` you pass is not
+  changed: sending the same one twice without an `EventId` sends two events.
+- `null` and `""` mean none, so the SDK makes one. The SDK does not check the id: the server
+  refuses (`422`) one of more than 255 characters or one holding NUL, and in a batch one such
+  event refuses the whole request.
+- An event fanned out to several experiments and flags carries the same `event_id` in every
+  entry, so it counts once in each of them. In `TrackBatchAsync`, each event has its own.
+- The SDK does not send a request again. A request that fails on the network or times out may
+  have been stored; send the event again with the same `eventId` and it is stored once.
 
 ---
 
@@ -344,7 +367,7 @@ Every request carries `X-API-Key` and `Accept: application/json`; POSTs carry
 |---|---|---|---|
 | `EvaluateFlagAsync` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=…` | `context`: the attributes as URL-encoded JSON, only when there are any | `{key, enabled, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
 | `GetAssignmentAsync` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
-| `TrackAsync` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
+| `TrackAsync` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?, event_id}` | ignored |
 | `TrackAsync` without keys, `TrackBatchAsync` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored (status only) |
 
 These SDK paths share a per-IP rate-limit ceiling of `SDK_RATE_LIMIT_PER_MINUTE` requests

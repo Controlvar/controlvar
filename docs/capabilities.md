@@ -10,7 +10,7 @@ What Controlvar does not do is in [Limitations](getting-started/limitations.md),
 - [Frequentist results](api/endpoints.md#how-results-are-judged): judged at the experiment's confidence level, with Benjamini-Hochberg (the default) or Bonferroni correction across its variants.
 - [Sequential testing](api/sequential-testing.md) (beta): mSPRT with always-valid confidence intervals, so you can read results at any time.
 - [Bayesian analysis](api/bayesian.md): each variant's chance to be best, the expected loss of choosing it, and a stopping recommendation.
-- [CUPED](api/cuped.md) (beta): narrower intervals from each user's pre-experiment history, through the API.
+- [CUPED](api/cuped.md) (beta): narrower intervals from each user's pre-experiment history, on the results page and through the API.
 - [Sample size planning](statistics/power-analysis.md): the Power Calculator and guided setup before an experiment, and the results page's Sample Size tab during it.
 - [Multi-armed bandits](api/multi-armed-bandit.md): new users go more often to the variants that perform better.
 - [Mutual exclusion groups and a global holdout](api/mutual-exclusion-groups.md): a user joins at most one experiment of a group, and the holdout keeps a share of new users out of every experiment (its results are beta).

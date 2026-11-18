@@ -1927,6 +1927,7 @@ See [Multi-Armed Bandit Guide](multi-armed-bandit.md) for full documentation.
 
 ```text
 GET  /api/v1/bandit/{experiment_id}           — Current variant weights and stats
+GET  /api/v1/bandit/{experiment_id}/history   — Past weight updates, newest first
 POST /api/v1/bandit/{experiment_id}/update    — Trigger weight recalculation (DEVELOPER+)
 PUT  /api/v1/bandit/{experiment_id}/weights   — Override weights manually (ADMIN)
 ```

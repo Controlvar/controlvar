@@ -72,7 +72,10 @@ describe('the action filter (#221)', () => {
     const values = Array.from(
       screen.getByTestId('filter-entity-type').querySelectorAll('option'),
     ).map((o) => o.value);
-    expect(values).not.toContain('safety_config');
+    // Saving the global safety settings writes safety_config entries (#1970).
+    expect(values).toContain('safety_config');
+    expect(values).not.toContain('permission');
+    expect(values).not.toContain('rollout_schedule');
     expect(values[0]).toBe('');
   });
 

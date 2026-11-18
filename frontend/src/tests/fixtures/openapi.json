@@ -273,6 +273,12 @@
         "summary": "Get Bandit Status"
       }
     },
+    "/api/v1/bandit/{experiment_id}/history": {
+      "get": {
+        "operationId": "get_bandit_history_api_v1_bandit__experiment_id__history_get",
+        "summary": "Get Bandit History"
+      }
+    },
     "/api/v1/bandit/{experiment_id}/update": {
       "post": {
         "operationId": "trigger_bandit_update_api_v1_bandit__experiment_id__update_post",

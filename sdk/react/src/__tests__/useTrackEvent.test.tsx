@@ -42,9 +42,16 @@ function setupFetchMock(): jest.Mock {
   return mock;
 }
 
+/** The `event_id` is made fresh per call; `event-id.test.ts` pins it, so these bodies leave it out. */
+function withoutEventId(body: Record<string, unknown>): Record<string, unknown> {
+  const { event_id: _eventId, ...rest } = body;
+  if (Array.isArray(rest.events)) rest.events = rest.events.map(e => withoutEventId(e as Record<string, unknown>));
+  return rest;
+}
+
 function lastBody(mock: jest.Mock) {
   const [, init] = mock.mock.calls[mock.mock.calls.length - 1];
-  return JSON.parse(init.body);
+  return withoutEventId(JSON.parse(init.body));
 }
 
 afterEach(() => {
@@ -180,7 +187,7 @@ describe('useTrackEvent', () => {
     const [url, init] = fetchMock.mock.calls[1];
     expect(url).toBe('https://api.example.com/api/v1/tracking/batch');
     expect(init.method).toBe('POST');
-    expect(JSON.parse(init.body)).toEqual({
+    expect(withoutEventId(JSON.parse(init.body))).toEqual({
       events: [
         {
           event_type: 'purchase',

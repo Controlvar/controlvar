@@ -100,9 +100,20 @@ function callAt(index: number): CapturedCall {
     url,
     method: init.method,
     headers: init.headers,
-    body: init.body === undefined ? undefined : JSON.parse(init.body),
+    body: init.body === undefined ? undefined : withoutEventId(JSON.parse(init.body)),
     rawBody: init.body,
   };
+}
+
+/**
+ * A body without the `event_id` of a tracking body or of each batch entry: the SDK makes a fresh
+ * one per event, so the exact-body assertions here leave it out. `event-id.test.ts` pins it.
+ */
+function withoutEventId(body: unknown): unknown {
+  if (!body || typeof body !== 'object') return body;
+  const { event_id: _eventId, ...rest } = body as Record<string, unknown>;
+  if (Array.isArray(rest.events)) rest.events = rest.events.map(withoutEventId);
+  return rest;
 }
 
 function calls(): CapturedCall[] {
