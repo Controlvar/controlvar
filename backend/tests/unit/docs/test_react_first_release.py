@@ -1,11 +1,12 @@
-"""The React SDK's first release is 0.1.0, and nothing names the old number.
+"""The React SDK's version is pinned, and nothing names the old number.
 
 Before its first publish, ``sdk/react`` carried 1.1.0, a version never
 released, and its pages and the demo READMEs followed it. Plan P (#1498)
-moves it to 0.1.0. This holds:
+moved it to 0.1.0, its first release; #1810's version pull request moves it
+to 0.2.0. This holds:
 
 * the manifest and the lock's own two version fields (R1a: edit this pin in
-  the pull request that bumps the version after 0.1.0 is on npm);
+  the pull request that bumps the version after 0.2.0);
 * for every npm SDK, the lock's own version fields agree with package.json
   (V1), which neither ``npm ci`` nor any other test compares;
 * the lines the widened version grep (EMP-9, the plan's C9) found for React,
@@ -41,14 +42,14 @@ def lock_versions(sdk: str) -> tuple:
 
 
 @pytest.mark.regression
-def test_the_react_package_is_first_published_at_0_1_0():
+def test_the_react_package_is_at_0_2_0():
     """R1a. The manifest said 1.1.0, a version never published; the first
-    release is 0.1.0. Edit this pin in the pull request that bumps the
-    version after 0.1.0 is on npm."""
+    release was 0.1.0, and 0.2.0 (#1810) adds useFlagValue. Edit this pin in
+    the pull request that bumps the version after 0.2.0."""
     manifest = _json(SDK / "react" / "package.json")
     assert manifest["name"] == "@controlvar/react-sdk"
-    assert manifest["version"] == "0.1.0"
-    assert lock_versions("react") == ("0.1.0", "0.1.0")
+    assert manifest["version"] == "0.2.0"
+    assert lock_versions("react") == ("0.2.0", "0.2.0")
 
 
 def _npm_sdks() -> list:

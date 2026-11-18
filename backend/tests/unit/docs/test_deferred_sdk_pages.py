@@ -1893,10 +1893,11 @@ RN_README = "sdk/react-native/README.md"
 #: named by its template.
 RN_EXPOSURE_SENTENCES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
     (
-        "\\| 'trackBatch' \\| 'exposure'` |",
+        "\\| 'trackBatch' \\| 'exposure' \\| 'value'`",
         (
             "is reported to onError once, with the operation exposure and the Error it threw,"
             " never as a request failure",
+            'another type answers the default and reports one TYPE_MISMATCH with "value"',
         ),
     ),
     (
