@@ -1110,7 +1110,7 @@ text = "run_in_progress | 409 | An analysis or preview on this connection has no
 by = ["mechanism:warehouse-troubleshooting"]
 
 [[unit]]
-text = "destination_not_allowed | 502 | The warehouse address is not one this deployment connects to. | Snowflake: the account is the organisation-account identifier, not a locator or a URL. An address that resolves to a private network is refused. Redshift: redshift-data.<region>.amazonaws.com and sts.<region>.amazonaws.com must resolve to public addresses, so an interface VPC endpoint with private DNS, which resolves them to private ones, is refused."
+text = "destination_not_allowed | 502 | The warehouse address is not one this deployment connects to. | Snowflake: the account is the organisation-account identifier, not a locator or a URL. An address that resolves to a private network is refused. Redshift: redshift-data.<region>.amazonaws.com and sts.<region>.amazonaws.com must resolve to public addresses. An interface VPC endpoint with private DNS resolves them to private ones, so we expect it to be refused; we have not run one."
 by = ["mechanism:warehouse-troubleshooting"]
 
 [[unit]]
