@@ -1318,3 +1318,39 @@ describe('a timed-out user delete is not reported as a failure (#1040 D10)', () 
     expect(await deleteAlice()).toBe("Couldn't delete alice: Cannot delete your own user account");
   });
 });
+
+describe('safeNextPath applies one check on every sign-in page', () => {
+  const FALLBACK = '/fallback';
+  const REFUSED: Array<[string, string]> = [
+    ['a tab', '/a\tb'],
+    ['a line feed', '/a\nb'],
+    ['a carriage return', '/a\rb'],
+    ['an encoded tab', '/a%09b'],
+    ['an encoded line feed', '/a%0ab'],
+    ['an encoded carriage return', '/a%0db'],
+    ['an encoded backslash', '/a%5cb'],
+    ['an upper-case encoded backslash', '/a%5Cb'],
+    ['a backslash', '/a\\b'],
+    ['a leading slash-backslash', '/\\host'],
+    ['a double slash', '//host'],
+    ['a double slash after decoding', '/%2f/host'],
+    ['a double slash after decoding (upper case)', '/%2F/host'],
+    ['a scheme', 'https://host/x'],
+  ];
+  const KEPT: Array<[string, string]> = [
+    ['a plain path', '/experiments'],
+    ['a query string', '/experiments?status=running&page=2'],
+    ['an encoded space', '/experiments?q=a%20b'],
+    ['a fragment', '/experiments#results'],
+    ['a path with an id', '/experiments/6f1c2a52-3b1e-4f43-9d0e-0a1b2c3d4e5f'],
+  ];
+
+  it.each(REFUSED)('refuses %s and returns the fallback', (_label, path) => {
+    expect(safeNextPath(path, FALLBACK)).toBe(FALLBACK);
+    expect(safeNextPath(path)).toBe('/');
+  });
+
+  it.each(KEPT)('keeps %s', (_label, path) => {
+    expect(safeNextPath(path, FALLBACK)).toBe(path);
+  });
+});
