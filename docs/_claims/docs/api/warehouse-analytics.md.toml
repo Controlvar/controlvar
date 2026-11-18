@@ -8,8 +8,8 @@ text = "Warehouse analysis (beta)"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Beta: Snowflake and BigQuery are available"
-by = ["exempt:baseline"]
+text = "Beta: Snowflake, BigQuery and Amazon Redshift are available"
+by = ["exempt:label"]
 
 [[unit]]
 text = "Warehouse analysis runs an experiment's analysis on tables in your own data warehouse instead of on events sent to Controlvar."
@@ -34,14 +34,11 @@ text = "BigQuery is available (see Setting up BigQuery)."
 by = ["mechanism:warehouse-availability"]
 
 [[unit]]
-text = "Amazon Athena isn't available yet."
-by = [
-    "test:modules/backend/tests/unit/warehouse/test_connectors.py::test_disabled_connector_refused_with_422",
-    "test:modules/backend/tests/unit/warehouse/test_connectors.py::test_enabled_connectors_exact",
-]
+text = "Amazon Redshift is available (see Setting up Amazon Redshift)."
+by = ["mechanism:warehouse-availability"]
 
 [[unit]]
-text = "Amazon Redshift isn't available yet."
+text = "Amazon Athena isn't available yet."
 by = [
     "test:modules/backend/tests/unit/warehouse/test_connectors.py::test_disabled_connector_refused_with_422",
     "test:modules/backend/tests/unit/warehouse/test_connectors.py::test_enabled_connectors_exact",
@@ -400,6 +397,193 @@ by = ["test:modules/backend/tests/unit/warehouse/test_bigquery.py::test_table_re
 [[unit]]
 text = "Every job carries the label experimently: analysis, so you can find its cost in your billing."
 by = ["test:modules/backend/tests/unit/warehouse/test_bigquery.py"]
+
+[[unit]]
+text = "Setting up Amazon Redshift"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Controlvar runs every statement through the Amazon Redshift Data API, as an IAM role in your AWS account that it assumes."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_redshift.py::test_a_statement_is_one_batch_exactly_as_specified",
+    "test:modules/backend/tests/unit/warehouse/test_aws.py::test_assume_role_session_checks_the_trust_policy_then_assumes_the_role",
+]
+
+[[unit]]
+text = "There is no password and no secret to store, and no network path to open: calls go to the Data API's regional endpoint, redshift-data.<region>.amazonaws.com, and never to the address of your cluster or workgroup."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_redshift.py::test_the_data_apis_regional_endpoint_is_the_only_redshift_host",
+    "test:modules/backend/tests/integration/warehouse/test_connections_api.py::test_redshift_fields_outside_the_contract_are_refused",
+]
+
+[[unit]]
+text = "A Redshift Serverless workgroup and a provisioned cluster both work."
+by = [
+    "test:modules/backend/tests/integration/warehouse/test_connections_api.py::test_once_enabled_a_redshift_connection_is_saved_with_an_external_id",
+    "test:modules/backend/tests/unit/warehouse/test_redshift.py::test_a_statement_is_one_batch_exactly_as_specified",
+]
+
+[[unit]]
+text = "Before step 1, the API needs an AWS identity."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Controlvar assumes your role as the identity the API itself runs as."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_aws.py::test_assume_role_session_checks_the_trust_policy_then_assumes_the_role",
+    "test:modules/backend/tests/unit/warehouse/test_aws.py::test_a_deployment_with_no_aws_identity_has_its_own_code",
+]
+
+[[unit]]
+text = "A deployment made with this repository's AWS CDK stacks (full profile, not the demo) gives the API's task role sts:AssumeRole on roles under the controlvar-warehouse/ path in any account."
+by = [
+    "test:infrastructure/tests/test_environments_do_not_collide.py::test_the_task_role_has_no_athena_s3_or_sts_and_the_execution_role_no_glue",
+    "test:infrastructure/tests/test_api_task_and_data_resources.py::test_the_api_task_role_holds_exactly_these_permissions",
+]
+
+[[unit]]
+text = "The stack's output TaskRoleArn is that role's ARN."
+by = ["test:infrastructure/tests/test_api_task_and_data_resources.py::test_the_task_role_arn_is_an_output_of_the_full_profile_outside_demo"]
+
+[[unit]]
+text = "With Docker Compose or Helm, run the API with an identity of your own (an instance profile, an IAM role for a service account, or credentials in the container's environment) and grant it sts:AssumeRole on arn:aws:iam::<your-account-id>:role/controlvar-warehouse/ and nothing wider."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A deployment with no such identity answers 503 aws_identity_unavailable to a test or a run."
+by = ["test:modules/backend/tests/unit/warehouse/test_aws.py::test_a_deployment_with_no_aws_identity_has_its_own_code"]
+
+[[unit]]
+text = "Choose the role's name."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The role must sit under the IAM path /controlvar-warehouse/, so its ARN is arn:aws:iam::<your-account-id>:role/controlvar-warehouse/<role-name>."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_request_schemas.py::test_a_redshift_body_in_the_contract_is_accepted",
+    "test:modules/backend/tests/unit/warehouse/test_request_schemas.py::test_a_redshift_body_outside_the_contract_is_refused",
+]
+
+[[unit]]
+text = "A role ARN anywhere else is refused with 422."
+by = ["test:modules/backend/tests/unit/warehouse/test_request_schemas.py::test_a_redshift_body_outside_the_contract_is_refused"]
+
+[[unit]]
+text = "Create the connection in Warehouse › Connections (ADMIN): the region of your workgroup or cluster, the role's ARN, the database, and either the Serverless workgroup or the provisioned cluster's identifier with its database user."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_request_schemas.py::test_a_redshift_body_in_the_contract_is_accepted",
+    "test:modules/frontend/src/tests/warehouse/connection-new.test.tsx",
+]
+
+[[unit]]
+text = "Saving generates the connection's external ID and shows it."
+by = ["test:modules/backend/tests/integration/warehouse/test_connections_api.py::test_once_enabled_a_redshift_connection_is_saved_with_an_external_id"]
+
+[[unit]]
+text = "There is no field for a password or a secret ARN, and a connection cannot be tested before it is saved."
+by = [
+    "test:modules/backend/tests/integration/warehouse/test_connections_api.py::test_redshift_fields_outside_the_contract_are_refused",
+    "test:modules/backend/tests/unit/warehouse/test_request_schemas.py::test_a_redshift_connection_cannot_be_tested_before_it_is_saved",
+]
+
+[[unit]]
+text = "Create the role in IAM."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Its trust policy lets the identity the API runs as assume it, and only with the connection's external ID:"
+by = ["mechanism:warehouse-redshift-policy"]
+
+[[unit]]
+text = "A role whose trust policy lets the API assume it without that external ID is refused (role_trust_unsafe)."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_aws.py::test_a_role_that_admits_the_deployment_without_the_external_id_is_refused",
+    "test:modules/backend/tests/unit/warehouse/test_redshift.py::test_a_role_that_admits_the_deployment_without_the_external_id_runs_nothing",
+]
+
+[[unit]]
+text = "Give the role this permissions policy."
+by = ["mechanism:warehouse-redshift-policy"]
+
+[[unit]]
+text = "A Serverless workgroup needs ServerlessSignIn and a provisioned cluster needs ClusterSignIn: delete the statement for the shape you do not use."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The workgroup in the first Resource list is named by its ID, not its name."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "OwnStatementsOnly lets the role read, fetch and cancel only the statements its own session started."
+by = ["mechanism:warehouse-redshift-policy"]
+
+[[unit]]
+text = "Scope GetClusterCredentials to exactly one database user, never dbuser:<cluster-identifier>/."
+by = ["mechanism:warehouse-redshift-policy"]
+
+[[unit]]
+text = "Give the database user read access, as a Redshift administrator."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Use a database user made for this connection, with SELECT on the source tables only, never a superuser or the admin user."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Serverless: the role signs in as the database user IAMR: followed by the role's name, for example IAMR:controlvar-rs-sitting for a role named controlvar-rs-sitting."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Create it with no password, and do not give it the sys:superuser role:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Provisioned: the database user is the one you named in the connection:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Test the saved connection once the role and the grants exist."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The test assumes the role and runs one statement that reads no table."
+by = ["test:modules/backend/tests/unit/warehouse/test_redshift.py::test_the_connection_test_reads_no_table"]
+
+[[unit]]
+text = "Then name tables as schema.table in a source: the table is in the connection's own database."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_redshift.py::test_a_table_reference_is_checked_before_anything_is_sent",
+    "test:modules/backend/tests/unit/warehouse/test_identifier_gate.py",
+]
+
+[[unit]]
+text = "Every statement runs as one transaction with the session time zone set to UTC, and Redshift is told to stop it a little after the connection's query_timeout_seconds."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_redshift.py::test_a_statement_is_one_batch_exactly_as_specified",
+    "test:modules/backend/tests/unit/warehouse/test_redshift.py::test_the_server_side_limit_follows_the_connection_and_the_time_left",
+]
+
+[[unit]]
+text = "A Redshift connection is limited in time, not in bytes."
+by = ["test:modules/backend/tests/unit/warehouse/test_request_schemas.py::test_a_redshift_body_defaults_its_limits_and_has_no_byte_cap"]
+
+[[unit]]
+text = "Each time Controlvar assumes your role for a test or a run, it first asks AWS to assume it without the external ID, and AWS must refuse that call."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_aws.py::test_assume_role_session_checks_the_trust_policy_then_assumes_the_role",
+    "test:modules/backend/tests/unit/warehouse/test_aws.py::test_only_an_access_denied_check_lets_the_operation_go_on",
+]
+
+[[unit]]
+text = "Expect a refused AssumeRole call in your CloudTrail beside each one that succeeds with the external ID: it is the check working, not a fault."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Statements run in the role session named controlvar-warehouse."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_aws.py::test_the_temporary_credentials_reach_no_log_and_no_repr",
+    "test:modules/backend/tests/unit/warehouse/test_redshift.py::test_a_role_that_admits_the_deployment_without_the_external_id_runs_nothing",
+]
 
 [[unit]]
 text = "Who can do what"
@@ -846,7 +1030,7 @@ text = "aws_identity_unavailable | 503 | This deployment has no AWS identity to 
 by = ["mechanism:warehouse-troubleshooting"]
 
 [[unit]]
-text = "auth_failed | 502 | The warehouse did not accept the connection's credentials. | Snowflake: the public key registered on the user is the one Controlvar shows, and the account identifier is right. BigQuery: the service account and its JSON key still exist. Then test the connection."
+text = "auth_failed | 502 | The warehouse did not accept the connection's credentials. | Snowflake: the public key registered on the user is the one Controlvar shows, and the account identifier is right. BigQuery: the service account and its JSON key still exist. Redshift: the role's trust policy names the identity the API runs as and requires the external ID shown on the connection. Then test the connection."
 by = ["mechanism:warehouse-troubleshooting"]
 
 [[unit]]
@@ -854,11 +1038,11 @@ text = "key_revoked | 502 | BigQuery reports that the key's service account clie
 by = ["mechanism:warehouse-troubleshooting"]
 
 [[unit]]
-text = "permission_denied | 502 | The role may not run this query. | Snowflake: USAGE on the warehouse, database and schema, and SELECT on the table. BigQuery: BigQuery Job User on the billing project, and BigQuery Data Viewer on each dataset."
+text = "permission_denied | 502 | The role may not run this query. | Snowflake: USAGE on the warehouse, database and schema, and SELECT on the table. BigQuery: BigQuery Job User on the billing project, and BigQuery Data Viewer on each dataset. Redshift: the role's policy names this connection's own workgroup or cluster as the resource of BatchExecuteStatement and DescribeTable; with a policy scoped that way, a connection that names a cluster the policy does not list answers permission_denied with the vendor code AccessDeniedException."
 by = ["mechanism:warehouse-troubleshooting"]
 
 [[unit]]
-text = "object_not_found | 502 | A table, view or column the query names was not found. | The table is named in full, with each part as the warehouse stores it, and every mapped column exists. On Snowflake a table the role may not see is reported the same way."
+text = "object_not_found | 502 | A table, view or column the query names was not found. | The table is named in full, with each part as the warehouse stores it, and every mapped column exists. On Snowflake a table the role may not see is reported the same way. On Redshift the table is schema.table in the connection's database; a table the database user may not read is not reported this way (see unrecognised_warehouse_error)."
 by = ["mechanism:warehouse-troubleshooting"]
 
 [[unit]]
@@ -930,7 +1114,7 @@ text = "redirect_refused | 502 | The warehouse answered with a redirect, which C
 by = ["mechanism:warehouse-troubleshooting"]
 
 [[unit]]
-text = "unreachable | 502 | The warehouse could not be reached. | That the API can open an outbound HTTPS connection to the warehouse, and that its firewall or network policy allows the API's address."
+text = "unreachable | 502 | The warehouse could not be reached. | That the API can open an outbound HTTPS connection to the warehouse, and that its firewall or network policy allows the API's address. Redshift: Data API not offered in that region; the endpoint is redshift-data.<region>.amazonaws.com, so pick a region where AWS offers the Data API."
 by = ["mechanism:warehouse-troubleshooting"]
 
 [[unit]]
@@ -952,6 +1136,43 @@ by = ["exempt:advice"]
 [[unit]]
 text = "Controlvar never repeats the warehouse's own error text."
 by = ["test:modules/backend/tests/unit/warehouse/test_errors.py::test_upstream_error_text_absent_from_responses_and_logs"]
+
+[[unit]]
+text = "For Redshift the vendor_code is the Data API's own code."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_redshift.py::test_errors_map_by_their_code",
+    "test:modules/backend/tests/unit/warehouse/test_redshift_recorded.py::test_a_recorded_missing_workgroup_is_unrecognised_with_its_code",
+]
+
+[[unit]]
+text = "A workgroup that does not exist in the region answers ValidationException."
+by = ["test:modules/backend/tests/unit/warehouse/test_redshift_recorded.py::test_a_recorded_missing_workgroup_is_unrecognised_with_its_code"]
+
+[[unit]]
+text = "FAILED means Redshift ran the batch and a statement in it failed; a table the database user may not read is one such case."
+by = ["test:modules/backend/tests/unit/warehouse/test_redshift_recorded.py::test_a_recorded_failed_statement_names_the_failed_sub_statement"]
+
+[[unit]]
+text = "For FAILED, take the log field request_id to aws redshift-data describe-statement --id <request_id>, signed as the connection's role with the role session name controlvar-warehouse: the policy above lets a role describe only the statements its own session ran."
+by = ["test:modules/backend/tests/unit/warehouse/test_redshift.py::test_a_failed_batch_names_the_failed_sub_statements_id"]
+
+[[unit]]
+text = "The answer's Status is FAILED, and its Error is Redshift's own text, which Controlvar never reads."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_redshift_recorded.py::test_a_recorded_failed_statement_names_the_failed_sub_statement",
+    "test:modules/backend/tests/unit/warehouse/test_redshift.py::test_the_error_text_of_a_failed_statement_is_never_read",
+]
+
+[[unit]]
+text = "The request_id is the Data API id of the first sub-statement that failed (<statement id>:<n>); it is logged and never returned."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_redshift.py::test_a_failed_batchs_request_id_is_the_first_failed_sub_statement",
+    "test:modules/backend/tests/unit/warehouse/test_errors.py",
+]
+
+[[unit]]
+text = "We have not measured whether a principal other than the connection's own session can describe it, or for how long after the run it can be described, so treat both as suggestions."
+by = ["exempt:advice"]
 
 [[unit]]
 text = "If you ran an earlier full-profile release"

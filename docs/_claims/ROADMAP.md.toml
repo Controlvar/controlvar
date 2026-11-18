@@ -74,7 +74,6 @@ by = ["exempt:policy"]
 text = "The Redshift connector type is in 0.47.0, switched off (#1943)."
 by = [
     "test:modules/backend/tests/integration/warehouse/test_connections_api.py::test_the_connector_list_follows_the_enabled_set",
-    "test:modules/backend/tests/integration/warehouse/test_connections_api.py::test_as_shipped_a_redshift_connection_is_422_and_nothing_is_stored",
 ]
 
 [[unit]]
