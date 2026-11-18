@@ -88,7 +88,9 @@ describe('/docs hub entries for methods that do not work yet', () => {
     const links = getAllByRole('link').filter((a) => /^CUPED/.test(a.textContent ?? ''));
     expect(links).toHaveLength(1);
     expect(links[0].textContent ?? '').toMatch(/pre-experiment events/i);
-    expect(links[0].textContent ?? '').not.toMatch(/\bnot\b|\bbeta\b/i);
+    // "(beta)" is the stability label docs/capabilities.md gives CUPED, not a defect.
+    expect(links[0].textContent ?? '').not.toMatch(/\bnot\b/i);
+    expect(links[0].textContent ?? '').toMatch(/\(beta\)/);
   });
 
   it.each([
