@@ -17,7 +17,9 @@
  *   - the marketing build's own pages (site design 2026-11-11): /books links
  *     every book of src/content/books.ts to its README, and /walkthroughs is
  *     the walkthroughs page, where the homepage's teaser links each card;
- *   - out/robots.txt lets every crawler in.
+ *   - out/robots.txt lets every crawler in, and names the sitemap with
+ *     `Sitemap: https://controlvar.com/sitemap.xml`; out/sitemap.xml is
+ *     well-formed and every address in it is a page of this export.
  *
  * What controlvar.com answers for a missing path is Amplify's console rule,
  * which this repository cannot see or test.
@@ -131,5 +133,27 @@ describe('robots.txt', () => {
     assert.ok(lines.includes('User-agent: *'), 'no "User-agent: *" group');
     assert.ok(lines.includes('Allow: /'), 'no "Allow: /"');
     assert.deepEqual(lines.filter((l) => /^disallow:\s*\S/i.test(l)), [], 'a Disallow rule');
+  });
+
+  it('names the sitemap, once', () => {
+    const lines = readOut('robots.txt').toString('utf8').split(/\r?\n/).map((l) => l.trim());
+    assert.deepEqual(lines.filter((l) => /^sitemap:/i.test(l)), ['Sitemap: https://controlvar.com/sitemap.xml']);
+  });
+});
+
+describe('sitemap.xml', () => {
+  it('is a urlset whose every address is a page of the export', () => {
+    const xml = readOut('sitemap.xml').toString('utf8');
+    assert.match(xml, /^<\?xml version="1.0" encoding="UTF-8"\?>\n<urlset xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9">/);
+    const locs = [...xml.matchAll(/<loc>([^<]*)<\/loc>/g)].map((m) => m[1]);
+    assert.equal(locs.length, KEPT.length + 1, 'one address per page');
+    assert.equal(new Set(locs).size, locs.length, 'an address twice');
+    for (const loc of locs) {
+      const url = new URL(loc);
+      assert.equal(url.origin, 'https://controlvar.com');
+      const file = url.pathname === '/' ? 'index.html' : `${url.pathname.slice(1)}.html`;
+      assert.ok(PAGES.includes(file), `${loc} is not a page of the export`);
+      readOut(file);
+    }
   });
 });

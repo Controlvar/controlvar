@@ -132,8 +132,8 @@ WITNESSES: Dict[str, str] = {
     "Archive and unarchive a feature flag": "flag-archive",
     "Create a bandit experiment": "bandit-create",
     "Set a bandit's weights by hand": "bandit-weights-override",
-    # #1958: the API half (beta) ships first; the dashboard half flips the row
-    # when its Weight history section carries this id.
+    # #1958: the experiment page's Weight history, on its loaded state (a
+    # table or the empty line), never loading or error.
     "A bandit's weight history (beta)": "bandit-weight-history",
     # #1446: only reading a holdout's results is beta. #1455's second half:
     # the page's loaded state (every holdout for an ADMIN, the active one for
@@ -738,6 +738,11 @@ STALE: Tuple[Tuple[str, str], ...] = (
         "the experiment page's Schedule sets a draft's start and end (#1454)",
     ),
     (
+        r"nothing in it changes the experiment",
+        "an Admin or a superuser sets a bandit's weights by hand from the "
+        "Current traffic weights panel (#1957)",
+    ),
+    (
         r"\| interaction detection \(beta\) \|[^|]{0,300}\(api only\)",
         "Experiments → Interactions runs the scan and the pair test (#1960)",
     ),
@@ -777,6 +782,16 @@ STALE: Tuple[Tuple[str, str], ...] = (
         r"pre-experiment history, through the api",
         "narrower intervals from pre-experiment history are on the results "
         "page as well as in the API (#1959)",
+    ),
+    # #1958: a bandit experiment's page has a Weight history section.
+    (
+        r"shows the current weights only",
+        "the experiment page's Weight history lists the bandit's past updates (#1958)",
+    ),
+    (
+        r"no chart of (past weights|how they changed)",
+        "the experiment page's Weight history lists the bandit's past updates, "
+        "as a table (#1958)",
     ),
 )
 
@@ -870,6 +885,8 @@ def test_no_page_repeats_a_removed_dashboard_claim():
         "[which actions have a screen](dashboard-and-api.md))",
         "You can also schedule automatic start and end dates. The dashboard has no schedule\n"
         "screen yet, so this is an API call:",
+        # #1957: user-guide.md's bandit panel paragraph.
+        "Every role can read it, and nothing in it changes the experiment. It loads once and again when you",
         # #1960: faq.md's analysis table row and user-guide.md's interaction section.
         "| Interaction detection (beta) | Jaccard overlap between experiments; whether one "
         "experiment's lift on its primary conversion metric differs across another's arms "
@@ -890,6 +907,10 @@ def test_no_page_repeats_a_removed_dashboard_claim():
         "**CUPED** (API only; the simulator's visitors are new, so they have no history)",
         "There is no CUPED toggle in the dashboard.",
         "[CUPED](api/cuped.md) (beta): narrower intervals from each user's pre-experiment history, through the API.",
+        # #1958: user-guide.md, DEMO_GUIDE.md and the ShopLab README.
+        "The dashboard shows the current weights only, with no history.",
+        "- The dashboard shows the current weights only. It has no chart of how they changed over time",
+        "not update by itself, and the dashboard has no chart of past weights. Then go to `/products`",
     ],
 )
 def test_the_sweep_catches_the_removed_wording(removed):

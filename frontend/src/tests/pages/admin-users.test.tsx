@@ -145,6 +145,8 @@ let users: AdminUser[];
 let patchResponse: FakeResponse | 'network';
 let captured: Captured[];
 let listUrls: string[];
+/** The ids `DELETE /api/v1/admin/users/{id}/2fa` was sent for. */
+let resets: string[];
 const mockFetch = jest.fn();
 
 function makeUsers(): AdminUser[] {
@@ -163,6 +165,12 @@ function route(url: string, init: RequestInit = {}): Promise<Response> {
     return Promise.resolve(
       respond({ status: 200, body: { items: users, total: users.length, skip: 0, limit: 50 } }),
     );
+  }
+  const reset = /^\/api\/v1\/admin\/users\/([^/]+)\/2fa$/.exec(pathname);
+  if (reset && method === 'DELETE') {
+    resets.push(reset[1]);
+    users = users.map((u) => (u.id === reset[1] ? { ...u, totp_enabled: false } : u));
+    return Promise.resolve(respond({ status: 204 }));
   }
   const match = /^\/api\/v1\/admin\/users\/([^/]+)$/.exec(pathname);
   if (match && method !== 'GET' && method !== 'DELETE') {
@@ -211,6 +219,7 @@ beforeEach(() => {
   patchResponse = { status: 200 };
   captured = [];
   listUrls = [];
+  resets = [];
   mockFetch.mockReset();
   mockFetch.mockImplementation(route);
   global.fetch = mockFetch as unknown as typeof fetch;
@@ -389,5 +398,42 @@ describe('/admin/users editing a user', () => {
     expect(within(modal).getByTestId('edit-role-select')).toBeDisabled();
     expect(within(modal).getByTestId('edit-active-toggle')).toBeDisabled();
     expect(within(modal).getByTestId('edit-self-note')).toBeInTheDocument();
+  });
+
+  it("Reset two-step sign-in sends DELETE /admin/users/{id}/2fa, and closing reloads the list (#1812)", async () => {
+    users = users.map((u) => (u.id === 'u-2' ? { ...u, totp_enabled: true } : u));
+    await renderPage();
+    fireEvent.click(screen.getByTestId('edit-user-u-2'));
+    const modal = await screen.findByTestId('edit-user-modal');
+    fireEvent.click(within(modal).getByTestId('edit-two-factor-reset'));
+    await act(async () => {
+      fireEvent.click(within(modal).getByTestId('edit-two-factor-reset-confirm'));
+    });
+    expect(resets).toEqual(['u-2']);
+    expect(within(modal).getByTestId('edit-two-factor-reset-done')).toHaveTextContent(
+      'Two-step sign-in is off for bob@example.com.',
+    );
+    // Nothing else was sent: the reset is not a save.
+    expect(captured).toHaveLength(0);
+    const listsBefore = listUrls.length;
+    fireEvent.click(within(modal).getByTestId('edit-cancel-button'));
+    await waitFor(() => expect(listUrls.length).toBe(listsBefore + 1));
+    await waitFor(() => expect(screen.queryByTestId('loading-skeleton')).not.toBeInTheDocument());
+
+    // Opened again from the reloaded list, the account no longer offers it.
+    fireEvent.click(await screen.findByTestId('edit-user-u-2'));
+    const again = await screen.findByTestId('edit-user-modal');
+    expect(within(again).queryByTestId('edit-two-factor')).not.toBeInTheDocument();
+  });
+
+  it('your own row with two-step sign-in on offers no reset', async () => {
+    users = users.map((u) => (u.id === 'me-1' ? { ...u, totp_enabled: true } : u));
+    await renderPage();
+    fireEvent.click(screen.getByTestId('edit-user-me-1'));
+    const modal = await screen.findByTestId('edit-user-modal');
+    expect(within(modal).queryByTestId('edit-two-factor-reset')).not.toBeInTheDocument();
+    expect(within(modal).getByTestId('edit-two-factor-self-note')).toHaveTextContent(
+      'Ask another administrator to reset yours.',
+    );
   });
 });

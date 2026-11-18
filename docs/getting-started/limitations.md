@@ -12,6 +12,8 @@ the row links it.
 | A flag targeted on a value inside a JSON attribute | Flag targeting refuses the `json_path` operator with `422`, because flag evaluation does not implement it. Experiment targeting accepts it. |
 | A flag targeted on a percentage bucket of an attribute | Flag targeting refuses the `percentage_bucket` operator with `422`, because flag evaluation does not implement it. Experiment targeting accepts it. |
 | A flag turned off for every user at once | Each client keeps the answer it has until its cache expires; a React or React Native component already on screen keeps its answer until it mounts again; and an iOS, Android, Flutter or React Native app that cannot reach the API keeps serving the last answer it stored. See [Turning a Flag Off](../feature-flags/kill-switch.md). |
+| Error reports from every SDK reaching automatic safety rollback | Only the JavaScript SDK (`reportError`) and the Python SDK (`report_error`) send error reports to `POST /api/v1/tracking/errors`; no other SDK has its own call for it, and neither OpenFeature provider has one of its own (its `client` property is the JavaScript or Python client, which does). See [Which errors count](../feature-flags/safety.md#which-errors-count). |
+| Every SDK retrying after a 429 | Only the JavaScript and Python SDKs retry, once, after the `Retry-After` the API sends (the JavaScript SDK waits up to its `timeoutMs`, the Python SDK up to 5 seconds). The two OpenFeature providers retry because they call those clients; no other SDK retries: a call that was answered `429` does not complete, and the Go SDK's error carries the header in `RetryAfter`. |
 
 ## Experiments and results
 
@@ -57,7 +59,7 @@ the row links it.
 
 | What you might expect | What happens instead |
 |---|---|
-| Multi-factor sign-in | Not available: a local account signs in with its email and password alone. |
+| Requiring two-step sign-in for a role | Not available yet: each local account turns two-step sign-in (an authenticator app) on or off for itself. See [Two-step sign-in](../api/auth.md#two-step-sign-in). |
 | SAML sign-in | Not available. OIDC sign-in is, with the `sso` module (full profile). |
 | A custom role that removes access, or that grants administration | Custom roles and direct permission grants (the `rbac` module) only add, and only to experiments, flags and reading the audit log; never administration or the compliance audit trail. Administration depends on the built-in role or the superuser flag; to restrict someone, give them a lower built-in role. See [What a role or grant cannot give](../api/rbac.md#what-a-role-or-grant-cannot-give). |
 | Assigning roles and granting permissions in the dashboard | The Roles page defines roles; assigning them and granting permissions go through the [RBAC API](../api/rbac.md). |

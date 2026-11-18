@@ -633,6 +633,10 @@ def http(local_provider):
     # deps.get_current_user loads the token's user with .filter().first(); the
     # /auth/me tests below go through it.
     db.query.return_value.filter.return_value.first.side_effect = lambda: state.user
+    # No confirmed user_totp row: the account has no two-step sign-in, so the
+    # password step issues the token (#1812; test_two_factor_routes.py covers
+    # an account that has it).
+    db.execute.return_value.first.return_value = None
 
     def override_get_db():
         yield db

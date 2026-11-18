@@ -26,6 +26,12 @@ interface PageTitleProps {
    * preview is built from (#1458).
    */
   path?: string;
+  /**
+   * A complete `<title>`, used instead of `<title> · Controlvar` on the
+   * marketing build only (the homepage's descriptive title). The dashboard
+   * keeps `title`.
+   */
+  marketingTitle?: string;
 }
 
 /**
@@ -33,13 +39,15 @@ interface PageTitleProps {
  *
  * On the marketing build, a page that gives both a `description` and its
  * `path` also gets the link-preview tags: og:title, og:description, og:url,
- * og:image (an absolute URL) and twitter:*. A self-hosted dashboard gets none
+ * og:image (an absolute URL) and twitter:*, and one canonical link equal to
+ * og:url. A self-hosted dashboard gets none
  * of them: its pages are not at controlvar.com, and an og:url saying they were
  * would be wrong. `scripts/site-head.test.mjs` checks the marketing export.
  */
-export function PageTitle({ title, description, path }: PageTitleProps) {
-  const fullTitle = formatPageTitle(title);
-  const share = isMarketingSite() && description && path;
+export function PageTitle({ title, description, path, marketingTitle }: PageTitleProps) {
+  const marketing = isMarketingSite();
+  const fullTitle = marketing && marketingTitle ? marketingTitle : formatPageTitle(title);
+  const share = marketing && description && path;
   const image = `${SITE_ORIGIN}${SHARE_IMAGE.path}`;
   return (
     <Head>
@@ -47,6 +55,7 @@ export function PageTitle({ title, description, path }: PageTitleProps) {
       {description ? <meta name="description" content={description} /> : null}
       {share ? (
         <>
+          <link key="canonical" rel="canonical" href={`${SITE_ORIGIN}${path}`} />
           <meta key="og:type" property="og:type" content="website" />
           <meta key="og:title" property="og:title" content={fullTitle} />
           <meta key="og:description" property="og:description" content={description} />

@@ -201,7 +201,42 @@
 # a local run of the superuser pass at this seed on the pull request's head
 # (1b42502e), which gave the counts of its fuzz.yml run.
 
+# Then #1812 added two-step sign-in's seven operations, listed from the
+# following reasoning before the pull request's own fuzz run.
+# POST /api/v1/auth/mfa/verify takes the short token the password step issues
+# to an account with two-step sign-in on; no generated token is one, so the
+# superuser and viewer passes get 401 (or 422, or 429 past its 10 a minute) and
+# reach it in neither. DELETE /api/v1/admin/users/{user_id}/2fa is a
+# superuser's: the viewer gets 403, and the superuser pass's stored id is its
+# own account's (400, as its DELETE /api/v1/admin/users/{user_id} gets), so
+# neither reaches it. The other five are reached: GET /api/v1/users/me/2fa and
+# POST /api/v1/users/me/2fa/enroll answer 200 to every account, and confirm,
+# disable and recovery-codes answer 409 while the account has no secret in the
+# state they need (they are declared in that order, confirm and disable before
+# enroll), or 423 once wrong codes have locked the address. None is an SDK
+# route, so the sdk pass selects none. Its fuzz.yml run, on a head without
+# #2000, gave 113 for superuser, 187 for viewer and 9 for sdk; merged with
+# #2000 the lists are 109, 187 and 9.
+
+# Then #2008 made POST /api/v1/users/me/2fa/enroll ask for the current
+# password, as POST /api/v1/users/me/password does. No generated
+# current_password is the account's own, so the superuser and viewer passes
+# get 403 (none, an empty one or a wrong one), 422 for a body that fails
+# validation, and 429 once its 5 a minute are spent; their wrong passwords
+# stay below the 10 that lock the address (423). It is reached in neither, so
+# it is listed for both, and the sentence above that it answers 200 to every
+# account no longer holds. The lists are 110 for superuser, 188 for viewer and
+# 9 for sdk: this pull request's fuzz.yml run at seed 20261006, on a head
+# without #2000, counted one more operation unreached and not listed in each
+# of those two passes, and no other change; merged with #2000 that is one more
+# than the 109, 187 and 9 above.
+
 # --- superuser: the seeded demo administrator's bearer token ----------------
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/auth/mfa/verify"
+reason = "The code step of two-step sign-in: no generated mfa_token is one the stack issued, so it answers 401, 422 for a body that fails validation, and 429 once its 10 a minute are spent."
 
 [[unreached]]
 pass = "superuser"
@@ -237,6 +272,11 @@ reason = "The Cognito Hosted UI's code exchange: the stack signs in with the loc
 pass = "superuser"
 operation = "POST /api/v1/users/"
 reason = "Every generated request fails the operation's own validation (422)."
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/users/me/2fa/enroll"
+reason = "Asks for the current password: no generated current_password is the account's own, so it answers 403 (none, an empty one or a wrong one), 422 for a body that fails validation, and 429 once its 5 a minute are spent."
 
 [[unreached]]
 pass = "superuser"
@@ -382,6 +422,11 @@ reason = "Generated ids never name a stored row (404); the other requests fail v
 pass = "superuser"
 operation = "DELETE /api/v1/admin/users/{user_id}"
 reason = "The handler refuses the generated values (400); ids that name no stored row answer 404 and invalid requests answer 422."
+
+[[unreached]]
+pass = "superuser"
+operation = "DELETE /api/v1/admin/users/{user_id}/2fa"
+reason = "The stored id this pass sends is its own account's, which the reset refuses (400); ids that name no stored row answer 404 and invalid requests answer 422."
 
 [[unreached]]
 pass = "superuser"
@@ -742,6 +787,11 @@ reason = "Every generated request fails the operation's own validation (422)."
 
 [[unreached]]
 pass = "viewer"
+operation = "POST /api/v1/auth/mfa/verify"
+reason = "The code step of two-step sign-in: no generated mfa_token is one the stack issued, so it answers 401, 422 for a body that fails validation, and 429 once its 10 a minute are spent."
+
+[[unreached]]
+pass = "viewer"
 operation = "POST /api/v1/auth/signup"
 reason = "Cognito sign-up and recovery: the stack signs in with the local provider, so it answers 404 (and 429 once the sign-in limit is spent)."
 
@@ -774,6 +824,11 @@ reason = "The Cognito Hosted UI's code exchange: the stack signs in with the loc
 pass = "viewer"
 operation = "POST /api/v1/users/"
 reason = "The VIEWER role may not use it, so the role check answers 403; requests that fail validation first answer 422."
+
+[[unreached]]
+pass = "viewer"
+operation = "POST /api/v1/users/me/2fa/enroll"
+reason = "Asks for the current password: no generated current_password is the account's own, so it answers 403 (none, an empty one or a wrong one), 422 for a body that fails validation, and 429 once its 5 a minute are spent."
 
 [[unreached]]
 pass = "viewer"
@@ -1009,6 +1064,11 @@ reason = "The VIEWER role may not use it, so the role check answers 403."
 pass = "viewer"
 operation = "DELETE /api/v1/admin/users/{user_id}"
 reason = "The VIEWER role may not use it, so the role check answers 403."
+
+[[unreached]]
+pass = "viewer"
+operation = "DELETE /api/v1/admin/users/{user_id}/2fa"
+reason = "Only a superuser may use it, so the role check answers 403."
 
 [[unreached]]
 pass = "viewer"

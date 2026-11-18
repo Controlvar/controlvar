@@ -12,6 +12,7 @@ import React, {
 import {
   ApiError,
   LoginResponse,
+  MfaRequiredResponse,
   Role,
   TOKEN_STORAGE_KEY,
   UserMe,
@@ -22,6 +23,7 @@ import {
   navigation,
   setToken,
   unreachableMessage,
+  unreadableAnswerMessage,
 } from '@/services/api';
 import { useAuthConfig } from '@/contexts/AuthConfigContext';
 import type { AuthConfig } from '@/services/authConfig';
@@ -32,8 +34,19 @@ import {
   silentSignInAllowed,
   writeSignInNotice,
 } from '@/services/hostedUi';
+import { MFA_VERIFY_PATH, SecondStepAnswer } from '@/services/twoFactor';
 
 export type AuthStatus = 'loading' | 'authenticated' | 'anonymous';
+
+/**
+ * What the password step of a local sign-in came to: signed in, or (an
+ * account with two-step sign-in on, #1812) a second step to take. The
+ * `mfaToken` is the caller's to keep in React state for that step and nowhere
+ * else: not in storage, not in a URL, not in a log.
+ */
+export type SignInResult =
+  | { status: 'signed-in'; user: UserMe }
+  | { status: 'second-step'; mfaToken: string; expiresIn: number };
 
 export interface LogoutOptions {
   /**
@@ -49,8 +62,19 @@ export interface AuthContextValue {
   status: AuthStatus;
   /** Convenience: `status === 'authenticated'`. */
   isAuthenticated: boolean;
-  /** `POST /api/v1/auth/login`; stores the token and resolves with the user. */
-  login: (email: string, password: string) => Promise<UserMe>;
+  /**
+   * `POST /api/v1/auth/login`. For most accounts it stores the token and
+   * resolves `signed-in` with the user. For an account with two-step sign-in
+   * on it stores nothing and resolves `second-step` with the short-lived
+   * `mfaToken` that `verifySecondStep` takes.
+   */
+  login: (email: string, password: string) => Promise<SignInResult>;
+  /**
+   * `POST /api/v1/auth/mfa/verify`: the password step's `mfaToken` and a code
+   * from the authenticator app or a recovery code. Stores the token and
+   * resolves with the user, as a sign-in without the second step does.
+   */
+  verifySecondStep: (mfaToken: string, answer: SecondStepAnswer) => Promise<UserMe>;
   /**
    * Signs out at once: clears the token and the user before anything else,
    * then sends `POST /api/v1/auth/logout` without waiting for it (best effort;
@@ -128,6 +152,13 @@ function cognitoUser(me: UsersMeAnswer): UserMe {
 
 function isCognito(config: AuthConfig): boolean {
   return config.kind !== 'local';
+}
+
+/** The password step's answer for an account with two-step sign-in on. */
+function isMfaRequired(answer: unknown): answer is MfaRequiredResponse {
+  if (!answer || typeof answer !== 'object') return false;
+  const fields = answer as Record<string, unknown>;
+  return fields.mfa_required === true && typeof fields.mfa_token === 'string' && fields.mfa_token !== '';
 }
 
 /**
@@ -274,12 +305,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('storage', onStorage);
   }, [applyAnonymous, loadMe]);
 
-  const login = useCallback(async (email: string, password: string): Promise<UserMe> => {
-    const result = await apiFetch<LoginResponse>(LOGIN_PATH, {
-      method: 'POST',
-      json: { email, password },
-      auth: false,
-    });
+  // Keep the access token a sign-in answered and make this tab signed in.
+  const applySignIn = useCallback((path: string, result: LoginResponse): UserMe => {
+    // Never store what is not a token (#1812: the password step of an account
+    // with two-step sign-in answers no `access_token` at all).
+    if (typeof result?.access_token !== 'string' || !result.access_token || !result.user) {
+      throw new ApiError({
+        status: 200,
+        message: unreadableAnswerMessage(path, 200, 'POST'),
+        unreadableAnswer: true,
+      });
+    }
     // A check still in flight from before this sign-in must not undo it.
     generation.current += 1;
     setToken(result.access_token);
@@ -291,6 +327,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     return result.user;
   }, []);
+
+  const login = useCallback(
+    async (email: string, password: string): Promise<SignInResult> => {
+      const result = await apiFetch<LoginResponse | MfaRequiredResponse>(LOGIN_PATH, {
+        method: 'POST',
+        json: { email, password },
+        auth: false,
+      });
+      if (isMfaRequired(result)) {
+        // Nothing is stored and nothing changes here: the caller holds the
+        // token for the code step, in its own state.
+        return { status: 'second-step', mfaToken: result.mfa_token, expiresIn: result.expires_in };
+      }
+      return { status: 'signed-in', user: applySignIn(LOGIN_PATH, result as LoginResponse) };
+    },
+    [applySignIn],
+  );
+
+  const verifySecondStep = useCallback(
+    async (mfaToken: string, answer: SecondStepAnswer): Promise<UserMe> => {
+      // `auth: false`: no session exists yet, so a 401 here (a wrong code, an
+      // expired step) clears nothing and redirects nowhere.
+      const result = await apiFetch<LoginResponse>(MFA_VERIFY_PATH, {
+        method: 'POST',
+        json: { mfa_token: mfaToken, ...answer },
+        auth: false,
+      });
+      return applySignIn(MFA_VERIFY_PATH, result);
+    },
+    [applySignIn],
+  );
 
   const logout = useCallback(
     async (options: LogoutOptions = {}): Promise<void> => {
@@ -345,13 +412,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       status,
       isAuthenticated: status === 'authenticated',
       login,
+      verifySecondStep,
       logout,
       afterLogoutPath,
       refresh,
       hasRole,
       sessionError,
     }),
-    [user, status, login, logout, afterLogoutPath, refresh, hasRole, sessionError],
+    [user, status, login, verifySecondStep, logout, afterLogoutPath, refresh, hasRole, sessionError],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

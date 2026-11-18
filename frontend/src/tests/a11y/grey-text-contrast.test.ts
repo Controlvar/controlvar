@@ -42,12 +42,18 @@ const FILES = [
   'pages/results/[id].tsx',
   // #1959: the results page's CUPED (beta) tab.
   'components/results/Cuped/CupedResultsPanel.tsx',
+  // #1958: the experiment page's bandit panel and its Weight history.
+  'components/experiments/BanditWeightsSection.tsx',
+  'components/experiments/BanditWeightHistory.tsx',
   // #442: the flag page's Manage this flag group (Archive, its dialog,
   // Unarchive), and the archived flag's note on both flag pages.
   'components/feature-flags/FlagManageSection.tsx',
   'components/feature-flags/ArchivedFlag.tsx',
   // #442: the new-experiment form's analysis settings and Advanced Bayesian settings.
   'components/experiments/new/AnalysisSettingsFields.tsx',
+  // #1957: the bandit panel, its role note and "Set weights by hand".
+  'components/experiments/BanditWeightsSection.tsx',
+  'components/experiments/BanditWeightsOverride.tsx',
   // #1960: the interactions page and its pair test answer. The nightly audit
   // does not visit them, so this is their only pin.
   'pages/experiments/interactions.tsx',

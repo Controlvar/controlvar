@@ -50,6 +50,36 @@ RSpec.describe Controlvar::Cache do
   end
 
   # -------------------------------------------------------------------------
+  # context (what a flag evaluation was answered for)
+  # -------------------------------------------------------------------------
+  describe 'context' do
+    it 'returns an entry only for the context it was stored with, when a context is given' do
+      cache.set([:flag, 'u1', 'f'], 'A', context: '{"plan":"pro"}')
+
+      expect(cache.get([:flag, 'u1', 'f'], context: '{"plan":"pro"}')).to eq('A')
+      expect(cache.get([:flag, 'u1', 'f'], context: '{"plan":"free"}')).to be_nil
+      expect(cache.get([:flag, 'u1', 'f'], context: '')).to be_nil
+    end
+
+    it 'returns any entry when no context is given' do
+      cache.set([:flag, 'u1', 'f'], 'A', context: '{"plan":"pro"}')
+      cache.set('plain', 'P')
+
+      expect(cache.get([:flag, 'u1', 'f'])).to eq('A')
+      expect(cache.get('plain')).to eq('P')
+    end
+
+    it 'replaces the entry under a key whatever its context: one key, one entry' do
+      cache.set([:flag, 'u1', 'f'], 'A', context: '{"plan":"pro"}')
+      cache.set([:flag, 'u1', 'f'], 'B', context: '{"plan":"free"}')
+
+      expect(cache.size).to eq(1)
+      expect(cache.live_values { |key| key[1] == 'u1' }).to eq(['B'])
+      expect(cache.get([:flag, 'u1', 'f'], context: '{"plan":"pro"}')).to be_nil
+    end
+  end
+
+  # -------------------------------------------------------------------------
   # live_values (per-user listing used by the track fan-out)
   # -------------------------------------------------------------------------
   describe '#live_values' do

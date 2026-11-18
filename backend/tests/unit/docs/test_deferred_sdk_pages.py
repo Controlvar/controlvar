@@ -1001,7 +1001,6 @@ SENDS_NO_CONTEXT = {
     "elixir",
     "flutter",
     "ios",
-    "ruby",
 }
 
 
@@ -1159,6 +1158,19 @@ def test_the_claim_patterns_find_the_true_sentence_on_the_dotnet_pages():
     assert sends_context("dotnet")
     for page in ("docs/sdk/dotnet.md", "sdk/dotnet/README.md"):
         assert "sent as context on flag evaluation" in attribute_claims(text(page)), (
+            page
+        )
+
+
+def test_the_claim_patterns_find_the_true_sentences_on_the_ruby_pages():
+    # Ruby sends the context (part of #1720), and both its pages say so: the
+    # patterns must see it, so that ruby put back in SENDS_NO_CONTEXT fails
+    # test_a_page_claims_no_attribute_targeting_its_client_does_not_send on
+    # docs/sdk/ruby.md and sdk/ruby/README.md as well as here.
+    assert "ruby" not in SENDS_NO_CONTEXT
+    assert sends_context("ruby")
+    for page in RUBY_PAGES:
+        assert "flag evaluation sends the attributes" in attribute_claims(text(page)), (
             page
         )
 
@@ -2269,6 +2281,121 @@ def test_each_java_context_sentence_is_on_its_page_and_held_by_a_test(
     assert missing == [], f"no JUnit test in {JAVA_TESTS.name} has these display names"
     gone = [node for node in server if not _python_test_exists(node)]
     assert gone == [], "these backend tests are gone"
+
+
+# ---------------------------------------------------------------------------
+# 8. The Ruby SDK's targeting context (part of #1720)
+# ---------------------------------------------------------------------------
+
+#: The Ruby SDK's page and its README, which say the same about the context.
+RUBY_PAGES = ("docs/sdk/ruby.md", "sdk/ruby/README.md")
+#: The Ruby SDK's client spec: each Ruby test named below is one of its
+#: ``it`` titles.
+RUBY_SPEC = SDK_DIR / "ruby/spec/controlvar/client_spec.rb"
+_RUBY_EXACT = (
+    "sends the attributes as context=<compact JSON>, percent-encoded, after user_id"
+)
+_RUBY_RULE = "matches a targeting rule on an attribute: the server reads plan=pro from the context"
+_RUBY_DECODE = (
+    "sends + & = # a space, / and non-ASCII so that the server decodes the same object"
+)
+_RUBY_SHORTHAND = "feature_enabled? sends the attributes too"
+_RUBY_NONE = (
+    "sends no context for nil, an empty Hash or a non-Hash: the URL is the one sent"
+    " before attributes were"
+)
+_RUBY_UNSENDABLE = (
+    "sends nothing and reports the flag as disabled when the attributes cannot be"
+    " written as JSON"
+)
+_RUBY_CACHE = (
+    "answers two calls that differ only in attributes with two requests and two answers",
+    "keeps one cached answer per user and flag: A, B, A makes three requests",
+    "does not serve an answer cached with attributes to a call without them",
+    "serves the same attributes from the cache: one request",
+)
+
+#: Each sentence both Ruby pages state about the targeting context (as written,
+#: folded to one line), the RSpec examples that fail when it stops being true,
+#: and the backend tests that hold the server's part of it. The pages are in
+#: ``CLAIMS_DEFERRED``, so no claims registry binds them; this does.
+RUBY_CONTEXT_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], ...] = (
+    (
+        "Flag evaluation sends the user's attributes as `context`, so a flag's targeting"
+        " rules match against them.",
+        (_RUBY_EXACT, _RUBY_RULE),
+        _SERVER_MATCHES,
+    ),
+    (
+        "`evaluate_flag` and `feature_enabled?` call"
+        " `GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=…`, where `context`"
+        " is the attributes as compact JSON, percent-encoded like `user_id`:"
+        " `{ plan: 'pro' }` travels as `context=%7B%22plan%22%3A%22pro%22%7D`.",
+        (_RUBY_EXACT, _RUBY_SHORTHAND, _RUBY_DECODE),
+        (),
+    ),
+    (
+        "With no attributes, an empty Hash or anything that is not a Hash, no `context`"
+        " is sent and the request carries the user id alone.",
+        (_RUBY_NONE,),
+        (),
+    ),
+    (
+        "If the attributes cannot be written as JSON (a `Float::NAN`, or a string that is"
+        " not valid UTF-8), nothing is sent, the flag is disabled, and a warning that"
+        " names no attribute is printed.",
+        (_RUBY_UNSENDABLE,),
+        (),
+    ),
+    (
+        "The SDK keeps one cached answer per user and flag, together with the attributes"
+        " it was asked with. A later call is answered from the cache only if its"
+        " attributes are exactly the same; otherwise the SDK asks the server, and the new"
+        " answer replaces the cached one. So two calls that differ only in attributes get"
+        " two answers. The same attributes written in a different key order may cost one"
+        " extra request; they never return another call's answer.",
+        _RUBY_CACHE,
+        (),
+    ),
+    (
+        "The change is in this repository"
+        " ([#1720](https://github.com/Controlvar/controlvar/issues/1720)); it reaches a"
+        " registry at this SDK's first publish, so a build from a clone of `main` has it"
+        " and a copy installed earlier does not.",
+        (_RUBY_EXACT,),
+        (),
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "sentence, tests, server",
+    RUBY_CONTEXT_SENTENCES,
+    ids=[s[:60] for s, _, _ in RUBY_CONTEXT_SENTENCES],
+)
+def test_each_ruby_context_sentence_is_on_both_pages_and_held_by_a_test(
+    sentence, tests, server
+):
+    unsaid = [page for page in RUBY_PAGES if sentence not in fold(text(page))]
+    assert unsaid == [], f"no longer said there: {sentence}"
+    source = RUBY_SPEC.read_text("utf-8")
+    missing = [
+        title
+        for title in tests
+        if f"it '{title}'" not in source and f'it "{title}"' not in source
+    ]
+    assert missing == [], f"no RSpec example in {RUBY_SPEC.name} has these titles"
+    gone = [node for node in server if not _python_test_exists(node)]
+    assert gone == [], "these backend tests are gone"
+
+
+def test_the_old_ruby_note_is_gone_from_both_pages():
+    # The note #1720 replaced: attributes accepted on evaluate_flag and not sent.
+    for page in RUBY_PAGES:
+        folded = fold(text(page))
+        assert "accepted for API symmetry only and not sent" not in folded, page
+        assert "accepted for symmetry only and not sent" not in folded, page
+        assert "targeting rules against an empty context" not in folded, page
 
 
 # ---------------------------------------------------------------------------

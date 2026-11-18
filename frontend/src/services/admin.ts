@@ -105,6 +105,15 @@ export const AdminService = {
     await apiFetch<void>(`/api/v1/admin/users/${id}`, { method: 'DELETE' });
   },
 
+  /**
+   * `DELETE /api/v1/admin/users/{id}/2fa`: turn off another account's
+   * two-step sign-in (superusers only; your own answers 400). The account then
+   * signs in with its password alone; a session it holds stays valid.
+   */
+  async resetTwoFactor(id: string): Promise<void> {
+    await apiFetch<void>(`/api/v1/admin/users/${id}/2fa`, { method: 'DELETE' });
+  },
+
   // Stats
   async getStats(): Promise<AdminStats> {
     return apiFetch<AdminStats>('/api/v1/admin/stats');
