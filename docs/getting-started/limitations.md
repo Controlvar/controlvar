@@ -1,3 +1,8 @@
+---
+title: Limitations, what Controlvar does not do
+description: "What Controlvar does not do and what happens instead, for feature flags, experiments and more, with links to the public issues that track each change."
+---
+
 # Limitations
 
 What Controlvar does not do, and what happens instead. Where a public issue tracks a change,

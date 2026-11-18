@@ -1,3 +1,7 @@
+---
+description: "Plan an A/B test before launch with the Power Calculator: baseline rate, minimum detectable effect, significance and power give the sample size you need."
+---
+
 # Statistical Power Analysis
 
 This guide explains how to use the pre-experiment Power Calculator to plan your A/B tests before you launch them.

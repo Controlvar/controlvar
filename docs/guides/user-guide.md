@@ -1,3 +1,8 @@
+---
+title: User Guide, running experiments and feature flags
+description: "A guide for product managers, experimenters and analysts: create, run and read experiments and feature flags, and use the advanced statistical methods (some beta)."
+---
+
 # User Guide
 
 Guide for product managers, experimenters, and analysts using Controlvar.
