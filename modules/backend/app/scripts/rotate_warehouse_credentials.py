@@ -131,7 +131,8 @@ def _session() -> Session:
     # The mappers resolve their foreign keys against the core tables.
     register_core_models()
     require_modules_or_absent()
-    engine = create_engine(database_url(), pool_pre_ping=True)
+    # hide_parameters: errors omit SQLAlchemy's "[parameters: ...]" listing.
+    engine = create_engine(database_url(), hide_parameters=True, pool_pre_ping=True)
     return sessionmaker(bind=engine, autoflush=False)()
 
 
