@@ -73,6 +73,28 @@ by = [
 ]
 
 [[unit]]
+text = "Error reports from every SDK reaching automatic safety rollback | Only the JavaScript SDK (reportError) and the Python SDK (report_error) send error reports to POST /api/v1/tracking/errors; no other SDK has its own call for it, and neither OpenFeature provider has one of its own (its client property is the JavaScript or Python client, which does). See Which errors count."
+by = [
+    "test:backend/tests/unit/sdk/test_sdk_error_reports_and_retries.py::test_only_the_javascript_and_python_sdks_send_error_reports",
+    "test:backend/tests/unit/sdk/test_sdk_error_reports_and_retries.py::test_the_error_report_path_is_in_both_clients",
+    "test:backend/tests/unit/sdk/test_sdk_error_reports_and_retries.py::test_both_openfeature_providers_delegate_to_the_clients_that_retry",
+    "test:sdk/js/__tests__/client.test.ts::POSTs one report to /api/v1/tracking/errors with the server field names and resolves true on 201",
+    "test:sdk/python/tests/test_client.py::TestReportError::test_posts_one_report_with_the_server_field_names_and_returns_true_on_201",
+]
+
+[[unit]]
+text = "Every SDK retrying after a 429 | Only the JavaScript and Python SDKs retry, once, after the Retry-After the API sends (the JavaScript SDK waits up to its timeoutMs, the Python SDK up to 5 seconds). The two OpenFeature providers retry because they call those clients; no other SDK retries: a call that was answered 429 does not complete, and the Go SDK's error carries the header in RetryAfter."
+by = [
+    "test:backend/tests/unit/sdk/test_sdk_error_reports_and_retries.py::test_only_four_sdk_directories_read_a_retry_after_header",
+    "test:backend/tests/unit/sdk/test_sdk_error_reports_and_retries.py::test_only_the_javascript_and_python_clients_send_the_request_again_after_a_429",
+    "test:backend/tests/unit/sdk/test_sdk_error_reports_and_retries.py::test_the_two_retrying_clients_cap_the_wait_at_their_own_figures",
+    "test:backend/tests/unit/sdk/test_sdk_error_reports_and_retries.py::test_no_other_sdk_waits_or_retries_near_a_429",
+    "test:backend/tests/unit/sdk/test_sdk_error_reports_and_retries.py::test_both_openfeature_providers_delegate_to_the_clients_that_retry",
+    "test:sdk/js/__tests__/client.test.ts::resolves true when the retry after a 429 is answered 201",
+    "test:sdk/python/tests/test_client.py::TestReportError::test_returns_true_when_the_retry_after_a_429_is_answered_201",
+]
+
+[[unit]]
 text = "Experiments and results"
 by = ["exempt:label"]
 

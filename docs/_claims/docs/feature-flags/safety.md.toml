@@ -156,6 +156,13 @@ by = [
 ]
 
 [[unit]]
+text = "No other SDK has its own call for it; the OpenFeature providers expose the JavaScript or Python client, which does."
+by = [
+    "test:backend/tests/unit/sdk/test_sdk_error_reports_and_retries.py::test_only_the_javascript_and_python_sdks_send_error_reports",
+    "test:backend/tests/unit/sdk/test_sdk_error_reports_and_retries.py::test_both_openfeature_providers_delegate_to_the_clients_that_retry",
+]
+
+[[unit]]
 text = "GET /api/v1/metrics/summary counts errors by the same rule: its error_rate leaves out the reports that do not count, and its uncounted_error_count is the number of them in its period."
 by = [
     "test:backend/tests/integration/api/test_metrics_summary_error_rule.py::test_the_summary_counts_errors_by_the_safety_checks_rule",
