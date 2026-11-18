@@ -11601,6 +11601,81 @@
         "title": "MetricsSummary",
         "type": "object"
       },
+      "MfaRequiredResponse": {
+        "description": "``POST /auth/login`` and ``/auth/token`` for an account with two-step\nsign-in on: the password was right, and a code is needed. There is no\n``access_token``: send ``mfa_token`` with a code to\n``POST /api/v1/auth/mfa/verify``.",
+        "properties": {
+          "enrol": {
+            "default": false,
+            "description": "Always false in this release: the account already has an authenticator app set up",
+            "title": "Enrol",
+            "type": "boolean"
+          },
+          "expires_in": {
+            "description": "Seconds until mfa_token expires",
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "mfa_required": {
+            "const": true,
+            "default": true,
+            "title": "Mfa Required",
+            "type": "boolean"
+          },
+          "mfa_token": {
+            "description": "Send it to POST /api/v1/auth/mfa/verify with a code",
+            "title": "Mfa Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mfa_token",
+          "expires_in"
+        ],
+        "title": "MfaRequiredResponse",
+        "type": "object"
+      },
+      "MfaVerifyRequest": {
+        "description": "``POST /api/v1/auth/mfa/verify``: the token from the password step, and\na code or a recovery code (exactly one).",
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The 6-digit code the authenticator app shows. Spaces and hyphens are ignored.",
+            "title": "Code"
+          },
+          "mfa_token": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Mfa Token",
+            "type": "string"
+          },
+          "recovery_code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "One of the account's recovery codes (10 characters, A-Z and 2-7). Spaces, hyphens and letter case are ignored. Each works once.",
+            "title": "Recovery Code"
+          }
+        },
+        "required": [
+          "mfa_token"
+        ],
+        "title": "MfaVerifyRequest",
+        "type": "object"
+      },
       "ModulesResponse": {
         "description": "What the dashboard needs to decide what to render.",
         "properties": {
@@ -13119,6 +13194,24 @@
         ],
         "title": "RecommendationAction",
         "type": "string"
+      },
+      "RecoveryCodesResponse": {
+        "description": "A new set of recovery codes, shown this once; any earlier set stops\nworking.",
+        "properties": {
+          "recovery_codes": {
+            "description": "10 codes of 10 characters; each signs in once",
+            "items": {
+              "type": "string"
+            },
+            "title": "Recovery Codes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "recovery_codes"
+        ],
+        "title": "RecoveryCodesResponse",
+        "type": "object"
       },
       "RedshiftConnectionCreate": {
         "additionalProperties": false,
@@ -17835,6 +17928,103 @@
         "title": "TriggerType",
         "type": "string"
       },
+      "TwoFactorCodeRequest": {
+        "description": "A code from the authenticator app (``confirm``, ``recovery-codes``).",
+        "properties": {
+          "code": {
+            "description": "The 6-digit code the authenticator app shows. Spaces and hyphens are ignored.",
+            "maxLength": 64,
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "TwoFactorCodeRequest",
+        "type": "object"
+      },
+      "TwoFactorDisableRequest": {
+        "description": "``POST /api/v1/users/me/2fa/disable``: a code or a recovery code\n(exactly one).",
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The 6-digit code the authenticator app shows. Spaces and hyphens are ignored.",
+            "title": "Code"
+          },
+          "recovery_code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "One of the account's recovery codes (10 characters, A-Z and 2-7). Spaces, hyphens and letter case are ignored. Each works once.",
+            "title": "Recovery Code"
+          }
+        },
+        "title": "TwoFactorDisableRequest",
+        "type": "object"
+      },
+      "TwoFactorEnrolResponse": {
+        "description": "``POST /api/v1/users/me/2fa/enroll``: a new secret for the\nauthenticator app, waiting for its first code.",
+        "properties": {
+          "otpauth_uri": {
+            "description": "The same secret as an otpauth:// link, for a QR code",
+            "title": "Otpauth Uri",
+            "type": "string"
+          },
+          "secret": {
+            "description": "The secret in base32, to type in",
+            "title": "Secret",
+            "type": "string"
+          }
+        },
+        "required": [
+          "secret",
+          "otpauth_uri"
+        ],
+        "title": "TwoFactorEnrolResponse",
+        "type": "object"
+      },
+      "TwoFactorStatusResponse": {
+        "description": "``GET /api/v1/users/me/2fa``.",
+        "properties": {
+          "enabled": {
+            "description": "Two-step sign-in is on",
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "recovery_codes_remaining": {
+            "description": "Unused recovery codes; 0 while two-step sign-in is off",
+            "title": "Recovery Codes Remaining",
+            "type": "integer"
+          },
+          "required": {
+            "default": false,
+            "description": "Your role must use two-step sign-in. Always false in this release",
+            "title": "Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled",
+          "recovery_codes_remaining"
+        ],
+        "title": "TwoFactorStatusResponse",
+        "type": "object"
+      },
       "UpdateLLMExperimentRequest": {
         "description": "Request schema for updating an LLM experiment.",
         "properties": {
@@ -18286,6 +18476,11 @@
             ],
             "title": "Role"
           },
+          "totp_enabled": {
+            "description": "The account has two-step sign-in on (an authenticator app confirmed with a code)",
+            "title": "Totp Enabled",
+            "type": "boolean"
+          },
           "updated_at": {
             "format": "date-time",
             "title": "Updated At",
@@ -18303,7 +18498,8 @@
           "is_active",
           "is_superuser",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "totp_enabled"
         ],
         "title": "UserResponse",
         "type": "object"
@@ -21009,6 +21205,56 @@
         ]
       }
     },
+    "/api/v1/admin/users/{user_id}/2fa": {
+      "delete": {
+        "description": "Turn off someone else's two-step sign-in (superusers only).\n\nFor an account that lost its authenticator app and its recovery codes:\nits next sign-in asks for the password alone, and it can set two-step\nsign-in up again. The wrong-code count goes with it. A session the account\nalready holds stays valid until it expires. Writes `user_2fa_reset`\n(nothing when the account had no two-step sign-in, which still answers\n204). Your own account answers 400: another administrator resets yours.",
+        "operationId": "reset_user_two_factor_api_v1_admin_users__user_id__2fa_delete",
+        "parameters": [
+          {
+            "description": "The account to reset",
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "description": "The account to reset",
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "You can't reset your own two-step sign-in. Ask another administrator to do it."
+          },
+          "404": {
+            "description": "No such user, or AUTH_PROVIDER is not 'local'."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Reset User Two Factor",
+        "tags": [
+          "Administration"
+        ]
+      }
+    },
     "/api/v1/ai/design": {
       "post": {
         "description": "Generate an AI-powered experiment design suggestion. Falls back to template-based suggestions when the Claude API is unavailable.",
@@ -22565,7 +22811,7 @@
     },
     "/api/v1/auth/login": {
       "post": {
-        "description": "Sign in with e-mail and password (``AUTH_PROVIDER=local``).\n\nReturns a bearer token plus the user's profile.  The same 401 message is\nused for an unknown address, a wrong password and an inactive account so\nthe endpoint cannot be used to enumerate users.  After\n``LOCAL_AUTH_MAX_FAILED_ATTEMPTS`` failures within\n``LOCAL_AUTH_LOCKOUT_MINUTES`` the address answers 423 until the window\nexpires.  The email address is matched whatever its letter case (A–Z),\nand every casing of it counts toward the same failed attempts.",
+        "description": "Sign in with e-mail and password (``AUTH_PROVIDER=local``).\n\nReturns a bearer token plus the user's profile.  The same 401 message is\nused for an unknown address, a wrong password and an inactive account so\nthe endpoint cannot be used to enumerate users.  After\n``LOCAL_AUTH_MAX_FAILED_ATTEMPTS`` failures within\n``LOCAL_AUTH_LOCKOUT_MINUTES`` the address answers 423 until the window\nexpires.  The email address is matched whatever its letter case (A–Z),\nand every casing of it counts toward the same failed attempts.\n\nFor an account with two-step sign-in on, the right password answers\n``{\"mfa_required\": true, \"mfa_token\": \"...\", \"enrol\": false,\n\"expires_in\": 300}`` with no ``access_token``: send the ``mfa_token`` with\na code from the authenticator app (or a recovery code) to\n``POST /api/v1/auth/mfa/verify`` within ``expires_in`` seconds. Scripts\nthat sign in this way should use an API key instead.",
         "operationId": "login_local_api_v1_auth_login_post",
         "requestBody": {
           "content": {
@@ -22582,7 +22828,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/LoginResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/LoginResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MfaRequiredResponse"
+                    }
+                  ],
+                  "title": "Response Login Local Api V1 Auth Login Post"
                 }
               }
             },
@@ -22664,6 +22918,60 @@
           }
         ],
         "summary": "Get User Info",
+        "tags": [
+          "Authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/mfa/verify": {
+      "post": {
+        "description": "The second step of a sign-in with two-step sign-in on\n(``AUTH_PROVIDER=local``).\n\nTakes the ``mfa_token`` that ``POST /api/v1/auth/login`` (or\n``/auth/token``) answered and exactly one of ``code`` (the 6 digits the\nauthenticator app shows) and ``recovery_code`` (one of the account's\nrecovery codes, each usable once). Answers what ``/auth/login`` answers\nfor an account without two-step sign-in: an access token and the\nprofile, read from the account as it is now.\n\nA wrong code answers 401 and counts toward the same lockout as a wrong\npassword; a code is accepted once. Limited to 10 requests a minute per\nclient address.",
+        "operationId": "verify_mfa_api_v1_auth_mfa_verify_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaVerifyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "That code is not correct. (a wrong, used or malformed code or recovery code), or Sign-in expired. Start again. (the mfa_token is expired, forged or of another purpose, or the account can no longer sign in)"
+          },
+          "404": {
+            "description": "AUTH_PROVIDER is not 'local'"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "423": {
+            "description": "Too many failed attempts for this address, passwords and codes counted together (see Retry-After); or two-step sign-in is locked after too many wrong codes until an administrator resets it (no Retry-After)"
+          },
+          "503": {
+            "description": "Two-step sign-in is unavailable for this account. Ask an administrator to reset it."
+          }
+        },
+        "summary": "Verify Mfa",
         "tags": [
           "Authentication"
         ]
@@ -23408,7 +23716,7 @@
     },
     "/api/v1/auth/token": {
       "post": {
-        "description": "OAuth2 compatible token login, get an access token for future requests.\n\nWith ``AUTH_PROVIDER=local`` the form's ``username`` field is the user's\ne-mail address and the response has the same shape as ``/login`` (this is\nwhat makes Swagger's *Authorize* button work).  With ``cognito`` the\ncredentials are forwarded to the user pool; a successful sign-in of a\nuser who already has an account writes ``user_login`` with the provider\n``cognito``.",
+        "description": "OAuth2 compatible token login, get an access token for future requests.\n\nWith ``AUTH_PROVIDER=local`` the form's ``username`` field is the user's\ne-mail address and the response has the same shape as ``/login`` (this is\nwhat makes Swagger's *Authorize* button work), ``mfa_required`` for an\naccount with two-step sign-in on included: Swagger's *Authorize* cannot\ntake the second step, so such an account signs in with ``/login`` and\n``/mfa/verify`` and pastes the access token.  With ``cognito`` the\ncredentials are forwarded to the user pool; a successful sign-in of a\nuser who already has an account writes ``user_login`` with the provider\n``cognito``.",
         "operationId": "login_api_v1_auth_token_post",
         "requestBody": {
           "content": {
@@ -23428,6 +23736,9 @@
                   "anyOf": [
                     {
                       "$ref": "#/components/schemas/LoginResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MfaRequiredResponse"
                     },
                     {
                       "$ref": "#/components/schemas/TokenResponse"
@@ -36445,6 +36756,248 @@
           }
         ],
         "summary": "Get User Me",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/api/v1/users/me/2fa": {
+      "get": {
+        "description": "Whether your two-step sign-in is on, and how many recovery codes are left.\n\n`required` is always false in this release.",
+        "operationId": "read_own_two_factor_api_v1_users_me_2fa_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TwoFactorStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "AUTH_PROVIDER is not 'local'."
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Read Own Two Factor",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/api/v1/users/me/2fa/confirm": {
+      "post": {
+        "description": "Turn two-step sign-in on with the first code from your authenticator app.\n\nAnswers 10 recovery codes, shown this once: each signs in once when the\napp is not at hand. A wrong code answers 403, leaves the secret waiting,\nand counts toward the same lockout as a wrong password.",
+        "operationId": "confirm_own_two_factor_api_v1_users_me_2fa_confirm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TwoFactorCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryCodesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "That code is not correct. (wrong, used or malformed)"
+          },
+          "404": {
+            "description": "AUTH_PROVIDER is not 'local'."
+          },
+          "409": {
+            "description": "No new secret is waiting for its first code. Ask for one with POST /api/v1/users/me/2fa/enroll."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "423": {
+            "description": "Too many failed attempts for this account, passwords and codes counted together (see Retry-After); or two-step sign-in is locked after too many wrong codes until an administrator resets it"
+          },
+          "503": {
+            "description": "Two-step sign-in is unavailable for this account. Ask an administrator to reset it."
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Confirm Own Two Factor",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/api/v1/users/me/2fa/disable": {
+      "post": {
+        "description": "Turn your two-step sign-in off, with a code from the app or a recovery\ncode (exactly one).\n\nAnswers 204. Sign-in then asks for the password alone. A wrong code\nanswers 403 and counts toward the same lockout as a wrong password.",
+        "operationId": "disable_own_two_factor_api_v1_users_me_2fa_disable_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TwoFactorDisableRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "That code is not correct. (wrong, used or malformed)"
+          },
+          "404": {
+            "description": "AUTH_PROVIDER is not 'local'."
+          },
+          "409": {
+            "description": "Two-step sign-in is not on for this account."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "423": {
+            "description": "Too many failed attempts for this account, passwords and codes counted together (see Retry-After); or two-step sign-in is locked after too many wrong codes until an administrator resets it"
+          },
+          "503": {
+            "description": "Two-step sign-in is unavailable for this account. Ask an administrator to reset it."
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Disable Own Two Factor",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/api/v1/users/me/2fa/enroll": {
+      "post": {
+        "description": "Start setting up two-step sign-in: a new secret for your authenticator app.\n\nAnswers the secret in base32 (to type in) and as an `otpauth://` link (for\na QR code). Nothing changes at sign-in until a code from the app confirms\nit (`POST /api/v1/users/me/2fa/confirm`). Asking again replaces a secret\nthat is still waiting, so a code from the earlier one no longer works.\n409 once two-step sign-in is on.",
+        "operationId": "enrol_own_two_factor_api_v1_users_me_2fa_enroll_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TwoFactorEnrolResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "AUTH_PROVIDER is not 'local'."
+          },
+          "409": {
+            "description": "Two-step sign-in is already on for this account. Turn it off first to set it up again."
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Enrol Own Two Factor",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/api/v1/users/me/2fa/recovery-codes": {
+      "post": {
+        "description": "A new set of 10 recovery codes, for a code from your authenticator app.\n\nShown this once; every earlier recovery code stops working. A wrong code\nanswers 403 and counts toward the same lockout as a wrong password.",
+        "operationId": "regenerate_own_recovery_codes_api_v1_users_me_2fa_recovery_codes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TwoFactorCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryCodesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "That code is not correct. (wrong, used or malformed)"
+          },
+          "404": {
+            "description": "AUTH_PROVIDER is not 'local'."
+          },
+          "409": {
+            "description": "Two-step sign-in is not on for this account."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "423": {
+            "description": "Too many failed attempts for this account, passwords and codes counted together (see Retry-After); or two-step sign-in is locked after too many wrong codes until an administrator resets it"
+          },
+          "503": {
+            "description": "Two-step sign-in is unavailable for this account. Ask an administrator to reset it."
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Regenerate Own Recovery Codes",
         "tags": [
           "Users"
         ]

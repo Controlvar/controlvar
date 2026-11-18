@@ -24,6 +24,8 @@ Where the login is checked depends on `AUTH_PROVIDER`:
   (`LOCAL_AUTH_TOKEN_TTL_MINUTES`, default `720`). After 10 failed attempts within 15
   minutes, the address answers `423` until the 15 minutes are up.
   The email address is matched whatever its letter case (A–Z), and every casing of it counts toward the same failed attempts.
+  An account with [two-step sign-in](#two-step-sign-in) on also gives a code from its
+  authenticator app.
 - **`cognito`**: the credentials are passed to an AWS Cognito user pool, which issues an
   access token and a refresh token. Users are created by an administrator
   ([Adding a user](../cognito_integration.md#adding-a-user)).
@@ -282,6 +284,169 @@ With the modules installed, admins can also create custom roles with fine-graine
 permissions, and grant temporary permissions to individual users. They add permissions to
 the base role in every permission check, from the user's next request, and never remove any.
 See the [RBAC API Reference](rbac.md).
+
+### Two-step sign-in
+
+With `AUTH_PROVIDER=local`, any account can turn on two-step sign-in (2FA, using TOTP codes):
+after the password, sign-in also asks for the 6-digit code an authenticator app shows, or for
+one of the account's recovery codes. Each account decides for itself; nothing can require it
+for a role yet.
+
+Turn it on as the viewer. Ask for a secret for the authenticator app:
+
+```{.bash exec}
+ENROL=$(curl -s -X POST localhost:8000/api/v1/users/me/2fa/enroll \
+  -H "Authorization: Bearer $VIEWER_TOKEN")
+SECRET=$(jq -r .secret <<<"$ENROL")
+
+jq -r .otpauth_uri <<<"$ENROL" | cut -d '?' -f 1
+```
+<!-- expect: otpauth://totp/Controlvar:viewer@example.com -->
+
+It prints the start of the `otpauth://` link a QR code carries. The whole link, or the
+`secret` typed in, adds the account to an authenticator app. Nothing changes at sign-in yet.
+
+Confirm with the app's current code. Here Python stands in for the app:
+
+```{.bash exec}
+CODE=$(python3 -c 'import base64,hmac,struct,sys,time; k=base64.b32decode(sys.argv[1]+"="*(-len(sys.argv[1])%8)); h=hmac.digest(k,struct.pack(">Q",int(time.time()//30)),"sha1"); o=h[19]&15; print(str((int.from_bytes(h[o:o+4],"big")&0x7FFFFFFF)%1000000).zfill(6))' "$SECRET")
+
+CONFIRM=$(curl -s -X POST localhost:8000/api/v1/users/me/2fa/confirm \
+  -H "Authorization: Bearer $VIEWER_TOKEN" \
+  -H 'content-type: application/json' \
+  -d "{\"code\": \"$CODE\"}")
+
+jq '.recovery_codes | length' <<<"$CONFIRM"
+```
+<!-- expect: 10 -->
+
+It prints `10`: two-step sign-in is on, and the answer holds 10 recovery codes, shown this
+once. Each signs in one time when the app is not at hand.
+
+Sign in again. The right password now answers `mfa_required` and a short `mfa_token`, with no
+`access_token`:
+
+```{.bash exec}
+STEP1=$(curl -s -X POST localhost:8000/api/v1/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"email":"viewer@example.com","password":"Viewer5678!"}')
+MFA_TOKEN=$(jq -r .mfa_token <<<"$STEP1")
+
+jq '{mfa_required, expires_in, access_token}' <<<"$STEP1"
+```
+<!-- expect: "mfa_required": true -->
+<!-- expect: "expires_in": 300 -->
+<!-- expect: "access_token": null -->
+
+Send the `mfa_token` back within `expires_in` seconds with a `code` from the app, or, as here,
+a `recovery_code`:
+
+```{.bash exec}
+RECOVERY=$(jq -r '.recovery_codes[0]' <<<"$CONFIRM")
+
+curl -s -X POST localhost:8000/api/v1/auth/mfa/verify \
+  -H 'content-type: application/json' \
+  -d "{\"mfa_token\": \"$MFA_TOKEN\", \"recovery_code\": \"$RECOVERY\"}" | jq -r .user.email
+```
+<!-- expect: viewer@example.com -->
+
+It prints `viewer@example.com`: the answer is the one `POST /api/v1/auth/login` gives an account
+without two-step sign-in, with `access_token`. A code or recovery code works once:
+
+```{.bash exec}
+curl -s -X POST localhost:8000/api/v1/auth/mfa/verify \
+  -H 'content-type: application/json' \
+  -d "{\"mfa_token\": \"$MFA_TOKEN\", \"recovery_code\": \"$RECOVERY\"}"
+```
+<!-- expect: {"detail":"That code is not correct."} -->
+
+```{.bash exec}
+curl -s localhost:8000/api/v1/users/me/2fa -H "Authorization: Bearer $VIEWER_TOKEN"
+```
+<!-- expect: {"enabled":true,"required":false,"recovery_codes_remaining":9} -->
+
+Turn it off with a code or a recovery code. It answers an empty `204`:
+
+```{.bash exec}
+SECOND=$(jq -r '.recovery_codes[1]' <<<"$CONFIRM")
+
+curl -s -X POST localhost:8000/api/v1/users/me/2fa/disable \
+  -H "Authorization: Bearer $VIEWER_TOKEN" \
+  -H 'content-type: application/json' \
+  -d "{\"recovery_code\": \"$SECOND\"}"
+
+curl -s localhost:8000/api/v1/users/me/2fa -H "Authorization: Bearer $VIEWER_TOKEN"
+```
+<!-- expect: {"enabled":false,"required":false,"recovery_codes_remaining":0} -->
+
+`$VIEWER_TOKEN` was issued before two-step sign-in was turned on, and it kept working
+throughout: a token stays valid until it expires.
+
+| Route | What it does |
+|---|---|
+| `GET /api/v1/users/me/2fa` | `enabled`, `required` (always `false`) and `recovery_codes_remaining` |
+| `POST /api/v1/users/me/2fa/enroll` | A new secret, waiting for its first code; a waiting one is replaced. `409` once on |
+| `POST /api/v1/users/me/2fa/confirm` | `{"code"}`: turns it on and answers 10 recovery codes. `409` with no secret waiting |
+| `POST /api/v1/users/me/2fa/recovery-codes` | `{"code"}`: 10 new recovery codes; the earlier ones stop working |
+| `POST /api/v1/users/me/2fa/disable` | `{"code"}` or `{"recovery_code"}`: turns it off. `409` while off |
+| `POST /api/v1/auth/mfa/verify` | `{"mfa_token"}` and `{"code"}` or `{"recovery_code"}`: the access token |
+| `DELETE /api/v1/admin/users/{user_id}/2fa` | A superuser turns off another account's two-step sign-in; your own answers `400` |
+
+A code is 6 digits and a recovery code 10 characters, `A`-`Z` and `2`-`7`. Spaces and hyphens
+are ignored, and so is a recovery code's letter case. A field longer than 64 characters, or
+both fields or neither, answers `422`. Anything else that is not a right, unused code counts as
+a wrong one.
+
+| Answer | When |
+|---|---|
+| `401` `That code is not correct.` | A wrong code at `POST /api/v1/auth/mfa/verify`; `403` with the same text on the `/api/v1/users/me/2fa` routes |
+| `401` `Sign-in expired. Start again.` | The `mfa_token` is expired or not one; or the account was deactivated, or its two-step sign-in turned off, since the password step |
+| `423` with `Retry-After` | Wrong passwords and wrong codes together: 10 within 15 minutes lock the address, as for sign-in |
+| `423` `Two-step sign-in is locked after too many wrong codes. Ask an administrator to reset it.` | 100 wrong codes in a row; even the right code is refused until the reset |
+| `503` `Two-step sign-in is unavailable for this account. Ask an administrator to reset it.` | The stored secret cannot be read, as after `SECRET_KEY` changes |
+
+`POST /api/v1/auth/mfa/verify` takes 10 requests a minute per address, like
+`POST /api/v1/auth/login`. `POST /api/v1/auth/token` answers `mfa_required` too, so the
+**Authorize** button of the interactive documentation cannot sign in such an account: sign in
+with the two calls above and paste the access token. A script should use an
+[API key](#api-key-authentication), not a person's password.
+
+A superuser resets an account that lost its app and its recovery codes with
+`DELETE /api/v1/admin/users/{user_id}/2fa`. An operator resets one, or every account, from the
+command line: [Resetting two-step sign-in](../auth/auth-user-guide.md#resetting-two-step-sign-in).
+
+Known limits:
+
+- A token issued before two-step sign-in was turned on, off or reset keeps working until it
+  expires.
+- The count of wrong passwords and codes is kept in each API process's memory, so each process
+  counts its own; the count of 100 wrong codes is stored with the account.
+
+#### Password sign-ins in this repository
+
+These sign in with a password and read `access_token`. Each fails if its account turns two-step
+sign-in on:
+
+| Path | Its account, and what happens |
+|---|---|
+| `scripts/synthetic_check.py` | A dedicated ANALYST account, every 30 minutes: its sign-in step fails. Keep that account without two-step sign-in |
+| `scripts/scale_stack.py` | The first superuser: its sign-in step fails |
+| `deploy/aws-installer/lib/steps.sh` | The first administrator, straight after the install, before anyone can turn it on |
+| `deploy/demo/probe.py` | The demo viewer; demo mode refuses turning two-step sign-in on |
+| `.github/workflows/_platform.yml` | Seeded accounts that never turn it on |
+| `.github/workflows/compose-production.yml` | Seeded accounts that never turn it on |
+| `.github/workflows/pr-qa-gate.yml` | Seeded accounts that never turn it on |
+| `scripts/compose_upgrade.sh` | Seeded accounts that never turn it on |
+| `scripts/fuzz_local.sh` | Seeded accounts that never turn it on |
+| `demo/streampulse/simulator/rollout_story.py` | Seeded accounts that never turn it on |
+| `tests/ground_truth/driver.py` | Seeded accounts that never turn it on |
+| `tests/sdk-contract/live/run_live_contract.py` | Seeded accounts that never turn it on |
+| `tests/alb/rehearse.sh` | Seeded accounts that never turn it on |
+| `tests/llm/smoke.sh` | Seeded accounts that never turn it on |
+| `tests/acceptance/showcase/capture/run.py` | Seeded accounts that never turn it on |
+| `tests/acceptance/docs/docs_runner/pacer.py` | Seeded accounts that never turn it on |
+| `backend/tests/performance/locustfiles/common.py` | Seeded accounts that never turn it on |
+| `modules/backend/tests/realistic/scenarios/multi_tenant_isolation.py` | Seeded accounts that never turn it on |
 
 ---
 

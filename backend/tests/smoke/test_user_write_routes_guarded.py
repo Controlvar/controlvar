@@ -27,16 +27,24 @@ PREFIXES = ("/api/v1/users", "/api/v1/admin/users")
 MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
 FLAGS = {"is_superuser", "is_active"}
 
-# Every mutating route under PREFIXES. The two DELETEs refuse deleting your
-# own account in the handler.
+# Every mutating route under PREFIXES. The two DELETEs of an account refuse
+# deleting your own account in the handler. The four ``/users/me/2fa`` actions
+# change only the caller's own two-step sign-in, and the superuser's
+# ``/admin/users/{user_id}/2fa`` reset refuses the caller's own account
+# (#1812); none of their bodies carries FLAGS.
 INVENTORY = {
     ("POST", "/api/v1/users/"),
     ("POST", "/api/v1/users/me/password"),
+    ("POST", "/api/v1/users/me/2fa/enroll"),
+    ("POST", "/api/v1/users/me/2fa/confirm"),
+    ("POST", "/api/v1/users/me/2fa/disable"),
+    ("POST", "/api/v1/users/me/2fa/recovery-codes"),
     ("PUT", "/api/v1/users/{user_id}"),
     ("DELETE", "/api/v1/users/{user_id}"),
     ("PUT", "/api/v1/admin/users/{user_id}"),
     ("PATCH", "/api/v1/admin/users/{user_id}"),
     ("DELETE", "/api/v1/admin/users/{user_id}"),
+    ("DELETE", "/api/v1/admin/users/{user_id}/2fa"),
 }
 
 # How each route whose body can carry FLAGS refuses an own-account change.

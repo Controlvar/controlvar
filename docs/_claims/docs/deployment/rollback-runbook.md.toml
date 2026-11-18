@@ -1838,3 +1838,7 @@ by = ["exempt:instruction"]
 [[unit]]
 text = "See also Responding to an incident on your deployment."
 by = ["exempt:navigation"]
+
+[[unit]]
+text = "Until the API is rolled back, a release that serves POST /api/v1/auth/mfa/verify answers 500 to every local password sign-in, because it looks the account up in that table at each one."
+by = ["test:backend/tests/unit/api/test_two_factor_routes.py::test_a_failed_two_step_lookup_is_a_500_never_a_token"]

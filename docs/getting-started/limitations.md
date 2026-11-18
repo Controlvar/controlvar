@@ -57,7 +57,7 @@ the row links it.
 
 | What you might expect | What happens instead |
 |---|---|
-| Multi-factor sign-in | Not available: a local account signs in with its email and password alone. |
+| Requiring two-step sign-in for a role | Not available yet: each local account turns two-step sign-in (an authenticator app) on or off for itself. See [Two-step sign-in](../api/auth.md#two-step-sign-in). |
 | SAML sign-in | Not available. OIDC sign-in is, with the `sso` module (full profile). |
 | A custom role that removes access, or that grants administration | Custom roles and direct permission grants (the `rbac` module) only add, and only to experiments, flags and reading the audit log; never administration or the compliance audit trail. Administration depends on the built-in role or the superuser flag; to restrict someone, give them a lower built-in role. See [What a role or grant cannot give](../api/rbac.md#what-a-role-or-grant-cannot-give). |
 | Assigning roles and granting permissions in the dashboard | The Roles page defines roles; assigning them and granting permissions go through the [RBAC API](../api/rbac.md). |
