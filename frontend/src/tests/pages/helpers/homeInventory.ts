@@ -199,7 +199,7 @@ export const TYPED: readonly Row[] = [
   { tag: 'h2', text: 'Roll features out gradually, with automatic rollback', source: `${UX} Row 1; feature-flags/index.tsx:134` },
   {
     tag: 'p',
-    text: 'Sticky assignment, gradual rollouts with configurable stages, and automated safety rollback on error-rate and latency thresholds.',
+    text: 'Sticky assignment, gradual rollouts with configurable stages, and automated safety rollback on error-rate and latency thresholds once you turn it on.',
     source: `${MAIN}:112`,
   },
   {
@@ -221,10 +221,10 @@ export const TYPED: readonly Row[] = [
   { tag: 'h2', text: 'Plan tests and analyse results', source: `${MAIN}:119 (#1415 finds it by name)` },
   { tag: 'p', text: "Work out a test's sample size in the power calculator, which needs no account.", source: `${UX} Row 2; videos.json 05` },
   { tag: 'li', text: 'Frequentist and Bayesian analysis', source: `${MAIN}:120` },
-  { tag: 'li', text: 'Sequential testing with mSPRT for early stopping', source: `${MAIN}:120` },
+  { tag: 'li', text: 'Sequential testing with mSPRT for early stopping (beta)', source: `${MAIN}:120` },
   { tag: 'li', text: 'Multi-armed bandits', source: `${MAIN}:120` },
   { tag: 'li', text: 'Per-segment breakdowns with a Bonferroni correction across segments', source: `${MAIN}:120` },
-  { tag: 'li', text: 'Mutual-exclusion groups and a global holdout', source: `${MAIN}:112` },
+  { tag: 'li', text: 'Mutual-exclusion groups and a global holdout, whose results are beta', source: `${MAIN}:112` },
   { tag: 'p', text: 'Open the power calculator →', source: `${UX} Row 2` },
 
   // Row 3: teams and the audit log.
@@ -235,7 +235,7 @@ export const TYPED: readonly Row[] = [
     source: `${UX} Row 3; docs/rbac/README.md:10-13, :78-91`,
   },
   { tag: 'li', text: 'An audit log you can filter by action, entity and date', source: `${UX} Row 3; AuditLogFilter.tsx labels` },
-  { tag: 'li', text: 'Download it as CSV or JSON', source: `${UX} Row 3; AuditLogDownload.tsx:109-110` },
+  { tag: 'li', text: 'Download it as CSV or JSON (the download is beta)', source: `${UX} Row 3; AuditLogDownload.tsx:109-110` },
   { tag: 'p', text: 'Role-based access control in the docs →', source: `${UX} Row 3; docs/rbac/README.md title` },
 
   // SDKs (the chips are read from content/sdks.ts).
