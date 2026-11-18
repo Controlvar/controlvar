@@ -1001,7 +1001,6 @@ SENDS_NO_CONTEXT = {
     "elixir",
     "flutter",
     "ios",
-    "php",
 }
 
 
@@ -1171,6 +1170,19 @@ def test_the_claim_patterns_find_the_true_sentences_on_the_ruby_pages():
     assert "ruby" not in SENDS_NO_CONTEXT
     assert sends_context("ruby")
     for page in RUBY_PAGES:
+        assert "flag evaluation sends the attributes" in attribute_claims(text(page)), (
+            page
+        )
+
+
+def test_the_claim_patterns_find_the_true_sentences_on_the_php_pages():
+    # PHP sends the context (part of #1720), and both its pages say so: the
+    # patterns must see it, so that php put back in SENDS_NO_CONTEXT fails
+    # test_a_page_claims_no_attribute_targeting_its_client_does_not_send on
+    # docs/sdk/php.md and sdk/php/README.md as well as here.
+    assert "php" not in SENDS_NO_CONTEXT
+    assert sends_context("php")
+    for page in PHP_PAGES:
         assert "flag evaluation sends the attributes" in attribute_claims(text(page)), (
             page
         )
@@ -2384,3 +2396,103 @@ def test_the_old_ruby_note_is_gone_from_both_pages():
         assert "accepted for API symmetry only and not sent" not in folded, page
         assert "accepted for symmetry only and not sent" not in folded, page
         assert "targeting rules against an empty context" not in folded, page
+
+
+# ---------------------------------------------------------------------------
+# 9. The PHP SDK's targeting context (part of #1720)
+# ---------------------------------------------------------------------------
+
+#: The PHP SDK's page and its README, which say the same about the context.
+PHP_PAGES = ("docs/sdk/php.md", "sdk/php/README.md")
+#: The PHP SDK's client test: each PHP test named below is one of its methods.
+PHP_TESTS = SDK_DIR / "php/tests/ExperimentationClientTest.php"
+_PHP_EXACT = "testEvaluateFlagSendsTheAttributesAsContextAfterUserId"
+_PHP_RULE = "testEvaluateFlagMatchesATargetingRuleOnAnAttribute"
+_PHP_SHORTHAND = "testIsFeatureEnabledSendsTheAttributesToo"
+_PHP_DECODE = "testTheContextDecodesToTheAttributesTheServerReads"
+_PHP_PINNED = "testTheContextIsPinnedAsAnExactUrl"
+_PHP_NONE = "testNoAttributesOrAnEmptyArraySendNoContext"
+_PHP_UNSENDABLE = "testEvaluateFlagSendsNothingWhenTheAttributesCannotBeWrittenAsJson"
+_PHP_CACHE = (
+    "testTwoCallsThatDifferOnlyInAttributesGetTwoRequestsAndTwoAnswers",
+    "testOneCachedAnswerPerUserAndFlagSoABAMakesThreeRequests",
+    "testAnAnswerCachedWithAttributesIsNotServedToACallWithoutThem",
+    "testTheSameAttributesAreServedFromTheCache",
+    "testTheSameAttributesInAnotherKeyOrderCostOneExtraRequest",
+)
+
+#: Each sentence both PHP pages state about the targeting context (as written,
+#: folded to one line), the PHPUnit tests that fail when it stops being true,
+#: and the backend tests that hold the server's part of it. The pages are in
+#: ``CLAIMS_DEFERRED``, so no claims registry binds them; this does.
+PHP_CONTEXT_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], ...] = (
+    (
+        "Flag evaluation sends the user's attributes as `context`, so a flag's targeting"
+        " rules match against them.",
+        (_PHP_EXACT, _PHP_RULE),
+        _SERVER_MATCHES,
+    ),
+    (
+        "`evaluateFlag` and `isFeatureEnabled` call"
+        " `GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=…`, where `context`"
+        " is the attributes as compact JSON, percent-encoded like `user_id`:"
+        " `['plan' => 'pro']` travels as `context=%7B%22plan%22%3A%22pro%22%7D`.",
+        (_PHP_EXACT, _PHP_SHORTHAND, _PHP_DECODE, _PHP_PINNED),
+        (),
+    ),
+    (
+        "With no attributes, or an empty array, no `context` is sent and the request"
+        " carries the user id alone.",
+        (_PHP_NONE,),
+        (),
+    ),
+    (
+        "If the attributes cannot be written as JSON (a `NAN`, or a string that is not"
+        " valid UTF-8), `evaluateFlag` returns the disabled evaluation and sends nothing.",
+        (_PHP_UNSENDABLE,),
+        (),
+    ),
+    (
+        "The SDK keeps one cached answer per user and flag, together with the attributes"
+        " it was asked with. A later call is answered from the cache only if its"
+        " attributes are exactly the same; otherwise the SDK asks the server, and a"
+        " successful new answer replaces the cached one. So two calls that differ only in"
+        " attributes get two answers. The same attributes written in a different key order"
+        " may cost one extra request; they never return another call's answer.",
+        _PHP_CACHE,
+        (),
+    ),
+    (
+        "The change is in this repository"
+        " ([#1720](https://github.com/Controlvar/controlvar/issues/1720)); it reaches a"
+        " registry at this SDK's first publish, so a build from a clone of `main` has it"
+        " and a copy installed earlier does not.",
+        (_PHP_EXACT,),
+        (),
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "sentence, tests, server",
+    PHP_CONTEXT_SENTENCES,
+    ids=[s[:60] for s, _, _ in PHP_CONTEXT_SENTENCES],
+)
+def test_each_php_context_sentence_is_on_both_pages_and_held_by_a_test(
+    sentence, tests, server
+):
+    unsaid = [page for page in PHP_PAGES if sentence not in fold(text(page))]
+    assert unsaid == [], f"no longer said there: {sentence}"
+    source = PHP_TESTS.read_text("utf-8")
+    missing = [name for name in tests if f"public function {name}(" not in source]
+    assert missing == [], f"no PHPUnit test in {PHP_TESTS.name} has these names"
+    gone = [node for node in server if not _python_test_exists(node)]
+    assert gone == [], "these backend tests are gone"
+
+
+def test_the_old_php_note_is_gone_from_both_pages():
+    # The note #1720 replaced: the evaluate request carries the user id alone.
+    for page in PHP_PAGES:
+        folded = fold(text(page))
+        assert "the user id alone, so the server evaluates" not in folded, page
+        assert "against an empty context" not in folded, page

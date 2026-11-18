@@ -9,14 +9,19 @@ namespace Controlvar;
  *
  * PHP is single-threaded within a request, so no mutex/locking is needed.
  * When the cache reaches maxCacheSize the oldest entry (by insertion order) is evicted.
+ *
+ * An entry may also remember a context: the client stores a flag evaluation with
+ * the exact context string it sent ('' when it sent none), and reads it back only
+ * for an equal string. One key still holds one entry, so a call with other
+ * attributes replaces it rather than adding a second.
  */
 class Cache
 {
     /**
-     * Cache store: key => ['value' => mixed, 'expires_at' => float|null]
+     * Cache store: key => ['value' => mixed, 'expires_at' => float|null, 'context' => string|null]
      * Uses SplDoublyLinkedList semantics via ordered array + index map for O(1) eviction.
      *
-     * @var array<string, array{value: mixed, expires_at: float|null}>
+     * @var array<string, array{value: mixed, expires_at: float|null, context: string|null}>
      */
     private array $store = [];
 
@@ -40,10 +45,13 @@ class Cache
     /**
      * Retrieve a cached value.
      *
-     * @param string $key Cache key
-     * @return mixed The cached value, or null if missing or expired
+     * @param string      $key     Cache key
+     * @param string|null $context When given ('' included), the entry is returned only if it
+     *                             was stored with this same context; null (the default) does
+     *                             not compare contexts, which is what assignments use
+     * @return mixed The cached value, or null if missing, expired or stored for another context
      */
-    public function get(string $key): mixed
+    public function get(string $key, ?string $context = null): mixed
     {
         if (!isset($this->store[$key])) {
             return null;
@@ -57,17 +65,22 @@ class Cache
             return null;
         }
 
+        if ($context !== null && $entry['context'] !== $context) {
+            return null;
+        }
+
         return $entry['value'];
     }
 
     /**
-     * Store a value in the cache.
+     * Store a value in the cache, replacing any entry under the same key.
      *
-     * @param string   $key   Cache key
-     * @param mixed    $value Value to store (may be null)
-     * @param int|null $ttl   TTL in seconds; null uses the default TTL; 0 = never expires
+     * @param string      $key     Cache key
+     * @param mixed       $value   Value to store (may be null)
+     * @param int|null    $ttl     TTL in seconds; null uses the default TTL; 0 = never expires
+     * @param string|null $context What a get() with a context must match
      */
-    public function set(string $key, mixed $value, ?int $ttl = null): void
+    public function set(string $key, mixed $value, ?int $ttl = null, ?string $context = null): void
     {
         // If key already exists, remove from insertion order list before re-adding
         if (isset($this->store[$key])) {
@@ -85,6 +98,7 @@ class Cache
         $this->store[$key] = [
             'value'      => $value,
             'expires_at' => $expiresAt,
+            'context'    => $context,
         ];
         $this->insertionOrder[] = $key;
     }
