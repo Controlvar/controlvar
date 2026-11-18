@@ -12,7 +12,9 @@ here, and this file IS collected (Module Tests, full-build):
 * the evidence writer writes nothing when a credential -- or an encoding or
   shape of one -- is anywhere in what it would write (sentinels generated at
   runtime; none is committed);
-* the parity and runner comparisons it makes fail when a number is wrong.
+* the parity and runner comparisons it makes fail when a number is wrong;
+* the Redshift verdicts fail on the readings they exist to refuse, and the
+  preview check runs the previews the way the endpoint does.
 """
 
 from __future__ import annotations
@@ -38,6 +40,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 from modules.backend.app.services import warehouse_runner
 from modules.backend.app.services.warehouse_query_builder import (
+    REDSHIFT_SQL,
     AnalysisWindow,
     AssignmentMapping,
     BuiltQuery,
@@ -56,10 +59,13 @@ from modules.backend.app.warehouse.bigquery import (
 )
 from modules.backend.app.warehouse.deadlines import Deadline
 from modules.backend.app.warehouse.egress import OutboundResponse
+from modules.backend.app.warehouse.errors import WarehouseError, WarehouseErrorCode
 from modules.backend.app.warehouse.redshift import RedshiftAdapter
 from modules.backend.app.warehouse.snowflake import SnowflakeAdapter
 from modules.backend.tests.live_warehouse import harness, selection
 from modules.backend.tests.unit.warehouse import numeric_fixtures as nf
+from modules.backend.tests.unit.warehouse import redshift_fake as fake
+from modules.backend.tests.unit.warehouse.conftest import FakeClock
 from modules.backend.tests.unit.warehouse.duckdb_adapter import DUCKDB_SQL
 
 pytestmark = pytest.mark.unit
@@ -796,6 +802,243 @@ def test_runner_parity_passes_on_the_oracle_and_fails_on_a_wrong_count():
         harness.run_plan(wrong, exposures, events, cols), Deadline(60)
     )
     assert harness.compare_results(shifted["results"], results[0]) != []
+
+
+# -- the Redshift verdicts, each shown to fail ---------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("probe", "zone", "passes"),
+    [
+        ("0.30000000000000004", "UTC", True),
+        # 15 significant digits: what a SET that did not hold would give.
+        ("0.3", "UTC", False),
+        ("0.30000000000000004", "America/New_York", False),
+        (None, "UTC", False),
+        ("NaN", "UTC", False),
+    ],
+)
+def test_the_wire_probe_verdict_refuses_what_the_connector_refuses(probe, zone, passes):
+    assert (harness.wire_probe_verdict(probe, zone) == []) is passes
+
+
+def _failed_reading(statuses=("FINISHED",) * 4 + ("FAILED",)):
+    return {"Status": "FAILED", "SubStatements": fake.sub_statements(statuses)}
+
+
+def _failed_refusal(request_id):
+    return {
+        "refused": "unrecognised_warehouse_error",
+        "vendor_code": "FAILED",
+        "request_id": request_id,
+    }
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    ("request_id", "passes"),
+    [
+        (f"{fake.STATEMENT_ID}:5", True),
+        # The RedshiftQueryIds a real Redshift reported for failed statements.
+        ("0", False),
+        ("-1", False),
+        # The probe's Id, the batch's own, none.
+        (f"{fake.STATEMENT_ID}:4", False),
+        (fake.STATEMENT_ID, False),
+        (None, False),
+    ],
+)
+def test_the_failed_statement_verdict_wants_the_failed_sub_statements_id(
+    request_id, passes
+):
+    verdict = harness.failed_statement_verdict(
+        _failed_refusal(request_id), _failed_reading()
+    )
+    assert (verdict == []) is passes, verdict
+
+
+def test_the_failed_statement_verdict_wants_the_refusal_and_a_failed_reading():
+    right = _failed_refusal(f"{fake.STATEMENT_ID}:5")
+    assert harness.failed_statement_verdict(right, _failed_reading()) == []
+    for wrong in (
+        {**right, "refused": "permission_denied"},
+        {**right, "vendor_code": "ABORTED"},
+        {"read": True},
+    ):
+        assert harness.failed_statement_verdict(wrong, _failed_reading()) != []
+    finished = {"Status": "FINISHED", "SubStatements": fake.sub_statements()}
+    assert harness.failed_statement_verdict(right, finished) != []
+    assert harness.failed_statement_verdict(right, {}) != []
+    # The first FAILED sub-statement, not the last that did not finish.
+    refused_set = _failed_reading(("FINISHED", "FAILED", "ABORTED", "ABORTED"))
+    first = _failed_refusal(f"{fake.STATEMENT_ID}:2")
+    assert harness.failed_statement_verdict(first, refused_set) == []
+    assert harness.failed_statement_verdict(right, refused_set) != []
+
+
+def test_a_recorded_engine_fact_never_fails_its_check():
+    from modules.backend.tests.live_warehouse.test_redshift_live import _record_only
+
+    def refused():
+        raise WarehouseError(
+            WarehouseErrorCode.PERMISSION_DENIED,
+            warehouse="redshift",
+            vendor_code="AccessDeniedException",
+        )
+
+    def broken():
+        raise KeyError("UPSTREAM-SENTINEL text")
+
+    assert _record_only(lambda: {"rows": [1]}) == {"rows": [1]}
+    assert _record_only(refused) == {
+        "refused": "permission_denied",
+        "vendor_code": "AccessDeniedException",
+        "request_id": None,
+    }
+    assert _record_only(broken) == {"error": "KeyError"}
+
+
+def _previewing(client):
+    """The oracle's client with an epoch function, so it can build a preview."""
+    return dataclasses.replace(
+        client,
+        dialect=dataclasses.replace(
+            DUCKDB_SQL, epoch_seconds=lambda e: f"CAST(floor(epoch({e})) AS BIGINT)"
+        ),
+    )
+
+
+def test_the_preview_check_passes_on_the_oracle_and_fails_on_a_wrong_count():
+    """rs_preview's own steps over a real SQL engine holding the same fixture:
+    what the previews return equals what expected_previews works out in
+    Python, and a count off by one, a missing preview or a wrong bound fails."""
+    from modules.backend.tests.live_warehouse.test_redshift_live import _previews
+
+    control, treatment = _small()
+    expected = harness.expected_previews(control, treatment)
+    assert expected["assignment"]["total_rows"] == len(control) + len(treatment)
+    assert [v["units"] for v in expected["assignment"]["variants"]] == [
+        len(control),
+        len(treatment),
+    ]
+    client, exposures, events, columns = harness.duckdb_oracle(control, treatment)
+    summaries = _previews(
+        _previewing(client), exposures, events, columns, lambda: Deadline(60)
+    )
+    assert harness.preview_verdict(summaries, expected) == []
+
+    class OffByOne:
+        def __init__(self, inner):
+            self.inner = inner
+
+        def run_query(self, built, deadline):
+            answer = self.inner.run_query(built, deadline)
+            rows = [dict(r) for r in answer.rows]
+            rows[0]["total_rows"] = str(int(rows[0]["total_rows"]) - 1)
+            return SimpleNamespace(rows=tuple(rows))
+
+    wrong = dataclasses.replace(_previewing(client), adapter=OffByOne(client.adapter))
+    shifted = _previews(wrong, exposures, events, columns, lambda: Deadline(60))
+    assert harness.preview_verdict(shifted, expected) != []
+    assert harness.preview_verdict({"assignment": summaries["assignment"]}, expected)
+    later = {
+        **expected,
+        "metric": {
+            **expected["metric"],
+            "latest": expected["metric"]["latest"].replace(second=1),
+        },
+    }
+    assert harness.preview_verdict(summaries, later) != []
+
+
+@pytest.fixture
+def aws_isolated(monkeypatch):
+    for name in (
+        "AWS_PROFILE",
+        "AWS_SESSION_TOKEN",
+        "AWS_ENDPOINT_URL",
+        "AWS_ENDPOINT_URL_REDSHIFT_DATA",
+        "AWS_ENDPOINT_URL_STS",
+        "AWS_USE_FIPS_ENDPOINT",
+        "AWS_USE_DUALSTACK_ENDPOINT",
+        "HTTPS_PROXY",
+        "https_proxy",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("AWS_CONFIG_FILE", "/dev/null")
+    monkeypatch.setenv("AWS_SHARED_CREDENTIALS_FILE", "/dev/null")
+    monkeypatch.setenv("AWS_EC2_METADATA_DISABLED", "true")
+
+
+def test_the_preview_check_reads_the_redshift_connectors_answers(
+    aws_isolated, monkeypatch
+):
+    """rs_preview's own steps through the Redshift connector, against the
+    scripted Data API: each preview is one batch of the builder's statement,
+    read as longValue counts and epoch seconds and a stringValue label."""
+    from modules.backend.tests.live_warehouse.test_redshift_live import (
+        _client,
+        _preview_queries,
+        _previews,
+    )
+
+    clock = FakeClock()
+    control, treatment = harness.live_fixture(3)
+    expected = harness.expected_previews(control, treatment)
+    exposures, events = ("live_check", "exposures"), ("live_check", "events")
+    columns = {
+        "exposures": {n: n for n in harness.EXPOSURE_COLUMNS},
+        "events": {n: n for n in harness.EVENT_COLUMNS},
+    }
+    queries = _preview_queries(REDSHIFT_SQL, exposures, events, columns)
+    a, m = expected["assignment"], expected["metric"]
+
+    def epoch(when):
+        return fake.long(int(when.timestamp()))
+
+    head = [fake.long(a["total_rows"]), fake.long(0), fake.long(0)]
+    assignment_rows = [
+        head
+        + [epoch(a["earliest"]), epoch(a["latest"])]
+        + [fake.string(v["label"]), fake.long(v["units"])]
+        for v in a["variants"]
+    ]
+    metric_rows = [
+        [fake.long(m["total_rows"]), fake.long(0), fake.long(0)]
+        + [epoch(m["earliest"]), epoch(m["latest"])]
+    ]
+    script = fake.AwsScript(
+        monkeypatch,
+        fake.assume_steps()
+        + fake.happy_batch(
+            queries["assignment"][0].sql,
+            [
+                "total_rows",
+                "null_unit_rows",
+                "null_variant_rows",
+                "earliest",
+                "latest",
+                "variant",
+                "units",
+            ],
+            assignment_rows,
+        )
+        + fake.happy_batch(
+            queries["metric"][0].sql,
+            ["total_rows", "null_unit_rows", "null_value_rows", "earliest", "latest"],
+            metric_rows,
+        ),
+        clock,
+    )
+    summaries = _previews(
+        _client(fake.adapter(clock=clock)),
+        exposures,
+        events,
+        columns,
+        lambda: fake.deadline(clock),
+    )
+    script.assert_played()
+    assert harness.preview_verdict(summaries, expected) == []
 
 
 # -- what the live files rely on -------------------------------------------------------

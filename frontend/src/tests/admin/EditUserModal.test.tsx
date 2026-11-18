@@ -8,7 +8,12 @@ import {
   FORBIDDEN_MESSAGE,
   NOT_FOUND_MESSAGE,
   SELF_EDIT_NOTE,
+  TWO_FACTOR_NOT_LOCAL_MESSAGE,
+  TWO_FACTOR_RESET_SELF_NOTE,
   editErrorMessage,
+  resetErrorMessage,
+  twoFactorResetDone,
+  twoFactorResetWarning,
 } from '@/components/admin/users/EditUserModal';
 import { ModulesProvider } from '@/contexts/ModulesContext';
 import { ApiError } from '@/services/api';
@@ -444,5 +449,112 @@ describe('EditUserModal accessibility (axe-core in jsdom; colour contrast is not
   it('the dialog has no axe violations on the own row', async () => {
     render(<EditUserModal isOpen user={mockUser} currentUserId="user-1" onClose={jest.fn()} onSave={jest.fn()} />);
     expect(await dialogViolations()).toStrictEqual([]);
+  });
+
+  it('the dialog has no axe violations while it asks to confirm a two-step reset, and once it is done', async () => {
+    render(
+      <EditUserModal
+        isOpen
+        user={{ ...mockUser, totp_enabled: true }}
+        currentUserId="admin-1"
+        onClose={jest.fn()}
+        onSave={jest.fn()}
+        onResetTwoFactor={jest.fn(() => Promise.resolve())}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('edit-two-factor-reset'));
+    expect(await dialogViolations()).toStrictEqual([]);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('edit-two-factor-reset-confirm'));
+    });
+    expect(screen.getByTestId('edit-two-factor-reset-done')).toBeInTheDocument();
+    expect(await dialogViolations()).toStrictEqual([]);
+  });
+});
+
+describe('EditUserModal: Reset two-step sign-in (#1812)', () => {
+  const twoStepUser: AdminUser = { ...mockUser, totp_enabled: true };
+  const props = {
+    isOpen: true,
+    user: twoStepUser,
+    currentUserId: 'admin-1',
+    onClose: jest.fn(),
+    onSave: jest.fn(() => Promise.resolve()),
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('is offered only for an account with two-step sign-in on', () => {
+    const onResetTwoFactor = jest.fn(() => Promise.resolve());
+    const { rerender } = render(<EditUserModal {...props} onResetTwoFactor={onResetTwoFactor} />);
+    expect(screen.getByTestId('edit-two-factor-reset')).toHaveTextContent('Reset two-step sign-in');
+    rerender(<EditUserModal {...props} user={{ ...mockUser, totp_enabled: false }} onResetTwoFactor={onResetTwoFactor} />);
+    expect(screen.queryByTestId('edit-two-factor')).not.toBeInTheDocument();
+    // An older API that does not send the field: nothing is offered.
+    rerender(<EditUserModal {...props} user={mockUser} onResetTwoFactor={onResetTwoFactor} />);
+    expect(screen.queryByTestId('edit-two-factor')).not.toBeInTheDocument();
+  });
+
+  it('is not offered on your own row, which says who can reset yours', () => {
+    const onResetTwoFactor = jest.fn(() => Promise.resolve());
+    render(<EditUserModal {...props} currentUserId="user-1" onResetTwoFactor={onResetTwoFactor} />);
+    expect(screen.queryByTestId('edit-two-factor-reset')).not.toBeInTheDocument();
+    expect(screen.getByTestId('edit-two-factor-self-note')).toHaveTextContent(TWO_FACTOR_RESET_SELF_NOTE);
+  });
+
+  it('asks first, saying the session stays, then resets and says so; closing reloads the list', async () => {
+    const onClose = jest.fn();
+    const onResetTwoFactor = jest.fn(() => Promise.resolve());
+    render(<EditUserModal {...props} onClose={onClose} onResetTwoFactor={onResetTwoFactor} />);
+
+    fireEvent.click(screen.getByTestId('edit-two-factor-reset'));
+    expect(onResetTwoFactor).not.toHaveBeenCalled();
+    const confirm = screen.getByTestId('edit-two-factor-confirm');
+    expect(confirm).toHaveTextContent(twoFactorResetWarning('jdoe@example.com'));
+    expect(confirm).toHaveTextContent('Their current session stays valid until it expires.');
+    expect(screen.getByTestId('edit-two-factor-keep')).toHaveFocus();
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('edit-two-factor-reset-confirm'));
+    });
+    expect(onResetTwoFactor).toHaveBeenCalledWith('user-1');
+    const done = screen.getByTestId('edit-two-factor-reset-done');
+    expect(done).toHaveTextContent(twoFactorResetDone('jdoe@example.com'));
+    expect(done).toHaveAttribute('role', 'status');
+    expect(done).toHaveFocus();
+
+    fireEvent.click(screen.getByTestId('edit-cancel-button'));
+    expect(onClose).toHaveBeenCalledWith({ reload: true });
+  });
+
+  it('Keep it goes back without resetting', () => {
+    const onResetTwoFactor = jest.fn(() => Promise.resolve());
+    render(<EditUserModal {...props} onResetTwoFactor={onResetTwoFactor} />);
+    fireEvent.click(screen.getByTestId('edit-two-factor-reset'));
+    fireEvent.click(screen.getByTestId('edit-two-factor-keep'));
+    expect(screen.getByTestId('edit-two-factor-reset')).toBeInTheDocument();
+    expect(onResetTwoFactor).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['403', new ApiError({ status: 403, detail: 'Not enough permissions' }), FORBIDDEN_MESSAGE],
+    ['404, the user is gone', new ApiError({ status: 404, detail: 'User not found' }), NOT_FOUND_MESSAGE],
+    [
+      '404, not the local provider',
+      new ApiError({ status: 404, detail: "Endpoint not available: AUTH_PROVIDER is not 'local'" }),
+      TWO_FACTOR_NOT_LOCAL_MESSAGE,
+    ],
+  ])('a failed reset (%s) shows its message inside the dialog', async (_name, err, expected) => {
+    const onResetTwoFactor = jest.fn(() => Promise.reject(err));
+    render(<EditUserModal {...props} onResetTwoFactor={onResetTwoFactor} />);
+    fireEvent.click(screen.getByTestId('edit-two-factor-reset'));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('edit-two-factor-reset-confirm'));
+    });
+    expect(screen.getByTestId('edit-error-message')).toHaveTextContent(expected);
+    expect(screen.queryByTestId('edit-two-factor-reset-done')).not.toBeInTheDocument();
+    expect(resetErrorMessage(err)).toBe(expected);
   });
 });

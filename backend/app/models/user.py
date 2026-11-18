@@ -9,14 +9,16 @@ from sqlalchemy import (
     String,
     Table,
     func,
+    select,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.declarative import declared_attr
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import object_session, relationship
 
 from backend.app.core.database_config import get_schema_name
 
 from .base import Base, BaseModel
+from .user_totp import UserTOTP
 
 
 # Define UserRole enum for direct role assignment
@@ -174,6 +176,25 @@ class User(Base, BaseModel):
         else:
             self.first_name = None
             self.last_name = None
+
+    @property
+    def totp_enabled(self) -> bool:
+        """Whether the account has two-step sign-in on (#1812): a ``user_totp``
+        row with ``confirmed_at`` set.
+
+        Read from the database each time, through the session the object
+        belongs to; no column of ``users`` holds it. False for an object that
+        belongs to no session (never saved, or detached).
+        """
+        session = object_session(self)
+        if session is None or self.id is None:
+            return False
+        found = session.execute(
+            select(UserTOTP.user_id).where(
+                UserTOTP.user_id == self.id, UserTOTP.confirmed_at.is_not(None)
+            )
+        ).first()
+        return found is not None
 
     @declared_attr
     def __table_args__(cls):

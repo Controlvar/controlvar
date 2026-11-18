@@ -114,6 +114,7 @@ CORE_ROUTES = {
     ("GET", "/api/v1/export/reports/experiments/{experiment_id}"): READ,
     ("POST", "/api/v1/ai/interpret/{experiment_id}"): NO_ROLE_CHECK,
     ("GET", "/api/v1/bandit/{experiment_id}"): READ,
+    ("GET", "/api/v1/bandit/{experiment_id}/history"): READ,
     ("POST", "/api/v1/bandit/{experiment_id}/update"): ROLE_ONLY,
     ("PUT", "/api/v1/bandit/{experiment_id}/weights"): ROLE_ONLY,
     # mutual-exclusion groups
@@ -165,8 +166,8 @@ EXPORT_AND_INTERACTION_ROUTES = {
 }
 EXPORT_AND_INTERACTION_PREFIXES = ("/api/v1/export/", "/api/v1/interactions/")
 
-CORE_COUNT = 52  # 50 HTTP + 1 WebSocket selected, and the explicit entry
-FULL_COUNT = 57
+CORE_COUNT = 53  # 51 HTTP + 1 WebSocket selected, and the explicit entry
+FULL_COUNT = 58
 
 
 def _full_profile() -> bool:

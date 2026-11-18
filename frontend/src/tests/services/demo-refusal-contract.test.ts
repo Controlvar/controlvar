@@ -38,6 +38,7 @@ import {
 } from '@/components/feature-flags/FlagManageSection';
 import { classifyPasswordError, passwordOutcomeSentence } from '@/services/password';
 import { FORBIDDEN_MESSAGE, editErrorMessage } from '@/components/admin/users/EditUserModal';
+import { OVERRIDE_ERROR_COPY, overrideErrorCopy } from '@/components/experiments/BanditWeightsOverride';
 
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
@@ -100,6 +101,8 @@ const MAPS: Array<[string, (err: unknown) => string]> = [
   ]),
   ['passwordOutcomeSentence', (e) => passwordOutcomeSentence(classifyPasswordError(e))],
   ['editErrorMessage', editErrorMessage],
+  // #1957: "Set weights by hand" on the experiment page's bandit panel.
+  ['overrideErrorCopy', overrideErrorCopy],
 ];
 
 beforeEach(() => {
@@ -153,6 +156,7 @@ describe('a role refusal (control): the same maps keep their own copy', () => {
     expect(rolloutErrorCopy(err)).toBe(ROLLOUT_ERROR_COPY[403]);
     expect(flagManageErrorCopy('archive', err)).toBe(FLAG_MANAGE_ERROR_COPY.archive[403]);
     expect(editErrorMessage(err)).toBe(FORBIDDEN_MESSAGE);
+    expect(overrideErrorCopy(err)).toBe(OVERRIDE_ERROR_COPY[403]);
   });
 
   it('is not a demo refusal on another status, even with the code', async () => {
@@ -182,8 +186,10 @@ const NEED_NOT_ASK: Record<string, string> = {
   'services/api.ts': 'defines ApiError.isForbidden',
   'utils/demoMode.ts': 'is the check',
   'components/results/ResultsDashboard/ResultsDashboard.tsx': 'a results load (GET), which demo mode never refuses',
+  'components/results/Cuped/useCupedResults.ts': 'a CUPED results load (GET), which demo mode never refuses',
   'hooks/useExperimentEligibility.ts': 'eligibility loads (GET)',
   'pages/experiments/holdouts.tsx': 'the holdout load (GET); its saves use holdoutErrorCopy',
+  'pages/experiments/interactions.tsx': 'the interaction scan and pair test (GET), which demo mode never refuses',
   'pages/auth/callback.tsx': 'GET /users/me after the Hosted UI sign-in',
   'modules/frontend/src/components/warehouse/runs/WarehouseAnalysisSection.tsx':
     "a runs load (GET), shown in the API's own words",

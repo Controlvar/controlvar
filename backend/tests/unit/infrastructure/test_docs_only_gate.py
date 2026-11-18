@@ -215,6 +215,9 @@ NOT_DOCS_TESTS = {
     # Reads only docs/api/openapi-v1.stable.json and docs/api/stability.md
     # (same reason as above).
     "backend/tests/smoke/test_segment_routes_in_snapshot.py": "docs/api only",
+    # Reads only the two docs/api/ OpenAPI snapshots and
+    # frontend/src/tests/fixtures/openapi.json (same reason as above).
+    "backend/tests/unit/api/test_bandit_history_contract.py": "docs/api only",
     # Reads only the docs/api/ snapshots and frontend/src/tests/fixtures/openapi.json
     # (same reason as above).
     "backend/tests/smoke/test_audit_export_in_snapshot.py": "docs/api only",
@@ -235,6 +238,9 @@ NOT_DOCS_TESTS = {
     "sdk/python/tests/test_readme.py": "reads sdk/python/README.md only",
     # Reads only docs/api/warehouse-analytics.md (same reason as above).
     "modules/backend/tests/unit/test_warehouse_docs_availability.py": "docs/api only",
+    # Reads only docs/api/auth.md's table of password sign-ins, for the rows
+    # under modules/ (same reason as above).
+    "modules/backend/tests/unit/test_password_sign_ins_modules.py": "docs/api only",
     # Reads only docs/api/split-url.md: the reference integration it prints,
     # its reasons and its crawler list (same reason as above).
     "modules/backend/tests/integration/split_url/test_split_url_reference_page.py": (
@@ -514,11 +520,13 @@ class TestBuildJobSteps:
         assert sorted(core_services) == ["postgres", "redis"], sorted(core_services)
         core_services.pop("redis")
         assert core_services == full["services"], "the Postgres services differ"
-        # 120, not 75: on 2026-11-03 core-build's passing runs reached about
-        # 75.5 minutes and four were cancelled at 75 (one 3 s after its script
-        # printed OK). A different number is a decision about the slowest
-        # required check.
-        assert core["timeout-minutes"] == 120
+        # 180, not 120 or 75: on 2026-11-03 core-build's passing runs reached
+        # about 75.5 minutes and four were cancelled at 75 (one 3 s after its
+        # script printed OK); on 2026-11-16 passing runs took up to 116
+        # minutes and one was cancelled at 120 with every test session it
+        # reached passed, on a runner about 1.25x slower. A different number is a
+        # decision about the slowest required check.
+        assert core["timeout-minutes"] == 180
         assert core["needs"] == "changes"
 
     def test_the_steps_both_jobs_have_are_the_same_step(self, gate):

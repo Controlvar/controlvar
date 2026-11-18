@@ -55,8 +55,9 @@ by = [
 ]
 
 [[unit]]
-text = "CUPED (beta): narrower intervals from each user's pre-experiment history, through the API."
+text = "CUPED (beta): narrower intervals from each user's pre-experiment history, on the results page and through the API."
 by = [
+    "test:frontend/src/tests/pages/results-cuped.test.tsx::sits after the Overview, Trends and Sample Size tabs and before Breakdowns",
     "test:backend/tests/unit/services/test_cuped_metric_result.py::test_s1_planted_correlation_removes_60_to_68_percent",
     "test:backend/tests/unit/core/test_analysis_status.py::test_demoted_routes_are_beta_in_the_openapi_document",
 ]

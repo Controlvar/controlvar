@@ -12,6 +12,9 @@ how to test for an interaction.
   experiment's primary conversion metric differs across the other experiment's variants,
   among the users in both.
 
+In the dashboard, **Experiments → Interactions** runs both: the scan, and the pair test for any
+two experiments you choose. A VIEWER is told which roles can use it.
+
 The pair route is beta
 ([#219](https://github.com/Controlvar/controlvar/issues/219)): its responses carry
 `"analysis_status": "beta"` and an `analysis_notice`, and the route is marked

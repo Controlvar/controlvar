@@ -103,8 +103,13 @@ describe('states', () => {
     const tip = document.getElementById(chip.getAttribute('aria-describedby')!)!;
     expect(tip).toHaveTextContent('Warehouse analysis is in beta');
     expect(tip).toHaveClass('sr-only');
+    // jsdom measures nothing, so pin the class: a closed tip with an explicit
+    // width (w-72) beat sr-only's 1px and pushed the page 52 px sideways at
+    // 390 px (#1971; measured in a browser, before 442 px, after 390 px).
+    expect(tip).not.toHaveClass('w-72');
     fireEvent.focus(chip);
     expect(tip).not.toHaveClass('sr-only');
+    expect(tip).toHaveClass('w-72', 'max-w-[calc(100vw-2rem)]');
   });
 });
 

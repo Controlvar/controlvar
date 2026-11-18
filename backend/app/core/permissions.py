@@ -369,6 +369,19 @@ def can_act_on_feature_flag(
     return owner_id is not None and str(owner_id) == str(getattr(user, "id", None))
 
 
+def feature_flag_roles_for(action: Action) -> List[UserRole]:
+    """The built-in roles that may take *action* on any feature flag.
+
+    Read from ``FEATURE_FLAG_SCOPE`` (the table ``can_act_on_feature_flag``
+    consults), so a message naming them cannot drift from the decision.
+    """
+    return [
+        role
+        for role in UserRole
+        if FEATURE_FLAG_SCOPE.get(role, {}).get(action) is Scope.ANY
+    ]
+
+
 def get_permission_error_message(resource: ResourceType, action: Action) -> str:
     """
     Get a user-friendly error message for permission denial.
@@ -395,10 +408,13 @@ def get_permission_error_message(resource: ResourceType, action: Action) -> str:
         ResourceType.ROLE: "roles",
         ResourceType.PERMISSION: "permissions",
         ResourceType.REPORT: "reports",
+        ResourceType.API_KEY: "API keys",
     }
 
-    action_name = action_names.get(action, str(action))
-    resource_name = resource_names.get(resource, str(resource))
+    # A member missing from the tables above still reads as words, never as
+    # an enum repr ("ResourceType.API_KEY").
+    action_name = action_names.get(action, action.value)
+    resource_name = resource_names.get(resource, resource.value.replace("_", " "))
 
     return f"You don't have permission to {action_name} {resource_name}"
 

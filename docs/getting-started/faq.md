@@ -62,11 +62,11 @@ The platform supports a range of statistical approaches:
 | Sequential testing (mSPRT) | Continuous monitoring with valid p-values at any sample size |
 | Always-valid confidence intervals | Confidence sequences that are valid at every look |
 | Alpha spending (O'Brien-Fleming, Pocock) | Not computed yet: the response's `alpha_spending` is empty; use the mSPRT, which is valid under continuous monitoring |
-| CUPED | Variance reduction from each user's own events before assignment (API only) |
+| CUPED | Variance reduction from each user's own events before assignment (the results page's CUPED tab when the experiment uses it, and the API) |
 | Bayesian (Beta-Binomial) | Posterior credible intervals, Bayes factors, probability of superiority, ROPE (the priors, loss threshold and credible level are set on the new-experiment form or through the API; the ROPE through the API only) |
 | Multi-armed bandit | Thompson Sampling, UCB1, and Epsilon-Greedy adaptive traffic allocation |
 | Dimensional analysis | Segment-level breakdowns with Bonferroni correction and heterogeneous treatment effect detection |
-| Interaction detection (beta) | Jaccard overlap between experiments; whether one experiment's lift on its primary conversion metric differs across another's arms (API only) |
+| Interaction detection (beta) | Jaccard overlap between experiments; whether one experiment's lift on its primary conversion metric differs across another's arms (the Interactions page and the API) |
 
 [What the dashboard does, and what is API only](../guides/dashboard-and-api.md) says which of these the
 dashboard shows.
