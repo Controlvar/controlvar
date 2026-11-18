@@ -23,6 +23,11 @@ from backend.app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Seconds a single send may wait on the mail server or the SendGrid API.
+# Passed to both transports; a send that exceeds it fails like any other
+# failed send and the caller carries on.
+EMAIL_SEND_TIMEOUT_SECONDS = 10
+
 # ---------------------------------------------------------------------------
 # Optional dependency: sendgrid
 # ---------------------------------------------------------------------------
@@ -262,9 +267,9 @@ class EmailNotifier:
                 return True
 
         logger.warning(
-            "Failed to send email '%s' to %s — both SendGrid and SMTP unavailable or failed",
+            "Failed to send email '%s' to %d recipient(s) — both SendGrid and SMTP unavailable or failed",
             subject,
-            to_addresses,
+            len(to_addresses),
         )
         return False
 
@@ -303,6 +308,8 @@ class EmailNotifier:
                 message.add_to(To(addr))
 
             client = SendGridAPIClient(self._sendgrid_api_key)
+            # SendGridAPIClient takes no timeout argument; its HTTP client does.
+            client.client.timeout = EMAIL_SEND_TIMEOUT_SECONDS
             response = client.send(message)
 
             if 200 <= response.status_code < 300:
@@ -356,7 +363,11 @@ class EmailNotifier:
             msg.attach(part)
 
             step = "connect"
-            with smtplib.SMTP(self._smtp_host, self._smtp_port) as server:
+            with smtplib.SMTP(
+                self._smtp_host,
+                self._smtp_port,
+                timeout=EMAIL_SEND_TIMEOUT_SECONDS,
+            ) as server:
                 try:
                     server.ehlo()
                     if needs_tls:
