@@ -46,6 +46,21 @@ The gates, per scenario (SPEC #1544 v1.2, section 3.5):
   group's users in the ledger's order, one counter step at a time, and (1)
   is the blocks' worst case at every n, never a probability. It proves
   nothing about concurrency.
+* **G1g** (S5, #1897) the results by group, from the ledger: every count
+  exact, and the overall estimate against the reference computed on the same
+  counts (S5 is A/A in every group, which the group sizes alone make
+  sensitive to the weights):
+
+  1. ``GET /api/v1/results/{id}?breakdown=country``: per (value, variant), the
+     users and converting users of the primary metric equal the ledger's, each
+     user in the value their first context gives (``US``, ``DE``, ``FR``,
+     ``BR`` and ``us`` are rows of their own; a nested or dotted key is
+     ``unknown``), and per variant the rows add up to the answer's headline;
+  2. ``GET /api/v1/results/{id}/balanced-groups``: per (group, variant), the
+     users and converting users equal the ledger's, each user in the group
+     they were balanced in;
+  3. its ``overall``, per treatment, equals ``reference.stratified`` on those
+     counts within 1e-9, ``is_significant`` exactly, and no group is merged.
 * **G1** per variant and metric: ``sample_size``, ``conversions`` and, for a
   revenue or count metric, ``mean`` exactly (``math.fsum`` of the ledger's
   per-user values over n, exact under the 2^-6 quantisation); a proportion's
@@ -823,6 +838,302 @@ def g0b_groups_lines(
 
 
 # ---------------------------------------------------------------------------
+# G1g: the results by group (S5): ?breakdown= and /balanced-groups
+# ---------------------------------------------------------------------------
+#: ``overall``'s tolerance against ``reference.stratified`` on the same counts.
+OVERALL_ABS = 1e-9
+#: How many values a breakdown lists by themselves; the rest are ``other``
+#: (``docs/api/dimensional-analysis.md``, "Where the segments come from").
+BREAKDOWN_LISTED = 20
+OTHER, UNKNOWN = "other", "unknown"
+
+#: One group's users and converting users per variant.
+GroupCounts = dict[str, dict[str, tuple[int, int]]]
+
+
+def first_context_values(plan: generator.Plan, attribute: str) -> dict[str, str | None]:
+    """Each user's value of *attribute* as ``?breakdown=`` reads it: the
+    top-level key of the context of the user's first assign (a nested or
+    dotted key is not read), when it is text that is not empty; else None.
+    ``/assign`` stores that context as the user's exposure, which a breakdown
+    reads before any other event (``docs/api/dimensional-analysis.md``). The
+    product reads the first event that carries a value; the two agree for S5,
+    because a returning user sends the same context (``generator.user_groups``
+    raises on a user sent in two groups)."""
+    values: dict[str, str | None] = {}
+    for op in plan.ops:
+        if op.kind == "assign":
+            sent = [op.body]
+        elif op.kind == "assign_batch":
+            sent = list(op.body["users"])
+        else:
+            continue
+        for entry in sent:
+            if entry["user_id"] in values:
+                continue
+            context = entry.get("context")
+            value = context.get(attribute) if isinstance(context, Mapping) else None
+            if value is not None and not isinstance(value, str):
+                raise ValueError(
+                    f"user {entry['user_id']}: {attribute} is not text; the"
+                    " breakdown's reading of it is not modelled"
+                )
+            values[entry["user_id"]] = value or None
+    return values
+
+
+def breakdown_rows(values: Mapping[str, str | None]) -> dict[str, str]:
+    """Each user's row of a breakdown: no value is ``unknown``; the
+    ``BREAKDOWN_LISTED`` values with the most users (then by value) are their
+    own rows; every other value is ``other``."""
+    users = Counter(v for v in values.values() if v not in (None, UNKNOWN, OTHER))
+    ranked = sorted(users.items(), key=lambda item: (-item[1], item[0]))
+    listed = {value for value, _ in ranked[:BREAKDOWN_LISTED]}
+    return {
+        user: UNKNOWN
+        if value is None or value == UNKNOWN
+        else value
+        if value in listed
+        else OTHER
+        for user, value in values.items()
+    }
+
+
+def group_counts(
+    experiment: contract.ExperimentExpected,
+    event_name: str,
+    row_of: Mapping[str, str],
+) -> GroupCounts:
+    """Per row, per variant, from the ledger: the assigned users, and those of
+    them with at least one counting event of *event_name*."""
+    counts: GroupCounts = {}
+    for variant in experiment.variants:
+        converting = experiment.counting.get((variant, event_name), {})
+        for user in experiment.users[variant]:
+            row = counts.setdefault(row_of.get(user, "(not sent)"), {})
+            users, converted = row.get(variant, (0, 0))
+            row[variant] = (
+                users + 1,
+                converted + (1 if converting.get(user, (0, ()))[0] > 0 else 0),
+            )
+    return counts
+
+
+def _served_rows(body: Any) -> dict[tuple[str, str], tuple[Any, Any]] | None:
+    """(group, variant) -> (sample_size, conversions) of a breakdown's
+    ``segments``; None without rows."""
+    segments = body.get("segments") if isinstance(body, Mapping) else None
+    if not isinstance(segments, list):
+        return None
+    served: dict[tuple[str, str], tuple[Any, Any]] = {}
+    for segment in segments:
+        if not isinstance(segment, Mapping):
+            continue
+        for row in segment.get("variants") or []:
+            if isinstance(row, Mapping):
+                served[(segment.get("segment_value"), row.get("variant_name"))] = (
+                    row.get("sample_size"),
+                    row.get("conversions"),
+                )
+    return served
+
+
+def _count_lines(
+    name: str,
+    what: str,
+    served: Mapping[tuple[str, str], tuple[Any, Any]],
+    want: GroupCounts,
+    variants: Sequence[str],
+) -> list[str]:
+    """One line per (group, variant) whose users or converting users differ
+    from the ledger's, the groups the ledger lacks included."""
+    lines = []
+    groups = [*want, *dict.fromkeys(g for g, _ in served if g not in want)]
+    for group in groups:
+        for variant in variants:
+            users, converted = want.get(group, {}).get(variant, (0, 0))
+            got_users, got_converted = served.get((group, variant), (0, None))
+            if got_users != users:
+                lines.append(
+                    f"{name} {what} {group}/{variant} users {_n(got_users)}"
+                    f" != {_n(users)}"
+                )
+            if got_converted != converted:
+                lines.append(
+                    f"{name} {what} {group}/{variant} conversions"
+                    f" {_n(got_converted)} != {_n(converted)}"
+                )
+    return lines
+
+
+def g1g_breakdown_lines(
+    scenario: Scenario,
+    experiment: contract.ExperimentExpected,
+    plan: generator.Plan,
+    results: Any,
+) -> list[str]:
+    """G1g (1): ``GET /results/{id}?breakdown=<attribute>``: per (value,
+    variant), the users and converting users of the primary metric equal the
+    ledger's, with each user in the value their first context gives
+    (``first_context_values``); and per variant the rows add up to the
+    headline of the same answer."""
+    assert scenario.balance is not None
+    name = scenario.name
+    body = results.get("breakdown") if isinstance(results, Mapping) else None
+    found = _served_rows(body)
+    if found is None:
+        return [f"{name} breakdown: the results answered no breakdown rows"]
+    served = found
+    metric = scenario.metrics[0]
+    row_of = breakdown_rows(first_context_values(plan, scenario.balance.attribute))
+    lines = _count_lines(
+        name,
+        "breakdown",
+        served,
+        group_counts(experiment, metric.event_name, row_of),
+        experiment.variants,
+    )
+    headline = _by(
+        _by(results.get("metrics"), "metric_name").get(metric.name, {}).get("variants"),
+        "variant_name",
+    )
+    for variant in experiment.variants:
+        rows = [v for (_, vname), v in served.items() if vname == variant]
+        for index, label in ((0, "sample_size"), (1, "conversions")):
+            added = sum(v[index] for v in rows if isinstance(v[index], int))
+            top = headline.get(variant, {}).get(label)
+            if added != top:
+                lines.append(
+                    f"{name} breakdown {variant}: rows add up to {_n(added)}"
+                    f" {label}, the headline {_n(top)}"
+                )
+    return lines
+
+
+def g1g_balanced_lines(
+    scenario: Scenario,
+    experiment: contract.ExperimentExpected,
+    plan: generator.Plan,
+    balanced: Any,
+) -> list[str]:
+    """G1g (2): ``GET /results/{id}/balanced-groups``: per (group, variant),
+    the users and converting users of the primary metric equal the ledger's,
+    with each user in the group the context they were sent puts them in."""
+    assert scenario.balance is not None
+    name = scenario.name
+    found = _served_rows(
+        balanced.get("groups") if isinstance(balanced, Mapping) else None
+    )
+    if found is None:
+        return [f"{name}: balanced-groups answered no group rows"]
+    return _count_lines(
+        name,
+        "balanced-groups",
+        found,
+        group_counts(
+            experiment, scenario.metrics[0].event_name, generator.user_groups(plan)
+        ),
+        experiment.variants,
+    )
+
+
+def _within(got: Any, want: float | None, tolerance: float) -> bool:
+    if want is None or got is None:
+        return want is None and got is None
+    if isinstance(got, bool) or not isinstance(got, (int, float)):
+        return False
+    return abs(got - want) <= tolerance
+
+
+def g1g_overall_lines(
+    scenario: Scenario,
+    experiment: contract.ExperimentExpected,
+    plan: generator.Plan,
+    balanced: Any,
+) -> list[str]:
+    """G1g (3): ``overall`` of ``GET /results/{id}/balanced-groups`` against
+    ``reference.stratified`` on the same counts (the ledger's, per group), each
+    field within ``OVERALL_ABS`` (``is_significant`` exactly), and no group
+    merged (the reference does not model a merge)."""
+    name = scenario.name
+    body = balanced if isinstance(balanced, Mapping) else {}
+    overall = body.get("overall")
+    if not isinstance(overall, list):
+        return [
+            f"{name} overall: {overall!r} (reason {body.get('reason')!r}),"
+            " expected one estimate per treatment"
+        ]
+    lines = []
+    if body.get("merged_groups"):
+        lines.append(f"{name} overall: merged_groups {body.get('merged_groups')!r}")
+    counts = group_counts(
+        experiment, scenario.metrics[0].event_name, generator.user_groups(plan)
+    )
+    control, *treatments = experiment.variants
+    wanted = {
+        t: reference.stratified(
+            list(counts.values()), control, t, scenario.confidence_level
+        )
+        for t in treatments
+    }
+    adjusted = reference.adjust(
+        [wanted[t].p_value for t in treatments], scenario.correction_method
+    )
+    served = _by(overall, "variant_name")
+    alpha = 1 - scenario.confidence_level
+    for treatment, q in zip(treatments, adjusted, strict=True):
+        want, got = wanted[treatment], served.get(treatment)
+        tag = f"{name} overall" + (f" {treatment}" if len(treatments) > 1 else "")
+        if got is None:
+            lines.append(f"{tag}: no estimate for {treatment}")
+            continue
+        interval = got.get("absolute_difference_ci")
+        ends = (
+            [None, None]
+            if interval is None
+            else list(interval)
+            if isinstance(interval, list) and len(interval) == 2
+            else ["?", "?"]
+        )
+        decisive = q if q is not None else want.p_value
+        checks = [
+            (
+                "absolute_difference",
+                got.get("absolute_difference"),
+                want.absolute_difference,
+            ),
+            ("standard_error", got.get("standard_error"), want.standard_error),
+            (
+                "relative_improvement_pct",
+                got.get("relative_improvement_pct"),
+                want.relative_improvement_pct,
+            ),
+            ("p_value", got.get("p_value"), want.p_value),
+            ("adjusted_p_value", got.get("adjusted_p_value"), q),
+            (
+                "absolute_difference_ci lower",
+                ends[0],
+                want.absolute_difference_ci and want.absolute_difference_ci[0],
+            ),
+            (
+                "absolute_difference_ci upper",
+                ends[1],
+                want.absolute_difference_ci and want.absolute_difference_ci[1],
+            ),
+        ]
+        for field_name, value, expected in checks:
+            if not _within(value, expected, OVERALL_ABS):
+                lines.append(f"{tag} {field_name} {value!r} != reference {expected!r}")
+        significant = decisive is not None and decisive < alpha
+        if got.get("is_significant") is not significant:
+            lines.append(
+                f"{tag} is_significant {got.get('is_significant')!r}"
+                f" != reference {significant!r}"
+            )
+    return lines
+
+
+# ---------------------------------------------------------------------------
 # A replayed scenario
 # ---------------------------------------------------------------------------
 @dataclass
@@ -837,6 +1148,8 @@ class Replayed:
     results: Any = None
     #: ``GET .../balanced-groups``, for a scenario that balances within groups.
     balanced: Any = None
+    #: ``GET .../results/{id}?breakdown=<attribute>``, for the same scenarios.
+    broken_down: Any = None
 
     @property
     def experiment(self) -> contract.ExperimentExpected:
@@ -1012,6 +1325,9 @@ def replay_scenario(
                 replayed.balanced = live.balanced_groups(
                     experiment_id, label=scenario.name
                 )
+                replayed.broken_down = live.breakdown(
+                    experiment_id, scenario.balance.attribute, label=scenario.name
+                )
         except (
             ledger.LedgerRefused,
             contract.ContractRefused,
@@ -1104,6 +1420,47 @@ def test_g0b3_the_server_s_groups_are_the_ledger_s(replayed: Replayed) -> None:
     )
     if lines:
         pytest.fail(report("G0b (3)", replayed, lines), pytrace=False)
+
+
+@pytest.mark.parametrize("replayed", BALANCED, indirect=True)
+def test_g1g1_the_breakdown_rows_equal_the_ledger(replayed: Replayed) -> None:
+    _completed("G1g", replayed)
+    lines = g1g_breakdown_lines(
+        replayed.scenario, replayed.experiment, replayed.plan, replayed.broken_down
+    )
+    if lines:
+        pytest.fail(
+            report("G1g (1)", replayed, lines, headline="?breakdown= rows"),
+            pytrace=False,
+        )
+
+
+@pytest.mark.parametrize("replayed", BALANCED, indirect=True)
+def test_g1g2_the_balanced_groups_rows_equal_the_ledger(replayed: Replayed) -> None:
+    _completed("G1g", replayed)
+    lines = g1g_balanced_lines(
+        replayed.scenario, replayed.experiment, replayed.plan, replayed.balanced
+    )
+    if lines:
+        pytest.fail(
+            report("G1g (2)", replayed, lines, headline="balanced-groups rows"),
+            pytrace=False,
+        )
+
+
+@pytest.mark.parametrize("replayed", BALANCED, indirect=True)
+def test_g1g3_the_overall_estimate_equals_the_stratified_reference(
+    replayed: Replayed,
+) -> None:
+    _completed("G1g", replayed)
+    lines = g1g_overall_lines(
+        replayed.scenario, replayed.experiment, replayed.plan, replayed.balanced
+    )
+    if lines:
+        pytest.fail(
+            report("G1g (3)", replayed, lines, headline="balanced-groups overall"),
+            pytrace=False,
+        )
 
 
 @pytest.mark.parametrize("replayed", ALL, indirect=True)
