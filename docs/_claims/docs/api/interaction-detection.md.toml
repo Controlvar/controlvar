@@ -31,6 +31,21 @@ by = [
 ]
 
 [[unit]]
+text = "In the dashboard, Experiments → Interactions runs both: the scan, and the pair test for any two experiments you choose."
+by = [
+    "test:frontend/src/tests/pages/interactions.test.tsx::sends GET /interactions/scan with no query and shows the server’s totals and pairs",
+    "test:frontend/src/tests/pages/interactions.test.tsx::sends one GET for the two chosen, with no query, and shows the answer the server gave",
+    "test:frontend/src/tests/pages/experiments-index.test.tsx::offers %s the \"Interactions\" link, underlined, beside the create block",
+]
+
+[[unit]]
+text = "A VIEWER is told which roles can use it."
+by = [
+    "test:frontend/src/tests/pages/interactions.test.tsx::%s is told who can, and no request is sent",
+    "test:backend/tests/unit/core/test_dashboard_experiment_roles.py::test_analyse_interactions_roles_match_require_developer",
+]
+
+[[unit]]
 text = "The pair route is beta (#219): its responses carry \"analysis_status\": \"beta\" and an analysis_notice, and the route is marked x-stability: beta in the OpenAPI document."
 by = [
     "test:backend/tests/integration/api/test_analysis_beta_labels.py",

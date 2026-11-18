@@ -339,17 +339,17 @@ def test_an_aborted_batch_is_cancelled_and_not_cancelled_again(
 
 
 @pytest.mark.regression
-def test_a_failed_batch_names_the_failed_sub_statements_query_id(
-    aws_env, monkeypatch, clock
-):
+def test_a_failed_batch_names_the_failed_sub_statements_id(aws_env, monkeypatch, clock):
     """FAILED is unrecognised, vendor code FAILED, and the request id is the
-    RedshiftQueryId of the sub-statement that failed (SYS_QUERY_HISTORY's
-    id), not the batch's own."""
+    Data API Id of the sub-statement that failed (``<statement id>:5``): not
+    the batch's own id, and not its RedshiftQueryId, which a real Redshift
+    reported as 0 or -1 for a statement that failed (the fake answers 0)."""
     failed = fake.describe_step(
         "FAILED",
         fake.sub_statements(("FINISHED",) * 4 + ("FAILED",)),
     )
     failed.response = {**failed.response, "RedshiftQueryId": 777}
+    assert [s["RedshiftQueryId"] for s in failed.response["SubStatements"]] == [0] * 5
     script = _script(
         monkeypatch,
         clock,
@@ -360,7 +360,7 @@ def test_a_failed_batch_names_the_failed_sub_statements_query_id(
     script.assert_played()
     assert err.value.code is _C.UNRECOGNISED_WAREHOUSE_ERROR
     assert err.value.vendor_code == "FAILED"
-    assert err.value.request_id == "9005"
+    assert err.value.request_id == f"{fake.STATEMENT_ID}:5"
     assert err.value.warehouse == "redshift"
     assert err.value.message == (
         "Amazon Redshift returned an error we don't recognise (code FAILED). "
@@ -368,6 +368,37 @@ def test_a_failed_batch_names_the_failed_sub_statements_query_id(
     )
     assert script.operations() == OPERATIONS[:4]
     assert err.value.__context__ is None
+
+
+@pytest.mark.parametrize(
+    ("statuses", "suffix"),
+    [
+        # A SET Redshift refuses: the statements after it are ABORTED.
+        (("FINISHED", "FAILED", "ABORTED", "ABORTED", "ABORTED"), ":2"),
+        # A FAILED batch with no FAILED sub-statement names none.
+        (("FINISHED",) * 4 + ("ABORTED",), None),
+    ],
+    ids=["first-failed", "none-failed"],
+)
+def test_a_failed_batchs_request_id_is_the_first_failed_sub_statement(
+    aws_env, monkeypatch, clock, statuses, suffix
+):
+    script = _script(
+        monkeypatch,
+        clock,
+        fake.assume_steps()
+        + [
+            fake.batch_step(DIAGNOSTICS.sql),
+            fake.describe_step("FAILED", fake.sub_statements(statuses)),
+        ],
+    )
+    with pytest.raises(WarehouseError) as err:
+        _run(fake.adapter(clock=clock), clock)
+    script.assert_played()
+    assert err.value.vendor_code == "FAILED"
+    assert err.value.request_id == (
+        None if suffix is None else f"{fake.STATEMENT_ID}{suffix}"
+    )
 
 
 def test_a_poll_that_fails_stops_the_batch(aws_env, monkeypatch, clock):

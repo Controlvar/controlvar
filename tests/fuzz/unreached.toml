@@ -190,6 +190,17 @@
 # the superuser pass at this seed on the pull request's head, which gave the
 # counts of its fuzz.yml run.
 
+# Then #2000 (#1958) added GET /api/v1/bandit/{experiment_id}/history. As
+# #1607 found, a new operation changes the ids reused by the operations after
+# it: the superuser pass again reaches the GET /api/v1/bandit/{experiment_id},
+# GET /api/v1/experiments/{experiment_id}/results,
+# GET /api/v1/results/{experiment_id}/sequential and
+# POST /api/v1/experiments/{experiment_id}/pause that #1978 listed, so they
+# are no longer listed and its list is 107. The new operation needs no entry.
+# The viewer and sdk lists do not change. Read from fuzz_check's evaluation of
+# a local run of the superuser pass at this seed on the pull request's head
+# (1b42502e), which gave the counts of its fuzz.yml run.
+
 # Then #1812 added two-step sign-in's seven operations, listed from the
 # following reasoning before the pull request's own fuzz run.
 # POST /api/v1/auth/mfa/verify takes the short token the password step issues
@@ -203,8 +214,9 @@
 # disable and recovery-codes answer 409 while the account has no secret in the
 # state they need (they are declared in that order, confirm and disable before
 # enroll), or 423 once wrong codes have locked the address. None is an SDK
-# route, so the sdk pass selects none. The lists are 113 for superuser, 187 for
-# viewer and 9 for sdk.
+# route, so the sdk pass selects none. Its fuzz.yml run, on a head without
+# #2000, gave 113 for superuser, 187 for viewer and 9 for sdk; merged with
+# #2000 the lists are 109, 187 and 9.
 
 # --- superuser: the seeded demo administrator's bearer token ----------------
 
@@ -262,16 +274,6 @@ reason = "The handler refuses the generated values (400); ids that name no store
 pass = "superuser"
 operation = "POST /api/v1/experiments/{experiment_id}/complete"
 reason = "No request names an active or paused experiment: every id sent that passes validation names a draft (400), and the other requests fail validation (422)."
-
-[[unreached]]
-pass = "superuser"
-operation = "POST /api/v1/experiments/{experiment_id}/pause"
-reason = "No request names a stored experiment: an id that names no stored row answers 404, and the other requests fail validation (422)."
-
-[[unreached]]
-pass = "superuser"
-operation = "GET /api/v1/experiments/{experiment_id}/results"
-reason = "No request names a stored experiment: an id that names no stored row answers 404, and the other requests fail validation (422)."
 
 [[unreached]]
 pass = "superuser"
@@ -410,11 +412,6 @@ reason = "The stored id this pass sends is its own account's, which the reset re
 
 [[unreached]]
 pass = "superuser"
-operation = "GET /api/v1/results/{experiment_id}/sequential"
-reason = "No request names a stored experiment: an id that names no stored row answers 404, and the other requests fail validation (422)."
-
-[[unreached]]
-pass = "superuser"
 operation = "POST /api/v1/rollout-schedules/"
 reason = "The handler refuses the generated values (400); ids that name no stored row answer 404 and invalid requests answer 422."
 
@@ -472,11 +469,6 @@ reason = "The handler refuses the generated values (400); invalid requests answe
 pass = "superuser"
 operation = "GET /api/v1/holdout/{holdout_id}/results"
 reason = "Generated ids never name a stored row (404); the other requests fail validation (422)."
-
-[[unreached]]
-pass = "superuser"
-operation = "GET /api/v1/bandit/{experiment_id}"
-reason = "No request names a stored bandit experiment: an id that names no stored row, or a fixed-allocation experiment, answers 404; the other requests fail validation (422)."
 
 [[unreached]]
 pass = "superuser"

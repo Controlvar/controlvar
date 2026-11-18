@@ -9,6 +9,7 @@ import {
   Exposure,
 } from './types';
 import { AttributedKeys } from './attribution';
+import { eventIdFor } from './eventId';
 import { callExposureHook, checkOnExposure, dropExposureError } from './exposure';
 
 interface CacheEntry<T> {
@@ -72,6 +73,7 @@ interface TrackBody {
   value?: number;
   metadata?: Record<string, unknown>;
   timestamp?: string;
+  event_id?: string;
 }
 
 /**
@@ -415,6 +417,8 @@ export class ExperimentationClient {
         value: options.value,
         metadata: properties,
         timestamp: options.timestamp?.toISOString(),
+        // One id per call, on every entry the call fans out to and in every chunk.
+        event_id: eventIdFor(options.eventId),
       };
 
       if (options.experimentKey || options.featureFlagKey) {

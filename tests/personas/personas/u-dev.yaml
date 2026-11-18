@@ -1,0 +1,106 @@
+# U-DEV: dev@demo.com, the developer's normal day (one card per persona; this
+# is the only card until each other persona's day is built).
+#
+# Every step names the oracle that decides it. A step that writes is decided by
+# state read back through the API (or a ledger the day kept), never by a toast;
+# text_exact and network_allowlist only ever add to a state oracle.
+id: U-DEV
+role: DEVELOPER
+account: dev@demo.com
+goals:
+  - Create an API key and see its secret exactly once.
+  - Build, start and read an experiment end to end through the dashboard.
+  - Target a feature flag, then roll it out in stages.
+day:
+  - n: 1
+    intent: create an API key at /account/api-keys
+    layer: A
+    writes: true
+    oracles:
+      - id: u-dev.1.key-listed-by-prefix
+        kind: api_state
+        expect: >-
+          GET /api/v1/api-keys lists the new key by its prefix and never
+          returns the secret; the page showed the secret once and the prefix
+          only after a reload
+        source:
+          path: docs/security/api-keys.md
+          anchor: "**The `key` value is shown only once.**"
+  - n: 2
+    intent: build an experiment in the wizard with two variants and one metric
+    layer: A
+    writes: true
+    oracles:
+      - id: u-dev.2.draft-with-key
+        kind: api_state
+        expect: >-
+          the experiment is DRAFT, its key is the slug of its name, allocation
+          is 100 and it has two variants and one metric
+  - n: 3
+    intent: start the experiment
+    layer: A
+    writes: true
+    oracles:
+      - id: u-dev.3.active
+        kind: api_state
+        expect: GET /api/v1/experiments/{id} answers status ACTIVE
+  - n: 4
+    intent: send 200 users through assign and 40 conversions with the new key
+    layer: A
+    writes: true
+    oracles:
+      - id: u-dev.4.assignments-equal-ledger
+        kind: count_delta
+        expect: >-
+          the experiment holds 200 assignments, equal to the ledger the day
+          kept, and a repeat assign for the same user returns the same variant
+        source:
+          path: docs/api/endpoints.md
+          anchor: "Assign a user to an experiment (sticky"
+  - n: 5
+    intent: read the results page
+    layer: A
+    numeric: true
+    oracles:
+      - id: u-dev.5.results-equal-ledger
+        kind: count_delta
+        expect: >-
+          users and conversions per variant equal the ledger, and the p-value
+          equals the one scipy computes from the ledger's counts
+      - id: u-dev.5.page-equals-api
+        kind: ui_matches_api
+        expect: the page shows what GET /api/v1/experiments/{id}/results returns
+  - n: 6
+    intent: target a feature flag at country US with a 20% rollout
+    layer: A
+    writes: true
+    oracles:
+      - id: u-dev.6.evaluate-by-rule
+        kind: api_state
+        expect: >-
+          evaluate answers enabled with reason targeting_rule for a US user and
+          reason rollout for a DE user
+      - id: u-dev.6.hash-vector
+        kind: hash_vector
+        expect: the rollout bucket of each user equals the golden hash vector
+  - n: 7
+    intent: add a rollout schedule of 10, 50 and 100 percent
+    layer: A
+    writes: true
+    oracles:
+      - id: u-dev.7.stages-stored
+        kind: api_state
+        expect: >-
+          GET /api/v1/rollout-schedules/{id} lists three stages at 10, 50 and
+          100, and the first is applied to the flag
+  - n: 8
+    intent: set an experiment end date in Los Angeles time
+    layer: A
+    writes: true
+    oracles:
+      - id: u-dev.8.end-date-utc
+        kind: api_state
+        expect: the end date the API returns is the UTC instant of the typed LA time
+        source:
+          path: docs/guides/user-guide.md
+          anchor: "in your zone and in UTC"

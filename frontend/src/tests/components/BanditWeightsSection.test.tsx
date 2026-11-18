@@ -1,8 +1,9 @@
 /**
- * "Current traffic weights" (#442 PR D): a bandit experiment's live split,
- * read-only. The exact request, the loaded, empty, loading and error states,
- * fixed error copy whatever the server says, nothing for a fixed split, and
- * axe in every state.
+ * "Current traffic weights" (#442 PR D): a bandit experiment's live split.
+ * The exact request, the loaded, empty, loading and error states, fixed error
+ * copy whatever the server says, nothing for a fixed split, no control but
+ * Refresh for anyone but an ADMIN or a superuser, and axe in every state.
+ * Setting the weights by hand (#1957) is BanditWeightsOverride.test.tsx.
  */
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
@@ -167,14 +168,29 @@ describe('loaded', () => {
     expect(formatShare(0.4567)).toBe('45.7%');
   });
 
-  it('offers no control but Refresh, for anyone', async () => {
-    mockedApiFetch.mockResolvedValue(UPDATED);
-    renderSection();
-    const section = await screen.findByTestId('bandit-weights');
-    await screen.findByTestId('bandit-weights-table');
-    expect(within(section).getAllByRole('button').map((b) => b.textContent)).toEqual(['Refresh']);
-    expect(within(section).queryAllByRole('textbox')).toEqual([]);
-    expect(within(section).queryAllByRole('spinbutton')).toEqual([]);
+  // Only a superuser or an ADMIN may set the weights by hand (#1957, its own
+  // tests in BanditWeightsOverride.test.tsx); for anyone else the panel only
+  // reads. No user at all (no session yet) is refused too, never offered.
+  it('offers no control but Refresh to anyone but an ADMIN or a superuser', async () => {
+    const users = [
+      undefined,
+      null,
+      { role: 'DEVELOPER', is_superuser: false },
+      { role: 'ANALYST', is_superuser: false },
+      { role: 'VIEWER', is_superuser: false },
+      { role: null, is_superuser: false },
+    ];
+    for (const user of users) {
+      mockedApiFetch.mockResolvedValue(UPDATED);
+      const view = render(<BanditWeightsSection experiment={EXPERIMENT} user={user} />);
+      const section = await screen.findByTestId('bandit-weights');
+      await screen.findByTestId('bandit-weights-table');
+      expect(within(section).getAllByRole('button').map((b) => b.textContent)).toEqual(['Refresh']);
+      expect(within(section).queryAllByRole('textbox')).toEqual([]);
+      expect(within(section).queryAllByRole('spinbutton')).toEqual([]);
+      expect(screen.queryByTestId('bandit-weights-override')).toBeNull();
+      view.unmount();
+    }
   });
 });
 

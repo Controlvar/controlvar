@@ -146,13 +146,16 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         lede("Sequential Testing"),
         says("### mSPRT (mixture Sequential Probability Ratio Test)"),
     ),
-    "Variance reduction from each user's own pre-experiment events (API only)": (
+    "Variance reduction from each user's own pre-experiment events, on the results page and in the API": (
         lede("CUPED Variance Reduction"),
         lede("by adjusting for what each user did before the experiment"),
-        lede("the dashboard and GET /results/{id} show the unadjusted numbers"),
+        lede("has a CUPED (beta) tab with these numbers"),
     ),
-    "Thompson Sampling, UCB1, Epsilon-Greedy (create a bandit through the API)": (
+    "Thompson Sampling, UCB1, Epsilon-Greedy (create one from the new-experiment form or the API)": (
         lede("Multi-Armed Bandit"),
+        says(
+            "To create one in the dashboard, choose Bandit as the experiment type on the new-experiment form"
+        ),
         says(
             "Set optimization_type to one of thompson_sampling, ucb1 or epsilon_greedy when you create the experiment"
         ),

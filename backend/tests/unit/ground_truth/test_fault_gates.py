@@ -679,7 +679,12 @@ def test_f7_s_loss_shows_at_its_size():
 # ---------------------------------------------------------------------------
 # S1 to S4 keep the clean replay's checks
 # ---------------------------------------------------------------------------
-CLEAN_SCENARIOS = clean.scenarios(SEED, 1)
+#: S5 balances within groups: G0b, not G0 (test_balanced_gates.py).
+CLEAN_SCENARIOS = {
+    name: scenario
+    for name, scenario in clean.scenarios(SEED, 1).items()
+    if name in clean.HASHED
+}
 
 
 def _clean_replayed(name: str, tmp_path: Any, plant: str | None = None) -> Any:

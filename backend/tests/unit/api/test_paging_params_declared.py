@@ -51,6 +51,7 @@ CORE_PARAMS: List[Tuple[str, str, str]] = [
     ("limit", "GET", "/api/v1/audit-logs/entity/{entity_type}/{entity_id}"),
     ("limit", "GET", "/api/v1/audit-logs/stream"),
     ("limit", "GET", "/api/v1/audit-logs/user/{user_id}"),
+    ("limit", "GET", "/api/v1/bandit/{experiment_id}/history"),
     ("limit", "GET", "/api/v1/compliance/audit-events"),
     ("limit", "GET", "/api/v1/experiments/"),
     ("limit", "GET", "/api/v1/feature-flags"),
@@ -90,8 +91,8 @@ MODULE_PARAMS: List[Tuple[str, str, str]] = [
     ("page_size", "GET", "/api/v1/hipaa/audit-logs"),
 ]
 
-CORE_COUNT = 36
-FULL_COUNT = 38
+CORE_COUNT = 37
+FULL_COUNT = 39
 
 #: The routes not in the document: the flag list's slash-less twin, whose
 #: skip and limit are the list's own.
@@ -173,7 +174,7 @@ def test_the_lists_are_sorted_and_counted():
         "skip": 10,
         "offset": 2,
         "page": 5,
-        "limit": 19,
+        "limit": 20,
         "page_size": 2,
         "per_page": 0,
     }

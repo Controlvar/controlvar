@@ -1,0 +1,188 @@
+# The role matrix: per role and action, what the dashboard offers (`ui`) and
+# what the API answers (`api`), each against its own documented cell.
+#
+# Columns: OWNER (admin@demo.com: role ADMIN and a superuser), ADMIN (role
+# ADMIN, NOT a superuser), DEVELOPER, ANALYST, VIEWER.
+#   ui:  offered | not_offered | refusal_page
+#          offered       the control or page works for that role
+#          not_offered   the control is absent
+#          refusal_page  the page renders its 403 view (the admin pages ask
+#                        for a superuser account)
+#   api: 2xx | 403   (a valid body and a real id; 404 and 422 are not a cell)
+# A cell whose ui and api disagree cites the documented divergence in
+# docs/rbac/README.md (`divergence`); a disagreement the docs do not state is
+# a finding, never a row. `profile: full` rows exist only in the full profile.
+# Built from what the code does at main:
+#   core/permissions.py ROLE_PERMISSIONS, deps.get_current_superuser,
+#   withAdminGuard (superuser by default), canCreateExperiment and its
+#   siblings in frontend/src/utils/experimentPermissions.ts.
+rows:
+  - id: experiment-create
+    action: create an experiment
+    method: POST
+    path: /api/v1/experiments/
+    profile: core
+    source:
+      path: docs/rbac/README.md
+      anchor: "**Developer**: Can create and manage experiments"
+    cells:
+      OWNER: {ui: offered, api: 2xx}
+      ADMIN: {ui: offered, api: 2xx}
+      DEVELOPER: {ui: offered, api: 2xx}
+      ANALYST: {ui: not_offered, api: "403"}
+      VIEWER: {ui: not_offered, api: "403"}
+
+  - id: experiment-list
+    action: list experiments
+    method: GET
+    path: /api/v1/experiments/
+    profile: core
+    source:
+      path: docs/rbac/README.md
+      anchor: "**Viewer**: Can view experiments and every feature flag"
+    cells:
+      OWNER: {ui: offered, api: 2xx}
+      ADMIN: {ui: offered, api: 2xx}
+      DEVELOPER: {ui: offered, api: 2xx}
+      ANALYST: {ui: offered, api: 2xx}
+      VIEWER: {ui: offered, api: 2xx}
+
+  - id: flag-create
+    action: create a feature flag
+    method: POST
+    path: /api/v1/feature-flags/
+    profile: core
+    source:
+      path: docs/rbac/README.md
+      anchor: "**Developer**: Can create and manage experiments, and create and manage any feature flag"
+    cells:
+      OWNER: {ui: offered, api: 2xx}
+      ADMIN: {ui: offered, api: 2xx}
+      DEVELOPER: {ui: offered, api: 2xx}
+      ANALYST: {ui: not_offered, api: "403"}
+      VIEWER: {ui: not_offered, api: "403"}
+
+  - id: flag-list
+    action: list feature flags
+    method: GET
+    path: /api/v1/feature-flags/
+    profile: core
+    source:
+      path: docs/rbac/README.md
+      anchor: "**Viewer**: Can view experiments and every feature flag"
+    cells:
+      OWNER: {ui: offered, api: 2xx}
+      ADMIN: {ui: offered, api: 2xx}
+      DEVELOPER: {ui: offered, api: 2xx}
+      ANALYST: {ui: offered, api: 2xx}
+      VIEWER: {ui: offered, api: 2xx}
+
+  - id: flag-change
+    action: change a feature flag
+    method: PUT
+    path: /api/v1/feature-flags/{flag_id}
+    profile: core
+    source:
+      path: docs/rbac/README.md
+      anchor: "ADMIN and DEVELOPER may change any flag"
+    cells:
+      OWNER: {ui: offered, api: 2xx}
+      ADMIN: {ui: offered, api: 2xx}
+      DEVELOPER: {ui: offered, api: 2xx}
+      ANALYST: {ui: not_offered, api: "403"}
+      VIEWER: {ui: not_offered, api: "403"}
+
+  - id: users-list
+    action: list user accounts (the Users page)
+    method: GET
+    path: /api/v1/admin/users
+    profile: core
+    source:
+      path: docs/rbac/README.md
+      anchor: "Managing user accounts (`/api/v1/admin/users`)"
+    cells:
+      OWNER: {ui: offered, api: 2xx}
+      ADMIN: {ui: refusal_page, api: "403"}
+      DEVELOPER: {ui: refusal_page, api: "403"}
+      ANALYST: {ui: refusal_page, api: "403"}
+      VIEWER: {ui: refusal_page, api: "403"}
+
+  - id: safety-settings-change
+    action: change the global safety settings
+    method: POST
+    path: /api/v1/safety/settings
+    profile: core
+    source:
+      path: docs/rbac/README.md
+      anchor: "global safety settings"
+    cells:
+      OWNER: {ui: offered, api: 2xx}
+      ADMIN: {ui: refusal_page, api: "403"}
+      DEVELOPER: {ui: refusal_page, api: "403"}
+      ANALYST: {ui: refusal_page, api: "403"}
+      VIEWER: {ui: refusal_page, api: "403"}
+
+  # The two documented divergences of the core profile (docs/rbac/README.md):
+  # through the API the Admin role alone lists and deletes other users' keys,
+  # while the dashboard's API Keys page needs a superuser account.
+  - id: api-keys-list-all
+    action: list every user's API keys
+    method: GET
+    path: /api/v1/api-keys
+    query: all=true
+    profile: core
+    source:
+      path: docs/rbac/README.md
+      anchor: "(`GET /api/v1/api-keys?all=true`, `DELETE /api/v1/api-keys/{id}`)"
+    cells:
+      OWNER: {ui: offered, api: 2xx}
+      ADMIN:
+        ui: refusal_page
+        api: 2xx
+        divergence:
+          path: docs/rbac/README.md
+          anchor: "Through the API, the Admin role alone may list and delete other users' API keys"
+      DEVELOPER: {ui: refusal_page, api: "403"}
+      ANALYST: {ui: refusal_page, api: "403"}
+      VIEWER: {ui: refusal_page, api: "403"}
+
+  - id: api-key-delete-others
+    action: delete another user's API key
+    method: DELETE
+    path: /api/v1/api-keys/{key_id}
+    profile: core
+    source:
+      path: docs/rbac/README.md
+      anchor: "(`GET /api/v1/api-keys?all=true`, `DELETE /api/v1/api-keys/{id}`)"
+    cells:
+      OWNER: {ui: offered, api: 2xx}
+      ADMIN:
+        ui: refusal_page
+        api: 2xx
+        divergence:
+          path: docs/rbac/README.md
+          anchor: "Through the API, the Admin role alone may list and delete other users' API keys"
+      DEVELOPER: {ui: refusal_page, api: "403"}
+      ANALYST: {ui: refusal_page, api: "403"}
+      VIEWER: {ui: refusal_page, api: "403"}
+
+  # The full profile's divergence: custom roles (the rbac module).
+  - id: custom-role-create
+    action: create a custom role
+    method: POST
+    path: /api/v1/rbac/roles
+    profile: full
+    source:
+      path: docs/rbac/README.md
+      anchor: "manage custom Roles"
+    cells:
+      OWNER: {ui: offered, api: 2xx}
+      ADMIN:
+        ui: refusal_page
+        api: 2xx
+        divergence:
+          path: docs/rbac/README.md
+          anchor: "and manage custom Roles"
+      DEVELOPER: {ui: refusal_page, api: "403"}
+      ANALYST: {ui: refusal_page, api: "403"}
+      VIEWER: {ui: refusal_page, api: "403"}
