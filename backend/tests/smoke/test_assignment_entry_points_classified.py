@@ -91,6 +91,11 @@ INVENTORY: Dict[str, str] = {
     "backend/app/services/assignment_service.py::AssignmentService._stored_assignment": READS,
     "backend/app/services/assignment_service.py::AssignmentService.get_assignment": READS,
     "backend/app/services/assignment_service.py::AssignmentService.get_user_assignments": READS,
+    # #449: a linked person's assignments (GET /tracking/assignments/{user_id})
+    # and the person's earliest row in an experiment (assign and the event
+    # routes read it; assign_user then writes as before).
+    "backend/app/services/assignment_service.py::AssignmentService.get_person_assignments": READS,
+    "backend/app/services/identity_aliases.py::holder_of": READS,
     "backend/app/services/event_matching.py::_assigned_pairs": READS,
     "backend/app/services/event_matching.py::assignment_times": READS,
     "backend/app/services/event_service.py::EventService.track_conversion": READS,
