@@ -38026,7 +38026,7 @@
     },
     "/api/v1/visual-editor/sessions/current": {
       "delete": {
-        "description": "End the session: its token answers 401 `signed_out` from then on. The\nsaved design is kept. Checked as every session call is, except that a\nsession signs out of a draft that has since been given a start date, or\nis no longer a draft.",
+        "description": "End the session: its token answers 401 `signed_out` from then on. The\nsaved design is kept. Only the first four checks of every session call\napply (the `Origin`, the token, the session's end and its expiry), so a\nsession signs out even once its user may no longer change experiments,\nand of a draft that has since been given a start date, or is no longer a\ndraft.",
         "operationId": "sign_out_of_editor_api_v1_visual_editor_sessions_current_delete",
         "responses": {
           "204": {
@@ -38043,10 +38043,7 @@
             "description": "The session cannot be used; reason says why"
           },
           "403": {
-            "description": "The request does not come from the dashboard, or the user may no longer change the experiment"
-          },
-          "404": {
-            "description": "The experiment no longer exists"
+            "description": "The request does not come from the dashboard"
           }
         },
         "summary": "Sign out of the visual editor (beta)",

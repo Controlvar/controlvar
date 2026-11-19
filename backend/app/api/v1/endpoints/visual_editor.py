@@ -453,21 +453,53 @@ def current_editor_session(
 
     It writes nothing.
     """
-    return _editor_session(request, db, editing=True)
+    row = _live_session_row(request, db)
+    user = db.get(User, row.user_id) if row.user_id else None
+    experiment = db.query(Experiment).filter(Experiment.id == row.experiment_id).first()
+    refuse_unless_allowed(experiment, user)
+    if experiment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=visual_editor.EXPERIMENT_GONE,
+        )
+    if experiment.status != ExperimentStatus.DRAFT:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=visual_editor.NOT_A_DRAFT
+        )
+    if experiment.start_date is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=visual_editor.DATED_DRAFT
+        )
+    return EditorSession(
+        id=row.id, expires_at=row.expires_at, user=user, experiment=experiment
+    )
+
+
+@dataclass
+class SessionToSignOut:
+    """The session a sign-out ends, as :func:`signing_out_editor_session`
+    found it."""
+
+    id: uuid.UUID
+    user_id: uuid.UUID | None
+    experiment_id: uuid.UUID
 
 
 def signing_out_editor_session(
     request: Request, db: Session = Depends(deps.get_db)
-) -> EditorSession:
-    """:func:`current_editor_session` without its step 7, for signing out:
-    a session signs out of a draft that has since been given a start date,
-    or is no longer a draft."""
-    return _editor_session(request, db, editing=False)
+) -> SessionToSignOut:
+    """The session to sign out: :func:`current_editor_session`'s steps 1-4
+    only. A session signs out whatever has changed since it was opened: its
+    user's status or role, the experiment's status or start date."""
+    row = _live_session_row(request, db)
+    return SessionToSignOut(
+        id=row.id, user_id=row.user_id, experiment_id=row.experiment_id
+    )
 
 
-def _editor_session(request: Request, db: Session, *, editing: bool) -> EditorSession:
-    """The checks of :func:`current_editor_session`; step 7 only when
-    *editing*."""
+def _live_session_row(request: Request, db: Session) -> VisualToken:
+    """Steps 1-4 of :func:`current_editor_session`: the row of the request's
+    editor session, neither ended nor expired."""
     refusal = dashboard_origin_refusal(request.headers.get("origin"), request.method)
     if refusal is not None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=refusal)
@@ -490,25 +522,7 @@ def _editor_session(request: Request, db: Session, *, editing: bool) -> EditorSe
         raise EditorSessionClosed(row.revoked_reason)
     if row.expires_at <= visual_editor.utcnow():
         raise EditorSessionClosed(visual_editor.EXPIRED)
-    user = db.get(User, row.user_id) if row.user_id else None
-    experiment = db.query(Experiment).filter(Experiment.id == row.experiment_id).first()
-    refuse_unless_allowed(experiment, user)
-    if experiment is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=visual_editor.EXPERIMENT_GONE,
-        )
-    if editing and experiment.status != ExperimentStatus.DRAFT:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=visual_editor.NOT_A_DRAFT
-        )
-    if editing and experiment.start_date is not None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=visual_editor.DATED_DRAFT
-        )
-    return EditorSession(
-        id=row.id, expires_at=row.expires_at, user=user, experiment=experiment
-    )
+    return row
 
 
 async def editor_cache_control() -> deps.CacheControl:
@@ -561,24 +575,26 @@ def read_editor_session(
     summary="Sign out of the visual editor (beta)",
     openapi_extra={"x-stability": "beta"},
     responses={
-        status_code: answer
-        for status_code, answer in _SESSION_REFUSALS.items()
-        if status_code != 400
+        401: _SESSION_REFUSALS[401],
+        403: {"description": "The request does not come from the dashboard"},
     },
 )
 def sign_out_of_editor(
-    session: EditorSession = Depends(signing_out_editor_session),
+    session: SessionToSignOut = Depends(signing_out_editor_session),
     db: Session = Depends(deps.get_db),
 ) -> Response:
     """
     End the session: its token answers 401 `signed_out` from then on. The
-    saved design is kept. Checked as every session call is, except that a
-    session signs out of a draft that has since been given a start date, or
-    is no longer a draft.
+    saved design is kept. Only the first four checks of every session call
+    apply (the `Origin`, the token, the session's end and its expiry), so a
+    session signs out even once its user may no longer change experiments,
+    and of a draft that has since been given a start date, or is no longer a
+    draft.
     """
-    actor = AuditActor.of(session.user)
-    experiment_id = session.experiment.id
-    name = session.experiment.name
+    user = db.get(User, session.user_id) if session.user_id else None
+    actor = AuditActor.of(user)
+    experiment_id = session.experiment_id
+    name = db.query(Experiment.name).filter(Experiment.id == experiment_id).scalar()
     try:
         ended = [
             visual_editor.Ended(*row)

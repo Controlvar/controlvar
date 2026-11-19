@@ -2138,7 +2138,9 @@ def test_signing_out_closes_the_session_with_its_entry(
 
 
 @pytest.mark.regression
-@pytest.mark.parametrize("change", ["dated", "no longer a draft"])
+@pytest.mark.parametrize(
+    "change", ["dated", "no longer a draft", "deactivated", "demoted"]
+)
 def test_a_session_signs_out_of_a_draft_it_can_no_longer_edit(
     client, db_session, developer, experiment, change
 ):
@@ -2146,20 +2148,35 @@ def test_a_session_signs_out_of_a_draft_it_can_no_longer_edit(
     session_id = str(_row(db_session, chain["token"]).id)
     if change == "dated":
         _set_start_date(db_session, experiment)
-        refusal = visual_editor.DATED_DRAFT
+        refusal = (400, visual_editor.DATED_DRAFT)
     else:
+        statement, values, refusal = {
+            "no longer a draft": (
+                "UPDATE experiments SET status = 'ACTIVE' WHERE id = :id",
+                {"id": uuid.UUID(experiment)},
+                (400, visual_editor.NOT_A_DRAFT),
+            ),
+            "deactivated": (
+                "UPDATE users SET is_active = false WHERE id = :id",
+                {"id": developer.id},
+                (403, visual_editor.CANNOT_CHANGE),
+            ),
+            "demoted": (
+                "UPDATE users SET role = 'VIEWER' WHERE id = :id",
+                {"id": developer.id},
+                (403, visual_editor.CANNOT_CHANGE),
+            ),
+        }[change]
         session = _session(db_session)
         try:
-            session.execute(
-                text("UPDATE experiments SET status = 'ACTIVE' WHERE id = :id"),
-                {"id": uuid.UUID(experiment)},
-            )
+            session.execute(text(statement), values)
             session.commit()
         finally:
             session.close()
-        refusal = visual_editor.NOT_A_DRAFT
     got = _current(client, chain["token"])
-    assert (got.status_code, got.json()["detail"]) == (400, refusal)
+    assert (got.status_code, got.json()["detail"]) == refusal, (
+        f"{change}: GET {got.status_code} != {refusal[0]}"
+    )
     before = len(_entries(db_session, experiment))
 
     response = _sign_out(client, chain["token"])
@@ -2168,12 +2185,48 @@ def test_a_session_signs_out_of_a_draft_it_can_no_longer_edit(
         f"{change}: sign-out {response.status_code} != 204"
     )
     assert _entries(db_session, experiment)[before:] == ["closed(signed_out)"]
-    assert json.loads(_audit_rows(db_session, experiment)[-1].new_value) == {
+    entry = _audit_rows(db_session, experiment)[-1]
+    assert entry.user_id == developer.id, f"{change}: actor {entry.user_id}"
+    assert json.loads(entry.new_value) == {
         "reason": "signed_out",
         "session_id": session_id,
         "session_user_id": str(developer.id),
     }
     assert _session_says(client, chain["token"]) == (401, "signed_out")
+
+
+@pytest.mark.regression
+def test_a_sign_out_whose_experiment_is_deleted_meanwhile_answers_204(
+    client, db_session, developer, experiment, monkeypatch
+):
+    """Deleting an experiment deletes its editor sessions. The sign-out is
+    held once it has found its session; the experiment is deleted; the
+    sign-out then answers 204 and writes no entry."""
+    chain = _opened(client, developer, experiment)
+    pause = _Pause(monkeypatch, visual_editor, "utcnow")
+    pool = ThreadPoolExecutor(max_workers=1)
+    try:
+        held = pool.submit(_sign_out, client, chain["token"])
+        assert pause.reached.wait(30), "the sign-out never reached its pause"
+        session = _session(db_session)
+        try:
+            session.execute(
+                text("DELETE FROM experiments WHERE id = :id"),
+                {"id": uuid.UUID(experiment)},
+            )
+            session.commit()
+        finally:
+            session.close()
+        assert _rows(db_session, experiment) == []
+        pause.released.set()
+        response = held.result(timeout=60)
+    finally:
+        pause.released.set()
+        pool.shutdown(wait=True)
+
+    assert response.status_code == 204, f"sign-out {response.status_code} != 204"
+    assert _entries(db_session, experiment) == ["opened"]
+    assert _session_says(client, chain["token"]) == (401, "not_recognised")
 
 
 @pytest.mark.regression
