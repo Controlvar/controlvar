@@ -48,8 +48,9 @@ PREVIOUS_CORE_HEAD = "c448_balance_within"
 #: revision after this one, whose downgrade drops ``user_totp``.
 CORE_HEAD = "t449_identity_aliases"
 #: Tables a later core revision's downgrade drops: a downgrade from the head to
-#: this test's target unapplies ``t1812_user_totp`` too.
-LATER_DOWNGRADE_TABLES = {"user_totp"}
+#: this test's target unapplies ``t1812_user_totp`` and ``t449_identity_aliases``
+#: too.
+LATER_DOWNGRADE_TABLES = {"user_totp", "identity_aliases"}
 MODULES_HEAD = "modules_0005_redshift"
 
 PREVIOUS_ROWS = {

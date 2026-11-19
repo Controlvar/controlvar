@@ -64,8 +64,14 @@ CORE_HEAD = "t449_identity_aliases"
 #: Tables a later core revision's downgrade drops: a downgrade from the head to
 #: this test's target unapplies those revisions too. ``c448_balance_within``
 #: (#448) drops ``balance_group_counters``; ``4955571d232c`` (#1545) drops
-#: ``visual_tokens``; ``t1812_user_totp`` (#1812) drops ``user_totp``.
-LATER_DOWNGRADE_TABLES = {"balance_group_counters", "visual_tokens", "user_totp"}
+#: ``visual_tokens``; ``t1812_user_totp`` (#1812) drops ``user_totp``;
+#: ``t449_identity_aliases`` (#449) drops ``identity_aliases``.
+LATER_DOWNGRADE_TABLES = {
+    "balance_group_counters",
+    "visual_tokens",
+    "user_totp",
+    "identity_aliases",
+}
 MODULES_HEAD = "modules_0005_redshift"
 
 PREVIOUS_ROWS = {

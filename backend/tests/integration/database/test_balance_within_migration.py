@@ -50,8 +50,9 @@ PREVIOUS_CORE_HEAD = "7b6b4b4fe246"
 #: ``experiments.visual_config`` and ``variants.visual_changes``.
 CORE_HEAD = "t449_identity_aliases"
 #: What a later core revision's downgrade drops: a downgrade from the head to
-#: this test's target unapplies ``4955571d232c`` and ``t1812_user_totp`` too.
-LATER_DOWNGRADE_TABLES = {"visual_tokens", "user_totp"}
+#: this test's target unapplies ``4955571d232c``, ``t1812_user_totp`` and
+#: ``t449_identity_aliases`` too.
+LATER_DOWNGRADE_TABLES = {"visual_tokens", "user_totp", "identity_aliases"}
 LATER_DOWNGRADE_EXPERIMENT_COLUMNS = {"visual_config"}
 #: The modules branch's head in this tree, recorded on both sides of every
 #: step here: this file is about the core chain.

@@ -78,6 +78,7 @@ LATER_DOWNGRADE_TABLES = {
     "balance_group_counters",
     "visual_tokens",
     "user_totp",
+    "identity_aliases",
 }
 #: The modules branch's head in this tree, recorded on both sides of every
 #: step here: this file is about the core chain.

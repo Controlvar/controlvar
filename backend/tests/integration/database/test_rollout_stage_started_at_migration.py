@@ -73,7 +73,12 @@ CORE_HEAD = "t449_identity_aliases"
 LATER_REVISIONS = ("c448_balance_within", "4955571d232c", "t1812_user_totp")
 #: Tables a later core revision's downgrade drops: a downgrade from the head to
 #: this test's target unapplies those revisions too.
-LATER_DOWNGRADE_TABLES = {"balance_group_counters", "visual_tokens", "user_totp"}
+LATER_DOWNGRADE_TABLES = {
+    "balance_group_counters",
+    "visual_tokens",
+    "user_totp",
+    "identity_aliases",
+}
 #: The modules branch's head in this tree, recorded on both sides of every
 #: step here: this file is about the core chain.
 MODULES_HEAD = "modules_0005_redshift"

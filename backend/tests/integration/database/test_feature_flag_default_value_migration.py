@@ -65,7 +65,8 @@ CORE_HEAD = "t449_identity_aliases"
 #: ``segment_members``; ``85dd4796bb8b`` (#1543) drops ``event_dedup_keys``;
 #: ``c448_balance_within`` (#448) drops ``balance_group_counters``;
 #: ``4955571d232c`` (#1545) drops ``visual_tokens``; ``t1812_user_totp``
-#: (#1812) drops ``user_totp``.
+#: (#1812) drops ``user_totp``; ``t449_identity_aliases`` (#449) drops
+#: ``identity_aliases``.
 LATER_DOWNGRADE_TABLES = {
     "holdout_population",
     "segment_members",
@@ -73,6 +74,7 @@ LATER_DOWNGRADE_TABLES = {
     "balance_group_counters",
     "visual_tokens",
     "user_totp",
+    "identity_aliases",
 }
 #: ``feature_flags`` columns a later core revision's downgrade drops:
 #: ``607c51a59bf5`` (#1497) drops a flag's value type and its two values.
