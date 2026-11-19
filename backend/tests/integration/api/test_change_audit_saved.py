@@ -367,6 +367,41 @@ def test_experiment_update_record_carries_targeting_and_status(
     assert old["name"] == new["name"] == body["name"]
 
 
+def test_flag_update_record_carries_its_five_values(client, fresh, developer):
+    """The record of a flag update carries the key, name, status, rollout
+    percentage and value type before and after, each exactly as main stores
+    it. Moving the record into the change's transaction (#1042) must not
+    change what it says."""
+    body = {**_flag_payload(), "is_active": True, "rollout_percentage": 30}
+    created = client.post(f"{FLAGS}/", json=body, headers=_auth(developer))
+    assert created.status_code == 201, created.text
+    flag_id = created.json()["id"]
+
+    response = client.put(
+        f"{FLAGS}/{flag_id}", json={"name": "renamed"}, headers=_auth(developer)
+    )
+
+    assert response.status_code == 200, response.text
+    rows = _audit_rows(fresh, "flag_update", flag_id)
+    assert len(rows) == 1, rows
+    assert rows[0].old_value == {
+        "key": body["key"],
+        "name": body["name"],
+        # pins main's format; see #2066
+        "status": "FeatureFlagStatus.ACTIVE",
+        "rollout_percentage": 30,
+        "value_type": "boolean",
+    }, rows[0].old_value
+    assert rows[0].new_value == {
+        "key": body["key"],
+        "name": "renamed",
+        # pins main's format; see #2066
+        "status": "active",
+        "rollout_percentage": 30,
+        "value_type": "boolean",
+    }, rows[0].new_value
+
+
 # --- a failed audit write changes nothing else --------------------------------
 
 
