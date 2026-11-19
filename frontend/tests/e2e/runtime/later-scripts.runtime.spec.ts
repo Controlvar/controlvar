@@ -11,12 +11,26 @@ import { expect, test, type VisualPackage } from "./runtime.fixture";
 const PATH = "/a/b?x=1";
 
 const READ = `function __read(stage) {
+  var statics = {
+    "RegExp.$1": String(RegExp.$1),
+    "RegExp.input": String(RegExp.input),
+    "RegExp.lastMatch": String(RegExp.lastMatch),
+    "RegExp.lastParen": String(RegExp.lastParen),
+    "RegExp.leftContext": String(RegExp.leftContext),
+    "RegExp.rightContext": String(RegExp.rightContext)
+  };
   var nav = performance.getEntriesByType("navigation")[0];
   var activation = navigation.activation && navigation.activation.entry;
   (window.__reads = window.__reads || {})[stage] = {
     now: performance.now(),
     entries: navigation.entries().length,
     values: {
+      "RegExp.$1": statics["RegExp.$1"],
+      "RegExp.input": statics["RegExp.input"],
+      "RegExp.lastMatch": statics["RegExp.lastMatch"],
+      "RegExp.lastParen": statics["RegExp.lastParen"],
+      "RegExp.leftContext": statics["RegExp.leftContext"],
+      "RegExp.rightContext": statics["RegExp.rightContext"],
       "location.href": location.href,
       "document.URL": document.URL,
       "document.baseURI": document.baseURI,
@@ -29,7 +43,7 @@ const READ = `function __read(stage) {
   };
 }`;
 
-const KNOWN_PAIR = ["navigation entry name", "navigation.activation.entry.url"];
+const RECORDED_ONLY = ["navigation entry name", "navigation.activation.entry.url"];
 const STAGES = ["inline-head", "inline-body", "deferred", "after-load"];
 
 const PAGE = html(
@@ -103,13 +117,13 @@ for (const arm of ["goto", "link click"] as const) {
 
     const found = holding(all, ticket);
     for (const stage of STAGES) {
-      for (const name of found[stage].filter((api) => !KNOWN_PAIR.includes(api))) {
+      for (const name of found[stage].filter((api) => !RECORDED_ONLY.includes(api))) {
         expect.soft(name, `${stage}: ${name} holds the ticket`).toBe("");
       }
       const want = control.reads[stage].entries;
       expect.soft(all[stage].entries, `${stage}: entries ${all[stage].entries} != ${want}`).toBe(want);
     }
-    test.info().annotations.push({ type: "known pair", description: JSON.stringify(found) });
+    test.info().annotations.push({ type: "recorded only", description: JSON.stringify(found) });
 
     await page.reload({ waitUntil: "load" });
     expect(holding(await reads(page), ticket)["after-load"], "after a reload").toEqual([]);

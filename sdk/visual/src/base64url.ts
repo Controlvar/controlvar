@@ -1,4 +1,5 @@
-const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+export const BASE64URL_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+const ALPHABET = BASE64URL_ALPHABET;
 
 /** RFC 4648 base64url, without padding: 32 bytes become 43 characters. */
 export function base64url(bytes: Uint8Array): string {

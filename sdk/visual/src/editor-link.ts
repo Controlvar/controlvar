@@ -1,4 +1,4 @@
-import { base64url } from "./base64url";
+import { BASE64URL_ALPHABET, base64url } from "./base64url";
 import type { Captures } from "./captures";
 import type { Config } from "./config";
 import { KEYS } from "./keys";
@@ -10,7 +10,8 @@ import type { Send } from "./send";
  * in the script's first synchronous run, before anything else but the
  * captures. Any other value after `#controlvar-editor=` is ignored.
  */
-export const EDITOR_FRAGMENT = /^#controlvar-editor=([A-Za-z0-9_-]{43})$/;
+export const EDITOR_PREFIX = "#controlvar-editor=";
+export const TICKET_LENGTH = 43;
 export const CLAIM_PATH = "/api/v1/visual-editor/tickets/claim";
 export const PANEL_PATH = "/visual-editor/panel";
 export const HANDSHAKE_MS = 5000;
@@ -32,10 +33,33 @@ export interface EditorLink {
   opened: boolean;
 }
 
+/**
+ * The link's value when *hash* is exactly `#controlvar-editor=` and 43
+ * base64url characters, else null. Checked with string operations only.
+ */
+export function editorTicket(hash: string): string | null {
+  if (hash.length !== EDITOR_PREFIX.length + TICKET_LENGTH) return null;
+  if (hash.slice(0, EDITOR_PREFIX.length) !== EDITOR_PREFIX) return null;
+  const ticket = hash.slice(EDITOR_PREFIX.length);
+  for (let i = 0; i < ticket.length; i += 1) {
+    if (BASE64URL_ALPHABET.indexOf(ticket.charAt(i)) < 0) return null;
+  }
+  return ticket;
+}
+
 function isHello(data: unknown): boolean {
   if (typeof data !== "object" || data === null) return false;
   const message = data as { cv?: unknown; type?: unknown };
   return message.cv === 1 && message.type === "hello";
+}
+
+/** Whether *win* shows a document from another origin than the page's: reading its document throws. */
+function onAnotherOrigin(win: Window): boolean {
+  try {
+    return win.document === undefined;
+  } catch {
+    return true;
+  }
 }
 
 function showHandshakeMessage(doc: Document): void {
@@ -60,10 +84,9 @@ function showHandshakeMessage(doc: Document): void {
 export function runEditorLink(env: EditorLinkEnv): EditorLink {
   const { window: win, captures, config, send } = env;
   const doc = win.document;
-  const match = EDITOR_FRAGMENT.exec(win.location.hash);
-  if (!match) return { opened: false };
+  let ticket = editorTicket(win.location.hash);
+  if (ticket === null) return { opened: false };
 
-  let ticket: string | null = match[1];
   captures.replaceState(win.history.state, "", win.location.pathname + win.location.search);
 
   let claim: string | null = base64url(captures.getRandomValues(new Uint8Array(32)));
@@ -110,6 +133,8 @@ export function runEditorLink(env: EditorLinkEnv): EditorLink {
     if (!settled || !helloSeen || claim === null || panel === null) return undefined;
     const message = { cv: 1, type: "claim", claim };
     claim = null;
+    // Handed over only to a panel frame on another origin; otherwise dropped.
+    if (!onAnotherOrigin(panel)) return undefined;
     panel.postMessage(message, editorOrigin);
     return undefined;
   };
@@ -120,6 +145,8 @@ export function runEditorLink(env: EditorLinkEnv): EditorLink {
   pending.then(onSettled, onSettled);
 
   captures.addEventListener("message", (event: MessageEvent): undefined => {
+    // Only a message the browser delivered counts.
+    if (event.isTrusted !== true) return undefined;
     if (helloSeen) return undefined;
     if (captures.messageSource(event) !== panel) return undefined;
     if (captures.messageOrigin(event) !== editorOrigin) return undefined;

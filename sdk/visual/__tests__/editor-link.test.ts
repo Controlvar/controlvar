@@ -48,6 +48,34 @@ describe('an exact editor link', () => {
     page.close();
   });
 
+  test("its claim is the base64url of 32 bytes from the browser's random source", () => {
+    const known = new Uint8Array(randomBytes(32));
+    const asked: number[] = [];
+    const page = runClassic(`${PAGE}#controlvar-editor=${ticket()}`, TAG, (window) => {
+      const crypto = window.Crypto.prototype as unknown as { getRandomValues(bytes: Uint8Array): Uint8Array };
+      crypto.getRandomValues = function (bytes: Uint8Array): Uint8Array {
+        asked.push(bytes.length);
+        bytes.set(known);
+        return bytes;
+      };
+    });
+    expect(asked).toEqual([32]);
+    expect(JSON.parse(String(page.fetches[0].init.body)).claim).toBe(Buffer.from(known).toString('base64url'));
+    page.close();
+  });
+
+  test('two links get two different claims', () => {
+    const claims = [ticket(), ticket()].map((value) => {
+      const page = runClassic(`${PAGE}#controlvar-editor=${value}`, TAG);
+      const claim: string = JSON.parse(String(page.fetches[0].init.body)).claim;
+      page.close();
+      return claim;
+    });
+    expect(claims[0]).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(claims[1]).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(claims[1]).not.toBe(claims[0]);
+  });
+
   test('opens the panel in a frame with no Referer and no ticket in its address', () => {
     const value = ticket();
     const page = runClassic(`${PAGE}#controlvar-editor=${value}`, TAG);
