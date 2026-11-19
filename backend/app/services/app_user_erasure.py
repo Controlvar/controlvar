@@ -10,7 +10,21 @@ rule of the erase is here:
   does the inventory gate
   (``backend/tests/unit/services/test_app_user_erase_inventory.py``), which
   classifies every other table as kept, so the two cannot drift.
-* :func:`erasure_ids` is the set of ids one erase covers: the id sent.
+* :func:`erasure_ids` is the set of ids one erase covers: the whole person of
+  the id sent (#449), ``person_of(id).ids`` read without its row limit, so a
+  person linked past the cap by other means is still erased whole. It is read
+  before anything is deleted: once the links are gone the set is the one id.
+* **Links last.** ``identity_aliases`` is erased in the final transaction, and
+  only when every other table is done. That transaction first takes
+  ``pg_advisory_xact_lock(LOCK_SPACE, k)`` for each of ``lock_keys`` of the
+  set's ``hashtext`` values, one statement per key in ascending order: the
+  keys and order :func:`backend.app.services.identity_aliases.link` takes,
+  imported, so the two never wait on each other in a cycle. It then reads the
+  set again: if a link added an id, no link is deleted and the answer is
+  ``complete: false`` (the next call's set has the new id). Through ``link`` a
+  set has at most 101 ids; a set of thousands written by hand needs as many
+  keys, can exhaust the server's shared memory for them, and the final
+  transaction then fails (500, start entry only).
 * **The record** is two ``audit_logs`` entries per call with the same
   ``entity_id``, the response's ``receipt_id``. The start entry
   (``app_user_erase_started``) is committed before anything is deleted; if it
@@ -54,7 +68,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Sequence, Tuple
 from uuid import UUID, uuid4
 
-from sqlalchemy import and_, delete, func, literal_column, select, tuple_
+from sqlalchemy import and_, delete, func, literal_column, or_, select, text, tuple_
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
@@ -65,10 +79,12 @@ from backend.app.models.event_dedup_key import EventDedupKey
 from backend.app.models.feature_flag import FeatureFlag, FeatureFlagOverride
 from backend.app.models.global_holdout import GlobalHoldout
 from backend.app.models.holdout_population import HoldoutPopulation
+from backend.app.models.identity_alias import IdentityAlias
 from backend.app.models.llm_experiment import LLMEvaluation
 from backend.app.models.metrics.metric import ErrorLog, RawMetric
 from backend.app.models.segment import Segment, SegmentMember
 from backend.app.services.audit_service import AuditActor, AuditService
+from backend.app.services.identity_aliases import LOCK_SPACE, lock_keys
 
 logger = logging.getLogger(__name__)
 
@@ -100,21 +116,31 @@ class ErasedTable:
 
     ``parent`` is ``(column, parent model)`` for a table whose only index on
     the id leads with that column: its rows are deleted in one statement
-    through the parent's primary key.
+    through the parent's primary key. ``also`` names more id columns, matched
+    with ``column``. A ``last`` table is erased in the final transaction, after
+    every other table is done, never in the chunk phase.
     """
 
     model: Any
     column: str
     parent: Optional[Tuple[str, Any]] = None
+    also: Tuple[str, ...] = ()
+    last: bool = False
 
     @property
     def name(self) -> str:
         return self.model.__table__.name
 
+    @property
+    def columns(self) -> Tuple[str, ...]:
+        return (self.column, *self.also)
+
 
 #: Every table that stores an app user's id, in the order they are erased.
 #: ``event_dedup_keys`` comes after ``events``: a call that ends between them
-#: leaves keys, which only refuse an ``event_id`` sent again.
+#: leaves keys, which only refuse an ``event_id`` sent again. The links come
+#: last: a call that ends before them leaves the person's set whole for the
+#: next one.
 ERASED_TABLES: Tuple[ErasedTable, ...] = (
     ErasedTable(Event, "user_id"),
     ErasedTable(RawMetric, "user_id"),
@@ -125,6 +151,7 @@ ERASED_TABLES: Tuple[ErasedTable, ...] = (
     ErasedTable(HoldoutPopulation, "user_id", ("holdout_id", GlobalHoldout)),
     ErasedTable(SegmentMember, "member_id", ("segment_id", Segment)),
     ErasedTable(FeatureFlagOverride, "user_id", ("feature_flag_id", FeatureFlag)),
+    ErasedTable(IdentityAlias, "user_id", also=("anonymous_id",), last=True),
 )
 
 
@@ -156,19 +183,40 @@ class EraseNotFinished(EraseFailed):
 
 
 def erasure_ids(db: Session, user_id: str) -> Tuple[str, ...]:
-    """The ids one erase of *user_id* covers: the id itself, matched exactly."""
-    return (user_id,)
+    """The ids one erase of *user_id* covers: its person, matched exactly.
+
+    The known id ``k`` is the one *user_id* is linked to as an anonymous id,
+    or *user_id* itself; the set is ``k`` and every anonymous id linked to
+    ``k``, in the order ``person_of`` gives them: ``person_of(user_id).ids``,
+    read with no row limit. An id never linked is a set of one.
+    """
+    aliases = IdentityAlias.__table__
+    known = db.execute(
+        select(aliases.c.user_id).where(aliases.c.anonymous_id == user_id)
+    ).scalar_one_or_none()
+    known = user_id if known is None else known
+    linked = (
+        db.execute(select(aliases.c.anonymous_id).where(aliases.c.user_id == known))
+        .scalars()
+        .all()
+    )
+    return (known, *sorted(linked))
 
 
 def statements(table: ErasedTable, ids: Sequence[str]) -> Tuple[Any, Any]:
     """``(delete, check)`` for *table* and *ids*.
 
     ``delete`` removes at most :data:`CHUNK_ROWS` rows (all of them, through
-    the parent's primary key, for a table with a ``parent``); ``check``
-    selects one row that is left, if any.
+    the parent's primary key, for a table with a ``parent``, and for a
+    ``last`` table); ``check`` selects one row that is left, if any.
     """
     t = table.model.__table__
-    match = t.c[table.column].in_(list(ids))
+    match = or_(*(t.c[column].in_(list(ids)) for column in table.columns))
+    if table.last:
+        return (
+            delete(t).where(match),
+            select(literal_column("1")).select_from(t).where(match).limit(1),
+        )
     if table.parent is not None:
         parent_column, parent_model = table.parent
         where = and_(t.c[parent_column].in_(select(parent_model.__table__.c.id)), match)
@@ -247,6 +295,39 @@ def _erase_table(
             return deleted, "done"
 
 
+def advisory_keys(db: Session, ids: Sequence[str]) -> list:
+    """``link``'s keys for *ids*: their ``hashtext`` values through the
+    imported ``lock_keys`` (de-duplicated, ascending)."""
+    hashes = db.execute(
+        text("SELECT hashtext(id) FROM unnest(CAST(:ids AS text[])) AS id"),
+        {"ids": list(ids)},
+    ).scalars()
+    return lock_keys(hashes)
+
+
+def _erase_links(
+    db: Session, user_id: str, ids: Sequence[str], deleted: Dict[str, int]
+) -> bool:
+    """Delete the person's links in the final transaction; True if done.
+
+    Takes ``link``'s key for each id, one statement per key in ascending
+    order, then reads the set again: a set that changed since the call read
+    it (a link added an id) deletes no link and answers False.
+    """
+    for key in advisory_keys(db, ids):
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(:space, :key)"),
+            {"space": LOCK_SPACE, "key": key},
+        )
+    if set(erasure_ids(db, user_id)) != set(ids):
+        return False
+    for table in ERASED_TABLES:
+        if table.last:
+            delete_rows, _ = statements(table, ids)
+            deleted[table.name] += db.execute(delete_rows).rowcount
+    return True
+
+
 def erase_app_user(db: Session, user_id: str, actor: Any) -> EraseResult:
     """Erase *user_id*'s rows from every table in :data:`ERASED_TABLES`.
 
@@ -271,11 +352,14 @@ def erase_app_user(db: Session, user_id: str, actor: Any) -> EraseResult:
         raise EraseNotStarted(exc) from None
 
     try:
+        # The person, before anything is deleted: afterwards it is one id.
         ids = erasure_ids(db, user_id)
         deleted = {table.name: 0 for table in ERASED_TABLES}
         complete = True
         chunk_deadline = deadline - FINAL_RESERVE_S
         for table in ERASED_TABLES:
+            if table.last:
+                continue
             n, ended = _erase_table(db, table, ids, chunk_deadline)
             deleted[table.name] += n
             if ended != "done":
@@ -283,6 +367,8 @@ def erase_app_user(db: Session, user_id: str, actor: Any) -> EraseResult:
                 break
 
         apply_settings(db, _clamped(_ms_left(deadline), FINAL_RESERVE_S * 1000))
+        if complete:
+            complete = _erase_links(db, user_id, ids, deleted)
         AuditService.record(
             db,
             actor=who,

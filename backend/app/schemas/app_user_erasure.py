@@ -44,6 +44,9 @@ class AppUserEraseCounts(BaseModel):
     holdout_population: int = Field(..., description="Global-holdout rows.")
     segment_members: int = Field(..., description="Id-list segment memberships.")
     feature_flag_overrides: int = Field(..., description="Per-user flag overrides.")
+    identity_aliases: int = Field(
+        ..., description="Links between the person's ids, deleted last."
+    )
 
 
 class AppUserEraseResponse(BaseModel):
@@ -59,9 +62,16 @@ class AppUserEraseResponse(BaseModel):
     complete: bool = Field(
         ...,
         description=(
-            "True when no row of the id is left. False when time ran out or "
-            "a statement timed out: send the same request again."
+            "True when no row of the person's ids is left. False when time ran "
+            "out, a statement timed out or a link added an id during the call: "
+            "send the same request again."
         ),
     )
-    ids_erased: int = Field(..., description="How many ids the erase covered.")
+    ids_erased: int = Field(
+        ...,
+        description=(
+            "How many ids the erase covered: the id sent and every id linked to "
+            "the same person."
+        ),
+    )
     deleted: AppUserEraseCounts

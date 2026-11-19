@@ -180,15 +180,16 @@ def test_every_erased_column_is_an_app_user_id(profile):
     """Each id column is a string of the width tracking stores (255)."""
     tables, _ = profile
     for table in ERASED_TABLES:
-        column = tables[table.name].c[table.column]
-        assert isinstance(column.type, String), (table.name, table.column)
-        assert column.type.length == 255, (table.name, table.column)
-        assert _id_like(table.column), (table.name, table.column)
+        for name in table.columns:
+            column = tables[table.name].c[name]
+            assert isinstance(column.type, String), (table.name, name)
+            assert column.type.length == 255, (table.name, name)
+            assert _id_like(name), (table.name, name)
 
 
 def test_kept_tables_have_no_unlisted_id_column(profile):
     tables, loaded = profile
-    erased = {(t.name, t.column) for t in ERASED_TABLES}
+    erased = {(t.name, c) for t in ERASED_TABLES for c in t.columns}
     platform = {**PLATFORM_CORE, **(PLATFORM_MODULES if loaded else {})}
     listed = set(platform) | set(KEPT_COLUMNS)
     problems = []
@@ -241,7 +242,8 @@ def test_each_erased_table_is_read_through_an_index(profile):
         leads = [[c.name for c in index.columns] for index in t.indexes]
         leads.append([c.name for c in t.primary_key.columns])
         if table.parent is None:
-            assert any(cols[:1] == [table.column] for cols in leads), table.name
+            for column in table.columns:
+                assert any(cols[:1] == [column] for cols in leads), (table.name, column)
         else:
             wanted = [table.parent[0], table.column]
             assert any(cols[:2] == wanted for cols in leads), table.name
@@ -268,6 +270,13 @@ def test_the_statement_shape_of_each_table(table):
     delete, check = (_sql(s) for s in statements(table, ["needle"]))
     t, c = table.name, table.column
     match = f"{t}.{c} IN ('needle')"
+    if table.last:
+        # The links: every id column, all rows at once, in the final transaction.
+        both = " OR ".join(f"{t}.{column} IN ('needle')" for column in table.columns)
+        assert table.columns == ("user_id", "anonymous_id")
+        assert delete == f"DELETE FROM {t} WHERE {both}"
+        assert check == f"SELECT 1 FROM {t} WHERE {both} LIMIT 1"
+        return
     if table.parent is not None:
         column, parent = table.parent
         p = parent.__table__.name

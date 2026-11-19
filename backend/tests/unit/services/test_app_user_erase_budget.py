@@ -27,10 +27,21 @@ TIMEOUT = re.compile(r"set_config\('statement_timeout', '([^']*)'")
 
 
 class _Result:
+    """Nothing found: no row, no link."""
+
     rowcount = 0
 
     def first(self):
         return None
+
+    def scalar_one_or_none(self):
+        return None
+
+    def scalars(self):
+        return self
+
+    def all(self):
+        return []
 
 
 class FakeSession:

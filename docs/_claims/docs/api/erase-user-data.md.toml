@@ -39,8 +39,9 @@ text = "Before you erase"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Stop sending the id first: rows your app sends during or after the erase are stored."
+text = "Stop sending the id, and linking it, first: rows your app sends during or after the erase are stored."
 by = [
+    "test:backend/tests/integration/api/test_app_user_erase_identity_aliases.py::test_a_link_waiting_on_the_erase_is_stored_after_it",
     "test:backend/tests/integration/api/test_app_user_erase_api.py::test_an_event_sent_again_after_an_erase_is_stored_again",
     "test:backend/tests/integration/api/test_app_user_erase_api.py::test_a_returning_user_is_assigned_afresh",
 ]
@@ -116,8 +117,9 @@ text = "200 | Erased, or nothing was stored under the id"
 by = ["test:backend/tests/integration/api/test_app_user_erase_api.py::test_the_response_counts_each_table_exactly"]
 
 [[unit]]
-text = "200 with complete: false | Time ran out, or a statement timed out: send the same request again"
+text = "200 with complete: false | Time ran out, a statement timed out, or a link added an id to the person during the call: send the same request again"
 by = [
+    "test:backend/tests/integration/api/test_app_user_erase_identity_aliases.py::test_a_link_made_during_the_erase_answers_complete_false_then_a_resend_erases_it",
     "test:backend/tests/integration/api/test_app_user_erase_api.py::test_a_failure_part_way_is_reported_and_resumable",
     "test:backend/tests/integration/api/test_app_user_erase_api.py::test_the_budget_ends_a_call_and_a_resend_resumes",
 ]
@@ -212,6 +214,33 @@ by = ["test:backend/tests/integration/api/test_app_user_erase_api.py::test_nothi
 [[unit]]
 text = "feature_flag_overrides | Per-user flag overrides"
 by = ["test:backend/tests/integration/api/test_app_user_erase_api.py::test_nothing_of_the_user_remains_in_any_table"]
+
+[[unit]]
+text = "identity_aliases | Links between the person's ids, deleted last"
+by = [
+    "test:backend/tests/integration/api/test_app_user_erase_identity_aliases.py::test_links_naming_the_id_in_either_column_are_deleted",
+    "test:backend/tests/integration/api/test_app_user_erase_identity_aliases.py::test_a_link_made_during_the_erase_answers_complete_false_then_a_resend_erases_it",
+    "test:backend/tests/integration/api/test_app_user_erase_identity_aliases.py::test_a_call_that_stops_early_keeps_the_links_and_a_resend_erases_the_person",
+]
+
+[[unit]]
+text = "A user linked to other ids"
+by = ["exempt:label"]
+
+[[unit]]
+text = "If the user was linked to other ids, the erase covers every id of that person (up to 101); ids_erased says how many."
+by = [
+    "test:backend/tests/integration/api/test_app_user_erase_identity_aliases.py::test_an_anonymous_ids_rows_held_for_the_person_are_erased",
+    "test:backend/tests/integration/api/test_app_user_erase_identity_aliases.py::test_a_person_at_the_cap_is_erased_whole",
+]
+
+[[unit]]
+text = "Erasing an anonymous id erases the whole person."
+by = ["test:backend/tests/integration/api/test_app_user_erase_identity_aliases.py::test_links_naming_the_id_in_either_column_are_deleted"]
+
+[[unit]]
+text = "If a link adds an id while the erase runs, the answer is complete: false; send the request again."
+by = ["test:backend/tests/integration/api/test_app_user_erase_identity_aliases.py::test_a_link_made_during_the_erase_answers_complete_false_then_a_resend_erases_it"]
 
 [[unit]]
 text = "A table that stores a user_id and is not in this list is a defect; report it."

@@ -7,7 +7,7 @@ undo. Restoring a backup brings back everything in it, not only this user.
 
 ## Before you erase
 
-Stop sending the id first: rows your app sends during or after the erase are stored. An id
+Stop sending the id, and linking it, first: rows your app sends during or after the erase are stored. An id
 many visitors share (an SDK default such as `anonymous`) erases all of them. The id is
 erased across every experiment and workspace of the installation. Because an erase cannot
 be undone, the accounts that can run it should use
@@ -36,7 +36,7 @@ A `200` answers what this call deleted, one count per table:
   "deleted": {
     "events": 4, "raw_metrics": 2, "error_logs": 0, "llm_evaluations": 0,
     "event_dedup_keys": 1, "assignments": 1, "holdout_population": 1,
-    "segment_members": 0, "feature_flag_overrides": 0
+    "segment_members": 0, "feature_flag_overrides": 0, "identity_aliases": 0
   }
 }
 ```
@@ -47,7 +47,7 @@ id.
 | Status | When |
 |---|---|
 | `200` | Erased, or nothing was stored under the id |
-| `200` with `complete: false` | Time ran out, or a statement timed out: send the same request again |
+| `200` with `complete: false` | Time ran out, a statement timed out, or a link added an id to the person during the call: send the same request again |
 | `401` | No token, an invalid token, or an API key alone |
 | `403` | Not a superuser (`Not enough permissions`), or demo mode |
 | `422` | The body or `user_id` is missing, empty, longer than 255 characters, not text, holds NUL or an unpaired surrogate, or the body has another field |
@@ -71,8 +71,16 @@ Every row of these tables whose id column holds the id:
 | `holdout_population` | Global-holdout membership |
 | `segment_members` | Membership of id-list segments |
 | `feature_flag_overrides` | Per-user flag overrides |
+| `identity_aliases` | Links between the person's ids, deleted last |
 
 A table that stores a `user_id` and is not in this list is a defect; report it.
+
+## A user linked to other ids
+
+If the user was linked to other ids, the erase covers every id of that person (up to
+101); `ids_erased` says how many. Erasing an anonymous id erases the whole person. If a
+link adds an id while the erase runs, the answer is `complete: false`; send the request
+again.
 
 ## What is not deleted
 

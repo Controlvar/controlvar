@@ -504,6 +504,11 @@
             "title": "Holdout Population",
             "type": "integer"
           },
+          "identity_aliases": {
+            "description": "Links between the person's ids, deleted last.",
+            "title": "Identity Aliases",
+            "type": "integer"
+          },
           "llm_evaluations": {
             "description": "LLM experiment evaluations.",
             "title": "Llm Evaluations",
@@ -529,7 +534,8 @@
           "assignments",
           "holdout_population",
           "segment_members",
-          "feature_flag_overrides"
+          "feature_flag_overrides",
+          "identity_aliases"
         ],
         "title": "AppUserEraseCounts",
         "type": "object"
@@ -559,7 +565,7 @@
         "description": "What one call did. Counts only: never the id.",
         "properties": {
           "complete": {
-            "description": "True when no row of the id is left. False when time ran out or a statement timed out: send the same request again.",
+            "description": "True when no row of the person's ids is left. False when time ran out, a statement timed out or a link added an id during the call: send the same request again.",
             "title": "Complete",
             "type": "boolean"
           },
@@ -567,7 +573,7 @@
             "$ref": "#/components/schemas/AppUserEraseCounts"
           },
           "ids_erased": {
-            "description": "How many ids the erase covered.",
+            "description": "How many ids the erase covered: the id sent and every id linked to the same person.",
             "title": "Ids Erased",
             "type": "integer"
           },

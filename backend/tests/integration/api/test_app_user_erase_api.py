@@ -40,7 +40,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional
 
 import pytest
-from sqlalchemy import event, func, select, text, update
+from sqlalchemy import event, func, or_, select, text, update
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import sessionmaker
 
@@ -79,6 +79,7 @@ from backend.app.services.global_holdout_service import (
     GlobalHoldoutService,
     holdout_bucket,
 )
+from backend.app.services.identity_aliases import link
 from backend.tests.integration.api.route_helpers import (
     SCHEMA,
     api_client,
@@ -322,8 +323,9 @@ def _counts(fresh, ids: Iterable[str]) -> Dict[str, int]:
         found = {}
         for table in ERASED_TABLES:
             t = table.model.__table__
+            match = or_(*(t.c[column].in_(ids) for column in table.columns))
             found[table.name] = session.execute(
-                select(func.count()).select_from(t).where(t.c[table.column].in_(ids))
+                select(func.count()).select_from(t).where(match)
             ).scalar_one()
         return found
     finally:
@@ -453,6 +455,8 @@ def test_nothing_of_the_user_remains_in_any_table(
 ):
     needle = _outside_the_holdout(world)
     _seed(client, db_session, world, developer, needle)
+    # A link (#449): an anonymous id of the same person, in identity_aliases.
+    link(db_session, f"{needle}-anonymous", needle)
     # An older entry that mentions the id: the residual, never erased.
     AuditService.record(
         db_session,
@@ -514,7 +518,7 @@ def test_the_response_counts_each_table_exactly(
 
 
 @pytest.mark.regression
-@pytest.mark.parametrize("held", ORDER)
+@pytest.mark.parametrize("held", [t.name for t in ERASED_TABLES if not t.last])
 def test_a_failure_part_way_is_reported_and_resumable(
     held, client, db_session, engine, fresh, world, superuser, developer, monkeypatch
 ):
@@ -1113,7 +1117,12 @@ def test_every_chunk_turns_sequential_scans_off_and_uses_its_tables_shape(
     assert set(deletes) == set(ORDER)
     for table in ERASED_TABLES:
         for sql in deletes[table.name]:
-            if table.parent is not None:
+            if table.last:
+                assert (
+                    f"{table.name}.user_id IN" in sql
+                    and f"OR {SCHEMA}.{table.name}.anonymous_id IN" in sql
+                ), sql
+            elif table.parent is not None:
                 column, parent = table.parent
                 assert (
                     f"{column} IN (SELECT {SCHEMA}.{parent.__table__.name}.id" in sql
