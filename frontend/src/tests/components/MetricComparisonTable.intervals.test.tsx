@@ -21,8 +21,6 @@
  *  - F13 the footnotes;
  *  - C16 the note when the interval and the significance disagree.
  */
-import fs from 'fs';
-import path from 'path';
 import React from 'react';
 import { render, screen, within } from '@testing-library/react';
 import axe from 'axe-core';
@@ -510,12 +508,8 @@ describe('C16: the interval and the significance disagree', () => {
     );
   });
 
-  const snapshot = JSON.parse(
-    fs.readFileSync(
-      path.join(__dirname, '..', '..', '..', '..', 'docs', 'api', 'openapi-v1.full.json'),
-      'utf8',
-    ),
-  );
+  // Every StatisticalTestUsed (a Record over the type cannot miss one;
+  // analysedAsRate.test.ts holds the type to the API's StatisticalTest).
   const testNames: Record<StatisticalTestUsed, string> = {
     fisher_exact: "Fisher's exact test",
     z_test_proportions: 'the z-test for two proportions',
@@ -523,7 +517,7 @@ describe('C16: the interval and the significance disagree', () => {
     permutation_t_test: 'the permutation test',
   };
 
-  it.each([...snapshot.components.schemas.StatisticalTest.enum] as StatisticalTestUsed[])(
+  it.each(Object.keys(testNames) as StatisticalTestUsed[])(
     'names %s in the note, never "the test"',
     (test) => {
       renderCase(significantMeanReachingZero(test));
