@@ -344,6 +344,9 @@ test.describe("after the bound", () => {
     await replaceAll(page, "p");
     await page.goto(`${ORIGIN}/next`, { waitUntil: "load" });
     await expect.poll(() => received.length).toBe(5);
-    expect(received.map((report) => report.metadata.index)).toEqual([2, 0, 1, 3, 4]);
+    // The four reports sent together as the page goes away are separate requests, so they arrive in any order.
+    expect(received[0].metadata.index, "the report sent when the tab went hidden").toBe(2);
+    const atPagehide = received.slice(1).map((report) => Number(report.metadata.index));
+    expect(atPagehide.sort((a, b) => a - b), "the reports sent as the page went away").toEqual([0, 1, 3, 4]);
   });
 });
