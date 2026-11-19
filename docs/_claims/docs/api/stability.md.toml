@@ -1402,3 +1402,15 @@ by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
+
+[[unit]]
+text = "POST /api/v1/users/me/password | #501 | A change signs out every session of the account: every access token issued before it, the one that sent the request included, answers 401 from then on, and a sign-in that has not finished starts again. For an account that signs in with its password alone the operation answers 200 with what POST /api/v1/auth/login answers (access_token, token_type, expires_in and user), where it answered an empty 204; for an account with two-step sign-in on, or required for its role, it still answers 204. The answer with a token is recorded as a user_login audit entry. The OpenAPI document changes: the operation's description, and its 200 response, now the LoginResponse schema, beside a 204 response."
+by = [
+    "test:backend/tests/integration/api/test_own_password_change.py::test_a_token_issued_before_the_change_is_refused",
+    "test:backend/tests/integration/api/test_password_change_ends_sessions.py::test_the_answer_carries_a_new_token_and_the_sending_token_is_refused",
+    "test:backend/tests/integration/api/test_password_change_ends_sessions.py::test_an_account_that_signs_in_with_a_second_step_gets_204_and_signs_in_again",
+    "test:backend/tests/integration/api/test_password_change_ends_sessions.py::test_a_code_step_begun_before_the_change_starts_again",
+    "test:backend/tests/integration/api/test_password_change_ends_sessions.py::test_the_answer_with_a_token_is_recorded_as_one_sign_in",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]

@@ -20,7 +20,10 @@ import { currentStep, nextCode, storedAndUrl, totp } from "./totp";
  * the authenticator app. A wrong first code is refused with the clock hint;
  * the right one gives the recovery codes, and Done (once they are saved)
  * signs it in. Its account page then offers no Turn off, and the next sign-in
- * asks for a code. The account is created and deleted here.
+ * asks for a code. Then it changes its password: for a role that requires
+ * two-step sign-in the change ends every session, this one too (#501), so the
+ * page says so and its Sign in opens the sign-in form. The account is created
+ * and deleted here.
  */
 
 /** The password step: waits out the 10-a-minute limit. Returns its answer. */
@@ -155,6 +158,39 @@ test.describe("Journey: two-step sign-in required for a role", () => {
         expect((await verified).status()).toBe(200);
         await page.waitForURL(/\/experiments$/, { timeout: 20_000 });
         expect(await loginPage.storedToken()).toBeTruthy();
+      });
+
+      await test.step("changing its password signs every session out, this one too (#501)", async () => {
+        const changed = `Changed${stamp}y`;
+        await page.goto("/account/password");
+        await page.getByTestId("current-password-input").fill(password);
+        await page.getByTestId("new-password-input").fill(changed);
+        await page.getByTestId("confirm-password-input").fill(changed);
+        const answer = page.waitForResponse(
+          (r) => new URL(r.url()).pathname === "/api/v1/users/me/password" && r.request().method() === "POST",
+        );
+        await page.getByTestId("change-password-submit").click();
+        expect((await answer).status(), "the change, for a role that requires two-step sign-in").toBe(204);
+        const outcome = page.getByTestId("change-password-outcome");
+        await expect(outcome).toHaveAttribute("data-outcome", "signed-out", { timeout: 15_000 });
+        await expect(outcome).toHaveAttribute("role", "status");
+        await expect(outcome).toHaveText(
+          "Your password has been changed, and every session has been signed out, this one too. " +
+            "Sign in again with the new password.",
+        );
+
+        await page.getByTestId("change-password-sign-in").click();
+        await page.waitForURL(/\/login$/, { timeout: 15_000 });
+        await expect(loginPage.form).toBeVisible({ timeout: 15_000 });
+        expect(await loginPage.storedToken()).toBeNull();
+
+        // A protected page now lands on the sign-in page and stays there.
+        await page.goto("/experiments");
+        await page.waitForURL(/\/login(\?|$)/, { timeout: 20_000 });
+        await expect(loginPage.form).toBeVisible({ timeout: 15_000 });
+        await page.waitForTimeout(1_000);
+        expect(new URL(page.url()).pathname).toBe("/login");
+        expect(await loginPage.storedToken()).toBeNull();
       });
     } finally {
       await context.close();

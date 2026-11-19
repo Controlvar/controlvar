@@ -1074,7 +1074,7 @@ count = 2
 [[unit]]
 text = "Response: 204 No Content"
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
-count = 3
+count = 2
 
 [[unit]]
 text = "Errors: 400 \"Superusers cannot delete themselves\" when a superuser deletes their own account."
@@ -1130,16 +1130,35 @@ text = "Available when AUTH_PROVIDER is local; otherwise the route answers 404 b
 by = ["test:backend/tests/integration/api/test_own_password_change.py::test_cognito_answers_404_before_validating_the_body"]
 
 [[unit]]
-text = "Changing the password does not end other sessions: a token issued before the change keeps working until it expires."
-by = ["test:backend/tests/integration/api/test_own_password_change.py::test_a_token_issued_before_the_change_keeps_working"]
+text = "Changing the password signs out every session of the account: every token issued before the change answers 401, the one that sent the request included, and a sign-in that has not finished starts again."
+by = [
+    "test:backend/tests/integration/api/test_own_password_change.py::test_a_token_issued_before_the_change_is_refused",
+    "test:backend/tests/integration/api/test_password_change_ends_sessions.py::test_the_answer_carries_a_new_token_and_the_sending_token_is_refused",
+    "test:backend/tests/integration/api/test_password_change_ends_sessions.py::test_a_code_step_begun_before_the_change_starts_again",
+    "test:backend/tests/integration/api/test_password_change_ends_sessions.py::test_setting_two_step_up_begun_before_the_change_starts_again",
+]
 
 [[unit]]
-text = "To end them straight away, an administrator sets is_active to false."
+text = "An administrator can also end every session of an account by setting is_active to false."
 by = ["test:backend/tests/unit/api/test_dependency_injection.py"]
 
 [[unit]]
 text = "Request Body: new_password follows the same rules as a new account's."
 by = ["test:backend/tests/integration/api/test_own_password_change.py::test_a_weak_new_password_is_422"]
+
+[[unit]]
+text = "Response: 200 with what POST /api/v1/auth/login answers (a new access_token, token_type, expires_in and user): use that token from then on."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/integration/api/test_password_change_ends_sessions.py::test_the_answer_carries_a_new_token_and_the_sending_token_is_refused",
+]
+
+[[unit]]
+text = "For an account with two-step sign-in on, or required for its role, 204 No Content instead: every session has ended, this one too, and it signs in again."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/integration/api/test_password_change_ends_sessions.py::test_an_account_that_signs_in_with_a_second_step_gets_204_and_signs_in_again",
+]
 
 [[unit]]
 text = "Errors: 403 when current_password is missing or incorrect (\"The current password is incorrect.\"), or when the account has no password of its own; 422 when new_password breaks the rules; 423 with Retry-After after too many wrong current passwords (the same count as failed logins, 10 within 15 minutes by default); 429 after 5 requests a minute from one address."

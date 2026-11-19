@@ -24,6 +24,7 @@ from backend.app.core.security import (
     decode_local_token,
     hash_api_key,
     oauth2_scheme,
+    stamp_is_current,
 )
 from backend.app.db import request_sessions
 from backend.app.db.session import SessionLocal
@@ -210,7 +211,10 @@ def _authenticate_local_token(token: str, db: Session) -> User:
     """
     Resolve a locally issued JWT to its ``User`` row.
 
-    401 for any decode/lookup failure, 400 when the account is inactive.
+    401 for any decode/lookup failure, 400 when the account is inactive, and
+    401 for a token issued before the account's password last changed (its
+    ``pwv`` stamp no longer matches, ``security.stamp_is_current``; #501).
+    That check comes last, so every answer reachable before it is unchanged.
     """
     try:
         claims = decode_local_token(token)
@@ -231,6 +235,13 @@ def _authenticate_local_token(token: str, db: Session) -> User:
         raise _credentials_exception()
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
+    if not stamp_is_current(claims, user):
+        # The reason and the account only: never the token or its claims.
+        logger.info(
+            "Local token refused: the account's password changed after it was "
+            f"issued (user {user.id})"
+        )
+        raise _credentials_exception()
     return user
 
 

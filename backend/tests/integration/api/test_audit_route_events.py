@@ -61,6 +61,8 @@ from backend.app.services.audit_service import (
     record_experiment_change,
 )
 from backend.app.services.cognito_accounts import cognito_external_id
+from backend.tests.smoke.test_audit_inventory import INVENTORY as AUDIT_INVENTORY
+from backend.tests.smoke.test_audit_inventory import Audited
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_db]
 
@@ -1325,6 +1327,32 @@ def test_failed_sign_in_writes_nothing(client, fresh, developer):
     )
     assert response.status_code == 401
     assert w.rows() == []
+
+
+def test_a_password_change_that_answers_a_token_is_recorded_as_a_sign_in(
+    client, fresh, developer
+):
+    """``POST /users/me/password`` answers a new access token for an account
+    that signs in with its password alone (#501): one ``user_login`` entry,
+    with how the token was issued, and neither password nor the token."""
+    new = "Ae221-Changed-Passw0rd"
+    w = Written(fresh)
+    response = client.post(
+        f"{V1}/users/me/password",
+        json={"current_password": PASSWORD, "new_password": new},
+        headers=_auth(developer),
+    )
+    assert response.status_code == 200, response.text
+    row = _one(w, "user_login", "user", developer.id, developer)
+    assert _values(row) == (None, {"provider": "local", "via": "password_change"})
+    for column in (row.old_value, row.new_value, row.reason, row.entity_name):
+        assert PASSWORD not in (column or "")
+        assert new not in (column or "")
+        assert response.json()["access_token"] not in (column or "")
+    # The inventory says so too: the smoke test classifies routes without
+    # running them, so this is where its entry meets what the route writes.
+    entry = AUDIT_INVENTORY[("POST", f"{V1}/users/me/password")]
+    assert isinstance(entry, Audited) and ActionType.USER_LOGIN in entry.actions, entry
 
 
 # --- G3 and G5: Cognito sign-in -------------------------------------------------
