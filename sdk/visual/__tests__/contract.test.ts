@@ -6,7 +6,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { KEYS, WRITTEN } from '../src/keys';
-import { MAX_REPORTS, MESSAGES } from '../src/reports';
+import { MAX_REPORTS, MESSAGES, OWN_UI_MESSAGE } from '../src/reports';
 
 const CONTRACT = join(__dirname, '..', '..', '..', 'tests', 'sdk-contract');
 const STORAGE = JSON.parse(readFileSync(join(CONTRACT, 'visual-storage-keys.json'), 'utf8'));
@@ -52,8 +52,14 @@ describe('the error reports', () => {
     expect(new Set(Object.values(MESSAGES)).size).toBe(Object.keys(MESSAGES).length);
   });
 
-  test('the types sent today are exactly visual_change_not_applied', () => {
+  test('the types sent today are exactly visual_change_not_applied and own_ui', () => {
     const sent = REPORTS.types.filter((type: { sent: boolean }) => type.sent).map((type: { error_type: string }) => type.error_type);
-    expect(sent).toEqual(['visual_change_not_applied']);
+    expect(sent).toEqual(['visual_change_not_applied', 'own_ui']);
+  });
+
+  test("own_ui's metadata is exactly the change's index, with one fixed message", () => {
+    const ownUi = REPORTS.types.find((type: { error_type: string }) => type.error_type === 'own_ui');
+    expect(ownUi.metadata_keys).toEqual(['index']);
+    expect(Object.values(MESSAGES)).not.toContain(OWN_UI_MESSAGE);
   });
 });

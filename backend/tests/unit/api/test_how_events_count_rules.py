@@ -138,10 +138,13 @@ def test_every_sdk_directory_is_listed():
 
 
 def test_the_visual_script_sends_events_through_batch_only():
-    """Its quoted tracking routes are exactly the page's changes, the error
-    reports and the batch route: never /tracking/track or /tracking/events."""
+    """Its quoted tracking routes are exactly the page's changes, a preview
+    link's changes (which record nothing), the error reports and the batch
+    route: never /tracking/track or /tracking/events."""
     routes = set(VISUAL_ROUTE_LITERAL.findall(_source(VISUAL_SOURCE)))
-    assert routes == {"visual", "errors", "batch"}, f"visual has quoted routes {routes}"
+    assert routes == {"visual", "visual/preview", "errors", "batch"}, (
+        f"visual has quoted routes {routes}"
+    )
 
 
 @pytest.mark.parametrize("name", sorted(NOT_AN_SDK))

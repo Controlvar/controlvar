@@ -21,9 +21,10 @@
     },
     {
       "error_type": "own_ui",
-      "sent": false,
+      "sent": true,
       "metadata_keys": ["index"],
-      "index": "The change's position in the variant's changes, from 0."
+      "index": "The change's position in the variant's changes, from 0.",
+      "means": "The change's selector matched the page's root element (<html>) or the script's own banner, which the script never changes."
     },
     {
       "error_type": "goal_not_found",

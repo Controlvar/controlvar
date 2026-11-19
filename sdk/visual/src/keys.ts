@@ -26,5 +26,8 @@ export const KEYS = {
   editorOpen: "controlvar_editor_open",
 } as const;
 
+/** Every key's prefix; revokeConsent() deletes every key that has it. */
+export const PREFIX = "controlvar_";
+
 /** The keys this version of the script writes. */
 export const WRITTEN = [KEYS.uid, KEYS.assigned, KEYS.pages, KEYS.backoff, KEYS.preview, KEYS.editorOpen] as const;

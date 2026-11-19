@@ -14,6 +14,16 @@
  * current path. When the path has changed it undoes the changes it made and
  * asks again for the new path, unless fresh rules cover nothing there. A
  * change of the part after `#` alone asks nothing.
+ *
+ * In a tab showing a preview link (preview.ts) it asks for that link's
+ * variant instead (POST /api/v1/tracking/visual/preview, which records
+ * nothing), applies it only on the experiment's pages, and shows the preview
+ * banner (own-ui.ts) with [Exit preview]. Every other experiment is off, it
+ * keeps no page rules or assignments, sets no cookie and track() sends nothing.
+ *
+ * Nothing is read from the visitor's cookie, stored or sent unless
+ * `allowed()`: consent given (or not needed) and not revoked. An answer that
+ * arrives after revokeConsent() is dropped.
  */
 import { createApplier, type Applier } from "./apply";
 import { answerBound, type Bound } from "./bound";
@@ -21,10 +31,24 @@ import type { Captures } from "./captures";
 import type { Config } from "./config";
 import { hidePage, type Hider } from "./hide";
 import { KEYS } from "./keys";
-import { keepRules, readAnswerRules, rulesSkip } from "./pages";
+import { createOwnUi, type OwnUi } from "./own-ui";
+import { keepRules, readAnswerRules, ruleMatches, rulesSkip } from "./pages";
+import {
+  endPreview,
+  EXIT_PREVIEW,
+  PREVIEW_FAILED,
+  PREVIEW_GONE,
+  PREVIEW_LABEL,
+  PREVIEW_LOADING,
+  PREVIEW_PATH,
+  PREVIEW_SCOPED_KEY,
+  previewElsewhere,
+  previewShowing,
+} from "./preview";
 import { createReporter } from "./reports";
 import { FORMAT_VERSION } from "./rules";
 import { backoffActive, startBackoff, type Send } from "./send";
+import { normalizeHost } from "./url";
 import { validateChanges } from "./validate";
 import { visitorId } from "./visitor";
 
@@ -54,6 +78,10 @@ export interface RuntimeEnv {
   silence(): void;
   /** The page's bound (bound.ts), made in the first run. */
   bound: Bound;
+  /** Whether the script may read the visitor's id, store or send now: consent given (or not needed), not revoked. */
+  allowed(): boolean;
+  /** The preview link's token this tab shows, or null for an ordinary page view; read once, by start(). */
+  previewToken(): string | null;
 }
 
 const NO_HIDE: Hider = { show: () => undefined, hidden: false };
@@ -97,9 +125,14 @@ export function createRuntime(env: RuntimeEnv): Runtime {
   /** The path last asked about, and how many times the script has asked. */
   let askedPath: string | null = null;
   let asked = 0;
+  /** The preview link's token while this tab shows one; the banner while it is on the page. */
+  let preview: string | null = null;
+  let banner: OwnUi | null = null;
+  const owns = (element: Element): boolean =>
+    element === win.document.documentElement || (banner !== null && banner.owns(element));
 
   function remember(keys: string[]): void {
-    if (keys.length === 0) return;
+    if (keys.length === 0 || !env.allowed()) return;
     const storage = env.local();
     const assigned = readAssigned(storage, env.now());
     for (const key of keys) assigned[key] = env.now();
@@ -111,17 +144,51 @@ export function createRuntime(env: RuntimeEnv): Runtime {
   }
 
   function refused(status: number): void {
-    startBackoff(env.session(), env.now());
+    if (env.allowed()) startBackoff(env.session(), env.now());
     env.silence();
     if (status === 401 || status === 403) win.console.warn(KEY_REFUSED);
   }
 
+  /** The preview call failed: the banner says why, and a link that no longer works is forgotten. */
+  function previewRefused(status: number): void {
+    if (status === 404) endPreview(env.session());
+    if (banner) banner.say(status === 404 ? PREVIEW_GONE : status === 403 ? PREVIEW_SCOPED_KEY : PREVIEW_FAILED);
+  }
+
+  function apply(applier: Applier, hider: Hider, which: number): void {
+    if (applier.empty) return hider.show();
+    current = applier;
+    applier.start(() => hider.show(), which === 1 ? env.bound : answerBound(captures));
+  }
+
+  function answerPreview(body: unknown, hider: Hider, which: number): void {
+    if (!env.allowed() || !isRecord(body) || which !== asked || preview === null) return hider.show();
+    const variant = typeof body.variant_name === "string" ? body.variant_name : "";
+    const key = typeof body.experiment_key === "string" ? body.experiment_key : "";
+    const rules = readAnswerRules(body.pages, env.now());
+    const location = win.location;
+    const covered =
+      rules !== null &&
+      rules.host === normalizeHost(location.host) &&
+      rules.rules.some((rule) => ruleMatches(location.pathname, rule));
+    if (banner) banner.say(covered ? previewShowing(variant) : previewElsewhere(variant));
+    if (!covered || body.changes === null || body.changes === undefined) return hider.show();
+    const verdict = validateChanges(body.changes);
+    if (!verdict.ok) {
+      reporter.notApplied(key, null, verdict.reason);
+      return hider.show();
+    }
+    const applier = createApplier({ window: win, captures, reporter, written, owns });
+    applier.add(key, verdict.changes);
+    apply(applier, hider, which);
+  }
+
   function answer(body: unknown, hider: Hider, which: number): void {
-    if (!isRecord(body) || which !== asked) return hider.show();
+    if (!env.allowed() || !isRecord(body) || which !== asked) return hider.show();
     const rules = readAnswerRules(body.pages, env.now());
     if (rules) keepRules(env.local(), rules);
     const experiments = Array.isArray(body.experiments) ? body.experiments.slice(0, MAX_EXPERIMENTS) : [];
-    const applier = createApplier({ window: win, captures, reporter, written });
+    const applier = createApplier({ window: win, captures, reporter, written, owns });
     const assigned: string[] = [];
     for (const experiment of experiments) {
       if (!isRecord(experiment) || experiment.assigned !== true) continue;
@@ -134,35 +201,42 @@ export function createRuntime(env: RuntimeEnv): Runtime {
       else applier.add(key, verdict.changes);
     }
     remember(assigned);
-    if (applier.empty) return hider.show();
-    current = applier;
-    applier.start(() => hider.show(), which === 1 ? env.bound : answerBound(captures));
+    apply(applier, hider, which);
   }
 
-  function ask(hider: Hider, userId: string, path: string, which: number): void {
+  function ask(hider: Hider, path: string, which: number): void {
     const location = win.location;
-    const body: Record<string, unknown> = {
-      user_id: userId,
-      host: location.host,
-      path,
-      format_version: FORMAT_VERSION,
-    };
-    if (config.attributes !== null) body.context = config.attributes;
-    const request = send(VISUAL_PATH, body, { apiKey: true });
+    const previewing = preview;
+    let request: Promise<Response> | null;
+    if (previewing !== null) {
+      request = send(PREVIEW_PATH, { token: previewing, host: location.host, path }, { apiKey: true });
+    } else {
+      const body: Record<string, unknown> = {
+        user_id: visitorId(win, config, captures),
+        host: location.host,
+        path,
+        format_version: FORMAT_VERSION,
+      };
+      if (config.attributes !== null) body.context = config.attributes;
+      request = send(VISUAL_PATH, body, { apiKey: true });
+    }
     if (request === null) return hider.show();
     request
       .then(
         (response) => {
           if (!response.ok) {
-            refused(response.status);
+            if (previewing !== null) previewRefused(response.status);
+            if (previewing === null || response.status !== 404) refused(response.status);
             return hider.show();
           }
           return response.json().then(
-            (parsed: unknown) => answer(parsed, hider, which),
+            (parsed: unknown) =>
+              previewing !== null ? answerPreview(parsed, hider, which) : answer(parsed, hider, which),
             () => hider.show(),
           );
         },
         () => {
+          if (previewing !== null) previewRefused(0);
           refused(0);
           hider.show();
         },
@@ -176,9 +250,10 @@ export function createRuntime(env: RuntimeEnv): Runtime {
    * fresh rules cover nothing there. Only the first one hides the page.
    */
   function evaluate(first: boolean): void {
+    if (!env.allowed()) return;
     const location = win.location;
     const path = location.pathname;
-    const skip = rulesSkip(env.local(), location.host, path, env.now());
+    const skip = preview === null && rulesSkip(env.local(), location.host, path, env.now());
     if (path === askedPath) return;
     askedPath = path;
     asked += 1;
@@ -189,12 +264,36 @@ export function createRuntime(env: RuntimeEnv): Runtime {
       leaving.stop();
     }
     if (skip || location.host.length > MAX_HOST_LENGTH || path.length > MAX_PATH_LENGTH) return;
-    const userId = visitorId(win, config, captures);
     const hider = first ? hidePage(win.document, captures, config.timeoutMs) : NO_HIDE;
     try {
-      ask(hider, userId, path, which);
+      ask(hider, path, which);
     } catch {
       hider.show();
+    }
+  }
+
+  /** [Exit preview]: the preview's changes are undone, the banner goes, and the tab forgets the link. */
+  function exitPreview(): void {
+    endPreview(env.session());
+    preview = null;
+    if (current) {
+      const leaving = current;
+      current = null;
+      leaving.stop();
+    }
+    if (banner) {
+      const leaving = banner;
+      banner = null;
+      leaving.remove();
+    }
+  }
+
+  function openBanner(): void {
+    try {
+      banner = createOwnUi(win, captures, PREVIEW_LABEL, { text: EXIT_PREVIEW, run: exitPreview });
+      banner.say(PREVIEW_LOADING);
+    } catch {
+      banner = null;
     }
   }
 
@@ -233,7 +332,12 @@ export function createRuntime(env: RuntimeEnv): Runtime {
     start() {
       if (started) return;
       started = true;
-      if (backoffActive(env.session(), env.now())) return;
+      preview = env.previewToken();
+      if (preview !== null) openBanner();
+      if (backoffActive(env.session(), env.now())) {
+        if (banner) banner.say(PREVIEW_FAILED);
+        return;
+      }
       try {
         follow();
       } catch {
@@ -246,6 +350,8 @@ export function createRuntime(env: RuntimeEnv): Runtime {
         win.console.warn(BAD_EVENT);
         return;
       }
+      // Before consent, after revokeConsent() and in a preview, track() reads and sends nothing.
+      if (!env.allowed() || preview !== null) return;
       const keys = Object.keys(readAssigned(env.local(), env.now())).slice(0, 100);
       if (keys.length === 0) return;
       const value = isRecord(options) && typeof options.value === "number" && isFinite(options.value) ? options.value : null;

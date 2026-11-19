@@ -3,7 +3,8 @@
  * makes: a text node's text, setAttribute for five names, an image's src,
  * and style properties through the CSSOM. Nothing is ever parsed as HTML.
  *
- * A change applies only when its selector matches exactly one element. While
+ * A change applies only when its selector matches exactly one element, and
+ * never to <html> or the script's own UI (reported as own_ui). While
  * the page is still loading, a change is applied as soon as its element
  * exists (a text change once its element is closed: a node follows it that
  * it does not contain). At DOMContentLoaded every change is checked once
@@ -70,6 +71,8 @@ export interface ApplyEnv {
   reporter: Reporter;
   /** Every element the script has written to on this page. */
   written: WeakSet<Element>;
+  /** Whether *element* is <html> or the script's own UI (own-ui.ts): never changed, reported as own_ui. */
+  owns(element: Element): boolean;
 }
 
 /** Whether the script refuses to apply *change* to *element*. */
@@ -256,15 +259,17 @@ export function createApplier(env: ApplyEnv): Applier {
   let observer: MutationObserver | null = null;
   let stopped = false;
 
-  function fail(item: Item, reason: NotApplied): void {
+  function fail(item: Item, reason: NotApplied | "own_ui"): void {
     if (item.undo) item.undo();
     item.undo = null;
     item.target = null;
     item.state = "failed";
-    env.reporter.notApplied(item.experimentKey, item.index, reason);
+    if (reason === "own_ui") env.reporter.ownUi(item.experimentKey, item.index);
+    else env.reporter.notApplied(item.experimentKey, item.index, reason);
   }
 
   function applyTo(item: Item, element: Element): void {
+    if (env.owns(element)) return fail(item, "own_ui");
     if (notAllowed(element, item.change)) return fail(item, "not_allowed");
     let undo: (() => void) | null;
     try {

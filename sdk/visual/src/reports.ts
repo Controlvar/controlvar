@@ -1,5 +1,6 @@
 /**
- * Error reports (tests/sdk-contract/visual-error-reports.json lists them).
+ * Error reports (tests/sdk-contract/visual-error-reports.json lists them:
+ * visual_change_not_applied and own_ui in this version).
  * Each is one POST /api/v1/tracking/errors with exactly error_type,
  * experiment_key, message and metadata: never a feature flag key, the
  * visitor's id, the page's address or its text. At most 5 per page view,
@@ -30,6 +31,10 @@ export const MESSAGES: Record<NotApplied, string> = {
   replaced_after_bound: "A visual change was lost: the page replaced the element after the script stopped watching.",
 };
 
+/** The fixed message of an own_ui report. */
+export const OWN_UI_MESSAGE =
+  "A visual change was not applied: it would have changed the page's root element or the script's own banner.";
+
 export interface ReportOptions {
   /** Sent as the page goes away: the request outlives it (fetch keepalive). */
   keepalive?: boolean;
@@ -37,29 +42,36 @@ export interface ReportOptions {
 
 export interface Reporter {
   notApplied(experimentKey: string, index: number | null, reason: NotApplied, options?: ReportOptions): void;
+  /** A change whose element is <html>, or the script's own UI. */
+  ownUi(experimentKey: string, index: number): void;
 }
 
 export function createReporter(send: Send): Reporter {
   let sent = 0;
+  function report(body: Record<string, unknown>, options: ReportOptions): void {
+    if (sent >= MAX_REPORTS) return;
+    const request = send(ERRORS_PATH, body, { apiKey: true, keepalive: options.keepalive === true });
+    if (request === null) return;
+    sent += 1;
+    request.then(
+      () => undefined,
+      () => undefined,
+    );
+  }
   return {
     notApplied(experimentKey, index, reason, options = {}) {
-      if (sent >= MAX_REPORTS) return;
-      const request = send(
-        ERRORS_PATH,
+      report(
         {
           error_type: "visual_change_not_applied",
           experiment_key: experimentKey,
           message: MESSAGES[reason],
           metadata: { index, reason },
         },
-        { apiKey: true, keepalive: options.keepalive === true },
+        options,
       );
-      if (request === null) return;
-      sent += 1;
-      request.then(
-        () => undefined,
-        () => undefined,
-      );
+    },
+    ownUi(experimentKey, index) {
+      report({ error_type: "own_ui", experiment_key: experimentKey, message: OWN_UI_MESSAGE, metadata: { index } }, {});
     },
   };
 }

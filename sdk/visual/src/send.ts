@@ -18,6 +18,8 @@ export interface Gates {
   consented(): boolean;
   /** True while this page has been told to send nothing (a backoff kept in memory only). */
   silent?(): boolean;
+  /** True once revokeConsent() was called on this page, until a later consent(). It stops every request. */
+  revoked?(): boolean;
 }
 
 export type Send = (path: string, body: unknown, options?: SendOptions) => Promise<Response> | null;
@@ -56,6 +58,7 @@ export function createSend(
 ): Send {
   return (path, body, options = {}) => {
     if (!configured(config)) return null;
+    if (gates.revoked && gates.revoked()) return null;
     if (!options.editorLink) {
       if (!gates.consented()) return null;
       if (gates.silent && gates.silent()) return null;
