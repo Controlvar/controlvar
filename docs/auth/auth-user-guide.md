@@ -243,7 +243,9 @@ deleted the account; closing the dialog refreshes the list.
 An account with [two-step sign-in](../api/auth.md#two-step-sign-in) that lost its
 authenticator app and its recovery codes cannot finish signing in. A superuser turns its
 two-step sign-in off with `DELETE /api/v1/admin/users/{user_id}/2fa`; the account then signs
-in with its password alone and can set two-step sign-in up again. No one can reset their own.
+in with its password alone and can set two-step sign-in up again. An account whose role
+`LOCAL_AUTH_2FA_REQUIRED_ROLES` names is asked to set it up at its next sign-in instead. No one
+can reset their own.
 
 When no superuser can sign in, or after `SECRET_KEY` has changed, reset accounts from where
 the API's database is reachable:

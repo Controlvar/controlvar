@@ -289,8 +289,8 @@ See the [RBAC API Reference](rbac.md).
 
 With `AUTH_PROVIDER=local`, any account can turn on two-step sign-in (2FA, using TOTP codes):
 after the password, sign-in also asks for the 6-digit code an authenticator app shows, or for
-one of the account's recovery codes. Each account decides for itself; nothing can require it
-for a role yet.
+one of the account's recovery codes. Each account can turn it on for itself, and an operator
+can require it for chosen roles: [Requiring it for a role](#requiring-it-for-a-role).
 
 Turn it on as the viewer. Ask for a secret for the authenticator app. It asks for your current
 password, as changing your password does:
@@ -387,12 +387,14 @@ throughout: a token stays valid until it expires.
 
 | Route | What it does |
 |---|---|
-| `GET /api/v1/users/me/2fa` | `enabled`, `required` (always `false`) and `recovery_codes_remaining` |
+| `GET /api/v1/users/me/2fa` | `enabled`, `required` (your role requires it) and `recovery_codes_remaining` |
 | `POST /api/v1/users/me/2fa/enroll` | `{"current_password"}`: a new secret, waiting for its first code; a waiting one is replaced. `409` once on |
 | `POST /api/v1/users/me/2fa/confirm` | `{"code"}`: turns it on and answers 10 recovery codes. `409` with no secret waiting |
 | `POST /api/v1/users/me/2fa/recovery-codes` | `{"code"}`: 10 new recovery codes; the earlier ones stop working |
-| `POST /api/v1/users/me/2fa/disable` | `{"code"}` or `{"recovery_code"}`: turns it off. `409` while off |
+| `POST /api/v1/users/me/2fa/disable` | `{"code"}` or `{"recovery_code"}`: turns it off. `409` while off; `403` when your role requires it |
 | `POST /api/v1/auth/mfa/verify` | `{"mfa_token"}` and `{"code"}` or `{"recovery_code"}`: the access token |
+| `POST /api/v1/auth/mfa/enroll` | `{"mfa_token"}` of a password step that answered `enrol: true`: a new secret, waiting for its first code |
+| `POST /api/v1/auth/mfa/enroll/confirm` | That `{"mfa_token"}` and `{"code"}`: turns it on and answers 10 recovery codes and the access token. `409` with no secret waiting |
 | `DELETE /api/v1/admin/users/{user_id}/2fa` | A superuser turns off another account's two-step sign-in; your own answers `400` |
 
 A code is 6 digits and a recovery code 10 characters, `A`-`Z` and `2`-`7`. Spaces and hyphens
@@ -403,10 +405,11 @@ a wrong one.
 | Answer | When |
 |---|---|
 | `401` `That code is not correct.` | A wrong code at `POST /api/v1/auth/mfa/verify`; `403` with the same text on the `/api/v1/users/me/2fa` routes |
-| `401` `Sign-in expired. Start again.` | The `mfa_token` is expired or not one; or the account was deactivated, or its two-step sign-in turned off, since the password step |
+| `401` `Sign-in expired. Start again.` | The `mfa_token` is expired or not one; or the account was deactivated, or its two-step sign-in turned off, since the password step. At the two enrol routes, also when its role no longer requires it or it was turned on meanwhile |
 | `423` with `Retry-After` | Wrong passwords and wrong codes together: 10 within 15 minutes lock the address, as for sign-in |
 | `423` `Two-step sign-in is locked after too many wrong codes. Ask an administrator to reset it.` | 100 wrong codes in a row; even the right code is refused until the reset |
 | `503` `Two-step sign-in is unavailable for this account. Ask an administrator to reset it.` | The stored secret cannot be read, as after `SECRET_KEY` changes |
+| `403` `Two-step sign-in is required for your role, so it cannot be turned off.` | `POST /api/v1/users/me/2fa/disable` for an account whose role requires it; no code is checked |
 
 `POST /api/v1/users/me/2fa/enroll` answers as `POST /api/v1/users/me/password` does about the
 current password, in this order:
@@ -418,7 +421,8 @@ current password, in this order:
 | `403` `Enter your current password (current_password) to set up two-step sign-in.` | No body, no `current_password` or an empty one; not counted |
 | `403` `The current password is incorrect.` | A wrong password; it counts toward the same limit as failed logins |
 
-`POST /api/v1/auth/mfa/verify` takes 10 requests a minute per address, like
+`POST /api/v1/auth/mfa/verify`, `POST /api/v1/auth/mfa/enroll` and
+`POST /api/v1/auth/mfa/enroll/confirm` each take 10 requests a minute per address, like
 `POST /api/v1/auth/login`, and `POST /api/v1/users/me/2fa/enroll` 5, like
 `POST /api/v1/users/me/password`. `POST /api/v1/auth/token` answers `mfa_required` too, so the
 **Authorize** button of the interactive documentation cannot sign in such an account: sign in
@@ -435,6 +439,31 @@ Known limits:
   expires.
 - The count of wrong passwords and codes is kept in each API process's memory, so each process
   counts its own; the count of 100 wrong codes is stored with the account.
+
+#### Requiring it for a role
+
+`LOCAL_AUTH_2FA_REQUIRED_ROLES` names the roles whose accounts must use two-step sign-in:
+one or more of `ADMIN`, `DEVELOPER`, `ANALYST` and `VIEWER`, in capitals and comma-separated,
+such as `ADMIN,DEVELOPER`. Unset or empty, no role is required. Any other entry, such as
+`admin`, `ADMNI` or the empty one in `ADMIN,`, stops the API starting with a message that names
+it. It applies to every account of a listed role that signs in with a password, superusers
+included.
+
+Such an account that has not set two-step sign-in up gets `{"mfa_required": true,
+"mfa_token": "...", "enrol": true, "expires_in": 600}` from the right password, with no
+`access_token`. It sets it up before it is signed in: `POST /api/v1/auth/mfa/enroll` with that
+`mfa_token` answers a new secret, as `POST /api/v1/users/me/2fa/enroll` does, and
+`POST /api/v1/auth/mfa/enroll/confirm` with the same `mfa_token` and the app's first `code`
+turns it on and answers `{"recovery_codes": [...], "login": {...}}`, where `login` is what
+`POST /api/v1/auth/login` answers an account without two-step sign-in. The dashboard does both
+as part of signing in. From then on the account signs in with a code, and
+`POST /api/v1/users/me/2fa/disable` answers it `403`. `GET /api/v1/users/me/2fa` says
+`required: true`, except for an account with no password of its own. After a superuser's reset,
+the next sign-in asks for set-up again.
+
+The Docker Compose file passes it from `.env`, and the Helm chart takes it in `api.extraEnv`
+(the chart's `values.yaml` shows how). The AWS CDK app cannot set it yet. Signing in with SSO
+(the `sso` module) asks for no code, for these roles too.
 
 #### Password sign-ins in this repository
 
@@ -461,6 +490,17 @@ sign-in on:
 | `tests/acceptance/docs/docs_runner/pacer.py` | Seeded accounts that never turn it on |
 | `backend/tests/performance/locustfiles/common.py` | Seeded accounts that never turn it on |
 | `modules/backend/tests/realistic/scenarios/multi_tenant_isolation.py` | Seeded accounts that never turn it on |
+
+Each also fails if `LOCAL_AUTH_2FA_REQUIRED_ROLES` names its account's role on the stack it signs
+in to: the password step then answers `enrol: true` and no `access_token`. Keep the seeded
+accounts' roles unrequired on the stacks they sign in to. The others:
+
+| Path | When its account's role is required |
+|---|---|
+| `scripts/synthetic_check.py` | Fails while ANALYST is required. Keep that role unrequired |
+| `scripts/scale_stack.py` | Fails while ADMIN is required |
+| `deploy/aws-installer/lib/steps.sh` | Fails if ADMIN is required during the install: require it after the install |
+| `deploy/demo/probe.py` | A VIEWER requirement on a demo stops every demo sign-in |
 
 ---
 

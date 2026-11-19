@@ -277,10 +277,12 @@ text = "Sign-in and access"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Requiring two-step sign-in for a role | Not available yet: each local account turns two-step sign-in (an authenticator app) on or off for itself. See Two-step sign-in."
+text = "Requiring two-step sign-in for a role on an AWS CDK install | Not available yet: the CDK app cannot set LOCAL_AUTH_2FA_REQUIRED_ROLES, so each local account turns two-step sign-in on or off for itself there. Docker Compose and the Helm chart can set it. See Requiring it for a role."
 by = [
-    "test:backend/tests/unit/api/test_documented_limits.py::test_a_local_account_can_turn_on_two_step_sign_in_but_no_role_requires_it",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_role_can_require_two_step_sign_in_on_compose_and_helm_not_cdk_yet",
     "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_every_role_manages_its_own_and_only_a_superuser_resets_others",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestTwoStepRoles",
+    "test:backend/tests/unit/chart/test_chart_render.py::test_the_two_step_roles_example_reaches_both_api_containers",
 ]
 
 [[unit]]

@@ -261,12 +261,36 @@
 # entries whose pass is superuser). The viewer and sdk lists do not change.
 # The counts equal those of the pull request's fuzz.yml run at that head.
 
+# Then #1812's required roles added POST /api/v1/auth/mfa/enroll and
+# POST /api/v1/auth/mfa/enroll/confirm. The pull request's fuzz.yml run
+# 43802032619 at seed 20261006, on a head without #2008 and #2000, counted both
+# unreached in the superuser and viewer passes, and the run 44307951324 on its
+# head with main at 108710f1 (before #1997) counted the same two and no other
+# change. Both take the short token the password step issues to an account
+# whose role LOCAL_AUTH_2FA_REQUIRED_ROLES names; the fuzz stack requires no
+# role, and no generated token is one, so the superuser and viewer passes get
+# 401 (or 422, or 429 past its 10 a minute) and reach them in neither. Neither
+# is an SDK route. The lists are 120 for superuser, 191 for viewer and 9 for
+# sdk: two more than the 118, 189 and 9 above in the first two passes. That is
+# a prediction for the merged head, which also carries #1997's shifted ids,
+# until its own fuzz.yml run.
+
 # --- superuser: the seeded demo administrator's bearer token ----------------
 
 [[unreached]]
 pass = "superuser"
 operation = "POST /api/v1/auth/mfa/verify"
 reason = "The code step of two-step sign-in: no generated mfa_token is one the stack issued, so it answers 401, 422 for a body that fails validation, and 429 once its 10 a minute are spent."
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/auth/mfa/enroll"
+reason = "Setting up two-step sign-in during a sign-in, for a role LOCAL_AUTH_2FA_REQUIRED_ROLES names: the stack requires no role and no generated mfa_token is one it issued, so it answers 401, 422 for a body that fails validation, and 429 once its 10 a minute are spent."
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/auth/mfa/enroll/confirm"
+reason = "Setting up two-step sign-in during a sign-in, for a role LOCAL_AUTH_2FA_REQUIRED_ROLES names: the stack requires no role and no generated mfa_token is one it issued, so it answers 401, 422 for a body that fails validation, and 429 once its 10 a minute are spent."
 
 [[unreached]]
 pass = "superuser"
@@ -859,6 +883,16 @@ reason = "Every generated request fails the operation's own validation (422)."
 pass = "viewer"
 operation = "POST /api/v1/auth/mfa/verify"
 reason = "The code step of two-step sign-in: no generated mfa_token is one the stack issued, so it answers 401, 422 for a body that fails validation, and 429 once its 10 a minute are spent."
+
+[[unreached]]
+pass = "viewer"
+operation = "POST /api/v1/auth/mfa/enroll"
+reason = "Setting up two-step sign-in during a sign-in, for a role LOCAL_AUTH_2FA_REQUIRED_ROLES names: the stack requires no role and no generated mfa_token is one it issued, so it answers 401, 422 for a body that fails validation, and 429 once its 10 a minute are spent."
+
+[[unreached]]
+pass = "viewer"
+operation = "POST /api/v1/auth/mfa/enroll/confirm"
+reason = "Setting up two-step sign-in during a sign-in, for a role LOCAL_AUTH_2FA_REQUIRED_ROLES names: the stack requires no role and no generated mfa_token is one it issued, so it answers 401, 422 for a body that fails validation, and 429 once its 10 a minute are spent."
 
 [[unreached]]
 pass = "viewer"

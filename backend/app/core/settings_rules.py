@@ -234,6 +234,77 @@ def credential_keys_error(value: Optional[str]) -> Optional[str]:
     return None
 
 
+#: The setting that names the roles whose local accounts must use two-step
+#: sign-in (#1812).
+TWO_FACTOR_ROLES_SETTING = "LOCAL_AUTH_2FA_REQUIRED_ROLES"
+
+#: The role names it takes, exactly as the API writes them (``UserRole``'s
+#: names; ``backend/tests/unit/core/test_two_factor_required_roles.py`` holds
+#: the two equal).
+TWO_FACTOR_ROLE_NAMES: tuple = ("ADMIN", "DEVELOPER", "ANALYST", "VIEWER")
+
+_TWO_FACTOR_ROLES_HOW = (
+    "Write one or more of the role names ADMIN, DEVELOPER, ANALYST, VIEWER, in "
+    "capitals and comma-separated (ADMIN,DEVELOPER), or leave it empty to "
+    "require two-step sign-in for no role."
+)
+
+
+def parse_two_factor_roles(value: Any) -> List[str]:
+    """``LOCAL_AUTH_2FA_REQUIRED_ROLES`` as a list of role names.
+
+    Unset (``None``), empty and blank all mean no role: Compose passes an
+    unset ``${LOCAL_AUTH_2FA_REQUIRED_ROLES:-}`` as ``""``. Otherwise the value
+    is split on commas, each entry is trimmed, and every entry must be one of
+    ``TWO_FACTOR_ROLE_NAMES`` exactly: an empty entry (``ADMIN,``,
+    ``,ADMIN``), lower case (``admin``) or a misspelling (``ADMNI``) raises
+    ``ValueError`` naming the entry and the four names, so a typo stops the
+    API starting instead of meaning "no role". Empty entries are never
+    dropped. A list (not the environment's form) is checked entry by entry.
+    A name given twice counts once.
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        if not value.strip():
+            return []
+        entries: List[Any] = value.split(",")
+    elif isinstance(value, (list, tuple)):
+        entries = list(value)
+    else:
+        raise ValueError(
+            f"{TWO_FACTOR_ROLES_SETTING} must be a comma-separated list of role "
+            f"names. {_TWO_FACTOR_ROLES_HOW}"
+        )
+    shown = value if isinstance(value, str) else ",".join(str(e) for e in entries)
+    roles: List[str] = []
+    for raw in entries:
+        entry = raw.strip() if isinstance(raw, str) else raw
+        if entry == "":
+            raise ValueError(
+                f"{TWO_FACTOR_ROLES_SETTING}={shown[:200]!r} has an empty entry. "
+                f"{_TWO_FACTOR_ROLES_HOW}"
+            )
+        if entry not in TWO_FACTOR_ROLE_NAMES:
+            raise ValueError(
+                f"{TWO_FACTOR_ROLES_SETTING} entry {str(entry)[:100]!r} is not a role. "
+                f"{_TWO_FACTOR_ROLES_HOW}"
+            )
+        if entry not in roles:
+            roles.append(entry)
+    return roles
+
+
+def two_factor_roles_error(value: Optional[str]) -> Optional[str]:
+    """Why *value* is not a usable ``LOCAL_AUTH_2FA_REQUIRED_ROLES``, or
+    ``None`` (the start-up check's form of :func:`parse_two_factor_roles`)."""
+    try:
+        parse_two_factor_roles(value)
+    except ValueError as exc:
+        return str(exc)
+    return None
+
+
 def secret_is_weak(value: Optional[str]) -> bool:
     """A SECRET_KEY or AUDIT_HMAC_KEY that staging/production refuse."""
     return secret_is_placeholder(value) or len(value or "") < MIN_SECRET_KEY_LENGTH

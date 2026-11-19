@@ -23,6 +23,12 @@ export const TWO_FACTOR_DISABLE_PATH = '/api/v1/users/me/2fa/disable';
 export const TWO_FACTOR_RECOVERY_CODES_PATH = '/api/v1/users/me/2fa/recovery-codes';
 /** The code step of a sign-in: no session yet. */
 export const MFA_VERIFY_PATH = '/api/v1/auth/mfa/verify';
+/**
+ * Setting it up during a sign-in, for an account whose role requires it
+ * (`enrol: true` from the password step): no session yet either.
+ */
+export const MFA_ENROL_PATH = '/api/v1/auth/mfa/enroll';
+export const MFA_ENROL_CONFIRM_PATH = '/api/v1/auth/mfa/enroll/confirm';
 
 // ---------------------------------------------------------------------------
 // The API's fixed texts, word for word (backend/app/services/two_factor_service.py
@@ -41,6 +47,9 @@ export const CODE_STEP_LOCKED_TEXT =
 /** The stored secret cannot be read (after SECRET_KEY changed): 503. */
 export const UNAVAILABLE_TEXT =
   'Two-step sign-in is unavailable for this account. Ask an administrator to reset it.';
+/** Turning it off while your role requires it: 403. */
+export const TWO_FACTOR_REQUIRED_FOR_ROLE =
+  'Two-step sign-in is required for your role, so it cannot be turned off.';
 /**
  * Setting it up asks for the current password, as changing the password does
  * (backend/app/api/v1/endpoints/users.py): its three 403 details.
@@ -76,6 +85,14 @@ export const NOT_LOCAL_TWO_FACTOR =
 /** The QR image's text alternative: the same key is always written beside it. */
 export const QR_ALT = 'QR code for adding Controlvar to an authenticator app. The same key is written below.';
 
+/** The account page while your role requires it: why Turn off is not offered. */
+export const REQUIRED_FOR_ROLE_MESSAGE =
+  'Your role requires two-step sign-in, so it cannot be turned off. If you lose your authenticator app ' +
+  'and your recovery codes, ask an administrator to reset it.';
+/** The set-up a sign-in asks for, when the account's role requires it. */
+export const ENROL_STEP_INTRO =
+  'Your role requires two-step sign-in. Set it up with an authenticator app on your phone to finish signing in.';
+
 export const CODE_HINT = '6 digits, from your authenticator app. Spaces and hyphens are ignored.';
 export const RECOVERY_CODE_HINT =
   'One of the recovery codes you saved. Spaces, hyphens and letter case are ignored.';
@@ -83,7 +100,10 @@ export const RECOVERY_CODE_HINT =
 /** `GET /api/v1/users/me/2fa`. */
 export interface TwoFactorStatus {
   enabled: boolean;
-  /** Always false until a role can require it. */
+  /**
+   * Your role must use it (`LOCAL_AUTH_2FA_REQUIRED_ROLES`): it cannot be
+   * turned off. False for an account that signs in without a password.
+   */
   required: boolean;
   recovery_codes_remaining: number;
 }
@@ -109,6 +129,19 @@ export function startTwoFactorEnrolment(currentPassword: string): Promise<TwoFac
   return apiFetch<TwoFactorEnrolment>(TWO_FACTOR_ENROL_PATH, {
     method: 'POST',
     json: { current_password: currentPassword },
+  });
+}
+
+/**
+ * A new secret during a sign-in, for an account whose role requires two-step
+ * sign-in: the password step's `mfaToken` (with `enrol: true`). `auth: false`:
+ * no session exists yet, so a 401 here clears nothing and redirects nowhere.
+ */
+export function startSignInEnrolment(mfaToken: string): Promise<TwoFactorEnrolment> {
+  return apiFetch<TwoFactorEnrolment>(MFA_ENROL_PATH, {
+    method: 'POST',
+    json: { mfa_token: mfaToken },
+    auth: false,
   });
 }
 
@@ -191,6 +224,7 @@ export type TwoFactorOutcome =
   | 'unavailable'
   | 'changed'
   | 'not-waiting'
+  | 'required'
   | 'invalid'
   | 'password-missing'
   | 'password-incorrect'
@@ -238,6 +272,9 @@ export function classifyTwoFactorError(err: unknown, context: TwoFactorErrorCont
         if (context.confirming) return { outcome: 'clock' };
         return { outcome: context.recovery ? 'wrong-recovery-code' : 'wrong-code' };
       }
+      // Turning it off while the role requires it: the page reloads and
+      // stops offering it.
+      if (err.detail === TWO_FACTOR_REQUIRED_FOR_ROLE) return { outcome: 'required' };
       // Setting it up: the current password's three refusals.
       if (err.detail === CURRENT_PASSWORD_INCORRECT_DETAIL) return { outcome: 'password-incorrect' };
       if (err.detail === ENROL_PASSWORD_MISSING_DETAIL) return { outcome: 'password-missing' };
@@ -275,6 +312,7 @@ const SENTENCES: Record<Exclude<TwoFactorOutcome, 'locked' | 'timed-out' | 'read
   changed: 'Two-step sign-in changed since this page was opened. The page now shows how it is.',
   'not-waiting':
     'No new secret is waiting for its first code, or two-step sign-in is already on. The page now shows how it is.',
+  required: REQUIRED_FOR_ROLE_MESSAGE,
   invalid: 'Enter the code as your authenticator app shows it, or a recovery code as you saved it.',
   'password-missing': ENROL_PASSWORD_MESSAGE,
   'password-incorrect': 'The current password is not correct. Check it and try again.',

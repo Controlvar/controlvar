@@ -22,6 +22,7 @@ import TwoFactorPage, {
   DISABLED_SENTENCE,
   ENABLED_SENTENCE,
   REGENERATED_SENTENCE,
+  REQUIRED_WHILE_OFF,
   STATUS_LOAD_FAILED,
 } from '@/pages/account/two-factor';
 import { TOKEN_STORAGE_KEY, navigation } from '@/services/api';
@@ -36,6 +37,8 @@ import {
   NOT_LOCAL_TWO_FACTOR,
   NO_PASSWORD_TWO_FACTOR,
   QR_ALT,
+  REQUIRED_FOR_ROLE_MESSAGE,
+  TWO_FACTOR_REQUIRED_FOR_ROLE,
   UNAVAILABLE_TEXT,
   WRONG_CODE_DETAIL,
   WRONG_CODE_MESSAGE,
@@ -516,6 +519,44 @@ describe('TwoFactorPage: on', () => {
       'Two-step sign-in changed since this page was opened. The page now shows how it is.',
     );
     expect(document.body.innerHTML).not.toContain('PLANTED-SERVER-TEXT');
+  });
+});
+
+describe('TwoFactorPage: a role that requires it', () => {
+  it('on: Turn off is not offered, and the page says why', async () => {
+    const { container } = await openOn({ ...ON, required: true });
+    expect(screen.getByTestId('two-factor-required')).toHaveTextContent(REQUIRED_FOR_ROLE_MESSAGE);
+    expect(screen.queryByTestId('two-factor-open-disable')).toBeNull();
+    // New recovery codes are still offered.
+    expect(screen.getByTestId('two-factor-open-regenerate')).toBeInTheDocument();
+    await expectNoAxeViolations(container);
+  });
+
+  it('off: says the role requires it, and still offers to set it up', async () => {
+    respond(200, { ...OFF, required: true });
+    const { container } = render(<TwoFactorPage />);
+    await screen.findByTestId('two-factor-off');
+    expect(screen.getByTestId('two-factor-required')).toHaveTextContent(REQUIRED_WHILE_OFF);
+    expect(screen.getByTestId('two-factor-start')).toBeInTheDocument();
+    await expectNoAxeViolations(container);
+  });
+
+  it('a role that does not require it is told nothing of the kind', async () => {
+    await openOn();
+    expect(screen.queryByTestId('two-factor-required')).toBeNull();
+    expect(screen.getByTestId('two-factor-open-disable')).toBeInTheDocument();
+  });
+
+  it('a 403 at turn-off because the role now requires it says so and reloads', async () => {
+    await openOn();
+    fireEvent.click(screen.getByTestId('two-factor-open-disable'));
+    type('123456');
+    respond(403, { detail: TWO_FACTOR_REQUIRED_FOR_ROLE });
+    respond(200, { ...ON, required: true });
+    await click('two-factor-submit');
+    expect(await outcome()).toHaveTextContent(REQUIRED_FOR_ROLE_MESSAGE);
+    await waitFor(() => expect(screen.queryByTestId('two-factor-open-disable')).toBeNull());
+    expect(callsTo(STATUS)).toHaveLength(2);
   });
 });
 

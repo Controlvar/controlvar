@@ -12,6 +12,7 @@ import React, {
 import {
   ApiError,
   LoginResponse,
+  MfaEnrolConfirmResponse,
   MfaRequiredResponse,
   Role,
   TOKEN_STORAGE_KEY,
@@ -34,7 +35,7 @@ import {
   silentSignInAllowed,
   writeSignInNotice,
 } from '@/services/hostedUi';
-import { MFA_VERIFY_PATH, SecondStepAnswer } from '@/services/twoFactor';
+import { MFA_ENROL_CONFIRM_PATH, MFA_VERIFY_PATH, SecondStepAnswer } from '@/services/twoFactor';
 
 export type AuthStatus = 'loading' | 'authenticated' | 'anonymous';
 
@@ -46,7 +47,18 @@ export type AuthStatus = 'loading' | 'authenticated' | 'anonymous';
  */
 export type SignInResult =
   | { status: 'signed-in'; user: UserMe }
-  | { status: 'second-step'; mfaToken: string; expiresIn: number };
+  | { status: 'second-step'; mfaToken: string; expiresIn: number }
+  | { status: 'enrol-step'; mfaToken: string; expiresIn: number };
+
+/**
+ * Two-step sign-in turned on during a sign-in (a role that requires it): the
+ * recovery codes to show, shown once, and `finish`, which stores the access
+ * token and signs this tab in. Until `finish` runs nothing is stored.
+ */
+export interface SignInEnrolment {
+  recoveryCodes: string[];
+  finish: () => UserMe;
+}
 
 export interface LogoutOptions {
   /**
@@ -66,7 +78,9 @@ export interface AuthContextValue {
    * `POST /api/v1/auth/login`. For most accounts it stores the token and
    * resolves `signed-in` with the user. For an account with two-step sign-in
    * on it stores nothing and resolves `second-step` with the short-lived
-   * `mfaToken` that `verifySecondStep` takes.
+   * `mfaToken` that `verifySecondStep` takes; for one whose role requires
+   * two-step sign-in and that has not set it up, `enrol-step` with the
+   * `mfaToken` that `startSignInEnrolment` and `confirmSignInEnrolment` take.
    */
   login: (email: string, password: string) => Promise<SignInResult>;
   /**
@@ -75,6 +89,13 @@ export interface AuthContextValue {
    * resolves with the user, as a sign-in without the second step does.
    */
   verifySecondStep: (mfaToken: string, answer: SecondStepAnswer) => Promise<UserMe>;
+  /**
+   * `POST /api/v1/auth/mfa/enroll/confirm`: the password step's `mfaToken`
+   * (`enrol-step`) and the first code of the secret `startSignInEnrolment`
+   * gave. Turns two-step sign-in on and resolves with the recovery codes and
+   * a `finish` that signs this tab in; it stores nothing itself.
+   */
+  confirmSignInEnrolment: (mfaToken: string, code: string) => Promise<SignInEnrolment>;
   /**
    * Signs out at once: clears the token and the user before anything else,
    * then sends `POST /api/v1/auth/logout` without waiting for it (best effort;
@@ -337,7 +358,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       if (isMfaRequired(result)) {
         // Nothing is stored and nothing changes here: the caller holds the
-        // token for the code step, in its own state.
+        // token for the next step, in its own state.
+        if (result.enrol === true) {
+          return { status: 'enrol-step', mfaToken: result.mfa_token, expiresIn: result.expires_in };
+        }
         return { status: 'second-step', mfaToken: result.mfa_token, expiresIn: result.expires_in };
       }
       return { status: 'signed-in', user: applySignIn(LOGIN_PATH, result as LoginResponse) };
@@ -355,6 +379,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         auth: false,
       });
       return applySignIn(MFA_VERIFY_PATH, result);
+    },
+    [applySignIn],
+  );
+
+  const confirmSignInEnrolment = useCallback(
+    async (mfaToken: string, code: string): Promise<SignInEnrolment> => {
+      // `auth: false`, as at the code step: no session exists yet.
+      const result = await apiFetch<MfaEnrolConfirmResponse>(MFA_ENROL_CONFIRM_PATH, {
+        method: 'POST',
+        json: { mfa_token: mfaToken, code },
+        auth: false,
+      });
+      const login = result?.login;
+      if (
+        !Array.isArray(result?.recovery_codes) ||
+        typeof login?.access_token !== 'string' ||
+        !login.access_token ||
+        !login.user
+      ) {
+        throw new ApiError({
+          status: 200,
+          message: unreadableAnswerMessage(MFA_ENROL_CONFIRM_PATH, 200, 'POST'),
+          unreadableAnswer: true,
+        });
+      }
+      // Nothing is stored yet: the recovery codes are shown first, and the
+      // caller finishes the sign-in once they are saved.
+      return {
+        recoveryCodes: result.recovery_codes,
+        finish: () => applySignIn(MFA_ENROL_CONFIRM_PATH, login),
+      };
     },
     [applySignIn],
   );
@@ -413,13 +468,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: status === 'authenticated',
       login,
       verifySecondStep,
+      confirmSignInEnrolment,
       logout,
       afterLogoutPath,
       refresh,
       hasRole,
       sessionError,
     }),
-    [user, status, login, verifySecondStep, logout, afterLogoutPath, refresh, hasRole, sessionError],
+    [
+      user,
+      status,
+      login,
+      verifySecondStep,
+      confirmSignInEnrolment,
+      logout,
+      afterLogoutPath,
+      refresh,
+      hasRole,
+      sessionError,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -223,27 +223,41 @@ TWO_STEP_ROUTES = {
     ("POST", "/api/v1/users/me/2fa/disable"),
     ("POST", "/api/v1/users/me/2fa/recovery-codes"),
     ("POST", "/api/v1/auth/mfa/verify"),
+    ("POST", "/api/v1/auth/mfa/enroll"),
+    ("POST", "/api/v1/auth/mfa/enroll/confirm"),
     ("DELETE", "/api/v1/admin/users/{user_id}/2fa"),
 }
 
+#: The one setting that requires two-step sign-in for roles.
+TWO_STEP_ROLES_SETTING = "LOCAL_AUTH_2FA_REQUIRED_ROLES"
 
-def test_a_local_account_can_turn_on_two_step_sign_in_but_no_role_requires_it(
+
+def test_a_role_can_require_two_step_sign_in_on_compose_and_helm_not_cdk_yet(
     routes,
 ):
     """limitations.md and the README: an account turns it on for itself, with
-    an authenticator app; nothing can require it for a role yet (no setting,
-    and the account's own status always says ``required: false``)."""
+    an authenticator app, and an operator can require it for roles with one
+    setting, ``LOCAL_AUTH_2FA_REQUIRED_ROLES``. The production compose file
+    passes it to the API and the Helm chart takes it through ``api.extraEnv``
+    (``test_chart_render.py`` renders the documented example); the AWS CDK
+    app gives the API a fixed environment that does not carry it yet."""
     from backend.app.core.config import Settings
-    from backend.app.schemas.two_factor import TwoFactorStatusResponse
 
     # The password step still takes an email and a password alone; the code
-    # is the second request's.
+    # is a later request's.
     assert set(LoginRequest.model_fields) == {"email", "password"}
     pattern = re.compile(r"mfa|totp|otp\b|2fa|two-factor|second-factor|webauthn", re.I)
     assert {(m, p) for m, p in routes if pattern.search(p)} == TWO_STEP_ROUTES
     policy = re.compile(r"2FA|TWO_FACTOR|TOTP|MFA|SECOND_FACTOR", re.I)
-    assert [name for name in Settings.model_fields if policy.search(name)] == []
-    assert TwoFactorStatusResponse.model_fields["required"].default is False
+    assert [name for name in Settings.model_fields if policy.search(name)] == [
+        TWO_STEP_ROLES_SETTING
+    ]
+    compose = (ROOT / "deploy" / "compose" / "compose.yml").read_text(encoding="utf-8")
+    assert f"{TWO_STEP_ROLES_SETTING}: ${{{TWO_STEP_ROLES_SETTING}:-}}" in compose
+    (chart,) = sorted((ROOT / "charts").glob("*/values.yaml"))
+    assert "extraEnv: []" in chart.read_text(encoding="utf-8")
+    cdk = ROOT / "infrastructure" / "cdk" / "stacks" / "fargate_service_stack.py"
+    assert TWO_STEP_ROLES_SETTING not in cdk.read_text(encoding="utf-8")
 
 
 def test_the_permission_check_reads_grants_only_through_the_capability():

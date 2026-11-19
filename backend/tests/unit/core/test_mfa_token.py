@@ -18,6 +18,8 @@ import pytest
 from backend.app.core import mfa_token
 from backend.app.core.config import settings
 from backend.app.core.mfa_token import (
+    ENROL_PURPOSE,
+    ENROL_TTL_SECONDS,
     MFA_TOKEN_ISSUER,
     VERIFY_PURPOSE,
     VERIFY_TTL_SECONDS,
@@ -114,6 +116,33 @@ def test_a_token_of_another_purpose_is_refused():
     with pytest.raises(InvalidMfaToken):
         decode_mfa_token(token)
     assert decode_mfa_token(token, purpose="enrol")
+
+
+@pytest.mark.regression
+def test_the_enrol_purpose_lasts_ten_minutes_and_is_only_its_own():
+    """A role that requires two-step sign-in (#1812): ``enrol`` tokens, 600
+    seconds, refused where a verify token is read and the other way round."""
+    user = _user()
+    token = create_mfa_token(user, purpose=ENROL_PURPOSE, ttl_seconds=ENROL_TTL_SECONDS)
+    claims = jwt.decode(
+        token, mfa_token_key(), algorithms=["HS256"], issuer=MFA_TOKEN_ISSUER
+    )
+    assert (ENROL_PURPOSE, ENROL_TTL_SECONDS) == ("enrol", 600)
+    assert claims["purpose"] == "enrol"
+    assert claims["exp"] - claims["iat"] == 600
+    assert decode_mfa_token(token, purpose=ENROL_PURPOSE) == user.id
+    with pytest.raises(InvalidMfaToken):
+        decode_mfa_token(token, purpose=VERIFY_PURPOSE)
+    with pytest.raises(InvalidMfaToken):
+        decode_mfa_token(create_mfa_token(user), purpose=ENROL_PURPOSE)
+    with pytest.raises(InvalidTokenError):
+        decode_local_token(token)
+    past = datetime.now(timezone.utc) - timedelta(seconds=ENROL_TTL_SECONDS + 5)
+    expired = create_mfa_token(
+        user, purpose=ENROL_PURPOSE, ttl_seconds=ENROL_TTL_SECONDS, now=past
+    )
+    with pytest.raises(InvalidMfaToken):
+        decode_mfa_token(expired, purpose=ENROL_PURPOSE)
 
 
 def test_a_token_signed_with_another_key_is_refused():

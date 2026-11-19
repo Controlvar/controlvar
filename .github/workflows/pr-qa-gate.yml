@@ -993,6 +993,33 @@ jobs:
           PLAYWRIGHT_API_URL: http://localhost:8000
         run: cd frontend && npx playwright test --project=journeys
 
+      # --- Two-step sign-in required for a role (#1812, U9 of PR 4). A second
+      # API process on :8002 with LOCAL_AUTH_2FA_REQUIRED_ROLES=ANALYST, the
+      # same database and SECRET_KEY, and ENVIRONMENT=test like the SSO API
+      # below (rate limiter and schedulers off). The journeys above sign in as
+      # the seeded analyst, so the policy cannot be set on their API. Playwright
+      # serves the same export on :3102 with /api proxied to :8002.
+      - name: Start an API that requires two-step sign-in for analysts
+        env:
+          ENVIRONMENT: test
+          APP_ENV: test
+          LOCAL_AUTH_2FA_REQUIRED_ROLES: ANALYST
+        run: |
+          python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8002 \
+            --log-level warning > api-required-roles.log 2>&1 &
+          deadline=$((SECONDS + 90))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            curl -sf localhost:8002/health/ready >/dev/null && exit 0
+            sleep 1
+          done
+          echo "the API did not become healthy"; tail -n 100 api-required-roles.log; exit 1
+
+      - name: Run the role-required sign-in journey
+        env:
+          PLAYWRIGHT_API_URL: http://localhost:8002
+          PLAYWRIGHT_PORT: '3102'
+        run: cd frontend && npx playwright test --project=required-roles
+
       # --- Sign in with SSO from the dashboard (C2b, launch-readiness
       # stream-c/c2b/spec-v3.md §12). A second API process on :8001 with
       # ENVIRONMENT=test and APP_ENV=test, so the fake provider may be plain

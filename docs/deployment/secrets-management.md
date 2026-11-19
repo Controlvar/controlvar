@@ -298,7 +298,9 @@ for this account). While the traffic shift runs, tasks on the old and the new se
 by side, so a sign-in can pass on one and fail on the other. Once the shift has completed, reset
 every account
 ([Resetting two-step sign-in](../auth/auth-user-guide.md#resetting-two-step-sign-in), with
-`--all`): each then signs in with its password alone and sets two-step sign-in up again. If you
+`--all`): each then signs in with its password alone and can set two-step sign-in up again,
+except an account whose role `LOCAL_AUTH_2FA_REQUIRED_ROLES` names, which is asked to set it up
+at its next sign-in, after its password. If you
 are rotating because the secret may have leaked, reset those accounts' passwords first, since
 the reset leaves them with the password alone.
 
