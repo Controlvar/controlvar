@@ -45,6 +45,9 @@ from backend.app.models.visual_token import (
     EDITOR_KINDS,
     EDITOR_SESSION,
     REOPENED,
+    SCHEDULED,
+    SIGNED_OUT,
+    STARTED,
     TICKET_REUSED,
     VisualToken,
 )
@@ -95,6 +98,50 @@ CANNOT_CHANGE = (
     "permission to change experiments."
 )
 EXPERIMENT_NOT_FOUND = "Experiment not found"
+#: An editor session whose experiment was deleted (404).
+EXPERIMENT_GONE = "This experiment no longer exists."
+#: A variant id that is not one of the session's experiment's (404).
+VARIANT_NOT_FOUND = "This experiment has no variant with that id."
+
+#: The reason codes an editor session's 401 carries besides the stored
+#: ``revoked_reason`` values: no session has that token, or it has ended.
+NOT_RECOGNISED = "not_recognised"
+EXPIRED = "expired"
+#: What the editor shows for each reason code, with focus on it.
+CLOSED_TEXTS: Dict[str, str] = {
+    REOPENED: (
+        "The editor was opened again for this experiment, so this one has "
+        "closed. Your saved changes are kept."
+    ),
+    TICKET_REUSED: (
+        "This editor link was used twice, so Controlvar closed the editor it "
+        "opened. Your saved changes are kept. Open the editor again from the "
+        "experiment's page."
+    ),
+    STARTED: "This experiment was started in Controlvar, so the editor has closed.",
+    SIGNED_OUT: (
+        "You signed out of the visual editor. Open the editor again from the "
+        "experiment's page in Controlvar."
+    ),
+    SCHEDULED: (
+        "This draft now has a start date, so the editor has closed. Your saved "
+        "changes are kept. Remove the start date on the experiment's page to "
+        "edit again."
+    ),
+    EXPIRED: (
+        "Your editing session has ended. Saved changes are kept. Open the "
+        "editor again from the experiment's page in Controlvar."
+    ),
+    NOT_RECOGNISED: (
+        "The visual editor does not recognise this sign-in. Open the editor "
+        "again from the experiment's page in Controlvar."
+    ),
+}
+
+
+def closed_reason(reason: Optional[str]) -> str:
+    """*reason* if it has a text, else :data:`NOT_RECOGNISED`."""
+    return reason if reason in CLOSED_TEXTS else NOT_RECOGNISED
 
 
 def utcnow() -> datetime:
@@ -293,12 +340,24 @@ def audit_sessions_closed(
             entity_type=EntityType.EXPERIMENT,
             entity_id=experiment_id,
             entity_name=experiment_name,
-            after={
-                "reason": reason,
-                "session_id": str(row.id),
-                "session_user_id": str(row.user_id) if row.user_id else None,
-            },
+            after=session_closed_value(reason, row),
         )
+
+
+def session_closed_value(reason: str, row: Any) -> Dict[str, Any]:
+    """``new_value`` of a ``visual_editor_session_closed`` entry: why the
+    session closed, the session's row id and its user's id."""
+    return {
+        "reason": reason,
+        "session_id": str(row.id),
+        "session_user_id": str(row.user_id) if row.user_id else None,
+    }
+
+
+def live_sessions(rows: List[Any], now: datetime) -> List[Any]:
+    """The editor sessions among *rows* (as ``revoke_editor_tokens`` returns
+    them) that had not ended by *now*: the ones a start closes."""
+    return [row for row in rows if row.kind == EDITOR_SESSION and row.expires_at > now]
 
 
 def end_reused_link(

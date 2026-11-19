@@ -105,9 +105,11 @@ def test_flag_status_changes_and_experiment_lifecycle_write_no_event():
         "update_feature_flag",
         "delete_feature_flag",
     }
+    # PUT /experiments/{id}'s trail is written in _apply_experiment_update,
+    # the update's steps that the visual editor's save shares (#1545).
     assert {fn for path, fn in by_function if path == EXPERIMENTS} == {
         "create_experiment",
-        "update_experiment",
+        "_apply_experiment_update",
         "delete_experiment",
     }
     # Sign-ins, role and API key changes write none either: no other file.

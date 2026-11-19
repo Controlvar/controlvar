@@ -5331,6 +5331,56 @@
         "title": "EditorSessionOpened",
         "type": "object"
       },
+      "EditorSessionRefusal": {
+        "description": "An editor session's 401.",
+        "properties": {
+          "detail": {
+            "description": "The sentence the editor shows.",
+            "title": "Detail",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Why: reopened, ticket_reused, started, signed_out, scheduled, expired or not_recognised.",
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail",
+          "reason"
+        ],
+        "title": "EditorSessionRefusal",
+        "type": "object"
+      },
+      "EditorSessionState": {
+        "description": "An editor session: when it ends, where it may run, and the draft.",
+        "properties": {
+          "experiment": {
+            "$ref": "#/components/schemas/EditorExperiment"
+          },
+          "expires_at": {
+            "description": "When the session ends: 4 hours after it began.",
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "site_origins": {
+            "description": "The experiment's sites the editor may run on: its pages' origins that this server accepts requests from.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Site Origins",
+            "type": "array"
+          }
+        },
+        "required": [
+          "expires_at",
+          "site_origins",
+          "experiment"
+        ],
+        "title": "EditorSessionState",
+        "type": "object"
+      },
       "EditorVariant": {
         "properties": {
           "id": {
@@ -37968,6 +38018,150 @@
           }
         },
         "summary": "Start a visual editor session (beta)",
+        "tags": [
+          "Visual Editor"
+        ],
+        "x-stability": "beta"
+      }
+    },
+    "/api/v1/visual-editor/sessions/current": {
+      "delete": {
+        "description": "End the session: its token answers 401 `signed_out` from then on. The\nsaved design is kept.",
+        "operationId": "sign_out_of_editor_api_v1_visual_editor_sessions_current_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "The experiment is no longer a draft, or has a start date"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditorSessionRefusal"
+                }
+              }
+            },
+            "description": "The session cannot be used; reason says why"
+          },
+          "403": {
+            "description": "The request does not come from the dashboard, or the user may no longer change the experiment"
+          },
+          "404": {
+            "description": "The experiment no longer exists"
+          }
+        },
+        "summary": "Sign out of the visual editor (beta)",
+        "tags": [
+          "Visual Editor"
+        ],
+        "x-stability": "beta"
+      },
+      "get": {
+        "description": "The session's end, the experiment's sites the editor may run on, and the\ndraft's design as stored now: the session's answer without its token.\nSent with `Cache-Control: no-store`.",
+        "operationId": "read_editor_session_api_v1_visual_editor_sessions_current_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditorSessionState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "The experiment is no longer a draft, or has a start date"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditorSessionRefusal"
+                }
+              }
+            },
+            "description": "The session cannot be used; reason says why"
+          },
+          "403": {
+            "description": "The request does not come from the dashboard, or the user may no longer change the experiment"
+          },
+          "404": {
+            "description": "The experiment no longer exists"
+          }
+        },
+        "summary": "The visual editor session and its draft (beta)",
+        "tags": [
+          "Visual Editor"
+        ],
+        "x-stability": "beta"
+      }
+    },
+    "/api/v1/visual-editor/sessions/current/variants/{variant_id}/changes": {
+      "put": {
+        "description": "Replace one variant's page changes, keeping every other variant and its\nchanges as stored. It is the experiment update's own write, so it refuses\nwhat an update refuses (the control's changes among them), records one\n\"Experiment changed\" entry by the session's user with the reason\n`visual editor session <first 8 characters of the session's id>`, and\ndrops the cached experiment. The variants are saved again, so each gets a\nnew id; the answer is the session's, with the new ids. Sent with\n`Cache-Control: no-store`.",
+        "operationId": "save_variant_changes_api_v1_visual_editor_sessions_current_variants__variant_id__changes_put",
+        "parameters": [
+          {
+            "description": "One of the draft's variants",
+            "in": "path",
+            "name": "variant_id",
+            "required": true,
+            "schema": {
+              "description": "One of the draft's variants",
+              "format": "uuid",
+              "title": "Variant Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VisualChanges"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditorSessionState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "The experiment is no longer a draft, or has a start date"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditorSessionRefusal"
+                }
+              }
+            },
+            "description": "The session cannot be used; reason says why"
+          },
+          "403": {
+            "description": "The request does not come from the dashboard, or the user may no longer change the experiment"
+          },
+          "404": {
+            "description": "The experiment no longer exists, or has no variant with that id"
+          },
+          "422": {
+            "description": "The page changes are refused, as an experiment update refuses them"
+          }
+        },
+        "summary": "Save one variant's page changes from the visual editor (beta)",
         "tags": [
           "Visual Editor"
         ],

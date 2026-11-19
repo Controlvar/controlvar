@@ -1,6 +1,7 @@
-"""The visual editor's one-time sign-in (#1545): opening the editor from the
-dashboard, the editor link's claim from the site's page, and the exchange for
-an editor session, on Postgres through the real routes.
+"""The visual editor's one-time sign-in and its session (#1545): opening the
+editor from the dashboard, the editor link's claim from the site's page, the
+exchange for an editor session, and the session's own routes, on Postgres
+through the real routes.
 
 Users of each role sign in with local tokens. TestClient sends no ``Origin``:
 every request here sets the one it means, and every "wrong Origin" refusal is
@@ -22,17 +23,27 @@ fails it (the failing line is the assertion's message or comparison):
 * V82     the dashboard's origins for the dashboard's routes, the
           experiment's sites for the page's route.
 * V84     the dashboard origins the mint sees, per environment.
-* V26     who may open the editor.
-* V65     a dated draft is not opened.
-* Also: a browser's preflighted request reaches the claim route; nothing
-  stored or logged holds a credential or its hash; the texts.
-
-Until the session routes exist, "a session answers 401" is read from its row
-(``revoked_reason``).
+* V26     who may open the editor, and a session whose user may no longer
+          change experiments is refused.
+* V65     a dated draft is not opened, and a session does not write to one.
+* V27     the session's token works on its three routes and nowhere else;
+          each credential lasts its time; another experiment's variant is
+          not saved.
+* V72a    a session's token makes no preview link.
+* K3      an ended session's 401 says why: its text and its reason.
+* V67     a start, by the route or the scheduler, ends the session (401
+          started, not 400) and records it.
+* V30     a save is one experiment change by the session's user, naming the
+          session; a dashboard save names none.
+* Also: the session's GET is the exchange's answer without the token; a save
+          keeps every other variant's changes; signing out is recorded; a
+          browser's preflighted request reaches the claim route; nothing
+          stored or logged holds a credential or its hash; the texts.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -42,10 +53,12 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
+from unittest.mock import MagicMock, patch
 from urllib.parse import urlsplit
 
 import pytest
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from sqlalchemy import text, update
 from sqlalchemy.orm import sessionmaker
@@ -74,7 +87,7 @@ from backend.app.models.visual_token import (
 )
 from backend.app.schemas import visual_editor as editor_schemas
 from backend.app.services import visual_editor, visual_origins
-from backend.tests.integration.api.route_helpers import auth, make_user
+from backend.tests.integration.api.route_helpers import api_key, auth, make_user
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_db]
 
@@ -317,10 +330,52 @@ def _rows(db_session, experiment_id: str, kind: Optional[str] = None):
 
 
 def _ended_why(db_session, value: str) -> Optional[str]:
-    """Why the credential *value* was ended; ``None`` while it is live."""
+    """Why the credential *value* (a ticket or a claim) was ended; ``None``
+    while it is live."""
     row = _row(db_session, value)
     assert row is not None, "no such credential"
     return row.revoked_reason
+
+
+CURRENT = f"{SESSIONS}/current"
+
+
+def _bearer(token: str, origin: Optional[str] = None) -> Dict[str, str]:
+    return {"Authorization": f"Bearer {token}", **_origin(origin)}
+
+
+def _current(client, token: str, origin: Optional[str] = None):
+    """GET the session; with no ``Origin``, as the dashboard's own page sends
+    it through its /api/ path."""
+    return client.get(CURRENT, headers=_bearer(token, origin))
+
+
+def _session_says(client, token: str):
+    """(status, reason) of the session's GET: (200, None) while it works."""
+    response = _current(client, token)
+    if response.status_code == 401:
+        return 401, response.json()["reason"]
+    return response.status_code, None
+
+
+def _save(
+    client, token: str, variant_id: str, changes, origin: Optional[str] = DASHBOARD
+):
+    return client.put(
+        f"{CURRENT}/variants/{variant_id}/changes",
+        json=changes,
+        headers=_bearer(token, origin),
+    )
+
+
+def _sign_out(client, token: str, origin: Optional[str] = DASHBOARD):
+    return client.delete(CURRENT, headers=_bearer(token, origin))
+
+
+def _variant(client, user, experiment_id: str, name: str) -> str:
+    detail = client.get(f"{EXPERIMENTS}/{experiment_id}", headers=auth(user))
+    assert detail.status_code == 200, detail.text
+    return next(v["id"] for v in detail.json()["variants"] if v["name"] == name)
 
 
 def _entries(db_session, experiment_id: str) -> List[str]:
@@ -636,7 +691,7 @@ def test_a_used_link_presented_again_ends_the_session_it_opened(
     client, db_session, developer, experiment, via
 ):
     chain = _opened(client, developer, experiment)
-    assert _ended_why(db_session, chain["token"]) is None
+    assert _session_says(client, chain["token"]) == (200, None)
 
     if via == "claim route":
         again = _claim(client, chain["ticket"], _value())
@@ -645,9 +700,9 @@ def test_a_used_link_presented_again_ends_the_session_it_opened(
 
     assert again.status_code == 409, again.text
     assert again.json()["detail"] == visual_editor.LINK_USED_TWICE
-    reason = _ended_why(db_session, chain["token"])
-    assert reason == TICKET_REUSED, f"session {reason!r} != {TICKET_REUSED!r}"
-    assert _rows(db_session, experiment, EDITOR_SESSION)[0].revoked_at is not None
+    status, reason = _session_says(client, chain["token"])
+    assert status == 401, f"session {status} != 401"
+    assert reason == TICKET_REUSED
 
 
 def _waiting_on(db_session, pid) -> bool:
@@ -933,22 +988,23 @@ def test_opening_the_editor_again_ends_every_earlier_credential_of_that_experime
     s_other = _opened(client, developer, elsewhere)
     s_colleague = _opened(client, colleague, experiment)
     s1 = _opened(client, developer, experiment)
-    theirs = _ended_why(db_session, s_colleague["token"])
-    assert theirs == REOPENED, f"user B's session: {theirs!r} != {REOPENED!r}"
-    assert _ended_why(db_session, s1["token"]) is None
+    status, reason = _session_says(client, s_colleague["token"])
+    assert status == 401, f"user B {status} != 401"
+    assert reason == REOPENED
+    assert _session_says(client, s1["token"]) == (200, None)
     pending = _claimed(client, developer, experiment)  # ends s1
     unclaimed = _ticket(client, developer, experiment)  # ends the pending claim
     s2 = _opened(client, developer, experiment)  # ends the unclaimed ticket
 
-    assert _ended_why(db_session, s1["token"]) == REOPENED
+    assert _session_says(client, s1["token"]) == (401, REOPENED)
     assert _ended_why(db_session, pending["claim"]) == REOPENED
     assert _ended_why(db_session, pending["ticket"]) == REOPENED
     assert _ended_why(db_session, unclaimed) == REOPENED
     assert _claim(client, unclaimed, _value()).status_code == 401
     assert _exchange(client, pending["claim"]).status_code == 401
-    assert _ended_why(db_session, s2["token"]) is None
-    other = _ended_why(db_session, s_other["token"])
-    assert other is None, f"other experiment's session: {other!r} != None"
+    assert _session_says(client, s2["token"]) == (200, None)
+    status, _ = _session_says(client, s_other["token"])
+    assert status == 200, f"other experiment {status} != 200"
 
 
 @pytest.mark.regression
@@ -1431,3 +1487,594 @@ def test_no_log_line_or_stored_entry_holds_a_credential(
         if value in haystack
     )
     assert found == []
+
+
+# --- the session's routes --------------------------------------------------------
+
+NEW_CHANGES = {
+    "version": 1,
+    "changes": [{"op": "set_text", "selector": "#headline", "text": "Welcome"}],
+}
+
+
+def _stored_changes(db_session, experiment_id: str) -> Dict[str, Any]:
+    session = _session(db_session)
+    try:
+        rows = session.execute(
+            text("SELECT name, visual_changes FROM variants WHERE experiment_id = :id"),
+            {"id": uuid.UUID(experiment_id)},
+        ).all()
+    finally:
+        session.close()
+    return dict(rows)
+
+
+def _start(client, user, experiment_id: str):
+    etag = client.get(f"{EXPERIMENTS}/{experiment_id}", headers=auth(user)).json()[
+        "design_etag"
+    ]
+    return client.post(
+        f"{EXPERIMENTS}/{experiment_id}/start",
+        json={"design_etag": etag},
+        headers=auth(user),
+    )
+
+
+def _tick(db_session) -> None:
+    """One experiment scheduler tick against the test database, notifications
+    stubbed."""
+    from backend.app.core.scheduler import ExperimentScheduler
+    from backend.app.services.notification_service import NotificationService
+
+    notifications = NotificationService()
+    notifications._slack = MagicMock()
+    notifications._email = MagicMock()
+    notifications._send = lambda event: True
+    scheduler = ExperimentScheduler()
+    scheduler._notification_service = notifications
+    factory = sessionmaker(bind=db_session.get_bind())
+    with patch("backend.app.core.scheduler.SessionLocal", factory):
+        asyncio.run(scheduler.process_scheduled_experiments())
+
+
+def _date_in_the_past(db_session, experiment_id: str) -> None:
+    session = _session(db_session)
+    try:
+        session.execute(
+            update(Experiment)
+            .where(Experiment.id == uuid.UUID(experiment_id))
+            .values(start_date=datetime.now(timezone.utc) - timedelta(minutes=1))
+        )
+        session.commit()
+    finally:
+        session.close()
+
+
+def test_the_closing_texts_are_these():
+    """Each reason's text, literally; the tests compare answers with
+    ``CLOSED_TEXTS``."""
+    assert visual_editor.CLOSED_TEXTS == {
+        "reopened": (
+            "The editor was opened again for this experiment, so this one has "
+            "closed. Your saved changes are kept."
+        ),
+        "ticket_reused": (
+            "This editor link was used twice, so Controlvar closed the editor it "
+            "opened. Your saved changes are kept. Open the editor again from the "
+            "experiment's page."
+        ),
+        "started": (
+            "This experiment was started in Controlvar, so the editor has closed."
+        ),
+        "signed_out": (
+            "You signed out of the visual editor. Open the editor again from the "
+            "experiment's page in Controlvar."
+        ),
+        "scheduled": (
+            "This draft now has a start date, so the editor has closed. Your "
+            "saved changes are kept. Remove the start date on the experiment's "
+            "page to edit again."
+        ),
+        "expired": (
+            "Your editing session has ended. Saved changes are kept. Open the "
+            "editor again from the experiment's page in Controlvar."
+        ),
+        "not_recognised": (
+            "The visual editor does not recognise this sign-in. Open the editor "
+            "again from the experiment's page in Controlvar."
+        ),
+    }
+    assert visual_editor.EXPERIMENT_GONE == "This experiment no longer exists."
+    assert visual_editor.VARIANT_NOT_FOUND == (
+        "This experiment has no variant with that id."
+    )
+    for text_ in visual_editor.CLOSED_TEXTS.values():
+        lowered = text_.lower()
+        assert not any(w in lowered for w in ("ticket", "claim", "token", "etag"))
+
+
+def test_the_session_reads_its_draft_as_the_exchange_answered(
+    client, developer, experiment
+):
+    chain = _claimed(client, developer, experiment)
+    opened = _exchange(client, chain["claim"])
+    assert opened.status_code == 201, opened.text
+    body = opened.json()
+    token = body.pop("token")
+
+    response = _current(client, token)
+
+    assert response.status_code == 200, response.text
+    assert response.headers["Cache-Control"] == "no-store"
+    assert response.json() == body
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "reopened",
+        "ticket_reused",
+        "started",
+        "signed_out",
+        "scheduled",
+        "expired",
+        "not_recognised",
+        "dashboard token",
+    ],
+)
+def test_an_ended_session_says_why(
+    client, db_session, developer, experiment, monkeypatch, reason
+):
+    at = [datetime.now(timezone.utc)]
+    monkeypatch.setattr(visual_editor, "utcnow", lambda: at[0])
+    chain = _opened(client, developer, experiment)
+    headers = _bearer(chain["token"])
+    expected = reason
+    if reason == "reopened":
+        _ticket(client, developer, experiment)
+    elif reason == "ticket_reused":
+        assert _claim(client, chain["ticket"], _value()).status_code == 409
+    elif reason == "started":
+        assert _start(client, developer, experiment).status_code == 200
+    elif reason == "signed_out":
+        assert _sign_out(client, chain["token"]).status_code == 204
+    elif reason == "scheduled":
+        session = _session(db_session)
+        try:
+            session.execute(
+                text(
+                    "UPDATE visual_tokens SET revoked_at = now(), "
+                    "revoked_reason = 'scheduled' WHERE token_hash = :h"
+                ),
+                {"h": hash_api_key(chain["token"])},
+            )
+            session.commit()
+        finally:
+            session.close()
+    elif reason == "expired":
+        at[0] += timedelta(hours=4)
+    elif reason == "not_recognised":
+        headers = _bearer("cves_" + _value())
+    else:
+        headers = auth(developer)
+        expected = "not_recognised"
+
+    response = client.get(CURRENT, headers=headers)
+
+    assert response.status_code == 401, response.text
+    assert response.headers["www-authenticate"] == "Bearer"
+    body = response.json()
+    want = visual_editor.CLOSED_TEXTS[expected]
+    assert body["detail"] == want, f"{expected}: {body['detail']!r} != {want!r}"
+    assert body == {"detail": want, "reason": expected}
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("path", ["route", "scheduler"])
+def test_a_started_experiments_session_says_started_and_is_recorded(
+    client, db_session, developer, experiment, path
+):
+    chain = _opened(client, developer, experiment)
+    session_id = str(_row(db_session, chain["token"]).id)
+    before = len(_entries(db_session, experiment))
+    if path == "route":
+        assert _start(client, developer, experiment).status_code == 200
+        label = "start"
+    else:
+        _date_in_the_past(db_session, experiment)
+        _tick(db_session)
+        label = "scheduled start"
+    state = client.get(f"{EXPERIMENTS}/{experiment}", headers=auth(developer))
+    assert state.json()["status"] == "active", state.text
+
+    status, reason = _session_says(client, chain["token"])
+
+    assert status == 401, f"{label}: {status} != 401"
+    assert reason == "started"
+    found = _entries(db_session, experiment)[before:]
+    assert found == ["closed(started)"], f"{found} != ['closed(started)']"
+    entry = _audit_rows(db_session, experiment)[-1]
+    if path == "route":
+        assert entry.user_id == developer.id
+    else:
+        assert entry.user_id is None
+        assert entry.user_email == "system:experiment-scheduler"
+    assert json.loads(entry.new_value) == {
+        "reason": "started",
+        "session_id": session_id,
+        "session_user_id": str(developer.id),
+    }
+
+
+@pytest.mark.regression
+def test_a_session_write_on_a_dated_draft_is_refused(
+    client, db_session, developer, experiment
+):
+    chain = _opened(client, developer, experiment)
+    variant = _variant(client, developer, experiment, "B")
+    _set_start_date(db_session, experiment)
+
+    response = _save(client, chain["token"], variant, NEW_CHANGES)
+
+    assert response.status_code == 400, (
+        f"changes PUT after schedule: {response.status_code} != 400"
+    )
+    assert response.json()["detail"] == visual_editor.DATED_DRAFT
+    assert _stored_changes(db_session, experiment)["B"] == CHANGES
+
+
+@pytest.mark.regression
+def test_a_save_is_one_experiment_change_by_the_editors_user(
+    client, db_session, developer, experiment
+):
+    """The draft is the developer's; a colleague opens the editor and saves.
+    The entry is the colleague's, names the session, and a dashboard save of
+    the same draft names none."""
+    colleague = _user(db_session, UserRole.DEVELOPER)
+    chain = _opened(client, colleague, experiment)
+    session_id = _row(db_session, chain["token"]).id
+    variant = _variant(client, developer, experiment, "B")
+
+    def updates():
+        return [
+            row
+            for row in _all_audit(db_session, experiment)
+            if row.action_type == "experiment_update"
+        ]
+
+    before = len(updates())
+    saved = _save(client, chain["token"], variant, NEW_CHANGES)
+    assert saved.status_code == 200, saved.text
+
+    found = updates()[before:]
+    assert len(found) == 1, found
+    (entry,) = found
+    assert entry.user_id == colleague.id, "actor_id mismatch"
+    assert json.loads(entry.new_value) == {"changed_fields": ["visual_changes"]}
+    want = f"visual editor session {session_id.hex[:8]}"
+    assert entry.reason == want, f"{entry.reason!r} != {want!r}"
+
+    dashboard = client.put(
+        f"{EXPERIMENTS}/{experiment}",
+        json={"description": "from the dashboard"},
+        headers=auth(developer),
+    )
+    assert dashboard.status_code == 200, dashboard.text
+    (plain,) = updates()[before + 1 :]
+    assert plain.reason is None and plain.user_id == developer.id
+
+
+def _all_audit(db_session, experiment_id: str) -> List[AuditLog]:
+    session = _session(db_session)
+    try:
+        return (
+            session.query(AuditLog)
+            .filter(AuditLog.entity_id == uuid.UUID(experiment_id))
+            .order_by(AuditLog.timestamp)
+            .all()
+        )
+    finally:
+        session.close()
+
+
+def test_signing_out_closes_the_session_with_its_entry(
+    client, db_session, developer, experiment
+):
+    chain = _opened(client, developer, experiment)
+    session_id = str(_row(db_session, chain["token"]).id)
+    before = len(_entries(db_session, experiment))
+
+    response = _sign_out(client, chain["token"])
+
+    assert response.status_code == 204, response.text
+    assert _entries(db_session, experiment)[before:] == ["closed(signed_out)"]
+    entry = _audit_rows(db_session, experiment)[-1]
+    assert entry.user_id == developer.id
+    assert json.loads(entry.new_value) == {
+        "reason": "signed_out",
+        "session_id": session_id,
+        "session_user_id": str(developer.id),
+    }
+    assert _session_says(client, chain["token"]) == (401, "signed_out")
+    # The saved design is kept.
+    assert _stored_changes(db_session, experiment)["B"] == CHANGES
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("wrong", [*WRONG_ORIGINS, "none"])
+def test_the_session_routes_take_the_dashboards_origin(
+    client, db_session, developer, experiment, wrong
+):
+    origin = WRONG_ORIGINS.get(wrong)
+    chain = _opened(client, developer, experiment)
+    token = chain["token"]
+    variant = _variant(client, developer, experiment, "B")
+
+    got = _current(client, token, origin)
+    put = _save(client, token, variant, NEW_CHANGES, origin)
+    deleted = _sign_out(client, token, origin)
+
+    if wrong == "none":
+        assert got.status_code == 200, f"same-origin GET {got.status_code} != 200"
+        assert put.status_code == 403, f"PUT no Origin: {put.status_code} != 403"
+        assert deleted.status_code == 403, (
+            f"DELETE no Origin: {deleted.status_code} != 403"
+        )
+        refused = (put, deleted)
+    else:
+        for name, answer in (("GET", got), ("PUT", put), ("DELETE", deleted)):
+            assert answer.status_code == 403, (
+                f"{name} {origin}: {answer.status_code} != 403"
+            )
+        refused = (got, put, deleted)
+    for answer in refused:
+        assert answer.json()["detail"] == visual_origins.NOT_FROM_DASHBOARD
+    assert _stored_changes(db_session, experiment)["B"] == CHANGES
+    # The pair: from each dashboard origin, all three answer.
+    for dashboard in (DASHBOARD, DASHBOARD2):
+        assert _current(client, token, dashboard).status_code == 200
+        variant = _variant(client, developer, experiment, "B")
+        assert _save(client, token, variant, NEW_CHANGES, dashboard).status_code == 200
+    assert _sign_out(client, token, DASHBOARD2).status_code == 204
+
+
+@pytest.mark.regression
+def test_a_save_keeps_every_other_variants_changes(client, db_session, developer):
+    a_changes = {
+        "version": 1,
+        "changes": [{"op": "hide", "selector": ".banner"}],
+    }
+    body = {
+        "name": f"{PREFIX}{uuid.uuid4().hex[:8]}",
+        "experiment_type": "a_b",
+        "visual_config": CONFIG,
+        "variants": [
+            {"name": "Control", "is_control": True, "traffic_allocation": 34},
+            {
+                "name": "A",
+                "is_control": False,
+                "traffic_allocation": 33,
+                "visual_changes": a_changes,
+            },
+            {
+                "name": "B",
+                "is_control": False,
+                "traffic_allocation": 33,
+                "visual_changes": CHANGES,
+            },
+        ],
+        "metrics": [
+            {"name": "Buy", "event_name": "click_buy", "metric_type": "conversion"}
+        ],
+    }
+    created = client.post(f"{EXPERIMENTS}/", json=body, headers=auth(developer))
+    assert created.status_code == 201, created.text
+    experiment = created.json()["id"]
+    link = client.post(
+        f"{EXPERIMENTS}/{experiment}/visual/preview-links",
+        json={"variant_id": _variant(client, developer, experiment, "A")},
+        headers=auth(developer),
+    )
+    assert link.status_code == 201, link.text
+    preview = link.json()["url"].partition("#controlvar-preview=")[2]
+    key = api_key(client, developer)
+    chain = _opened(client, developer, experiment)
+
+    saved = _save(
+        client,
+        chain["token"],
+        _variant(client, developer, experiment, "B"),
+        NEW_CHANGES,
+    )
+
+    assert saved.status_code == 200, saved.text
+    stored = _stored_changes(db_session, experiment)
+    assert stored["A"] == a_changes, "variant A changes lost"
+    assert stored["B"] == NEW_CHANGES
+    assert stored["Control"] is None
+    shown = {
+        v["name"]: v["visual_changes"] for v in saved.json()["experiment"]["variants"]
+    }
+    assert shown == {"Control": None, "A": a_changes, "B": NEW_CHANGES}
+    read = client.post(
+        "/api/v1/tracking/visual/preview",
+        json={"token": preview, "host": "shop.example.com", "path": "/"},
+        headers=key,
+    )
+    assert read.status_code == 200, read.text
+    assert read.json()["changes"] == a_changes
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("change", ["demoted", "deactivated"])
+def test_a_session_whose_user_may_no_longer_change_the_draft_is_refused(
+    client, db_session, developer, experiment, change
+):
+    chain = _opened(client, developer, experiment)
+    variant = _variant(client, developer, experiment, "B")
+    session = _session(db_session)
+    try:
+        if change == "demoted":
+            statement = "UPDATE users SET role = 'VIEWER' WHERE id = :id"
+        else:
+            statement = "UPDATE users SET is_active = false WHERE id = :id"
+        session.execute(text(statement), {"id": developer.id})
+        session.commit()
+    finally:
+        session.close()
+
+    got = _current(client, chain["token"])
+    put = _save(client, chain["token"], variant, NEW_CHANGES)
+
+    for answer in (got, put):
+        assert answer.status_code == 403, f"{change}: {answer.status_code} != 403"
+        assert answer.json()["detail"] == visual_editor.CANNOT_CHANGE
+    assert _stored_changes(db_session, experiment)["B"] == CHANGES
+
+
+# --- the session's reach ----------------------------------------------------------
+
+SESSION_ROUTES = {
+    ("GET", "/api/v1/visual-editor/sessions/current"),
+    ("DELETE", "/api/v1/visual-editor/sessions/current"),
+    ("PUT", "/api/v1/visual-editor/sessions/current/variants/{variant_id}/changes"),
+}
+EDITOR_ROUTES = SESSION_ROUTES | {
+    ("POST", "/api/v1/visual-editor/tickets/claim"),
+    ("POST", "/api/v1/visual-editor/sessions"),
+}
+
+
+def _http_routes() -> List[tuple]:
+    found = set()
+    for route in app.routes:
+        contexts = getattr(route, "effective_route_contexts", None)
+        if contexts is None:
+            if not isinstance(route, APIRoute):
+                continue
+            contexts = (route,)
+        for ctx in contexts() if callable(contexts) else contexts:
+            for method in getattr(ctx, "methods", None) or ():
+                found.add((method, ctx.path))
+    return sorted(found)
+
+
+def test_the_editor_routes_are_exactly_these():
+    routes = _http_routes()
+    editor = {(m, p) for m, p in routes if p.startswith("/api/v1/visual-editor/")}
+    unexpected = sorted(editor - EDITOR_ROUTES)
+    assert not unexpected, f"unexpected route {unexpected}"
+    assert editor == EDITOR_ROUTES
+    visual = {
+        (m, p) for m, p in routes if p.startswith(f"{EXPERIMENTS}/") and "/visual/" in p
+    }
+    assert visual == {
+        ("POST", "/api/v1/experiments/{experiment_id}/visual/preview-links"),
+        ("DELETE", "/api/v1/experiments/{experiment_id}/visual/preview-links"),
+        ("POST", "/api/v1/experiments/{experiment_id}/visual/editor-tickets"),
+    }
+    words = ("renew", "audience", "preview")
+    stray = [p for m, p in editor for w in words if w in p]
+    assert stray == [], f"unexpected route {stray}"
+
+
+def _answer(response):
+    """What is compared: status, WWW-Authenticate, and a refusal's body."""
+    body = None
+    if response.status_code in (401, 403):
+        try:
+            body = response.json()
+        except ValueError:
+            body = response.text
+    return response.status_code, response.headers.get("www-authenticate"), body
+
+
+def _send(client, method: str, path: str, token: str):
+    url = re.sub(r"\{[^}]+\}", "00000000-0000-4000-8000-000000000000", path)
+    body = {} if method in ("POST", "PUT", "PATCH", "DELETE") else None
+    return client.request(method, url, json=body, headers=_bearer(token, DASHBOARD))
+
+
+@pytest.mark.regression
+def test_no_other_route_takes_a_session_token(client, developer, experiment):
+    """Every route but the session's own answers a live session's token
+    exactly as it answers a made-up one; on its own three routes the live
+    token gets in and the made-up one does not."""
+    chain = _opened(client, developer, experiment)
+    live, made_up = chain["token"], "cves_" + _value()
+    routes = _http_routes()
+    assert len(routes) >= 150, len(routes)
+    taken = {}
+    for method, path in routes:
+        if (method, path) in SESSION_ROUTES:
+            continue
+        if _answer(_send(client, method, path, live)) != _answer(
+            _send(client, method, path, made_up)
+        ):
+            taken[f"{method} {path}"] = True
+    assert not taken, f"beyond allow-list: {sorted(taken)}"
+    variant = _variant(client, developer, experiment, "B")
+    assert _current(client, made_up).status_code == 401
+    assert _current(client, live).status_code == 200
+    assert _save(client, made_up, variant, NEW_CHANGES).status_code == 401
+    assert _save(client, live, variant, NEW_CHANGES).status_code == 200
+    assert _sign_out(client, made_up).status_code == 401
+    assert _sign_out(client, live).status_code == 204
+
+
+@pytest.mark.regression
+def test_each_credential_lasts_its_time(client, developer, experiment, monkeypatch):
+    base = datetime(2031, 3, 4, 5, 6, 7, tzinfo=timezone.utc)
+    at = [base]
+    monkeypatch.setattr(visual_editor, "utcnow", lambda: at[0])
+
+    ticket = _ticket(client, developer, experiment)
+    at[0] = base + timedelta(seconds=120)
+    late = _claim(client, ticket, _value())
+    assert late.status_code == 401, f"ticket after 120 s: {late.status_code} != 401"
+    assert late.json()["detail"] == visual_editor.LINK_NOT_VALID
+
+    at[0] = base
+    chain = _claimed(client, developer, experiment)
+    at[0] = base + timedelta(seconds=120)
+    late = _exchange(client, chain["claim"])
+    assert late.status_code == 401, f"claim after 120 s: {late.status_code} != 401"
+
+    at[0] = base
+    chain = _opened(client, developer, experiment)
+    at[0] = base + timedelta(hours=4) - timedelta(seconds=1)
+    assert _session_says(client, chain["token"]) == (200, None)
+    at[0] = base + timedelta(hours=4)
+    assert _session_says(client, chain["token"]) == (401, "expired")
+
+
+@pytest.mark.regression
+def test_a_variant_of_another_experiment_is_not_saved(
+    client, db_session, developer, experiment
+):
+    other = _draft(client, developer)
+    theirs = _variant(client, developer, other, "B")
+    chain = _opened(client, developer, experiment)
+
+    response = _save(client, chain["token"], theirs, NEW_CHANGES)
+
+    assert response.status_code == 404, f"{response.status_code} != 404"
+    assert response.json()["detail"] == visual_editor.VARIANT_NOT_FOUND
+    assert _stored_changes(db_session, other)["B"] == CHANGES
+    assert _stored_changes(db_session, experiment)["B"] == CHANGES
+
+
+@pytest.mark.regression
+def test_a_session_token_makes_no_preview_link(client, developer, experiment):
+    chain = _opened(client, developer, experiment)
+    variant = _variant(client, developer, experiment, "B")
+    url = f"{EXPERIMENTS}/{experiment}/visual/preview-links"
+
+    refused = client.post(
+        url, json={"variant_id": variant}, headers=_bearer(chain["token"], DASHBOARD)
+    )
+
+    assert refused.status_code == 401, f"{refused.status_code} != 401"
+    made = client.post(url, json={"variant_id": variant}, headers=auth(developer))
+    assert made.status_code == 201, made.text

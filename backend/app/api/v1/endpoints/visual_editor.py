@@ -17,35 +17,66 @@ refusal that comes after the spend leaves the credential spent. A spent
 ticket or claim presented again ends the editor that link opened (409); see
 ``backend/app/services/visual_editor.py``. Both routes have an exact rate
 limit of their own (``RATE_LIMIT_CONFIG``).
+
+The session's own routes take ``Authorization: Bearer cves_...`` and nothing
+else; no other route takes that token:
+
+* ``GET /api/v1/visual-editor/sessions/current``: the session and the draft.
+* ``DELETE /api/v1/visual-editor/sessions/current``: signs out.
+* ``PUT /api/v1/visual-editor/sessions/current/variants/{variant_id}/changes``:
+  saves one variant's page changes, through the experiment update's own
+  steps (``experiments._apply_experiment_update``), as the session's user.
+
+Each runs :func:`current_editor_session` first. A session that cannot be used
+answers 401 with ``{"detail", "reason"}`` (:class:`EditorSessionClosed`), so
+the editor can say why it closed.
 """
 
 from __future__ import annotations
 
 import secrets
 import uuid
+from dataclasses import dataclass
+from datetime import datetime
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
-from sqlalchemy import select
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    HTTPException,
+    Path,
+    Request,
+    Response,
+    status,
+)
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
 from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.v1.endpoints import experiments as experiments_endpoints
 from backend.app.core.logger import unexpected_failure
 from backend.app.core.logging import logger
 from backend.app.core.security import hash_api_key
 from backend.app.models.audit_log import ActionType, EntityType
-from backend.app.models.experiment import Experiment
+from backend.app.models.experiment import Experiment, ExperimentStatus
 from backend.app.models.user import User
 from backend.app.models.visual_token import (
     EDITOR_CLAIM,
     EDITOR_SESSION,
     EDITOR_TICKET,
+    SIGNED_OUT,
     VisualToken,
 )
+from backend.app.schemas.experiment import ExperimentUpdate, VariantBase
+from backend.app.schemas.visual import VisualChanges
 from backend.app.schemas.visual_editor import (
     ClaimExchange,
     EditorSessionOpened,
+    EditorSessionState,
     TicketClaim,
     TicketClaimed,
 )
@@ -60,6 +91,44 @@ from backend.app.services.visual_origins import (
 )
 
 router = APIRouter(route_class=OffLoopRoute)
+
+
+class EditorSessionRefusal(BaseModel):
+    """An editor session's 401."""
+
+    detail: str = Field(..., description="The sentence the editor shows.")
+    reason: str = Field(
+        ...,
+        description=(
+            "Why: reopened, ticket_reused, started, signed_out, scheduled, "
+            "expired or not_recognised."
+        ),
+    )
+
+
+class EditorSessionClosed(HTTPException):
+    """The 401 of an editor session that cannot be used: ``detail`` is the
+    text for *reason*, and the answer carries both (see
+    :func:`editor_session_closed_handler`)."""
+
+    def __init__(self, reason: str | None) -> None:
+        self.reason = visual_editor.closed_reason(reason)
+        super().__init__(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=visual_editor.CLOSED_TEXTS[self.reason],
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+async def editor_session_closed_handler(
+    request: Request, exc: EditorSessionClosed
+) -> JSONResponse:
+    """``{"detail": <text>, "reason": <code>}`` with ``WWW-Authenticate``."""
+    return JSONResponse(
+        {"detail": exc.detail, "reason": exc.reason},
+        status_code=exc.status_code,
+        headers=exc.headers,
+    )
 
 
 async def require_dashboard_origin(request: Request) -> None:
@@ -328,3 +397,256 @@ def open_editor_session(
     )
     response.headers["Cache-Control"] = "no-store"
     return EditorSessionOpened(token=token, **state)
+
+
+# --- the session's routes ----------------------------------------------------------
+
+
+@dataclass
+class EditorSession:
+    """The session a request is made in, as :func:`current_editor_session`
+    found it."""
+
+    id: uuid.UUID
+    expires_at: datetime
+    user: User
+    experiment: Experiment
+
+
+def current_editor_session(
+    request: Request, db: Session = Depends(deps.get_db)
+) -> EditorSession:
+    """The editor session of the request, or the refusal, checked in this
+    order on every call:
+
+    1. 403 unless the ``Origin`` is a dashboard origin; a ``GET`` or ``HEAD``
+       may have none.
+    2. 401 ``not_recognised`` unless ``Authorization: Bearer cves_...`` names
+       an editor session.
+    3. 401 with the session's ``revoked_reason`` once it has been ended.
+    4. 401 ``expired`` once its 4 hours are over.
+    5. 403 unless its user is active and may still change experiments.
+    6. 404 when the experiment no longer exists.
+    7. 400 once the experiment is no longer a draft, or has a start date.
+
+    It writes nothing.
+    """
+    refusal = dashboard_origin_refusal(request.headers.get("origin"), request.method)
+    if refusal is not None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=refusal)
+    scheme, _, token = (request.headers.get("authorization") or "").partition(" ")
+    if scheme.lower() != "bearer" or not token.startswith(
+        visual_editor.SESSION_TOKEN_PREFIX
+    ):
+        raise EditorSessionClosed(visual_editor.NOT_RECOGNISED)
+    row = (
+        db.query(VisualToken)
+        .filter(
+            VisualToken.token_hash == hash_api_key(token),
+            VisualToken.kind == EDITOR_SESSION,
+        )
+        .first()
+    )
+    if row is None:
+        raise EditorSessionClosed(visual_editor.NOT_RECOGNISED)
+    if row.revoked_at is not None:
+        raise EditorSessionClosed(row.revoked_reason)
+    if row.expires_at <= visual_editor.utcnow():
+        raise EditorSessionClosed(visual_editor.EXPIRED)
+    user = db.get(User, row.user_id) if row.user_id else None
+    experiment = db.query(Experiment).filter(Experiment.id == row.experiment_id).first()
+    refuse_unless_allowed(experiment, user)
+    if experiment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=visual_editor.EXPERIMENT_GONE,
+        )
+    if experiment.status != ExperimentStatus.DRAFT:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=visual_editor.NOT_A_DRAFT
+        )
+    if experiment.start_date is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=visual_editor.DATED_DRAFT
+        )
+    return EditorSession(
+        id=row.id, expires_at=row.expires_at, user=user, experiment=experiment
+    )
+
+
+async def editor_cache_control() -> deps.CacheControl:
+    """The experiment cache as the experiment routes use it, without their
+    ``skip_cache`` query parameter: the session's write always drops it."""
+    return await deps.get_cache_control(skip_cache=False)
+
+
+_SESSION_REFUSALS = {
+    400: {"description": "The experiment is no longer a draft, or has a start date"},
+    401: {
+        "model": EditorSessionRefusal,
+        "description": "The session cannot be used; reason says why",
+    },
+    403: {
+        "description": (
+            "The request does not come from the dashboard, or the user may no "
+            "longer change the experiment"
+        )
+    },
+    404: {"description": "The experiment no longer exists"},
+}
+
+
+@router.get(
+    "/sessions/current",
+    response_model=EditorSessionState,
+    summary="The visual editor session and its draft (beta)",
+    openapi_extra={"x-stability": "beta"},
+    responses=_SESSION_REFUSALS,
+)
+def read_editor_session(
+    response: Response,
+    session: EditorSession = Depends(current_editor_session),
+) -> EditorSessionState:
+    """
+    The session's end, the experiment's sites the editor may run on, and the
+    draft's design as stored now: the session's answer without its token.
+    Sent with `Cache-Control: no-store`.
+    """
+    response.headers["Cache-Control"] = "no-store"
+    return EditorSessionState(
+        **visual_editor.session_state(session.experiment, session.expires_at)
+    )
+
+
+@router.delete(
+    "/sessions/current",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Sign out of the visual editor (beta)",
+    openapi_extra={"x-stability": "beta"},
+    responses=_SESSION_REFUSALS,
+)
+def sign_out_of_editor(
+    session: EditorSession = Depends(current_editor_session),
+    db: Session = Depends(deps.get_db),
+) -> Response:
+    """
+    End the session: its token answers 401 `signed_out` from then on. The
+    saved design is kept.
+    """
+    actor = AuditActor.of(session.user)
+    experiment_id = session.experiment.id
+    name = session.experiment.name
+    try:
+        ended = [
+            visual_editor.Ended(*row)
+            for row in db.execute(
+                update(VisualToken)
+                .where(
+                    VisualToken.id == session.id,
+                    VisualToken.revoked_at.is_(None),
+                )
+                .values(revoked_at=visual_editor.utcnow(), revoked_reason=SIGNED_OUT)
+                .returning(VisualToken.id, VisualToken.kind, VisualToken.user_id)
+                .execution_options(synchronize_session=False)
+            ).all()
+        ]
+        db.commit()
+    except Exception as exc:
+        raise unexpected_failure(
+            exc,
+            "Visual editor sign-out",
+            "Could not sign out of the visual editor",
+            db=db,
+            logger=logger,
+        )
+    visual_editor.audit_sessions_closed(
+        db,
+        ended,
+        actor=actor,
+        reason=SIGNED_OUT,
+        experiment_id=experiment_id,
+        experiment_name=name,
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def _variant_body(variant, changes: VisualChanges | None) -> VariantBase:
+    """A stored variant as an update sends it. Its page changes are sent only
+    for the variant being saved; every other variant keeps the ones stored
+    for its name."""
+    fields = {
+        "name": variant.name,
+        "description": variant.description,
+        "is_control": bool(variant.is_control),
+        "traffic_allocation": variant.traffic_allocation,
+        "configuration": variant.configuration,
+    }
+    if changes is not None:
+        fields["visual_changes"] = changes
+    return VariantBase(**fields)
+
+
+@router.put(
+    "/sessions/current/variants/{variant_id}/changes",
+    response_model=EditorSessionState,
+    summary="Save one variant's page changes from the visual editor (beta)",
+    openapi_extra={"x-stability": "beta"},
+    responses={
+        **_SESSION_REFUSALS,
+        404: {
+            "description": (
+                "The experiment no longer exists, or has no variant with that id"
+            )
+        },
+        422: {
+            "description": (
+                "The page changes are refused, as an experiment update refuses them"
+            )
+        },
+    },
+)
+async def save_variant_changes(
+    response: Response,
+    variant_id: uuid.UUID = Path(..., description="One of the draft's variants"),
+    changes: VisualChanges = Body(...),
+    session: EditorSession = Depends(current_editor_session),
+    db: Session = Depends(deps.get_db),
+    cache_control: deps.CacheControl = Depends(editor_cache_control),
+) -> EditorSessionState:
+    """
+    Replace one variant's page changes, keeping every other variant and its
+    changes as stored. It is the experiment update's own write, so it refuses
+    what an update refuses (the control's changes among them), records one
+    "Experiment changed" entry by the session's user with the reason
+    `visual editor session <first 8 characters of the session's id>`, and
+    drops the cached experiment. The variants are saved again, so each gets a
+    new id; the answer is the session's, with the new ids. Sent with
+    `Cache-Control: no-store`.
+    """
+    experiment = session.experiment
+    stored = list(experiment.variants)
+    if not any(variant.id == variant_id for variant in stored):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=visual_editor.VARIANT_NOT_FOUND,
+        )
+    update_in = ExperimentUpdate(
+        variants=[
+            _variant_body(variant, changes if variant.id == variant_id else None)
+            for variant in stored
+        ]
+    )
+    experiment_id = experiment.id
+    await experiments_endpoints._apply_experiment_update(
+        db,
+        experiment_id,
+        update_in,
+        session.user,
+        cache_control,
+        audit_reason=f"visual editor session {session.id.hex[:8]}",
+    )
+    # The variants were saved again: read the row as it is now.
+    db.expire_all()
+    saved = db.query(Experiment).filter(Experiment.id == experiment_id).first()
+    response.headers["Cache-Control"] = "no-store"
+    return EditorSessionState(**visual_editor.session_state(saved, session.expires_at))

@@ -342,17 +342,27 @@ def design_etag(experiment: Any) -> Optional[str]:
 # --- the editor's credentials ---------------------------------------------------
 
 
-def revoke_editor_tokens(db: Session, experiment_id: Any, reason: str) -> None:
+def revoke_editor_tokens(db: Session, experiment_id: Any, reason: str) -> List[Any]:
     """End every editor ticket, session and claim of *experiment_id* not yet
     ended, recording *reason*: one UPDATE in the caller's transaction, so it
-    commits or rolls back with the start. Preview links are not touched."""
-    db.execute(
-        update(VisualToken)
-        .where(
-            VisualToken.experiment_id == experiment_id,
-            VisualToken.kind.in_(EDITOR_KINDS),
-            VisualToken.revoked_at.is_(None),
-        )
-        .values(revoked_at=func.now(), revoked_reason=reason)
-        .execution_options(synchronize_session=False)
+    commits or rolls back with the start. Preview links are not touched.
+    Returns each row it ended (``id``, ``kind``, ``user_id``, ``expires_at``),
+    so the caller can record the editor sessions it closed."""
+    return list(
+        db.execute(
+            update(VisualToken)
+            .where(
+                VisualToken.experiment_id == experiment_id,
+                VisualToken.kind.in_(EDITOR_KINDS),
+                VisualToken.revoked_at.is_(None),
+            )
+            .values(revoked_at=func.now(), revoked_reason=reason)
+            .returning(
+                VisualToken.id,
+                VisualToken.kind,
+                VisualToken.user_id,
+                VisualToken.expires_at,
+            )
+            .execution_options(synchronize_session=False)
+        ).all()
     )

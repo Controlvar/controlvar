@@ -1419,6 +1419,22 @@
         "summary": "Start a visual editor session (beta)"
       }
     },
+    "/api/v1/visual-editor/sessions/current": {
+      "delete": {
+        "operationId": "sign_out_of_editor_api_v1_visual_editor_sessions_current_delete",
+        "summary": "Sign out of the visual editor (beta)"
+      },
+      "get": {
+        "operationId": "read_editor_session_api_v1_visual_editor_sessions_current_get",
+        "summary": "The visual editor session and its draft (beta)"
+      }
+    },
+    "/api/v1/visual-editor/sessions/current/variants/{variant_id}/changes": {
+      "put": {
+        "operationId": "save_variant_changes_api_v1_visual_editor_sessions_current_variants__variant_id__changes_put",
+        "summary": "Save one variant's page changes from the visual editor (beta)"
+      }
+    },
     "/api/v1/visual-editor/tickets/claim": {
       "post": {
         "operationId": "claim_editor_link_api_v1_visual_editor_tickets_claim_post",

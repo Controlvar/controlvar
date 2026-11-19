@@ -300,12 +300,13 @@ No entry holds a password, a token, any part of an API key, or a request body.
 | `toggle_enable`, `toggle_disable` | `feature_flag` | A flag is turned on or off (`/toggle`, `/enable`, `/disable`, or bulk `enable`/`disable`); `old_value` and `new_value` are the status |
 | `experiment_create` | `experiment` | `POST /experiments/`, `/clone` (`reason` names the source), wizard submit |
 | `experiment_update` | `experiment` | `PUT /experiments/{id}`, `/schedule`, `/metadata`, `/archive`, `PUT /bandit/{id}/weights` (`reason` names the change, except for `PUT`) |
+| `experiment_update` | `experiment` | `PUT /visual-editor/sessions/current/variants/{variant_id}/changes` saves a variant's page changes from the visual editor, the actor being the session's user; `reason` is `visual editor session` and the first 8 characters of the session's id |
 | `experiment_delete` | `experiment` | `DELETE /experiments/{id}` |
 | `experiment_start`, `experiment_pause`, `experiment_complete` | `experiment` | `/start` (also a resume), `/pause`, `/complete` |
 | `experiment_preview_link_create` | `experiment` | `POST /experiments/{id}/visual/preview-links` makes a visual experiment's preview link; `new_value` is `{"variant_id", "expires_at"}`, never the link or its token |
 | `experiment_preview_links_revoke` | `experiment` | `DELETE /experiments/{id}/visual/preview-links` ends the experiment's live preview links; `new_value` is `{"revoked"}`, how many were ended |
 | `visual_editor_session_opened` | `experiment` | `POST /visual-editor/sessions` starts a visual editor session, the actor being the user who opened the editor link; `new_value` is `{"session_id"}`, never the session's token |
-| `visual_editor_session_closed` | `experiment` | A visual editor session ends; `new_value` is `{"reason", "session_id", "session_user_id"}`. `reason` is `reopened` when `POST /experiments/{id}/visual/editor-tickets` opened the editor again, the actor being whoever opened it, and `ticket_reused` when the session's editor link came back after it was used, the actor being `system:visual-editor` |
+| `visual_editor_session_closed` | `experiment` | A visual editor session ends; `new_value` is `{"reason", "session_id", "session_user_id"}`. `reason` is `reopened` when `POST /experiments/{id}/visual/editor-tickets` opened the editor again, the actor being whoever opened it; `ticket_reused` when the session's editor link came back after it was used, the actor being `system:visual-editor`; `signed_out` for `DELETE /visual-editor/sessions/current`, the actor being the session's user; and `started` when the experiment starts, the actor being whoever started it with `/start`, or `system:experiment-scheduler` |
 | `visual_editor_ticket_reused` | `experiment` | An editor link that was already used came back to `POST /visual-editor/tickets/claim` or `POST /visual-editor/sessions`, which closes the editor it opened; the actor is `system:visual-editor` and `new_value` is `{"link_user_id"}`, the user who opened the link |
 | `api_key_create`, `api_key_revoke` | `api_key` | `POST /api-keys`, `DELETE /api-keys/{id}` |
 | `holdout_create` | `holdout` | `POST /holdout`. With `is_active: true` it turns the active holdout off, and that holdout gets its own `holdout_deactivate` |
@@ -366,7 +367,7 @@ these reserved values:
 
 | `user_email` | Written by |
 |--------------|------------|
-| `system:experiment-scheduler` | The experiment scheduler: scheduled starts, resumes and ends |
+| `system:experiment-scheduler` | The experiment scheduler: scheduled starts, resumes and ends, and each visual editor session a scheduled start closes |
 | `system:rollout-scheduler` | The rollout scheduler: each rollout stage it starts |
 | `system:safety-monitor` | The safety monitor: each automatic rollback |
 | `system:cognito-sync` | Cognito group sync: each role or superuser flag change |

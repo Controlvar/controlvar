@@ -557,6 +557,13 @@ by = [
 ]
 
 [[unit]]
+text = "experiment_update | experiment | PUT /visual-editor/sessions/current/variants/{variant_id}/changes saves a variant's page changes from the visual editor, the actor being the session's user; reason is visual editor session and the first 8 characters of the session's id"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_a_save_is_one_experiment_change_by_the_editors_user",
+]
+
+[[unit]]
 text = "experiment_delete | experiment | DELETE /experiments/{id}"
 by = [
     "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
@@ -593,11 +600,13 @@ by = [
 ]
 
 [[unit]]
-text = "visual_editor_session_closed | experiment | A visual editor session ends; new_value is {\"reason\", \"session_id\", \"session_user_id\"}. reason is reopened when POST /experiments/{id}/visual/editor-tickets opened the editor again, the actor being whoever opened it, and ticket_reused when the session's editor link came back after it was used, the actor being system:visual-editor"
+text = "visual_editor_session_closed | experiment | A visual editor session ends; new_value is {\"reason\", \"session_id\", \"session_user_id\"}. reason is reopened when POST /experiments/{id}/visual/editor-tickets opened the editor again, the actor being whoever opened it; ticket_reused when the session's editor link came back after it was used, the actor being system:visual-editor; signed_out for DELETE /visual-editor/sessions/current, the actor being the session's user; and started when the experiment starts, the actor being whoever started it with /start, or system:experiment-scheduler"
 by = [
     "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
     "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_each_case_writes_exactly_its_audit_entries",
     "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_a_reopen_closing_entry_names_who_opened_again_and_whose_session_closed",
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_signing_out_closes_the_session_with_its_entry",
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_a_started_experiments_session_says_started_and_is_recorded",
 ]
 
 [[unit]]
@@ -888,10 +897,11 @@ text = "user_email | Written by"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "system:experiment-scheduler | The experiment scheduler: scheduled starts, resumes and ends"
+text = "system:experiment-scheduler | The experiment scheduler: scheduled starts, resumes and ends, and each visual editor session a scheduled start closes"
 by = [
     "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_these",
     "test:backend/tests/integration/services/test_audit_service_sites.py::test_scheduled_start_is_recorded_by_the_experiment_scheduler",
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_a_started_experiments_session_says_started_and_is_recorded",
 ]
 
 [[unit]]

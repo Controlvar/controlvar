@@ -160,7 +160,10 @@ INVENTORY = {
     ("POST", f"{V1}/experiments/{{experiment_id}}/metadata"): EXP_UPDATE,
     ("POST", f"{V1}/experiments/{{experiment_id}}/pause"): Audited(A.EXPERIMENT_PAUSE),
     ("PUT", f"{V1}/experiments/{{experiment_id}}/schedule"): EXP_UPDATE,
-    ("POST", f"{V1}/experiments/{{experiment_id}}/start"): Audited(A.EXPERIMENT_START),
+    # A start also closes the experiment's open visual editor sessions (#1545).
+    ("POST", f"{V1}/experiments/{{experiment_id}}/start"): Audited(
+        A.EXPERIMENT_START, A.VISUAL_EDITOR_SESSION_CLOSED
+    ),
     # #1545: a visual experiment's preview links.
     ("POST", f"{V1}/experiments/{{experiment_id}}/visual/preview-links"): Audited(
         A.EXPERIMENT_PREVIEW_LINK_CREATE
@@ -284,6 +287,13 @@ INVENTORY = {
         A.VISUAL_EDITOR_TICKET_REUSED,
         A.VISUAL_EDITOR_SESSION_CLOSED,
     ),
+    ("DELETE", f"{V1}/visual-editor/sessions/current"): Audited(
+        A.VISUAL_EDITOR_SESSION_CLOSED
+    ),
+    # The editor's save is PUT /experiments/{id}'s own write and entry.
+    ("PUT", f"{V1}/visual-editor/sessions/current/variants/{{variant_id}}/changes"): (
+        EXP_UPDATE
+    ),
 }
 
 #: GET routes a reader could expect to be recorded, and why they are not.
@@ -334,7 +344,7 @@ def test_the_inventory_is_exact():
         f"unclassified: {sorted(found - set(INVENTORY))}; "
         f"gone: {sorted(set(INVENTORY) - found)}"
     )
-    assert len(INVENTORY) == 120
+    assert len(INVENTORY) == 122
 
 
 def test_every_mutating_route_is_under_backend_or_modules():
