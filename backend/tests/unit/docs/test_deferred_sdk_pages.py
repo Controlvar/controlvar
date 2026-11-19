@@ -997,7 +997,6 @@ DELEGATES: Dict[str, Tuple[str, "re.Pattern[str]"]] = {
 #: source reads. When one starts sending it, change this set with its pages.
 SENDS_NO_CONTEXT = {
     "android",
-    "elixir",
     "flutter",
     "ios",
 }
@@ -2659,4 +2658,137 @@ def test_the_old_edge_note_is_gone_from_both_pages():
         folded = fold(text(page))
         assert "The `attributes` argument was dropped" not in folded, page
         assert "`evaluateFlag` sends the user id alone" not in folded, page
+        assert "against an empty context" not in folded, page
+
+
+# ---------------------------------------------------------------------------
+# 9. The Elixir SDK's targeting context (part of #1720)
+# ---------------------------------------------------------------------------
+
+#: The Elixir SDK's page and its README, which say the same about the context.
+ELIXIR_PAGES = ("docs/sdk/elixir.md", "sdk/elixir/README.md")
+#: The Elixir SDK's client tests: each name below is one of its ``test "..."``
+#: titles (the decode test's has ``#{name}`` in it, once per vector).
+ELIXIR_TESTS = SDK_DIR / "elixir/test/controlvar/client_test.exs"
+_ELIXIR_EXACT = "context=<compact JSON>, percent-encoded, after user_id"
+_ELIXIR_RULE = "matches a targeting rule on an attribute: the server reads plan=pro from the context"
+_ELIXIR_DECODE = (
+    "the server decodes the same object, the user id and nothing else (#{name})"
+)
+_ELIXIR_PASS = "feature_enabled?/4 passes the options through; /3 is kept"
+_ELIXIR_NONE = (
+    "no attributes, an empty map or a non-map: the request is the one sent before"
+    " attributes were"
+)
+_ELIXIR_UNSENDABLE = (
+    "return the fixed {:error, :invalid_attributes}: nothing is sent, nothing is cached"
+)
+_ELIXIR_CACHE = (
+    "A then B: two requests and two answers",
+    "A, B, A: three requests, because the one slot holds B's context",
+    "A then no attributes: two requests, and the second is not A's answer",
+    "A then A: one request",
+)
+
+#: Each sentence both Elixir pages state about the targeting context (as
+#: written, folded to one line), the ExUnit tests that fail when it stops being
+#: true, and the backend tests that hold the server's part of it. The pages are
+#: in ``CLAIMS_DEFERRED``, so no claims registry binds them; this does.
+ELIXIR_CONTEXT_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], ...] = (
+    (
+        "Flag evaluation sends the user's attributes as `context`, so a flag's targeting"
+        " rules match against them.",
+        (_ELIXIR_EXACT, _ELIXIR_RULE),
+        _SERVER_MATCHES,
+    ),
+    (
+        "`evaluate_flag` and `feature_enabled?` call"
+        " `GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=…`, where `context`"
+        " is the attributes as compact JSON, percent-encoded like `user_id`:"
+        ' `%{plan: "pro"}` travels as `context=%7B%22plan%22%3A%22pro%22%7D`.',
+        (_ELIXIR_EXACT, _ELIXIR_PASS, _ELIXIR_DECODE),
+        (),
+    ),
+    (
+        "With no attributes, an empty map or anything that is not a map, no `context`"
+        " is sent and the request carries the user id alone. If the attributes cannot"
+        " be written as JSON, `evaluate_flag` returns `{:error, :invalid_attributes}`"
+        " and sends nothing.",
+        (_ELIXIR_NONE, _ELIXIR_UNSENDABLE),
+        (),
+    ),
+    (
+        "The SDK keeps one cached answer per user and flag, together with the attributes"
+        " it was asked with. A later call is answered from the cache only if its"
+        " attributes are exactly the same; otherwise the SDK asks the server, and the new"
+        " answer replaces the cached one. So two calls that differ only in attributes get"
+        " two answers. The same attributes written in a different key order may cost one"
+        " extra request; they never return another call's answer.",
+        _ELIXIR_CACHE,
+        (),
+    ),
+    (
+        "The change is in this repository"
+        " ([#1720](https://github.com/Controlvar/controlvar/issues/1720)); it reaches a"
+        " registry at this SDK's first publish, so a build from a clone of `main` has it"
+        " and a copy installed earlier does not.",
+        (_ELIXIR_EXACT,),
+        (),
+    ),
+)
+
+
+def test_the_claim_patterns_find_the_true_sentences_on_the_elixir_pages():
+    # Elixir sends the context (part of #1720), and both its pages say so: the
+    # patterns must see it, so that elixir put back in SENDS_NO_CONTEXT fails
+    # test_a_page_claims_no_attribute_targeting_its_client_does_not_send on
+    # docs/sdk/elixir.md and sdk/elixir/README.md as well as here.
+    assert "elixir" not in SENDS_NO_CONTEXT
+    assert sends_context("elixir")
+    for page in ELIXIR_PAGES:
+        assert "flag evaluation sends the attributes" in attribute_claims(text(page)), (
+            page
+        )
+
+
+@pytest.mark.parametrize(
+    "sentence, tests, server",
+    ELIXIR_CONTEXT_SENTENCES,
+    ids=[s[:60] for s, _, _ in ELIXIR_CONTEXT_SENTENCES],
+)
+def test_each_elixir_context_sentence_is_on_both_pages_and_held_by_a_test(
+    sentence, tests, server
+):
+    unsaid = [page for page in ELIXIR_PAGES if sentence not in fold(text(page))]
+    assert unsaid == [], f"no longer said there: {sentence}"
+    source = ELIXIR_TESTS.read_text("utf-8")
+    missing = [title for title in tests if f'test "{title}"' not in source]
+    assert missing == [], f"no ExUnit test in {ELIXIR_TESTS.name} has these titles"
+    gone = [node for node in server if not _python_test_exists(node)]
+    assert gone == [], "these backend tests are gone"
+
+
+def test_the_elixir_page_says_feature_enabled_passes_its_options_through():
+    # The facade's feature_enabled?/4 forwards its options to the client's
+    # (held by the _ELIXIR_PASS test and by the facade test named below).
+    page = fold(text("docs/sdk/elixir.md"))
+    assert (
+        "`opts` are those of `evaluate_flag/4` (`:attributes`, `:skip_cache`) and are"
+        " passed through to it." in page
+    )
+    assert "takes no options" not in page
+    assert f'test "{_ELIXIR_PASS}"' in ELIXIR_TESTS.read_text("utf-8")
+    facade = SDK_DIR / "elixir/test/controlvar_test.exs"
+    assert (
+        'test "the facade forwards attributes: the request carries &context= after'
+        ' user_id"' in facade.read_text("utf-8")
+    )
+
+
+def test_the_old_elixir_note_is_gone_from_both_pages():
+    # The note #1720 replaced: attributes accepted on evaluate_flag and not sent.
+    for page in ELIXIR_PAGES:
+        folded = fold(text(page))
+        assert "accepted for symmetry and not sent" not in folded, page
+        assert "accepted for symmetry" not in folded, page
         assert "against an empty context" not in folded, page

@@ -586,6 +586,13 @@ SENDS = {
         [("async evaluateFlag(", "const evaluation: FlagEvaluation = {")],
         "?user_id=${encode(userId)}${context}",
     ),
+    # Part of #1720: the attributes as compact JSON, through the same encode as
+    # user_id.
+    "elixir": (
+        "sdk/elixir/lib/controlvar/client.ex",
+        [("def evaluate_flag(", "{:ok, data} when is_map(data) ->")],
+        '"&context=#{encode(context_json)}"',
+    ),
 }
 
 #: Every directory under sdk/ whose flag evaluation sends the user id alone, so
@@ -593,11 +600,6 @@ SENDS = {
 #: file, and its code from the evaluate signature through the request call as
 #: (the line that starts it, the first line after the call) pairs.
 DOES_NOT_SEND = {
-    "elixir": (
-        1720,
-        "sdk/elixir/lib/controlvar/client.ex",
-        [("def evaluate_flag(", "{:ok, data} when is_map(data) ->")],
-    ),
     "ios": (
         438,
         "sdk/ios/Sources/Controlvar/ExperimentationClient.swift",
