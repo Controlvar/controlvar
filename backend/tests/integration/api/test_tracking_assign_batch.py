@@ -703,11 +703,12 @@ class TestDatabaseWork:
     ):
         """Fixed allocation, no holdout active, no group, no targeting.
 
-        Per new user, 7: the experiment (with its variants), the sticky
-        lookup, the holdout lookup, the INSERT, the refresh, and the two reads
-        of the stored assignment and its variant. Per sticky user, 4: the
-        experiment, the sticky lookup and those two reads. The request's own
-        work (the key, the experiment by key) is the same for any N.
+        Per new user, 8: the experiment (with its variants), the read of the
+        person the id belongs to (#449), the sticky lookup, the holdout
+        lookup, the INSERT, the refresh, and the two reads of the stored
+        assignment and its variant. Per sticky user, 5: the experiment, the
+        person, the sticky lookup and those two reads. The request's own work
+        (the key, the experiment by key) is the same for any N.
         """
         engine = db_session.get_bind()
 
@@ -723,8 +724,8 @@ class TestDatabaseWork:
         one, eleven = _users(1), _users(11)
         new_one, new_eleven = count(one), count(eleven)
         sticky_one, sticky_eleven = count(one), count(eleven)
-        assert (new_eleven - new_one) == 10 * 7, (new_one, new_eleven)
-        assert (sticky_eleven - sticky_one) == 10 * 4, (sticky_one, sticky_eleven)
+        assert (new_eleven - new_one) == 10 * 8, (new_one, new_eleven)
+        assert (sticky_eleven - sticky_one) == 10 * 5, (sticky_one, sticky_eleven)
 
 
 # ---------------------------------------------------------------------------

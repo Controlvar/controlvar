@@ -8,7 +8,8 @@ scopes (what a browser or a mobile app is told to use):
   not, both with the same key;
 * ``POST /tracking/assign`` assigns any ``user_id`` to an experiment;
 * ``GET /tracking/assignments/{user_id}`` lists the experiments a given id is
-  assigned to, for an id the key's owner never was.
+  assigned to, for an id the key's owner never was; for an id linked to
+  another (#449), the person's assignments.
 
 The docs say this in ``docs/security/api-keys.md``, ``docs/guides/segments.md``
 and ``docs/sdk/javascript.md``.
@@ -33,8 +34,10 @@ from backend.app.models.event import Event
 from backend.app.models.experiment import Experiment, ExperimentStatus, Variant
 from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
 from backend.app.models.global_holdout import GlobalHoldout
+from backend.app.models.identity_alias import IdentityAlias
 from backend.app.models.segment import Segment, SegmentKind, SegmentMember
 from backend.app.models.user import User, UserRole
+from backend.app.services import identity_aliases
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_db]
 
@@ -222,3 +225,33 @@ def test_assign_and_the_assignments_list_answer_for_any_user_id(
     )
     assert nobody.status_code == 200
     assert nobody.json() == []
+
+
+def test_the_assignments_list_answers_a_linked_id_with_its_persons(
+    client, unscoped_key, world, db_session
+):
+    """#449 (D5): for an id linked to another, the list holds the
+    person's assignments, read with the same plain key, under the id sent."""
+    suffix = uuid.uuid4().hex[:8]
+    anonymous, known = f"plain-anon-{suffix}", f"plain-known-{suffix}"
+    response = client.post(
+        "/api/v1/tracking/assign",
+        json={"experiment_key": world.experiment.key, "user_id": anonymous},
+        headers=unscoped_key,
+    )
+    assert response.status_code == 200, response.text
+    assert identity_aliases.link(db_session, anonymous, known) is True
+    try:
+        listed = client.get(
+            f"/api/v1/tracking/assignments/{known}", headers=unscoped_key
+        )
+        assert listed.status_code == 200, listed.text
+        assert [(r["experiment_id"], r["user_id"]) for r in listed.json()] == [
+            (str(world.experiment.id), known)
+        ]
+    finally:
+        db_session.rollback()
+        db_session.query(IdentityAlias).filter(
+            IdentityAlias.anonymous_id == anonymous
+        ).delete(False)
+        db_session.commit()
