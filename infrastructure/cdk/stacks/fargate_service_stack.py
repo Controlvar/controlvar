@@ -73,6 +73,41 @@ API_PATH_RULES = (
     (11, ("/health", "/health/*", "/metrics")),
 )
 
+#: The CDK context key that sets the API's LOCAL_AUTH_2FA_REQUIRED_ROLES (#1812):
+#: `-c local_auth_2fa_required_roles=ADMIN,DEVELOPER`. Unset, the API task has
+#: no such variable and the API's default applies (no role is required).
+TWO_STEP_ROLES_CONTEXT = "local_auth_2fa_required_roles"
+TWO_STEP_ROLES_SETTING = "LOCAL_AUTH_2FA_REQUIRED_ROLES"
+
+
+def two_step_required_roles(scope, hosted_ui: bool = False):
+    """The context's value, as given, or ``None`` when it is unset.
+
+    Only its type is checked here: a non-empty string. Which role names it may
+    hold is the API's rule (``parse_two_factor_roles`` in
+    ``backend/app/core/settings_rules.py``), applied when the API starts, and
+    this does not copy it. An empty value is refused, as for
+    ``backend_image_tag``: leave the context out to require no role. It is
+    also refused with ``cognito_hosted_ui``: the API then signs in through
+    Cognito, and a setting about local accounts would do nothing.
+    """
+    value = scope.node.try_get_context(TWO_STEP_ROLES_CONTEXT)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(
+            f"the {TWO_STEP_ROLES_CONTEXT} context must be a non-empty string of "
+            "role names such as ADMIN,DEVELOPER; leave it out to require "
+            f"two-step sign-in for no role; got {value!r}"
+        )
+    if hosted_ui:
+        raise ValueError(
+            f"the {TWO_STEP_ROLES_CONTEXT} context does nothing with "
+            "cognito_hosted_ui=true: the API signs users in through Cognito, "
+            "not with local accounts"
+        )
+    return value
+
 
 class FargateServiceStack(Stack):
     """
@@ -374,6 +409,12 @@ class FargateServiceStack(Stack):
             )
         self.backend_image_tag = image_tag
 
+        # `-c local_auth_2fa_required_roles=...`: passed to the API task
+        # exactly as given, and absent from it when the context is.
+        two_step_roles = two_step_required_roles(
+            self, hosted_ui=cognito_hosted_ui is not None
+        )
+
         # --- ECS Task Definition ---
         self.task_definition = ecs.FargateTaskDefinition(
             self,
@@ -464,6 +505,13 @@ class FargateServiceStack(Stack):
                         "AWS_REGION": cognito_hosted_ui.region,
                     }
                     if cognito_hosted_ui is not None
+                    else {}
+                ),
+                # Roles whose local accounts must use two-step sign-in (#1812),
+                # only with `-c local_auth_2fa_required_roles=ADMIN,...`.
+                **(
+                    {TWO_STEP_ROLES_SETTING: two_step_roles}
+                    if two_step_roles is not None
                     else {}
                 ),
             },

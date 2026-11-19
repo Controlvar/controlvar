@@ -232,7 +232,7 @@ TWO_STEP_ROUTES = {
 TWO_STEP_ROLES_SETTING = "LOCAL_AUTH_2FA_REQUIRED_ROLES"
 
 
-def test_a_role_can_require_two_step_sign_in_on_compose_and_helm_not_cdk_yet(
+def test_a_role_can_require_two_step_sign_in_on_compose_helm_and_cdk(
     routes,
 ):
     """limitations.md and the README: an account turns it on for itself, with
@@ -240,7 +240,8 @@ def test_a_role_can_require_two_step_sign_in_on_compose_and_helm_not_cdk_yet(
     setting, ``LOCAL_AUTH_2FA_REQUIRED_ROLES``. The production compose file
     passes it to the API and the Helm chart takes it through ``api.extraEnv``
     (``test_chart_render.py`` renders the documented example); the AWS CDK
-    app gives the API a fixed environment that does not carry it yet."""
+    app passes it from the ``local_auth_2fa_required_roles`` context
+    (``infrastructure/tests/test_two_step_roles_context.py`` synthesises it)."""
     from backend.app.core.config import Settings
 
     # The password step still takes an email and a password alone; the code
@@ -257,7 +258,9 @@ def test_a_role_can_require_two_step_sign_in_on_compose_and_helm_not_cdk_yet(
     (chart,) = sorted((ROOT / "charts").glob("*/values.yaml"))
     assert "extraEnv: []" in chart.read_text(encoding="utf-8")
     cdk = ROOT / "infrastructure" / "cdk" / "stacks" / "fargate_service_stack.py"
-    assert TWO_STEP_ROLES_SETTING not in cdk.read_text(encoding="utf-8")
+    cdk_source = cdk.read_text(encoding="utf-8")
+    assert TWO_STEP_ROLES_SETTING in cdk_source
+    assert "local_auth_2fa_required_roles" in cdk_source
 
 
 def test_the_permission_check_reads_grants_only_through_the_capability():
