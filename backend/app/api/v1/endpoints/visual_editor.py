@@ -13,10 +13,11 @@ route here takes a dashboard sign-in or an API key.
   design.
 
 Each spends its credential with one statement and commits at once, so a
-refusal that comes after the spend leaves the credential spent, then writes
-the next credential under ``visual_editor.hold_editor``, and only while the
-one it spent is still live. A spent ticket or claim presented again ends the
-editor that link opened (409); see ``backend/app/services/visual_editor.py``. Both routes have an exact rate
+refusal that comes after the spend leaves the credential spent. It then
+writes the next credential under ``visual_editor.hold_editor``, and only
+while the one it spent is still live. A spent ticket or claim presented
+again ends the editor that link opened (409); see
+``backend/app/services/visual_editor.py``. Both routes have an exact rate
 limit of their own (``RATE_LIMIT_CONFIG``).
 
 The session's own routes take ``Authorization: Bearer cves_...`` and nothing
