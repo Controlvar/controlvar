@@ -873,31 +873,6 @@ def test_experiment_schedule_metadata_and_clone(client, fresh, developer):
     assert row.reason == f"clone of {exp['id']}"
 
 
-def test_wizard_submit_records_the_created_experiment(
-    client, fresh, db_session, developer, monkeypatch
-):
-    from backend.app.services import experiment_wizard_service as wizard
-
-    exp = Experiment(
-        name=f"{P} wizard", owner_id=developer.id, status=ExperimentStatus.DRAFT
-    )
-    db_session.add(exp)
-    db_session.commit()
-    monkeypatch.setattr(
-        wizard.ExperimentWizardService, "get_draft", staticmethod(lambda *a, **k: {})
-    )
-    monkeypatch.setattr(
-        wizard.ExperimentWizardService,
-        "validate_and_submit",
-        staticmethod(lambda *a, **k: {"success": True, "experiment_id": str(exp.id)}),
-    )
-    w = Written(fresh)
-    response = client.post(f"{V1}/wizard/drafts/d1/submit", headers=_auth(developer))
-    assert response.status_code == 200, response.text
-    row = _one(w, "experiment_create", "experiment", exp.id, developer)
-    assert row.reason == "submitted from the wizard"
-
-
 def test_bandit_weights_override(client, fresh, db_session, admin):
     exp = Experiment(
         name=f"{P} bandit",

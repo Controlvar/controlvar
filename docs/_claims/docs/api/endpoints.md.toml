@@ -3268,18 +3268,6 @@ text = "Which warehouses are available is on Warehouse analysis."
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "Experiment Wizard"
-by = ["exempt:label"]
-
-[[unit]]
-text = "See Experiment Wizard Guide for full documentation."
-by = ["exempt:navigation"]
-
-[[unit]]
-text = "All six wizard operations are deprecated: the dashboard does not use them, and they may be removed in a later release."
-by = ["test:backend/tests/unit/api/test_wizard_drafts_per_user.py::test_every_wizard_operation_is_deprecated"]
-
-[[unit]]
 text = "Rollout Schedules"
 by = ["exempt:label"]
 

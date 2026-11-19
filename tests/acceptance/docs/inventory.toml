@@ -451,7 +451,7 @@ reason = "its API steps run on a stack in Doc Examples"
 [pages."guides/experiment-wizard.md"]
 class = "journey"
 journey = "experiment-wizard"
-reason = "the wizard's five steps to a draft, then started; its API steps run in Doc Examples"
+reason = "guided setup's five steps to a draft, then started; its sample-size commands run in Doc Examples"
 
 [pages."api/interaction-detection.md"]
 class = "exec"

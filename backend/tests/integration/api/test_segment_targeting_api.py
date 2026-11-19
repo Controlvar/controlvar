@@ -7,7 +7,7 @@ written directly and evaluated through ``POST /feature-flags/evaluate/{key}``,
 * rules naming an active segment are accepted on every write route; a
   segment that is unknown, inactive, archived, or whose rules are not valid
   is refused at every rule-writing site (flag create and update, experiment
-  create, update and clone, the deprecated wizard);
+  create, update and clone);
 * membership is decided by the server: a ``$segments`` value in the request
   context is never membership, and only the request's ``user_id`` -- never
   one in the context -- decides id-list and rules-segment membership;
@@ -43,7 +43,6 @@ from backend.app.models.metrics.metric import ErrorLog, MetricType, RawMetric
 from backend.app.models.segment import Segment, SegmentKind, SegmentMember
 from backend.app.models.segment import SegmentStatus as ModelSegmentStatus
 from backend.app.services import segment_membership
-from backend.app.services.experiment_wizard_service import ExperimentWizardService
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_db]
 
@@ -442,52 +441,6 @@ def test_reference_refused_on_clone(admin_client, world, cleanup_created, case):
         f"not active or whose rules are not valid ({_expected_message(case)}). "
         "Create the experiment again with rules that use active segments."
     )
-
-
-@pytest.mark.parametrize("case", REFERENCE_CASES)
-def test_reference_refused_on_wizard_submit(test_db, world, admin_user, case):
-    from sqlalchemy.orm import sessionmaker
-
-    segment_id = _unusable(world, case)
-    session = sessionmaker(bind=test_db)()
-    session.execute(text(f"SET search_path TO {SCHEMA}"))
-    user = str(admin_user.id)
-    try:
-        draft = ExperimentWizardService.create_draft(user_id=user, experiment_type="ab")
-        for step, data in (
-            ("choose_type", {"experiment_type": "ab"}),
-            (
-                "define_hypothesis",
-                {
-                    "hypothesis": "Segments are checked",
-                    "name": f"Seg wizard {uuid.uuid4().hex[:8]}",
-                    "primary_metric_id": "purchase",
-                },
-            ),
-            (
-                "configure_targeting",
-                {
-                    "targeting_rules": [
-                        {
-                            "attribute": "segment",
-                            "operator": "in_segment",
-                            "value": segment_id,
-                        }
-                    ]
-                },
-            ),
-        ):
-            ExperimentWizardService.update_draft(
-                draft_id=draft.id, user_id=user, step=step, data=data
-            )
-        result = ExperimentWizardService.validate_and_submit(
-            draft.id, user_id=user, db=session
-        )
-    finally:
-        session.close()
-    assert result["success"] is False, result
-    assert result["persisted"] is False
-    assert result["errors"] == [f"targeting_rules: {_expected_message(case)}"]
 
 
 # ---------------------------------------------------------------------------
