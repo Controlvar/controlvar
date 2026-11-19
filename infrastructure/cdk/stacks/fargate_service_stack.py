@@ -656,6 +656,13 @@ class FargateServiceStack(Stack):
                 conditions=[elbv2.ListenerCondition.path_patterns(list(paths))],
                 target_groups=[live_target_groups[live]],
             )
+            # #1618: CodeDeploy swaps which target group a listener points at,
+            # so on destroy either one may still be in use. Delete the rule
+            # before BOTH groups. `{id}Rule` is the construct add_target_groups
+            # creates.
+            rule = self.https_listener.node.find_child(f"ApiPaths{priority}Rule")
+            rule.node.add_dependency(self.blue_target_group)
+            rule.node.add_dependency(self.green_target_group)
 
         # --- Test Listener (port 8443) ---
         # CodeDeploy uses this listener to route traffic to the green (new)
@@ -677,6 +684,9 @@ class FargateServiceStack(Stack):
             "TestListener",
             **test_listener_kwargs,
         )
+        # #1618: as for the rules above, the listener goes before both groups.
+        self.test_listener.node.add_dependency(self.blue_target_group)
+        self.test_listener.node.add_dependency(self.green_target_group)
 
         # Imported immutably, and this is the whole fix for the dependency
         # cycle. Passing the ComputeStack's SecurityGroup *object* to the
