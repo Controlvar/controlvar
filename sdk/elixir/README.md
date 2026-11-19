@@ -81,7 +81,7 @@ Controlvar.stop(client)
 | `evaluate_flag(client, flag_key, user_id, opts \\ [])` | `{:ok, %FlagEvaluation{key, enabled, config}}` or `{:error, reason}`; opts `:attributes`, `:skip_cache` |
 | `feature_enabled?(client, flag_key, user_id, opts \\ [])` | `true`/`false` (`false` on any failure); opts as `evaluate_flag` |
 | `get_assignment(client, experiment_key, user_id, attributes \\ %{})` | `{:ok, %Assignment{experiment_key, variant_id, variant_name, is_control, configuration}}` or `{:error, reason}` |
-| `track(client, event_name, user_id, properties \\ %{}, opts \\ [])` | `:ok` (fire-and-forget; opts `:experiment_key`, `:feature_flag_key`, `:value`, `:event_type`, `:timestamp`) |
+| `track(client, event_name, user_id, properties \\ %{}, opts \\ [])` | `:ok` (fire-and-forget; opts `:experiment_key`, `:feature_flag_key`, `:value`, `:event_type`, `:timestamp`, `:event_id`) |
 | `track_batch(client, events)` | `{:ok, %BatchResult{success_count, failure_count, errors}}` or `{:error, reason}` (max 100 per request) |
 | `assignments(client, user_id)` / `evaluated_flags(client, user_id)` | Cached (successful, unexpired) assignments / flag keys for the user |
 | `clear_cache(client)` | `:ok` |
@@ -92,6 +92,27 @@ flag key, or a draft experiment with no control variant; 422 = validation; 429 =
 `{:network_error, reason}`, `{:malformed_response, body}`, and `:invalid_attributes` from
 `evaluate_flag` (below). An experiment that is not ACTIVE is not an error: it answers its control
 variant.
+
+## Event ids
+
+Every event this SDK sends carries an `event_id`, and the server stores an event sent again with
+the same `event_id`, user, experiment, flag and event name only once. The package is not on Hex
+yet: the `git:` dependency above, which builds this repository's `main`, has it.
+
+- `track/5`'s `:event_id` option, or an `event_id` key (atom or string) in a `track_batch/2`
+  event, sets the id. Without one (`nil` or `""`), the SDK makes a lowercase random UUID
+  (version 4) for the event in that call, so tracking the same event twice sends two events.
+- A fanned-out event carries the same id in every entry. In `track_batch/2`, each event has its
+  own id.
+- An id must be a string of at most 255 characters, valid UTF-8, with no NUL. With any other id, `track/5` sends
+  nothing and logs a warning that does not hold the id; `track_batch/2` counts that event as a
+  failure and sends the others.
+- When `:httpc` sends a request again by itself, it sends the same body and `event_id`, so the
+  server stores the event once.
+- A request that times out is not sent again. To send it again yourself and have it stored once,
+  give the event an `event_id` and send that same id again.
+
+Full details: [Event ids](../../docs/sdk/elixir.md#event-ids).
 
 ## Attributes on flag evaluation
 
@@ -140,7 +161,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 |---|---|---|---|
 | `evaluate_flag`, `feature_enabled?` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=…` | `context`: the user's attributes as JSON, left out when there are none | `{key, enabled, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
 | `get_assignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
-| `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp}` | ignored |
+| `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp, event_id}` | ignored |
 | `track` without keys, `track_batch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | `{success_count, failure_count, errors}` |
 
 ## Architecture
