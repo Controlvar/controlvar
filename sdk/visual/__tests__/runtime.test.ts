@@ -239,14 +239,32 @@ describe('the visitor id', () => {
 });
 
 describe('the hide', () => {
+  /** The tag first in <head>: the script runs before the page's <body> exists. */
+  const inHead = (window: Window) => {
+    window.document.documentElement.removeChild(window.document.body);
+  };
+
   test('holds <html> hidden while the answer is awaited, and data-timeout-ms=0 never hides', () => {
-    const waiting = page(() => undefined);
-    const never = page(() => undefined, { 'data-timeout-ms': '0' });
+    const waiting = page(() => undefined, {}, inHead);
+    const never = page(() => undefined, { 'data-timeout-ms': '0' }, inHead);
     expect(waiting.window.document.documentElement.style.getPropertyValue('visibility')).toBe('hidden');
     expect(waiting.window.document.documentElement.style.getPropertyPriority('visibility')).toBe('important');
     expect(never.window.document.documentElement.style.visibility).toBe('');
     waiting.close();
     never.close();
+  });
+
+  test('a script that starts once the page has a <body> never hides it, and still applies the changes', async () => {
+    const changes = { version: 1, changes: [{ op: 'set_text', selector: '#t', text: 'Changed' }] };
+    const waiting = page(() => undefined);
+    expect(waiting.window.document.documentElement.style.visibility).toBe('');
+    const answered = page(answering([experiment('headline', changes)]));
+    expect(answered.window.document.documentElement.style.visibility).toBe('');
+    await settle();
+    expect(answered.window.document.getElementById('t')!.textContent).toBe('Changed');
+    expect(answered.window.document.documentElement.style.visibility).toBe('');
+    waiting.close();
+    answered.close();
   });
 
   test.each([

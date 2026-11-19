@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { BrowserContext, Page } from "@playwright/test";
 import { expect, test } from "./runtime.fixture";
-import { EDITOR, newTicket, routeSite, SITE, storageKeys, type Site } from "./editor";
-import { answering, calls, experiment, previewAnswer, sitePage, VISUAL_PATH } from "./visual";
+import { EDITOR, html, newTicket, routeSite, SITE, snippet, storageKeys, type Site } from "./editor";
+import { answering, calls, experiment, previewAnswer, shown, sitePage, VISUAL_PATH } from "./visual";
 
 /**
  * consent() and revokeConsent() on a real page (#1545). A tag with
@@ -112,6 +112,106 @@ test.describe("consent()", () => {
 
     expect(Array.from(seen).sort(), "every key seen").toEqual(WRITTEN);
   });
+});
+
+/** The page's timers run only when the test says so: the hide's timeout never fires on its own. */
+async function stopClock(page: Page): Promise<void> {
+  const start = new Date("2026-11-19T12:00:00Z");
+  await page.clock.install({ time: start });
+  await page.clock.pauseAt(new Date(start.getTime() + 1000));
+}
+
+function held(): { hold: Promise<void>; release: () => void } {
+  let release: () => void = () => undefined;
+  const hold = new Promise<void>((resolve) => (release = resolve));
+  return { hold, release };
+}
+
+test.describe("consent() and the hide", () => {
+  test("a consent() made while <head> loads hides the page as usual until the changes are applied", async ({ page, visualPackage }) => {
+    await stopClock(page);
+    const answer = held();
+    const site = await routeSite(page, visualPackage, {
+      pages: {
+        "/a/b/page": sitePage(BODY, { "data-require-consent": true }, "<script>controlvar.visual.consent();</script>"),
+      },
+      answer: answering({ experiments: [experiment("headline", HEADLINE)], hold: answer.hold }),
+    });
+    await page.goto(`${SITE}/a/b/page`, { waitUntil: "domcontentloaded" });
+    await expect.poll(() => calls(site, VISUAL_PATH).length).toBe(1);
+    expect(await shown(page), "shown while the answer is awaited").toBe(false);
+    answer.release();
+    await expect(page.locator("#t")).toHaveText("Changed");
+    await expect.poll(() => shown(page), { message: "shown once the change is applied" }).toBe(true);
+  });
+
+  test("a consent() after the page has rendered applies the changes without hiding it", async ({ page, visualPackage }) => {
+    await stopClock(page);
+    const answer = held();
+    const site = await routeSite(page, visualPackage, {
+      pages: { "/a/b/page": sitePage(BODY, { "data-require-consent": true }) },
+      answer: answering({ experiments: [experiment("headline", HEADLINE)], hold: answer.hold }),
+    });
+    await page.goto(`${SITE}/a/b/page`, { waitUntil: "load" });
+    expect(await shown(page), "shown before consent()").toBe(true);
+    const right = await page.evaluate(() => {
+      (window as unknown as { controlvar: { visual: Visual } }).controlvar.visual.consent();
+      return getComputedStyle(document.documentElement).visibility;
+    });
+    expect(right, "visibility straight after consent()").toBe("visible");
+    await expect.poll(() => calls(site, VISUAL_PATH).length).toBe(1);
+    expect(await shown(page), "shown while the answer is awaited").toBe(true);
+    answer.release();
+    await expect(page.locator("#t")).toHaveText("Changed");
+    expect(await shown(page), "shown with the change").toBe(true);
+  });
+});
+
+test("a controlvar_uid a server set for the parent domain stays after revokeConsent(), and the next consent() uses its id", async ({
+  page,
+  context,
+  visualPackage,
+}) => {
+  // A host under a parent domain; *.localhost needs no name lookup, and page.route answers everything.
+  const host = "shop.site.localhost:4100";
+  const origin = `http://${host}`;
+  const sent: { path: string; userId: unknown }[] = [];
+  const tag = snippet({ "data-api-url": origin, "data-editor-origin": null, "data-require-consent": true });
+  await page.route(`${origin}/**`, async (route) => {
+    const request = route.request();
+    const { pathname } = new URL(request.url());
+    if (pathname === "/controlvar-visual.js") {
+      await route.fulfill({ contentType: "text/javascript; charset=utf-8", body: visualPackage.classicScript });
+    } else if (pathname.startsWith("/api/")) {
+      sent.push({ path: pathname, userId: (request.postDataJSON() as { user_id?: unknown }).user_id });
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ experiments: [], pages: { host: "shop.site.localhost", rules: [{ match: "prefix", path: "/" }], max_age: 60 } }),
+      });
+    } else {
+      // The first page's response sets the visitor-id cookie for the parent domain, as a server integration given a cookie domain does.
+      const headers: Record<string, string> =
+        pathname === "/first" ? { "Set-Cookie": "controlvar_uid=server-visitor-1; Domain=site.localhost; Path=/; Max-Age=600; SameSite=Lax" } : {};
+      await route.fulfill({ contentType: "text/html; charset=utf-8", headers, body: html(tag, BODY) });
+    }
+  });
+  const parentCookies = async () =>
+    (await context.cookies(origin)).filter((cookie) => cookie.name === "controlvar_uid" && cookie.domain === ".site.localhost").map((cookie) => cookie.value);
+
+  await page.goto(`${origin}/first`, { waitUntil: "load" });
+  expect(await parentCookies(), "the parent-domain cookie").toEqual(["server-visitor-1"]);
+  await visual(page, "consent");
+  await expect.poll(() => sent.length).toBe(1);
+  expect(sent[0], "the call after consent()").toEqual({ path: VISUAL_PATH, userId: "server-visitor-1" });
+
+  await visual(page, "revokeConsent");
+  expect(await parentCookies(), "the parent-domain cookie after revokeConsent()").toEqual(["server-visitor-1"]);
+
+  await page.goto(`${origin}/next`, { waitUntil: "load" });
+  await visual(page, "consent");
+  await expect.poll(() => sent.length).toBe(2);
+  expect(sent[1], "the call after a later consent()").toEqual({ path: VISUAL_PATH, userId: "server-visitor-1" });
 });
 
 /** A page at /a/b/page with every key of the closed list already set, and the site's own keys beside them. */

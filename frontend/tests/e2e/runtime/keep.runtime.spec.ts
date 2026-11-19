@@ -192,6 +192,52 @@ setInterval(function () {
     expect(reports(site), "reports").toEqual([]);
   });
 
+  for (const [every, perSecond] of [
+    [40, 25],
+    [60, 16],
+  ] as const) {
+    const capped = perSecond > 20;
+    test(`a page that resets a text every ${every} ms (${perSecond} a second) ${capped ? "is stopped by the cap of 20 re-applies in a second" : "gets the change back each time until the bound, with no report"}`, async ({
+      page,
+      visualPackage,
+    }) => {
+      // The clock moves only through runFor, which runs the page's timers one by one.
+      await page.clock.install({ time: START });
+      await page.clock.pauseAt(new Date(START.getTime() + 1000));
+      const body = `<h1 id="t">Original</h1>
+<script>
+window.__seen = [];
+setInterval(function () {
+  var t = document.getElementById("t");
+  window.__seen.push(t.textContent);
+  t.textContent = "Original";
+}, ${every});
+</script>`;
+      const site = await routeSite(page, visualPackage, {
+        pages: { "/": sitePage(body) },
+        answer: answering({ experiments: [experiment("reset", [{ op: "set_text", selector: "#t", text: "Changed" }])] }),
+      });
+      await page.goto(`${SITE}/`, { waitUntil: "load" });
+      await expect(page.locator("#t")).toHaveText("Changed");
+      const seen = () => page.evaluate(() => (window as unknown as { __seen: string[] }).__seen.slice());
+      if (capped) {
+        await page.clock.runFor(2000);
+        await expect.poll(() => reports(site).length, { message: "reports" }).toBe(1);
+        expect(reports(site)[0].metadata).toEqual({ index: 0, reason: "reapply_limit" });
+        expect((await seen()).slice(0, 21), "what the first 21 resets found").toEqual(Array(21).fill("Changed"));
+        await expect(page.locator("#t")).toHaveText("Original");
+      } else {
+        // The bound is 5 s after the load; stop just before it.
+        await page.clock.runFor(4900);
+        const found = await seen();
+        expect(found.length, "resets inside the bound").toBe(Math.floor(4900 / every));
+        expect(found.filter((text) => text !== "Changed"), "resets that found the change gone").toEqual([]);
+        await expect(page.locator("#t")).toHaveText("Changed");
+        expect(reports(site), "reports").toEqual([]);
+      }
+    });
+  }
+
   test("25 elements a re-render replaces at once all get their change back, none reported", async ({ page, visualPackage }) => {
     const site = await routeSite(page, visualPackage, {
       pages: { "/": sitePage(TARGETS) },

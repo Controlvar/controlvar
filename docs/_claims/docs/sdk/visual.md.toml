@@ -127,7 +127,7 @@ by = [
 ]
 
 [[unit]]
-text = "At most 5 reports are sent per page view."
+text = "At most 5 reports are sent per page load."
 by = [
     "test:frontend/tests/e2e/runtime/apply.runtime.spec.ts::at most five reports per page view",
     "test:sdk/visual/__tests__/runtime.test.ts::carry exactly the four keys, never a feature flag key, and stop at five per page view",
@@ -209,6 +209,14 @@ by = [
 ]
 
 [[unit]]
+text = "A consent() made while the page's <head> is still loading (a stored consent read there) hides the page as usual; a later one applies the changes in view, without hiding the page."
+by = [
+    "test:frontend/tests/e2e/runtime/consent.runtime.spec.ts::a consent() made while <head> loads hides the page as usual until the changes are applied",
+    "test:frontend/tests/e2e/runtime/consent.runtime.spec.ts::a consent() after the page has rendered applies the changes without hiding it",
+    "test:sdk/visual/__tests__/runtime.test.ts::a script that starts once the page has a <body> never hides it, and still applies the changes",
+]
+
+[[unit]]
 text = "controlvar.visual.revokeConsent() stops the script: nothing more is sent from this page, and it deletes every cookie it set and every controlvar_ key in this site's localStorage and sessionStorage."
 by = [
     "test:frontend/tests/e2e/runtime/consent.runtime.spec.ts::the cookie and every key go, nothing more is sent, and the next page follows the tag",
@@ -225,6 +233,17 @@ by = [
     "test:frontend/tests/e2e/runtime/consent.runtime.spec.ts::the cookie and every key go, nothing more is sent, and the next page follows the tag",
     "test:sdk/visual/__tests__/consent.test.ts::with data-require-consent the script waits again, and a later consent() starts with a new id",
 ]
+
+[[unit]]
+text = "A Split URL server integration given a cookie domain sets controlvar_uid for that parent domain, which revokeConsent() does not delete, so a later consent() uses the same id."
+by = [
+    "test:modules/backend/tests/integration/split_url/test_split_url_reference_integration.py::test_the_cookie_is_exact",
+    "test:frontend/tests/e2e/runtime/consent.runtime.spec.ts::a controlvar_uid a server set for the parent domain stays after revokeConsent(), and the next consent() uses its id",
+]
+
+[[unit]]
+text = "Have your server expire that cookie too when a visitor withdraws consent."
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Events already sent are not deleted; they stay in your Controlvar database."
@@ -261,10 +280,11 @@ by = [
 ]
 
 [[unit]]
-text = "The preview lasts for the tab, turns every other experiment off and records nothing: no assignment, no exposure and no event."
+text = "The preview lasts for the tab, turns every other experiment off and records no assignment, no exposure and no event; a change it cannot apply is still reported."
 by = [
     "test:frontend/tests/e2e/runtime/real-api-preview.runtime.spec.ts::a preview link shows its variant 50 times and records nothing",
     "test:frontend/tests/e2e/runtime/preview.runtime.spec.ts::shows its variant with the banner, other experiments off, the address clean and nothing recorded",
+    "test:sdk/visual/__tests__/consent.test.ts::a change on <html> or on the banner is never applied, and is reported as own_ui",
 ]
 
 [[unit]]

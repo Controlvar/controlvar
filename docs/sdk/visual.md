@@ -37,7 +37,7 @@ It keeps the page rules of the running experiments for 60 seconds, and a page no
 
 When a change cannot be applied, the script sends an error report with the experiment's key, a fixed message, the change's position and the reason.
 A report never holds a feature flag key, the visitor's id, the page's address or anything from the page, so it never counts toward a flag's safety rollback.
-At most 5 reports are sent per page view.
+At most 5 reports are sent per page load.
 
 `controlvar.visual.track(event, { value })` sends one event for each experiment the visitor was assigned to in the last 30 days, so a purchase on another page counts for the experiment the visitor saw first.
 
@@ -61,10 +61,13 @@ Every key starts with `controlvar_`, and `revokeConsent()` deletes all of them, 
 If your page waits for consent (`data-require-consent`), the script reads, stores and sends nothing about your visitors before `consent()`.
 The one exception is a visual-editor link that someone on your team opens from Controlvar: the script then sends only that link's one-time sign-in, opens the editor's frame and stores the editor's own key, and nothing about any visitor.
 Call `controlvar.visual.consent()` once the visitor agrees, and the script applies the page's changes.
+A `consent()` made while the page's `<head>` is still loading (a stored consent read there) hides the page as usual; a later one applies the changes in view, without hiding the page.
 
 `controlvar.visual.revokeConsent()` stops the script: nothing more is sent from this page, and it deletes every cookie it set and every `controlvar_` key in this site's localStorage and sessionStorage.
 Changes already shown stay until the visitor leaves the page.
 With `data-require-consent`, later pages wait for `consent()` again; without it the next page starts again, so a site that lets visitors withdraw consent sets `data-require-consent`.
+A [Split URL](../api/split-url.md#the-visitor-id-cookie) server integration given a cookie domain sets `controlvar_uid` for that parent domain, which `revokeConsent()` does not delete, so a later `consent()` uses the same id.
+Have your server expire that cookie too when a visitor withdraws consent.
 Events already sent are not deleted; they stay in your Controlvar database.
 
 ## While the page is hidden
@@ -77,7 +80,7 @@ On Next.js's App Router, React places the framework's own scripts ahead of this 
 ## Preview links
 
 A preview link opens your page with one variant's changes and a banner with an Exit preview button.
-The preview lasts for the tab, turns every other experiment off and records nothing: no assignment, no exposure and no event.
+The preview lasts for the tab, turns every other experiment off and records no assignment, no exposure and no event; a change it cannot apply is still reported.
 No change is ever applied to the page's `<html>` element or to the banner.
 
 ## Visitor IP addresses

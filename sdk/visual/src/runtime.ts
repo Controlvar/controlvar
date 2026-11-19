@@ -1,8 +1,8 @@
 /**
  * What the script does on an ordinary page view: ask which visual changes
  * this visitor gets on this page (POST /api/v1/tracking/visual), hide the
- * page meanwhile, check and apply the answer, and report what could not be
- * applied. Also `track()`, which records an event for the experiments this
+ * page meanwhile if it starts before the page's <body> exists, check and
+ * apply the answer, and report what could not be applied. Also `track()`, which records an event for the experiments this
  * visitor was assigned to in the last 30 days.
  *
  * Whatever goes wrong, the page is shown: every path that hid it ends by
@@ -247,9 +247,9 @@ export function createRuntime(env: RuntimeEnv): Runtime {
   /**
    * One re-evaluation: one read of the kept page rules against the current
    * path. A new path undoes the current changes and asks for its own, unless
-   * fresh rules cover nothing there. Only the first one hides the page.
+   * fresh rules cover nothing there. Only the first one may hide the page.
    */
-  function evaluate(first: boolean): void {
+  function evaluate(hide: boolean): void {
     if (!env.allowed()) return;
     const location = win.location;
     const path = location.pathname;
@@ -264,7 +264,7 @@ export function createRuntime(env: RuntimeEnv): Runtime {
       leaving.stop();
     }
     if (skip || location.host.length > MAX_HOST_LENGTH || path.length > MAX_PATH_LENGTH) return;
-    const hider = first ? hidePage(win.document, captures, config.timeoutMs) : NO_HIDE;
+    const hider = hide ? hidePage(win.document, captures, config.timeoutMs) : NO_HIDE;
     try {
       ask(hider, path, which);
     } catch {
@@ -343,7 +343,10 @@ export function createRuntime(env: RuntimeEnv): Runtime {
       } catch {
         // A page whose history cannot be wrapped still gets this page's changes.
       }
-      evaluate(true);
+      // The page is hidden only while nothing of it can have been painted (its
+      // <body> does not exist yet); a later start, such as a consent() after the
+      // page has rendered, applies the changes in view.
+      evaluate(win.document.body === null);
     },
     track(event, options) {
       if (typeof event !== "string" || event.length < 1 || event.length > MAX_EVENT_LENGTH) {

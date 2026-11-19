@@ -28,10 +28,10 @@ interface Visual {
 }
 const visual = (window: Window) => (window as unknown as { controlvar: { visual: Visual } }).controlvar.visual;
 
-function answering(changes: unknown = CHANGE, previewRules = [{ match: 'prefix', path: '/' }]) {
+function answering(changes: unknown = CHANGE, previewRules = [{ match: 'prefix', path: '/' }], host = 'shop.example') {
   return (call: FetchCall): Answer | undefined => {
     const path = new URL(call.url).pathname;
-    const pages = { host: 'shop.example', rules: previewRules, max_age: 60 };
+    const pages = { host, rules: previewRules, max_age: 60 };
     if (path === '/api/v1/tracking/visual') {
       const experiments = [{ experiment_key: 'headline', variant_id: 'v1', variant_name: 'B', assigned: true, reason: 'assigned', changes, goals: [] }];
       return { status: 200, body: { experiments, pages } };
@@ -227,6 +227,18 @@ describe('a preview link', () => {
     const p = page(answering(CHANGE, [{ match: 'exact', path: '/checkout' }]), {}, () => undefined, `${PAGE}#controlvar-preview=${TOKEN}`);
     await settle();
     expect(p.window.document.getElementById('t')!.textContent).toBe('Original');
+    p.close();
+  });
+
+  test('changes nothing when its answer names another host, and the banner says so', async () => {
+    let roots: ShadowRoot[] = [];
+    const p = page(answering(CHANGE, [{ match: 'prefix', path: '/' }], 'other.example'), {}, (window) => {
+      roots = recordShadows(window);
+    }, `${PAGE}#controlvar-preview=${TOKEN}`);
+    await settle();
+    expect(p.window.document.getElementById('t')!.textContent).toBe('Original');
+    expect(roots).toHaveLength(1);
+    expect(roots[0].textContent).toContain('Variant B changes none of this page');
     p.close();
   });
 
