@@ -97,7 +97,11 @@ export interface ExperimentSummaryData {
 }
 
 /** The test that produced a variant's p_value (backend StatisticalTest). */
-export type StatisticalTestUsed = 'fisher_exact' | 'z_test_proportions' | 'welch_t_test';
+export type StatisticalTestUsed =
+  | 'fisher_exact'
+  | 'z_test_proportions'
+  | 'welch_t_test'
+  | 'permutation_t_test';
 
 /** Multiple-comparison correction (backend CorrectionMethod). Only these three exist. */
 export type CorrectionMethod = 'none' | 'bonferroni' | 'benjamini_hochberg';

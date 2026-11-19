@@ -4,8 +4,8 @@
  * the server computed: `fixtures/results-intervals.json` is written by
  * `python -m backend.scripts.generate_results_interval_fixtures` from the
  * results path's own builders, and a backend test fails when it drifts from
- * them. Only the old-server and noun cases below edit a fixture, and they say
- * so.
+ * them. Only the old-server, noun and test-name cases below edit a fixture,
+ * and they say so.
  *
  * The checks are the S2-b words' F1-F10, F13 and C16 (plan S, v1.2-ux-s2b-words):
  *  - F1  a wide proportion interval: grouping, one decimal, no exponent;
@@ -21,11 +21,18 @@
  *  - F13 the footnotes;
  *  - C16 the note when the interval and the significance disagree.
  */
+import fs from 'fs';
+import path from 'path';
 import React from 'react';
 import { render, screen, within } from '@testing-library/react';
 import axe from 'axe-core';
 import { MetricComparisonTable } from '@/components/results/MetricComparison/MetricComparisonTable';
-import { CorrectionMethod, MetricResult, VariantResult } from '@/types/results';
+import {
+  CorrectionMethod,
+  MetricResult,
+  StatisticalTestUsed,
+  VariantResult,
+} from '@/types/results';
 import fixtures from '@/tests/fixtures/results-intervals.json';
 import { spokenText, visibleText } from '@/tests/helpers/visibleText';
 
@@ -478,6 +485,53 @@ describe('C16: the interval and the significance disagree', () => {
     renderCase(serverCase('f1_wide_proportion'));
     expect(screen.queryByTestId('reconciliation-note')).toBeNull();
   });
+
+  /**
+   * A mean's p-value comes from the permutation test (#2041, engine 1.13.0)
+   * and its interval is still Welch's, so they can disagree away from the
+   * threshold too. This case edits a server-computed mean (interval -6.07 to
+   * +8.07) to a significant p of 0.03, the way such a disagreement arrives.
+   */
+  function significantMeanReachingZero(test: StatisticalTestUsed): Case {
+    const c = serverCase('f3_mean_no_relative_interval');
+    const treatment = c.metric.variants.find((v) => !v.is_control) as VariantResult;
+    treatment.p_value = 0.03;
+    treatment.is_significant = true;
+    treatment.statistical_test_used = test;
+    return c;
+  }
+
+  it('names the permutation test and says the interval is computed differently', () => {
+    renderCase(significantMeanReachingZero('permutation_t_test'));
+    expect(testIdText('treatment', 'reconciliation-note')).toBe(
+      'Significant: the permutation test gives p 0.0300, below 0.05, although the interval ' +
+        'reaches 0. The test decides; the interval is computed differently and can disagree ' +
+        "with it, most often when the variants' sizes are very different.",
+    );
+  });
+
+  const snapshot = JSON.parse(
+    fs.readFileSync(
+      path.join(__dirname, '..', '..', '..', '..', 'docs', 'api', 'openapi-v1.full.json'),
+      'utf8',
+    ),
+  );
+  const testNames: Record<StatisticalTestUsed, string> = {
+    fisher_exact: "Fisher's exact test",
+    z_test_proportions: 'the z-test for two proportions',
+    welch_t_test: "Welch's t-test",
+    permutation_t_test: 'the permutation test',
+  };
+
+  it.each([...snapshot.components.schemas.StatisticalTest.enum] as StatisticalTestUsed[])(
+    'names %s in the note, never "the test"',
+    (test) => {
+      renderCase(significantMeanReachingZero(test));
+      const note = testIdText('treatment', 'reconciliation-note') as string;
+      expect(note.startsWith(`Significant: ${testNames[test]} gives p 0.0300`)).toBe(true);
+      expect(note).not.toContain('the test gives');
+    },
+  );
 });
 
 describe('F13: the footnotes', () => {
