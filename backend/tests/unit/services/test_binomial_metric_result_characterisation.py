@@ -227,6 +227,15 @@ CHARACTERISATIONS: Dict[str, Dict[str, str]] = {
         "edges-0.95-none": "ec0b2f6f4ce27a2ec9dbc540ef79d9c74ac423844d26e75a089a75a1ccb893ee",
         "edges-0.95-bonferroni": "ebbbc649115fe1c97337c4afcbe04c6c8f80591c8b6a2654d90ee8d7eacba10d",
     },
+    # 1.13.0 (#2041) changes a mean metric's p-value only: 1.12.0's.
+    "1.13.0": {
+        "three_variants-0.95-none": "ece157050f50545868f0578cfaa695d25584f87c1546aa86f7d02e0f41516b53",
+        "three_variants-0.95-bonferroni": "d3a91b82c4a94008c415af63846df6245af4719997ea6dc4b0985f3a5dfa1b8b",
+        "three_variants-0.95-benjamini_hochberg": "dd080d66753fbe4a6a0a391d59a6e193370456310bc5bd88a2fb5bc0eb061e43",
+        "three_variants-0.9-benjamini_hochberg": "3fccfd274278e5811b851b2f097580678de0ad5d3d1e3ab6bea48425f86fa453",
+        "edges-0.95-none": "ec0b2f6f4ce27a2ec9dbc540ef79d9c74ac423844d26e75a089a75a1ccb893ee",
+        "edges-0.95-bonferroni": "ebbbc649115fe1c97337c4afcbe04c6c8f80591c8b6a2654d90ee8d7eacba10d",
+    },
 }
 
 #: The cases pinned for the running engine.  The same six keys in every

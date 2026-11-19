@@ -28,6 +28,7 @@ import subprocess
 import sys
 from fractions import Fraction
 from pathlib import Path
+from types import SimpleNamespace
 from typing import List, Sequence, Tuple
 
 import numpy as np
@@ -43,6 +44,12 @@ from backend.app.services.permutation_test import (
     permutations_for,
     welch_t_from_sums,
 )
+from backend.app.services.sufficient_stats_analysis import (
+    BinomialVariant,
+    PermutationPValueError,
+    mean_metric_result,
+    per_user_mean_metric_result,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -51,6 +58,45 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 METRIC_ID = "5e3c1f00-2041-4000-8000-0000000000a1"
 CONTROL_ID = "5e3c1f00-2041-4000-8000-0000000000c0"
 TREATMENT_ID = "5e3c1f00-2041-4000-8000-0000000000e1"
+SECOND_ID = "5e3c1f00-2041-4000-8000-0000000000e2"
+
+
+def _metric(metric_id=METRIC_ID) -> SimpleNamespace:
+    return SimpleNamespace(
+        id=metric_id, name="revenue", metric_type="revenue", is_primary=True
+    )
+
+
+def _result(
+    control: Sequence[float],
+    n_control: int,
+    treatment: Sequence[float],
+    n_treatment: int,
+    *,
+    metric_id=METRIC_ID,
+    control_id=CONTROL_ID,
+    treatment_id=TREATMENT_ID,
+) -> dict:
+    """``per_user_mean_metric_result`` on one control and one treatment."""
+    return per_user_mean_metric_result(
+        [
+            (
+                BinomialVariant(control_id, "Control", True),
+                n_control,
+                len(control),
+                list(control),
+            ),
+            (
+                BinomialVariant(treatment_id, "Treatment", False),
+                n_treatment,
+                len(treatment),
+                list(treatment),
+            ),
+        ],
+        0.05,
+        "benjamini_hochberg",
+        metric=_metric(metric_id),
+    )
 
 
 def _p_value(
@@ -435,12 +481,24 @@ _SUBPROCESS = """
 import json, sys
 sys.path.insert(0, {root!r})
 from backend.tests.unit.stats_validation import test_permutation_test as t
-print(json.dumps({{"p": t._det_p(), "hash": hash("controlvar")}}, sort_keys=True))
+print(json.dumps(
+    {{"p": t._det_p(), "result": t._det_json(), "hash": hash("controlvar")}},
+    sort_keys=True,
+))
 """
 
 
+def _det_json() -> str:
+    """``per_user_mean_metric_result`` on the fixture, as canonical JSON."""
+    result = _result(DET_CONTROL, DET_N_CONTROL, DET_TREATMENT, DET_N_TREATMENT)
+    return json.dumps(result, sort_keys=True, separators=(",", ":"))
+
+
 def test_two_processes_with_different_hash_seeds_give_the_same_p_value():
-    """``PYTHONHASHSEED`` 1 and 2 (``-I`` would ignore it, so ``-s -P``)."""
+    """``PYTHONHASHSEED`` 1 and 2 (``-I`` would ignore it, so ``-s -P``): the
+    p-value and the whole ``per_user_mean_metric_result``, as canonical
+    JSON, are identical, and the treatment's p-value is the permutation
+    test's."""
     outputs = []
     for hash_seed in ("1", "2"):
         result = subprocess.run(
@@ -457,6 +515,10 @@ def test_two_processes_with_different_hash_seeds_give_the_same_p_value():
     assert outputs[0]["p"] == outputs[1]["p"] == _det_p(), (
         f"p-values differ between processes: {outputs[0]['p']} and {outputs[1]['p']}"
     )
+    assert outputs[0]["result"] == outputs[1]["result"] == _det_json()
+    treatment = json.loads(_det_json())["variants"][1]
+    assert treatment["statistical_test_used"] == "permutation_t_test"
+    assert treatment["p_value"] == _det_p()
 
 
 def test_reordered_input_with_explicit_zeros_gives_the_same_p_value():
@@ -530,6 +592,14 @@ def test_a_net_zero_user_counts_as_zero_in_every_summation_order():
         DET_CONTROL + [other_order], DET_N_CONTROL, DET_TREATMENT, DET_N_TREATMENT
     )
     assert first == second == _det_p()
+    in_product = _result(
+        DET_CONTROL + [in_order], DET_N_CONTROL, DET_TREATMENT, DET_N_TREATMENT
+    )
+    other_in_product = _result(
+        DET_CONTROL + [other_order], DET_N_CONTROL, DET_TREATMENT, DET_N_TREATMENT
+    )
+    assert in_product["variants"][1]["p_value"] == _det_p()
+    assert other_in_product["variants"][1]["p_value"] == _det_p()
 
 
 def test_the_zero_tolerance_scales_with_the_largest_total():
@@ -539,3 +609,171 @@ def test_the_zero_tolerance_scales_with_the_largest_total():
     large = listed_values([[1e-3, 3e-3], [2e6]])
     assert large[0].tolist() == [3e-3]
     assert large[1].tolist() == [2e6]
+
+
+def test_a_total_of_1e9_makes_totals_of_1_or_less_count_as_0_in_the_test_only():
+    """One total of 1e9: totals at or below 1e-9 * 1e9 = 1 count as 0 in the
+    test, so 0.5 and 1.0 are not listed and 1.5 is.  The p-value is the one
+    of the same data with 0.5 and 1.0 set to exactly 0 (the same listed
+    counts, so the same seed); the reported means use every total."""
+    control = [1e9, 0.5, 2.0, 7.25, 1.0, 3.5]
+    treatment = [1.5, 0.5, 4.0, 1.0, 12.0, 6.0, 2.5]
+
+    def zeroed(values):
+        return [0.0 if v in (0.5, 1.0) else v for v in values]
+
+    vc, vt = listed_values([control, treatment])
+    for listed in (vc, vt):
+        assert 0.5 not in listed.tolist() and 1.0 not in listed.tolist(), listed
+    assert 1.5 in vt.tolist(), vt
+    assert (vc.size, vt.size) == (4, 5)
+    assert _p_value(control, 40, treatment, 300) == _p_value(
+        zeroed(control), 40, zeroed(treatment), 300
+    )
+    as_given = _result(control, 40, treatment, 300)
+    with_zeros = _result(zeroed(control), 40, zeroed(treatment), 300)
+    assert as_given["variants"][1]["p_value"] == with_zeros["variants"][1]["p_value"]
+    assert as_given["variants"][1]["mean"] == math.fsum(treatment) / 300
+    assert as_given["variants"][1]["mean"] != with_zeros["variants"][1]["mean"]
+
+
+# ---------------------------------------------------------------------------
+# Fail closed: no fallback to Welch
+# ---------------------------------------------------------------------------
+
+
+def _two_treatment_sums():
+    control = BinomialVariant(CONTROL_ID, "Control", True)
+    first = BinomialVariant(TREATMENT_ID, "T1", False)
+    second = BinomialVariant(SECOND_ID, "T2", False)
+    return [
+        (control, 100, -5.0, 900.0),
+        (first, 100, 3.0, 950.0),
+        (second, 100, 2.0, 870.0),
+    ]
+
+
+def test_a_missing_permutation_p_value_raises():
+    with pytest.raises(PermutationPValueError, match=SECOND_ID):
+        mean_metric_result(
+            0.0,
+            _two_treatment_sums(),
+            0.05,
+            "benjamini_hochberg",
+            metric=_metric(),
+            p_values={TREATMENT_ID: 0.2},
+        )
+
+
+def test_a_permutation_p_value_for_a_treatment_that_is_not_compared_raises():
+    control = BinomialVariant(CONTROL_ID, "Control", True)
+    flat = BinomialVariant(TREATMENT_ID, "T1", False)
+    with pytest.raises(PermutationPValueError, match=TREATMENT_ID):
+        mean_metric_result(
+            1.0,
+            [(control, 10, 0.0, 0.0), (flat, 10, 0.0, 0.0)],
+            0.05,
+            "none",
+            metric=_metric(),
+            p_values={TREATMENT_ID: 0.5},
+        )
+
+
+def test_given_permutation_p_values_are_used_and_named():
+    result = mean_metric_result(
+        0.0,
+        _two_treatment_sums(),
+        0.05,
+        "bonferroni",
+        metric=_metric(),
+        p_values={TREATMENT_ID: 0.02, SECOND_ID: 0.5},
+    )
+    treatments = result["variants"][1:]
+    assert [v["p_value"] for v in treatments] == [0.02, 0.5]
+    assert [v["adjusted_p_value"] for v in treatments] == [0.04, 1.0]
+    assert [v["statistical_test_used"] for v in treatments] == [
+        "permutation_t_test"
+    ] * 2
+
+
+@pytest.mark.parametrize(
+    "ids",
+    [
+        {"metric_id": None},
+        {"metric_id": "revenue"},
+        {"control_id": "control"},
+        {"treatment_id": None},
+    ],
+)
+def test_a_mean_metric_without_uuids_has_no_p_value(ids):
+    """The metric's and the variants' ids are in the seed; the comparison
+    raises rather than fall back to Welch's p-value."""
+    with pytest.raises(ComparisonIdentityError):
+        _result(DET_CONTROL, DET_N_CONTROL, DET_TREATMENT, DET_N_TREATMENT, **ids)
+
+
+# ---------------------------------------------------------------------------
+# What does not change
+# ---------------------------------------------------------------------------
+
+#: The fields whose values the permutation test does not change: every
+#: estimate and interval stays Welch's or Fieller's.
+UNCHANGED_FIELDS = (
+    "variant_id",
+    "variant_name",
+    "is_control",
+    "sample_size",
+    "conversions",
+    "mean",
+    "std_dev",
+    "confidence_interval",
+    "effect_size",
+    "effect_size_label",
+    "power",
+    "relative_improvement_pct",
+    "absolute_difference",
+    "absolute_difference_ci",
+    "relative_improvement_pct_ci",
+    "incremental_impact",
+    "incremental_impact_ci",
+)
+
+
+def _unchanged_datasets():
+    rng = np.random.default_rng(2_041_022_000)
+    buyers_c = rng.lognormal(3.0, 1.0, size=30)
+    buyers_t = rng.lognormal(3.1, 1.0, size=36)
+    return {
+        "balanced revenue": (buyers_c.tolist(), 400, buyers_t.tolist(), 400),
+        "normal": (
+            rng.normal(50.0, 10.0, size=60).tolist(),
+            60,
+            rng.normal(52.0, 10.0, size=540).tolist(),
+            540,
+        ),
+    }
+
+
+@pytest.mark.parametrize("name", ["balanced revenue", "normal"])
+def test_every_estimate_and_interval_is_what_welch_gave(name, monkeypatch):
+    """A balanced revenue experiment and a metric that is not skewed: every
+    field but the p-values, significance, the test's name and the winner is
+    exactly what the engine gave before #2041, when the p-value was Welch's
+    (``mean_metric_result`` without permutation p-values, which its own
+    fingerprint holds to 1.12.0's output byte for byte).  A conversion
+    metric's whole result is unchanged too: the binomial pins under 1.13.0
+    are 1.12.0's."""
+    control, n_control, treatment, n_treatment = _unchanged_datasets()[name]
+    product = _result(control, n_control, treatment, n_treatment)
+    monkeypatch.setattr(
+        "backend.app.services.sufficient_stats_analysis._permutation_p_values",
+        lambda *args, **kwargs: None,
+    )
+    welch = _result(control, n_control, treatment, n_treatment)
+    assert product["variants"][1]["statistical_test_used"] == "permutation_t_test"
+    assert welch["variants"][1]["statistical_test_used"] == "welch_t_test"
+    for ours, theirs in zip(product["variants"], welch["variants"]):
+        for field in UNCHANGED_FIELDS:
+            assert ours[field] == theirs[field], (name, ours["variant_name"], field)
+    for key in ("metric_id", "metric_name", "metric_type", "analysis"):
+        assert product[key] == welch[key]

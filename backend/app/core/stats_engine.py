@@ -78,6 +78,14 @@ import numpy as np
 #: longer fires on a spread or a change of sign of the lifts, nor on a
 #: chi-squared test of the converting users alone at a fixed 0.05; the
 #: ``hte_warning`` text changes with it.
+#: 1.13.0 (#2041): a revenue, count, duration or custom metric's p-value in
+#: ``/results`` comes from a permutation test of Welch's t on each user's
+#: value (``backend/app/services/permutation_test.py``), named
+#: ``permutation_t_test``, instead of Welch's t-test, so ``p_value``,
+#: ``adjusted_p_value``, ``is_significant``, the winner and the
+#: recommendation can change; a mean's ``is_significant`` no longer follows
+#: its ``absolute_difference_ci``, which is still Welch's.  A mean computed
+#: from sums alone (a warehouse run) keeps Welch's t-test.
 #:
 #: The rule: an engine-changing PR bumps ``ENGINE_VERSION`` to the next minor
 #: and appends it to ``RELEASED_ENGINE_VERSIONS`` ("frozen on main", in
@@ -89,7 +97,7 @@ import numpy as np
 #: path stamping ``engine_version`` returns, caches or persists: results and
 #: its snapshots, Bayesian, CUPED, sequential, and the bandit's state, history
 #: and status.  A revert of an engine-changing PR bumps again.
-ENGINE_VERSION: str = "1.12.0"
+ENGINE_VERSION: str = "1.13.0"
 
 #: Mask that keeps the derived seed inside the signed 64-bit range.
 _SEED_MASK = (1 << 63) - 1

@@ -189,13 +189,13 @@ def test_a_mean_metric_carries_the_relative_interval_and_the_impact(
     expected = per_user_mean_metric_result(
         [
             (
-                BinomialVariant("c", "control", True),
+                BinomialVariant(control["variant_id"], "control", True),
                 USERS["control"],
                 PURCHASES["control"],
                 [1.0] * PURCHASES["control"],
             ),
             (
-                BinomialVariant("t", "treatment", False),
+                BinomialVariant(treatment["variant_id"], "treatment", False),
                 USERS["treatment"],
                 PURCHASES["treatment"],
                 [1.0] * PURCHASES["treatment"],
@@ -204,7 +204,10 @@ def test_a_mean_metric_carries_the_relative_interval_and_the_impact(
         0.05,
         "benjamini_hochberg",
         metric=SimpleNamespace(
-            id="m", name="m", metric_type=metric["metric_type"], is_primary=False
+            id=metric["metric_id"],
+            name="m",
+            metric_type=metric["metric_type"],
+            is_primary=False,
         ),
     )
     [want] = [v for v in expected["variants"] if not v["is_control"]]

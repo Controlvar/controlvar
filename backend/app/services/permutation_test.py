@@ -24,6 +24,13 @@ change to any step below changes p-values and bumps ``ENGINE_VERSION``.
    (:func:`listed_values`).  The same rule decides ``K`` and the values in
    ``T`` and ``T*``, so a total that is 0 in one summation order and a
    rounding residue such as ``-1.78e-15`` in another gives the same p-value.
+   When a metric's largest per-user total M is large, totals at or below
+   1e-9·M count as 0 in the test only: at M = 1e9 that is every total of 1 or
+   less, at M = 1e12 every total of 1,000 or less. The reported mean, standard
+   deviation, conversions and intervals use every total.  A net-zero user
+   whose individual events are much larger than M (about a million times or
+   more) can still count as listed or not, depending on summation order.
+   Exact summation would close this, and is not done.
 
 2. **Centring.**  Every sum is centred on the grand mean ``kbar`` over all
    ``n_c + n_t`` users (``math.fsum`` of the listed values over
