@@ -53,7 +53,8 @@ makes none itself ([Event ids](../sdk/python.md#event-ids)). The React and React
 every event an `event_id`, from their next published version
 ([React](../sdk/react.md#event-ids), [React Native](../sdk/react-native.md#event-ids)). The .NET
 SDK gives every event an `event_id`, from its next published version
-([Event ids](../sdk/dotnet.md#event-ids)).
+([Event ids](../sdk/dotnet.md#event-ids)). The Android SDK, which you build from a clone of this
+repository, gives every event an `event_id` ([Event ids](../sdk/android.md#event-ids)).
 No other
 SDK has an `event_id` option yet ([Limitations](../getting-started/limitations.md#sdks)): send an
 event that may be sent again to `POST /api/v1/tracking/track` or `POST /api/v1/tracking/batch`

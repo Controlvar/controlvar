@@ -122,6 +122,27 @@ control variant, and an event tracked without a key after the user's cache entri
 (`cacheTtlMs`, 5 minutes by default) is not sent, so pass `experimentKey` on a conversion that
 can come later.
 
+## Event ids
+
+Every event this SDK sends carries an `event_id`, and the server stores an event sent again with
+the same `event_id`, user, experiment, flag and event name only once. The SDK is not on Maven
+Central yet, so this is in the build you make from a clone of this repository.
+
+- `TrackEvent(userId, eventName, eventId = "order-42")` sets the id. Without one, the SDK makes a
+  lowercase random UUID (version 4) each time you track the event, so tracking the same
+  `TrackEvent` twice sends two events.
+- A fanned-out event carries the same id in every entry. In `trackBatch`, each event has its own id.
+- At most 255 characters, with no NUL and no lone surrogate; `TrackEvent`'s constructor and
+  `copy()` throw `IllegalArgumentException` for any other id, so that event is never sent. `null`
+  and `""` set none.
+- OkHttp can send a request again by itself when the connection drops after the request was
+  written, for example on a kept-alive connection the server or a proxy has closed. The request it
+  sends again carries the same body and the same `event_id`, so the server stores the event once.
+- A request that times out is not sent again. To send it again yourself and have it stored once,
+  give the event an `eventId` and send that same id again.
+
+Full details: [Event ids](../../docs/sdk/android.md#event-ids).
+
 ## Consistent hash (compatibility utility)
 
 `ConsistentHash.compute(userId, key)` computes `MD5("{userId}:{key}")`, reads the first 4 bytes as
@@ -137,7 +158,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 |---|---|---|---|
 | `evaluateFlag` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
 | `getAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
-| `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
+| `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?, event_id}` | ignored |
 | `track` without keys, `trackBatch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored |
 
 ## Tests
@@ -166,7 +187,7 @@ bash sdk/android/examples/contract_smoke.sh
 It prints:
 
 ```text
-{"sdk":"android","assign":{"variant_name":"treatment","is_control":false,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
+{"sdk":"android","assign":{"variant_name":"treatment","is_control":false,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true},"event_id":{"user_id":"smoke-<uuid>","event_name":"contract_dedup_<uuid>","id":"contract-<uuid>","sends":2}}
 ```
 
 Runs `com.controlvar.android.examples.ContractSmoke` from the JVM build above
@@ -180,7 +201,8 @@ forces a rebuild). Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`),
 `ExperimentationClient.track()` is fire-and-forget — it launches on a background scope and swallows
 every error — so the smoke calls it *and* posts the same `TrackEvent.toJson()` bodies through
 `HttpClient`, which throws on a non-2xx response. A renamed field or a path the backend does not
-serve fails the smoke.
+serve fails the smoke. It also sends one keyed event twice with one fixed `eventId` and reports it
+as `event_id`; the runner then checks that the server stored that event once.
 
 CI runs this SDK's contract smoke against a real API: `android` is in the `sdks:` list of the
 SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml). The smoke

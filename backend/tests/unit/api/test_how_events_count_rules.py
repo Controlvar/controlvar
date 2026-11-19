@@ -159,8 +159,9 @@ def test_every_sdk_sends_its_events_through_track_and_batch(sdk):
 #: The SDKs that send an ``event_id`` (#1543). Each SDK's own pull request
 #: adds the option, moves the SDK here, and takes it out of the SDK row of
 #: ``docs/getting-started/limitations.md``. What each one sends is held by its
-#: own tests (Java: ``ExperimentationClientTest``'s ``EventIds``).
-WITH_EVENT_ID = ("java", "js", "python", "react", "react-native", "dotnet")
+#: own tests (Java: ``ExperimentationClientTest``'s ``EventIds``; Android:
+#: ``EventIdTest``).
+WITH_EVENT_ID = ("java", "js", "python", "react", "react-native", "dotnet", "android")
 #: The SDKs with no ``event_id`` option yet: every other one.
 WITHOUT_EVENT_ID = sorted(set(SDK_SOURCES) - set(WITH_EVENT_ID))
 #: The option's name in each SDK's idiom: ``event_id``, ``eventId``,

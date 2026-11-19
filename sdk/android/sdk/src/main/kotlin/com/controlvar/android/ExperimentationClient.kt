@@ -7,6 +7,7 @@ import kotlinx.coroutines.launch
 import okhttp3.HttpUrl
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.UUID
 
 /**
  * Main Controlvar SDK client for Android.
@@ -158,14 +159,18 @@ class ExperimentationClient(
      *
      * Events with an empty `userId` or `eventName` are ignored.
      *
+     * The event is sent with its [TrackEvent.eventId], or, when it has none, with a
+     * lowercase random UUID made for this call. Every fan-out entry carries the same id.
+     *
      * @param event the event to track
      */
     suspend fun track(event: TrackEvent) {
         if (!isValid(event)) return
-        if (event.hasKey()) {
-            send(listOf("/api/v1/tracking/track" to event.toJson()))
+        val identified = withEventId(event)
+        if (identified.hasKey()) {
+            send(listOf("/api/v1/tracking/track" to identified.toJson()))
         } else {
-            send(batchRequests(fanOut(event)))
+            send(batchRequests(fanOut(identified)))
         }
     }
 
@@ -175,13 +180,21 @@ class ExperimentationClient(
      * events with nothing cached for their user are dropped. Fire-and-forget — never
      * throws.
      *
+     * Each event is sent with its own [TrackEvent.eventId], or with a lowercase random UUID
+     * made for it in this call, shared by that event's fan-out entries.
+     *
      * @param events the events to track
      */
     suspend fun trackBatch(events: List<TrackEvent>) {
         val entries = mutableListOf<JSONObject>()
         for (event in events) {
             if (!isValid(event)) continue
-            if (event.hasKey()) entries.add(event.toJson()) else entries.addAll(fanOut(event))
+            val identified = withEventId(event)
+            if (identified.hasKey()) {
+                entries.add(identified.toJson())
+            } else {
+                entries.addAll(fanOut(identified))
+            }
         }
         send(batchRequests(entries))
     }
@@ -260,6 +273,15 @@ class ExperimentationClient(
 
     private fun isValid(event: TrackEvent): Boolean =
         event.userId.isNotEmpty() && event.eventName.isNotEmpty()
+
+    /**
+     * The event with its `event_id`: the caller's [TrackEvent.eventId], or a lowercase random
+     * UUID (version 4) when it has none (`null` or `""`). Called before fan-out, so every
+     * entry of the event shares it.
+     */
+    // Made once per event, before the first attempt. A future event queue stores it with the event and never makes a new one on dequeue.
+    private fun withEventId(event: TrackEvent): TrackEvent =
+        if (event.eventId.isNullOrEmpty()) event.copy(eventId = UUID.randomUUID().toString()) else event
 
     /** Wraps batch entries into `/tracking/batch` requests of at most [BATCH_LIMIT] events each. */
     private fun batchRequests(entries: List<JSONObject>): List<Pair<String, JSONObject>> =
