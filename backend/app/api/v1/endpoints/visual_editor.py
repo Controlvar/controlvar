@@ -13,9 +13,10 @@ route here takes a dashboard sign-in or an API key.
   design.
 
 Each spends its credential with one statement and commits at once, so a
-refusal that comes after the spend leaves the credential spent. A spent
-ticket or claim presented again ends the editor that link opened (409); see
-``backend/app/services/visual_editor.py``. Both routes have an exact rate
+refusal that comes after the spend leaves the credential spent, then writes
+the next credential under ``visual_editor.hold_editor``, and only while the
+one it spent is still live. A spent ticket or claim presented again ends the
+editor that link opened (409); see ``backend/app/services/visual_editor.py``. Both routes have an exact rate
 limit of their own (``RATE_LIMIT_CONFIG``).
 
 The session's own routes take ``Authorization: Bearer cves_...`` and nothing
@@ -27,9 +28,10 @@ else; no other route takes that token:
   saves one variant's page changes, through the experiment update's own
   steps (``experiments._apply_experiment_update``), as the session's user.
 
-Each runs :func:`current_editor_session` first. A session that cannot be used
-answers 401 with ``{"detail", "reason"}`` (:class:`EditorSessionClosed`), so
-the editor can say why it closed.
+Each runs :func:`current_editor_session` first (signing out,
+:func:`signing_out_editor_session`). A session that cannot be used answers 401
+with ``{"detail", "reason"}`` (:class:`EditorSessionClosed`), so the editor can
+say why it closed.
 """
 
 from __future__ import annotations
@@ -88,6 +90,7 @@ from backend.app.services.visual_origins import (
     request_origin,
     site_origin_refusal,
     site_origins,
+    visual_origin_problem,
 )
 
 router = APIRouter(route_class=OffLoopRoute)
@@ -197,8 +200,9 @@ def claim_editor_link(
     or is already in use (the ticket is not spent); 409 when the ticket was
     already used, which also closes the editor it opened; 401 when it is
     unknown, expired or ended; 403 when the request's `Origin` is not one of
-    the experiment's sites (the ticket stays spent). Sent with
-    `Cache-Control: no-store`.
+    the experiment's sites (the ticket stays spent); then the same 409 or 401
+    if the link has been used again, ended or has expired meanwhile. Sent
+    with `Cache-Control: no-store`.
     """
     claim_hash = hash_api_key(body.claim)
     ticket_hash = hash_api_key(body.ticket)
@@ -236,6 +240,11 @@ def claim_editor_link(
             db.rollback()
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=refusal)
         expires_at = now + visual_editor.CLAIM_LIFETIME
+        visual_editor.hold_editor(db, ticket.experiment_id)
+        refusal = visual_editor.parent_refusal(db, ticket.id)
+        if refusal is not None:
+            db.rollback()
+            raise refusal
         db.add(
             VisualToken(
                 kind=EDITOR_CLAIM,
@@ -317,10 +326,13 @@ def open_editor_session(
     dashboard's; 422 when the request is not in the documented form; 409 when
     the value was already used, which also closes the editor it opened; 401
     when it is unknown, expired or ended; 403 when `page_origin` is not one of
-    the experiment's sites; 403 when the user is no longer active or may no
-    longer change experiments; 400 when the experiment is no longer a draft,
-    has a start date, or has no visual settings. After the 401 every refusal
-    leaves the value spent. Sent with `Cache-Control: no-store`.
+    the experiment's sites; 422, as opening the editor answers, when
+    CORS_ORIGINS contains `*` or one of the experiment's pages is no longer
+    on a site this server accepts; 403 when the user is no longer active or
+    may no longer change experiments; 400 when the experiment is no longer a
+    draft, has a start date, or has no visual settings; then the same 409 or
+    401 if the value has been ended or has expired meanwhile. After the 401
+    every refusal leaves the value spent. Sent with `Cache-Control: no-store`.
     """
     claim_hash = hash_api_key(body.claim)
     try:
@@ -352,6 +364,11 @@ def open_editor_session(
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail=SITE_NOT_LISTED
             )
+        problem = visual_origin_problem(experiment.visual_config)
+        if problem is not None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=problem
+            )
         user = db.get(User, claim.user_id) if claim.user_id else None
         refuse_unless_allowed(experiment, user)
         visual_editor.refuse_unless_open_to_edit(experiment)
@@ -363,6 +380,10 @@ def open_editor_session(
         state = visual_editor.session_state(experiment, expires_at)
         name = experiment.name
         experiment_id = experiment.id
+        visual_editor.hold_editor(db, experiment_id)
+        refusal = visual_editor.parent_refusal(db, claim.id)
+        if refusal is not None:
+            raise refusal
         db.add(
             VisualToken(
                 id=session_id,
@@ -431,6 +452,21 @@ def current_editor_session(
 
     It writes nothing.
     """
+    return _editor_session(request, db, editing=True)
+
+
+def signing_out_editor_session(
+    request: Request, db: Session = Depends(deps.get_db)
+) -> EditorSession:
+    """:func:`current_editor_session` without its step 7, for signing out:
+    a session signs out of a draft that has since been given a start date,
+    or is no longer a draft."""
+    return _editor_session(request, db, editing=False)
+
+
+def _editor_session(request: Request, db: Session, *, editing: bool) -> EditorSession:
+    """The checks of :func:`current_editor_session`; step 7 only when
+    *editing*."""
     refusal = dashboard_origin_refusal(request.headers.get("origin"), request.method)
     if refusal is not None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=refusal)
@@ -461,11 +497,11 @@ def current_editor_session(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=visual_editor.EXPERIMENT_GONE,
         )
-    if experiment.status != ExperimentStatus.DRAFT:
+    if editing and experiment.status != ExperimentStatus.DRAFT:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=visual_editor.NOT_A_DRAFT
         )
-    if experiment.start_date is not None:
+    if editing and experiment.start_date is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=visual_editor.DATED_DRAFT
         )
@@ -523,15 +559,21 @@ def read_editor_session(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Sign out of the visual editor (beta)",
     openapi_extra={"x-stability": "beta"},
-    responses=_SESSION_REFUSALS,
+    responses={
+        status_code: answer
+        for status_code, answer in _SESSION_REFUSALS.items()
+        if status_code != 400
+    },
 )
 def sign_out_of_editor(
-    session: EditorSession = Depends(current_editor_session),
+    session: EditorSession = Depends(signing_out_editor_session),
     db: Session = Depends(deps.get_db),
 ) -> Response:
     """
     End the session: its token answers 401 `signed_out` from then on. The
-    saved design is kept.
+    saved design is kept. Checked as every session call is, except that a
+    session signs out of a draft that has since been given a start date, or
+    is no longer a draft.
     """
     actor = AuditActor.of(session.user)
     experiment_id = session.experiment.id

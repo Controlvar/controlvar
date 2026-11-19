@@ -135,6 +135,7 @@ def open_visual_editor(
     ticket = secrets.token_urlsafe(32)
     expires_at = now + visual_editor.TICKET_LIFETIME
     try:
+        visual_editor.hold_editor(db, experiment_id)
         ended = visual_editor.reopen(db, experiment_id, now)
         db.add(
             VisualToken(

@@ -30483,7 +30483,7 @@
     },
     "/api/v1/visual-editor/sessions": {
       "post": {
-        "description": "Exchange the page's value for a visual editor session.\n\nSent by the visual editor's panel, from the dashboard, with the value the\npage handed it and that page's origin. The session belongs to the user\nwho made the editor link, lasts 4 hours and cannot be extended; its token\nworks only on the visual editor's session routes. The answer carries the\ntoken once, the experiment's sites the editor may run on, and the\ndraft's design.\n\nRefused, in this order: 403 when the request's `Origin` is not one of the\ndashboard's; 422 when the request is not in the documented form; 409 when\nthe value was already used, which also closes the editor it opened; 401\nwhen it is unknown, expired or ended; 403 when `page_origin` is not one of\nthe experiment's sites; 403 when the user is no longer active or may no\nlonger change experiments; 400 when the experiment is no longer a draft,\nhas a start date, or has no visual settings. After the 401 every refusal\nleaves the value spent. Sent with `Cache-Control: no-store`.",
+        "description": "Exchange the page's value for a visual editor session.\n\nSent by the visual editor's panel, from the dashboard, with the value the\npage handed it and that page's origin. The session belongs to the user\nwho made the editor link, lasts 4 hours and cannot be extended; its token\nworks only on the visual editor's session routes. The answer carries the\ntoken once, the experiment's sites the editor may run on, and the\ndraft's design.\n\nRefused, in this order: 403 when the request's `Origin` is not one of the\ndashboard's; 422 when the request is not in the documented form; 409 when\nthe value was already used, which also closes the editor it opened; 401\nwhen it is unknown, expired or ended; 403 when `page_origin` is not one of\nthe experiment's sites; 422, as opening the editor answers, when\nCORS_ORIGINS contains `*` or one of the experiment's pages is no longer\non a site this server accepts; 403 when the user is no longer active or\nmay no longer change experiments; 400 when the experiment is no longer a\ndraft, has a start date, or has no visual settings; then the same 409 or\n401 if the value has been ended or has expired meanwhile. After the 401\nevery refusal leaves the value spent. Sent with `Cache-Control: no-store`.",
         "operationId": "open_editor_session_api_v1_visual_editor_sessions_post",
         "requestBody": {
           "content": {
@@ -30538,14 +30538,11 @@
     },
     "/api/v1/visual-editor/sessions/current": {
       "delete": {
-        "description": "End the session: its token answers 401 `signed_out` from then on. The\nsaved design is kept.",
+        "description": "End the session: its token answers 401 `signed_out` from then on. The\nsaved design is kept. Checked as every session call is, except that a\nsession signs out of a draft that has since been given a start date, or\nis no longer a draft.",
         "operationId": "sign_out_of_editor_api_v1_visual_editor_sessions_current_delete",
         "responses": {
           "204": {
             "description": "Successful Response"
-          },
-          "400": {
-            "description": "The experiment is no longer a draft, or has a start date"
           },
           "401": {
             "content": {
@@ -30682,7 +30679,7 @@
     },
     "/api/v1/visual-editor/tickets/claim": {
       "post": {
-        "description": "Spend an editor link's ticket and store the page's value in its place.\n\nSent by the Controlvar script on the page the editor link opened, with no\nAPI key and no cookie. `claim` is 43 base64url characters the page drew;\nthe editor's panel then exchanges it for a session\n(`POST /api/v1/visual-editor/sessions`) within 120 seconds. The answer holds\nno credential.\n\nRefused, in this order: 422 when `claim` is not 43 base64url characters,\nor is already in use (the ticket is not spent); 409 when the ticket was\nalready used, which also closes the editor it opened; 401 when it is\nunknown, expired or ended; 403 when the request's `Origin` is not one of\nthe experiment's sites (the ticket stays spent). Sent with\n`Cache-Control: no-store`.",
+        "description": "Spend an editor link's ticket and store the page's value in its place.\n\nSent by the Controlvar script on the page the editor link opened, with no\nAPI key and no cookie. `claim` is 43 base64url characters the page drew;\nthe editor's panel then exchanges it for a session\n(`POST /api/v1/visual-editor/sessions`) within 120 seconds. The answer holds\nno credential.\n\nRefused, in this order: 422 when `claim` is not 43 base64url characters,\nor is already in use (the ticket is not spent); 409 when the ticket was\nalready used, which also closes the editor it opened; 401 when it is\nunknown, expired or ended; 403 when the request's `Origin` is not one of\nthe experiment's sites (the ticket stays spent); then the same 409 or 401\nif the link has been used again, ended or has expired meanwhile. Sent\nwith `Cache-Control: no-store`.",
         "operationId": "claim_editor_link_api_v1_visual_editor_tickets_claim_post",
         "requestBody": {
           "content": {

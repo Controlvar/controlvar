@@ -15,10 +15,16 @@ fails it (the failing line is the assertion's message or comparison):
 * V115    a claim of the wrong form, or one already stored, is refused and
           the ticket stays unused; a good one is stored and nothing comes
           back; the exchange takes a claim, never a ticket.
-* V79     a used ticket or claim presented again ends everything descended
-          from the ticket; two at once store exactly one row.
+* V79     a used ticket or claim presented again, at once or after the
+          ticket and the claim have expired, ends the ticket and everything
+          descended from it; two at once store exactly one row; a link
+          presented again while its claim is being written leaves nothing of
+          it live; nothing is written for a ticket or a claim that expired
+          after it was spent.
 * V80     opening the editor again ends every earlier editor credential of
-          that experiment, whoever holds it, and nothing of another one.
+          that experiment, whoever holds it, and nothing of another one; two
+          opens at once leave one link, and a re-open during an exchange
+          leaves one editor.
 * V81     the audit entries of each case, exactly.
 * V82     the dashboard's origins for the dashboard's routes, the
           experiment's sites for the page's route.
@@ -26,9 +32,10 @@ fails it (the failing line is the assertion's message or comparison):
 * V26     who may open the editor, and a session whose user may no longer
           change experiments is refused.
 * V65     a dated draft is not opened, and a session does not write to one.
-* V27     the session's token works on its three routes and nowhere else;
-          each credential lasts its time; another experiment's variant is
-          not saved.
+* V27     the session's token works on its three routes, as a bearer token,
+          and nowhere else, as a bearer token or as an API key; each
+          credential lasts its time; another experiment's variant is not
+          saved.
 * V72a    a session's token makes no preview link.
 * K3      an ended session's 401 says why: its text and its reason.
 * V67     a start, by the route or the scheduler, ends the session (401
@@ -39,10 +46,12 @@ fails it (the failing line is the assertion's message or comparison):
           session, no text or JSON column holds the client's address, and no
           compliance event made since names one.
 * Also: the session's GET is the exchange's answer without the token; a save
-          keeps every other variant's changes; signing out is recorded; a
-          browser's preflighted request reaches the claim route; nothing
-          stored or logged holds a credential or its hash; the editor cannot
-          be opened while CORS_ORIGINS holds ``*``; the texts.
+          keeps every other variant's changes; signing out is recorded, and
+          works on a draft the session can no longer edit; a browser's
+          preflighted request reaches the claim route; nothing stored or
+          logged holds a credential or its hash; the editor cannot be opened
+          while CORS_ORIGINS holds ``*``, even from a link made before; the
+          session routes check the ``Origin`` before the token; the texts.
 """
 
 from __future__ import annotations
@@ -52,6 +61,7 @@ import json
 import logging
 import re
 import secrets
+import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -68,6 +78,7 @@ from sqlalchemy import text, update
 from sqlalchemy.orm import sessionmaker
 
 from backend.app.api import deps
+from backend.app.api.v1.endpoints import visual_editor as editor_endpoints
 from backend.app.core.config import DevSettings, ProdSettings, TestSettings, settings
 from backend.app.core.permissions import (
     Action,
@@ -695,12 +706,22 @@ def test_a_second_claim_of_a_ticket_ends_the_first_claim(
 
 
 @pytest.mark.regression
+@pytest.mark.parametrize(
+    "later", [None, timedelta(minutes=3)], ids=["at once", "3 min"]
+)
 @pytest.mark.parametrize("via", ["claim route", "exchange"])
 def test_a_used_link_presented_again_ends_the_session_it_opened(
-    client, db_session, developer, experiment, via
+    client, db_session, developer, experiment, monkeypatch, via, later
 ):
+    """Presented again at once, or 3 minutes later, when the link and its
+    claim have expired and the session they opened has not."""
+    if later is not None:
+        at = [datetime.now(timezone.utc)]
+        monkeypatch.setattr(visual_editor, "utcnow", lambda: at[0])
     chain = _opened(client, developer, experiment)
     assert _session_says(client, chain["token"]) == (200, None)
+    if later is not None:
+        at[0] += later
 
     if via == "claim route":
         again = _claim(client, chain["ticket"], _value())
@@ -827,6 +848,214 @@ def test_two_exchanges_of_one_claim_at_once_store_exactly_one_session(
     assert len(sessions) == 1, f"sessions {len(sessions)} != 1"
     assert waited, "the second exchange never waited for the first"
     assert response.status_code == 409, response.text
+
+
+# --- one experiment's sign-in requests, one after another ----------------------------
+
+
+class _Pause:
+    """Stops the first request that calls ``owner.<name>`` just after that
+    call returns, until :attr:`released` is set. When the call's first
+    argument is the request's database session, :attr:`pid` is its backend,
+    so a test can see another request wait for it."""
+
+    def __init__(self, monkeypatch, owner, name: str):
+        self.reached = threading.Event()
+        self.released = threading.Event()
+        self.pid: Optional[int] = None
+        self._calls = 0
+        self._count = threading.Lock()
+        original = getattr(owner, name)
+
+        def paused(*args, **kwargs):
+            result = original(*args, **kwargs)
+            with self._count:
+                self._calls += 1
+                first = self._calls == 1
+            if first:
+                if args and hasattr(args[0], "execute"):
+                    self.pid = args[0].execute(text("SELECT pg_backend_pid()")).scalar()
+                self.reached.set()
+                assert self.released.wait(30), "the paused request was never let go"
+            return result
+
+        monkeypatch.setattr(owner, name, paused)
+
+
+def _alongside(db_session, pause: _Pause, held, other):
+    """Send *held* and wait until it reaches *pause*; send *other*; wait
+    until Postgres shows *other* waiting for the held request, or *other* has
+    answered; then let the held request go. Returns both answers and whether
+    *other* was seen waiting."""
+    pool = ThreadPoolExecutor(max_workers=2)
+    try:
+        first = pool.submit(held)
+        assert pause.reached.wait(30), "the held request never reached its pause"
+        second = pool.submit(other)
+        waited = False
+        deadline = time.monotonic() + 30
+        while not second.done():
+            if pause.pid is not None and _waiting_on(db_session, pause.pid):
+                waited = True
+                break
+            assert time.monotonic() < deadline, (
+                "the second request neither waited nor answered"
+            )
+            time.sleep(0.05)
+        pause.released.set()
+        return first.result(timeout=60), second.result(timeout=60), waited
+    finally:
+        pause.released.set()
+        pool.shutdown(wait=True)
+
+
+def _live(db_session, experiment_id: str, kind: str) -> List[VisualToken]:
+    return [
+        row for row in _rows(db_session, experiment_id, kind) if row.revoked_at is None
+    ]
+
+
+@pytest.mark.regression
+def test_a_link_opened_twice_at_once_leaves_one_editor(
+    client, db_session, developer, experiment, monkeypatch
+):
+    """The first open is held after it ended the earlier credentials and
+    before it writes its link; the second open waits for it, then ends the
+    first open's link."""
+    pause = _Pause(monkeypatch, visual_editor, "reopen")
+
+    first, second, waited = _alongside(
+        db_session,
+        pause,
+        lambda: _mint(client, developer, experiment),
+        lambda: _mint(client, developer, experiment),
+    )
+
+    live = _live(db_session, experiment, EDITOR_TICKET)
+    assert len(live) == 1, f"live tickets {len(live)} != 1"
+    assert waited, "the second open never waited for the first"
+    assert _claim(client, _ticket_of(first), _value()).status_code == 401
+    newer = _ticket_of(second)
+    claim = _value()
+    assert _claim(client, newer, claim).status_code == 201
+    assert _exchange(client, claim).status_code == 201
+    assert len(_live(db_session, experiment, EDITOR_SESSION)) == 1
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("held_at", ["before its write", "at its write"])
+def test_a_link_used_again_while_it_is_claimed_leaves_nothing_live(
+    client, db_session, developer, experiment, monkeypatch, held_at
+):
+    """The first claim is held after it spent the link: before it writes the
+    claim, or with the claim about to be written. The same link is presented
+    again meanwhile (409); nothing that link led to stays live."""
+    ticket = _ticket(client, developer, experiment)
+    first = _value()
+    if held_at == "before its write":
+        pause = _Pause(monkeypatch, editor_endpoints, "site_origins")
+    else:
+        pause = _Pause(monkeypatch, visual_editor, "parent_refusal")
+
+    held, again, waited = _alongside(
+        db_session,
+        pause,
+        lambda: _claim(client, ticket, first),
+        lambda: _claim(client, ticket, _value()),
+    )
+
+    assert again.status_code == 409, again.text
+    live = _live(db_session, experiment, EDITOR_CLAIM)
+    assert len(live) == 0, f"live claims {len(live)} != 0"
+    assert _ended_why(db_session, ticket) == TICKET_REUSED
+    if held_at == "before its write":
+        assert held.status_code == 409, f"held claim {held.status_code} != 409"
+        assert held.json()["detail"] == visual_editor.LINK_USED_TWICE
+        assert _rows(db_session, experiment, EDITOR_CLAIM) == []
+    else:
+        assert held.status_code == 201, held.text
+        assert waited, "the second claim never waited for the first"
+        assert _ended_why(db_session, first) == TICKET_REUSED
+    late = _exchange(client, first)
+    assert late.status_code == 401, f"held claim's exchange {late.status_code} != 401"
+    assert _rows(db_session, experiment, EDITOR_SESSION) == []
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("held_at", ["before its write", "at its write"])
+def test_opening_the_editor_again_during_an_exchange_leaves_one_editor(
+    client, db_session, developer, experiment, monkeypatch, held_at
+):
+    """The exchange is held after it spent the claim: before it writes the
+    session, or with the session about to be written. The editor is opened
+    again meanwhile; no session of the earlier link stays live, and the new
+    link opens the one editor."""
+    chain = _claimed(client, developer, experiment)
+    if held_at == "before its write":
+        pause = _Pause(monkeypatch, visual_editor, "refuse_unless_open_to_edit")
+    else:
+        pause = _Pause(monkeypatch, visual_editor, "parent_refusal")
+
+    held, reopened, waited = _alongside(
+        db_session,
+        pause,
+        lambda: _exchange(client, chain["claim"]),
+        lambda: _mint(client, developer, experiment),
+    )
+
+    assert reopened.status_code == 201, reopened.text
+    live = _live(db_session, experiment, EDITOR_SESSION)
+    assert len(live) == 0, f"live sessions {len(live)} != 0"
+    if held_at == "before its write":
+        assert held.status_code == 401, f"held exchange {held.status_code} != 401"
+        assert held.json()["detail"] == visual_editor.LINK_NOT_VALID
+        assert _rows(db_session, experiment, EDITOR_SESSION) == []
+    else:
+        assert held.status_code == 201, held.text
+        assert waited, "the re-open never waited for the exchange"
+        says = _session_says(client, held.json()["token"])
+        assert says == (401, REOPENED), (
+            f"held exchange's session {says} != (401, 'reopened')"
+        )
+    claim = _value()
+    assert _claim(client, _ticket_of(reopened), claim).status_code == 201
+    assert _exchange(client, claim).status_code == 201
+    assert len(_live(db_session, experiment, EDITOR_SESSION)) == 1
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("via", ["claim route", "exchange"])
+def test_nothing_is_written_for_a_link_that_expired_after_it_was_spent(
+    client, db_session, developer, experiment, monkeypatch, via
+):
+    """The request is held after it spent the ticket (or the claim), the
+    clock moves to that credential's expiry, and the request goes on: it
+    writes nothing and answers the one 401."""
+    base = datetime(2031, 3, 4, 5, 6, 7, tzinfo=timezone.utc)
+    at = [base]
+    monkeypatch.setattr(visual_editor, "utcnow", lambda: at[0])
+    if via == "claim route":
+        ticket = _ticket(client, developer, experiment)
+        pause = _Pause(monkeypatch, editor_endpoints, "site_origins")
+        send, kind = (lambda: _claim(client, ticket, _value())), EDITOR_CLAIM
+    else:
+        chain = _claimed(client, developer, experiment)
+        pause = _Pause(monkeypatch, visual_editor, "refuse_unless_open_to_edit")
+        send, kind = (lambda: _exchange(client, chain["claim"])), EDITOR_SESSION
+    pool = ThreadPoolExecutor(max_workers=1)
+    try:
+        answer = pool.submit(send)
+        assert pause.reached.wait(30), "the request never reached its pause"
+        at[0] = base + timedelta(seconds=120)
+        pause.released.set()
+        response = answer.result(timeout=60)
+    finally:
+        pause.released.set()
+        pool.shutdown(wait=True)
+
+    assert response.status_code == 401, f"{via}: {response.status_code} != 401"
+    assert response.json()["detail"] == visual_editor.LINK_NOT_VALID
+    assert _rows(db_session, experiment, kind) == []
 
 
 # --- the exchange's checks on the page, and that the value stays spent ---------------
@@ -1408,6 +1637,35 @@ def test_no_draft_is_opened_while_cors_origins_holds_every_site(
     assert _mint(client, developer, experiment).status_code == 201
 
 
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "listed", [["*"], ["*", SHOP, SHOP2]], ids=["only *", "* and the sites"]
+)
+def test_a_link_made_before_cors_origins_held_every_site_opens_no_editor_after(
+    client, db_session, developer, experiment, monkeypatch, listed
+):
+    chain = _claimed(client, developer, experiment)
+    monkeypatch.setattr(settings, "CORS_ORIGINS", listed)
+
+    refused = _exchange(client, chain["claim"])
+
+    if listed == ["*"]:
+        # No site is left, so the page is not one of them.
+        want = (403, visual_origins.SITE_NOT_LISTED)
+    else:
+        want = (422, visual_origins.EVERY_SITE_ALLOWED)
+    assert refused.status_code == want[0], (
+        f"exchange with *: {refused.status_code} != {want[0]}"
+    )
+    assert refused.json()["detail"] == want[1]
+    assert _rows(db_session, experiment, EDITOR_SESSION) == []
+    # The pair: the sites alone, and a link exchanges.
+    monkeypatch.setattr(settings, "CORS_ORIGINS", [SHOP, SHOP2])
+    assert _exchange(client, chain["claim"]).status_code == 409
+    fresh = _claimed(client, developer, experiment)
+    assert _exchange(client, fresh["claim"]).status_code == 201
+
+
 # --- a browser's request reaches the claim route ------------------------------------------
 
 
@@ -1880,14 +2138,71 @@ def test_signing_out_closes_the_session_with_its_entry(
 
 
 @pytest.mark.regression
+@pytest.mark.parametrize("change", ["dated", "no longer a draft"])
+def test_a_session_signs_out_of_a_draft_it_can_no_longer_edit(
+    client, db_session, developer, experiment, change
+):
+    chain = _opened(client, developer, experiment)
+    session_id = str(_row(db_session, chain["token"]).id)
+    if change == "dated":
+        _set_start_date(db_session, experiment)
+        refusal = visual_editor.DATED_DRAFT
+    else:
+        session = _session(db_session)
+        try:
+            session.execute(
+                text("UPDATE experiments SET status = 'ACTIVE' WHERE id = :id"),
+                {"id": uuid.UUID(experiment)},
+            )
+            session.commit()
+        finally:
+            session.close()
+        refusal = visual_editor.NOT_A_DRAFT
+    got = _current(client, chain["token"])
+    assert (got.status_code, got.json()["detail"]) == (400, refusal)
+    before = len(_entries(db_session, experiment))
+
+    response = _sign_out(client, chain["token"])
+
+    assert response.status_code == 204, (
+        f"{change}: sign-out {response.status_code} != 204"
+    )
+    assert _entries(db_session, experiment)[before:] == ["closed(signed_out)"]
+    assert json.loads(_audit_rows(db_session, experiment)[-1].new_value) == {
+        "reason": "signed_out",
+        "session_id": session_id,
+        "session_user_id": str(developer.id),
+    }
+    assert _session_says(client, chain["token"]) == (401, "signed_out")
+
+
+@pytest.mark.regression
 @pytest.mark.parametrize("wrong", [*WRONG_ORIGINS, "none"])
 def test_the_session_routes_take_the_dashboards_origin(
     client, db_session, developer, experiment, wrong
 ):
     origin = WRONG_ORIGINS.get(wrong)
+    signed_out = _opened(client, developer, experiment)["token"]
+    assert _sign_out(client, signed_out).status_code == 204
     chain = _opened(client, developer, experiment)
     token = chain["token"]
     variant = _variant(client, developer, experiment, "B")
+
+    # The Origin comes before the token: a made-up token and a signed-out one
+    # get the same 403, never a 401, except a GET with no Origin.
+    for label, other in (("made-up", "cves_" + _value()), ("signed-out", signed_out)):
+        answers = (
+            ("GET", _current(client, other, origin)),
+            ("PUT", _save(client, other, variant, NEW_CHANGES, origin)),
+            ("DELETE", _sign_out(client, other, origin)),
+        )
+        for name, answer in answers:
+            want = 401 if wrong == "none" and name == "GET" else 403
+            assert answer.status_code == want, (
+                f"{label} token {name} from {origin}: {answer.status_code} != {want}"
+            )
+            if want == 403:
+                assert answer.json()["detail"] == visual_origins.NOT_FROM_DASHBOARD
 
     got = _current(client, token, origin)
     put = _save(client, token, variant, NEW_CHANGES, origin)
@@ -2068,29 +2383,40 @@ def _answer(response):
     return response.status_code, response.headers.get("www-authenticate"), body
 
 
-def _send(client, method: str, path: str, token: str):
+#: Each place a request carries a credential the API reads.
+POSITIONS = {
+    "Authorization": lambda token: {"Authorization": f"Bearer {token}"},
+    "X-API-Key": lambda token: {"X-API-Key": token},
+}
+
+
+def _send(client, method: str, path: str, token: str, position: str):
     url = re.sub(r"\{[^}]+\}", "00000000-0000-4000-8000-000000000000", path)
     body = {} if method in ("POST", "PUT", "PATCH", "DELETE") else None
-    return client.request(method, url, json=body, headers=_bearer(token, DASHBOARD))
+    headers = {**POSITIONS[position](token), **_origin(DASHBOARD)}
+    return client.request(method, url, json=body, headers=headers)
 
 
 @pytest.mark.regression
 def test_no_other_route_takes_a_session_token(client, developer, experiment):
-    """Every route but the session's own answers a live session's token
-    exactly as it answers a made-up one; on its own three routes the live
+    """Every route but the session's own, and the session's own routes in
+    every place but ``Authorization: Bearer``, answer a live session's token
+    exactly as they answer a made-up one, the token sent as a bearer token
+    and as an API key; on its own three routes, as a bearer token, the live
     token gets in and the made-up one does not."""
     chain = _opened(client, developer, experiment)
     live, made_up = chain["token"], "cves_" + _value()
     routes = _http_routes()
     assert len(routes) >= 150, len(routes)
-    taken = {}
+    taken = []
     for method, path in routes:
-        if (method, path) in SESSION_ROUTES:
-            continue
-        if _answer(_send(client, method, path, live)) != _answer(
-            _send(client, method, path, made_up)
-        ):
-            taken[f"{method} {path}"] = True
+        for position in POSITIONS:
+            if (method, path) in SESSION_ROUTES and position == "Authorization":
+                continue
+            if _answer(_send(client, method, path, live, position)) != _answer(
+                _send(client, method, path, made_up, position)
+            ):
+                taken.append(f"{method} {path} ({position})")
     assert not taken, f"beyond allow-list: {sorted(taken)}"
     variant = _variant(client, developer, experiment, "B")
     assert _current(client, made_up).status_code == 401

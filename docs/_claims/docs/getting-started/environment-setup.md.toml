@@ -203,6 +203,7 @@ by = [
     "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_a_claim_from_a_page_outside_the_experiments_sites_is_refused_and_spends_the_ticket",
     "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_an_exchange_naming_a_page_outside_the_experiments_sites_is_refused_and_spends_the_claim",
     "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_no_draft_is_opened_while_cors_origins_holds_every_site",
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_a_link_made_before_cors_origins_held_every_site_opens_no_editor_after",
 ]
 
 [[unit]]

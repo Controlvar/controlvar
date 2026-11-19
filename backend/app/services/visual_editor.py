@@ -19,9 +19,16 @@ before it through ``parent_id``:
 Each step spends its credential with one UPDATE (:func:`spend`) and commits at
 once, so of two requests carrying the same credential exactly one finds it
 unspent, and a refusal that follows the spend leaves it spent. A spent ticket
-or claim presented again ends every live row descended from its ticket
+or claim presented again ends the ticket and every live row descended from it
 (:func:`end_descendants`, reason ``ticket_reused``): the editor that link
 opened closes, and the answer is :data:`LINK_USED_TWICE`.
+
+Every request that ends or writes an editor credential of an experiment takes
+:func:`hold_editor` for that experiment first, in the transaction that does
+it: opening the editor before it ends the earlier credentials, a reuse before
+it ends the link's, and the claim and the exchange before they write the next
+credential, which they then write only if the one they spent is still live
+(:func:`parent_refusal`). For one experiment they run one after another.
 
 Only the SHA-256 of a credential is stored (``hash_api_key``). No answer but
 the one that hands a credential out holds it, and no log line or audit entry
@@ -36,7 +43,7 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 from sqlalchemy.orm import Session
 
 from backend.app.models.audit_log import ActionType, EntityType
@@ -228,10 +235,45 @@ def hash_is_stored(db: Session, token_hash: str) -> bool:
     )
 
 
+def hold_editor(db: Session, experiment_id: Any) -> None:
+    """Wait until no other transaction holds *experiment_id*'s editor
+    credentials, then hold them until this transaction commits or rolls back:
+    a PostgreSQL advisory transaction lock on the experiment's id. Taken
+    before ending or writing any editor credential of the experiment (see the
+    module docstring); nothing else takes it."""
+    db.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+        {"key": f"experimently.visual-editor.{experiment_id}"},
+    )
+
+
+def parent_refusal(db: Session, parent_id: Any) -> Optional[HTTPException]:
+    """Read after :func:`hold_editor`, just before a request writes the
+    credential that follows the one it spent (*parent_id*): ``None`` while
+    that one is still live (not ended, not expired), else the refusal to
+    raise, the 409 :data:`LINK_USED_TWICE` when it was ended because its link
+    was used again, the 401 :data:`LINK_NOT_VALID` otherwise. The caller rolls
+    back before raising it."""
+    row = db.execute(
+        select(
+            VisualToken.revoked_at, VisualToken.revoked_reason, VisualToken.expires_at
+        ).where(VisualToken.id == parent_id)
+    ).first()
+    if row is not None and row.revoked_at is None and row.expires_at > utcnow():
+        return None
+    if row is not None and row.revoked_reason == TICKET_REUSED:
+        return HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=LINK_USED_TWICE
+        )
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED, detail=LINK_NOT_VALID
+    )
+
+
 def reopen(db: Session, experiment_id: Any, now: datetime) -> List[Ended]:
     """End every live editor ticket, claim and session of *experiment_id*,
     whoever holds it, with the reason ``reopened``; returns each one ended.
-    The caller commits."""
+    The caller holds :func:`hold_editor` and commits."""
     rows = db.execute(
         update(VisualToken)
         .where(
@@ -248,12 +290,14 @@ def reopen(db: Session, experiment_id: Any, now: datetime) -> List[Ended]:
 
 
 def end_descendants(db: Session, ticket_id: Any, now: datetime) -> List[Ended]:
-    """End every live row descended from the ticket *ticket_id* through
-    ``parent_id`` -- its claims, and their sessions -- with the reason
-    ``ticket_reused``; returns each one ended. The caller commits."""
+    """End the ticket *ticket_id* and every row descended from it through
+    ``parent_id`` -- its claims, and their sessions -- that is still live,
+    with the reason ``ticket_reused``; returns each one ended. The walk goes
+    through rows that have expired or ended. The caller holds
+    :func:`hold_editor` and commits."""
     tree = (
         select(VisualToken.id)
-        .where(VisualToken.parent_id == ticket_id)
+        .where(VisualToken.id == ticket_id)
         .cte("descendants", recursive=True)
     )
     tree = tree.union_all(
@@ -363,10 +407,12 @@ def live_sessions(rows: List[Any], now: datetime) -> List[Any]:
 def end_reused_link(
     db: Session, ticket_id: Any, ticket_user_id: Any, experiment_id: Any
 ) -> HTTPException:
-    """A spent ticket or claim was presented again: end everything descended
-    from its ticket, commit, write ``visual_editor_ticket_reused`` and one
-    ``visual_editor_session_closed`` per session ended (by
-    ``system:visual-editor``), and return the 409 to raise."""
+    """A spent ticket or claim was presented again: end its ticket and
+    everything descended from it, commit, write
+    ``visual_editor_ticket_reused`` and one ``visual_editor_session_closed``
+    per session ended (by ``system:visual-editor``), and return the 409 to
+    raise."""
+    hold_editor(db, experiment_id)
     ended = end_descendants(db, ticket_id, utcnow())
     name = db.execute(
         select(Experiment.name).where(Experiment.id == experiment_id)
