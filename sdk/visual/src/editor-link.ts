@@ -53,10 +53,15 @@ function isHello(data: unknown): boolean {
   return message.cv === 1 && message.type === "hello";
 }
 
-/** Whether *win* shows a document from another origin than the page's: reading its document throws. */
+/**
+ * Whether *win* shows a document from another origin than the page's: true
+ * only when reading its document throws. A read that returns, whatever it
+ * returns, is the page's own origin.
+ */
 function onAnotherOrigin(win: Window): boolean {
   try {
-    return win.document === undefined;
+    void win.document;
+    return false;
   } catch {
     return true;
   }

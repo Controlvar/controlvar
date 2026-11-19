@@ -12,6 +12,8 @@ Put the tag first in the `<head>` of each page an experiment may change:
 <script src="https://controlvar.example.com/controlvar-visual.js" data-api-url="https://api.controlvar.example.com" data-api-key="YOUR_WEBSITE_KEY" data-require-consent></script>
 ```
 
+Placed anywhere else (in `<body>`, with `defer` or `async`, or added by a tag manager), the script may not hide the page, so visitors can see the original page before its changes.
+
 | Attribute | What it does |
 |---|---|
 | `data-api-url` | Your Controlvar API's address. Without it, or without the key, the script logs one error and does nothing. |

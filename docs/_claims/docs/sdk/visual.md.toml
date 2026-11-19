@@ -25,6 +25,10 @@ text = "Put the tag first in the <head> of each page an experiment may change:"
 by = ["exempt:instruction"]
 
 [[unit]]
+text = "Placed anywhere else (in <body>, with defer or async, or added by a tag manager), the script may not hide the page, so visitors can see the original page before its changes."
+by = ["test:sdk/visual/__tests__/runtime.test.ts::a script that starts once the page has a <body> never hides it, and still applies the changes"]
+
+[[unit]]
 text = "Attribute | What it does"
 by = ["exempt:label"]
 
