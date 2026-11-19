@@ -54,10 +54,11 @@ PREVIOUS_CORE_HEAD = "d12cbd384bbe"
 #: (rollback records keep without a safety configuration), ``607c51a59bf5``
 #: (a flag's value type and two values), ``85dd4796bb8b`` (the event_id keys),
 #: ``7b6b4b4fe246`` (when each rollout stage started), ``c448_balance_within``
-#: (balance the split within groups), ``4955571d232c`` (visual experiments)
-#: and ``t1812_user_totp`` (two-step sign-in) find their objects already built
-#: by ``create_all`` and add none.
-CORE_HEAD = "t1812_user_totp"
+#: (balance the split within groups), ``4955571d232c`` (visual experiments),
+#: ``t1812_user_totp`` (two-step sign-in) and ``t449_identity_aliases``
+#: (identity aliases) find their objects already built by ``create_all`` and
+#: add none.
+CORE_HEAD = "t449_identity_aliases"
 #: Tables that a later core revision's downgrade drops: a downgrade from the
 #: head to this test's target unapplies those revisions too.  ``d29a479daafe``
 #: (#445) drops ``holdout_population``; ``37dcb2969766`` (#440) drops

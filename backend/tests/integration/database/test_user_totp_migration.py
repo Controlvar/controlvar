@@ -35,8 +35,9 @@ pytestmark = [pytest.mark.integration]
 #: This revision, and the core revision it extends.
 REVISION = "t1812_user_totp"
 PREVIOUS_CORE_HEAD = "4955571d232c"
-#: The core head of this tree.
-CORE_HEAD = "t1812_user_totp"
+#: The core head of this tree: ``t449_identity_aliases`` (#449), the revision
+#: after this one.
+CORE_HEAD = "t449_identity_aliases"
 MODULES_HEAD = "modules_0005_redshift"
 
 PREVIOUS_ROWS = {

@@ -37,7 +37,8 @@ pytestmark = [pytest.mark.integration]
 REVISION = "8fd44fb483a2"
 PREVIOUS_CORE_HEAD = "b8c9d0e1f2a3"
 #: The core head of this tree: ``upgrade heads`` runs on past this revision to
-#: ``t1812_user_totp`` (two-step sign-in), through ``4955571d232c`` (visual
+#: ``t449_identity_aliases`` (identity aliases), through ``t1812_user_totp``
+#: (two-step sign-in), ``4955571d232c`` (visual
 #: experiments), ``271f03a31742``, ``d12cbd384bbe``, ``a89544fb1075``,
 #: ``1ab99332f0ba``,
 #: ``806901fb7735`` (the experiments' correction settings), ``d29a479daafe``
@@ -48,7 +49,7 @@ PREVIOUS_CORE_HEAD = "b8c9d0e1f2a3"
 #: stage started) and ``c448_balance_within`` (balance the split within
 #: groups); a database built by ``create_all`` already carries what they
 #: build, so they add nothing here.
-CORE_HEAD = "t1812_user_totp"
+CORE_HEAD = "t449_identity_aliases"
 #: Tables that a later core revision's downgrade drops: a downgrade from the
 #: head to this test's target unapplies those revisions too.  ``d29a479daafe``
 #: (#445) drops ``holdout_population``; ``37dcb2969766`` (#440) drops

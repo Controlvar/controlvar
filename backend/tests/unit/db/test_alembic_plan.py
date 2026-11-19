@@ -45,11 +45,14 @@ CORE_VERSIONS = REPO_ROOT / "backend" / "app" / "db" / "migrations" / "versions"
 
 pytestmark = pytest.mark.unit
 
-#: The core chain's head: each local account's two-step sign-in secret and
-#: recovery codes (#1812).
-CORE_HEAD = "t1812_user_totp"
+#: The core chain's head: the table that links an anonymous id to a known id
+#: (#449).
+CORE_HEAD = "t449_identity_aliases"
+#: Each local account's two-step sign-in secret and recovery codes (#1812), the
+#: revision before it.
+TOTP = "t1812_user_totp"
 #: A visual experiment's page changes, pages and goals, and the editor's
-#: tokens (#1545), the revision before it.
+#: tokens (#1545), the revision before that.
 VISUAL = "4955571d232c"
 #: An experiment balances its split within groups (#448), the revision before
 #: that.
@@ -160,6 +163,7 @@ CORE_PLAN = [
     STAGE_STARTS,
     BALANCE_WITHIN,
     VISUAL,
+    TOTP,
     CORE_HEAD,
 ]
 
@@ -168,7 +172,7 @@ CORE_PLAN = [
 #: whole reason the edge exists, and before the core marker and everything the
 #: core chain adds after it.
 FULL_PLAN = [
-    *CORE_PLAN[:-16],
+    *CORE_PLAN[:-17],
     *MODULES_BRANCH_PLAN,
     CORE_MARKER,
     SDK_COUNTERS,
@@ -185,6 +189,7 @@ FULL_PLAN = [
     STAGE_STARTS,
     BALANCE_WITHIN,
     VISUAL,
+    TOTP,
     CORE_HEAD,
 ]
 
@@ -305,9 +310,9 @@ def test_unapplying_the_branch_is_one_revision_and_modules_at_base_is_all_of_the
     assert _downgrade_plan(script, UNAPPLY_WHOLE_MODULES_BRANCH) == list(
         reversed(MODULES_BRANCH_PLAN)
     )
-    # 45: the 40 core revisions (through t1812_user_totp, #1812) and the
+    # 46: the 41 core revisions (through t449_identity_aliases, #449) and the
     # branch's 5.
-    assert len(_downgrade_plan(script, "modules@base")) == len(FULL_PLAN) == 45
+    assert len(_downgrade_plan(script, "modules@base")) == len(FULL_PLAN) == 46
 
 
 #: A command line, not a mention of one: the three documents all warn about

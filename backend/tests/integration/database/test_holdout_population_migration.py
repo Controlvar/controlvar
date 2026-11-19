@@ -47,12 +47,12 @@ pytestmark = [pytest.mark.integration]
 #: This revision, and the core revision it extends.
 REVISION = "d29a479daafe"
 PREVIOUS_CORE_HEAD = "806901fb7735"
-#: The core head of this tree: ``t1812_user_totp`` (#1812), after
-#: ``4955571d232c`` (#1545), ``c448_balance_within`` (#448), ``7b6b4b4fe246``
-#: (#1528), ``85dd4796bb8b`` (#1543), ``607c51a59bf5`` (#1497),
-#: ``4c2c09a2b3e8`` (#1206) and ``37dcb2969766`` (#440), the revision after
-#: this one.
-CORE_HEAD = "t1812_user_totp"
+#: The core head of this tree: ``t449_identity_aliases`` (#449), after
+#: ``t1812_user_totp`` (#1812), ``4955571d232c`` (#1545),
+#: ``c448_balance_within`` (#448), ``7b6b4b4fe246`` (#1528), ``85dd4796bb8b``
+#: (#1543), ``607c51a59bf5`` (#1497), ``4c2c09a2b3e8`` (#1206) and
+#: ``37dcb2969766`` (#440), the revision after this one.
+CORE_HEAD = "t449_identity_aliases"
 #: Tables that a later core revision's downgrade drops: a downgrade from the
 #: head to this test's target unapplies those revisions too.  ``37dcb2969766``
 #: (#440) drops ``segment_members``; ``85dd4796bb8b`` (#1543) drops
