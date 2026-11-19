@@ -1,4 +1,5 @@
 ---
+title: Statistical Power Analysis, plan your sample size
 description: "Plan an A/B test before launch with the Power Calculator: baseline rate, minimum detectable effect, significance and power give the sample size you need."
 ---
 
