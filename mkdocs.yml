@@ -194,6 +194,7 @@ nav:
 - Authentication:
   - How Auth Works: auth/flow.md
   - For Users: auth/auth-user-guide.md
+  - Two-step sign-in: auth/two-factor.md
   - Cognito Integration: cognito_integration.md
   - RBAC: rbac/README.md
 - Architecture:

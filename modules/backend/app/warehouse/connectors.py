@@ -23,9 +23,14 @@ KNOWN_CONNECTORS: Final = ("bigquery", "snowflake", "athena", "redshift")
 #: * ``bigquery`` -- the real-account check passed on 2026-10-05, run
 #:   ``wl-bigquery-20261005T150837Z-7782e712`` (10 checks, all passed).
 #:
-#: Amazon Athena stays disabled until after launch.  Amazon Redshift stays
-#: disabled until its client exists and its real-account check has passed.
-ENABLED_CONNECTORS: Final[frozenset[str]] = frozenset({"snowflake", "bigquery"})
+#: * ``redshift`` -- the real-account check passed on 2026-11-18, run
+#:   ``wl-redshift-20261118T011715Z-6b77b53f`` (20 checks, all passed, on a
+#:   Serverless workgroup and on a provisioned cluster).
+#:
+#: Amazon Athena stays disabled until after launch.
+ENABLED_CONNECTORS: Final[frozenset[str]] = frozenset(
+    {"snowflake", "bigquery", "redshift"}
+)
 
 _NAMES: Final = {
     "bigquery": "BigQuery",

@@ -42,7 +42,9 @@ from backend.app.core.config import settings
 from backend.app.core.permissions import ROLE_PERMISSIONS, Action, ResourceType
 from backend.app.core.security import create_local_access_token
 from backend.app.main import app
-from backend.app.models.experiment import Experiment, ExperimentStatus
+from backend.app.models.assignment import Assignment
+from backend.app.models.experiment import Experiment, ExperimentStatus, Variant
+from backend.app.models.segment import Segment, SegmentMember, SegmentStatus
 from backend.app.models.user import User, UserRole
 from backend.tests.smoke.test_experiment_routes_classified import (
     _http_routes,
@@ -91,6 +93,7 @@ ROUTES = {
     "cuped": ("GET", f"{R}/cuped", None),
     "bayesian": ("GET", f"{R}/bayesian", None),
     "balanced_groups": ("GET", f"{R}/balanced-groups", None),
+    "segment_results": ("GET", f"{R}/segments/{{segment_id}}", None),
     "post_stratification": ("POST", f"{R}/post-stratification", POST_STRAT_BODY),
     "fdr_correction": ("POST", f"{R}/fdr-correction", FDR_BODY),
     "export_experiments": ("GET", "/api/v1/export/experiments", None),
@@ -119,10 +122,11 @@ RESULTS_ROUTES = [
     "cuped",
     "bayesian",
     "balanced_groups",
+    "segment_results",
     "post_stratification",
     "fdr_correction",
 ]
-#: The 9 results routes, and the results route with a breakdown.
+#: The 10 results routes, and the results route with a breakdown.
 BREAKDOWN = "results_breakdown"
 NO_ROLE_RESULTS_CELLS = [*RESULTS_ROUTES, BREAKDOWN]
 
@@ -157,6 +161,7 @@ FOUR_ROLES = {
     "cuped": _everyone(200),
     "bayesian": _everyone(200),
     "balanced_groups": _everyone(NOT_BALANCED_ANSWER),
+    "segment_results": _everyone(200),
     "post_stratification": _everyone(POST_STRAT_UNAVAILABLE),
     "fdr_correction": _everyone(200),
     "export_experiments": _everyone(200),
@@ -433,14 +438,57 @@ def _experiment(client, db_session, people):
     return experiment_id
 
 
-def _url(route, experiment_id, other_id=None):
+def _url(route, experiment_id, other_id=None, segment_id=None):
     path = _routes()[route if route != BREAKDOWN else "results"][1]
     path = path.replace("{experiment_id}", experiment_id)
     path = path.replace("{exp_a_id}", experiment_id)
     path = path.replace("{exp_b_id}", other_id or str(uuid.uuid4()))
+    path = path.replace("{segment_id}", segment_id or str(uuid.uuid4()))
     if route == BREAKDOWN:
         path += "?breakdown=country"
     return path
+
+
+#: The members of every cell's ID-list segment: six users the segment-results
+#: cells assign, and two ids never assigned.
+SEGMENT_MEMBERS = [f"readrule-member-{i}" for i in range(1, 9)]
+
+
+def _segment(db_session, people):
+    """A stored ID-list segment, owned by the creator, for the cells of the
+    segment-results route (#1933)."""
+    segment = Segment(
+        name=f"readrule list {uuid.uuid4().hex[:8]}",
+        kind="id_list",
+        status=SegmentStatus.ACTIVE,
+        owner_id=people["creator"].id,
+    )
+    db_session.add(segment)
+    db_session.flush()
+    for member in SEGMENT_MEMBERS:
+        db_session.add(SegmentMember(segment_id=segment.id, member_id=member))
+    db_session.commit()
+    return str(segment.id)
+
+
+def _assign_members(db_session, experiment_id):
+    """Six of the segment's members assigned to the experiment, three per
+    variant."""
+    variants = (
+        db_session.query(Variant)
+        .filter(Variant.experiment_id == uuid.UUID(experiment_id))
+        .order_by(Variant.created_at, Variant.id)
+        .all()
+    )
+    for index, member in enumerate(SEGMENT_MEMBERS[:6]):
+        db_session.add(
+            Assignment(
+                experiment_id=uuid.UUID(experiment_id),
+                variant_id=variants[index % len(variants)].id,
+                user_id=member,
+            )
+        )
+    db_session.commit()
 
 
 def _stream(client, url, user):
@@ -462,7 +510,10 @@ def _ask(client, db_session, people, route, user, experiment_id=None):
     other_id = None
     if route == "interaction_pair":
         other_id = _experiment(client, db_session, people)
-    url = _url(route, experiment_id, other_id)
+    segment_id = None
+    if route == "segment_results":
+        segment_id = _segment(db_session, people)
+    url = _url(route, experiment_id, other_id, segment_id)
     if route == "stream":
         return _stream(client, url, user), None
     method = _routes()[route if route != BREAKDOWN else "results"][0]
@@ -510,12 +561,12 @@ def test_the_development_sign_in_is_off():
 
 
 def test_the_table_is_the_live_application_routes():
-    """19 routes in the core profile and 20 in the full one, by 5 callers:
-    95 and 100 answers. A route added under these prefixes, or one of them
+    """20 routes in the core profile and 21 in the full one, by 5 callers:
+    100 and 105 answers. A route added under these prefixes, or one of them
     mounted somewhere else, fails here until it is in the table."""
     declared = {(method, path) for method, path, _ in _routes().values()}
     assert _live_read_routes() == declared
-    expected_routes = 20 if _full_profile() else 19
+    expected_routes = 21 if _full_profile() else 20
     assert len(_four_roles()) == len(_routes()) == expected_routes
     answers = sum(len(row) for row in _four_roles().values())
     assert answers == expected_routes * len(SHIPPED)
@@ -534,6 +585,25 @@ def test_every_shipped_role_keeps_its_answer_on_each_route(
     assert answer == _four_roles()[route][caller], detail
     if answer == 403:
         assert detail == INTERACTIONS_ROLES
+
+
+@pytest.mark.parametrize("caller", SHIPPED)
+def test_every_shipped_role_reads_a_segments_results(
+    client, db_session, people, caller
+):
+    """#1933: every role that reads results reads one ID-list segment's, and
+    the answer counts the members assigned to the experiment (six of the
+    eight), not an empty or a whole-experiment one."""
+    experiment_id = _experiment(client, db_session, people)
+    _assign_members(db_session, experiment_id)
+    url = _url(
+        "segment_results", experiment_id, segment_id=_segment(db_session, people)
+    )
+    response = client.get(url, headers=_auth(people[caller]))
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["summary"]["total_users"] == 6
+    assert body["segment"]["member_count"] == 8
 
 
 # --- no base role ---------------------------------------------------------------

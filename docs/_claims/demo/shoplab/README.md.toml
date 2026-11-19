@@ -347,11 +347,12 @@ by = [
 ]
 
 [[unit]]
-text = "Press Refresh to see the latest weights; the panel does not update by itself, and the dashboard has no chart of past weights."
+text = "Press Refresh to see the latest weights; the panel does not update by itself; Weight history below it lists each past update."
 by = [
     "test:frontend/src/tests/components/BanditWeightsSection.test.tsx::reads GET /api/v1/bandit/{id} once on load, with no options, and again on Refresh",
     "test:frontend/src/tests/components/BanditWeightsSection.test.tsx::never polls: no further request without a click",
-    "test:frontend/src/tests/components/BanditWeightsSection.test.tsx::offers no control but Refresh, for anyone",
+    "test:frontend/src/tests/components/BanditWeightsSection.test.tsx::offers no control but Refresh to anyone but an ADMIN or a superuser",
+    "test:frontend/src/tests/pages/experiment-detail-bandit-history.test.tsx::shows the server weights as shares, columns in the variant order",
 ]
 
 [[unit]]

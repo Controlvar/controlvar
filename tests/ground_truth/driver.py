@@ -590,6 +590,19 @@ class Driver:
             RESULTS, experiment_id, label, "results", params={"use_cache": "false"}
         )
 
+    def breakdown(
+        self, experiment_id: str, dimension: str, *, label: str | None = None
+    ) -> Any:
+        """``GET /api/v1/results/{experiment_id}?breakdown=<dimension>
+        &use_cache=false``, as JSON: the results with their ``breakdown``."""
+        return self._read(
+            RESULTS,
+            experiment_id,
+            label,
+            "breakdown",
+            params={"use_cache": "false", "breakdown": dimension},
+        )
+
     def balanced_groups(self, experiment_id: str, *, label: str | None = None) -> Any:
         """``GET /api/v1/results/{experiment_id}/balanced-groups``, as JSON:
         computed on each request, never cached (#448)."""

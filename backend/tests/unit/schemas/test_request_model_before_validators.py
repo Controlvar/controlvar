@@ -41,9 +41,14 @@ pytestmark = [pytest.mark.unit]
 #: profile: the Redshift create and update bodies. #1545's delivery routes
 #: added 3 more to both: the bodies of /tracking/visual (VisualTrackingRequest),
 #: /tracking/visual/preview (VisualPreviewRequest) and a preview link's create
-#: (PreviewLinkCreate).
-CORE_MODEL_COUNT = 93
-FULL_MODEL_COUNT = 137
+#: (PreviewLinkCreate). #1812 added 3 to both: the bodies of /auth/mfa/verify
+#: (MfaVerifyRequest), /users/me/2fa/confirm and /recovery-codes
+#: (TwoFactorCodeRequest) and /users/me/2fa/disable (TwoFactorDisableRequest);
+#: its required roles 2 more to both: /auth/mfa/enroll (MfaEnrolRequest) and
+#: /auth/mfa/enroll/confirm (MfaEnrolConfirmRequest). Then 1 more to both: the
+#: current password at /users/me/2fa/enroll (TwoFactorEnrolRequest).
+CORE_MODEL_COUNT = 99
+FULL_MODEL_COUNT = 143
 
 #: ``(model, field)`` pairs that a ``mode="before"`` field validator covers.
 CORE_BEFORE_COUNT = 46

@@ -2416,6 +2416,18 @@ count = 3
 reason = "names objects in the live warehouse sandbox and its recorded evidence"
 
 [[keep]]
+path = "modules/backend/tests/unit/warehouse/recorded/redshift/real_missing_table.json"
+literal = "experimently_live_check_probe"
+count = 1
+reason = "the live check's probe table, as the green Redshift run recorded it; the fixture is kept byte for byte"
+
+[[keep]]
+path = "modules/backend/tests/unit/warehouse/test_redshift_recorded.py"
+literal = "experimently_live_check_probe"
+count = 1
+reason = "the replay asks for the probe table the recorded run named"
+
+[[keep]]
 path = "modules/backend/tests/unit/warehouse/test_live_check_harness.py"
 literal = "experimently"
 count = 7

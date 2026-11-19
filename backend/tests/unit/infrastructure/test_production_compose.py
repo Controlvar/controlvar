@@ -270,7 +270,9 @@ class TestForwardedAllowIps:
         spec = importlib.util.spec_from_file_location("check_compose_config", script)
         check = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(check)
-        assert check.PASSED_SETTINGS == ("FORWARDED_ALLOW_IPS",) + COGNITO_SETTINGS
+        assert check.PASSED_SETTINGS == (
+            ("FORWARDED_ALLOW_IPS",) + COGNITO_SETTINGS + (TWO_STEP_ROLES,)
+        )
         names = ("FORWARDED_ALLOW_IPS",)
         assert check.feature_key_failures({"FORWARDED_ALLOW_IPS": ""}, {}, names) == []
         given = {"FORWARDED_ALLOW_IPS": "192.0.2.10"}
@@ -285,6 +287,101 @@ class TestForwardedAllowIps:
 
 #: Passed to the api as ``${NAME:-}``: empty unless `.env` sets them (#708).
 COGNITO_SETTINGS = ("COGNITO_USER_POOL_ID", "COGNITO_CLIENT_ID", "COGNITO_DOMAIN")
+
+#: The roles whose accounts must use two-step sign-in (#1812), passed the same
+#: way.
+TWO_STEP_ROLES = "LOCAL_AUTH_2FA_REQUIRED_ROLES"
+
+_INTERPOLATION = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)(?::-([^}]*))?\}")
+
+
+def _rendered(value: str, dotenv: Dict[str, str]) -> str:
+    """``value`` as compose interpolates it from a ``.env`` of ``dotenv``:
+    ``${NAME:-default}`` is the default while NAME is unset or empty. The
+    compose-production job checks the real interpolation (``docker compose
+    config``) and boots the API on it."""
+
+    def one(match: "re.Match[str]") -> str:
+        name, default = match.group(1), match.group(2) or ""
+        return dotenv.get(name) or default
+
+    return _INTERPOLATION.sub(one, value)
+
+
+@pytest.mark.unit
+@pytest.mark.regression
+class TestTwoStepRoles:
+    """LOCAL_AUTH_2FA_REQUIRED_ROLES reaches the api from `.env` (#1812).
+    Exactly ``${LOCAL_AUTH_2FA_REQUIRED_ROLES:-}``, so a `.env` without it
+    passes ``""``; the settings and the start-up check read ``""`` as no role
+    and refuse a typo, on the value as rendered (V18 against the rendered
+    Compose environment)."""
+
+    _PRODUCTION = {
+        "ENVIRONMENT": "production",
+        "SECRET_KEY": "a1" * 32,
+        "FIRST_SUPERUSER_PASSWORD": "Xq7-first-admin-password",
+        "PUBLIC_BASE_URL": "https://controlvar.example.com",
+        "POSTGRES_SERVER": "postgres",
+    }
+
+    def _check(self, rendered: str):
+        from backend.app.core import preflight
+
+        env = dict(self._PRODUCTION, **{TWO_STEP_ROLES: rendered})
+        return preflight.check(
+            env, full_profile=False, root=Path("/nonexistent-preflight-root")
+        )
+
+    def test_the_api_is_passed_the_setting_empty_by_default(self, services):
+        env = services["api"]["environment"]
+        assert env[TWO_STEP_ROLES] == f"${{{TWO_STEP_ROLES}:-}}"
+
+    def test_the_example_documents_it_and_the_config_check_follows_it(self):
+        import importlib.util
+
+        example = ENV_EXAMPLE.read_text(encoding="utf-8")
+        assert re.search(rf"^# {TWO_STEP_ROLES}=$", example, re.M)
+        script = REPO_ROOT / "scripts" / "check_compose_config.py"
+        spec = importlib.util.spec_from_file_location("check_compose_config", script)
+        check = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(check)
+        assert TWO_STEP_ROLES in check.PASSED_SETTINGS
+        assert (
+            check.feature_key_failures({TWO_STEP_ROLES: ""}, {}, (TWO_STEP_ROLES,))
+            == []
+        )
+
+    @pytest.mark.parametrize(
+        "dotenv, roles",
+        [
+            ({}, []),
+            ({TWO_STEP_ROLES: ""}, []),
+            ({TWO_STEP_ROLES: "ADMIN,DEVELOPER"}, ["ADMIN", "DEVELOPER"]),
+        ],
+        ids=["not-in-env", "empty-in-env", "set-in-env"],
+    )
+    def test_the_rendered_value_is_what_the_api_starts_with(
+        self, services, dotenv, roles
+    ):
+        from backend.app.core.config import Settings
+        from backend.app.core.settings_rules import parse_two_factor_roles
+
+        rendered = _rendered(services["api"]["environment"][TWO_STEP_ROLES], dotenv)
+        assert parse_two_factor_roles(rendered) == roles
+        assert (
+            Settings(**{TWO_STEP_ROLES: rendered}).LOCAL_AUTH_2FA_REQUIRED_ROLES
+            == roles
+        )
+        assert self._check(rendered) == []
+
+    @pytest.mark.parametrize("typed", ["admin", "ADMIN,", ",ADMIN", "ADMNI"])
+    def test_a_typo_in_env_stops_the_start(self, services, typed):
+        rendered = _rendered(
+            services["api"]["environment"][TWO_STEP_ROLES], {TWO_STEP_ROLES: typed}
+        )
+        problems = self._check(rendered)
+        assert len(problems) == 1 and problems[0].startswith(TWO_STEP_ROLES), problems
 
 
 @pytest.mark.unit
@@ -358,7 +455,8 @@ class TestText:
         """Every `${NAME:-default}` / `${NAME-default}` on a secret, in any service."""
         secrets = REQUIRED + OPTIONAL_SECRETS + ("REDIS_PASSWORD",)
         text = COMPOSE.read_text(encoding="utf-8")
-        for name, default in re.findall(r"\$\{([A-Z_]+):?-([^}]*)\}", text):
+        # A name may hold digits (LOCAL_AUTH_2FA_REQUIRED_ROLES).
+        for name, default in re.findall(r"\$\{([A-Z_][A-Z0-9_]*):?-([^}]*)\}", text):
             if name in secrets:
                 assert default == "", f"{name} has the default {default!r}"
 
@@ -369,7 +467,8 @@ class TestText:
 
     def test_every_variable_is_documented_in_the_example(self):
         text = COMPOSE.read_text(encoding="utf-8")
-        names = set(re.findall(r"\$\{([A-Z_]+)", text))
+        names = set(re.findall(r"\$\{([A-Z_][A-Z0-9_]*)", text))
+        assert TWO_STEP_ROLES in names
         example = ENV_EXAMPLE.read_text(encoding="utf-8")
         undocumented = sorted(
             n for n in names if not re.search(rf"^#?\s*{n}=", example, re.M)

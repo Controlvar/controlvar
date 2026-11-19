@@ -89,6 +89,7 @@ export default function HomePage() {
     <>
       <PageTitle
         path="/"
+        marketingTitle="Controlvar: open-source A/B testing and feature flags you run yourself"
         description="Open-source A/B testing and feature flags you run on your own infrastructure. Experiments, targeting rules, frequentist and Bayesian statistics, and MIT-licensed SDKs for web, mobile and server. Apache-2.0."
       />
       <div data-testid="public-home" className="min-h-screen bg-white text-slate-900">

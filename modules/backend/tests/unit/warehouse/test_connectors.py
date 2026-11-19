@@ -30,10 +30,11 @@ VENDOR_DOC_ROOTS = {
 
 #: The connectors whose real check has passed, each enabled by its own pull
 #: request carrying the run id (Snowflake: wl-snowflake-20261004T225624Z-3787b33c;
-#: BigQuery: wl-bigquery-20261005T150837Z-7782e712).
-SHIPPED_ENABLED = frozenset({"snowflake", "bigquery"})
+#: BigQuery: wl-bigquery-20261005T150837Z-7782e712; Redshift:
+#: wl-redshift-20261118T011715Z-6b77b53f).
+SHIPPED_ENABLED = frozenset({"snowflake", "bigquery", "redshift"})
 #: Every other connector ships disabled.
-SHIPPED_DISABLED = ("athena", "redshift")
+SHIPPED_DISABLED = ("athena",)
 
 
 def test_enabled_connectors_exact():

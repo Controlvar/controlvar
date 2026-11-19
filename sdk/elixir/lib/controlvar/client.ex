@@ -7,7 +7,7 @@ defmodule Controlvar.Client do
   user + key (in a per-client ETS cache) for `cache_ttl` seconds; failures are
   never cached.
 
-    - `evaluate_flag/4`   : `GET  /api/v1/feature-flags/evaluate/{key}?user_id=...`
+    - `evaluate_flag/4`   : `GET  /api/v1/feature-flags/evaluate/{key}?user_id=...&context=...`
     - `get_assignment/4`  : `POST /api/v1/tracking/assign`   (sticky on the server)
     - `track/5`           : `POST /api/v1/tracking/track`    (with a key)
                             `POST /api/v1/tracking/batch`    (fan-out without a key)
@@ -85,8 +85,14 @@ defmodule Controlvar.Client do
 
   ## Options
   - `:skip_cache` — bypass the cache and ask the server (default: `false`)
-  - `:attributes` — accepted for symmetry with `get_assignment/4` and not sent:
-    the evaluate endpoint takes a context, which this SDK does not send yet
+  - `:attributes` — the user's attributes (a map), sent as `context` so the
+    flag's targeting rules are evaluated against them. With no attributes, an
+    empty map or anything that is not a map, no `context` is sent. Attributes
+    that cannot be written as JSON return `{:error, :invalid_attributes}`,
+    send nothing and cache nothing.
+
+  The cache holds one answer per user and flag, with the attributes it was
+  asked with: a later call is answered from it only for the same attributes.
   """
   @spec evaluate_flag(server(), String.t(), String.t(), keyword()) ::
           {:ok, FlagEvaluation.t()} | {:error, term()}
@@ -94,40 +100,48 @@ defmodule Controlvar.Client do
     %{config: config, cache: cache, http: http} = context(server)
     cache_key = {:flag, user_id, flag_key}
 
-    case cached(cache, cache_key, opts) do
-      %FlagEvaluation{} = evaluation ->
-        {:ok, evaluation}
+    case attributes_json(Keyword.get(opts, :attributes)) do
+      {:error, :invalid_attributes} = invalid ->
+        invalid
 
-      nil ->
-        path =
-          "/api/v1/feature-flags/evaluate/#{encode(flag_key)}?user_id=#{encode(user_id)}"
-
-        case http.get(config, path) do
-          {:ok, data} when is_map(data) ->
-            evaluation = %FlagEvaluation{
-              key: flag_key,
-              enabled: Map.get(data, "enabled") == true,
-              config: Map.get(data, "config")
-            }
-
-            :ok = Cache.put(cache, cache_key, evaluation)
+      {:ok, context_json} ->
+        case cached_flag(cache, cache_key, context_json, opts) do
+          %FlagEvaluation{} = evaluation ->
             {:ok, evaluation}
 
-          {:ok, other} ->
-            {:error, {:malformed_response, other}}
+          nil ->
+            path =
+              "/api/v1/feature-flags/evaluate/#{encode(flag_key)}?user_id=#{encode(user_id)}" <>
+                if(context_json == "", do: "", else: "&context=#{encode(context_json)}")
 
-          {:error, reason} ->
-            {:error, reason}
+            case http.get(config, path) do
+              {:ok, data} when is_map(data) ->
+                evaluation = %FlagEvaluation{
+                  key: flag_key,
+                  enabled: Map.get(data, "enabled") == true,
+                  config: Map.get(data, "config")
+                }
+
+                :ok = Cache.put(cache, cache_key, {context_json, evaluation})
+                {:ok, evaluation}
+
+              {:ok, other} ->
+                {:error, {:malformed_response, other}}
+
+              {:error, reason} ->
+                {:error, reason}
+            end
         end
     end
   end
 
   @doc """
-  Boolean convenience around `evaluate_flag/3`: `false` on any failure.
+  Boolean convenience around `evaluate_flag/4`: `false` on any failure.
+  `opts` are the options of `evaluate_flag/4` (`:attributes`, `:skip_cache`).
   """
-  @spec feature_enabled?(server(), String.t(), String.t()) :: boolean()
-  def feature_enabled?(server, flag_key, user_id) do
-    case evaluate_flag(server, flag_key, user_id) do
+  @spec feature_enabled?(server(), String.t(), String.t(), keyword()) :: boolean()
+  def feature_enabled?(server, flag_key, user_id, opts \\ []) do
+    case evaluate_flag(server, flag_key, user_id, opts) do
       {:ok, %FlagEvaluation{enabled: enabled}} -> enabled == true
       {:error, _reason} -> false
     end
@@ -278,7 +292,7 @@ defmodule Controlvar.Client do
   @spec evaluated_flags(server(), String.t()) :: [String.t()]
   def evaluated_flags(server, user_id) do
     %{cache: cache} = context(server)
-    cache |> Cache.list(:flag, user_id) |> Enum.map(& &1.key)
+    cache |> flag_evaluations(user_id) |> Enum.map(& &1.key)
   end
 
   @doc "Drop every cached evaluation and assignment."
@@ -367,6 +381,40 @@ defmodule Controlvar.Client do
     if Keyword.get(opts, :skip_cache, false), do: nil, else: Cache.get(cache, cache_key)
   end
 
+  # A flag's cache entry is `{context, %FlagEvaluation{}}`: the exact context
+  # string the answer was asked with ("" when none was sent). The key stays
+  # {:flag, user_id, flag_key}, so a call with other attributes replaces it.
+  defp cached_flag(cache, cache_key, context_json, opts) do
+    case cached(cache, cache_key, opts) do
+      {^context_json, %FlagEvaluation{} = evaluation} -> evaluation
+      _ -> nil
+    end
+  end
+
+  defp flag_evaluations(cache, user_id) do
+    cache
+    |> Cache.list(:flag, user_id)
+    |> Enum.map(fn {_context, %FlagEvaluation{} = evaluation} -> evaluation end)
+  end
+
+  # The attributes as compact JSON, "" when none are sent (nil, an empty map,
+  # anything that is not a map). `Jason.encode/1`, not `encode!/1`, and the
+  # error is dropped: Jason's error structs carry the value that failed.
+  defp attributes_json(attributes) when is_map(attributes) and map_size(attributes) > 0 do
+    case safe_json(attributes) do
+      {:ok, "{" <> _ = json} -> {:ok, json}
+      _ -> {:error, :invalid_attributes}
+    end
+  end
+
+  defp attributes_json(_attributes), do: {:ok, ""}
+
+  defp safe_json(value) do
+    Jason.encode(value)
+  rescue
+    _ -> :error
+  end
+
   # Percent-encode a path segment / query value (RFC 3986 unreserved characters kept).
   defp encode(value), do: URI.encode(to_string(value), &URI.char_unreserved?/1)
 
@@ -397,7 +445,7 @@ defmodule Controlvar.Client do
 
       flag_events =
         cache
-        |> Cache.list(:flag, user_id)
+        |> flag_evaluations(user_id)
         |> Enum.map(&Map.put(base, :feature_flag_key, &1.key))
 
       (assignment_events ++ flag_events)

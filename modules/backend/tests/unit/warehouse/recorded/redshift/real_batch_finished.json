@@ -1,0 +1,92 @@
+{
+  "_provenance": {
+    "source": "real account",
+    "real_run_id": "wl-redshift-20261118T011715Z-6b77b53f",
+    "check": "rs_sign_in",
+    "request": {
+      "service": "redshift-data",
+      "operation": "DescribeStatement"
+    },
+    "note": "Recorded by the warehouse_live check; see evidence.json."
+  },
+  "status": 200,
+  "body": {
+    "Id": "8c4ec3b5-d59c-40e7-be2a-7753eebc981d",
+    "DbUser": "IAMR:controlvar-rs-sitting",
+    "Database": "dev",
+    "Duration": 211324738,
+    "Status": "FINISHED",
+    "CreatedAt": "datetime.datetime(2026, 11, 17, 17, 17, 17, 358000, tzinfo=tzlocal())",
+    "UpdatedAt": "datetime.datetime(2026, 11, 17, 17, 17, 18, 778000, tzinfo=tzlocal())",
+    "RedshiftPid": 1073881270,
+    "HasResultSet": true,
+    "ResultRows": -1,
+    "ResultSize": -1,
+    "RedshiftQueryId": 0,
+    "SubStatements": [
+      {
+        "Id": "8c4ec3b5-d59c-40e7-be2a-7753eebc981d:1",
+        "Duration": 50585143,
+        "Status": "FINISHED",
+        "CreatedAt": "datetime.datetime(2026, 11, 17, 17, 17, 17, 547000, tzinfo=tzlocal())",
+        "UpdatedAt": "datetime.datetime(2026, 11, 17, 17, 17, 18, 50000, tzinfo=tzlocal())",
+        "QueryString": "SET timezone TO 'UTC'",
+        "ResultRows": 0,
+        "ResultSize": 0,
+        "RedshiftQueryId": 0,
+        "HasResultSet": false
+      },
+      {
+        "Id": "8c4ec3b5-d59c-40e7-be2a-7753eebc981d:2",
+        "Duration": 52119645,
+        "Status": "FINISHED",
+        "CreatedAt": "datetime.datetime(2026, 11, 17, 17, 17, 17, 553000, tzinfo=tzlocal())",
+        "UpdatedAt": "datetime.datetime(2026, 11, 17, 17, 17, 18, 180000, tzinfo=tzlocal())",
+        "QueryString": "SET extra_float_digits TO 2",
+        "ResultRows": 0,
+        "ResultSize": 0,
+        "RedshiftQueryId": 0,
+        "HasResultSet": false
+      },
+      {
+        "Id": "8c4ec3b5-d59c-40e7-be2a-7753eebc981d:3",
+        "Duration": 52947819,
+        "Status": "FINISHED",
+        "CreatedAt": "datetime.datetime(2026, 11, 17, 17, 17, 17, 560000, tzinfo=tzlocal())",
+        "UpdatedAt": "datetime.datetime(2026, 11, 17, 17, 17, 18, 310000, tzinfo=tzlocal())",
+        "QueryString": "SET statement_timeout TO 34000",
+        "ResultRows": 0,
+        "ResultSize": 0,
+        "RedshiftQueryId": 0,
+        "HasResultSet": false
+      },
+      {
+        "Id": "8c4ec3b5-d59c-40e7-be2a-7753eebc981d:4",
+        "Duration": 28405461,
+        "Status": "FINISHED",
+        "CreatedAt": "datetime.datetime(2026, 11, 17, 17, 17, 17, 566000, tzinfo=tzlocal())",
+        "UpdatedAt": "datetime.datetime(2026, 11, 17, 17, 17, 18, 535000, tzinfo=tzlocal())",
+        "QueryString": "SELECT CAST(CAST(0.1 AS DOUBLE PRECISION) + CAST(0.2 AS DOUBLE PRECISION) AS VARCHAR) AS probe, current_setting('timezone') AS tz",
+        "ResultRows": 1,
+        "ResultSize": 22,
+        "RedshiftQueryId": 0,
+        "HasResultSet": true
+      },
+      {
+        "Id": "8c4ec3b5-d59c-40e7-be2a-7753eebc981d:5",
+        "Duration": 27266670,
+        "Status": "FINISHED",
+        "CreatedAt": "datetime.datetime(2026, 11, 17, 17, 17, 17, 572000, tzinfo=tzlocal())",
+        "UpdatedAt": "datetime.datetime(2026, 11, 17, 17, 17, 18, 714000, tzinfo=tzlocal())",
+        "QueryString": "SELECT 1 AS connected",
+        "ResultRows": 1,
+        "ResultSize": 11,
+        "RedshiftQueryId": 0,
+        "HasResultSet": true
+      }
+    ],
+    "WorkgroupName": "controlvar-rs-sitting",
+    "ResultFormat": "json",
+    "ExecutionMode": "TRANSACTION"
+  }
+}

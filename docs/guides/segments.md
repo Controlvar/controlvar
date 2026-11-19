@@ -197,7 +197,16 @@ gets the control variant with `assigned: false` and `reason: "targeting"`.
 The full rule is in the
 [API reference](../api/endpoints.md#targeting-rules).
 
+## Read an experiment's results for the list
+
+`GET /api/v1/results/{experiment_id}/segments/{segment_id}` (beta) computes an experiment's
+results for the users in an ID-list segment and nobody else. See
+[Results for one saved segment](../api/dimensional-analysis.md#results-for-one-saved-segment).
+
 ## Archive a segment
+
+An archived list still filters an experiment's results, and its IDs cannot change while it stays
+archived.
 
 A segment that a flag or an experiment still uses cannot be archived or made inactive: it
 answers `409` and lists them. A flag counts until it is archived, and an experiment until it is

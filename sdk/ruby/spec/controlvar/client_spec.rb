@@ -1,5 +1,54 @@
 require 'spec_helper'
 
+module ControlvarSpec
+  # An attribute value that must never reach a log line or an error message.
+  CANARY = 'attrcanary7f3'.freeze
+
+  # A query string as the server reads it (Starlette's parse_qsl): split on
+  # '&', then on the first '=', read '+' as a space and percent-decode as
+  # UTF-8 (URI.decode_www_form_component does those last two). Gives the
+  # [name, value] pairs in order.
+  def self.server_query(query)
+    query.split('&').map do |pair|
+      pair.split('=', 2).values_at(0, 1).map do |part|
+        decoded = URI.decode_www_form_component(part.to_s)
+        raise ArgumentError, "not UTF-8 once decoded: #{part}" unless decoded.valid_encoding?
+
+        decoded
+      end
+    end
+  end
+
+  # Stands in for Controlvar::HttpClient, so a spec reads the exact path the
+  # client hands to #get rather than a WebMock match (WebMock normalises a URI
+  # before comparing it). It answers a flag evaluation as the server does for
+  # a flag whose one rule is "plan equals pro", rollout 0: enabled, reason
+  # targeting_rule, only when the context it decodes has plan "pro".
+  class FakeFlagServer
+    attr_reader :paths, :posts
+
+    def initialize
+      @paths = []
+      @posts = []
+    end
+
+    def get(path, headers: {})
+      @paths << path
+      context = ControlvarSpec.server_query(path.partition('?')[2]).to_h['context']
+      if context && JSON.parse(context)['plan'] == 'pro'
+        { 'key' => 'f', 'enabled' => true, 'config' => nil, 'reason' => 'targeting_rule' }
+      else
+        { 'key' => 'f', 'enabled' => false, 'config' => nil, 'reason' => 'rollout' }
+      end
+    end
+
+    def post(path, body, headers: {})
+      @posts << [path, body]
+      { 'success_count' => Array(body[:events]).size, 'failure_count' => 0 }
+    end
+  end
+end
+
 RSpec.describe Controlvar::Client do
   let(:base_url) { 'https://api.example.com' }
   let(:api_key)  { 'sk-test-key' }
@@ -274,6 +323,170 @@ RSpec.describe Controlvar::Client do
     it 'returns false on failure' do
       stub_evaluate(status: 500, body: '{"detail":"boom"}')
       expect(client.feature_enabled?('dark-mode', 'user-123')).to be false
+    end
+  end
+
+  # -------------------------------------------------------------------------
+  # evaluate_flag with attributes: the context (#1720)
+  #
+  # These read the path the client hands to HttpClient#get (FakeFlagServer),
+  # not a WebMock match: WebMock normalises a URI before it compares, so a
+  # request whose parameters came in another order would still match.
+  # -------------------------------------------------------------------------
+  describe '#evaluate_flag with attributes (#1720)' do
+    let(:server) { ControlvarSpec::FakeFlagServer.new }
+    let(:flag_client) do
+      allow(Controlvar::HttpClient).to receive(:new).and_return(server)
+      described_class.new(base_url: base_url, api_key: api_key, cache_ttl: 60)
+    end
+    let(:pro)  { { plan: 'pro' } }
+    let(:free) { { plan: 'free' } }
+
+    # The parameters of the n-th request as the server reads them.
+    def sent(index)
+      ControlvarSpec.server_query(server.paths.fetch(index).partition('?')[2])
+    end
+
+    def evaluations(*attribute_sets)
+      attribute_sets.map { |attributes| flag_client.evaluate_flag('f', 'u1', attributes).enabled? }
+    end
+
+    # Matches captured output that does not contain +text+.
+    def naming_no(text)
+      satisfy("names no #{text}") { |output| !output.include?(text) }
+    end
+
+    it 'sends the attributes as context=<compact JSON>, percent-encoded, after user_id', :regression do
+      flag_client.evaluate_flag('f', 'u1', pro)
+
+      expect(server.paths).to eq(['/api/v1/feature-flags/evaluate/f?user_id=u1&context=%7B%22plan%22%3A%22pro%22%7D'])
+    end
+
+    it 'matches a targeting rule on an attribute: the server reads plan=pro from the context', :regression do
+      expect(flag_client.evaluate_flag('f', 'u1', pro).enabled?).to be true
+      expect(flag_client.evaluate_flag('f', 'u2', free).enabled?).to be false
+    end
+
+    it 'sends + & = # a space, / and non-ASCII so that the server decodes the same object' do
+      vectors = [
+        { 'q' => "a+b&c=d#e f/é😀!'()*~" },
+        { 'q' => 'a+b&c=d#e fé' },
+        { 'age' => 30, 'beta' => true, 'device' => { 'os' => 'ios', 'version' => '17.4.0' }, 'tags' => %w[a b] }
+      ]
+      vectors.each_with_index do |attributes, index|
+        flag_client.evaluate_flag('f', "u#{index}", attributes)
+        names = sent(index).map(&:first)
+        values = sent(index).to_h
+
+        expect(names).to eq(%w[user_id context])
+        expect(values['user_id']).to eq("u#{index}")
+        expect(JSON.parse(values['context'])).to eq(attributes)
+      end
+    end
+
+    it "pins #1720's own vector as an exact URL" do
+      flag_client.evaluate_flag('f', 'u1', { 'q' => 'a+b&c=d#e fé' })
+
+      # Measured on Ruby 3.2.11 at main 0e7e4ce2 with this change; it is also
+      # what the JavaScript SDK sends. Correctness is the decode test above.
+      expect(server.paths).to eq(
+        ['/api/v1/feature-flags/evaluate/f?user_id=u1&context=%7B%22q%22%3A%22a%2Bb%26c%3Dd%23e%20f%C3%A9%22%7D']
+      )
+    end
+
+    it 'sends no context for nil, an empty Hash or a non-Hash: the URL is the one sent before attributes were' do
+      flag_client.evaluate_flag('f', 'u1')
+      ['u2', 'u3', 'u4'].zip([nil, {}, ['plan', 'pro']]).each do |user, attributes|
+        flag_client.evaluate_flag('f', user, attributes)
+      end
+
+      expect(server.paths).to eq(%w[u1 u2 u3 u4].map { |user| "/api/v1/feature-flags/evaluate/f?user_id=#{user}" })
+    end
+
+    it 'feature_enabled? sends the attributes too' do
+      expect(flag_client.feature_enabled?('f', 'u1', pro)).to be true
+      expect(sent(0).to_h['context']).to eq('{"plan":"pro"}')
+    end
+
+    it 'answers two calls that differ only in attributes with two requests and two answers' do
+      expect(evaluations(pro, free)).to eq([true, false])
+      expect(server.paths.size).to eq(2)
+    end
+
+    it 'treats {plan: "pro"} and {tier: "pro"}, and {n: 1} and {n: "1"}, as different attributes' do
+      evaluations({ plan: 'pro' }, { tier: 'pro' })
+      expect(server.paths.size).to eq(2)
+
+      flag_client.clear_cache
+      evaluations({ n: 1 }, { n: '1' })
+      expect(server.paths.size).to eq(4)
+    end
+
+    it 'keeps one cached answer per user and flag: A, B, A makes three requests' do
+      expect(evaluations(pro, free, pro)).to eq([true, false, true])
+      expect(server.paths.size).to eq(3)
+    end
+
+    it 'does not serve an answer cached with attributes to a call without them' do
+      expect(evaluations(pro, nil)).to eq([true, false])
+      expect(server.paths.size).to eq(2)
+    end
+
+    it 'treats no attributes and an empty Hash as the same call: one request' do
+      evaluations({}, {})
+      expect(server.paths.size).to eq(1)
+
+      flag_client.clear_cache
+      flag_client.evaluate_flag('f', 'u1')
+      flag_client.evaluate_flag('f', 'u1', {})
+      expect(server.paths.size).to eq(2)
+    end
+
+    it 'serves the same attributes from the cache: one request' do
+      expect(evaluations(pro, pro, { 'plan' => 'pro' })).to eq([true, true, true])
+      expect(server.paths.size).to eq(1)
+    end
+
+    it 'fans a keyless track out to a flag once, however many attributes it was evaluated with' do
+      evaluations(pro, free)
+
+      expect(flag_client.evaluated_flags('u1')).to eq(['f'])
+      expect(flag_client.track('page_view', 'u1')).to be true
+      expect(server.posts.map(&:first)).to eq(['/api/v1/tracking/batch'])
+      expect(server.posts.first.last[:events].map { |event| event[:feature_flag_key] }).to eq(['f'])
+      # The one cached answer is the latest one, B's.
+      expect(evaluations(free)).to eq([false])
+      expect(server.paths.size).to eq(2)
+    end
+
+    it 'names no attribute in its warning when the request fails, even for a base_url with a space' do
+      allow_any_instance_of(described_class).to receive(:warn).and_call_original
+      spaced = described_class.new(base_url: 'http://local host:8000', api_key: api_key)
+      result = nil
+
+      expect { result = spaced.evaluate_flag('f', 'u1', { plan: ControlvarSpec::CANARY }) }
+        .to output(
+          a_string_including('[Controlvar] evaluate_flag error', 'local host:8000/api/v1/feature-flags/evaluate/f')
+            .and(naming_no(ControlvarSpec::CANARY))
+        ).to_stderr_from_any_process
+      expect(result.enabled?).to be false
+    end
+
+    it 'sends nothing and reports the flag as disabled when the attributes cannot be written as JSON' do
+      allow_any_instance_of(described_class).to receive(:warn).and_call_original
+
+      [{ ControlvarSpec::CANARY => Float::NAN }, { 'k' => "#{ControlvarSpec::CANARY}\xFF" }].each do |attributes|
+        result = nil
+        expect { result = flag_client.evaluate_flag('f', 'u1', attributes) }
+          .to output(
+            a_string_including('[Controlvar] evaluate_flag: the attributes cannot be sent as JSON; ' \
+                               'nothing was sent and the flag is reported as disabled')
+              .and(naming_no(ControlvarSpec::CANARY))
+          ).to_stderr_from_any_process
+        expect(result.enabled?).to be false
+      end
+      expect(server.paths).to eq([])
+      expect(flag_client.evaluated_flags('u1')).to eq([])
     end
   end
 

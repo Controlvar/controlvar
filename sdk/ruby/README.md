@@ -41,11 +41,11 @@ if assignment                       # nil on any failure (404 unknown key, 401, 
   assignment.configuration          # => the variant's configuration Hash, or nil
 end
 
-# Feature flag — GET /api/v1/feature-flags/evaluate/new_search?user_id=user-123
-flag = client.evaluate_flag("new_search", "user-123")
+# Feature flag — GET /api/v1/feature-flags/evaluate/new_search?user_id=user-123&context=…
+flag = client.evaluate_flag("new_search", "user-123", { plan: "pro" })
 flag.enabled?                       # => false on any failure
 flag.config                         # => nil: the evaluate endpoint returns config: null
-client.feature_enabled?("new_search", "user-123")
+client.feature_enabled?("new_search", "user-123", { plan: "pro" })
 
 # Track with a key — one POST /api/v1/tracking/track (never raises)
 client.track("purchase", "user-123", value: 49.99, experiment_key: "checkout_flow",
@@ -83,18 +83,39 @@ Missing `base_url`/`api_key` raise `ArgumentError` from `Client.new`.
 | `Controlvar::FeatureFlagEvaluator.hash_user(user_id, key)` | `Float` in `[0, 1)` | pure (parity utility) |
 
 `attributes` on `get_assignment` are sent as the assignment `context` (targeting rules); on
-`evaluate_flag` they are accepted for symmetry only and not sent: the request carries the user id
-alone, so the server evaluates the flag's targeting rules against an empty context.
+`evaluate_flag` and `feature_enabled?` they are sent as the flag evaluation's `context` (below).
 `track`: `properties` → `metadata`, `event_type` defaults to `event_name`, `timestamp` (`Time` or
 ISO-8601 string) defaults to now (UTC). `track_batch` events are Hashes with `event_name` and
 `user_id` plus optional `experiment_key`/`feature_flag_key`; malformed Hashes are counted as
 failures without being sent. An event with no key is stored as history and counts in no
 experiment's results; tag outcome events.
 
+## Attributes on flag evaluation
+
+Flag evaluation sends the user's attributes as `context`, so a flag's targeting rules match against
+them. `evaluate_flag` and `feature_enabled?` call
+`GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=…`, where `context` is the attributes
+as compact JSON, percent-encoded like `user_id`: `{ plan: 'pro' }` travels as
+`context=%7B%22plan%22%3A%22pro%22%7D`. With no attributes, an empty Hash or anything that is not a
+Hash, no `context` is sent and the request carries the user id alone. If the attributes cannot be
+written as JSON (a `Float::NAN`, or a string that is not valid UTF-8), nothing is sent, the flag is
+disabled, and a warning that names no attribute is printed.
+
+The SDK keeps one cached answer per user and flag, together with the attributes it was asked with.
+A later call is answered from the cache only if its attributes are exactly the same; otherwise the
+SDK asks the server, and the new answer replaces the cached one. So two calls that differ only in
+attributes get two answers. The same attributes written in a different key order may cost one extra
+request; they never return another call's answer.
+
+The change is in this repository ([#1720](https://github.com/Controlvar/controlvar/issues/1720)); it
+reaches a registry at this SDK's first publish, so a build from a clone of `main` has it and a copy
+installed earlier does not.
+
 ## Caching and failure behaviour
 
 - Successful evaluations and assignments are cached per **user + key** for `cache_ttl` (default
-  300 s, LRU-bounded by `max_cache_size`); a hit makes no request. **Failures are never cached.**
+  300 s, LRU-bounded by `max_cache_size`); a hit makes no request, and a cached flag evaluation
+  answers only a call with the same attributes. **Failures are never cached.**
 - Network error / timeout, 401 (bad key), 404 (an unknown experiment or flag key, or a draft experiment with no
   control variant), 422, 429 (rate limited), 5xx: `evaluate_flag` returns a **disabled** evaluation, `get_assignment`
   returns **`nil`**, `track` returns **`false`**, `track_batch` counts the chunk as failed. Each logs one
@@ -133,7 +154,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
-| `evaluate_flag`, `feature_enabled?` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
+| `evaluate_flag`, `feature_enabled?` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=…` | `context`: the user's attributes as JSON, left out when there are none | `{key, enabled, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
 | `get_assignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp}` | ignored |
 | `track` without keys, `track_batch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | `{success_count, failure_count, errors}` (`track_batch` only) |

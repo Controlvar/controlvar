@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { PageTitle } from '@/components/PageTitle';
+import { BanditWeightHistory } from '@/components/experiments/BanditWeightHistory';
 import { BanditWeightsSection } from '@/components/experiments/BanditWeightsSection';
 import { ExperimentManageSection } from '@/components/experiments/ExperimentManageSection';
 import { TargetingSection } from '@/components/experiments/TargetingSection';
@@ -825,7 +826,8 @@ export default function ExperimentDetailPage() {
           onSaved={onSaved}
         />
 
-        <BanditWeightsSection experiment={experiment} />
+        <BanditWeightsSection experiment={experiment} user={user} />
+        <BanditWeightHistory experiment={experiment} />
 
         {/* Warehouse analysis (beta): the `warehouse` module; renders nothing without it. */}
         <WarehouseAnalysisSection experiment={experiment} />

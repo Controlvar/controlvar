@@ -43,6 +43,27 @@ export interface LoginResponse {
   user: UserMe;
 }
 
+/**
+ * `POST /api/v1/auth/login` for an account with two-step sign-in on (#1812):
+ * the password was right and a code is needed. No `access_token`: the
+ * `mfa_token` goes to `POST /api/v1/auth/mfa/verify` with the code. With
+ * `enrol: true` the account's role requires two-step sign-in and it has not
+ * set it up: the `mfa_token` goes to `POST /api/v1/auth/mfa/enroll` and
+ * `/auth/mfa/enroll/confirm` instead.
+ */
+export interface MfaRequiredResponse {
+  mfa_required: true;
+  mfa_token: string;
+  enrol: boolean;
+  expires_in: number;
+}
+
+/** `POST /api/v1/auth/mfa/enroll/confirm`: the recovery codes, and the sign-in. */
+export interface MfaEnrolConfirmResponse {
+  recovery_codes: string[];
+  login: LoginResponse;
+}
+
 // ---------------------------------------------------------------------------
 // Base URL
 // ---------------------------------------------------------------------------
@@ -405,11 +426,25 @@ function isOnLoginPage(): boolean {
   return window.location.pathname.replace(/\/+$/, '') === LOGIN_PATH;
 }
 
-/** Only allow same-origin, absolute-path redirect targets (no `//evil.com`). */
+/**
+ * Only allow same-origin, absolute-path redirect targets: one leading `/`
+ * (never `//`, also after decoding), no backslash, and no control character or
+ * its percent-encoding anywhere. Every sign-in page uses this one check, the
+ * Hosted UI's `safeAfterSignInPath` included.
+ */
 export function safeNextPath(next: string | null | undefined, fallback = '/'): string {
-  if (!next || !next.startsWith('/') || next.startsWith('//') || next.startsWith('/\\')) {
+  if (typeof next !== 'string' || next.length > 2048) return fallback;
+  if (!next.startsWith('/') || next.startsWith('//') || next.startsWith('/\\')) return fallback;
+  if (!/^\/[A-Za-z0-9\-._~!$&'()*+,;=:@/?#%]*$/.test(next)) return fallback;
+  if (/%(0[0-9a-f]|1[0-9a-f]|7f|5c)/i.test(next)) return fallback;
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(next);
+  } catch {
     return fallback;
   }
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f\\]/.test(decoded) || decoded.startsWith('//')) return fallback;
   return next;
 }
 

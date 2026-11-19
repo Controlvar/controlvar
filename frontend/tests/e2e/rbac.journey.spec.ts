@@ -320,13 +320,24 @@ test.describe("Journey: RBAC", () => {
   }
 
   // Reading a bandit's current weights is allowed to every signed-in role
-  // (`GET /api/v1/bandit/{id}`), and the panel changes nothing, so all four
-  // roles get the same read-only panel. What it shows is compared with the
-  // server's own answer to the page's request, not with a value typed here:
-  // before the first update (`last_updated` null) the panel says so instead
-  // of showing the even split the server fills in.
+  // (`GET /api/v1/bandit/{id}`). Setting them by hand (#1957,
+  // `PUT /api/v1/bandit/{id}/weights`) is offered to an ADMIN or a superuser
+  // only: admin@demo.com is both, so it also sees "Set weights by hand"; the
+  // other three see Refresh alone. Nothing here clicks it, so the journey
+  // still only reads (no non-GET request). What the panel shows is compared
+  // with the server's own answer to the page's request, not with a value typed
+  // here: before the first update (`last_updated` null) the panel says so
+  // instead of showing the even split the server fills in.
+  const banditControls = {
+    admin: ["Refresh", "Set weights by hand"],
+    developer: ["Refresh"],
+    analyst: ["Refresh"],
+    viewer: ["Refresh"],
+  } as const;
   for (const role of ["admin", "developer", "analyst", "viewer"] as const) {
-    test(`${role} reads a bandit's current traffic weights and is offered no change`, async ({ sessions }) => {
+    test(`${role} reads a bandit's current traffic weights and is offered only its own controls`, async ({
+      sessions,
+    }) => {
       const page = await (await sessions(role)).newPage();
       const experiments = new ExperimentsPage(page);
       const writes: string[] = [];
@@ -358,7 +369,7 @@ test.describe("Journey: RBAC", () => {
         await expect(panel).toBeVisible();
         await expect(panel.getByTestId("bandit-weights-loading")).toHaveCount(0, { timeout: 15_000 });
         await expect(panel.getByTestId("bandit-weights-error")).toHaveCount(0);
-        await expect(panel.getByRole("button")).toHaveText(["Refresh"]);
+        await expect(panel.getByRole("button")).toHaveText([...banditControls[role]]);
 
         if (body.last_updated === null) {
           await expect(panel.getByTestId("bandit-weights-empty")).toBeVisible();
@@ -379,6 +390,51 @@ test.describe("Journey: RBAC", () => {
       }
     });
   }
+
+  // The bandit's weight history (#1958, beta route): the read rule is every
+  // role's, so a VIEWER opens it. Nothing is requested until it is opened; the
+  // rows are compared with the server's own answer, not a value typed here.
+  test("viewer opens a bandit's weight history and it only reads", async ({ sessions }) => {
+    const page = await (await sessions("viewer")).newPage();
+    const experiments = new ExperimentsPage(page);
+    const writes: string[] = [];
+    page.on("request", (request) => {
+      const { pathname } = new URL(request.url());
+      if (pathname.startsWith("/api/v1/bandit/") && request.method() !== "GET") {
+        writes.push(`${request.method()} ${pathname}`);
+      }
+    });
+    try {
+      await experiments.goto();
+      await expect(experiments.experimentList).toBeVisible({ timeout: 15_000 });
+      // Seeded ACTIVE with Thompson sampling by seed_demo_data.py.
+      await experiments.clickExperiment("Recommendation Algorithm MAB");
+      const section = page.getByTestId("bandit-weight-history-section");
+      await expect(section).toBeVisible({ timeout: 15_000 });
+      const answer = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname.endsWith("/history") &&
+          new URL(response.url()).pathname.startsWith("/api/v1/bandit/") &&
+          response.request().method() === "GET",
+        { timeout: 20_000 },
+      );
+      await section.getByRole("button", { name: "Show weight history" }).click();
+      const response = await answer;
+      expect(response.status(), "a viewer may read the weight history").toBe(200);
+      const ticks = (await response.json()) as { tick_at: string; weights: Record<string, number> }[];
+
+      await expect(section.getByTestId("bandit-weight-history-error")).toHaveCount(0);
+      await expect(section.getByTestId("bandit-weight-history")).toBeVisible();
+      if (ticks.length === 0) {
+        await expect(section.getByTestId("bandit-weight-history-table")).toHaveCount(0);
+      } else {
+        await expect(section.getByTestId("bandit-weight-history-row")).toHaveCount(Math.min(ticks.length, 200));
+      }
+      expect(writes, "the history only reads").toEqual([]);
+    } finally {
+      await page.close();
+    }
+  });
 
   // #1960: interaction analysis is for a superuser or the ANALYST, DEVELOPER
   // and ADMIN roles (`interactions._require_developer`). An ANALYST -- not a

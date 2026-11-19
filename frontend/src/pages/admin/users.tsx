@@ -49,6 +49,12 @@ export function UserManagementPage() {
     announceStatus(`Saved changes to ${name}.`);
   };
 
+  // Rejects with the request's error, which the dialog shows; it stays open
+  // and says the reset is done, and closing it reloads the list.
+  const handleResetTwoFactor = async (userId: string) => {
+    await AdminService.resetTwoFactor(userId);
+  };
+
   const handleCloseEdit = (options?: EditUserCloseOptions) => {
     if (editUser) setFocusUserId(editUser.id);
     setEditUser(null);
@@ -121,6 +127,7 @@ export function UserManagementPage() {
           currentUserId={currentUserId}
           onClose={handleCloseEdit}
           onSave={handleSaveUser}
+          onResetTwoFactor={handleResetTwoFactor}
         />
 
         {/* Effective Permissions Modal — reads `/api/v1/rbac/users/{id}/permissions`,

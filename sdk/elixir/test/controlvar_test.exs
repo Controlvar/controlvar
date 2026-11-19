@@ -21,7 +21,9 @@ defmodule ControlvarTest do
     @spy :controlvar_facade_test_spy
 
     @impl true
-    def get(_config, "/api/v1/feature-flags/evaluate/my-flag?user_id=" <> _user_id) do
+    def get(_config, "/api/v1/feature-flags/evaluate/my-flag?user_id=" <> _user_id = path) do
+      if pid = Process.whereis(@spy), do: send(pid, {:get, path})
+
       {:ok, %{"key" => "my-flag", "enabled" => true, "config" => %{"variant" => "new"}}}
     end
 
@@ -128,6 +130,32 @@ defmodule ControlvarTest do
       client = start_ep()
       assert Controlvar.feature_enabled?(client, "my-flag", "user-1")
       refute Controlvar.feature_enabled?(client, "unknown-flag", "user-1")
+    end
+
+    test "sends no context" do
+      client = start_ep()
+      assert Controlvar.feature_enabled?(client, "my-flag", "user-1")
+      assert_receive {:get, "/api/v1/feature-flags/evaluate/my-flag?user_id=user-1"}
+    end
+  end
+
+  describe "feature_enabled?/4" do
+    @tag :regression
+    test "the facade forwards attributes: the request carries &context= after user_id" do
+      client = start_ep()
+
+      assert Controlvar.feature_enabled?(client, "my-flag", "user-1", attributes: %{plan: "pro"})
+
+      assert_receive {:get, path}
+
+      assert path ==
+               "/api/v1/feature-flags/evaluate/my-flag?user_id=user-1" <>
+                 "&context=%7B%22plan%22%3A%22pro%22%7D"
+    end
+
+    test "is false on a failure, with options" do
+      client = start_ep()
+      refute Controlvar.feature_enabled?(client, "unknown-flag", "user-1", attributes: %{a: 1})
     end
   end
 

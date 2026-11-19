@@ -78,8 +78,8 @@ by = ["exempt:baseline"]
 [[unit]]
 text = "To create one in the dashboard, choose Bandit as the experiment type on the new-experiment form (guided setup or the single-page form) and pick the Optimization algorithm."
 by = [
-    "test:frontend/src/tests/pages/experiment-new-bandit.test.tsx::appears only while Bandit is chosen, and goes again with it",
-    "test:frontend/src/tests/pages/experiment-new-bandit.test.tsx::Bandit with UCB1 sends exactly the bandit literal, a valid ExperimentCreate",
+    "test:frontend/src/tests/pages/experiment-new-bandit.test.tsx::%s: appears only while Bandit is chosen, and goes again with it",
+    "test:frontend/src/tests/pages/experiment-new-bandit.test.tsx::%s: Bandit with UCB1 sends exactly the bandit literal, a valid ExperimentCreate",
 ]
 
 [[unit]]
@@ -275,6 +275,14 @@ text = "Use with caution: the scheduler replaces an override on its next cycle w
 by = ["test:backend/tests/integration/api/test_bandit_weights_routes.py::test_the_scheduler_replaces_an_override_while_the_experiment_is_active"]
 
 [[unit]]
+text = "In the dashboard, an Admin or a superuser uses Set weights by hand in the experiment page's Current traffic weights panel; it sends this request with each variant's whole percentage divided by 100."
+by = [
+    "test:frontend/src/tests/pages/experiment-detail-bandit.test.tsx",
+    "test:frontend/src/tests/components/BanditWeightsOverride.test.tsx::sends each whole percentage divided by 100, keyed by the experiment's own variant ids",
+    "test:backend/tests/unit/core/test_dashboard_experiment_roles.py::test_override_bandit_weights_roles_match_the_dashboard",
+]
+
+[[unit]]
 text = "It prints the new weights:"
 by = ["docex:docs/api/multi-armed-bandit.md#{\"variant_name\":\"red_button\",\"current_weight\":0.8}"]
 
@@ -329,6 +337,10 @@ by = [
     "docex:docs/api/multi-armed-bandit.md#{\"updates\":1,\"variants\":3}",
     "test:backend/tests/integration/api/test_bandit_history_api.py::test_a_manual_override_is_not_an_update",
 ]
+
+[[unit]]
+text = "The dashboard shows the same updates under Weight history on the experiment's page."
+by = ["test:frontend/src/tests/pages/experiment-detail-bandit-history.test.tsx::shows the server weights as shares, columns in the variant order"]
 
 [[unit]]
 text = "Scheduler"

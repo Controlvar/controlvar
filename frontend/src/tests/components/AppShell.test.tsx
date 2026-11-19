@@ -288,10 +288,15 @@ describe('AppShell', () => {
       expect(screen.getByTestId('user-menu')).not.toContainElement(link);
       const group = screen.getAllByTestId('more-nav-group')[0] as HTMLDetailsElement;
       expect(group).toContainElement(link);
-      // Last in the group, after the modules guide and the user's own API
-      // keys, with a rule between the guide and the user's own pages.
+      // After the modules guide and the user's own API keys, before two-step
+      // sign-in, with a rule between the guide and the user's own pages.
       const panelLinks = Array.from(group.querySelectorAll('a'));
-      expect(panelLinks.map((a) => a.textContent)).toEqual(['Modules', 'Your API keys', 'Change password']);
+      expect(panelLinks.map((a) => a.textContent)).toEqual([
+        'Modules',
+        'Your API keys',
+        'Change password',
+        'Two-step sign-in',
+      ]);
       expect(group.querySelector('[role="separator"]')).not.toBeNull();
 
       // Reachable: More opens, the link is followed, More closes.
@@ -335,6 +340,7 @@ describe('AppShell', () => {
       expect(Array.from(group.querySelectorAll('a')).map((a) => a.textContent)).toEqual([
         'Your API keys',
         'Change password',
+        'Two-step sign-in',
       ]);
       expect(group.querySelector('[role="separator"]')).toBeNull();
     });
@@ -388,6 +394,29 @@ describe('AppShell', () => {
       expect(screen.queryByTestId('change-password-link')).not.toBeInTheDocument();
       view.unmount();
     }
+  });
+
+  describe('Two-step sign-in (#1812)', () => {
+    it('offers it to a local sign-in user, opening /account/two-factor', async () => {
+      signInAs(makeUser({ auth_provider: 'local' }));
+      renderShell();
+      const link = await screen.findByTestId('two-factor-link');
+      expect(link).toHaveTextContent('Two-step sign-in');
+      expect(link).toHaveAttribute('href', '/account/two-factor');
+      expect(screen.getAllByTestId('more-nav-group')[0]).toContainElement(link);
+    });
+
+    it('hides it from a user who does not sign in locally: the routes answer 404 there', async () => {
+      for (const provider of ['cognito', 'sso', '']) {
+        localStorage.clear();
+        mockFetch.mockReset();
+        signInAs(makeUser({ auth_provider: provider }));
+        const view = renderShell();
+        await waitFor(() => expect(screen.getByTestId('user-menu')).toBeInTheDocument());
+        expect(screen.queryByTestId('two-factor-link')).not.toBeInTheDocument();
+        view.unmount();
+      }
+    });
   });
 
   it('falls back to username when full_name is empty', () => {

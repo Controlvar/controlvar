@@ -38,10 +38,11 @@ LIBRARY_ROOT = REPO_ROOT / "tests" / "ground_truth"
 #: test node id count per module, as ``pytest --collect-only -q`` lists them.
 EXPECTED = {
     "test_balanced_gates.py": 9,
+    "test_breakdown_gates.py": 21,
     "test_collection_count.py": 4,
     "test_contract.py": 38,
     "test_contract_citations.py": 32,
-    "test_driver.py": 23,
+    "test_driver.py": 24,
     "test_fault_gates.py": 57,
     "test_fault_library.py": 135,
     "test_flag_rollout_use_cases.py": 2,
@@ -136,6 +137,9 @@ REPLAY_SUITE = [
             "test_g0b1_each_group_is_balanced_at_every_prefix",
             "test_g0b2_a_returning_user_keeps_their_variant",
             "test_g0b3_the_server_s_groups_are_the_ledger_s",
+            "test_g1g1_the_breakdown_rows_equal_the_ledger",
+            "test_g1g2_the_balanced_groups_rows_equal_the_ledger",
+            "test_g1g3_the_overall_estimate_equals_the_stratified_reference",
         )
     ),
     *(

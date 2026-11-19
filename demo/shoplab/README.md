@@ -151,7 +151,7 @@ source venv/bin/activate && python -m pytest demo/shoplab/simulator/test_traffic
 2. **Product sort** (`shoplab_plp_sort`): open the experiment's page. Its **Current traffic
    weights** panel shows each variant's share of new visitors, drifting toward `ml_personalized`
    (true click rate 28% vs 22% / 19%). Press **Refresh** to see the latest weights; the panel does
-   not update by itself, and the dashboard has no chart of past weights. Then go to `/products`
+   not update by itself; **Weight history** below it lists each past update. Then go to `/products`
    and note the sort the page names: it follows the visitor's arm, and "Recommended for you" is
    `ml_personalized`'s, the arm the weights favour.
 3. **Buy button** (`shoplab_pdp_buy_button`): four cells. `orange_buy_now` wins on add-to-cart;
