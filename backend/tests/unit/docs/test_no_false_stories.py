@@ -33,7 +33,8 @@ everywhere rather than fixed page by page:
 6. **editor-wcag.** The visual editor does not meet WCAG 2.1 AA: its sign-in
    on a page lasts 4 hours and cannot be extended, which misses success
    criterion 2.2.1 (Timing Adjustable), as the limitations page says (#1545).
-   No page may say that it meets, or conforms to, WCAG 2.1 AA.
+   No page may say that it meets, conforms to, or is compliant with WCAG 2.1
+   AA.
 
 Each rule is a pattern, why it is wrong, the path prefixes it is limited to
 (``None``: every in-scope document) and a sample of the removed text it must
@@ -305,6 +306,20 @@ RULES: Tuple[Rule, ...] = (
         None,
         "- A WCAG 2.1 AA compliant visual editor for your marketers",
     ),
+    (
+        "editor-wcag",
+        r"(?i)\bvisual\s+editor\s+is\s+(?:fully\s+)?WCAG\s*2(?:\.\d)?\s+(?:level\s+)?AA\s+(?:compliant|conformant)\b",
+        _EDITOR_WCAG,
+        None,
+        "The visual editor is WCAG 2.1 AA compliant.",
+    ),
+    (
+        "editor-wcag",
+        r"(?i)\bvisual\s+editor\s+is\s+(?:fully\s+)?accessible\s*\(\s*WCAG\s*2(?:\.\d)?\s+(?:level\s+)?AA\s*\)",
+        _EDITOR_WCAG,
+        None,
+        "The visual editor is fully accessible (WCAG 2.1 AA).",
+    ),
 )
 
 #: (document, exact text, why the hit inside it stays for now).
@@ -433,6 +448,7 @@ def test_every_story_has_a_rule() -> None:
         " extended. This does not meet WCAG 2.1 success criterion 2.2.1 (Timing"
         " Adjustable).",
         "The visual editor does not meet WCAG 2.1 AA.",
+        "The visual editor is not yet available in the dashboard.",
     ],
 )
 def test_a_true_sentence_is_not_a_hit(true_text: str) -> None:
