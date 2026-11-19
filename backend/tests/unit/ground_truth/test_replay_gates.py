@@ -750,3 +750,33 @@ def test_the_step_summary_carries_the_seed_and_counts_only():
         in text
     )
     assert f"| `{ledger.TRACK}` | 10 | 0 | 0 | 0.5 | 20.0 |" in text
+
+
+def test_the_step_summary_names_a_skipped_significance_comparison(
+    tmp_path, monkeypatch
+):
+    """A treatment whose ``is_significant`` G2 did not compare is named in the
+    step summary, not only in the log; with none skipped the summary is the
+    text alone, and without ``GITHUB_STEP_SUMMARY`` nothing is written."""
+    target = tmp_path / "summary.md"
+    monkeypatch.setattr(suite, "SIGNIFICANCE_SKIPPED", {"S3": ["Treatment B"]})
+    suite.write_step_summary(
+        "### Ground-truth replay\n", {"GITHUB_STEP_SUMMARY": str(target)}
+    )
+    written = target.read_text(encoding="utf-8")
+    assert written.startswith("### Ground-truth replay\n"), written
+    assert (
+        "G2: is_significant not compared, a mean's p-value within tolerance of "
+        "alpha: S3 Treatment B"
+    ) in written, written
+
+    monkeypatch.setattr(suite, "SIGNIFICANCE_SKIPPED", {"S3": []})
+    clean = tmp_path / "clean.md"
+    suite.write_step_summary("text\n", {"GITHUB_STEP_SUMMARY": str(clean)})
+    assert clean.read_text(encoding="utf-8") == "text\n"
+
+    suite.write_step_summary("text\n", {})
+    assert sorted(path.name for path in tmp_path.iterdir()) == [
+        "clean.md",
+        "summary.md",
+    ]

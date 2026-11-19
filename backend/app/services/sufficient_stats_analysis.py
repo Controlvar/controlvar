@@ -1261,8 +1261,11 @@ def per_user_mean_metric_result(
     proportion metric; ``mean`` is the total of the values over ``n``;
     ``std_dev`` is over the ``n`` per-user values (ddof 1); and the interval
     is ``mean +/- t(1 - alpha / 2, n - 1) * std_dev / sqrt(n)``.  Per
-    treatment: Welch's t-test against the control and the rest of
-    ``mean_metric_result``'s comparison, the winner in the metric's direction,
+    treatment: the p-value of the permutation test of Welch's t against the
+    control over every assigned user's value (``permutation_test``;
+    ``statistical_test_used`` ``permutation_t_test``), which
+    ``is_significant`` follows; the rest of ``mean_metric_result``'s
+    comparison on Welch's numbers; the winner in the metric's direction,
     ``relative_improvement_pct`` computed on the means (None when the
     control's mean is 0), and ``absolute_difference`` with its interval from
     ``welch_difference_intervals``.  From the same Welch numbers (#1496):
@@ -1271,9 +1274,10 @@ def per_user_mean_metric_result(
     control's ``mean +/- c * se`` reaches 0), and ``incremental_impact`` and
     ``incremental_impact_ci``, the difference and its interval times the
     treatment's ``sample_size``.  None of the intervals is adjusted for
-    multiple comparisons.
+    multiple comparisons, and none of them comes from the permutation test.
 
-    Nothing here raises for well-formed input:
+    Nothing here raises for well-formed input whose metric and variants have
+    UUID ids:
 
     * an arm with fewer than 2 users has its mean (0.0 with none), no
       ``std_dev``, the interval ``(mean, mean)`` and no comparison; with a
@@ -1291,6 +1295,9 @@ def per_user_mean_metric_result(
         SufficientStatsRefused: a count is not a non-negative integer, or a
             total is not finite.
         ValueError: when no variant is the control.
+        ComparisonIdentityError: the metric or a compared variant has no id,
+            or one that is not a UUID, so its comparison has no seed.  It is
+            not caught here: there is no fallback to Welch's p-value.
     """
     arms: List[Tuple[Any, int, int, List[float]]] = []
     for variant, n, n_converted, totals in variants:

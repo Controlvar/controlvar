@@ -205,8 +205,9 @@ The results engine computes:
   close this, and is not done.
 - B + 1 is `max(2000, 2000 * ceil(4k / (2000 * alpha)))`, with k the metric's treatments that
   get a p-value and alpha 1 minus the confidence level, worked out in whole numbers on alpha
-  rounded to 9 decimal places: 1,999 for one treatment at 0.95, 3,999 for six at 0.99. So the
-  smallest p-value, 2 / (B + 1) (0.001 at 1,999), stays significant after the correction
+  rounded to 9 decimal places, so B is 1,999 for one treatment at 0.95 and 3,999 for six at
+  0.99. So the smallest p-value, 2 / (B + 1) (0.001 at 1,999), stays significant after the
+  correction
 - The random draws are seeded from the comparison's identity and its counts, never from the
   values or the day: the same data gives the same p-value in every request, process and day
 - A running experiment's p-value near 0.05 can move by about ±0.015 between refreshes as data

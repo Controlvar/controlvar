@@ -1568,6 +1568,20 @@ def significance_skipped_line() -> str | None:
     )
 
 
+def write_step_summary(text: str, environ: Mapping[str, str]) -> None:
+    """Append the step summary to the file ``GITHUB_STEP_SUMMARY`` names, when
+    it is set, followed by :func:`significance_skipped_line` when there is
+    one: the summary is what a reader of the run looks at, not the raw log."""
+    target = environ.get("GITHUB_STEP_SUMMARY")
+    if not target:
+        return
+    skipped = significance_skipped_line()
+    with open(target, "a", encoding="utf-8") as stream:
+        stream.write(text)
+        if skipped:
+            stream.write(f"\n{skipped}\n")
+
+
 @pytest.mark.parametrize("replayed", ALL, indirect=True)
 def test_z_no_answer_is_a_5xx(replayed: Replayed) -> None:
     if replayed.server_errors:

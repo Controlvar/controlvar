@@ -334,6 +334,37 @@ def test_ties_and_the_equal_tailed_rule_hold_in_exact_arithmetic(
     )
 
 
+@pytest.mark.parametrize(
+    "control, treatment",
+    [
+        ([], [100.0]),
+        ([100.0], []),
+        ([100.0], [100.0]),
+        ([2e-13, -3e-13, 1e-13], [4e-13, -1e-13]),
+    ],
+    ids=[
+        "one buyer in the treatment",
+        "one buyer in the control",
+        "one buyer in each arm, the same value",
+        "residues only, no listed value",
+    ],
+)
+def test_the_p_value_is_capped_at_1(control, treatment):
+    """``min(1, ...)``: when both tails hold more than half of the
+    permutations, the p-value is exactly 1, never more.  One buyer at
+    100/100 puts the observed t at the edge of almost every permutation, and
+    with no listed value at all (totals that are rounding residues) every
+    permutation ties the observed t, where twice the smaller tail is 2.
+
+    Checked through the procedure and through the product, whose schema
+    refuses a p-value above 1: without the cap an early experiment with one
+    buyer would answer an error."""
+    assert _p_value(control, 100, treatment, 100) == 1.0
+    product = _result(control, 100, treatment, 100)
+    assert product["variants"][1]["statistical_test_used"] == "permutation_t_test"
+    assert product["variants"][1]["p_value"] == 1.0
+
+
 def _enumerated_p(
     control: Sequence[float], treatment: Sequence[float], statistic
 ) -> float:

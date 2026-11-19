@@ -38,7 +38,7 @@ EXPECTED = {
     "test_golden_planted_lift.py": 3,
     "test_golden_srm.py": 4,
     "test_multiple_comparison_reference.py": 21,
-    "test_permutation_test.py": 42,
+    "test_permutation_test.py": 46,
     "test_sequential_confidence_sequence.py": 20,
     "test_sequential_p_value.py": 18,
     "test_sequential_unequal_arms.py": 12,

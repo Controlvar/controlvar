@@ -307,7 +307,10 @@ by = [
 
 [[unit]]
 text = "The p-value is twice the smaller tail, counting the observed assignment: min(1, 2 min(1 + #{t >= t}, 1 + #{t <= t}) / (B + 1)); a reassignment's t within 1e-9 of the observed one (relative, at least 1e-9 absolute) counts in both tails"
-by = ["test:backend/tests/unit/stats_validation/test_permutation_test.py::test_ties_and_the_equal_tailed_rule_hold_in_exact_arithmetic"]
+by = [
+    "test:backend/tests/unit/stats_validation/test_permutation_test.py::test_ties_and_the_equal_tailed_rule_hold_in_exact_arithmetic",
+    "test:backend/tests/unit/stats_validation/test_permutation_test.py::test_the_p_value_is_capped_at_1",
+]
 
 [[unit]]
 text = "The test reads a user's total as 0 when it is within 1e-9 of 0, relative to the largest total of the metric (at least 1e-9 absolute), so a total that sums to 0 in one order and to a rounding residue in another gives the same p-value"
@@ -336,7 +339,7 @@ text = "Exact summation would close this, and is not done."
 by = ["exempt:theory"]
 
 [[unit]]
-text = "B + 1 is max(2000, 2000 ceil(4k / (2000 alpha))), with k the metric's treatments that get a p-value and alpha 1 minus the confidence level, worked out in whole numbers on alpha rounded to 9 decimal places: 1,999 for one treatment at 0.95, 3,999 for six at 0.99."
+text = "B + 1 is max(2000, 2000 ceil(4k / (2000 alpha))), with k the metric's treatments that get a p-value and alpha 1 minus the confidence level, worked out in whole numbers on alpha rounded to 9 decimal places, so B is 1,999 for one treatment at 0.95 and 3,999 for six at 0.99."
 by = ["test:backend/tests/unit/stats_validation/test_permutation_test.py::test_the_number_of_permutations_follows_the_integer_rule"]
 
 [[unit]]
