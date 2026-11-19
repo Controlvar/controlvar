@@ -41,6 +41,12 @@
         "summary": "Update User"
       }
     },
+    "/api/v1/admin/users/{user_id}/2fa": {
+      "delete": {
+        "operationId": "reset_user_two_factor_api_v1_admin_users__user_id__2fa_delete",
+        "summary": "Reset User Two Factor"
+      }
+    },
     "/api/v1/ai/design": {
       "post": {
         "operationId": "suggest_design_api_v1_ai_design_post",
@@ -169,6 +175,24 @@
       "get": {
         "operationId": "get_user_info_api_v1_auth_me_get",
         "summary": "Get User Info"
+      }
+    },
+    "/api/v1/auth/mfa/enroll": {
+      "post": {
+        "operationId": "enrol_during_sign_in_api_v1_auth_mfa_enroll_post",
+        "summary": "Enrol During Sign In"
+      }
+    },
+    "/api/v1/auth/mfa/enroll/confirm": {
+      "post": {
+        "operationId": "confirm_enrolment_during_sign_in_api_v1_auth_mfa_enroll_confirm_post",
+        "summary": "Confirm Enrolment During Sign In"
+      }
+    },
+    "/api/v1/auth/mfa/verify": {
+      "post": {
+        "operationId": "verify_mfa_api_v1_auth_mfa_verify_post",
+        "summary": "Verify Mfa"
       }
     },
     "/api/v1/auth/refresh": {
@@ -1041,6 +1065,12 @@
         "summary": "Get Sample Size Status"
       }
     },
+    "/api/v1/results/{experiment_id}/segments/{segment_id}": {
+      "get": {
+        "operationId": "get_segment_results_api_v1_results__experiment_id__segments__segment_id__get",
+        "summary": "Beta: an experiment's results for the members of one ID-list segment"
+      }
+    },
     "/api/v1/results/{experiment_id}/sequential": {
       "get": {
         "operationId": "get_sequential_results_api_v1_results__experiment_id__sequential_get",
@@ -1331,6 +1361,36 @@
       "get": {
         "operationId": "get_user_me_api_v1_users_me_get",
         "summary": "Get User Me"
+      }
+    },
+    "/api/v1/users/me/2fa": {
+      "get": {
+        "operationId": "read_own_two_factor_api_v1_users_me_2fa_get",
+        "summary": "Read Own Two Factor"
+      }
+    },
+    "/api/v1/users/me/2fa/confirm": {
+      "post": {
+        "operationId": "confirm_own_two_factor_api_v1_users_me_2fa_confirm_post",
+        "summary": "Confirm Own Two Factor"
+      }
+    },
+    "/api/v1/users/me/2fa/disable": {
+      "post": {
+        "operationId": "disable_own_two_factor_api_v1_users_me_2fa_disable_post",
+        "summary": "Disable Own Two Factor"
+      }
+    },
+    "/api/v1/users/me/2fa/enroll": {
+      "post": {
+        "operationId": "enrol_own_two_factor_api_v1_users_me_2fa_enroll_post",
+        "summary": "Enrol Own Two Factor"
+      }
+    },
+    "/api/v1/users/me/2fa/recovery-codes": {
+      "post": {
+        "operationId": "regenerate_own_recovery_codes_api_v1_users_me_2fa_recovery_codes_post",
+        "summary": "Regenerate Own Recovery Codes"
       }
     },
     "/api/v1/users/me/password": {

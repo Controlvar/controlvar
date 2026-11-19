@@ -86,26 +86,10 @@ export interface PendingSignIn {
 // ---------------------------------------------------------------------------
 
 /**
- * `next` when it is a path on this origin with nothing unusual in it, else
- * `/experiments`. On top of `safeNextPath` (no scheme, no `//`, no `/\`), a
- * backslash, a control character or its percent-encoding anywhere is refused.
+ * `next` when `safeNextPath` keeps it, else `/experiments`.
  */
 export function safeAfterSignInPath(next: string | null | undefined): string {
-  const fallback = AFTER_SIGN_IN_DEFAULT;
-  if (typeof next !== 'string' || next.length > 2048) return fallback;
-  const safe = safeNextPath(next, fallback);
-  if (safe === fallback) return fallback;
-  if (!/^\/[A-Za-z0-9\-._~!$&'()*+,;=:@/?#%]*$/.test(safe)) return fallback;
-  if (/%(0[0-9a-f]|1[0-9a-f]|7f|5c)/i.test(safe)) return fallback;
-  let decoded: string;
-  try {
-    decoded = decodeURIComponent(safe);
-  } catch {
-    return fallback;
-  }
-  // eslint-disable-next-line no-control-regex
-  if (/[\u0000-\u001f\u007f\\]/.test(decoded) || decoded.startsWith('//')) return fallback;
-  return safe;
+  return safeNextPath(next, AFTER_SIGN_IN_DEFAULT);
 }
 
 // ---------------------------------------------------------------------------

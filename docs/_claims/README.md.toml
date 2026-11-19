@@ -260,8 +260,9 @@ by = [
 ]
 
 [[unit]]
-text = "Sequential testing: mSPRT with always-valid confidence intervals, so you can read results at any time."
+text = "Sequential testing (beta): mSPRT with always-valid confidence intervals, so you can read results at any time."
 by = [
+    "test:backend/tests/unit/core/test_analysis_status.py::test_the_table_holds_exactly_the_expected_statuses",
     "test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_aa_false_rejections_under_peeking",
     "test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_cs_anytime_coverage",
 ]
@@ -403,9 +404,10 @@ text = "One deployment is one environment: run staging and production as separat
 by = ["test:backend/tests/unit/api/test_documented_limits.py::test_flags_experiments_and_keys_carry_no_environment"]
 
 [[unit]]
-text = "Sign-in has no multi-factor step, and SAML sign-in is not available (OIDC is, with the sso module)."
+text = "Two-step sign-in can be required for chosen roles on Docker Compose and Helm installs, not yet on an AWS CDK install, and SAML sign-in is not available (OIDC is, with the sso module)."
 by = [
-    "test:backend/tests/unit/api/test_documented_limits.py::test_a_local_sign_in_takes_an_email_and_a_password_alone",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_role_can_require_two_step_sign_in_on_compose_and_helm_not_cdk_yet",
+    "test:backend/tests/integration/api/test_two_factor_required_roles_api.py::test_a_required_role_sets_it_up_at_its_first_sign_in",
     "test:modules/backend/tests/integration/api/test_sso_provisioning_scope.py::test_a_saml_acs_token_is_still_not_a_session",
     "test:modules/backend/tests/unit/services/test_sso_service.py::TestNonceInTheAuthorizationURL::test_an_oidc_provider_gets_the_nonce",
 ]

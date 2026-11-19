@@ -1,0 +1,39 @@
+{
+  "_provenance": {
+    "source": "real account",
+    "real_run_id": "wl-redshift-20261118T011715Z-6b77b53f",
+    "check": "rs_sign_in",
+    "request": {
+      "service": "redshift-data",
+      "operation": "GetStatementResult"
+    },
+    "note": "Recorded by the warehouse_live check; see evidence.json."
+  },
+  "status": 200,
+  "body": {
+    "Records": [
+      [
+        {
+          "longValue": 1
+        }
+      ]
+    ],
+    "ColumnMetadata": [
+      {
+        "isCaseSensitive": false,
+        "isCurrency": false,
+        "isSigned": true,
+        "label": "connected",
+        "name": "connected",
+        "nullable": 1,
+        "precision": 10,
+        "scale": 0,
+        "schemaName": "",
+        "tableName": "",
+        "typeName": "int4",
+        "length": 0
+      }
+    ],
+    "TotalNumRows": 1
+  }
+}

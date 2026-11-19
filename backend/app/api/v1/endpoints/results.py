@@ -27,6 +27,7 @@ from backend.app.core.logger import unexpected_failure
 from backend.app.core.stats_engine import ENGINE_VERSION
 from backend.app.models.analysis_snapshot import AnalysisKind
 from backend.app.models.experiment import Experiment, Metric, MetricType
+from backend.app.models.segment import Segment, SegmentKind
 from backend.app.models.user import User
 from backend.app.schemas.balanced_groups import BalancedGroupsResponse
 from backend.app.schemas.bayesian import BayesianResultsResponse
@@ -45,6 +46,7 @@ from backend.app.schemas.results import (
     SRMResult,
     VariantTimeSeries,
 )
+from backend.app.schemas.segment_results import ResultsSegment, SegmentResultsResponse
 from backend.app.schemas.sequential import SequentialTestingResponse
 from backend.app.schemas.variance_reduction import (
     CupedMetricResult,
@@ -52,6 +54,7 @@ from backend.app.schemas.variance_reduction import (
     VarianceReductionConfig,
     VarianceReductionMethod,
 )
+from backend.app.services import segment_results as segment_results_service
 from backend.app.services.analysis_service import AnalysisService
 from backend.app.services.analysis_settings import resolve_analysis_settings
 from backend.app.services.analysis_snapshot_service import record_snapshot
@@ -1881,6 +1884,173 @@ def get_balanced_groups(
             exc,
             "Balanced groups",
             BALANCED_GROUPS_FAILURE,
+            db=db,
+            logger=logger,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Endpoint 9 — GET /{experiment_id}/segments/{segment_id} (#1933)
+# ---------------------------------------------------------------------------
+
+SEGMENT_RESULTS_FAILURE = "Could not compute the experiment's results for this segment"
+
+#: The operation's description in the OpenAPI document.
+SEGMENT_RESULTS_DESCRIPTION = (
+    "Beta. The experiment's results counted only for its assigned users whose "
+    "user_id is in the id_list segment when the request is made, matched "
+    "exactly. Exploratory: is_exploratory is always true, and the correction "
+    "covers the comparisons within the segment, not the choice of segment. "
+    "srm is the sample ratio check of those users alone; "
+    "summary.recommendation is computed for them, and is INCONCLUSIVE "
+    "whenever that check or the whole experiment's "
+    "(segment.experiment_srm_warning) warns. Do not automate a decision from "
+    "it. A segment in any status is accepted. 404 for an unknown experiment "
+    "or segment; 422 for a rules segment; 503 with Retry-After while another "
+    "segment's results are being computed in the same API process. Computed "
+    "on each request: not cached, and no snapshot is recorded. No other "
+    "route filters by a segment."
+)
+
+
+@router.get(
+    "/{experiment_id}/segments/{segment_id}",
+    response_model=SegmentResultsResponse,
+    summary="Beta: an experiment's results for the members of one ID-list segment",
+    description=SEGMENT_RESULTS_DESCRIPTION,
+    responses={
+        404: {"description": "Experiment not found, or Segment not found."},
+        503: {"description": segment_results_service.BUSY},
+    },
+    openapi_extra={"x-stability": "beta"},
+)
+def get_segment_results(
+    experiment_id: UUID,
+    segment_id: UUID,
+    confidence_level: Optional[float] = Query(
+        default=None,
+        ge=0.80,
+        le=0.99,
+        allow_inf_nan=False,
+        description=(
+            "Confidence level for this request. Omit it to use the "
+            "experiment's stored confidence_level (0.95 unless set otherwise)."
+        ),
+    ),
+    correction_method: Optional[str] = Query(
+        default=None,
+        pattern="^(none|bonferroni|benjamini_hochberg)$",
+        description=(
+            "Multiple-comparison correction for this request. Omit it to use "
+            "the experiment's stored correction_method (benjamini_hochberg "
+            "unless set otherwise). 'none' shows the uncorrected numbers."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> SegmentResultsResponse:
+    """
+    One experiment's results for the members of one ID-list segment (#1933).
+
+    The checks, in order: the router's read rule (401, 403), FastAPI's own
+    validation (422), the experiment (404), the segment (404), its kind (422
+    for a rules segment), then one computation per API process (503 while
+    another runs). None of the refusals takes the computation slot, and none
+    repeats a submitted value except FastAPI's own 422.
+    """
+    experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
+    if experiment is None:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    segment = db.query(Segment).filter(Segment.id == segment_id).first()
+    if segment is None:
+        raise HTTPException(status_code=404, detail="Segment not found")
+    if segment.kind != SegmentKind.ID_LIST.value:
+        raise HTTPException(
+            status_code=422,
+            detail=[
+                {
+                    "loc": ["path", "segment_id"],
+                    "msg": segment_results_service.RULES_SEGMENT_REFUSED,
+                    "type": "value_error",
+                }
+            ],
+        )
+    # Raised outside the failure mapping below: a busy slot is a 503 with
+    # Retry-After, never a 500, and logs no traceback.
+    if not segment_results_service.COMPUTE_SLOT.acquire(blocking=False):
+        raise HTTPException(
+            status_code=503,
+            detail=segment_results_service.BUSY,
+            headers={
+                "Retry-After": str(segment_results_service.BUSY_RETRY_AFTER_SECONDS)
+            },
+        )
+    try:
+        return _segment_results(
+            experiment_id, segment, confidence_level, correction_method, db
+        )
+    finally:
+        segment_results_service.COMPUTE_SLOT.release()
+
+
+def _segment_results(
+    experiment_id: UUID,
+    segment: Segment,
+    confidence_level: Optional[float],
+    correction_method: Optional[str],
+    db: Session,
+) -> SegmentResultsResponse:
+    try:
+        result = segment_results_service.segment_results(
+            db,
+            experiment_id,
+            segment.id,
+            confidence_level=confidence_level,
+            correction_method=correction_method,
+        )
+    except ValueError:
+        # An experiment with a metric and no control variant, as on
+        # GET /results/{id}.
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    except Exception as exc:
+        raise unexpected_failure(
+            exc,
+            "Segment results",
+            SEGMENT_RESULTS_FAILURE,
+            db=db,
+            logger=logger,
+        )
+    try:
+        return SegmentResultsResponse(
+            experiment_id=result["experiment_id"],
+            experiment_name=result["experiment_name"],
+            status=result["status"],
+            start_date=result["start_date"],
+            end_date=result["end_date"],
+            confidence_level=result["confidence_level"],
+            correction_method=result["correction_method"],
+            sample_size_adequate=result["sample_size_adequate"],
+            computed_at=result["computed_at"],
+            summary=result["summary"],
+            metrics=result["metrics"],
+            srm=_srm_block(experiment_id, result["srm"]),
+            segment=ResultsSegment(
+                id=segment.id,
+                name=segment.name,
+                kind=segment.kind,
+                status=getattr(segment.status, "value", segment.status),
+                membership="current",
+                member_count=result["member_count"],
+                experiment_users=result["experiment_users"],
+                experiment_srm_warning=result["experiment_srm_warning"],
+            ),
+            is_exploratory=True,
+        )
+    except Exception as exc:
+        raise unexpected_failure(
+            exc,
+            "Segment results",
+            SEGMENT_RESULTS_FAILURE,
             db=db,
             logger=logger,
         )

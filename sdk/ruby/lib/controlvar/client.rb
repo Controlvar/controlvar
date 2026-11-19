@@ -7,9 +7,10 @@ module Controlvar
   #
   # Flag evaluation and experiment assignment are decided by the server; the
   # SDK never buckets users locally. Successful results are cached per
-  # user + key for +cache_ttl+ seconds; failures are never cached.
+  # user + key for +cache_ttl+ seconds; failures are never cached. A cached
+  # flag evaluation answers only a call with the same attributes.
   #
-  #   - evaluate_flag    : GET  /api/v1/feature-flags/evaluate/{key}?user_id=...
+  #   - evaluate_flag    : GET  /api/v1/feature-flags/evaluate/{key}?user_id=...&context=...
   #   - get_assignment   : POST /api/v1/tracking/assign   (sticky on the server)
   #   - track            : POST /api/v1/tracking/track    (with a key)
   #                        POST /api/v1/tracking/batch    (fan-out without a key)
@@ -54,21 +55,31 @@ module Controlvar
 
     # Evaluate a feature flag for a user. The server decides.
     #
-    # @param flag_key    [String] feature flag key
-    # @param user_id     [String] user identifier
-    # @param _attributes [Hash]   accepted for API symmetry with get_assignment
-    #                             and not sent: the evaluate endpoint takes a
-    #                             context, which this SDK does not send yet
+    # @param flag_key   [String] feature flag key
+    # @param user_id    [String] user identifier
+    # @param attributes [Hash]   user attributes, sent as +context+ (compact
+    #   JSON) so the flag's targeting rules match against them; nil, an empty
+    #   Hash or anything that is not a Hash sends no +context+
     # @return [FlagEvaluation] never nil. On a network/HTTP failure (including
     #   404 for an unknown flag key) the flag is reported as disabled; a flag
     #   that is not ACTIVE is a normal answer with enabled false. A cached
-    #   evaluation, when present, is returned instead.
-    def evaluate_flag(flag_key, user_id, _attributes = {})
+    #   evaluation for the same user, key and attributes, when present, is
+    #   returned instead. Attributes that cannot be written as JSON send
+    #   nothing and report the flag as disabled.
+    def evaluate_flag(flag_key, user_id, attributes = {})
+      context = flag_context(attributes)
+      if context.nil?
+        warn '[Controlvar] evaluate_flag: the attributes cannot be sent as JSON; ' \
+             'nothing was sent and the flag is reported as disabled'
+        return FlagEvaluation.new(key: flag_key, enabled: false, config: nil)
+      end
+
       cache_key = flag_cache_key(user_id, flag_key)
-      cached = @cache.get(cache_key)
+      cached = @cache.get(cache_key, context: context)
       return cached unless cached.nil?
 
       path = "/api/v1/feature-flags/evaluate/#{encode(flag_key)}?user_id=#{encode(user_id)}"
+      path += "&context=#{encode(context)}" unless context.empty?
       data = @http.get(path)
       data = {} unless data.is_a?(Hash)
 
@@ -77,7 +88,7 @@ module Controlvar
         enabled: data['enabled'] == true,
         config:  data['config']
       )
-      @cache.set(cache_key, evaluation)
+      @cache.set(cache_key, evaluation, context: context)
       evaluation
     rescue NetworkError, APIError => e
       warn "[Controlvar] evaluate_flag error: #{e.message}"
@@ -254,6 +265,18 @@ module Controlvar
     # Percent-encode a path segment / query value (spaces as %20, not +).
     def encode(value)
       URI.encode_www_form_component(value.to_s).gsub('+', '%20')
+    end
+
+    # The attributes as the compact JSON sent as a flag evaluation's +context+:
+    # "" when there are none to send (nil, not a Hash, or empty), and nil when
+    # they cannot be written as JSON (NaN, malformed UTF-8, a cycle, ...). The
+    # serialiser's error is dropped, because its message can quote a value.
+    def flag_context(attributes)
+      return '' unless attributes.is_a?(Hash) && !attributes.empty?
+
+      JSON.generate(attributes)
+    rescue StandardError
+      nil
     end
 
     def build_event_body(event_name, user_id, properties, value, event_type, timestamp)

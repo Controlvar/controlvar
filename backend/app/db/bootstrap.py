@@ -717,7 +717,8 @@ def _bootstrap_schema(engine: Engine, schema: str) -> str:
 
 def make_engine() -> Engine:
     """The engine of a process outside the API (bootstrap, operator commands)."""
-    return create_engine(database_url())
+    # hide_parameters: errors omit SQLAlchemy's "[parameters: ...]" listing.
+    return create_engine(database_url(), hide_parameters=True)
 
 
 def bootstrap(engine: Engine | None = None, schema: str | None = None) -> str:

@@ -214,10 +214,50 @@ def test_assignment_and_tracking_write_no_counter():
 # ---------------------------------------------------------------------------
 # Sign-in and access
 # ---------------------------------------------------------------------------
-def test_a_local_sign_in_takes_an_email_and_a_password_alone(routes):
+#: Every route of two-step sign-in (#1812): an account's own (any role, local
+#: provider), the code step of a sign-in, and a superuser's reset.
+TWO_STEP_ROUTES = {
+    ("GET", "/api/v1/users/me/2fa"),
+    ("POST", "/api/v1/users/me/2fa/enroll"),
+    ("POST", "/api/v1/users/me/2fa/confirm"),
+    ("POST", "/api/v1/users/me/2fa/disable"),
+    ("POST", "/api/v1/users/me/2fa/recovery-codes"),
+    ("POST", "/api/v1/auth/mfa/verify"),
+    ("POST", "/api/v1/auth/mfa/enroll"),
+    ("POST", "/api/v1/auth/mfa/enroll/confirm"),
+    ("DELETE", "/api/v1/admin/users/{user_id}/2fa"),
+}
+
+#: The one setting that requires two-step sign-in for roles.
+TWO_STEP_ROLES_SETTING = "LOCAL_AUTH_2FA_REQUIRED_ROLES"
+
+
+def test_a_role_can_require_two_step_sign_in_on_compose_and_helm_not_cdk_yet(
+    routes,
+):
+    """limitations.md and the README: an account turns it on for itself, with
+    an authenticator app, and an operator can require it for roles with one
+    setting, ``LOCAL_AUTH_2FA_REQUIRED_ROLES``. The production compose file
+    passes it to the API and the Helm chart takes it through ``api.extraEnv``
+    (``test_chart_render.py`` renders the documented example); the AWS CDK
+    app gives the API a fixed environment that does not carry it yet."""
+    from backend.app.core.config import Settings
+
+    # The password step still takes an email and a password alone; the code
+    # is a later request's.
     assert set(LoginRequest.model_fields) == {"email", "password"}
     pattern = re.compile(r"mfa|totp|otp\b|2fa|two-factor|second-factor|webauthn", re.I)
-    assert [path for _, path in routes if pattern.search(path)] == []
+    assert {(m, p) for m, p in routes if pattern.search(p)} == TWO_STEP_ROUTES
+    policy = re.compile(r"2FA|TWO_FACTOR|TOTP|MFA|SECOND_FACTOR", re.I)
+    assert [name for name in Settings.model_fields if policy.search(name)] == [
+        TWO_STEP_ROLES_SETTING
+    ]
+    compose = (ROOT / "deploy" / "compose" / "compose.yml").read_text(encoding="utf-8")
+    assert f"{TWO_STEP_ROLES_SETTING}: ${{{TWO_STEP_ROLES_SETTING}:-}}" in compose
+    (chart,) = sorted((ROOT / "charts").glob("*/values.yaml"))
+    assert "extraEnv: []" in chart.read_text(encoding="utf-8")
+    cdk = ROOT / "infrastructure" / "cdk" / "stacks" / "fargate_service_stack.py"
+    assert TWO_STEP_ROLES_SETTING not in cdk.read_text(encoding="utf-8")
 
 
 def test_the_permission_check_reads_grants_only_through_the_capability():
@@ -481,6 +521,34 @@ SENDS = {
         ],
         'query["context"]',
     ),
+    # Part of #1720: the attributes as compact JSON, through the same encode as
+    # user_id.
+    "ruby": (
+        "sdk/ruby/lib/controlvar/client.rb",
+        [("def evaluate_flag(", "data = {} unless data.is_a?(Hash)")],
+        '"&context=#{encode(context)}"',
+    ),
+    # Part of #1720: the attributes as compact JSON, through rawurlencode, the
+    # encoder user_id already goes through.
+    "php": (
+        "sdk/php/src/ExperimentationClient.php",
+        [("public function evaluateFlag(", "} catch (ExperimentationException) {")],
+        "'&context=' . rawurlencode($context)",
+    ),
+    # Part of #1720: the attributes as contextQuery writes them (a copy of the
+    # JavaScript SDK's), after user_id.
+    "edge": (
+        "sdk/edge/src/client.ts",
+        [("async evaluateFlag(", "const evaluation: FlagEvaluation = {")],
+        "?user_id=${encode(userId)}${context}",
+    ),
+    # Part of #1720: the attributes as compact JSON, through the same encode as
+    # user_id.
+    "elixir": (
+        "sdk/elixir/lib/controlvar/client.ex",
+        [("def evaluate_flag(", "{:ok, data} when is_map(data) ->")],
+        '"&context=#{encode(context_json)}"',
+    ),
     # Since #438's Flutter change: evaluateFlag hands the attributes to the
     # evaluate request as `context`, after `user_id`.
     "flutter": (
@@ -495,26 +563,6 @@ SENDS = {
 #: file, and its code from the evaluate signature through the request call as
 #: (the line that starts it, the first line after the call) pairs.
 DOES_NOT_SEND = {
-    "ruby": (
-        1720,
-        "sdk/ruby/lib/controlvar/client.rb",
-        [("def evaluate_flag(", "data = {} unless data.is_a?(Hash)")],
-    ),
-    "php": (
-        1720,
-        "sdk/php/src/ExperimentationClient.php",
-        [("public function evaluateFlag(", "} catch (ExperimentationException) {")],
-    ),
-    "elixir": (
-        1720,
-        "sdk/elixir/lib/controlvar/client.ex",
-        [("def evaluate_flag(", "{:ok, data} when is_map(data) ->")],
-    ),
-    "edge": (
-        1720,
-        "sdk/edge/src/client.ts",
-        [("async evaluateFlag(", "const evaluation: FlagEvaluation = {")],
-    ),
     "ios": (
         438,
         "sdk/ios/Sources/Controlvar/ExperimentationClient.swift",

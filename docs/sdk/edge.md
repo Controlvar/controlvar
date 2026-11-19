@@ -9,7 +9,7 @@ with stubbed KV and request objects, not on the three platforms.
 Flag evaluation and experiment assignment are decided **by the server**: every call goes to the
 public API with your `X-API-Key`, the server buckets the user (sticky per user + experiment), and the
 SDK caches the answer per user + key — in memory and, optionally, in a shared KV store so other
-isolates can reuse it. Nothing is bucketed locally.
+isolates can reuse it (a flag call with attributes is not stored; see Attributes on flag evaluation). Nothing is bucketed locally.
 
 Source: `sdk/edge`.
 
@@ -56,8 +56,8 @@ const client = new EdgeExperimentationClient({
 const assignment = await client.getAssignment('checkout_flow', userId, { country: 'US' });
 // { experimentKey, userId, variantId, variantName, isControl, configuration } or null on failure
 
-// Flag evaluation
-const { key, enabled, config } = await client.evaluateFlag('new-checkout', userId);
+// Flag evaluation; `attributes` is sent as `context`, so targeting rules on attributes match
+const { key, enabled, config } = await client.evaluateFlag('new-checkout', userId, { plan: 'pro' });
 
 // Zero-latency re-reads from the in-memory cache (no network)
 client.evaluateFlagSync('new-checkout', userId);    // boolean, false when not cached
@@ -75,17 +75,45 @@ await client.track('page_view', userId, { path: '/' }); // no key: fanned out, s
 Every `evaluateFlag` / `getAssignment` call resolves in this order:
 
 1. **In-memory cache** (per user + key, `cacheTtlMs`, default 60 s) — zero latency.
-2. **Shared store** (`config.store`; Cloudflare KV / Deno KV via the adapters) — one KV read.
+2. **Shared store** (`config.store`; Cloudflare KV / Deno KV via the adapters) — one KV read; a
+   flag call with attributes skips it (see [Attributes on flag evaluation](#attributes-on-flag-evaluation)).
 3. **Network** — one request to the backend; the result is written to both caches.
 
 Failures (network errors, timeouts, and a 404: an unknown experiment or flag key, or a draft
 experiment with no control variant) are **never cached**:
 `evaluateFlag` resolves to `{ key, enabled: false, config: null }` and `getAssignment` to `null`, and
-the next call retries. Concurrent calls for the same user + key share one in-flight request.
+the next call retries. Concurrent calls for the same user + key share one in-flight request; for a
+flag, only calls with the same attributes share one.
 
 `evaluateFlagSync` / `getAssignmentSync` / `getCachedFlag` / `getCachedAssignment` read the in-memory
 cache only and never touch the network — call the async method first (typically once at the top of
 the request handler), then use the sync accessors freely.
+
+### Attributes on flag evaluation
+
+Flag evaluation sends the user's attributes as `context`, so a flag's targeting rules match against
+them. `evaluateFlag`, `isFeatureEnabled` and `getAllFlags` take them as an optional last argument.
+The flag calls are
+`GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=…` and
+`GET /api/v1/feature-flags/user/{user_id}?context=…`, where `context` is the attributes as compact
+JSON, percent-encoded: `{ plan: 'pro' }` travels as `context=%7B%22plan%22%3A%22pro%22%7D`. With no
+attributes or an empty object, no `context` is sent and the request carries the user id alone.
+If the attributes cannot be written as JSON (a BigInt, or an object that refers to itself), nothing
+is sent, the call returns the disabled answer (`{}` for `getAllFlags`), and nothing is
+logged.
+
+The SDK keeps one cached answer per user and flag, together with the attributes it was asked with.
+A later call is answered from the cache only if its attributes are exactly the same; otherwise the
+SDK asks the server, and the new answer replaces the cached one. So two calls that differ only in
+attributes get two answers. The same attributes written in a different key order may cost one extra
+request; they never return another call's answer. Calls with attributes neither read nor write the
+shared store; only calls without attributes use it. `evaluateFlagSync` and `getCachedFlag` return the
+last answer cached for this user and flag, whatever attributes it was asked with; call `evaluateFlag`
+with the attributes when the answer must match them.
+
+The change is in this repository ([#1720](https://github.com/Controlvar/controlvar/issues/1720)); it
+reaches a registry at this SDK's first publish, so a build from a clone of `main` has it and a copy
+installed earlier does not.
 
 ---
 
@@ -121,7 +149,8 @@ read `env`; when `config.kvNamespace` is not set it uses the `env.KV` binding.
 
 ### KV caching
 
-When a `kvNamespace` is provided the SDK stores each **server result** under
+When a `kvNamespace` is provided the SDK stores each **server result** (a flag call with attributes
+is not stored; see Attributes on flag evaluation) under
 `ep:flag:{userId}:{flagKey}` / `ep:assign:{userId}:{experimentKey}` with `expirationTtl` derived from
 `cacheTtlMs` (Cloudflare enforces a 60 s minimum; override with `kvTtlSeconds`). Another instance
 serving the same user reads the value from KV instead of calling the API. No bootstrap payload is
@@ -171,7 +200,8 @@ In a Next.js project the adapter's own note says to pass the same headers with
 across isolates) and `kvTtlMs` (default `cacheTtlMs`).
 
 `createDenoHandler` creates one client per isolate so the in-memory cache is reused across
-requests. With `kv`, results are stored under `["ep", "flag:{userId}:{flagKey}"]` /
+requests. With `kv`, results (a flag call with attributes is not stored; see Attributes on flag
+evaluation) are stored under `["ep", "flag:{userId}:{flagKey}"]` /
 `["ep", "assign:{userId}:{experimentKey}"]` as JSON strings with `expireIn`.
 
 ---
@@ -206,8 +236,8 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
-| `evaluateFlag`, `isFeatureEnabled`, Vercel `flagKeys` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
-| `getAllFlags`, Vercel middleware without `flagKeys` | `GET /api/v1/feature-flags/user/{user_id}` | — | `{"<flag_key>": bool, ...}` |
+| `evaluateFlag`, `isFeatureEnabled`, Vercel `flagKeys` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=…` | `context`: the user's attributes as JSON, left out when there are none (the Vercel middleware sends none) | `{key, enabled, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
+| `getAllFlags`, Vercel middleware without `flagKeys` | `GET /api/v1/feature-flags/user/{user_id}?context=…` | `context`: the user's attributes as JSON, left out when there are none (the Vercel middleware sends none) | `{"<flag_key>": bool, ...}` |
 | `getAssignment`, `getVariant` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
 | `track` without keys | `POST /api/v1/tracking/batch`, one entry per cached assignment and evaluated flag; with nothing cached, nothing is sent | `{events: [ ...track bodies ]}` (max 100 per request) | ignored |
@@ -239,9 +269,9 @@ Adapter configs add `kvNamespace` / `kvTtlSeconds` (Cloudflare), `kv` / `kvTtlMs
 
 | Method | Returns | Description |
 |---|---|---|
-| `evaluateFlag(flagKey, userId)` | `Promise<FlagEvaluation>` | Server-decided; `{key, enabled, config}`. Disabled evaluation on failure (not cached). |
-| `isFeatureEnabled(flagKey, userId)` | `Promise<boolean>` | `evaluateFlag(...).enabled` |
-| `getAllFlags(userId)` | `Promise<Record<string, boolean>>` | Every flag for the user; `{}` on failure. Not cached. |
+| `evaluateFlag(flagKey, userId, attributes?)` | `Promise<FlagEvaluation>` | Server-decided; `{key, enabled, config}`; `attributes` → `context`. Disabled evaluation on failure (not cached). |
+| `isFeatureEnabled(flagKey, userId, attributes?)` | `Promise<boolean>` | `evaluateFlag(...).enabled` |
+| `getAllFlags(userId, attributes?)` | `Promise<Record<string, boolean>>` | Every flag for the user; `attributes` → `context`. `{}` on failure. Not cached. |
 | `getAssignment(experimentKey, userId, attributes?)` | `Promise<Assignment \| null>` | Sticky server assignment; `attributes` → `context`. `null` on failure (not cached). |
 | `getVariant(experimentKey, userId, attributes?)` | `Promise<string \| null>` | `getAssignment(...).variantName` |
 | `evaluateFlagSync(flagKey, userId)` | `boolean` | In-memory cache only; `false` when not cached. |
@@ -287,8 +317,10 @@ interface Assignment {
 ## Migrating from 0.1
 
 - `evaluateFlag` now resolves to `FlagEvaluation` instead of `boolean` — use `.enabled` or
-  `isFeatureEnabled`. The `attributes` argument was dropped: `evaluateFlag` sends the user id
-  alone (`?user_id=`), so the server evaluates the flag's targeting rules against an empty context.
+  `isFeatureEnabled`. 0.1's `attributes` argument was dropped in 0.2 and is back as an optional
+  last argument, sent as `context` (see [Attributes on flag evaluation](#attributes-on-flag-evaluation));
+  a build of 0.2 from before [#1720](https://github.com/Controlvar/controlvar/issues/1720) sends the
+  user id alone.
 - `getAssignment` now resolves to `Assignment | null` instead of `string | null` — use `.variantName`
   or `getVariant`. It accepts `attributes` (sent as `context`).
 - `bootstrapFlags`, `FeatureFlag`, `TargetingRule`, `FlagVariant`, `Experiment`, `BootstrapResponse`,

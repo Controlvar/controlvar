@@ -238,6 +238,34 @@ don't have permission to change users" means your account is no longer a
 superuser; sign in again to check. "This user no longer exists" means someone
 deleted the account; closing the dialog refreshes the list.
 
+## Resetting two-step sign-in
+
+An account with [two-step sign-in](../api/auth.md#two-step-sign-in) that lost its
+authenticator app and its recovery codes cannot finish signing in. A superuser turns its
+two-step sign-in off with `DELETE /api/v1/admin/users/{user_id}/2fa`; the account then signs
+in with its password alone and can set two-step sign-in up again. An account whose role
+`LOCAL_AUTH_2FA_REQUIRED_ROLES` names is asked to set it up at its next sign-in instead. No one
+can reset their own.
+
+When no superuser can sign in, or after `SECRET_KEY` has changed, reset accounts from where
+the API's database is reachable:
+
+- One account: `python -m backend.app.db.two_factor_reset --email <address>`, the address in
+  any letter case.
+- Every account: `python -m backend.app.db.two_factor_reset --all --yes-reset-every-account`.
+
+With Docker Compose, run it in the API container (`docker compose exec api ...`); with the Helm
+chart, in an API pod (`kubectl exec ...`). On AWS, run it as a deploy runs the migration:
+`scripts/run_migration_task.sh` with the cluster, migration task definition, network
+configuration and log group of Actions → Deploy's "Run the migration" step, and only the command
+changed, in the overrides:
+`{"containerOverrides":[{"name":"backend","command":["python","-m","backend.app.db.two_factor_reset","--email","<address>"]}]}`.
+
+It prints how many accounts it reset and writes a `user_2fa_reset` audit entry for each, by
+`system:operator-cli`. An address no account has, `--all` without
+`--yes-reset-every-account`, or neither option exits with status `2` and changes nothing. A
+reset signs nobody out: a token issued before it keeps working until it expires.
+
 ## Common Error Scenarios and Solutions
 
 ### Registration Errors
@@ -290,6 +318,8 @@ To keep your account secure:
 
 ### Account Protection
 
+- With local sign-in, turn on [two-step sign-in](two-factor.md) and keep its recovery codes
+  somewhere safe
 - Don't share your verification codes with anyone
 - Log out when using shared or public computers
 - Check for HTTPS in the browser address bar before logging in

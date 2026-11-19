@@ -608,3 +608,124 @@ class TestExceptionNeverPropagates:
         assert result2 is False
         assert result3 is False
         assert result4 is False
+
+
+# ---------------------------------------------------------------------------
+# Send timeouts: a send never waits for ever
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.regression
+class TestSendTimeouts:
+    def test_smtp_connection_gets_the_timeout(self):
+        """smtplib.SMTP is called with the module's timeout constant."""
+        import backend.app.services.email_notifier as mod
+
+        notifier = _make_notifier(smtp_host="smtp.example.com")
+        instance = MagicMock()
+        instance.__enter__ = MagicMock(return_value=instance)
+        instance.__exit__ = MagicMock(return_value=False)
+
+        with patch("smtplib.SMTP", return_value=instance) as smtp_cls:
+            assert notifier._send_via_smtp(["user@example.com"], "S", "<p>x</p>")
+
+        assert smtp_cls.call_args.kwargs["timeout"] == mod.EMAIL_SEND_TIMEOUT_SECONDS
+        assert mod.EMAIL_SEND_TIMEOUT_SECONDS == 10
+
+    def test_sendgrid_client_gets_the_timeout(self):
+        """The SendGrid HTTP client is given the module's timeout constant."""
+        import backend.app.services.email_notifier as mod
+
+        notifier = _make_notifier(sendgrid_api_key="SG.validkey")
+        response = MagicMock()
+        response.status_code = 202
+        sg_client = MagicMock()
+        sg_client.send.return_value = response
+
+        original = mod.SENDGRID_AVAILABLE
+        mod.SENDGRID_AVAILABLE = True
+        try:
+            with patch.object(mod, "SendGridAPIClient", return_value=sg_client):
+                assert notifier._send_via_sendgrid(
+                    ["user@example.com"], "S", "<p>x</p>"
+                )
+        finally:
+            mod.SENDGRID_AVAILABLE = original
+
+        assert sg_client.client.timeout == mod.EMAIL_SEND_TIMEOUT_SECONDS
+
+    def test_smtp_timeout_does_not_propagate_or_name_the_address(self):
+        """A timeout raised by the send is logged and False is returned."""
+        notifier = _make_notifier(smtp_host="smtp.example.com")
+        instance = MagicMock()
+        instance.__enter__ = MagicMock(return_value=instance)
+        instance.__exit__ = MagicMock(return_value=False)
+        instance.sendmail.side_effect = TimeoutError("timed out")
+
+        with (
+            patch("smtplib.SMTP", return_value=instance),
+            patch("backend.app.services.email_notifier.logger") as mock_logger,
+        ):
+            result = notifier._send_via_smtp(["user@example.com"], "S", "<p>x</p>")
+
+        assert result is False
+        logged = repr(mock_logger.error.call_args)
+        assert "user@example.com" not in logged
+        assert "secret" not in logged
+
+    def test_sendgrid_timeout_does_not_propagate(self):
+        """A timeout from the SendGrid client falls through to the SMTP path."""
+        import backend.app.services.email_notifier as mod
+
+        notifier = _make_notifier(sendgrid_api_key="SG.validkey")
+        sg_client = MagicMock()
+        sg_client.send.side_effect = TimeoutError("timed out")
+
+        original = mod.SENDGRID_AVAILABLE
+        mod.SENDGRID_AVAILABLE = True
+        try:
+            with patch.object(mod, "SendGridAPIClient", return_value=sg_client):
+                result = notifier._send_via_sendgrid(
+                    ["user@example.com"], "S", "<p>x</p>"
+                )
+        finally:
+            mod.SENDGRID_AVAILABLE = original
+
+        assert result is False
+
+    def test_a_timed_out_send_logs_the_failure_and_no_recipient(self, caplog):
+        """Both transports time out: _send_email returns False and its log
+        lines name the failure but hold no recipient address."""
+        import logging
+
+        import backend.app.services.email_notifier as mod
+
+        notifier = _make_notifier(sendgrid_api_key="SG.validkey")
+        sg_client = MagicMock()
+        sg_client.send.side_effect = TimeoutError("timed out")
+        instance = MagicMock()
+        instance.__enter__ = MagicMock(return_value=instance)
+        instance.__exit__ = MagicMock(return_value=False)
+        instance.sendmail.side_effect = TimeoutError("timed out")
+
+        original = mod.SENDGRID_AVAILABLE
+        mod.SENDGRID_AVAILABLE = True
+        try:
+            # Both transports are patched: nothing here reaches the network.
+            with (
+                patch.object(mod, "SendGridAPIClient", return_value=sg_client),
+                patch("smtplib.SMTP", return_value=instance),
+                caplog.at_level(logging.DEBUG, logger=mod.logger.name),
+            ):
+                result = notifier._send_email(
+                    ["user@example.com", "other@example.com"], "S", "<p>x</p>"
+                )
+        finally:
+            mod.SENDGRID_AVAILABLE = original
+
+        assert result is False
+        assert "TimeoutError" in caplog.text
+        assert "Failed to send email" in caplog.text
+        assert "user@example.com" not in caplog.text
+        assert "other@example.com" not in caplog.text
+        assert "SG.validkey" not in caplog.text

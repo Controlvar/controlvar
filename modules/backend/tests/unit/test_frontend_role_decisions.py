@@ -299,6 +299,16 @@ SITES: Dict[Key, Tuple[int, str, str]] = {
         "which no grantable pair names",
     ),
     (
+        _EXP_PERMS,
+        "return ROLES_THAT_OVERRIDE_BANDIT_WEIGHTS.includes(user.role as 'ADMIN');",
+    ): (
+        1,
+        BASE,
+        "canOverrideBanditWeights (#1957) mirrors override_bandit_weights "
+        "(backend/app/api/v1/endpoints/bandit.py:255-256: ADMIN or a superuser), "
+        "which consults no grantable pair",
+    ),
+    (
         "frontend/src/contexts/AuthContext.tsx",
         "(...roles: Role[]): boolean => !!user && roles.includes(user.role),",
     ): (
@@ -487,8 +497,8 @@ SITES: Dict[Key, Tuple[int, str, str]] = {
 }
 
 #: Reads per class, and in all: a classification that loses or gains one fails.
-EXPECTED_READS = {CONVERTED: 7, BASE: 16, NOTHING: 31}
-EXPECTED_TOTAL = 54
+EXPECTED_READS = {CONVERTED: 7, BASE: 17, NOTHING: 31}
+EXPECTED_TOTAL = 55
 
 
 # ---------------------------------------------------------------------------

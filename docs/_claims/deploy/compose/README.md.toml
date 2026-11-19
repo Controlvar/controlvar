@@ -218,6 +218,13 @@ text = "AWS_REGION | the user pool's region: us-east-1 by default"
 by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestSignIn::test_the_region_defaults_to_the_apis_own"]
 
 [[unit]]
+text = "LOCAL_AUTH_2FA_REQUIRED_ROLES | with local sign-in, the roles whose accounts must use two-step sign-in: ADMIN, DEVELOPER, ANALYST or VIEWER, comma-separated; empty by default, which requires it for no role. Any other entry stops the API starting and names it"
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestTwoStepRoles",
+    "test:backend/tests/unit/core/test_two_factor_required_roles.py::test_a_typo_stops_the_start_naming_the_entry_and_the_four_names",
+]
+
+[[unit]]
 text = "WAREHOUSE_CREDENTIALS_KEYS | turns on warehouse analysis in the full profile: Fernet keys, comma-separated, newest first, that encrypt the warehouse credentials the API stores; while it is empty, storing or using a credential answers 503 credentials_unavailable"
 by = [
     "test:backend/tests/unit/infrastructure/test_production_compose.py::TestFeatureKeys::test_the_api_is_passed_the_key_empty_by_default",

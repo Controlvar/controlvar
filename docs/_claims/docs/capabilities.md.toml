@@ -85,6 +85,14 @@ by = [
 ]
 
 [[unit]]
+text = "Results for one saved segment (beta, exploratory): an experiment's results counted only for the users in one ID-list segment."
+by = [
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_fixture_m_matches_the_hand_counts",
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_the_answer_is_labelled_and_carries_no_whole_experiment_block",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_the_segment_results_route_is_beta_and_adds_only_its_two_components",
+]
+
+[[unit]]
 text = "Breakdowns: results by a user attribute such as device or country, flagged when the effect differs between segments."
 by = [
     "test:backend/tests/unit/api/test_dimensional_analysis_api.py::TestBreakdownQueryParam::test_breakdown_response_contains_segments",
@@ -130,7 +138,7 @@ by = [
 ]
 
 [[unit]]
-text = "Warehouse analysis (full profile, beta): an experiment's analysis run on tables in your own Snowflake or BigQuery warehouse."
+text = "Warehouse analysis (full profile, beta): an experiment's analysis run on tables in your own Snowflake, BigQuery or Amazon Redshift warehouse."
 by = [
     "test:modules/backend/tests/unit/warehouse/test_connectors.py::test_enabled_connectors_exact",
     "test:modules/backend/tests/integration/warehouse/test_runs_api.py",

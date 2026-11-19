@@ -978,6 +978,25 @@ MECHANISMS: Dict[str, Mechanism] = {
             "Status is the HTTP status of a route that answers with the code directly.",
         ),
     ),
+    # The Redshift setup's two JSON policies parse, and keep the external-ID
+    # condition, the statement-owner condition and the named resources.
+    "warehouse-redshift-policy": Mechanism(
+        "modules/backend/tests/unit/test_warehouse_docs_availability.py"
+        "::test_the_redshift_setup_json_is_exactly_the_proven_policies",
+        holds=_whole(
+            "docs/api/warehouse-analytics.md",
+            "Its trust policy lets the identity the API runs as assume it, and only"
+            " with the connection's external ID:",
+            "Give the role this permissions policy.",
+            "OwnStatementsOnly lets the role read, fetch and cancel only the"
+            " statements started by this role under the same session name (the"
+            " condition compares aws:userid, which includes it).",
+            "The statement-owner condition keys on aws:userid, which includes"
+            " the session name.",
+            "Scope GetClusterCredentials to exactly one database user, never"
+            " dbuser:<cluster-identifier>/.",
+        ),
+    ),
     # The heading the unrecognised-error text points at.
     "warehouse-troubleshooting-pointer": Mechanism(
         "modules/backend/tests/unit/test_warehouse_docs_availability.py"
@@ -1971,6 +1990,55 @@ MECHANISMS: Dict[str, Mechanism] = {
                 r"^The example response above answers [A-Z_]{1,20}: the treatment's"
                 r" expected loss, [0-9.]{1,12}, is below the default loss_threshold,"
                 r" but its probability to be best, [0-9.]{1,12}, is under 0\.975\.$",
+            ),
+        ),
+    ),
+    # The auth page's table of the repository's password sign-ins (#1812): its
+    # rows, each a path, against every file that names the sign-in routes; a
+    # core test may not name a module's path, so the modules' rows are their
+    # own test's.
+    "password-sign-ins": Mechanism(
+        "backend/tests/unit/docs/test_two_step_sign_in_docs.py"
+        "::test_the_page_names_every_password_sign_in",
+        holds=(
+            (
+                "docs/api/auth.md",
+                r"^(?:\.github|backend|demo|deploy|scripts|tests)/"
+                r"[A-Za-z0-9_./-]{1,100} \| [^|]{1,200}$",
+            ),
+        )
+        + _whole(
+            "docs/api/auth.md",
+            "These sign in with a password and read access_token.",
+            "Each fails if its account turns two-step sign-in on:",
+        ),
+    ),
+    # The second table, when an account's role is required (#1812): exactly
+    # the first table's rows whose account is not a seeded one.
+    "password-sign-ins-required-roles": Mechanism(
+        "backend/tests/unit/docs/test_two_step_sign_in_docs.py"
+        "::test_each_account_that_is_not_seeded_says_what_a_required_role_does",
+        holds=(
+            (
+                "docs/api/auth.md",
+                r"^(?:\.github|backend|demo|deploy|scripts|tests)/"
+                r"[A-Za-z0-9_./-]{1,100} \| [^|]{1,200}$",
+            ),
+        )
+        + _whole(
+            "docs/api/auth.md",
+            "Each also fails if LOCAL_AUTH_2FA_REQUIRED_ROLES names its account's "
+            "role on the stack it signs in to: the password step then answers "
+            "enrol: true and no access_token.",
+        ),
+    ),
+    "password-sign-ins-modules": Mechanism(
+        "modules/backend/tests/unit/test_password_sign_ins_modules.py"
+        "::test_the_page_names_the_full_profiles_password_sign_ins",
+        holds=(
+            (
+                "docs/api/auth.md",
+                r"^modules/[A-Za-z0-9_./-]{1,100} \| [^|]{1,200}$",
             ),
         ),
     ),

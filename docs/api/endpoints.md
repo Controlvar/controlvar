@@ -876,6 +876,11 @@ response.
 - Not affected: the breakdown (`?breakdown=`) applies its own Bonferroni
   correction over segments, and sequential testing uses its own `alpha`.
   CUPED follows the stored level and applies the stored correction.
+- `GET /api/v1/results/{experiment_id}/segments/{segment_id}` (beta), the
+  results for one ID-list segment's users, takes `?correction_method=` and
+  `?confidence_level=` as the results route does and applies the correction
+  across each metric's treatments within the segment
+  ([Results for one saved segment](dimensional-analysis.md#results-for-one-saved-segment)).
 
 ### The difference from the control, its intervals and the impact
 

@@ -31,7 +31,8 @@ class CreateWorkspaceRequest(BaseModel):
     @field_validator("slug")
     @classmethod
     def validate_slug(cls, v: str) -> str:
-        if not _SLUG_RE.match(v):
+        # fullmatch, not match: "$" also matches before a final newline.
+        if not _SLUG_RE.fullmatch(v):
             raise ValueError(
                 "Slug must be 3–50 characters, lowercase alphanumeric with hyphens, "
                 "and must not start or end with a hyphen."

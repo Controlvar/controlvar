@@ -787,14 +787,10 @@ text = "\"While we're talking, the platform is learning and reallocating.\""
 by = ["test:backend/tests/unit/infrastructure/test_setup_local_runs_the_demo.py::test_the_bandit_weights_are_recomputed_every_minute_and_every_5_by_default"]
 
 [[unit]]
-text = "The dashboard shows the current weights only."
-by = ["test:frontend/src/tests/components/BanditWeightsSection.test.tsx::shows each variant with the server values, in its order, and when they were computed"]
-
-[[unit]]
-text = "It has no chart of how they changed over time"
+text = "Open Weight history below the panel to show how the weights moved: one row per update, newest first"
 by = [
-    "test:frontend/src/tests/components/BanditWeightsSection.test.tsx::shows each variant with the server values, in its order, and when they were computed",
-    "test:frontend/src/tests/components/BanditWeightsSection.test.tsx::offers no control but Refresh, for anyone",
+    "test:frontend/src/tests/pages/experiment-detail-bandit-history.test.tsx::shows the server weights as shares, columns in the variant order",
+    "test:frontend/src/tests/pages/experiment-detail-bandit-history.test.tsx::sits below the weights panel, outside it, and only reads",
 ]
 
 [[unit]]

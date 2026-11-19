@@ -188,7 +188,7 @@ See `demo/streampulse/README.md`.
   - "No one made that decision. The algorithm did."
 - Press **Refresh** to see the latest weights. The panel does not update by itself; `setup-local.sh` recomputes the weights every minute (`BANDIT_UPDATE_INTERVAL_MINUTES`, 5 by default)
   - "While we're talking, the platform is learning and reallocating."
-- The dashboard shows the current weights only. It has no chart of how they changed over time
+- Open **Weight history** below the panel to show how the weights moved: one row per update, newest first
 
 **Key talking points:**
 - MAB for optimization problems where you can't wait for a winner

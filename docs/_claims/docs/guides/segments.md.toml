@@ -295,8 +295,30 @@ text = "The full rule is in the API reference."
 by = ["exempt:baseline"]
 
 [[unit]]
+text = "Read an experiment's results for the list"
+by = ["exempt:label"]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id}/segments/{segment_id} (beta) computes an experiment's results for the users in an ID-list segment and nobody else."
+by = [
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_fixture_m_matches_the_hand_counts",
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_the_answer_is_the_unfiltered_one_on_a_pruned_database",
+]
+
+[[unit]]
+text = "See Results for one saved segment."
+by = ["exempt:navigation"]
+
+[[unit]]
 text = "Archive a segment"
 by = ["exempt:baseline"]
+
+[[unit]]
+text = "An archived list still filters an experiment's results, and its IDs cannot change while it stays archived."
+by = [
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_an_archived_or_inactive_list_is_accepted",
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_kind_member_routes_refuse_an_archived_segment",
+]
 
 [[unit]]
 text = "A segment that a flag or an experiment still uses cannot be archived or made inactive: it answers 409 and lists them."

@@ -15,12 +15,13 @@ What Controlvar does not do is in [Limitations](getting-started/limitations.md),
 - [Multi-armed bandits](api/multi-armed-bandit.md): new users go more often to the variants that perform better.
 - [Mutual exclusion groups and a global holdout](api/mutual-exclusion-groups.md): a user joins at most one experiment of a group, and the holdout keeps a share of new users out of every experiment (its results are beta).
 - [Breakdowns](api/dimensional-analysis.md): results by a user attribute such as device or country, flagged when the effect differs between segments.
+- [Results for one saved segment](api/dimensional-analysis.md#results-for-one-saved-segment) (beta, exploratory): an experiment's results counted only for the users in one ID-list segment.
 - [Interaction detection](api/interaction-detection.md): a scan for running experiments that share users, and a test of one pair of them (beta).
 - [Live results](websocket-streaming.md): a WebSocket that sends an experiment's results every 30 seconds by default.
 - [Scheduling](guides/user-guide.md#creating-an-experiment): start and end dates that the scheduler acts on, and a scheduled resume after a pause.
 - [Balanced split within groups](guides/balance-within-groups.md) (beta): each group of users, by an attribute or a saved segment, gets the experiment's split among themselves, with results for each group.
 - [Split URL experiments](api/split-url.md) (full profile, beta): each variant is its own page, and your server or edge sends each visitor to theirs.
-- [Warehouse analysis](api/warehouse-analytics.md) (full profile, beta): an experiment's analysis run on tables in your own Snowflake or BigQuery warehouse.
+- [Warehouse analysis](api/warehouse-analytics.md) (full profile, beta): an experiment's analysis run on tables in your own Snowflake, BigQuery or Amazon Redshift warehouse.
 - [LLM experiments](llm-evaluation/overview.md): users split between model variants, with an optional LLM judge that scores the answers.
 
 ## Feature flags and rollouts

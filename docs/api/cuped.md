@@ -3,7 +3,8 @@
 CUPED (Controlled-experiment Using Pre-Experiment Data) narrows the interval around a
 treatment effect by adjusting for what each user did before the experiment. How much it
 narrows depends on how well that history predicts the outcome. The endpoint is
-`GET /api/v1/results/{experiment_id}/cuped`. In the dashboard, the results page of an
+`GET /api/v1/results/{experiment_id}/cuped`. CUPED is **beta**: the endpoint is marked
+`x-stability: beta`, so its request and response may still change. In the dashboard, the results page of an
 experiment whose method is `cuped` or `cuped_plus` has a **CUPED (beta)** tab with these
 numbers; its other tabs and `GET /results/{id}` show the unadjusted ones.
 
