@@ -176,7 +176,7 @@ by = [
 [[unit]]
 text = "A variant that is no better recommended to ship no more often than α says, whatever the split | On zero-inflated, right-skewed revenue (most users spend nothing, a few spend a lot), a lopsided split recommended shipping a variant that was no better more often than α says. Measured in 2,000 A/A experiments (both variants the same) at each split, at α = 0.05, with 5% of users buying, order values lognormal and repeat purchases: with 600 users in the control and 5,400 in the treatment, the treatment was recommended to ship in 150 (7.5%), where about 50 (2.5%) are expected in that direction, and there the larger variant was the one wrongly named; with 3,000 users in each, in 46, within the expected rate. These are the sizes measured; no size is known at which a lopsided split meets α."
 by = [
-    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_an_uneven_split_recommends_a_false_winner_above_the_band",
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_a_lopsided_split_names_a_false_winner_no_more_often_than_alpha",
     "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_an_equal_split_recommends_a_false_winner_within_the_band",
     "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_the_band_is_the_central_99_9_percent_of_one_direction",
 ]
