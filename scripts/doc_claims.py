@@ -978,6 +978,25 @@ MECHANISMS: Dict[str, Mechanism] = {
             "Status is the HTTP status of a route that answers with the code directly.",
         ),
     ),
+    # The Redshift setup's two JSON policies parse, and keep the external-ID
+    # condition, the statement-owner condition and the named resources.
+    "warehouse-redshift-policy": Mechanism(
+        "modules/backend/tests/unit/test_warehouse_docs_availability.py"
+        "::test_the_redshift_setup_json_is_exactly_the_proven_policies",
+        holds=_whole(
+            "docs/api/warehouse-analytics.md",
+            "Its trust policy lets the identity the API runs as assume it, and only"
+            " with the connection's external ID:",
+            "Give the role this permissions policy.",
+            "OwnStatementsOnly lets the role read, fetch and cancel only the"
+            " statements started by this role under the same session name (the"
+            " condition compares aws:userid, which includes it).",
+            "The statement-owner condition keys on aws:userid, which includes"
+            " the session name.",
+            "Scope GetClusterCredentials to exactly one database user, never"
+            " dbuser:<cluster-identifier>/.",
+        ),
+    ),
     # The heading the unrecognised-error text points at.
     "warehouse-troubleshooting-pointer": Mechanism(
         "modules/backend/tests/unit/test_warehouse_docs_availability.py"

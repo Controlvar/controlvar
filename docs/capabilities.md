@@ -21,7 +21,7 @@ What Controlvar does not do is in [Limitations](getting-started/limitations.md),
 - [Scheduling](guides/user-guide.md#creating-an-experiment): start and end dates that the scheduler acts on, and a scheduled resume after a pause.
 - [Balanced split within groups](guides/balance-within-groups.md) (beta): each group of users, by an attribute or a saved segment, gets the experiment's split among themselves, with results for each group.
 - [Split URL experiments](api/split-url.md) (full profile, beta): each variant is its own page, and your server or edge sends each visitor to theirs.
-- [Warehouse analysis](api/warehouse-analytics.md) (full profile, beta): an experiment's analysis run on tables in your own Snowflake or BigQuery warehouse.
+- [Warehouse analysis](api/warehouse-analytics.md) (full profile, beta): an experiment's analysis run on tables in your own Snowflake, BigQuery or Amazon Redshift warehouse.
 - [LLM experiments](llm-evaluation/overview.md): users split between model variants, with an optional LLM judge that scores the answers.
 
 ## Feature flags and rollouts

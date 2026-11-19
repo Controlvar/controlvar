@@ -138,7 +138,7 @@ by = [
 ]
 
 [[unit]]
-text = "Warehouse analysis (full profile, beta): an experiment's analysis run on tables in your own Snowflake or BigQuery warehouse."
+text = "Warehouse analysis (full profile, beta): an experiment's analysis run on tables in your own Snowflake, BigQuery or Amazon Redshift warehouse."
 by = [
     "test:modules/backend/tests/unit/warehouse/test_connectors.py::test_enabled_connectors_exact",
     "test:modules/backend/tests/integration/warehouse/test_runs_api.py",

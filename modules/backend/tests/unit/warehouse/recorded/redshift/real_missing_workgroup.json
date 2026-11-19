@@ -1,0 +1,20 @@
+{
+  "_provenance": {
+    "source": "real account",
+    "real_run_id": "wl-redshift-20261118T011715Z-6b77b53f",
+    "check": "rs_missing_workgroup",
+    "request": {
+      "service": "redshift-data",
+      "operation": "BatchExecuteStatement"
+    },
+    "note": "Recorded by the warehouse_live check; see evidence.json."
+  },
+  "status": 400,
+  "body": {
+    "Error": {
+      "Message": "Redshift endpoint doesn't exist in this region.",
+      "Code": "ValidationException"
+    },
+    "Message": "Redshift endpoint doesn't exist in this region."
+  }
+}

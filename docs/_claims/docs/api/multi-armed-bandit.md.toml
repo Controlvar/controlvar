@@ -78,8 +78,8 @@ by = ["exempt:baseline"]
 [[unit]]
 text = "To create one in the dashboard, choose Bandit as the experiment type on the new-experiment form (guided setup or the single-page form) and pick the Optimization algorithm."
 by = [
-    "test:frontend/src/tests/pages/experiment-new-bandit.test.tsx::appears only while Bandit is chosen, and goes again with it",
-    "test:frontend/src/tests/pages/experiment-new-bandit.test.tsx::Bandit with UCB1 sends exactly the bandit literal, a valid ExperimentCreate",
+    "test:frontend/src/tests/pages/experiment-new-bandit.test.tsx::%s: appears only while Bandit is chosen, and goes again with it",
+    "test:frontend/src/tests/pages/experiment-new-bandit.test.tsx::%s: Bandit with UCB1 sends exactly the bandit literal, a valid ExperimentCreate",
 ]
 
 [[unit]]
