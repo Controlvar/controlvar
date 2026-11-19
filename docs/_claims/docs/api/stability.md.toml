@@ -171,6 +171,13 @@ by = [
 ]
 
 [[unit]]
+text = "GET /api/v1/results/{id}/segments/{segment_id} is beta too (#1933): it answers for one ID-list segment's members, and its response may still change."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_the_segment_results_route_is_beta_and_adds_only_its_two_components",
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_fixture_m_matches_the_hand_counts",
+]
+
+[[unit]]
 text = "Changing a stable route"
 by = ["exempt:baseline"]
 

@@ -110,7 +110,8 @@ install.
 - **No product analytics or session replay.** Controlvar sends exposures to the tools that do this,
   and its warehouse analysis (beta) reads your own tables.
 - **Not planned unless users ask:** interleaving, switchbacks, contextual bandits, an AI-assisted
-  visual editor, post-stratification, retention metrics, and effects by segment beyond breakdowns.
+  visual editor, post-stratification, retention metrics, and effects for a rules segment's members
+  beyond breakdowns.
 - **No dates on this page.** A date we cannot keep is worse than none.
 
 ## How to influence it

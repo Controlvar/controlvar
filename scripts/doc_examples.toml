@@ -13,7 +13,7 @@
 
 [meta]
 documents = 60
-exec = 342
+exec = 347
 universe = [
     ".github/pull_request_template.md",
     ".github/qa-templates/README.md",
@@ -381,9 +381,9 @@ expects = 18
 [[document]]
 path = "docs/api/dimensional-analysis.md"
 environment = "stack"
-exec = 8
+exec = 13
 skip = 0
-expects = 15
+expects = 20
 
 [[document]]
 path = "docs/api/interaction-detection.md"
