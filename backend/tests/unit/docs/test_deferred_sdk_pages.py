@@ -997,7 +997,6 @@ DELEGATES: Dict[str, Tuple[str, "re.Pattern[str]"]] = {
 #: source reads. When one starts sending it, change this set with its pages.
 SENDS_NO_CONTEXT = {
     "android",
-    "edge",
     "elixir",
     "flutter",
     "ios",
@@ -2495,4 +2494,169 @@ def test_the_old_php_note_is_gone_from_both_pages():
     for page in PHP_PAGES:
         folded = fold(text(page))
         assert "the user id alone, so the server evaluates" not in folded, page
+        assert "against an empty context" not in folded, page
+
+
+# ---------------------------------------------------------------------------
+# The Edge SDK's targeting context (part of #1720)
+# ---------------------------------------------------------------------------
+
+#: The Edge SDK's page and its README, which say the same about the context.
+EDGE_PAGES = ("docs/sdk/edge.md", "sdk/edge/README.md")
+#: The Edge SDK's client tests: each test named below is one of its jest
+#: ``test('title', ...)`` titles.
+EDGE_TESTS = SDK_DIR / "edge/__tests__/client.test.ts"
+_EDGE_EXACT = (
+    "regression #1720: sends the attributes as context=<compact JSON>,"
+    " percent-encoded, after user_id"
+)
+_EDGE_RULE = (
+    "regression #1720: matches a targeting rule on an attribute: the server reads"
+    " plan=pro from the context"
+)
+_EDGE_SHORTHAND = "isFeatureEnabled sends the attributes too"
+_EDGE_ALL_FLAGS = (
+    "getAllFlags sends the attributes as context after the path, and nothing else"
+)
+_EDGE_NONE = (
+    "sends no context for no attributes or an empty object: the request is the one"
+    " sent before"
+)
+_EDGE_UNSENDABLE = (
+    "attributes that cannot be written as JSON send nothing, cache nothing and"
+    " report the flag as disabled",
+    "attributes that cannot be written as JSON log nothing",
+)
+_EDGE_CACHE = (
+    "(a) A then B: two requests, two answers",
+    "(c) A, B, A: three requests, because the one slot holds B when A comes back",
+    "(d) A then no attributes: two requests, and the second is the no-attribute answer",
+    "(f) A then A: one request",
+)
+_EDGE_STORE = (
+    "A on one client writes nothing, and B on another client does not get A answer"
+)
+_EDGE_SYNC = (
+    "evaluateFlagSync and getCachedFlag return the last answer cached, whatever"
+    " attributes it was asked with"
+)
+
+#: Each sentence both Edge pages state about the targeting context (as written,
+#: folded to one line), the jest tests that fail when it stops being true, and
+#: the backend tests that hold the server's part of it. The pages are in
+#: ``CLAIMS_DEFERRED``, so no claims registry binds them; this does.
+EDGE_CONTEXT_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], ...] = (
+    (
+        "Flag evaluation sends the user's attributes as `context`, so a flag's targeting"
+        " rules match against them.",
+        (_EDGE_EXACT, _EDGE_RULE),
+        _SERVER_MATCHES,
+    ),
+    (
+        "`evaluateFlag`, `isFeatureEnabled` and `getAllFlags` take them as an optional"
+        " last argument.",
+        (_EDGE_SHORTHAND, _EDGE_ALL_FLAGS),
+        (),
+    ),
+    (
+        "The flag calls are `GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=…`"
+        " and `GET /api/v1/feature-flags/user/{user_id}?context=…`, where `context` is"
+        " the attributes as compact JSON, percent-encoded: `{ plan: 'pro' }` travels as"
+        " `context=%7B%22plan%22%3A%22pro%22%7D`.",
+        (_EDGE_EXACT, _EDGE_ALL_FLAGS),
+        (),
+    ),
+    (
+        "With no attributes or an empty object, no `context` is sent and the request"
+        " carries the user id alone.",
+        (_EDGE_NONE,),
+        (),
+    ),
+    (
+        "If the attributes cannot be written as JSON (a BigInt, or an object that refers"
+        " to itself), nothing is sent, the call returns the disabled answer (`{}` for"
+        " `getAllFlags`), and nothing is logged.",
+        _EDGE_UNSENDABLE,
+        (),
+    ),
+    (
+        "The SDK keeps one cached answer per user and flag, together with the attributes"
+        " it was asked with. A later call is answered from the cache only if its"
+        " attributes are exactly the same; otherwise the SDK asks the server, and the new"
+        " answer replaces the cached one. So two calls that differ only in attributes get"
+        " two answers. The same attributes written in a different key order may cost one"
+        " extra request; they never return another call's answer.",
+        _EDGE_CACHE,
+        (),
+    ),
+    (
+        "Calls with attributes neither read nor write the shared store; only calls"
+        " without attributes use it.",
+        (_EDGE_STORE,),
+        (),
+    ),
+    (
+        "a flag call with attributes is not stored; see Attributes on flag evaluation",
+        (_EDGE_STORE,),
+        (),
+    ),
+    (
+        "`evaluateFlagSync` and `getCachedFlag` return the last answer cached for this"
+        " user and flag, whatever attributes it was asked with; call `evaluateFlag` with"
+        " the attributes when the answer must match them.",
+        (_EDGE_SYNC,),
+        (),
+    ),
+    (
+        "The change is in this repository"
+        " ([#1720](https://github.com/Controlvar/controlvar/issues/1720)); it reaches a"
+        " registry at this SDK's first publish, so a build from a clone of `main` has it"
+        " and a copy installed earlier does not.",
+        (_EDGE_EXACT,),
+        (),
+    ),
+)
+
+
+def test_the_claim_patterns_find_the_true_sentences_on_the_edge_pages():
+    # Edge sends the context (part of #1720), and both its pages say so: the
+    # patterns must see it, so that edge put back in SENDS_NO_CONTEXT fails
+    # test_a_page_claims_no_attribute_targeting_its_client_does_not_send on
+    # docs/sdk/edge.md and sdk/edge/README.md as well as here.
+    assert "edge" not in SENDS_NO_CONTEXT
+    assert sends_context("edge")
+    for page in EDGE_PAGES:
+        assert "flag evaluation sends the attributes" in attribute_claims(text(page)), (
+            page
+        )
+
+
+@pytest.mark.parametrize(
+    "sentence, tests, server",
+    EDGE_CONTEXT_SENTENCES,
+    ids=[s[:60] for s, _, _ in EDGE_CONTEXT_SENTENCES],
+)
+def test_each_edge_context_sentence_is_on_both_pages_and_held_by_a_test(
+    sentence, tests, server
+):
+    unsaid = [page for page in EDGE_PAGES if sentence not in fold(text(page))]
+    assert unsaid == [], f"no longer said there: {sentence}"
+    source = EDGE_TESTS.read_text("utf-8")
+    missing = [
+        title
+        for title in tests
+        if f"test('{title}'" not in source and f'test("{title}"' not in source
+    ]
+    assert missing == [], f"no jest test in {EDGE_TESTS.name} has these titles"
+    gone = [node for node in server if not _python_test_exists(node)]
+    assert gone == [], "these backend tests are gone"
+
+
+def test_the_old_edge_note_is_gone_from_both_pages():
+    # The note #1720 replaced: evaluateFlag takes no attributes and sends the
+    # user id alone, so the server evaluates against an empty context.
+    for page in EDGE_PAGES:
+        folded = fold(text(page))
+        assert "The `attributes` argument was dropped" not in folded, page
+        assert "`evaluateFlag` sends the user id alone" not in folded, page
         assert "against an empty context" not in folded, page

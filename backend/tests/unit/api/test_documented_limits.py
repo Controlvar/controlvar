@@ -579,6 +579,13 @@ SENDS = {
         [("public function evaluateFlag(", "} catch (ExperimentationException) {")],
         "'&context=' . rawurlencode($context)",
     ),
+    # Part of #1720: the attributes as contextQuery writes them (a copy of the
+    # JavaScript SDK's), after user_id.
+    "edge": (
+        "sdk/edge/src/client.ts",
+        [("async evaluateFlag(", "const evaluation: FlagEvaluation = {")],
+        "?user_id=${encode(userId)}${context}",
+    ),
 }
 
 #: Every directory under sdk/ whose flag evaluation sends the user id alone, so
@@ -590,11 +597,6 @@ DOES_NOT_SEND = {
         1720,
         "sdk/elixir/lib/controlvar/client.ex",
         [("def evaluate_flag(", "{:ok, data} when is_map(data) ->")],
-    ),
-    "edge": (
-        1720,
-        "sdk/edge/src/client.ts",
-        [("async evaluateFlag(", "const evaluation: FlagEvaluation = {")],
     ),
     "ios": (
         438,
