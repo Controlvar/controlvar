@@ -24,6 +24,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from backend.app.models.event import Event
+from backend.app.models.holdout_population import HoldoutPopulation
 from backend.app.services.analysis_service import AnalysisService
 from backend.app.services.audience_service import AudienceService
 from backend.app.services.balanced_groups_results import stored_strata
@@ -283,6 +284,42 @@ def test_holdout_results_count_a_linked_person_under_its_recorded_id(
     assert after == {IN_HOLDOUT: (2, 0), NOT_IN_HOLDOUT: (1, 0)}, (
         "b1 counted as converted"
     )
+
+
+def test_a_linked_persons_holdout_follows_the_first_recorded_row(
+    admin_client, db_session, world
+):
+    """D3, "the earliest population row decides": a1 was recorded held out
+    before u1 was recorded outside, so after the link both ids answer
+    ``holdout`` in a new experiment, with no assignment and no new row."""
+    first = world.experiment("Holdout first")
+    second = world.experiment("Holdout second")
+    with measurable_holdout(db_session) as holdout:
+        a1, u1 = held_and_free(holdout, world)
+        assert assign(admin_client, first, a1)["reason"] == "holdout"
+        assert assign(admin_client, first, u1)["reason"] == "assigned"
+        world.link(a1, u1)
+
+        def population():
+            db_session.expire_all()
+            return sorted(
+                (r.user_id, r.in_holdout, r.first_seen_at)
+                for r in db_session.query(HoldoutPopulation).filter(
+                    HoldoutPopulation.holdout_id == holdout.id,
+                    HoldoutPopulation.user_id.in_([a1, u1]),
+                )
+            )
+
+        before = population()
+        assert [(u, h) for u, h, _ in before] == sorted([(a1, True), (u1, False)])
+
+        for user_id in (a1, u1):
+            answer = assign(admin_client, second, user_id)
+            assert (answer["assigned"], answer["reason"]) == (False, "holdout"), (
+                f"{user_id} answered {answer['reason']}"
+            )
+        assert world.rows(second, [a1, u1]) == []
+        assert population() == before
 
 
 def test_interaction_detection_counts_ids(admin_client, db_session, world):

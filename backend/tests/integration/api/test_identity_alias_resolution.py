@@ -310,6 +310,34 @@ def test_a_known_ids_conversion_counts_for_its_persons_variant(
     assert converters == 1
 
 
+def test_a_linked_ids_event_is_tagged_only_while_the_experiment_runs(
+    admin_client, db_session, world
+):
+    """D4, "while ACTIVE": once the experiment is paused or completed, an
+    event under a linked id is stored under the holder with no variant, as an
+    id that was never linked gets."""
+    exp = world.experiment("E1 status")
+    a1, u1 = world.split_pair(exp)
+    x = variant_of(exp, world.hashed_variant(exp, a1))
+    assign(admin_client, exp, a1)
+    world.link(a1, u1)
+
+    running = track(admin_client, exp, u1)
+    assert running["variant_id"] == str(x.id)
+
+    for status in (ExperimentStatus.PAUSED, ExperimentStatus.COMPLETED):
+        exp.status = status
+        db_session.commit()
+        answer = track(admin_client, exp, u1)
+        assert answer["user_id"] == u1
+        assert answer["variant_id"] is None, f"{status.value}: event still tagged"
+
+    stored = [
+        (e.user_id, e.variant_id) for e in world.events(exp, [a1, u1], "purchase")
+    ]
+    assert stored == [(a1, x.id), (a1, None), (a1, None)]
+
+
 def test_the_event_batch_stores_a_known_ids_events_under_its_person(
     admin_client, world
 ):
