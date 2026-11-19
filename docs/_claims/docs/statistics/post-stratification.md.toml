@@ -30,6 +30,10 @@ text = "REST API Reference"
 by = ["exempt:baseline"]
 
 [[unit]]
+text = "This route is not listed in the API document."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_the_post_stratification_route_is_not_in_the_published_documents"]
+
+[[unit]]
 text = "POST /api/v1/results/{experiment_id}/post-stratification"
 by = ["exempt:baseline"]
 
@@ -54,13 +58,14 @@ by = [
 
 [[unit]]
 text = "metric_col | str | No | \"metric_value\" | Name of the outcome column."
-by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+by = ["test:backend/tests/unit/schemas/test_post_stratification_schema.py::test_metric_col_defaults_to_metric_value"]
 
 [[unit]]
 text = "alpha | float | No | 0.05 | Significance level for CI (exclusive: 0–1)."
 by = [
     "test:backend/tests/integration/api/test_post_strat_api.py::TestPostStratificationEndpoint::test_post_strat_invalid_alpha_returns_422",
-    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/unit/schemas/test_post_stratification_schema.py::test_alpha_defaults_to_0_05",
+    "test:backend/tests/unit/schemas/test_post_stratification_schema.py::test_alpha_is_exclusive_of_0_and_1",
 ]
 
 [[unit]]
