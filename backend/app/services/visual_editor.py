@@ -243,7 +243,7 @@ def hold_editor(db: Session, experiment_id: Any) -> None:
     module docstring); nothing else takes it."""
     db.execute(
         text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
-        {"key": f"experimently.visual-editor.{experiment_id}"},
+        {"key": f"controlvar.visual-editor.{experiment_id}"},
     )
 
 
