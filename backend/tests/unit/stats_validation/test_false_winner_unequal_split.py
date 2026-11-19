@@ -71,6 +71,7 @@ measures; each assertion prints what it measured.
 
 from __future__ import annotations
 
+import math
 import uuid
 from dataclasses import dataclass
 from functools import lru_cache
@@ -84,6 +85,7 @@ from scipy.stats import binom
 from backend.app.services.analysis_service import AnalysisService
 from backend.app.services.sufficient_stats_analysis import (
     BinomialVariant,
+    mean_metric_result,
     per_user_mean_metric_result,
 )
 
@@ -615,3 +617,65 @@ def test_a_shape_change_at_5400_600_is_held_as_measured():
     measured = measure("strong_shape_change")
     assert_one_winner_field("strong_shape_change", measured)
     assert_measured("strong_shape_change", (measured.ship, measured.keep))
+
+
+#: (SHIP_VARIANT, KEEP_CONTROL) of the lopsided battery with each arm given
+#: as its sums alone.
+FROM_SUMS_MEASURED = (150, 12)
+
+
+def test_a_mean_from_sums_alone_keeps_welchs_t_test():
+    """A warehouse analysis of a mean has only each variant's sums, so
+    ``mean_metric_result`` compares it with Welch's t-test: the lopsided
+    battery's 2,000 A/A experiments (600/5,400, seed 1736001), each arm given
+    as its count and its sums centred on the grand mean, still recommend
+    shipping the treatment in 150 and keeping the control in 12, as
+    ``/results`` did before engine 1.13.0.  ``limitations.md`` says so."""
+    arms, seed, runs, _, _ = SCENARIOS["lopsided"]
+    rng = np.random.default_rng(seed)
+    alpha = 1.0 - CONFIDENCE_LEVEL
+    experiment = SimpleNamespace(metric_definitions=[])
+    ship = keep = 0
+    tests = set()
+    for run in range(runs):
+        metric_id, control_id, treatment_id = _ids(
+            seed, run, ("metric", "control", "t1")
+        )
+        drawn = [draw(rng, users) for users, draw in arms]
+        users = [n for n, _ in arms]
+        everyone = [v for _, totals in drawn for v in totals]
+        k = math.fsum(everyone) / sum(users)
+        rows = []
+        for (n, (_, totals)), variant in zip(
+            zip(users, drawn),
+            (
+                BinomialVariant(control_id, "control", True),
+                BinomialVariant(treatment_id, "t1", False),
+            ),
+        ):
+            zeros = n - len(totals)
+            sum_d = math.fsum([v - k for v in totals] + [-k * zeros])
+            sum_d2 = math.fsum([(v - k) ** 2 for v in totals] + [k * k * zeros])
+            rows.append((variant, n, sum_d, sum_d2))
+        result = mean_metric_result(
+            k,
+            rows,
+            alpha,
+            CORRECTION_METHOD,
+            metric=SimpleNamespace(
+                id=metric_id, name="revenue", metric_type="revenue", is_primary=True
+            ),
+        )
+        tests.update(v["statistical_test_used"] for v in result["variants"][1:])
+        decision = AnalysisService._summarise_decision(experiment, [result], True)
+        ship += decision["recommendation"] == "SHIP_VARIANT"
+        keep += decision["recommendation"] == "KEEP_CONTROL"
+    assert tests == {"welch_t_test"}, sorted(tests)
+    assert ship > MAX_ONE_SIDED, (
+        f"SHIP_VARIANT in {ship} of {runs} from sums alone: no longer above the "
+        f"band's top ({MAX_ONE_SIDED}), so limitations.md's warehouse row is out "
+        "of date"
+    )
+    assert (ship, keep) == FROM_SUMS_MEASURED, (
+        f"from sums: measured {(ship, keep)}, pinned {FROM_SUMS_MEASURED}"
+    )
