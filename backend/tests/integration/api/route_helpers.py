@@ -169,6 +169,36 @@ def track(
     return resp.json()
 
 
+def client_address_count(db_session: Session, address: str) -> int:
+    """How many values of every text and JSON column of the schema hold
+    *address* (TestClient's client address is ``testclient``)."""
+    factory = sessionmaker(bind=db_session.get_bind(), autoflush=False)
+    session = factory()
+    try:
+        session.execute(text(f"SET search_path TO {SCHEMA}"))
+        columns = session.execute(
+            text(
+                "SELECT table_name, column_name FROM information_schema.columns "
+                "WHERE table_schema = :schema AND data_type IN "
+                "('text', 'character varying', 'json', 'jsonb')"
+            ),
+            {"schema": SCHEMA},
+        ).all()
+        assert len(columns) > 50, "the scan sees the schema"
+        total = 0
+        for table, column in columns:
+            total += session.execute(
+                text(
+                    f'SELECT count(*) FROM "{SCHEMA}"."{table}" '
+                    f'WHERE "{column}"::text LIKE :needle'
+                ),
+                {"needle": f"%{address}%"},
+            ).scalar_one()
+        return total
+    finally:
+        session.close()
+
+
 class FakeRedis:
     """What the results cache asks of Redis, kept in a dict.
 

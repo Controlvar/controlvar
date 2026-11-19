@@ -1,7 +1,8 @@
-"""Five false stories the docs told, refused in every in-scope document (#1142).
+"""False stories the docs told or could tell, refused in every in-scope document
+(#1142).
 
-Each story was told on many pages at once, so it is swept everywhere rather
-than fixed page by page:
+Each story was told on many pages at once, or would be, so it is swept
+everywhere rather than fixed page by page:
 
 1. **inactive-404.** A flag that exists but is not ACTIVE does not answer 404
    and is not an error: ``GET /api/v1/feature-flags/evaluate/{key}`` answers
@@ -29,6 +30,10 @@ than fixed page by page:
    examples, "77 core + 30 starter", or a table with a Tests or Unit tests
    column) goes stale with the next test anyone adds. A page names the suite
    and where it runs instead.
+6. **editor-wcag.** The visual editor does not meet WCAG 2.1 AA: its sign-in
+   on a page lasts 4 hours and cannot be extended, which misses success
+   criterion 2.2.1 (Timing Adjustable), as the limitations page says (#1545).
+   No page may say that it meets, or conforms to, WCAG 2.1 AA.
 
 Each rule is a pattern, why it is wrong, the path prefixes it is limited to
 (``None``: every in-scope document) and a sample of the removed text it must
@@ -105,6 +110,11 @@ _CONTEXT = (
     " POST: the body); say that the SDK does not send it"
 )
 _COUNT = "a hand-written test count goes stale; name the suite and where it runs"
+_EDITOR_WCAG = (
+    "the visual editor's sign-in lasts 4 hours and cannot be extended, which"
+    " misses WCAG success criterion 2.2.1 (Timing Adjustable): it does not meet"
+    " WCAG 2.1 AA"
+)
 
 RULES: Tuple[Rule, ...] = (
     # 1. inactive-404
@@ -280,6 +290,21 @@ RULES: Tuple[Rule, ...] = (
         None,
         "| SDK | Location | Unit tests | Verified live | Docs |",
     ),
+    # 6. editor-wcag
+    (
+        "editor-wcag",
+        r"(?i)\bvisual\s+editor\b[^.|\n]{0,60}?\b(?:meets|conforms\s+to|complies\s+with|satisfies)\s+(?:the\s+)?(?:requirements\s+of\s+)?WCAG\s*2(?:\.\d)?\s+(?:level\s+)?AA\b",
+        _EDITOR_WCAG,
+        None,
+        "The visual editor meets WCAG 2.1 AA, like the rest of the dashboard.",
+    ),
+    (
+        "editor-wcag",
+        r"(?i)\bWCAG\s*2(?:\.\d)?\s+(?:level\s+)?AA\b[^.|\n]{0,30}?\b(?:compliant|conformant|accessible)\b[^.|\n]{0,30}?\bvisual\s+editor\b",
+        _EDITOR_WCAG,
+        None,
+        "- A WCAG 2.1 AA compliant visual editor for your marketers",
+    ),
 )
 
 #: (document, exact text, why the hit inside it stays for now).
@@ -385,6 +410,7 @@ def test_every_story_has_a_rule() -> None:
         "aws-path",
         "no-context",
         "test-counts",
+        "editor-wcag",
     }
 
 
@@ -403,6 +429,10 @@ def test_every_story_has_a_rule() -> None:
         "`main` requires 20 checks to merge; `lint` is one of them.",
         "`./vendor/bin/phpunit` runs the PHPUnit 10 suite (client, cache, HTTP client and hash tests)",
         "the default (2 vCPU + 4 GB)",
+        "The visual editor's sign-in on your page lasts 4 hours and cannot be"
+        " extended. This does not meet WCAG 2.1 success criterion 2.2.1 (Timing"
+        " Adjustable).",
+        "The visual editor does not meet WCAG 2.1 AA.",
     ],
 )
 def test_a_true_sentence_is_not_a_hit(true_text: str) -> None:

@@ -67,6 +67,7 @@ from backend.tests.integration.api.route_helpers import (
     api_client,
     api_key,
     auth,
+    client_address_count,
     make_user,
 )
 
@@ -930,41 +931,15 @@ def test_a_rules_segment_on_a_website_detail_matches_exactly(
 # --- V56 (server): no visitor IP address is stored -----------------------------------
 
 
-def _client_address_count(db_session, address: str) -> int:
-    """How many values of every text and JSON column of the schema hold
-    *address*."""
-    session = _session(db_session)
-    try:
-        columns = session.execute(
-            text(
-                "SELECT table_name, column_name FROM information_schema.columns "
-                "WHERE table_schema = :schema AND data_type IN "
-                "('text', 'character varying', 'json', 'jsonb')"
-            ),
-            {"schema": SCHEMA},
-        ).all()
-        assert len(columns) > 50, "the scan sees the schema"
-        total = 0
-        for table, column in columns:
-            total += session.execute(
-                text(
-                    f'SELECT count(*) FROM "{SCHEMA}"."{table}" '
-                    f'WHERE "{column}"::text LIKE :needle'
-                ),
-                {"needle": f"%{address}%"},
-            ).scalar_one()
-        return total
-    finally:
-        session.close()
-
-
 @pytest.mark.regression
 def test_no_visitor_ip_address_is_stored(client, db_session, developer, key):
-    """TestClient's client address is ``testclient``: no column gains it."""
+    """TestClient's client address is ``testclient``: no column gains it.
+    The visual editor's routes are scanned the same way
+    (test_visual_editor_sign_in.py)."""
     host = _host()
     experiment = _running(client, developer, host)
     address = "testclient"
-    before = _client_address_count(db_session, address)
+    before = client_address_count(db_session, address)
     visitor = _visitor()
     _ask(client, key, host, user_id=visitor, context={"web_device": "phone"})
     goal = client.post(
@@ -995,7 +970,7 @@ def test_no_visitor_ip_address_is_stored(client, db_session, developer, key):
     )
     assert report.status_code in (200, 201), report.text
     assert len(_exposures(db_session, experiment["id"], visitor)) == 1
-    assert _client_address_count(db_session, address) == before
+    assert client_address_count(db_session, address) == before
 
 
 # --- V24: results reuse the normal view ----------------------------------------------

@@ -35,10 +35,14 @@ fails it (the failing line is the assertion's message or comparison):
           started, not 400) and records it.
 * V30     a save is one experiment change by the session's user, naming the
           session; a dashboard save names none.
+* V93     no IP address is stored: after every route of the sign-in and the
+          session, no text or JSON column holds the client's address, and no
+          compliance event made since names one.
 * Also: the session's GET is the exchange's answer without the token; a save
           keeps every other variant's changes; signing out is recorded; a
           browser's preflighted request reaches the claim route; nothing
-          stored or logged holds a credential or its hash; the texts.
+          stored or logged holds a credential or its hash; the editor cannot
+          be opened while CORS_ORIGINS holds ``*``; the texts.
 """
 
 from __future__ import annotations
@@ -87,7 +91,12 @@ from backend.app.models.visual_token import (
 )
 from backend.app.schemas import visual_editor as editor_schemas
 from backend.app.services import visual_editor, visual_origins
-from backend.tests.integration.api.route_helpers import api_key, auth, make_user
+from backend.tests.integration.api.route_helpers import (
+    api_key,
+    auth,
+    client_address_count,
+    make_user,
+)
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_db]
 
@@ -1380,6 +1389,25 @@ def test_what_else_is_refused_before_a_link_is_made(client, db_session, develope
     )
 
 
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "listed", [["*"], ["*", SHOP, SHOP2]], ids=["only *", "* and the sites"]
+)
+def test_no_draft_is_opened_while_cors_origins_holds_every_site(
+    client, db_session, developer, experiment, monkeypatch, listed
+):
+    monkeypatch.setattr(settings, "CORS_ORIGINS", listed)
+
+    refused = _mint(client, developer, experiment)
+
+    assert refused.status_code == 422, f"mint with *: {refused.status_code} != 422"
+    assert refused.json()["detail"] == visual_origins.EVERY_SITE_ALLOWED
+    assert _rows(db_session, experiment) == []
+    # The pair: the sites alone, and the same draft opens.
+    monkeypatch.setattr(settings, "CORS_ORIGINS", [SHOP, SHOP2])
+    assert _mint(client, developer, experiment).status_code == 201
+
+
 # --- a browser's request reaches the claim route ------------------------------------------
 
 
@@ -1487,6 +1515,56 @@ def test_no_log_line_or_stored_entry_holds_a_credential(
         if value in haystack
     )
     assert found == []
+
+
+# --- V93: no IP address is stored -----------------------------------------------------------
+
+
+@pytest.mark.regression
+def test_no_ip_address_is_stored_by_the_editors_routes(client, db_session, developer):
+    """TestClient's client address is ``testclient``. Every route of the
+    sign-in and the session runs once: opening the editor, the page's claim,
+    the exchange, a save, signing out, opening it again over a live session
+    and a used link presented again. No text or JSON column gains the
+    address (the scan of test_visual_tracking_api.py), and no compliance
+    event made since has an actor address."""
+    address = "testclient"
+    experiment = _draft(client, developer)
+    before = client_address_count(db_session, address)
+    started = datetime.now(timezone.utc)
+
+    first = _opened(client, developer, experiment)
+    variant = _variant(client, developer, experiment, "B")
+    assert _save(client, first["token"], variant, NEW_CHANGES).status_code == 200
+    assert _sign_out(client, first["token"]).status_code == 204
+    second = _opened(client, developer, experiment)
+    _ticket(client, developer, experiment)
+    assert _session_says(client, second["token"]) == (401, "reopened")
+    assert _claim(client, second["ticket"], _value()).status_code == 409
+
+    assert _entries(db_session, experiment) == [
+        "opened",
+        "closed(signed_out)",
+        "opened",
+        "closed(reopened)",
+        "ticket_reused",
+    ]
+    session = _session(db_session)
+    try:
+        events = (
+            session.query(ComplianceAuditEvent)
+            .filter(
+                ComplianceAuditEvent.timestamp >= started,
+                ComplianceAuditEvent.resource_id == experiment,
+            )
+            .all()
+        )
+    finally:
+        session.close()
+    assert events, "the save made no compliance event: the scan sees nothing"
+    addresses = [event.actor_ip for event in events if event.actor_ip is not None]
+    assert addresses == [], f"{addresses[0]!r} in compliance_audit_events.actor_ip"
+    assert client_address_count(db_session, address) == before
 
 
 # --- the session's routes --------------------------------------------------------
@@ -2024,7 +2102,9 @@ def test_no_other_route_takes_a_session_token(client, developer, experiment):
 
 
 @pytest.mark.regression
-def test_each_credential_lasts_its_time(client, developer, experiment, monkeypatch):
+def test_each_credential_lasts_its_time(
+    client, db_session, developer, experiment, monkeypatch
+):
     base = datetime(2031, 3, 4, 5, 6, 7, tzinfo=timezone.utc)
     at = [base]
     monkeypatch.setattr(visual_editor, "utcnow", lambda: at[0])
@@ -2045,8 +2125,13 @@ def test_each_credential_lasts_its_time(client, developer, experiment, monkeypat
     chain = _opened(client, developer, experiment)
     at[0] = base + timedelta(hours=4) - timedelta(seconds=1)
     assert _session_says(client, chain["token"]) == (200, None)
+    variant = _variant(client, developer, experiment, "B")
+    assert _save(client, chain["token"], variant, NEW_CHANGES).status_code == 200
     at[0] = base + timedelta(hours=4)
     assert _session_says(client, chain["token"]) == (401, "expired")
+    # What was saved is kept, and the editor opens again from the draft.
+    assert _stored_changes(db_session, experiment)["B"] == NEW_CHANGES
+    assert _mint(client, developer, experiment).status_code == 201
 
 
 @pytest.mark.regression

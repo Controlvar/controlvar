@@ -22,7 +22,7 @@ by = ["exempt:label"]
 [[unit]]
 text = "What you might expect | What happens instead"
 by = ["exempt:label"]
-count = 7
+count = 8
 
 [[unit]]
 text = "A flag that serves one of several values | A flag serves two values: its on value to the users it is on for (a matching targeting rule's percentage, or the rollout percentage), and its off value to everyone else and to everyone while it is off. No rule or rollout splits users among three or more values. GET /api/v1/feature-flags/user/{user_id} answers every flag as on or off. For three or more experiences, run a multivariate experiment: each variant carries a configuration, which POST /api/v1/tracking/assign returns."
@@ -498,4 +498,23 @@ by = [
     "test:backend/tests/integration/api/test_balanced_assignment.py::test_a_held_counter_row_holds_up_nothing_else",
     "test:backend/tests/integration/api/test_balanced_assignment.py::test_a_held_counter_row_is_answered_by_hash",
     "test:backend/tests/integration/database/test_balance_within_migration.py::test_the_previous_releases_statements_run_on_this_schema",
+]
+
+[[unit]]
+text = "Visual experiments (not yet available)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The visual editor is not yet available in the dashboard."
+by = ["test:backend/tests/unit/api/test_visual_editor_not_in_dashboard.py::test_the_dashboard_does_not_open_the_visual_editor_yet"]
+
+[[unit]]
+text = "This line is about the sign-in it will use."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "An editor sign-in that can be extended | The visual editor's sign-in on your page lasts 4 hours and cannot be extended there. Every saved change is kept, and you go on by opening the editor again from the experiment's page. This does not meet WCAG 2.1 success criterion 2.2.1 (Timing Adjustable)."
+by = [
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_each_credential_lasts_its_time",
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_the_editor_routes_are_exactly_these",
 ]
