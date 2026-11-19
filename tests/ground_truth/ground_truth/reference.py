@@ -7,11 +7,15 @@ Written from the docs, not from the product:
   against the control (``docs/architecture/technical-guide.md``, "Statistical
   Methods"); its ``absolute_difference`` is the difference of the shares;
 * a revenue, count, duration or custom metric is analysed as its mean per
-  assigned user, Welch's t-test (``docs/getting-started/concepts.md``); its
-  ``absolute_difference`` is the difference of the means and
-  ``absolute_difference_ci`` Welch's interval at the confidence level
-  (``docs/api/endpoints.md``, "The difference from the control, its intervals
-  and the impact");
+  assigned user (``docs/getting-started/concepts.md``); its p-value is a
+  permutation test of Welch's t statistic, twice the smaller tail
+  (``docs/architecture/technical-guide.md``, engine 1.13.0), computed here
+  with scipy's own permutation test over every assigned user's value, so it
+  agrees with the server's within the Monte Carlo error of both
+  (``permutation_tolerance``), never exactly; its ``absolute_difference`` is
+  the difference of the means and ``absolute_difference_ci`` Welch's interval
+  at the confidence level (``docs/api/endpoints.md``, "The difference from the
+  control, its intervals and the impact");
 * ``adjusted_p_value`` applies the experiment's correction method across the
   treatments of one metric, and ``is_significant`` is decided on it
   (``docs/statistics/fdr-correction.md``);
@@ -21,19 +25,25 @@ Written from the docs, not from the product:
 A proportion's interval (Newcombe's), the Bayesian and the sequential fields
 are not computed here.
 
-Welch's test is computed from the per-user values through their exact sums
+Welch's interval is computed from the per-user values through their exact sums
 (``math.fsum``), so the reference does not share the product's arithmetic. It
 uses scipy for the distributions, as the product does: a defect in scipy would
-be shared.
+be shared.  The mean's permutation test is scipy's: it reassigns all the users
+at random, where the server draws how many non-zero values fall in each arm
+and which, so the two share neither the draws nor the arithmetic.
 """
 
 from __future__ import annotations
 
+import hashlib
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from scipy import stats
+
+#: The reference's resamples plus one.
+REFERENCE_RESAMPLES = 10_000
 
 #: How each metric type is analysed.
 ANALYSIS = {
@@ -130,6 +140,73 @@ def welch(
     return Welch(p_value, difference, (difference - margin, difference + margin))
 
 
+def permutation_rng(seed: int, scenario: str, metric: str) -> int:
+    """The int that seeds the reference's permutation test of one metric:
+    sha256 of ``seed|scenario|metric``, 63 bits, so a failure reproduces from
+    the run's printed seed."""
+    digest = hashlib.sha256(f"{seed}|{scenario}|{metric}".encode()).digest()
+    return int.from_bytes(digest[:8], "big") >> 1
+
+
+def permutation_p(
+    control: Sequence[float], treatment: Sequence[float], rng: int
+) -> float:
+    """The two-sided permutation p-value of Welch's t, treatment against
+    control, over every assigned user's value (0 included): scipy's
+    ``ttest_ind(equal_var=False, method=PermutationMethod(...))`` with
+    ``REFERENCE_RESAMPLES - 1`` resamples, which is twice the smaller tail
+    counting the observed assignment."""
+    method = stats.PermutationMethod(
+        n_resamples=REFERENCE_RESAMPLES - 1, batch=500, rng=rng
+    )
+    return float(
+        stats.ttest_ind(
+            list(treatment), list(control), equal_var=False, method=method
+        ).pvalue
+    )
+
+
+def product_resamples(treatments: int, confidence_level: float) -> int:
+    """The server's permutations plus one for a metric with *treatments*
+    compared treatments, as ``docs/architecture/technical-guide.md`` gives the
+    rule: ``max(2000, 2000 * ceil(4k / (2000 * alpha)))`` with alpha
+    ``1 - confidence_level``, in integer arithmetic on
+    ``round(alpha * 10**9)``."""
+    a = round((1 - confidence_level) * 10**9)
+    blocks = -(-(4 * treatments * 10**9) // (2000 * a))
+    return max(2000, 2000 * blocks)
+
+
+def permutation_tolerance(
+    p_server: float,
+    p_reference: float,
+    server_resamples: int,
+    reference_resamples: int = REFERENCE_RESAMPLES,
+) -> float:
+    """How far apart two Monte Carlo permutation p-values of the same data
+    may be: 5 standard errors of the difference of two equal-tailed p-values
+    plus the server's step.
+
+    ``q = clip((p_server + p_reference) / 4, 1 / reference_resamples, 0.5)``
+    is the smaller tail; each p-value is twice a share, so the standard error
+    of the difference is ``2 * sqrt(q (1 - q) (1 / B_s + 1 / B_r))``, with
+    ``B`` the resamples plus one; the server's p-value moves in steps of
+    ``2 / B_s``.  At p 0.05, 2,000 and 10,000: 0.0392.
+    """
+    q = min(max((p_server + p_reference) / 4, 1 / reference_resamples), 0.5)
+    se = 2 * math.sqrt(q * (1 - q) * (1 / server_resamples + 1 / reference_resamples))
+    return 5 * se + 2 / server_resamples
+
+
+def significance_comparable(
+    p_server: float, p_reference: float, alpha: float, tolerance: float
+) -> bool:
+    """Whether ``is_significant`` can be compared exactly: both p-values are
+    more than *tolerance* from alpha, so Monte Carlo error cannot put them on
+    different sides of it."""
+    return abs(p_server - alpha) > tolerance and abs(p_reference - alpha) > tolerance
+
+
 def adjust(p_values: Sequence[float | None], method: str) -> list[float | None]:
     """The p-values adjusted by *method* across one metric's treatments.
 
@@ -179,15 +256,22 @@ def compare(
     analysis: str,
     correction_method: str,
     confidence_level: float,
+    *,
+    rng: int | None = None,
 ) -> list[Comparison]:
     """Each treatment of one metric against the control.
 
     *per_user* maps each variant, in creation order with the control first, to
     its users' values (``contract.ExperimentExpected.per_user``): 1 or 0 for a
-    proportion. *analysis* is ``proportion`` or ``mean`` (``ANALYSIS``).
+    proportion. *analysis* is ``proportion`` or ``mean`` (``ANALYSIS``).  A
+    mean's p-value is ``permutation_p`` seeded with *rng*
+    (``permutation_rng``), which a mean therefore needs; its interval is
+    Welch's.
     """
     if analysis not in ("proportion", "mean"):
         raise ValueError(f"analysis {analysis!r} is not proportion or mean")
+    if analysis == "mean" and rng is None:
+        raise ValueError("a mean's permutation p-value needs rng")
     (_, control), *treatments = per_user.items()
     if not treatments:
         raise ValueError("a comparison needs a control and a treatment")
@@ -206,10 +290,13 @@ def compare(
             found.append((name, p, difference, None))
         else:
             result = welch(control, values, confidence_level)
+            # No test where Welch has none: fewer than 2 users in an arm, or
+            # neither arm varies.
+            p = None if result.p_value is None else permutation_p(control, values, rng)
             found.append(
                 (
                     name,
-                    result.p_value,
+                    p,
                     result.absolute_difference,
                     result.absolute_difference_ci,
                 )
