@@ -670,3 +670,434 @@ by = ["test:backend/tests/unit/api/test_sign_in_and_account_rules.py::test_a_loc
 [[unit]]
 text = "In production, send all API traffic over HTTPS."
 by = ["exempt:baseline"]
+
+[[unit]]
+text = "An account with two-step sign-in on also gives a code from its authenticator app."
+by = [
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_the_password_step_answers_mfa_required_and_no_access_token",
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_sign_in_asks_for_a_code_and_a_code_is_used_once",
+]
+
+[[unit]]
+text = "Two-step sign-in"
+by = ["exempt:label"]
+
+[[unit]]
+text = "With AUTH_PROVIDER=local, any account can turn on two-step sign-in (2FA, using TOTP codes): after the password, sign-in also asks for the 6-digit code an authenticator app shows, or for one of the account's recovery codes."
+by = [
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_every_role_manages_its_own_and_only_a_superuser_resets_others",
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_sign_in_asks_for_a_code_and_a_code_is_used_once",
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_a_recovery_code_signs_in_once",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_under_cognito_every_route_answers_the_local_only_404",
+]
+
+[[unit]]
+text = "Each account decides for itself; nothing can require it for a role yet."
+by = ["test:backend/tests/unit/api/test_documented_limits.py::test_a_local_account_can_turn_on_two_step_sign_in_but_no_role_requires_it"]
+
+[[unit]]
+text = "Turn it on as the viewer."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Ask for a secret for the authenticator app."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It asks for your current password, as changing your password does:"
+by = [
+    "docex:docs/api/auth.md#otpauth://totp/Controlvar:viewer@example.com",
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_setting_it_up_checks_the_password_before_any_secret_is_stored",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_setting_it_up_checks_the_current_password_first_in_this_order",
+]
+
+[[unit]]
+text = "It prints the start of the otpauth:// link a QR code carries."
+by = [
+    "docex:docs/api/auth.md#otpauth://totp/Controlvar:viewer@example.com",
+    "test:backend/tests/unit/core/test_totp.py::test_the_otpauth_link",
+]
+
+[[unit]]
+text = "The whole link, or the secret typed in, adds the account to an authenticator app."
+by = [
+    "test:backend/tests/unit/core/test_totp.py::test_the_otpauth_link",
+    "test:backend/tests/unit/core/test_totp.py::test_the_secret_text_is_base32_without_padding",
+]
+
+[[unit]]
+text = "Nothing changes at sign-in yet."
+by = [
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_a_waiting_secret_changes_nothing_and_a_new_one_replaces_it",
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_a_waiting_secret_changes_nothing_at_sign_in",
+]
+
+[[unit]]
+text = "Confirm with the app's current code."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Here Python stands in for the app:"
+by = ["exempt:example"]
+
+[[unit]]
+text = "It prints 10: two-step sign-in is on, and the answer holds 10 recovery codes, shown this once."
+by = [
+    "docex:docs/api/auth.md#10",
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_confirm_gives_ten_recovery_codes_and_stores_only_their_hashes",
+]
+
+[[unit]]
+text = "Each signs in one time when the app is not at hand."
+by = [
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_a_recovery_code_signs_in_once",
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_a_recovery_code_signs_in_once",
+]
+
+[[unit]]
+text = "Sign in again."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The right password now answers mfa_required and a short mfa_token, with no access_token:"
+by = [
+    "docex:docs/api/auth.md#\"access_token\": null",
+    "docex:docs/api/auth.md#\"mfa_required\": true",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_the_password_step_answers_mfa_required_and_no_access_token",
+]
+
+[[unit]]
+text = "Send the mfa_token back within expires_in seconds with a code from the app, or, as here, a recovery_code:"
+by = [
+    "docex:docs/api/auth.md#\"expires_in\": 300",
+    "test:backend/tests/unit/core/test_mfa_token.py::test_an_expired_token_is_refused",
+    "test:backend/tests/unit/core/test_mfa_token.py::test_its_claims_are_exactly_these",
+]
+
+[[unit]]
+text = "It prints viewer@example.com: the answer is the one POST /api/v1/auth/login gives an account without two-step sign-in, with access_token."
+by = [
+    "docex:docs/api/auth.md#viewer@example.com",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_the_code_step_signs_in_and_records_the_second_step",
+]
+
+[[unit]]
+text = "A code or recovery code works once:"
+by = [
+    "docex:docs/api/auth.md#{\"detail\":\"That code is not correct.\"}",
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_sign_in_asks_for_a_code_and_a_code_is_used_once",
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_a_recovery_code_signs_in_once",
+]
+
+[[unit]]
+text = "Turn it off with a code or a recovery code."
+by = [
+    "docex:docs/api/auth.md#{\"enabled\":false,\"required\":false,\"recovery_codes_remaining\":0}",
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_turning_it_off_and_new_recovery_codes",
+]
+
+[[unit]]
+text = "It answers an empty 204:"
+by = ["test:backend/tests/unit/api/test_two_factor_routes.py::test_the_answers_that_succeed"]
+
+[[unit]]
+text = "$VIEWER_TOKEN was issued before two-step sign-in was turned on, and it kept working throughout: a token stays valid until it expires."
+by = [
+    "docex:docs/api/auth.md#{\"enabled\":true,\"required\":false,\"recovery_codes_remaining\":9}",
+    "docex:docs/api/auth.md#{\"enabled\":false,\"required\":false,\"recovery_codes_remaining\":0}",
+]
+
+[[unit]]
+text = "Route | What it does"
+by = ["exempt:label"]
+
+[[unit]]
+text = "GET /api/v1/users/me/2fa | enabled, required (always false) and recovery_codes_remaining"
+by = [
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_reading_your_own_status",
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_a_recovery_code_signs_in_once",
+]
+
+[[unit]]
+text = "POST /api/v1/users/me/2fa/enroll | {\"current_password\"}: a new secret, waiting for its first code; a waiting one is replaced. 409 once on"
+by = [
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_a_waiting_secret_changes_nothing_and_a_new_one_replaces_it",
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_setting_it_up_checks_the_password_before_any_secret_is_stored",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_the_wrong_state_answers_409",
+]
+
+[[unit]]
+text = "POST /api/v1/users/me/2fa/confirm | {\"code\"}: turns it on and answers 10 recovery codes. 409 with no secret waiting"
+by = [
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_a_waiting_secret_changes_nothing_and_a_new_one_replaces_it",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_the_wrong_state_answers_409",
+]
+
+[[unit]]
+text = "POST /api/v1/users/me/2fa/recovery-codes | {\"code\"}: 10 new recovery codes; the earlier ones stop working"
+by = ["test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_turning_it_off_and_new_recovery_codes"]
+
+[[unit]]
+text = "POST /api/v1/users/me/2fa/disable | {\"code\"} or {\"recovery_code\"}: turns it off. 409 while off"
+by = [
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_turning_it_off_and_new_recovery_codes",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_the_wrong_state_answers_409",
+]
+
+[[unit]]
+text = "POST /api/v1/auth/mfa/verify | {\"mfa_token\"} and {\"code\"} or {\"recovery_code\"}: the access token"
+by = [
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_sign_in_asks_for_a_code_and_a_code_is_used_once",
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_a_recovery_code_signs_in_once",
+]
+
+[[unit]]
+text = "DELETE /api/v1/admin/users/{user_id}/2fa | A superuser turns off another account's two-step sign-in; your own answers 400"
+by = [
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_every_role_manages_its_own_and_only_a_superuser_resets_others",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_a_superuser_cannot_reset_their_own",
+]
+
+[[unit]]
+text = "A code is 6 digits and a recovery code 10 characters, A-Z and 2-7."
+by = [
+    "test:backend/tests/unit/core/test_totp.py::test_the_literal_code_shapes_follow_the_length_constants",
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_confirm_gives_ten_recovery_codes_and_stores_only_their_hashes",
+]
+
+[[unit]]
+text = "Spaces and hyphens are ignored, and so is a recovery code's letter case."
+by = [
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_the_next_step_is_accepted_and_typed_spaces_are_ignored",
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_a_recovery_code_is_read_in_any_case_with_spaces_or_hyphens",
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_a_recovery_code_signs_in_once",
+]
+
+[[unit]]
+text = "A field longer than 64 characters, or both fields or neither, answers 422."
+by = [
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_input_that_is_not_a_code_answers_422_before_the_service",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_disable_takes_exactly_one_of_code_and_recovery_code",
+]
+
+[[unit]]
+text = "Anything else that is not a right, unused code counts as a wrong one."
+by = [
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_each_refusal_counts_in_the_shared_counter_and_the_column",
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_the_same_code_twice_is_refused",
+]
+
+[[unit]]
+text = "Answer | When"
+by = ["exempt:label"]
+count = 2
+
+[[unit]]
+text = "401 That code is not correct. | A wrong code at POST /api/v1/auth/mfa/verify; 403 with the same text on the /api/v1/users/me/2fa routes"
+by = [
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_each_refusal_of_the_code_step",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_a_signed_in_route_refuses_a_wrong_code_with_403",
+]
+
+[[unit]]
+text = "401 Sign-in expired. Start again. | The mfa_token is expired or not one; or the account was deactivated, or its two-step sign-in turned off, since the password step"
+by = [
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_a_bad_mfa_token_is_refused_before_any_lookup",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_an_account_that_can_no_longer_sign_in_starts_again",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_each_refusal_of_the_code_step",
+]
+
+[[unit]]
+text = "423 with Retry-After | Wrong passwords and wrong codes together: 10 within 15 minutes lock the address, as for sign-in"
+by = [
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_wrong_codes_share_the_password_lockout",
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_ten_wrong_codes_while_signed_in_lock_the_sign_in",
+]
+
+[[unit]]
+text = "423 Two-step sign-in is locked after too many wrong codes. Ask an administrator to reset it. | 100 wrong codes in a row; even the right code is refused until the reset"
+by = [
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_the_cap_refuses_the_right_code_until_a_superuser_resets_it",
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_after_100_wrong_codes_even_the_right_one_is_refused",
+]
+
+[[unit]]
+text = "503 Two-step sign-in is unavailable for this account. Ask an administrator to reset it. | The stored secret cannot be read, as after SECRET_KEY changes"
+by = [
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_each_refusal_of_the_code_step",
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_a_secret_sealed_under_another_secret_key_fails_closed",
+]
+
+[[unit]]
+text = "POST /api/v1/users/me/2fa/enroll answers as POST /api/v1/users/me/password does about the current password, in this order:"
+by = [
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_setting_it_up_checks_the_current_password_first_in_this_order",
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_setting_it_up_checks_the_password_before_any_secret_is_stored",
+]
+
+[[unit]]
+text = "423 with Retry-After | The address is locked by wrong passwords and codes, even for the right password"
+by = [
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_wrong_passwords_at_set_up_lock_it_and_sign_in",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_setting_it_up_checks_the_current_password_first_in_this_order",
+]
+
+[[unit]]
+text = "403 This account does not sign in with a password, so two-step sign-in does not apply to it. | The account has no password of its own; not counted"
+by = [
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_an_account_with_no_password_cannot_set_it_up",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_setting_it_up_checks_the_current_password_first_in_this_order",
+]
+
+[[unit]]
+text = "403 Enter your current password (current_password) to set up two-step sign-in. | No body, no current_password or an empty one; not counted"
+by = [
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_setting_it_up_checks_the_password_before_any_secret_is_stored",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_setting_it_up_checks_the_current_password_first_in_this_order",
+]
+
+[[unit]]
+text = "403 The current password is incorrect. | A wrong password; it counts toward the same limit as failed logins"
+by = [
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_wrong_passwords_at_set_up_lock_it_and_sign_in",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_setting_it_up_checks_the_current_password_first_in_this_order",
+]
+
+[[unit]]
+text = "POST /api/v1/auth/mfa/verify takes 10 requests a minute per address, like POST /api/v1/auth/login, and POST /api/v1/users/me/2fa/enroll 5, like POST /api/v1/users/me/password."
+by = [
+    "test:backend/tests/unit/middleware/test_route_rate_limits.py::test_the_code_step_of_a_sign_in_takes_ten_a_minute",
+    "test:backend/tests/unit/middleware/test_route_rate_limits.py::test_sign_in_takes_ten_requests_a_minute",
+    "test:backend/tests/unit/middleware/test_route_rate_limits.py::test_setting_up_two_step_sign_in_takes_five_a_minute_like_the_password_change",
+]
+
+[[unit]]
+text = "POST /api/v1/auth/token answers mfa_required too, so the Authorize button of the interactive documentation cannot sign in such an account: sign in with the two calls above and paste the access token."
+by = [
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_the_password_step_answers_mfa_required_and_no_access_token",
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_sign_in_asks_for_a_code_and_a_code_is_used_once",
+]
+
+[[unit]]
+text = "A script should use an API key, not a person's password."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "A superuser resets an account that lost its app and its recovery codes with DELETE /api/v1/admin/users/{user_id}/2fa."
+by = [
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_the_cap_refuses_the_right_code_until_a_superuser_resets_it",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_a_superuser_resets_someone_else",
+]
+
+[[unit]]
+text = "An operator resets one, or every account, from the command line: Resetting two-step sign-in."
+by = [
+    "test:backend/tests/integration/services/test_two_factor_reset_cli.py::test_one_account_by_its_address_in_any_case",
+    "test:backend/tests/integration/services/test_two_factor_reset_cli.py::test_every_account_with_the_confirmation_flag",
+]
+
+[[unit]]
+text = "Known limits:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A token issued before two-step sign-in was turned on, off or reset keeps working until it expires."
+by = [
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_the_cap_refuses_the_right_code_until_a_superuser_resets_it",
+    "docex:docs/api/auth.md#{\"enabled\":false,\"required\":false,\"recovery_codes_remaining\":0}",
+]
+
+[[unit]]
+text = "The count of wrong passwords and codes is kept in each API process's memory, so each process counts its own; the count of 100 wrong codes is stored with the account."
+by = [
+    "test:backend/tests/unit/api/test_local_auth.py::TestLoginAttemptTracker",
+    "test:backend/tests/integration/services/test_two_factor_service.py::test_a_new_service_reads_the_same_rows",
+]
+
+[[unit]]
+text = "Password sign-ins in this repository"
+by = ["exempt:label"]
+
+[[unit]]
+text = "These sign in with a password and read access_token."
+by = ["mechanism:password-sign-ins"]
+
+[[unit]]
+text = "Each fails if its account turns two-step sign-in on:"
+by = ["mechanism:password-sign-ins"]
+
+[[unit]]
+text = "Path | Its account, and what happens"
+by = ["exempt:label"]
+
+[[unit]]
+text = "scripts/synthetic_check.py | A dedicated ANALYST account, every 30 minutes: its sign-in step fails. Keep that account without two-step sign-in"
+by = ["mechanism:password-sign-ins"]
+
+[[unit]]
+text = "scripts/scale_stack.py | The first superuser: its sign-in step fails"
+by = ["mechanism:password-sign-ins"]
+
+[[unit]]
+text = "deploy/aws-installer/lib/steps.sh | The first administrator, straight after the install, before anyone can turn it on"
+by = ["mechanism:password-sign-ins"]
+
+[[unit]]
+text = "deploy/demo/probe.py | The demo viewer; demo mode refuses turning two-step sign-in on"
+by = ["mechanism:password-sign-ins"]
+
+[[unit]]
+text = ".github/workflows/_platform.yml | Seeded accounts that never turn it on"
+by = ["mechanism:password-sign-ins"]
+
+[[unit]]
+text = ".github/workflows/compose-production.yml | Seeded accounts that never turn it on"
+by = ["mechanism:password-sign-ins"]
+
+[[unit]]
+text = ".github/workflows/pr-qa-gate.yml | Seeded accounts that never turn it on"
+by = ["mechanism:password-sign-ins"]
+
+[[unit]]
+text = "scripts/compose_upgrade.sh | Seeded accounts that never turn it on"
+by = ["mechanism:password-sign-ins"]
+
+[[unit]]
+text = "scripts/fuzz_local.sh | Seeded accounts that never turn it on"
+by = ["mechanism:password-sign-ins"]
+
+[[unit]]
+text = "demo/streampulse/simulator/rollout_story.py | Seeded accounts that never turn it on"
+by = ["mechanism:password-sign-ins"]
+
+[[unit]]
+text = "tests/ground_truth/driver.py | Seeded accounts that never turn it on"
+by = ["mechanism:password-sign-ins"]
+
+[[unit]]
+text = "tests/sdk-contract/live/run_live_contract.py | Seeded accounts that never turn it on"
+by = ["mechanism:password-sign-ins"]
+
+[[unit]]
+text = "tests/alb/rehearse.sh | Seeded accounts that never turn it on"
+by = ["mechanism:password-sign-ins"]
+
+[[unit]]
+text = "tests/llm/smoke.sh | Seeded accounts that never turn it on"
+by = ["mechanism:password-sign-ins"]
+
+[[unit]]
+text = "tests/acceptance/showcase/capture/run.py | Seeded accounts that never turn it on"
+by = ["mechanism:password-sign-ins"]
+
+[[unit]]
+text = "tests/acceptance/docs/docs_runner/pacer.py | Seeded accounts that never turn it on"
+by = ["mechanism:password-sign-ins"]
+
+[[unit]]
+text = "backend/tests/performance/locustfiles/common.py | Seeded accounts that never turn it on"
+by = ["mechanism:password-sign-ins"]
+
+[[unit]]
+text = "modules/backend/tests/realistic/scenarios/multi_tenant_isolation.py | Seeded accounts that never turn it on"
+by = ["mechanism:password-sign-ins-modules"]

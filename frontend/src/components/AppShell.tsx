@@ -62,6 +62,16 @@ export const CHANGE_PASSWORD_ITEM: NavItem = {
   testId: 'change-password-link',
 };
 
+/** The page where a local-sign-in user turns two-step sign-in on or off (#1812). */
+export const TWO_FACTOR_PATH = '/account/two-factor';
+
+/** "Two-step sign-in", beside "Change password" in More: local sign-in only. */
+export const TWO_FACTOR_ITEM: NavItem = {
+  label: 'Two-step sign-in',
+  href: TWO_FACTOR_PATH,
+  testId: 'two-factor-link',
+};
+
 /** The page where any signed-in user manages their own API keys. */
 export const OWN_API_KEYS_PATH = '/account/api-keys';
 
@@ -138,7 +148,7 @@ export function installedModuleNav(
  * navigation at all, in the core profile a "Modules" link to the guide
  * that says what the modules are and how to run the full profile, and the
  * signed-in user's own pages: "Your API keys", and, for a local sign-in user,
- * "Change password".
+ * "Change password" and "Two-step sign-in".
  */
 function MoreNavGroup({
   items,
@@ -150,7 +160,7 @@ function MoreNavGroup({
   items: NavItem[];
   /** Add the "Modules" documentation link (the core profile). */
   showModulesGuide: boolean;
-  /** The signed-in user's own pages, listed last ("Your API keys", "Change password"). */
+  /** The signed-in user's own pages, listed last ("Your API keys", "Change password", "Two-step sign-in"). */
   accountItems: NavItem[];
   id: string;
   /** Called when a link inside the group is followed (closes the mobile menu). */
@@ -274,11 +284,11 @@ interface AppShellProps {
 
 /**
  * Application chrome: top navigation (Experiments · Feature Flags · Segments ·
- * Audit Log · Admin · Docs · More, which holds "Your API keys" and "Change
- * password") and the user
+ * Audit Log · Admin · Docs · More, which holds "Your API keys", "Change
+ * password" and "Two-step sign-in") and the user
  * area with a visible "Log out" button. Mounted by `_app.tsx` for every route
  * except `/login`. In demo mode the demo banner sits above the header and
- * More holds neither account page (the API refuses both pages' changes).
+ * More holds no account page (the API refuses each page's changes).
  */
 export function AppShell({ children }: AppShellProps) {
   const router = useRouter();
@@ -314,14 +324,15 @@ export function AppShell({ children }: AppShellProps) {
   // profile it reports is meaningless there.
   const showModulesGuide = !marketing && !modulesLoading && modulesError === null && profile === 'core';
   // The signed-in user's own pages. "Your API keys" is every user's. Only
-  // local sign-in has a password the API can change; under any other provider
-  // that route answers 404. Neither waits for the modules probe. A read-only
-  // demo offers neither: both exist to change something.
+  // local sign-in has a password the API can change, or a two-step sign-in it
+  // manages; under any other provider those routes answer 404. None waits for
+  // the modules probe. A read-only demo offers none: each exists to change
+  // something.
   const accountNav: NavItem[] =
     marketing || !user || demo
       ? []
       : user.auth_provider === 'local'
-        ? [OWN_API_KEYS_ITEM, CHANGE_PASSWORD_ITEM]
+        ? [OWN_API_KEYS_ITEM, CHANGE_PASSWORD_ITEM, TWO_FACTOR_ITEM]
         : [OWN_API_KEYS_ITEM];
   const moreRoutes = modulesLoading ? [] : moduleNav;
   const showMore = accountNav.length > 0 || moreRoutes.length > 0 || showModulesGuide;

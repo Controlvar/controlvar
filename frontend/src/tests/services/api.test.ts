@@ -30,6 +30,7 @@ import {
 import { AdminService } from '@/services/admin';
 import { ResultsService } from '@/services/results';
 import { UserTable, deleteTimedOutMessage } from '@/components/admin/users/UserTable';
+import { overrideErrorCopy } from '@/components/experiments/BanditWeightsOverride';
 import { UNREACHABLE, errorCopy } from '@/components/experiments/ExperimentManageSection';
 import { SCHEDULE_ERROR_COPY, scheduleErrorCopy } from '@/components/experiments/ExperimentScheduleSection';
 import { flagManageErrorCopy } from '@/components/feature-flags/FlagManageSection';
@@ -37,10 +38,11 @@ import { rolloutErrorCopy } from '@/components/feature-flags/RolloutScheduleMana
 import { resultsErrorMessage } from '@/components/results/ResultsDashboard/ResultsDashboard';
 import { cupedErrorMessage } from '@/components/results/Cuped/useCupedResults';
 import { sessionErrorMessage } from '@/contexts/AuthContext';
-import { demoEnterErrorMessage, loginErrorMessage, signInNoticeMessage } from '@/pages/login';
+import { codeStepErrorMessage, demoEnterErrorMessage, loginErrorMessage, signInNoticeMessage } from '@/pages/login';
 import { DEMO_UNREACHABLE } from '@/utils/demoMode';
 import { signInFailureNotice } from '@/services/hostedUi';
 import { classifyPasswordError, passwordOutcomeSentence } from '@/services/password';
+import { classifyTwoFactorError, twoFactorFailureSentence } from '@/services/twoFactor';
 import { groupErrorCopy } from '@/utils/exclusionGroups';
 import { holdoutErrorCopy, loadErrorCopy, resultsErrorCopy } from '@/utils/holdouts';
 import { pairErrorCopy, scanErrorCopy } from '@/utils/interactions';
@@ -910,6 +912,9 @@ describe('without AbortSignal.any (#1040 D6)', () => {
 const STATUS_ZERO_SITES: Record<string, { count: number; kind: string }> = {
   // The definition: ApiError.isNetworkError and its comparison.
   'services/api.ts': { count: 2, kind: 'definition' },
+  // overrideErrorCopy ("Set weights by hand", #1957): returns `err.message` for
+  // every status 0, so a timed-out PUT says its outcome is unknown.
+  'components/experiments/BanditWeightsOverride.tsx': { count: 1, kind: 'passes-message' },
   'components/experiments/ExperimentManageSection.tsx': { count: 1, kind: 'write' },
   // SCHEDULE_ERROR_COPY's `0:` entry.
   'components/experiments/ExperimentScheduleSection.tsx': { count: 1, kind: 'write' },
@@ -921,12 +926,15 @@ const STATUS_ZERO_SITES: Record<string, { count: number; kind: string }> = {
   // cupedErrorMessage: the same, for the CUPED tab (#1959).
   'components/results/Cuped/useCupedResults.ts': { count: 1, kind: 'passes-message' },
   'contexts/AuthContext.tsx': { count: 1, kind: 'read' },
-  // loginErrorMessage, and demoEnterErrorMessage (the read-only demo's button).
-  'pages/login.tsx': { count: 2, kind: 'sign-in' },
+  // loginErrorMessage, demoEnterErrorMessage (the read-only demo's button) and
+  // codeStepErrorMessage (the code step of a two-step sign-in, #1812).
+  'pages/login.tsx': { count: 3, kind: 'sign-in' },
   // signInFailureNotice: the Cognito Hosted UI callback's exchange (#708).
   'services/hostedUi.ts': { count: 1, kind: 'sign-in' },
   // classifyPasswordError's `case 0:`.
   'services/password.ts': { count: 1, kind: 'write' },
+  // classifyTwoFactorError's `case 0:` (the two-step sign-in account page, #1812).
+  'services/twoFactor.ts': { count: 1, kind: 'write' },
   'utils/exclusionGroups.ts': { count: 1, kind: 'write' },
   // holdoutErrorCopy's `case 0:`, loadErrorCopy, resultsErrorCopy.
   'utils/holdouts.ts': { count: 3, kind: 'write' },
@@ -1088,6 +1096,10 @@ describe('each status-0 place says what a time-out means (#1040 D7)', () => {
   // modules/frontend/src/tests/services/request-timeouts.test.ts). Each says
   // the time-out text exactly, and keeps its own unreachable line otherwise.
   const CHECKS: Record<string, (write: ApiError, read: ApiError) => void> = {
+    'components/experiments/BanditWeightsOverride.tsx': (write) => {
+      expect(overrideErrorCopy(write)).toBe(WRITE_TEXT);
+      expect(overrideErrorCopy(unreachable())).toBe(unreachableMessage());
+    },
     'components/experiments/ExperimentManageSection.tsx': (write) => {
       for (const action of ['clone', 'edit', 'delete', 'design'] as const) {
         expect(errorCopy(action, write)).toBe(WRITE_TEXT);
@@ -1125,6 +1137,10 @@ describe('each status-0 place says what a time-out means (#1040 D7)', () => {
       expect(loginErrorMessage(unreachable())).toBe(unreachableMessage());
       expect(demoEnterErrorMessage(write)).toBe(SIGN_IN_TEXT);
       expect(demoEnterErrorMessage(unreachable())).toBe(DEMO_UNREACHABLE);
+      for (const recovery of [false, true]) {
+        expect(codeStepErrorMessage(write, recovery)).toBe(SIGN_IN_TEXT);
+        expect(codeStepErrorMessage(unreachable(), recovery)).toBe(unreachableMessage());
+      }
     },
     'services/hostedUi.ts': (write) => {
       expect(signInNoticeMessage(signInFailureNotice(write, '/'))).toBe(SIGN_IN_TEXT);
@@ -1134,6 +1150,11 @@ describe('each status-0 place says what a time-out means (#1040 D7)', () => {
       expect(classifyPasswordError(write)).toEqual({ outcome: 'timed-out', message: WRITE_TEXT });
       expect(passwordOutcomeSentence(classifyPasswordError(write))).toBe(WRITE_TEXT);
       expect(classifyPasswordError(unreachable())).toEqual({ outcome: 'network' });
+    },
+    'services/twoFactor.ts': (write) => {
+      expect(classifyTwoFactorError(write)).toEqual({ outcome: 'timed-out', message: WRITE_TEXT });
+      expect(twoFactorFailureSentence(classifyTwoFactorError(write))).toBe(WRITE_TEXT);
+      expect(classifyTwoFactorError(unreachable())).toEqual({ outcome: 'network' });
     },
     'utils/exclusionGroups.ts': (write, read) => {
       for (const action of ['save', 'archive', 'add', 'remove'] as const) {
@@ -1295,5 +1316,44 @@ describe('a timed-out user delete is not reported as a failure (#1040 D10)', () 
   it('D10 positive control: a refused delete keeps its own wording', async () => {
     serve(() => Promise.resolve(jsonResponse(400, { detail: 'Cannot delete your own user account' })));
     expect(await deleteAlice()).toBe("Couldn't delete alice: Cannot delete your own user account");
+  });
+});
+
+describe('safeNextPath applies one check on every sign-in page', () => {
+  const FALLBACK = '/fallback';
+  const REFUSED: Array<[string, string]> = [
+    ['a tab', '/a\tb'],
+    ['a line feed', '/a\nb'],
+    ['a carriage return', '/a\rb'],
+    ['an encoded tab', '/a%09b'],
+    ['an encoded line feed', '/a%0ab'],
+    ['an encoded carriage return', '/a%0db'],
+    ['an encoded backslash', '/a%5cb'],
+    ['an upper-case encoded backslash', '/a%5Cb'],
+    ['a backslash', '/a\\b'],
+    ['a leading slash-backslash', '/\\host'],
+    ['a double slash', '//host'],
+    ['a double slash after decoding', '/%2f/host'],
+    ['a double slash after decoding (upper case)', '/%2F/host'],
+    ['a scheme', 'https://host/x'],
+    ['more than 2048 characters', '/' + 'a'.repeat(2048)],
+    ['a character outside the URL set', '/x?a=<b>'],
+  ];
+  const KEPT: Array<[string, string]> = [
+    ['a plain path', '/experiments'],
+    ['a query string', '/experiments?status=running&page=2'],
+    ['an encoded space', '/experiments?q=a%20b'],
+    ['a fragment', '/experiments#results'],
+    ['a path with an id', '/experiments/6f1c2a52-3b1e-4f43-9d0e-0a1b2c3d4e5f'],
+    ['2048 characters', '/' + 'a'.repeat(2047)],
+  ];
+
+  it.each(REFUSED)('refuses %s and returns the fallback', (_label, path) => {
+    expect(safeNextPath(path, FALLBACK)).toBe(FALLBACK);
+    expect(safeNextPath(path)).toBe('/');
+  });
+
+  it.each(KEPT)('keeps %s', (_label, path) => {
+    expect(safeNextPath(path, FALLBACK)).toBe(path);
   });
 });

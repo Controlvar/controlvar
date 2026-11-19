@@ -15,6 +15,11 @@ export interface AdminUser {
    * `role`: an Admin need not be a superuser, and a superuser may have any role.
    */
   is_superuser?: boolean;
+  /**
+   * The account has two-step sign-in on (#1812): `UserResponse.totp_enabled`,
+   * read from the `user_totp` table. Absent from an older API.
+   */
+  totp_enabled?: boolean;
   created_at: string;
   last_login?: string;
 }

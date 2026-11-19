@@ -7,6 +7,9 @@ Two providers share this router (selected by ``settings.AUTH_PROVIDER``):
   ``users`` table, HS256 JWTs issued by ``core.security``.  Endpoints:
   ``POST /login``, ``GET /me``, ``POST /logout`` and the OAuth2 form
   ``POST /token`` (``username`` = e-mail) so Swagger's *Authorize* works.
+  For an account with two-step sign-in on (#1812), ``/login`` and ``/token``
+  answer ``mfa_required`` with a short ``mfa_token`` instead of an access
+  token, and ``POST /mfa/verify`` exchanges that token and a code for one.
 * ``cognito`` — AWS Cognito.  The legacy endpoints (signup, confirm, token,
   forgot/reset password, refresh, me) forward to the user pool; ``/login``
   answers 404 because Cognito has its own flows.  The dashboard signs in
@@ -31,7 +34,7 @@ unaffected by that setting.
 """
 
 import logging
-from typing import Any, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -40,7 +43,18 @@ from sqlalchemy.orm import Session
 
 from backend.app.api import deps
 from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.two_factor_answers import (
+    REFUSALS,
+    SIGN_IN_EXPIRED_DETAIL,
+    refusal_answer,
+)
 from backend.app.core.config import settings
+from backend.app.core.mfa_token import (
+    VERIFY_TTL_SECONDS,
+    InvalidMfaToken,
+    create_mfa_token,
+    decode_mfa_token,
+)
 from backend.app.core.security import create_local_access_token, oauth2_scheme
 from backend.app.models.audit_log import ActionType, EntityType
 from backend.app.models.user import User
@@ -64,6 +78,7 @@ from backend.app.schemas.auth import (
     UserInfoResponse,
     UserMe,
 )
+from backend.app.schemas.two_factor import MfaRequiredResponse, MfaVerifyRequest
 from backend.app.services import cognito_hosted_ui
 from backend.app.services.audit_service import AuditService
 from backend.app.services.auth_service import (
@@ -78,7 +93,13 @@ from backend.app.services.cognito_accounts import cognito_external_id
 from backend.app.services.local_auth_service import (
     AccountLockedError,
     InvalidCredentialsError,
+    account_may_sign_in,
     local_auth_service,
+)
+from backend.app.services.two_factor_service import (
+    UNAVAILABLE_TEXT,
+    WRONG_CODE_TEXT,
+    two_factor_service,
 )
 
 logger = logging.getLogger(__name__)
@@ -179,10 +200,19 @@ def user_to_me(user: User) -> UserMe:
     )
 
 
-def _issue_local_login(db: Session, email: str, password: str) -> LoginResponse:
-    """Authenticate with the local provider and build the token response."""
+def _issue_local_login(
+    db: Session, email: str, password: str
+) -> Union[LoginResponse, MfaRequiredResponse]:
+    """Authenticate with the local provider and build the token response.
+
+    For an account with two-step sign-in on, the right password answers
+    ``mfa_required`` with a short ``mfa_token`` and no access token, and the
+    address's failure count is NOT cleared: only an accepted code clears it
+    (``POST /auth/mfa/verify``), and wrong codes add to it. For any other
+    account the count is cleared and the access token issued, as before.
+    """
     try:
-        user = local_auth_service.authenticate(db, email, password)
+        user = local_auth_service.authenticate(db, email, password, reset=False)
     except AccountLockedError as exc:
         raise HTTPException(
             status_code=status.HTTP_423_LOCKED,
@@ -199,6 +229,20 @@ def _issue_local_login(db: Session, email: str, password: str) -> LoginResponse:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # No except: a failed lookup (the user_totp table missing, say) is a 500,
+    # never a sign-in with the password alone.
+    if two_factor_service.is_enabled(db, user.id):
+        return MfaRequiredResponse(
+            mfa_token=create_mfa_token(user), expires_in=VERIFY_TTL_SECONDS
+        )
+    local_auth_service.reset_failures(db, user)
+    return _local_sign_in_answer(db, user, after={"provider": "local"})
+
+
+def _local_sign_in_answer(
+    db: Session, user: User, *, after: Dict[str, str]
+) -> LoginResponse:
+    """The access token for ``user``, and its ``user_login`` entry."""
     token = create_local_access_token(user)
     response = LoginResponse(
         access_token=token,
@@ -207,7 +251,8 @@ def _issue_local_login(db: Session, email: str, password: str) -> LoginResponse:
         user=user_to_me(user),
     )
     # After the sign-in has succeeded; a failed audit write does not refuse
-    # it. The entry records the provider only.
+    # it. The entry records the provider, and the second step if there was
+    # one; never a code or a token.
     AuditService.record_after_commit(
         db,
         actor=user,
@@ -215,7 +260,7 @@ def _issue_local_login(db: Session, email: str, password: str) -> LoginResponse:
         entity_type=EntityType.USER,
         entity_id=user.id,
         entity_name=user.username or str(user.id),
-        after={"provider": "local"},
+        after=after,
     )
     return response
 
@@ -348,7 +393,7 @@ def _sign_out_of_cognito(token: Optional[str]) -> None:
 
 @router.post(
     "/login",
-    response_model=LoginResponse,
+    response_model=Union[LoginResponse, MfaRequiredResponse],
     responses={
         401: {"description": INVALID_CREDENTIALS_DETAIL},
         423: {"description": "Account temporarily locked after repeated failures"},
@@ -365,9 +410,96 @@ def login_local(body: LoginRequest, db: Session = Depends(deps.get_db)) -> Any:
     ``LOCAL_AUTH_LOCKOUT_MINUTES`` the address answers 423 until the window
     expires.  The email address is matched whatever its letter case (A–Z),
     and every casing of it counts toward the same failed attempts.
+
+    For an account with two-step sign-in on, the right password answers
+    ``{"mfa_required": true, "mfa_token": "...", "enrol": false,
+    "expires_in": 300}`` with no ``access_token``: send the ``mfa_token`` with
+    a code from the authenticator app (or a recovery code) to
+    ``POST /api/v1/auth/mfa/verify`` within ``expires_in`` seconds. Scripts
+    that sign in this way should use an API key instead.
     """
     _require_local_provider()
     return _issue_local_login(db, body.email, body.password)
+
+
+@router.post(
+    "/mfa/verify",
+    response_model=LoginResponse,
+    dependencies=[Depends(_require_local_provider)],
+    responses={
+        401: {
+            "description": (
+                f"{WRONG_CODE_TEXT} (a wrong, used or malformed code or "
+                f"recovery code), or {SIGN_IN_EXPIRED_DETAIL} (the mfa_token "
+                "is expired, forged or of another purpose, or the account can "
+                "no longer sign in)"
+            )
+        },
+        404: {"description": "AUTH_PROVIDER is not 'local'"},
+        423: {
+            "description": (
+                "Too many failed attempts for this address, passwords and codes "
+                "counted together (see Retry-After); or two-step sign-in is "
+                "locked after too many wrong codes until an administrator "
+                "resets it (no Retry-After)"
+            )
+        },
+        503: {"description": UNAVAILABLE_TEXT},
+    },
+)
+def verify_mfa(
+    body: MfaVerifyRequest, request: Request, db: Session = Depends(deps.get_db)
+) -> Any:
+    """
+    The second step of a sign-in with two-step sign-in on
+    (``AUTH_PROVIDER=local``).
+
+    Takes the ``mfa_token`` that ``POST /api/v1/auth/login`` (or
+    ``/auth/token``) answered and exactly one of ``code`` (the 6 digits the
+    authenticator app shows) and ``recovery_code`` (one of the account's
+    recovery codes, each usable once). Answers what ``/auth/login`` answers
+    for an account without two-step sign-in: an access token and the
+    profile, read from the account as it is now.
+
+    A wrong code answers 401 and counts toward the same lockout as a wrong
+    password; a code is accepted once. Limited to 10 requests a minute per
+    client address.
+    """
+    try:
+        user_id = decode_mfa_token(body.mfa_token)
+    except InvalidMfaToken:
+        raise _sign_in_expired()
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None or not account_may_sign_in(user):
+        raise _sign_in_expired()
+    try:
+        result = two_factor_service.verify_sign_in(
+            db,
+            user,
+            code=body.code,
+            recovery_code=body.recovery_code,
+            client_host=request.client.host if request.client else None,
+        )
+    except REFUSALS as exc:
+        # Two-step sign-in turned off or reset since the password step: the
+        # sign-in starts again, and then asks for no code.
+        raise refusal_answer(
+            exc,
+            signed_in=False,
+            not_enabled_status=status.HTTP_401_UNAUTHORIZED,
+            not_enabled_detail=SIGN_IN_EXPIRED_DETAIL,
+        )
+    return _local_sign_in_answer(
+        db, user, after={"provider": "local", "second_step": result.method}
+    )
+
+
+def _sign_in_expired() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=SIGN_IN_EXPIRED_DETAIL,
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 @router.post(
@@ -483,7 +615,9 @@ def confirm_signup(confirm_data: ConfirmSignUpRequest) -> Any:
         )
 
 
-@router.post("/token", response_model=Union[LoginResponse, TokenResponse])
+@router.post(
+    "/token", response_model=Union[LoginResponse, MfaRequiredResponse, TokenResponse]
+)
 def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(deps.get_db),
@@ -493,7 +627,10 @@ def login(
 
     With ``AUTH_PROVIDER=local`` the form's ``username`` field is the user's
     e-mail address and the response has the same shape as ``/login`` (this is
-    what makes Swagger's *Authorize* button work).  With ``cognito`` the
+    what makes Swagger's *Authorize* button work), ``mfa_required`` for an
+    account with two-step sign-in on included: Swagger's *Authorize* cannot
+    take the second step, so such an account signs in with ``/login`` and
+    ``/mfa/verify`` and pastes the access token.  With ``cognito`` the
     credentials are forwarded to the user pool; a successful sign-in of a
     user who already has an account writes ``user_login`` with the provider
     ``cognito``.

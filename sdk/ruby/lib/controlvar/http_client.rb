@@ -9,6 +9,10 @@ module Controlvar
   # +Accept+/+Content-Type: application/json+. Responses are parsed as JSON.
   # Non-2xx responses raise APIError subclasses; network failures raise NetworkError.
   #
+  # No error it raises names the request's query string, in its message or
+  # through a cause (each is raised with +cause: nil+): on a flag evaluation
+  # that query is +?user_id=...&context=...+, the user's id and attributes.
+  #
   # A new Net::HTTP connection is opened per request, so a single instance can
   # be shared between threads.
   class HttpClient
@@ -73,19 +77,20 @@ module Controlvar
       end
 
       response = http.request(req)
-      handle_response(response)
+      handle_response(response, path)
     rescue Net::OpenTimeout, Net::ReadTimeout, Errno::ETIMEDOUT => e
-      raise NetworkError, "Request timed out: #{e.message}"
+      raise NetworkError, without_query("Request timed out: #{e.message}", path), cause: nil
     rescue Errno::ECONNREFUSED, Errno::EHOSTUNREACH, Errno::ECONNRESET,
            Errno::ENETUNREACH, SocketError => e
-      raise NetworkError, "Connection failed: #{e.message}"
+      raise NetworkError, without_query("Connection failed: #{e.message}", path), cause: nil
     rescue NetworkError, APIError, AuthenticationError
       raise
     rescue StandardError => e
-      raise NetworkError, "Unexpected network error: #{e.message}"
+      # URI::InvalidURIError (a base_url with a space, say) quotes the whole URL.
+      raise NetworkError, without_query("Unexpected network error: #{e.message}", path), cause: nil
     end
 
-    def handle_response(response)
+    def handle_response(response, path)
       code = response.code.to_i
 
       case code
@@ -100,11 +105,23 @@ module Controlvar
         end
       when 401
         msg = extract_error_message(response) || "Authentication failed"
-        raise AuthenticationError.new(msg, status_code: 401)
+        raise AuthenticationError.new(without_query(msg, path), status_code: 401), cause: nil
       else
         msg = extract_error_message(response) || "API error (HTTP #{code})"
-        raise APIError.new(msg, status_code: code)
+        raise APIError.new(without_query(msg, path), status_code: code), cause: nil
       end
+    end
+
+    # +text+ without +path+'s query string, with or without its "?": the query
+    # of a flag evaluation holds the user's id and attributes. The client
+    # percent-encodes that query to plain ASCII, which String#inspect (what
+    # URI::InvalidURIError quotes) leaves as it is. +scrub+ first, so that a
+    # server message that is not valid UTF-8 is still raised as itself.
+    def without_query(text, path)
+      query = path.to_s.partition('?')[2]
+      return text.to_s if query.empty?
+
+      text.to_s.scrub.gsub("?#{query}", '').gsub(query, '')
     end
 
     def extract_error_message(response)

@@ -73,6 +73,9 @@ INVENTORY: Dict[str, str] = {
     # split without balancing (#448).
     "backend/app/services/balanced_groups_results.py::stored_strata": READS,
     "backend/app/services/balanced_groups_results.py::users_outside_blocks": READS,
+    # /results/{id}/segments/{segment_id}: the experiment's assigned users,
+    # members of the segment or not (#1933).
+    "backend/app/services/segment_results.py::experiment_users": READS,
     # /track and /batch read the user's stored variant through it.
     "backend/app/api/v1/endpoints/tracking.py::_variant_at_receipt": READS,
     "backend/app/core/bandit_scheduler.py::BanditScheduler._count_assignments_by_variant": READS,

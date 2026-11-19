@@ -14,6 +14,14 @@ the global holdout's admin actions. Its server side, ``_require_admin`` in
 ``mutual_exclusion_groups.py`` and ``global_holdout.py``, checks the role and
 not the role table, so its list is compared with what both functions do when
 called with each role (a behavioural twin), not with ``ROLE_PERMISSIONS``.
+
+``canOverrideBanditWeights`` (#1957) gates "Set weights by hand" on the
+experiment page's bandit panel. Its server side, ``override_bandit_weights``
+(``PUT /api/v1/bandit/{id}/weights``), also checks the role itself, so it gets
+the same kind of twin: the route is called with each role and a database that
+refuses every use, and the roles that reach the database are the ones it
+admits.
+
 ``canAnalyseInteractions`` (#1960) gates the Interactions page; its server
 side, ``_require_developer`` in ``interactions.py``, names its roles too, so
 it gets the same behavioural twin.
@@ -23,18 +31,21 @@ from __future__ import annotations
 
 import pathlib
 import re
+import uuid
 from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
 
 from backend.app.api.v1.endpoints import (
+    bandit,
     global_holdout,
     interactions,
     mutual_exclusion_groups,
 )
 from backend.app.core.permissions import ROLE_PERMISSIONS, Action, ResourceType
 from backend.app.models.user import UserRole
+from backend.app.schemas.bandit import BanditUpdateRequest
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[4]
 HELPER = REPO_ROOT / "frontend" / "src" / "utils" / "experimentPermissions.ts"
@@ -160,6 +171,84 @@ def test_require_admin_admits_a_superuser_of_any_role(module):
     assert "if (user.is_superuser) return true;" in body.group(1)
     # A null user (no session yet) is refused, not admitted (fail closed).
     assert "if (!user) return false;" in body.group(1)
+
+
+# canOverrideBanditWeights (#1957) gates "Set weights by hand". The route,
+# `override_bandit_weights`, refuses with 403 before it touches the database,
+# so a caller it admits is the one that reaches the database: the stand-in
+# session raises `_ReachedTheDatabase` on any use, and nothing is read or
+# written.
+class _ReachedTheDatabase(Exception):
+    pass
+
+
+class _NoDatabase:
+    def __getattr__(self, name: str):
+        raise _ReachedTheDatabase(name)
+
+
+def _admitted_by_override(*, superuser: bool) -> set[str]:
+    admitted = set()
+    for role in UserRole:
+        try:
+            bandit.override_bandit_weights(
+                experiment_id=uuid.uuid4(),
+                body=BanditUpdateRequest(weights={"variant": 1.0}),
+                db=_NoDatabase(),
+                current_user=SimpleNamespace(role=role, is_superuser=superuser),
+            )
+        except HTTPException as refused:
+            assert refused.status_code == 403
+            assert refused.detail == "ADMIN role required to override bandit weights"
+        except _ReachedTheDatabase:
+            admitted.add(role.name)
+        else:  # pragma: no cover - the stand-in session cannot answer
+            raise AssertionError(
+                f"{role.name}: neither refused nor reached the database"
+            )
+    return admitted
+
+
+def _override_helper_body() -> str:
+    helper = HELPER.read_text("utf-8")
+    body = re.search(
+        r"export function canOverrideBanditWeights\([^)]*\)[^{]*\{(.{0,400}?)\n\}",
+        helper,
+        re.S,
+    )
+    assert body, "canOverrideBanditWeights not found"
+    return body.group(1)
+
+
+def test_override_bandit_weights_roles_match_the_dashboard():
+    # The four built-in roles are all asked; a role enum that lost one would
+    # make the admitted set too easy to match.
+    assert {role.name for role in UserRole} >= {
+        "ADMIN",
+        "DEVELOPER",
+        "ANALYST",
+        "VIEWER",
+    }
+    admitted = _admitted_by_override(superuser=False)
+    assert admitted == _ts_roles("ROLES_THAT_OVERRIDE_BANDIT_WEIGHTS") == {"ADMIN"}
+    # The helper reads its own list, not another route's that happens to agree
+    # today (canAdministerEligibility's), and no effective map: the route
+    # consults no custom role or direct grant.
+    body = _override_helper_body()
+    assert "ROLES_THAT_OVERRIDE_BANDIT_WEIGHTS.includes(" in body
+    assert "ROLES_THAT_ADMINISTER_ELIGIBILITY" not in body
+    assert "holds(" not in body
+
+
+def test_override_bandit_weights_admits_a_superuser_of_any_role():
+    # canOverrideBanditWeights answers true for any superuser before reading
+    # the role; the route must too, or the dashboard hides a control the API
+    # accepts.
+    assert _admitted_by_override(superuser=True) == {role.name for role in UserRole}
+    body = _override_helper_body()
+    assert "if (user.is_superuser) return true;" in body
+    # A null user (no session yet) is refused, not admitted (fail closed).
+    assert "if (!user) return false;" in body
 
 
 # canAnalyseInteractions (#1960) gates the Interactions link and every request

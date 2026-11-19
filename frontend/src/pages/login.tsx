@@ -23,6 +23,16 @@ import {
 } from '@/services/hostedUi';
 import { PageTitle } from '@/components/PageTitle';
 import { Wordmark } from '@/components/Wordmark';
+import { TwoStepCodeInput } from '@/components/account/TwoStepCodeInput';
+import {
+  CODE_STEP_LOCKED_TEXT,
+  LOST_DEVICE_HELP,
+  SIGN_IN_TIMED_OUT_MESSAGE,
+  UNAVAILABLE_TEXT,
+  WRONG_CODE_DETAIL,
+  WRONG_CODE_MESSAGE,
+  WRONG_RECOVERY_CODE_MESSAGE,
+} from '@/services/twoFactor';
 // The SSO button and `/login?sso_error=` copy: the SSO module's; a core build
 // resolves this to a stub that renders nothing.
 import SsoSignIn from '@modules/components/sso/SsoSignIn';
@@ -69,6 +79,50 @@ export function loginErrorMessage(err: unknown): string {
         : 'Too many failed attempts. Try again in a few minutes.';
     }
     if (err.status === 429) return RATE_LIMITED_MESSAGE;
+    if (err.unreadableAnswer) return SIGN_IN_UNREADABLE_MESSAGE;
+    if (err.timedOut) return signInTimeoutMessage();
+    if (err.status === 0) return unreachableMessage();
+    return err.message;
+  }
+  if (err instanceof Error && err.message) return err.message;
+  return 'Something went wrong. Please try again.';
+}
+
+/**
+ * The code step's 401 that means "start again": the mfa_token expired, or the
+ * account can no longer finish signing in. Any 401 but a wrong code is one.
+ */
+export function codeStepExpired(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 401 && err.detail !== WRONG_CODE_DETAIL;
+}
+
+/**
+ * Map a failed code step (`POST /auth/mfa/verify`) to the copy in its alert.
+ * Never `loginErrorMessage`'s: a 401 here is a wrong code, not a wrong
+ * password. The cap's 423 shows the API's own sentence, which says waiting
+ * will not help; the address lock's 423 shows its detail, as the password step
+ * does.
+ */
+export function codeStepErrorMessage(err: unknown, recovery: boolean): string {
+  if (err instanceof ApiError) {
+    if (err.status === 401) {
+      if (codeStepExpired(err)) return SIGN_IN_TIMED_OUT_MESSAGE;
+      return recovery ? WRONG_RECOVERY_CODE_MESSAGE : WRONG_CODE_MESSAGE;
+    }
+    if (err.status === 423) {
+      if (err.detail === CODE_STEP_LOCKED_TEXT) return CODE_STEP_LOCKED_TEXT;
+      return typeof err.detail === 'string' && err.detail
+        ? err.detail
+        : 'Too many failed attempts. Try again in a few minutes.';
+    }
+    if (err.status === 503 && err.detail === UNAVAILABLE_TEXT) return UNAVAILABLE_TEXT;
+    if (err.status === 422) {
+      return recovery
+        ? 'Enter one of your recovery codes as you saved it.'
+        : 'Enter the 6-digit code your authenticator app shows.';
+    }
+    if (err.status === 429) return RATE_LIMITED_MESSAGE;
+    if (err.status === 400 && err.detail === INVALID_HOST_DETAIL) return wrongHostMessage();
     if (err.unreadableAnswer) return SIGN_IN_UNREADABLE_MESSAGE;
     if (err.timedOut) return signInTimeoutMessage();
     if (err.status === 0) return unreachableMessage();
@@ -144,7 +198,13 @@ function DemoSignIn({ account }: { account: DemoAccount }) {
     setEntering(true);
     setError(null);
     try {
-      await login(account.email, account.password);
+      const result = await login(account.email, account.password);
+      if (result.status !== 'signed-in') {
+        // The demo account cannot take a second step: demo mode refuses it.
+        setError(DEMO_ENTER_FAILED);
+        setEntering(false);
+        return;
+      }
       await router.replace(nextPath);
     } catch (err) {
       setError(demoEnterErrorMessage(err));
@@ -391,13 +451,21 @@ function HostedUiSignIn({ config }: { config: CognitoSignInConfig }) {
   );
 }
 
-/** `/login` under the local provider: the email and password form. */
+/**
+ * `/login` under the local provider: the email and password form, then, for an
+ * account with two-step sign-in on (#1812), the code step in the same card.
+ * The code step's `mfa_token` is held in this component's state only: a
+ * reload, or "Back to sign-in", starts again at the password.
+ */
 function LocalSignIn() {
   const router = useRouter();
-  const { login, status, sessionError } = useAuth();
+  const { login, verifySecondStep, status, sessionError } = useAuth();
   const emailId = useId();
   const passwordId = useId();
   const errorId = useId();
+  const codeId = useId();
+  const codeErrorId = useId();
+  const codeIntroId = useId();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -408,7 +476,18 @@ function LocalSignIn() {
   const [ssoRetry, setSsoRetry] = useState<(() => void) | null>(null);
   const emailRef = useRef<HTMLInputElement>(null);
 
+  // The code step. `mfaToken` set means the password was right and a code is
+  // needed; it lives here and nowhere else.
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
+  const [recovery, setRecovery] = useState(false);
+  const [code, setCode] = useState('');
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const codeRef = useRef<HTMLInputElement>(null);
+  // "Back to sign-in" gives focus back to the email field.
+  const [backToPassword, setBackToPassword] = useState(0);
+
   const nextPath = safeNextPath(firstQueryValue(router.query.next), DEFAULT_AFTER_LOGIN);
+  const codeStep = mfaToken !== null;
 
   // Already signed in (e.g. the user typed /login by hand): go straight through.
   useEffect(() => {
@@ -421,6 +500,23 @@ function LocalSignIn() {
     // An SSO error focuses the SSO form's email instead (SsoSignIn does).
     if (error && !ssoRetry) emailRef.current?.focus();
   }, [error, ssoRetry]);
+
+  useEffect(() => {
+    if (backToPassword) emailRef.current?.focus();
+  }, [backToPassword]);
+
+  // The code step's field gets focus when the step opens, when it switches
+  // between a code and a recovery code, and after a refused code.
+  useEffect(() => {
+    if (codeStep) codeRef.current?.focus();
+  }, [codeStep, recovery, codeError]);
+
+  const leaveCodeStep = () => {
+    setMfaToken(null);
+    setRecovery(false);
+    setCode('');
+    setCodeError(null);
+  };
 
   const handleSsoError = useCallback((message: string | null, retry: (() => void) | null) => {
     setError(message);
@@ -442,7 +538,18 @@ function LocalSignIn() {
     setError(null);
     setSsoRetry(null);
     try {
-      await login(trimmedEmail, password);
+      const result = await login(trimmedEmail, password);
+      if (result.status === 'second-step') {
+        // The password is not needed again: the code step starts.
+        setPassword('');
+        setShowPassword(false);
+        setRecovery(false);
+        setCode('');
+        setCodeError(null);
+        setMfaToken(result.mfaToken);
+        setFormState('idle');
+        return;
+      }
       await router.replace(nextPath);
     } catch (err) {
       setError(loginErrorMessage(err));
@@ -450,7 +557,149 @@ function LocalSignIn() {
     }
   };
 
+  const handleVerify = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (formState === 'submitting' || mfaToken === null) return;
+    if (!code.trim()) {
+      setCodeError(recovery ? 'Enter one of your recovery codes.' : 'Enter the 6-digit code from your authenticator app.');
+      return;
+    }
+    setFormState('submitting');
+    setCodeError(null);
+    try {
+      // Sent as typed: the API drops spaces and hyphens and ignores a
+      // recovery code's letter case.
+      await verifySecondStep(mfaToken, recovery ? { recovery_code: code } : { code });
+      await router.replace(nextPath);
+    } catch (err) {
+      setFormState('idle');
+      if (codeStepExpired(err)) {
+        // The step ran out (or the account changed): sign in again.
+        leaveCodeStep();
+        setError(SIGN_IN_TIMED_OUT_MESSAGE);
+        return;
+      }
+      setCode('');
+      setCodeError(codeStepErrorMessage(err, recovery));
+    }
+  };
+
+  const switchCodeKind = () => {
+    setRecovery((value) => !value);
+    setCode('');
+    setCodeError(null);
+  };
+
+  const backToSignIn = () => {
+    leaveCodeStep();
+    setError(null);
+    setBackToPassword((n) => n + 1);
+  };
+
   const submitting = formState === 'submitting';
+
+  if (codeStep) {
+    return (
+      <>
+        <PageTitle title="Sign in" />
+        <main className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4 py-12">
+          <div className="w-full max-w-sm">
+            <div className="flex justify-center mb-8">
+              <Wordmark href={null} />
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 sm:p-8">
+              <h1 className="text-xl font-semibold text-slate-900 mb-1" data-testid="mfa-heading">
+                {recovery ? 'Enter a recovery code' : 'Enter your code'}
+              </h1>
+              <p id={codeIntroId} className="text-sm text-slate-500 mb-6" data-testid="mfa-intro">
+                {recovery
+                  ? 'Enter one of the recovery codes you saved when you turned on two-step sign-in. Each works once.'
+                  : 'Open your authenticator app and enter the 6-digit code for Controlvar.'}
+              </p>
+
+              <form onSubmit={handleVerify} noValidate data-testid="mfa-form" aria-describedby={codeIntroId}>
+                {codeError && (
+                  <div
+                    id={codeErrorId}
+                    role="alert"
+                    data-testid="mfa-error"
+                    className="login-error mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+                  >
+                    {codeError}
+                  </div>
+                )}
+
+                <div className="mb-6">
+                  <TwoStepCodeInput
+                    ref={codeRef}
+                    id={codeId}
+                    label={recovery ? 'Recovery code' : 'Code'}
+                    recovery={recovery}
+                    value={code}
+                    onChange={setCode}
+                    errorId={codeError ? codeErrorId : null}
+                    readOnly={submitting}
+                    testId="mfa-code-input"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  data-testid="mfa-submit"
+                  disabled={submitting}
+                  aria-busy={submitting}
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                >
+                  {submitting && (
+                    <span
+                      aria-hidden="true"
+                      className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"
+                    />
+                  )}
+                  {submitting ? 'Verifying…' : 'Verify'}
+                </button>
+              </form>
+
+              <div className="mt-4 flex flex-col items-start gap-2 text-sm">
+                <button
+                  type="button"
+                  data-testid="mfa-switch"
+                  onClick={switchCodeKind}
+                  disabled={submitting}
+                  className="font-medium text-blue-700 underline hover:text-blue-900 disabled:opacity-60"
+                >
+                  {recovery ? 'Use a code from your authenticator app instead' : 'Use a recovery code instead'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="mfa-back"
+                  onClick={backToSignIn}
+                  disabled={submitting}
+                  className="text-slate-600 underline hover:text-slate-900 disabled:opacity-60"
+                >
+                  Back to sign-in
+                </button>
+              </div>
+
+              <details className="mt-5 text-sm" data-testid="lost-device">
+                <summary className="cursor-pointer text-slate-500 hover:text-slate-800 select-none">
+                  Lost your phone and your recovery codes?
+                </summary>
+                <p className="mt-2 text-slate-600" data-testid="lost-device-help">
+                  {LOST_DEVICE_HELP}
+                </p>
+              </details>
+            </div>
+
+            <p className="mt-6 text-center text-xs text-slate-500">
+              No public sign-up. Accounts are created by an administrator.
+            </p>
+          </div>
+        </main>
+      </>
+    );
+  }
 
   return (
     <>

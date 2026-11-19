@@ -9,13 +9,17 @@
  *
  * Behaviour:
  *  - **The server decides.** Flag evaluation goes to
- *    `GET /api/v1/feature-flags/evaluate/{key}?user_id=…` and assignment to
+ *    `GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=…` (the
+ *    user's attributes, left out when there are none) and assignment to
  *    `POST /api/v1/tracking/assign`. Nothing is bucketed locally; `hashUser`
  *    is exported as a utility only.
  *  - **Caching.** Successful results are cached in memory per user + key for
  *    `cacheTtlMs`, and optionally in a shared `store` (Cloudflare KV, Deno KV)
  *    so other isolates can reuse them. Failures are never cached. Concurrent
- *    calls for the same user + key share one in-flight request.
+ *    calls for the same user + key (and, for a flag, the same attributes)
+ *    share one in-flight request. A flag's cache slot remembers the attributes
+ *    it was asked with, and only a call with the same attributes reuses it;
+ *    the shared store is used only by calls without attributes.
  *  - **Failure values.** `evaluateFlag` resolves to a disabled evaluation and
  *    `getAssignment` to `null` when the server cannot be reached; `track`
  *    never throws.
@@ -63,6 +67,53 @@ function encode(value: string): string {
   return encodeURIComponent(value);
 }
 
+/**
+ * `&context=<url-encoded JSON>` for a flag query string, or `''` when the
+ * attributes are missing or an empty object (nothing is sent then).
+ */
+function contextQuery(attributes: Record<string, unknown> | undefined): string {
+  if (!attributes || typeof attributes !== 'object' || Object.keys(attributes).length === 0) return '';
+  return `&context=${encode(JSON.stringify(attributes))}`;
+}
+
+/**
+ * The `contextQuery` for a flag call, or `null` when the attributes cannot be
+ * written as JSON (a BigInt, a cycle). Nothing is then sent, cached or logged:
+ * the serialiser's own error is dropped because its message can quote a value.
+ */
+function contextQueryOrNull(attributes: Record<string, unknown> | undefined): string | null {
+  try {
+    return contextQuery(attributes);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A request path without its query string, as a request error message names it:
+ * `/api/v1/feature-flags/evaluate/my-flag?user_id=…&context=…` gives
+ * `/api/v1/feature-flags/evaluate/my-flag`. The query holds the user's id and attributes.
+ */
+function withoutQuery(path: string): string {
+  const question = path.indexOf('?');
+  return question === -1 ? path : path.slice(0, question);
+}
+
+/** The query of `url` (`?…`) as the URL parser writes it, or `''` when it cannot be parsed. */
+function serialisedQuery(url: string): string {
+  try {
+    return new URL(url).search;
+  } catch {
+    return '';
+  }
+}
+
+/** One cached flag answer, with the exact context string it was asked with (`''` for none). */
+interface FlagSlot {
+  evaluation: FlagEvaluation;
+  context: string;
+}
+
 function toIso(timestamp: Date | string): string {
   return timestamp instanceof Date ? timestamp.toISOString() : String(timestamp);
 }
@@ -75,8 +126,11 @@ export class EdgeExperimentationClient {
   protected readonly store: EdgeStore | undefined;
   private readonly fetchImpl: typeof fetch | undefined;
 
-  /** Per-user flag evaluations (keyed by "flag:{userId}:{flagKey}"). */
-  private readonly flagCache: EdgeCache<FlagEvaluation>;
+  /**
+   * Per-user flag evaluations (keyed by "flag:{userId}:{flagKey}"): one slot per
+   * user + flag, which remembers the context it was answered for.
+   */
+  private readonly flagCache: EdgeCache<FlagSlot>;
   /** Per-user assignments (keyed by "assign:{userId}:{experimentKey}"). */
   private readonly assignmentCache: EdgeCache<Assignment>;
   /** Requests currently in flight, so concurrent callers share one fetch. */
@@ -99,7 +153,7 @@ export class EdgeExperimentationClient {
     this.store = config.store;
     this.fetchImpl = config.fetch;
 
-    this.flagCache = new EdgeCache<FlagEvaluation>(this.cacheTtlMs);
+    this.flagCache = new EdgeCache<FlagSlot>(this.cacheTtlMs);
     this.assignmentCache = new EdgeCache<Assignment>(this.cacheTtlMs);
   }
 
@@ -107,9 +161,12 @@ export class EdgeExperimentationClient {
   // Synchronous access (zero latency — in-memory cache only, never the network)
   // ---------------------------------------------------------------------------
 
-  /** Cached evaluation for this user + flag, or `null` when not cached (or expired). */
+  /**
+   * Cached evaluation for this user + flag, or `null` when not cached (or expired).
+   * It is the last answer cached, whatever attributes it was asked with.
+   */
   getCachedFlag(flagKey: string, userId: string): FlagEvaluation | null {
-    return this.flagCache.get(flagKey_(userId, flagKey)) ?? null;
+    return this.flagCache.get(flagKey_(userId, flagKey))?.evaluation ?? null;
   }
 
   /** Cached assignment for this user + experiment, or `null` when not cached (or expired). */
@@ -139,34 +196,48 @@ export class EdgeExperimentationClient {
   // ---------------------------------------------------------------------------
 
   /**
-   * Evaluate a flag via `GET /api/v1/feature-flags/evaluate/{key}?user_id=…`.
-   * Order: in-memory cache → shared store → network. Never throws: on
-   * failure (404 unknown flag key, network error, timeout) resolves to
+   * Evaluate a flag via `GET /api/v1/feature-flags/evaluate/{key}?user_id=…[&context=…]`.
+   * `attributes` (when non-empty) is sent as `context`, so the flag's targeting
+   * rules match against it. Order: in-memory cache → shared store → network.
+   * The cache holds one answer per user + flag, with the attributes it was asked
+   * with; a call is answered from it only when its attributes are exactly the
+   * same. Only a call without attributes reads or writes the shared store.
+   * Never throws: on failure (404 unknown flag key, network error, timeout,
+   * attributes that cannot be written as JSON) resolves to
    * `{key, enabled: false, config: null}`, which is not cached.
    */
-  async evaluateFlag(flagKey: string, userId: string): Promise<FlagEvaluation> {
+  async evaluateFlag(
+    flagKey: string,
+    userId: string,
+    attributes?: Record<string, unknown>,
+  ): Promise<FlagEvaluation> {
+    const context = contextQueryOrNull(attributes);
+    if (context === null) return { key: flagKey, enabled: false, config: null };
+
     const cacheKey = flagKey_(userId, flagKey);
     const cached = this.flagCache.get(cacheKey);
-    if (cached) return cached;
+    if (cached && cached.context === context) return cached.evaluation;
 
-    return this.dedupe(cacheKey, async () => {
-      const stored = await this.storeGet<FlagEvaluation>(cacheKey, isFlagEvaluation);
+    return this.dedupe(`${cacheKey}\u0000${context}`, async () => {
+      // The shared store keeps answers for calls without attributes only.
+      const fromStore = context === '' ? await this.storeGet<FlagEvaluation>(cacheKey, isFlagEvaluation) : null;
+      const stored: FlagSlot | null = fromStore ? { evaluation: fromStore, context } : null;
       if (stored) {
         this.flagCache.set(cacheKey, stored);
-        return stored;
+        return stored.evaluation;
       }
 
       try {
         const data = await this.requestJson<FlagEvaluateResponse>(
-          `/api/v1/feature-flags/evaluate/${encode(flagKey)}?user_id=${encode(userId)}`,
+          `/api/v1/feature-flags/evaluate/${encode(flagKey)}?user_id=${encode(userId)}${context}`,
         );
         const evaluation: FlagEvaluation = {
           key: flagKey,
           enabled: Boolean(data?.enabled),
           config: data?.config === undefined ? null : data.config,
         };
-        this.flagCache.set(cacheKey, evaluation);
-        await this.storePut(cacheKey, evaluation);
+        this.flagCache.set(cacheKey, { evaluation, context });
+        if (context === '') await this.storePut(cacheKey, evaluation);
         return evaluation;
       } catch {
         return { key: flagKey, enabled: false, config: null };
@@ -175,19 +246,28 @@ export class EdgeExperimentationClient {
   }
 
   /** `true` only when the server says the flag is enabled for this user; `false` on any failure. */
-  async isFeatureEnabled(flagKey: string, userId: string): Promise<boolean> {
-    return (await this.evaluateFlag(flagKey, userId)).enabled;
+  async isFeatureEnabled(
+    flagKey: string,
+    userId: string,
+    attributes?: Record<string, unknown>,
+  ): Promise<boolean> {
+    return (await this.evaluateFlag(flagKey, userId, attributes)).enabled;
   }
 
   /**
-   * All flags for a user via `GET /api/v1/feature-flags/user/{user_id}` →
-   * `{flagKey: enabled}`. Not cached and not part of the tracking fan-out
-   * (it carries no `config`). Resolves to `{}` on failure.
+   * All flags for a user via
+   * `GET /api/v1/feature-flags/user/{user_id}[?context=<url-encoded JSON>]` →
+   * `{flagKey: enabled}`. `attributes` (when non-empty) is sent as `context`
+   * for targeting rules. Not cached and not part of the tracking fan-out
+   * (it carries no `config`). Resolves to `{}` on failure, and when the
+   * attributes cannot be written as JSON.
    */
-  async getAllFlags(userId: string): Promise<Record<string, boolean>> {
+  async getAllFlags(userId: string, attributes?: Record<string, unknown>): Promise<Record<string, boolean>> {
+    const context = contextQueryOrNull(attributes);
+    if (context === null) return {};
     try {
       const data = await this.requestJson<Record<string, unknown>>(
-        `/api/v1/feature-flags/user/${encode(userId)}`,
+        `/api/v1/feature-flags/user/${encode(userId)}${context ? `?${context.slice(1)}` : ''}`,
       );
       const flags: Record<string, boolean> = {};
       if (data && typeof data === 'object') {
@@ -341,7 +421,7 @@ export class EdgeExperimentationClient {
 
   /** Keys of flags successfully evaluated (and still cached) for the user. */
   getEvaluatedFlags(userId: string): string[] {
-    return this.flagCache.entries(`${FLAG_PREFIX}${encode(userId)}:`).map(([, e]) => e.key);
+    return this.flagCache.entries(`${FLAG_PREFIX}${encode(userId)}:`).map(([, slot]) => slot.evaluation.key);
   }
 
   /** Drop every cached evaluation and assignment (in-memory only). */
@@ -440,6 +520,7 @@ export class EdgeExperimentationClient {
   }
 
   private async request(path: string, init: RequestInitLite = {}): Promise<Response> {
+    const url = `${this.baseUrl}${path}`;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeout);
     try {
@@ -448,7 +529,7 @@ export class EdgeExperimentationClient {
       if (typeof fetchImpl !== 'function') {
         throw new Error('No fetch implementation available; pass config.fetch');
       }
-      return await fetchImpl(`${this.baseUrl}${path}`, {
+      return await fetchImpl(url, {
         method: init.method ?? 'GET',
         headers: {
           'X-API-Key': this.apiKey,
@@ -458,6 +539,20 @@ export class EdgeExperimentationClient {
         body: init.body === undefined ? undefined : JSON.stringify(init.body),
         signal: controller.signal,
       });
+    } catch (err) {
+      const shown = withoutQuery(path);
+      if (shown === path) throw err;
+      // The path has a query (the user id and attributes). A fetch implementation may name the URL
+      // in its own message, as passed or as the URL parser writes it (`'` as `%27`, for one): the
+      // query is removed in both forms, with and without its `?`. The original error is not kept
+      // as a `cause`, because its message and its own cause can still hold the query.
+      let message = err instanceof Error ? err.message : String(err);
+      for (const query of [path.slice(shown.length), serialisedQuery(url)]) {
+        if (query.length > 1) message = message.split(query).join('').split(query.slice(1)).join('');
+      }
+      const stripped = new Error(message);
+      if (err instanceof Error) stripped.name = err.name;
+      throw stripped;
     } finally {
       clearTimeout(timer);
     }
@@ -466,12 +561,12 @@ export class EdgeExperimentationClient {
   /** Perform a request and throw on a non-2xx status; the body is ignored. */
   private async requestOk(path: string, init: RequestInitLite = {}): Promise<void> {
     const response = await this.request(path, init);
-    if (!response.ok) throw new EdgeApiError(response.status, `API error ${response.status} (${path})`);
+    if (!response.ok) throw new EdgeApiError(response.status, `API error ${response.status} (${withoutQuery(path)})`);
   }
 
   private async requestJson<T>(path: string, init: RequestInitLite = {}): Promise<T> {
     const response = await this.request(path, init);
-    if (!response.ok) throw new EdgeApiError(response.status, `API error ${response.status} (${path})`);
+    if (!response.ok) throw new EdgeApiError(response.status, `API error ${response.status} (${withoutQuery(path)})`);
     return (await response.json()) as T;
   }
 }
