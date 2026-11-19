@@ -20,6 +20,11 @@ posterior: every call made on the same day for the same experiment and
 sample count reuses the same seed, so dashboards, API consumers and the
 persisted ``analysis_snapshots`` agree.
 
+``derive_test_seed(key)`` is the same construction over a key alone, with no
+day: a mean metric's permutation test (``services/permutation_test.py``)
+keys it on the comparison's identity, so the same rows give the same p-value
+on every day.
+
 This module lives in ``core`` (not ``services``) so that Pydantic schemas can
 import ``ENGINE_VERSION`` without creating an import cycle through
 ``backend.app.services``.
@@ -122,6 +127,25 @@ def derive_seed(experiment_id: object, bucket: str, n_samples: int) -> int:
     """
     key = f"{experiment_id}|{bucket}|{int(n_samples)}".encode("utf-8")
     digest = hashlib.blake2b(key, digest_size=8).digest()
+    return int.from_bytes(digest, "big") & _SEED_MASK
+
+
+def derive_test_seed(key: str) -> int:
+    """Derive the RNG seed of a computation identified by ``key`` alone.
+
+    The same construction as :func:`derive_seed` (blake2b, 8 bytes,
+    big-endian, top bit cleared) with no day bucket, so the same key gives
+    the same seed on every day, in every process and on every machine.  A
+    mean metric's permutation test (#2041) keys it on the comparison's
+    identity (``backend.app.services.permutation_test``).
+
+    Args:
+        key: The computation's identity, encoded as UTF-8.
+
+    Returns:
+        A non-negative integer below 2**63.
+    """
+    digest = hashlib.blake2b(key.encode("utf-8"), digest_size=8).digest()
     return int.from_bytes(digest, "big") & _SEED_MASK
 
 
