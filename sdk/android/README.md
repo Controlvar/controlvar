@@ -128,18 +128,20 @@ Every event this SDK sends carries an `event_id`, and the server stores an event
 the same `event_id`, user, experiment, flag and event name only once. The SDK is not on Maven
 Central yet, so this is in the build you make from a clone of this repository.
 
-- `TrackEvent(userId, eventName, eventId = "order-42")` sets the id. Without one, the SDK makes a
+- `TrackEvent(userId, eventName, eventId = ...)` sets the id. Without one, the SDK makes a
   lowercase random UUID (version 4) each time you track the event, so tracking the same
-  `TrackEvent` twice sends two events.
+  `TrackEvent` twice sends two events. For an event your code may send again, make the id once,
+  when the event happens (for example `UUID.randomUUID().toString()`), keep it with the event,
+  and pass the same `eventId` each time you send it.
 - A fanned-out event carries the same id in every entry. In `trackBatch`, each event has its own id.
 - At most 255 characters, with no NUL and no lone surrogate; `TrackEvent`'s constructor and
   `copy()` throw `IllegalArgumentException` for any other id, so that event is never sent. `null`
   and `""` set none.
-- OkHttp can send a request again by itself when the connection drops after the request was
-  written, for example on a kept-alive connection the server or a proxy has closed. The request it
-  sends again carries the same body and the same `event_id`, so the server stores the event once.
-- A request that times out is not sent again. To send it again yourself and have it stored once,
-  give the event an `eventId` and send that same id again.
+- OkHttp sends a request again by itself when a kept-alive connection that the server or a proxy
+  has closed drops after the request was written. The request it sends again carries the same
+  body and the same `event_id`, so the server stores the event once.
+- A request that times out, or whose new connection drops, is not sent again. To send it again
+  yourself and have it stored once, give the event an `eventId` and send that same id again.
 
 Full details: [Event ids](../../docs/sdk/android.md#event-ids).
 

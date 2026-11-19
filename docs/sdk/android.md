@@ -271,21 +271,23 @@ same `event_id`, user, experiment, flag and event name only once (see
 Maven Central yet, so this is in the build you make from a clone of this repository (see
 [Installation](#installation)).
 
-- `TrackEvent(userId, eventName, eventId = "order-42")` sets the id. Without one, `track` and
+- `TrackEvent(userId, eventName, eventId = ...)` sets the id. Without one, `track` and
   `trackBatch` make a lowercase random UUID (version 4) for the event each time you track it, so
-  tracking the same `TrackEvent` twice sends two events.
+  tracking the same `TrackEvent` twice sends two events. For an event your code may send again,
+  make the id once, when the event happens (for example `UUID.randomUUID().toString()`), keep it
+  with the event, and pass the same `eventId` each time you send it.
 - An event fanned out to several experiments and flags carries the same id in every entry, so it
   counts once in each of them. In `trackBatch`, each event has its own id.
 - `eventId` takes at most 255 characters, with no NUL and no lone surrogate. `TrackEvent`'s
   constructor and `copy()` throw `IllegalArgumentException` for any other id, so that event is
   never sent. `null` and `""` set none.
-- OkHttp, which this SDK sends its requests with, sends a request again by itself when the
-  connection drops after the request was written, for example on a kept-alive connection that the
-  server or a proxy has closed. The request it sends again has the same body and the same
-  `event_id`, so the server stores the event once.
-- A request that times out is not sent again: `track` and `trackBatch` drop it. The server may
-  have stored it. To send it again yourself and have it stored once, give the event an `eventId`
-  and send it again with that same id.
+- OkHttp, which this SDK sends its requests with, sends a request again by itself when a
+  kept-alive connection that the server or a proxy has closed drops after the request was
+  written. The request it sends again has the same body and the same `event_id`, so the server
+  stores the event once.
+- A request that times out, or whose new connection drops, is not sent again: `track` and
+  `trackBatch` drop it. The server may have stored it. To send it again yourself and have it
+  stored once, give the event an `eventId` and send it again with that same id.
 
 ---
 
