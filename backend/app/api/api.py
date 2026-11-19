@@ -45,6 +45,8 @@ from backend.app.api.v1.endpoints import (
     tracking,
     tracking_visual,
     users,
+    visual_editor,
+    visual_editor_tickets,
     visual_preview_links,
     websocket_results,
 )
@@ -76,6 +78,16 @@ def register_core_routers(router: APIRouter) -> APIRouter:
     # dashboard (needs experiment update).
     router.include_router(
         visual_preview_links.router, prefix="/experiments", tags=["Experiments"]
+    )
+    # #1545: opening a visual draft in the visual editor (needs experiment
+    # update; only from the dashboard's origin).
+    router.include_router(
+        visual_editor_tickets.router, prefix="/experiments", tags=["Experiments"]
+    )
+    # #1545: the editor link's claim, from the site's page, and the editor's
+    # session, from the dashboard; neither takes a sign-in or an API key.
+    router.include_router(
+        visual_editor.router, prefix="/visual-editor", tags=["Visual Editor"]
     )
     router.include_router(tracking.router, prefix="/tracking", tags=["Tracking"])
     # #1545: the visual editor's browser script asks which changes and goals a

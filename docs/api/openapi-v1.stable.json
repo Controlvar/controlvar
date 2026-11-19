@@ -2116,6 +2116,30 @@
         "title": "BulkToggleResult",
         "type": "object"
       },
+      "ClaimExchange": {
+        "additionalProperties": false,
+        "description": "What the visual editor's panel sends to start its session.",
+        "properties": {
+          "claim": {
+            "description": "The value the page handed the panel: the 43 base64url characters it sent with the editor link.",
+            "title": "Claim",
+            "type": "string"
+          },
+          "page_origin": {
+            "description": "The origin of the page that handed the panel the value: the `origin` of that message event. It must be one of the experiment's sites.",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Page Origin",
+            "type": "string"
+          }
+        },
+        "required": [
+          "claim",
+          "page_origin"
+        ],
+        "title": "ClaimExchange",
+        "type": "object"
+      },
       "ClickGoal": {
         "additionalProperties": false,
         "description": "A click on the one element *selector* matches, on page *page*.",
@@ -3545,6 +3569,170 @@
           "segments"
         ],
         "title": "DimensionalBreakdownResponse",
+        "type": "object"
+      },
+      "EditorExperiment": {
+        "properties": {
+          "design_etag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The design's version, as the experiment's own answer gives it.",
+            "title": "Design Etag"
+          },
+          "editor_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Editor Url"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pages": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Pages",
+            "type": "array"
+          },
+          "variants": {
+            "items": {
+              "$ref": "#/components/schemas/EditorVariant"
+            },
+            "title": "Variants",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "pages",
+          "variants"
+        ],
+        "title": "EditorExperiment",
+        "type": "object"
+      },
+      "EditorLinkOpened": {
+        "description": "The editor link, shown once.",
+        "properties": {
+          "expires_at": {
+            "description": "When the link stops working.",
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "open_url": {
+            "description": "The experiment's editor page with `#controlvar-editor=<43 characters>`. It opens the visual editor once, within 120 seconds, on a page with the Controlvar script.",
+            "title": "Open Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "open_url",
+          "expires_at"
+        ],
+        "title": "EditorLinkOpened",
+        "type": "object"
+      },
+      "EditorSessionOpened": {
+        "description": "A new editor session, with its token, shown once.",
+        "properties": {
+          "experiment": {
+            "$ref": "#/components/schemas/EditorExperiment"
+          },
+          "expires_at": {
+            "description": "When the session ends: 4 hours after it began.",
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "site_origins": {
+            "description": "The experiment's sites the editor may run on: its pages' origins that this server accepts requests from.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Site Origins",
+            "type": "array"
+          },
+          "token": {
+            "description": "`cves_` and 43 base64url characters: the session's bearer token for the visual editor's session routes and no other.",
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expires_at",
+          "site_origins",
+          "experiment",
+          "token"
+        ],
+        "title": "EditorSessionOpened",
+        "type": "object"
+      },
+      "EditorVariant": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_control": {
+            "title": "Is Control",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "visual_changes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The variant's page changes as stored, or null.",
+            "title": "Visual Changes"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "is_control"
+        ],
+        "title": "EditorVariant",
         "type": "object"
       },
       "EffectSizeLabel": {
@@ -13508,6 +13696,46 @@
         "title": "TestNotificationRequest",
         "type": "object"
       },
+      "TicketClaim": {
+        "additionalProperties": false,
+        "description": "What the page an editor link opened sends.",
+        "properties": {
+          "claim": {
+            "description": "43 base64url characters (A-Z, a-z, 0-9, - and _, no padding), drawn at random by the page.",
+            "title": "Claim",
+            "type": "string"
+          },
+          "ticket": {
+            "description": "The value after `#controlvar-editor=` in the editor link.",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Ticket",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticket",
+          "claim"
+        ],
+        "title": "TicketClaim",
+        "type": "object"
+      },
+      "TicketClaimed": {
+        "description": "The claim was stored. No credential comes back.",
+        "properties": {
+          "expires_at": {
+            "description": "When the claim stops working if the editor has not used it.",
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expires_at"
+        ],
+        "title": "TicketClaimed",
+        "type": "object"
+      },
       "ToggleRequest": {
         "description": "Schema for feature flag toggle requests.",
         "properties": {
@@ -21258,6 +21486,60 @@
           "Experiments",
           "Experiments"
         ]
+      }
+    },
+    "/api/v1/experiments/{experiment_id}/visual/editor-tickets": {
+      "post": {
+        "description": "Make the link that opens a visual draft in the visual editor, on the\nexperiment's own page.\n\nThe link is the experiment's editor page with\n`#controlvar-editor=<ticket>`; it works once, within 120 seconds, and is\nanswered once (only a hash of the ticket is stored). Making it ends every\neditor session of the experiment that is still open, whoever opened it.\n\nAccepted only from the dashboard: the request's `Origin` must be one of\nthe server's dashboard origins (DASHBOARD_ORIGINS, or PUBLIC_BASE_URL's).\nRefused, in this order: 422 when the server knows no dashboard origin;\n403 for any other `Origin`, or none; 404; 403 for a caller who may not\nchange experiments (READ and UPDATE); 400 when the experiment has no\nvisual settings, is not a draft, or has a start date; 422 when one of its\npages, or its editor page, is on a site this server does not accept\nrequests from (CORS_ORIGINS), or on the dashboard's own address, or when\nCORS_ORIGINS is `*`. Sent with `Cache-Control: no-store`.",
+        "operationId": "open_visual_editor_api_v1_experiments__experiment_id__visual_editor_tickets_post",
+        "parameters": [
+          {
+            "description": "The visual draft",
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "description": "The visual draft",
+              "format": "uuid",
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditorLinkOpened"
+                }
+              }
+            },
+            "description": "The editor link, shown once"
+          },
+          "400": {
+            "description": "The experiment has no visual settings, is not a draft, or has a start date"
+          },
+          "403": {
+            "description": "The request does not come from the dashboard, or the caller may not change experiments"
+          },
+          "404": {
+            "description": "No such experiment"
+          },
+          "422": {
+            "description": "The server does not know the dashboard's address, or a page of the experiment is on a site this server does not accept"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Open a visual draft in the visual editor (beta)",
+        "tags": [
+          "Experiments"
+        ],
+        "x-stability": "beta"
       }
     },
     "/api/v1/experiments/{experiment_id}/visual/preview-links": {
@@ -30147,6 +30429,106 @@
         "tags": [
           "Utilities"
         ]
+      }
+    },
+    "/api/v1/visual-editor/sessions": {
+      "post": {
+        "description": "Exchange the page's value for a visual editor session.\n\nSent by the visual editor's panel, from the dashboard, with the value the\npage handed it and that page's origin. The session belongs to the user\nwho made the editor link, lasts 4 hours and cannot be extended; its token\nworks only on the visual editor's session routes. The answer carries the\ntoken once, the experiment's sites the editor may run on, and the\ndraft's design.\n\nRefused, in this order: 403 when the request's `Origin` is not one of the\ndashboard's; 422 when the request is not in the documented form; 409 when\nthe value was already used, which also closes the editor it opened; 401\nwhen it is unknown, expired or ended; 403 when `page_origin` is not one of\nthe experiment's sites; 403 when the user is no longer active or may no\nlonger change experiments; 400 when the experiment is no longer a draft,\nhas a start date, or has no visual settings. After the 401 every refusal\nleaves the value spent. Sent with `Cache-Control: no-store`.",
+        "operationId": "open_editor_session_api_v1_visual_editor_sessions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimExchange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditorSessionOpened"
+                }
+              }
+            },
+            "description": "The session's token, shown once, and the draft"
+          },
+          "400": {
+            "description": "The experiment is no longer a draft, has a start date, or has no visual settings"
+          },
+          "401": {
+            "description": "The value is unknown, expired or ended"
+          },
+          "403": {
+            "description": "The request does not come from the dashboard, the page is not one of the experiment's sites, or the user may no longer change the experiment"
+          },
+          "409": {
+            "description": "The editor link was already used: the editor it opened is closed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start a visual editor session (beta)",
+        "tags": [
+          "Visual Editor"
+        ],
+        "x-stability": "beta"
+      }
+    },
+    "/api/v1/visual-editor/tickets/claim": {
+      "post": {
+        "description": "Spend an editor link's ticket and store the page's value in its place.\n\nSent by the Controlvar script on the page the editor link opened, with no\nAPI key and no cookie. `claim` is 43 base64url characters the page drew;\nthe editor's panel then exchanges it for a session\n(`POST /api/v1/visual-editor/sessions`) within 120 seconds. The answer holds\nno credential.\n\nRefused, in this order: 422 when `claim` is not 43 base64url characters,\nor is already in use (the ticket is not spent); 409 when the ticket was\nalready used, which also closes the editor it opened; 401 when it is\nunknown, expired or ended; 403 when the request's `Origin` is not one of\nthe experiment's sites (the ticket stays spent). Sent with\n`Cache-Control: no-store`.",
+        "operationId": "claim_editor_link_api_v1_visual_editor_tickets_claim_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TicketClaim"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketClaimed"
+                }
+              }
+            },
+            "description": "The claim is stored; no credential comes back"
+          },
+          "401": {
+            "description": "The editor link is unknown, expired or ended"
+          },
+          "403": {
+            "description": "The request does not come from one of the experiment's sites"
+          },
+          "409": {
+            "description": "The editor link was already used: the editor it opened is closed"
+          },
+          "422": {
+            "description": "The request is not in the documented form, or the value sent with the link is already in use"
+          }
+        },
+        "summary": "Claim an editor link, from the page it opened (beta)",
+        "tags": [
+          "Visual Editor"
+        ],
+        "x-stability": "beta"
       }
     },
     "/api/v1/wizard/drafts": {

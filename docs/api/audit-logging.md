@@ -304,6 +304,9 @@ No entry holds a password, a token, any part of an API key, or a request body.
 | `experiment_start`, `experiment_pause`, `experiment_complete` | `experiment` | `/start` (also a resume), `/pause`, `/complete` |
 | `experiment_preview_link_create` | `experiment` | `POST /experiments/{id}/visual/preview-links` makes a visual experiment's preview link; `new_value` is `{"variant_id", "expires_at"}`, never the link or its token |
 | `experiment_preview_links_revoke` | `experiment` | `DELETE /experiments/{id}/visual/preview-links` ends the experiment's live preview links; `new_value` is `{"revoked"}`, how many were ended |
+| `visual_editor_session_opened` | `experiment` | `POST /visual-editor/sessions` starts a visual editor session, the actor being the user who opened the editor link; `new_value` is `{"session_id"}`, never the session's token |
+| `visual_editor_session_closed` | `experiment` | A visual editor session ends; `new_value` is `{"reason", "session_id", "session_user_id"}`. `reason` is `reopened` when `POST /experiments/{id}/visual/editor-tickets` opened the editor again, the actor being whoever opened it, and `ticket_reused` when the session's editor link came back after it was used, the actor being `system:visual-editor` |
+| `visual_editor_ticket_reused` | `experiment` | An editor link that was already used came back to `POST /visual-editor/tickets/claim` or `POST /visual-editor/sessions`, which closes the editor it opened; the actor is `system:visual-editor` and `new_value` is `{"link_user_id"}`, the user who opened the link |
 | `api_key_create`, `api_key_revoke` | `api_key` | `POST /api-keys`, `DELETE /api-keys/{id}` |
 | `holdout_create` | `holdout` | `POST /holdout`. With `is_active: true` it turns the active holdout off, and that holdout gets its own `holdout_deactivate` |
 | `holdout_update`, `holdout_activate`, `holdout_deactivate` | `holdout` | `PUT /holdout/{id}`, one entry per kind of change. Activating a holdout turns any other active one off, and that holdout gets its own `holdout_deactivate`. An activate or deactivate entry also carries the `activated_at` or `deactivated_at` it set |
@@ -369,6 +372,7 @@ these reserved values:
 | `system:cognito-sync` | Cognito group sync: each role or superuser flag change |
 | `system:sso-sync` | SSO sign-in (full profile): each role change from a mapped group |
 | `system:operator-cli` | An operator's command, `python -m backend.app.db.two_factor_reset`: each account whose two-step sign-in it resets |
+| `system:visual-editor` | The visual editor's sign-in: each editor link that came back after it was used, and each editor session that closes because of it |
 
 An entry is automatic only when `user_id` is empty **and** `user_email` is one of these
 values. Deleting a user also empties `user_id` on their entries, but keeps their own

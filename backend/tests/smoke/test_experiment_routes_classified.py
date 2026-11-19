@@ -93,6 +93,8 @@ CORE_ROUTES = {
     # visual_preview_links.py (#1545)
     ("POST", f"{E}/{{experiment_id}}/visual/preview-links"): CHANGE_UPDATE,
     ("DELETE", f"{E}/{{experiment_id}}/visual/preview-links"): CHANGE_UPDATE,
+    # visual_editor_tickets.py (#1545): opening the visual editor
+    ("POST", f"{E}/{{experiment_id}}/visual/editor-tickets"): CHANGE_UPDATE,
     # results.py and post_stratification.py
     ("GET", R): READ,
     ("GET", f"{R}/daily"): READ,
@@ -166,8 +168,8 @@ EXPORT_AND_INTERACTION_ROUTES = {
 }
 EXPORT_AND_INTERACTION_PREFIXES = ("/api/v1/export/", "/api/v1/interactions/")
 
-CORE_COUNT = 53  # 51 HTTP + 1 WebSocket selected, and the explicit entry
-FULL_COUNT = 58
+CORE_COUNT = 54  # 52 HTTP + 1 WebSocket selected, and the explicit entry
+FULL_COUNT = 59
 
 
 def _full_profile() -> bool:

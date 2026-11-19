@@ -45,9 +45,11 @@ pytestmark = [pytest.mark.unit]
 #: (MfaVerifyRequest), /users/me/2fa/confirm and /recovery-codes
 #: (TwoFactorCodeRequest) and /users/me/2fa/disable (TwoFactorDisableRequest).
 #: Then 1 more to both: the current password at /users/me/2fa/enroll
-#: (TwoFactorEnrolRequest).
-CORE_MODEL_COUNT = 97
-FULL_MODEL_COUNT = 141
+#: (TwoFactorEnrolRequest). #1545's visual editor sign-in added 2 to both:
+#: the bodies of /visual-editor/tickets/claim (TicketClaim) and
+#: /visual-editor/sessions (ClaimExchange).
+CORE_MODEL_COUNT = 99
+FULL_MODEL_COUNT = 143
 
 #: ``(model, field)`` pairs that a ``mode="before"`` field validator covers.
 CORE_BEFORE_COUNT = 46

@@ -168,6 +168,11 @@ INVENTORY = {
     ("DELETE", f"{V1}/experiments/{{experiment_id}}/visual/preview-links"): Audited(
         A.EXPERIMENT_PREVIEW_LINKS_REVOKE
     ),
+    # #1545: opening the visual editor closes the experiment's open editor
+    # sessions, one entry each.
+    ("POST", f"{V1}/experiments/{{experiment_id}}/visual/editor-tickets"): Audited(
+        A.VISUAL_EDITOR_SESSION_CLOSED
+    ),
     # --- experiment wizard ---------------------------------------------------
     ("POST", f"{V1}/wizard/drafts"): DRAFT,
     ("PUT", f"{V1}/wizard/drafts/{{draft_id}}/step"): DRAFT,
@@ -269,6 +274,16 @@ INVENTORY = {
     # #1545: the visual editor's browser script, with a key in the page.
     ("POST", f"{V1}/tracking/visual"): SDK,
     ("POST", f"{V1}/tracking/visual/preview"): READ_ONLY,
+    # --- the visual editor's sign-in (#1545) -----------------------------------
+    # A used editor link presented again ends the editor it opened.
+    ("POST", f"{V1}/visual-editor/tickets/claim"): Audited(
+        A.VISUAL_EDITOR_TICKET_REUSED, A.VISUAL_EDITOR_SESSION_CLOSED
+    ),
+    ("POST", f"{V1}/visual-editor/sessions"): Audited(
+        A.VISUAL_EDITOR_SESSION_OPENED,
+        A.VISUAL_EDITOR_TICKET_REUSED,
+        A.VISUAL_EDITOR_SESSION_CLOSED,
+    ),
 }
 
 #: GET routes a reader could expect to be recorded, and why they are not.
@@ -319,7 +334,7 @@ def test_the_inventory_is_exact():
         f"unclassified: {sorted(found - set(INVENTORY))}; "
         f"gone: {sorted(set(INVENTORY) - found)}"
     )
-    assert len(INVENTORY) == 117
+    assert len(INVENTORY) == 120
 
 
 def test_every_mutating_route_is_under_backend_or_modules():
