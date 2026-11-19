@@ -110,7 +110,7 @@ step: [Guided examples](docs/guides/guided-examples.md).
 
 - **A/B Testing & Multivariate Experiments**: Frequentist, sequential (mSPRT) and Bayesian analysis
   in the API; [which of them the dashboard shows](docs/guides/dashboard-and-api.md)
-- **Sequential testing**: mSPRT with always-valid confidence intervals, so you can read results at
+- **Sequential testing (beta)**: mSPRT with always-valid confidence intervals, so you can read results at
   any time. There are no O'Brien-Fleming or Pocock boundaries.
 - **Multiple-comparison correction**: Benjamini-Hochberg by default, or Bonferroni, across each experiment's variants; stored with the experiment alongside its confidence level
 - **Sample Size Calculations**: Automatic power analysis
@@ -141,8 +141,8 @@ step: [Guided examples](docs/guides/guided-examples.md).
   allocation.
 - One deployment is one environment: run staging and production as separate deployments, each
   with its own API keys.
-- Sign-in has no multi-factor step, and SAML sign-in is not available (OIDC is, with the `sso`
-  module).
+- Two-step sign-in can be required for chosen roles on Docker Compose and Helm installs, not
+  yet on an AWS CDK install, and SAML sign-in is not available (OIDC is, with the `sso` module).
 - Nothing deletes events, assignments or audit records by age, and no tool erases one person's
   data. The platform's own analysis history is purged after `ANALYSIS_HISTORY_RETENTION_DAYS`
   (90 days by default).

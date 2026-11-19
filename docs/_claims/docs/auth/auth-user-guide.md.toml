@@ -724,6 +724,10 @@ text = "Account Protection"
 by = ["exempt:baseline"]
 
 [[unit]]
+text = "With local sign-in, turn on two-step sign-in and keep its recovery codes somewhere safe"
+by = ["exempt:advice"]
+
+[[unit]]
 text = "Don't share your verification codes with anyone"
 by = ["exempt:baseline"]
 
@@ -794,3 +798,68 @@ by = [
 [[unit]]
 text = "A password change and other changes to your profile are not recorded (#502); keep the account deactivated while you check."
 by = ["test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact"]
+
+[[unit]]
+text = "Resetting two-step sign-in"
+by = ["exempt:label"]
+
+[[unit]]
+text = "An account with two-step sign-in that lost its authenticator app and its recovery codes cannot finish signing in."
+by = ["test:backend/tests/unit/api/test_two_factor_routes.py::test_the_password_step_answers_mfa_required_and_no_access_token"]
+
+[[unit]]
+text = "A superuser turns its two-step sign-in off with DELETE /api/v1/admin/users/{user_id}/2fa; the account then signs in with its password alone and can set two-step sign-in up again."
+by = [
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_the_cap_refuses_the_right_code_until_a_superuser_resets_it",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_a_superuser_resets_someone_else",
+]
+
+[[unit]]
+text = "An account whose role LOCAL_AUTH_2FA_REQUIRED_ROLES names is asked to set it up at its next sign-in instead."
+by = ["test:backend/tests/integration/api/test_two_factor_required_roles_api.py::test_a_reset_account_of_a_required_role_sets_it_up_again"]
+
+[[unit]]
+text = "No one can reset their own."
+by = [
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_a_superuser_cannot_reset_their_own",
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_every_role_manages_its_own_and_only_a_superuser_resets_others",
+]
+
+[[unit]]
+text = "When no superuser can sign in, or after SECRET_KEY has changed, reset accounts from where the API's database is reachable:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "One account: python -m backend.app.db.two_factor_reset --email <address>, the address in any letter case."
+by = ["test:backend/tests/integration/services/test_two_factor_reset_cli.py::test_one_account_by_its_address_in_any_case"]
+
+[[unit]]
+text = "Every account: python -m backend.app.db.two_factor_reset --all --yes-reset-every-account."
+by = ["test:backend/tests/integration/services/test_two_factor_reset_cli.py::test_every_account_with_the_confirmation_flag"]
+
+[[unit]]
+text = "With Docker Compose, run it in the API container (docker compose exec api ...); with the Helm chart, in an API pod (kubectl exec ...)."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "On AWS, run it as a deploy runs the migration: scripts/run_migration_task.sh with the cluster, migration task definition, network configuration and log group of Actions → Deploy's \"Run the migration\" step, and only the command changed, in the overrides: {\"containerOverrides\":[{\"name\":\"backend\",\"command\":[\"python\",\"-m\",\"backend.app.db.two_factor_reset\",\"--email\",\"<address>\"]}]}."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints how many accounts it reset and writes a user_2fa_reset audit entry for each, by system:operator-cli."
+by = [
+    "test:backend/tests/integration/services/test_two_factor_reset_cli.py::test_one_account_by_its_address_in_any_case",
+    "test:backend/tests/integration/services/test_two_factor_reset_cli.py::test_every_account_with_the_confirmation_flag",
+]
+
+[[unit]]
+text = "An address no account has, --all without --yes-reset-every-account, or neither option exits with status 2 and changes nothing."
+by = [
+    "test:backend/tests/integration/services/test_two_factor_reset_cli.py::test_an_address_no_account_has_is_refused",
+    "test:backend/tests/integration/services/test_two_factor_reset_cli.py::test_all_without_the_confirmation_flag_changes_nothing",
+    "test:backend/tests/integration/services/test_two_factor_reset_cli.py::test_wrong_arguments_are_refused",
+]
+
+[[unit]]
+text = "A reset signs nobody out: a token issued before it keeps working until it expires."
+by = ["test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_the_cap_refuses_the_right_code_until_a_superuser_resets_it"]

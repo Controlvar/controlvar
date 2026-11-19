@@ -444,7 +444,10 @@ export function OwnApiKeys() {
         )}
 
         {keys !== null && !loadError && keys.length > 0 && (
-          <div className="overflow-x-auto">
+          // relative: the table's sr-only header ("Actions") is absolutely
+          // positioned, and a scroller that is not positioned does not clip
+          // it, so it widened the page to the table's right edge (#1971).
+          <div className="relative overflow-x-auto">
             <table className="w-full text-sm" data-testid="own-key-table">
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-700">
                 <tr>

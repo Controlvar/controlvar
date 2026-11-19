@@ -321,4 +321,53 @@ class HttpClientTest extends TestCase
 
         $this->assertSame([], $client->get('/api/v1/feature-flags/evaluate/f?user_id=u1'));
     }
+
+    // -------------------------------------------------------------------------
+    // Errors name no query (part of #1720): on a flag evaluation it holds the
+    // user's id and attributes
+    // -------------------------------------------------------------------------
+
+    public function testNoErrorOfAFailedGetNamesTheQueryOrChainsAnotherException(): void
+    {
+        $canary = 'attrcanary7f3';
+        $path = '/api/v1/feature-flags/evaluate/f?user_id=u1&context=%7B%22plan%22%3A%22' . $canary . '%22%7D';
+        $url = 'https://api.example.com' . $path;
+        $cases = [
+            'transport failure'  => ['', 0, 'Could not resolve host in ' . $url],
+            'transport, no ?'    => ['', 0, 'bad url ' . substr($path, strpos($path, '?') + 1)],
+            'non-2xx detail'     => [json_encode(['detail' => 'bad ' . $path]), 422, ''],
+            'non-2xx non-string' => [json_encode(['detail' => ['loc' => $path]]), 500, ''],
+        ];
+
+        foreach ($cases as $name => [$body, $code, $curlError]) {
+            $client = $this->makeStubClient($this->makeConfig(), (string) $body, $code, $curlError);
+            try {
+                $client->get($path);
+                $this->fail("$name: expected an exception");
+            } catch (\Controlvar\Errors\ExperimentationException $e) {
+                $this->assertStringNotContainsString($canary, $e->getMessage(), $name);
+                $this->assertStringNotContainsString('context=', $e->getMessage(), $name);
+                $this->assertNotSame('', $e->getMessage(), $name);
+                $this->assertNull($e->getPrevious(), "$name: no chained exception");
+                if (PHP_VERSION_ID >= 80200) {
+                    // The trace's arguments are redacted (#[\SensitiveParameter]).
+                    $this->assertStringNotContainsString($canary, (string) $e, "$name: string form");
+                    $this->assertStringNotContainsString('context=', (string) $e, "$name: string form");
+                }
+            }
+        }
+    }
+
+    public function testTheProbeOfTheQueryTestSeesAQueryThatIsNotStripped(): void
+    {
+        // Positive control: the text the stub hands back does carry the canary, so
+        // the test above would see it if the message kept it.
+        $client = $this->makeStubClient($this->makeConfig(), '', 0, 'failed for /x?context=attrcanary7f3');
+        try {
+            $client->get('/x?context=attrcanary7f3');
+            $this->fail('expected NetworkException');
+        } catch (NetworkException $e) {
+            $this->assertSame('cURL error: failed for /x', $e->getMessage());
+        }
+    }
 }

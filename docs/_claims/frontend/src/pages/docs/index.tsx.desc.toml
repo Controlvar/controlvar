@@ -57,23 +57,23 @@ text = "Which capabilities have a dashboard screen, and which work through the A
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Sequential testing with mSPRT"
+text = "Sequential testing with mSPRT (beta)"
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Variance reduction from each user's own pre-experiment events (API only)"
+text = "Variance reduction from each user's own pre-experiment events, on the results page and in the API (beta)"
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Thompson Sampling, UCB1, Epsilon-Greedy (create a bandit through the API)"
+text = "Thompson Sampling, UCB1, Epsilon-Greedy (create one from the new-experiment form or the API)"
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Full profile: give each variant its own URL. Your server or edge, or on AWS an optional CloudFront router, asks Controlvar where to send each visitor, and conversions count for the variant they saw."
+text = "Full profile (beta): give each variant its own URL. Your server or edge, or on AWS an optional CloudFront router, asks Controlvar where to send each visitor, and conversions count for the variant they saw."
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Keep users out of conflicting experiments, and a share of new users out of every experiment"
+text = "Keep users out of conflicting experiments, and a share of new users out of every experiment, whose results are beta"
 by = ["mechanism:docs-hub"]
 
 [[unit]]

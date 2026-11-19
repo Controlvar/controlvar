@@ -1,8 +1,9 @@
 """Who may read an experiment's results, its exports and its live stream.
 
 The results routes (``/api/v1/results/*``, post-stratification and FDR
-correction), the single-experiment report export, the bandit status route, the
-real-time counters and the live results stream admit a caller by the rule
+correction), the single-experiment report export, the bandit status route and
+the bandit's weight history, the real-time counters and the live results
+stream admit a caller by the rule
 ``GET /api/v1/experiments/{id}`` uses: experiment READ. The experiment and
 variant exports need experiment LIST and the flag export feature-flag LIST, as
 their list pages do, and the overview needs both. The interaction routes admit
@@ -105,6 +106,7 @@ ROUTES = {
         None,
     ),
     "bandit": ("GET", "/api/v1/bandit/{experiment_id}", None),
+    "bandit_history": ("GET", "/api/v1/bandit/{experiment_id}/history", None),
     "interaction_scan": ("GET", "/api/v1/interactions/scan", None),
     "interaction_pair": ("GET", "/api/v1/interactions/{exp_a_id}/{exp_b_id}", None),
     "stream": ("WS", "/api/v1/ws/experiments/{experiment_id}/results", None),
@@ -168,6 +170,7 @@ FOUR_ROLES = {
     "export_overview": _everyone(200),
     "export_report": _everyone(200),
     "bandit": _everyone(200),
+    "bandit_history": _everyone(200),
     "interaction_scan": {**_everyone(200), "viewer": 403},
     "interaction_pair": {**_everyone(200), "viewer": 403},
     "stream": _everyone("snapshot"),
@@ -183,6 +186,7 @@ NO_ROLE = {
     "export_overview": (403, CANNOT_LIST_EXPERIMENTS),
     "export_report": (403, CANNOT_VIEW),
     "bandit": (403, CANNOT_VIEW),
+    "bandit_history": (403, CANNOT_VIEW),
     "interaction_scan": (403, INTERACTIONS_ROLES),
     "interaction_pair": (403, INTERACTIONS_ROLES),
     "stream": (WS_FORBIDDEN, None),
@@ -535,6 +539,7 @@ def _live_read_routes():
     covered.discard(("POST", f"{R}/invalidate-cache"))
     covered |= http & {
         ("GET", "/api/v1/bandit/{experiment_id}"),
+        ("GET", "/api/v1/bandit/{experiment_id}/history"),
         ("GET", "/api/v1/counters/{experiment_id}"),
     }
     covered |= {
@@ -556,12 +561,12 @@ def test_the_development_sign_in_is_off():
 
 
 def test_the_table_is_the_live_application_routes():
-    """19 routes in the core profile and 20 in the full one, by 5 callers:
-    95 and 100 answers. A route added under these prefixes, or one of them
+    """20 routes in the core profile and 21 in the full one, by 5 callers:
+    100 and 105 answers. A route added under these prefixes, or one of them
     mounted somewhere else, fails here until it is in the table."""
     declared = {(method, path) for method, path, _ in _routes().values()}
     assert _live_read_routes() == declared
-    expected_routes = 20 if _full_profile() else 19
+    expected_routes = 21 if _full_profile() else 20
     assert len(_four_roles()) == len(_routes()) == expected_routes
     answers = sum(len(row) for row in _four_roles().values())
     assert answers == expected_routes * len(SHIPPED)
@@ -615,6 +620,7 @@ def test_no_base_role_is_refused_on_results_routes(client, db_session, people, r
     [
         "export_report",
         "bandit",
+        "bandit_history",
         pytest.param("counters", marks=pytest.mark.modules),
     ],
 )
@@ -655,6 +661,11 @@ PRECEDENCE = {
     "empty_body": ("POST", "/api/v1/results/{id}/fdr-correction", {}),
     "malformed_id": ("GET", "/api/v1/results/not-a-uuid/daily", None),
     "unknown_bandit": ("GET", f"/api/v1/bandit/{uuid.UUID(int=7)}", None),
+    "unknown_bandit_history": (
+        "GET",
+        f"/api/v1/bandit/{uuid.UUID(int=7)}/history",
+        None,
+    ),
     "unknown_report": (
         "GET",
         f"/api/v1/export/reports/experiments/{uuid.UUID(int=7)}",
@@ -865,7 +876,7 @@ def test_stream_snapshot_for_a_reader(client, db_session, people):
 
 # --- READ is what decides -------------------------------------------------------
 
-READ_ROUTES = [*RESULTS_ROUTES, "export_report", "bandit", "stream"]
+READ_ROUTES = [*RESULTS_ROUTES, "export_report", "bandit", "bandit_history", "stream"]
 WITHOUT_READ = {
     **dict.fromkeys(READ_ROUTES, 403),
     "stream": WS_FORBIDDEN,
@@ -897,7 +908,14 @@ def test_without_read_the_read_routes_refuse(
 
 # --- a grant of experiment (read) -----------------------------------------------
 
-GRANT_ROUTES = [*RESULTS_ROUTES, "export_report", "bandit", "stream", "counters"]
+GRANT_ROUTES = [
+    *RESULTS_ROUTES,
+    "export_report",
+    "bandit",
+    "bandit_history",
+    "stream",
+    "counters",
+]
 
 
 def _grant_experiment_read(db_session, user):

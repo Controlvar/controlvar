@@ -40,6 +40,13 @@ jest.mock('@/services/api', () => ({
   apiFetch: jest.fn(),
 }));
 
+// The signed-in user (none by default); a case sets one to see a creator's link.
+const mockAuth = jest.fn();
+jest.mock('@/contexts/AuthContext', () => ({
+  ...jest.requireActual('@/contexts/AuthContext'),
+  useOptionalAuth: () => mockAuth(),
+}));
+
 const mockRouter = makeRouter({ pathname: '/results/[id]', query: { id: 'exp-1' } });
 jest.mock('next/router', () => ({ useRouter: () => mockRouter }));
 
@@ -196,7 +203,9 @@ function segmentAnswer(overrides: Record<string, unknown> = {}, segment: Record<
       kind: 'id_list',
       status: 'active',
       membership: 'current',
-      member_count: 4,
+      // Two listed IDs were never assigned: the page's N is summary.total_users
+      // (4), never this count, and a test can tell the two apart.
+      member_count: 6,
       experiment_users: 30000,
       experiment_srm_warning: false,
       ...segment,
@@ -243,11 +252,33 @@ interface Setup {
   list?: () => Promise<unknown>;
   segment?: (path: string, options: ApiFetchOptions) => Promise<unknown>;
   results?: Record<string, unknown>;
+  /** The experiment's stored method is CUPED: its results have a CUPED (beta) tab. */
+  cuped?: boolean;
 }
 
-function setup({ list, segment, results }: Setup = {}) {
+function setup({ list, segment, results, cuped }: Setup = {}) {
   const api = routedApi([
-    { path: '/api/v1/experiments/exp-1', handler: async () => EXPERIMENT },
+    {
+      path: '/api/v1/experiments/exp-1',
+      handler: async () => (cuped ? { ...EXPERIMENT, variance_reduction_config: { method: 'cuped' } } : EXPERIMENT),
+    },
+    {
+      path: '/api/v1/results/exp-1/cuped',
+      handler: async () => ({
+        experiment_id: 'exp-1',
+        method: 'cuped',
+        confidence_level: 0.95,
+        correction_method: 'benjamini_hochberg',
+        covariate_lookback_days: 7,
+        metrics: [],
+        computed_at: '2026-11-15T12:00:00+00:00',
+        seed: null,
+        n_samples: null,
+        engine_version: '1.3.0',
+        analysis_status: 'ga',
+        analysis_notice: null,
+      }),
+    },
     { path: '/api/v1/results/exp-1', handler: async () => results ?? UNFILTERED },
     { path: '/api/v1/results/exp-1/daily', handler: async () => ({ experiment_id: 'exp-1', metric_id: null, series: [] }) },
     { path: '/api/v1/results/exp-1/sample-size', handler: async () => Promise.reject(apiError(500, 'no plan')) },
@@ -293,6 +324,7 @@ async function violations(node: Element) {
 
 beforeEach(() => {
   mockedApiFetch.mockReset();
+  mockAuth.mockReset();
 });
 
 // --- F2, F8: one request, and only it -------------------------------------------
@@ -461,7 +493,7 @@ it('F6: no inside check says so', async () => {
   );
 });
 
-// --- F7: the five tab notes --------------------------------------------------------------
+// --- F7: the tab notes: five, and a sixth on the CUPED tab ----------------------------------
 
 it('F7: each tab but the Overview says it shows all users, only under a segment', async () => {
   setup({ results: { ...UNFILTERED, sequential_testing: SEQUENTIAL } });
@@ -566,6 +598,28 @@ it('F10: no ID-list segment: the empty line, with the create link only for a cre
   expect(screen.queryByText(CREATE_SEGMENT_LINK)).not.toBeInTheDocument();
 });
 
+it('F10: no ID-list segment: a creator sees the link to the Segments page, and a viewer does not', async () => {
+  mockAuth.mockReturnValue({ user: { role: 'DEVELOPER', is_superuser: false } });
+  setup({ list: async () => [listed('rules-1', 'Desktop by rule', 'rules')] });
+  const { unmount } = render(<ResultDetailPage />);
+  await waitFor(() => screen.getByTestId('experiment-summary'));
+  await userEvent.hover(picker());
+  await waitFor(() => screen.getByTestId('segment-list-empty'));
+  const link = screen.getByRole('link', { name: CREATE_SEGMENT_LINK });
+  expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  expect(link).toHaveAttribute('target', '_blank');
+  unmount();
+
+  mockedApiFetch.mockReset();
+  mockAuth.mockReturnValue({ user: { role: 'VIEWER', is_superuser: false } });
+  setup({ list: async () => [listed('rules-1', 'Desktop by rule', 'rules')] });
+  render(<ResultDetailPage />);
+  await waitFor(() => screen.getByTestId('experiment-summary'));
+  await userEvent.hover(picker());
+  await waitFor(() => screen.getByTestId('segment-list-empty'));
+  expect(screen.queryByText(CREATE_SEGMENT_LINK)).not.toBeInTheDocument();
+});
+
 it('F11: the page renders, and is not delayed, when the list fails', async () => {
   setup({ list: async () => Promise.reject(apiError(500, 'down')) });
   await openPage();
@@ -652,6 +706,23 @@ it('F13: an empty list', async () => {
   );
 });
 
+it('F7: the CUPED (beta) tab of a CUPED experiment is the sixth, and says it shows all users', async () => {
+  setup({ cuped: true });
+  await openPage();
+  await userEvent.click(screen.getByRole('tab', { name: 'CUPED (beta)' }));
+  await screen.findByTestId('cuped-results');
+  expect(screen.queryByTestId('segment-tab-note')).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('tab', { name: 'Overview' }));
+  await choose();
+  await waitFor(() => screen.getByTestId('segment-banner'));
+  await userEvent.click(screen.getByRole('tab', { name: 'CUPED (beta)' }));
+  expect(screen.getByTestId('segment-tab-note')).toHaveTextContent(tabNote(NAME));
+  expect(screen.getAllByTestId('segment-tab-note')).toHaveLength(1);
+  await screen.findByTestId('cuped-results');
+  // The CUPED numbers stay the whole experiment's: the segment route is not asked for them.
+  expect(calls('/api/v1/results/exp-1/cuped')).toHaveLength(1);
+});
+
 // --- F14: accessibility ------------------------------------------------------------------------
 
 it('F14: the picker is a labelled native select, and axe finds nothing in each state', async () => {
@@ -664,11 +735,24 @@ it('F14: the picker is a labelled native select, and axe finds nothing in each s
   expect(await violations(screen.getByTestId('results-dashboard'))).toEqual([]);
 });
 
-it('F14: axe finds nothing in the error, zero and list-failure states', async () => {
-  setup({ segment: async () => Promise.reject(apiError(500, 'x')) });
+const ZERO = segmentAnswer({ summary: { ...segmentAnswer().summary, total_users: 0 }, srm: null });
+
+// One render per state, so each is scanned on its own page.
+const AXE_STATES: [string, Setup, string, boolean][] = [
+  ['loading', { segment: () => new Promise(() => undefined) }, 'segment-loading', true],
+  ['error', { segment: async () => Promise.reject(apiError(500, 'x')) }, 'segment-error', true],
+  ['zero', { segment: async () => ZERO }, 'segment-zero', true],
+  ['archived', { segment: async () => segmentAnswer({}, { status: 'archived' }) }, 'segment-banner-archived', true],
+  ['empty list', { list: async () => [listed('rules-1', 'Desktop by rule', 'rules')] }, 'segment-list-empty', false],
+  ['list failure', { list: async () => Promise.reject(apiError(500, 'down')) }, 'segment-list-error', false],
+];
+
+it.each(AXE_STATES)('F14: axe finds nothing in the %s state', async (_name, config, testId, chooses) => {
+  setup(config);
   await openPage();
-  await choose();
-  await waitFor(() => screen.getByTestId('segment-error'));
+  if (chooses) await choose();
+  else await userEvent.hover(picker());
+  await waitFor(() => screen.getByTestId(testId));
   expect(await violations(screen.getByTestId('results-dashboard'))).toEqual([]);
 });
 

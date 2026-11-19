@@ -558,6 +558,18 @@ by = [
 ]
 
 [[unit]]
+text = "POST /api/v1/wizard/drafts, PUT /api/v1/wizard/drafts/{draft_id}/step | #2024 | A user keeps at most 20 drafts: creating one more drops that user's oldest, and the create still answers 201. All users together keep at most 350; the oldest is dropped first. A step field larger than its limit answers 422 at POST /drafts (for experiment_type) or PUT .../step with a fixed message that names the field and the limit, and the draft is left unchanged. The OpenAPI document does not change. See Guided experiment builder."
+by = [
+    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_the_draft_after_the_limit_drops_the_users_oldest",
+    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_a_text_field_over_its_limit_is_refused_and_not_stored",
+    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_a_list_field_over_its_limit_is_refused_and_not_stored",
+    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_a_create_with_an_over_long_experiment_type_is_refused_and_stores_nothing",
+    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_drafts_of_all_users_together_are_capped_oldest_first",
+    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_the_numbers_the_docs_state_are_the_limits",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
 text = "POST /api/v1/wizard/drafts/{draft_id}/submit | #1257 | The experiment it creates carries the draft's mde as its primary metric's expected_effect, which the results page plans the sample for; the mde used to be dropped, leaving expected_effect null. The guardrail metrics carry none, and a draft with no mde creates the experiment as before. The OpenAPI document does not change. See Guided experiment builder."
 by = [
     "test:backend/tests/integration/api/test_wizard_submit_builds.py::test_a_submitted_draft_creates_the_documented_experiment",
@@ -1367,6 +1379,26 @@ by = [
     "test:backend/tests/unit/services/test_engine_fingerprint.py::test_engine_output_matches_the_fingerprint_for_this_version",
     "test:backend/tests/unit/services/test_engine_versions_frozen.py",
     "test:backend/tests/unit/scripts/test_openapi_dump_and_stability.py::test_the_results_cache_key_names_the_engine_and_a_finished_answer_lasts_a_day",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "POST /api/v1/auth/login, POST /api/v1/auth/token | #1812 | For an account with two-step sign-in on, the right password answers 200 with {\"mfa_required\": true, \"mfa_token\", \"enrol\": false, \"expires_in\": 300} and no access_token; the access token comes from POST /api/v1/auth/mfa/verify. For an account whose role LOCAL_AUTH_2FA_REQUIRED_ROLES names and that has not set it up, it answers {\"mfa_required\": true, \"mfa_token\", \"enrol\": true, \"expires_in\": 600} and no access_token; the access token comes from POST /api/v1/auth/mfa/enroll/confirm. Every other account gets the answer it got before. The OpenAPI document changes: each 200 answer is an anyOf that adds MfaRequiredResponse, and the descriptions say so. See Two-step sign-in."
+by = [
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_the_password_step_answers_mfa_required_and_no_access_token",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_a_required_role_without_it_answers_enrol_and_no_access_token",
+    "test:backend/tests/integration/api/test_two_factor_required_roles_api.py::test_a_required_role_sets_it_up_at_its_first_sign_in",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_no_2fa_user_login_unchanged",
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_sign_in_asks_for_a_code_and_a_code_is_used_once",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "GET /api/v1/admin/users, GET/PUT /api/v1/admin/users/{user_id}, GET /api/v1/users/, GET /api/v1/users/me, GET/PUT /api/v1/users/{user_id} | #1812 | Each user carries totp_enabled, whether the account has two-step sign-in on. The OpenAPI document changes: UserResponse gains the required totp_enabled."
+by = [
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_the_admin_list_says_who_has_two_step_sign_in_on",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]

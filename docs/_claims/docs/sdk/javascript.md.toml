@@ -365,8 +365,9 @@ by = [
 ]
 
 [[unit]]
-text = "track | (userId, eventName, options?: TrackOptions) => Promise<void> | — | Never rejects; onError(err, 'track')"
+text = "track | (userId, eventName, options?: TrackOptions) => Promise<void> | — | Never rejects; onError(err, 'track') when a request fails (network error or non-2xx). A 2xx answer is not inspected, so an entry the server refuses inside a 200 does not reach onError; trackBatch returns those"
 by = [
+    "test:sdk/js/__tests__/client.test.ts::does not call onError for an entry a 200 batch answer refuses",
     "test:sdk/js/__tests__/client.test.ts::reports swallowed failures through onError",
     "test:sdk/js/__tests__/client.test.ts::never rejects when the batch request fails",
 ]

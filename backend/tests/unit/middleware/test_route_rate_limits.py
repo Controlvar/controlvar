@@ -25,6 +25,18 @@ def test_sign_in_takes_ten_requests_a_minute():
     assert RATE_LIMIT_CONFIG["/api/v1/auth/login"] == (10, MINUTE)
 
 
+def test_the_code_step_of_a_sign_in_takes_ten_a_minute():
+    """Two-step sign-in's second step (#1812), limited like the first."""
+    assert RATE_LIMIT_CONFIG["/api/v1/auth/mfa/verify"] == (10, MINUTE)
+
+
+def test_setting_it_up_during_a_sign_in_takes_ten_a_minute():
+    """A role that requires two-step sign-in (#1812): the two routes that set
+    it up before the session, each limited like the step they replace."""
+    assert RATE_LIMIT_CONFIG["/api/v1/auth/mfa/enroll"] == (10, MINUTE)
+    assert RATE_LIMIT_CONFIG["/api/v1/auth/mfa/enroll/confirm"] == (10, MINUTE)
+
+
 def test_sign_up_and_the_password_reset_routes_take_five_a_minute():
     for path in (
         "/api/v1/auth/signup",
@@ -34,6 +46,16 @@ def test_sign_up_and_the_password_reset_routes_take_five_a_minute():
         "/api/v1/users/me/password",
     ):
         assert RATE_LIMIT_CONFIG[path] == (5, MINUTE), path
+
+
+def test_setting_up_two_step_sign_in_takes_five_a_minute_like_the_password_change():
+    """It checks the current password too (#1812). The key is the route's own
+    path, read from the application: a limit keyed on any other path limits
+    nothing."""
+    from backend.app.main import app
+
+    assert app.url_path_for("enrol_own_two_factor") == "/api/v1/users/me/2fa/enroll"
+    assert RATE_LIMIT_CONFIG["/api/v1/users/me/2fa/enroll"] == (5, MINUTE)
 
 
 def test_the_sso_routes_take_ten_and_thirty_a_minute():
@@ -57,11 +79,15 @@ def test_these_are_all_the_routes_with_a_limit_of_their_own():
     assert set(RATE_LIMIT_CONFIG) == {
         "/api/v1/auth/token",
         "/api/v1/auth/login",
+        "/api/v1/auth/mfa/verify",
+        "/api/v1/auth/mfa/enroll",
+        "/api/v1/auth/mfa/enroll/confirm",
         "/api/v1/auth/signup",
         "/api/v1/auth/confirm",
         "/api/v1/auth/forgot-password",
         "/api/v1/auth/reset-password",
         "/api/v1/users/me/password",
+        "/api/v1/users/me/2fa/enroll",
         "/api/v1/auth/sso/exchange",
         "/api/v1/auth/sso/login",
         "/api/v1/auth/cognito/exchange",

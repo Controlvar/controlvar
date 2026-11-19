@@ -99,8 +99,10 @@ class FakeServer:
             variants = [
                 {"id": f"id-{v['name']}", "name": v["name"]} for v in body["variants"]
             ]
+            echo = {k: body[k] for k in ("balance_within",) if k in body}
             return httpx.Response(
-                201, json={"id": created, "status": "draft", "variants": variants}
+                201,
+                json={"id": created, "status": "draft", "variants": variants, **echo},
             )
         if path.endswith("/start"):
             return httpx.Response(200, json={"status": "active"})
@@ -210,6 +212,66 @@ def test_the_experiment_is_created_with_the_plan_s_variants_in_order(signed_in, 
     assert body["key"] == SCENARIO.experiment_key
     assert body["correction_method"] == SCENARIO.correction_method
     assert body["confidence_level"] == SCENARIO.confidence_level
+    assert "balance_within" not in body
+
+
+BALANCED = generator.Scenario(
+    name="D5",
+    experiment_key="gt-d5",
+    arms=(generator.Arm("control", 30, 0.2), generator.Arm("treatment", 70, 0.2)),
+    users=20,
+    event_name="purchase",
+    metrics=(generator.Metric("buyers", "purchase", "conversion"),),
+    single_share=1.0,
+    sticky_share=1.0,
+    balance=generator.Balance(
+        "country",
+        ("US",),
+        (
+            generator.Cohort("US", {"country": "US"}, 15),
+            generator.Cohort("unknown", {"plan": "free"}, 5),
+        ),
+    ),
+)
+
+
+def test_a_balanced_scenario_sends_its_setting_and_contexts_and_reads_its_groups(
+    signed_in, server
+):
+    experiment_id = signed_in.replay(
+        generator.simulate(7, BALANCED), io.StringIO(), declared={"event_dedup": True}
+    )
+    (body,) = server.experiments.values()
+    assert body["balance_within"] == {"attribute": "country", "values": ["US"]}
+    contexts = [
+        json.loads(r.content)["context"] for _, r in server.requests_to(ledger.ASSIGN)
+    ]
+    assert len(contexts) == 40  # every user, then every user again
+    assert sorted(map(json.dumps, contexts)) == sorted(
+        [json.dumps({"country": "US"})] * 30 + [json.dumps({"plan": "free"})] * 10
+    )
+    signed_in.balanced_groups(experiment_id, label="D5")
+    path = driver.BALANCED_GROUPS.format(experiment_id=experiment_id)
+    ((_, read),) = server.requests_to(path)
+    assert read.method == "GET"
+    assert read.headers["Authorization"] == f"Bearer {TOKEN}"
+    assert ("D5", "balanced_groups") in signed_in.phases
+
+
+def test_a_create_answer_without_the_balance_within_stops_the_run(signed_in, server):
+    """A server without #448 ignores the field and answers 200: the run stops
+    rather than replay a hashed experiment as a balanced one."""
+    variants = [{"id": "id-control", "name": "control"}]
+    variants.append({"id": "id-treatment", "name": "treatment"})
+    server.script[driver.EXPERIMENTS] = [
+        httpx.Response(201, json={"id": "e-1", "variants": variants})
+    ]
+    with pytest.raises(driver.ReplayError, match="did not answer the balance_within"):
+        signed_in.replay(
+            generator.simulate(7, BALANCED),
+            io.StringIO(),
+            declared={"event_dedup": True},
+        )
 
 
 #: A clean plan sends no /events: test_fault_gates.py paces those, on F6.
@@ -315,6 +377,14 @@ def test_the_results_are_read_past_the_cache(signed_in, server, clock):
     assert request.method == "GET"
     assert dict(request.url.params) == {"use_cache": "false"}
     assert ("D1", "results") in signed_in.phases
+
+
+def test_a_breakdown_is_read_past_the_cache_by_its_dimension(signed_in, server, clock):
+    signed_in.breakdown("1234", "country", label="D1")
+    (_, request) = server.requests_to("/api/v1/results/1234")[0]
+    assert request.method == "GET"
+    assert dict(request.url.params) == {"use_cache": "false", "breakdown": "country"}
+    assert ("D1", "breakdown") in signed_in.phases
 
 
 def test_an_administrative_429_is_waited_out(signed_in, server, clock):

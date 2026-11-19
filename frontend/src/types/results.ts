@@ -387,3 +387,60 @@ export interface SampleSizeOverrides {
   confidence_level?: number;
   correction_method?: CorrectionMethod;
 }
+
+/** The method an experiment's `variance_reduction_config` names. */
+export type VarianceReductionMethod = 'none' | 'cuped' | 'cuped_plus' | 'winsorization';
+
+/**
+ * `CupedMetricResult` (beta): one treatment against the control on one metric,
+ * adjusted for each user's pre-experiment history. A comparison that could not
+ * be computed has `unavailable_reason` and null numbers; it is still listed.
+ * `adjusted_p_value` is the p-value before any correction (the opposite of
+ * `GET /results/{id}`); the corrected one is `corrected_p_value`.
+ */
+export interface CupedMetricResult {
+  metric_id: string;
+  metric_name: string;
+  /** Null only when the experiment has no control or no treatment. */
+  variant_id: string | null;
+  variant_name: string | null;
+  control_variant_id: string | null;
+  control_sample_size: number | null;
+  treatment_sample_size: number | null;
+  adjusted_control_mean: number | null;
+  adjusted_treatment_mean: number | null;
+  adjusted_effect: number | null;
+  adjusted_se: number | null;
+  adjusted_p_value: number | null;
+  adjusted_ci_lower: number | null;
+  adjusted_ci_upper: number | null;
+  unadjusted_effect: number | null;
+  unadjusted_se: number | null;
+  /** Null for the correction 'none'. */
+  corrected_p_value: number | null;
+  is_significant: boolean;
+  /** Percent; can be negative. */
+  variance_reduction_pct: number | null;
+  theta: number | null;
+  covariate_event_name: string | null;
+  /** Percent, 0-100. */
+  covariate_coverage_pct: number | null;
+  unavailable_reason: string | null;
+  method: VarianceReductionMethod;
+}
+
+/** `GET /results/{id}/cuped` (beta): `CupedResultsResponse`. */
+export interface CupedResultsResponse {
+  experiment_id: string;
+  method: VarianceReductionMethod;
+  confidence_level: number | null;
+  correction_method: string | null;
+  covariate_lookback_days: number | null;
+  metrics: CupedMetricResult[];
+  computed_at: string;
+  seed?: number | null;
+  n_samples?: number | null;
+  engine_version?: string | null;
+  analysis_status?: 'ga' | 'beta' | null;
+  analysis_notice?: string | null;
+}

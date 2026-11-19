@@ -535,6 +535,58 @@ describe('SafetyDashboard rollback dialog on the shared Dialog (#369)', () => {
     expect(mockRollbackFlag).toHaveBeenCalledTimes(1);
   });
 
+  // #1798: A's answer arrives after its dialog closed and B's opened.
+  it('a late rollback result does not show in another flag\'s dialog; the status area names its flag', async () => {
+    let resolveA: (v: unknown) => void = () => undefined;
+    mockRollbackFlag.mockReturnValueOnce(new Promise((resolve) => (resolveA = resolve)));
+    render(<SafetyDashboard />);
+    await waitFor(() => expect(screen.getAllByTestId('safety-status-card')).toHaveLength(2));
+    fireEvent.click(screen.getAllByTestId('rollback-button')[0]);
+    fireEvent.click(await screen.findByTestId('rollback-confirm-button'));
+    fireEvent.click(screen.getByTestId('rollback-cancel-button'));
+    await waitFor(() => expect(screen.queryByTestId('rollback-modal')).not.toBeInTheDocument());
+    fireEvent.click(screen.getAllByTestId('rollback-button')[1]);
+    expect(await screen.findByTestId('rollback-modal-flag-name')).toHaveTextContent(
+      'Payments redesign',
+    );
+    // B's own confirm is not held up by A's request.
+    expect(screen.getByTestId('rollback-confirm-button')).toBeEnabled();
+
+    resolveA({
+      success: true,
+      feature_flag_id: 'flag-1',
+      message: 'Rolled back from 50% to 0%',
+      trigger_type: 'manual',
+      previous_percentage: 50,
+      new_percentage: 0,
+      rollback_record_id: 'rec-a',
+      timestamp: '2026-01-01T00:00:01Z',
+    });
+    const notice = await screen.findByTestId('rollback-notice');
+    expect(notice).toHaveTextContent('Checkout v2 is off');
+    expect(screen.queryByTestId('rollback-success-message')).not.toBeInTheDocument();
+    expect(screen.getByTestId('rollback-modal')).not.toHaveTextContent(/is off/);
+    expect(screen.getByTestId('rollback-modal-flag-name')).toHaveTextContent('Payments redesign');
+  });
+
+  it('a late rollback error shows in the status area, not in another flag\'s dialog', async () => {
+    let rejectA: (e: Error) => void = () => undefined;
+    mockRollbackFlag.mockReturnValueOnce(new Promise((_, reject) => (rejectA = reject)));
+    render(<SafetyDashboard />);
+    await waitFor(() => expect(screen.getAllByTestId('safety-status-card')).toHaveLength(2));
+    fireEvent.click(screen.getAllByTestId('rollback-button')[0]);
+    fireEvent.click(await screen.findByTestId('rollback-confirm-button'));
+    fireEvent.click(screen.getByTestId('rollback-cancel-button'));
+    await waitFor(() => expect(screen.queryByTestId('rollback-modal')).not.toBeInTheDocument());
+    fireEvent.click(screen.getAllByTestId('rollback-button')[1]);
+    await screen.findByTestId('rollback-modal');
+
+    rejectA(new Error('Not enough permissions'));
+    const notice = await screen.findByTestId('rollback-notice');
+    expect(notice).toHaveTextContent('Rollback of Checkout v2 failed: Not enough permissions');
+    expect(screen.queryByTestId('rollback-error')).not.toBeInTheDocument();
+  });
+
   it('a refused rollback is an alert inside the dialog, which stays open', async () => {
     mockRollbackFlag.mockRejectedValue(new Error('Not enough permissions'));
     await openRollbackModalForSecondFlag();

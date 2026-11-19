@@ -224,14 +224,14 @@ text = "If your session has ended, sign in again in another tab, then press Crea
 by = ["test:frontend/src/tests/pages/experiment-new-create-errors.test.tsx"]
 
 [[unit]]
-text = "Guided setup offers only A/B Test and Multivariate."
+text = "Guided setup offers A/B Test, Multivariate and Bandit."
 by = [
     "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::offers exactly the types the single-page form offers",
-    "journey:experiment-wizard#new-experiment",
+    "test:frontend/src/tests/pages/experiment-new-bandit.test.tsx::guided setup has three radios in the order A/B Test, Multivariate, Bandit",
 ]
 
 [[unit]]
-text = "Create a split URL or bandit experiment through the API (POST /api/v1/experiments/)."
+text = "Create a split URL experiment through the API (POST /api/v1/experiments/)."
 by = ["exempt:instruction"]
 
 [[unit]]
@@ -274,6 +274,34 @@ text = "Drafts are per user: a draft that belongs to another user is answered ex
 by = [
     "test:backend/tests/unit/api/test_wizard_drafts_per_user.py::test_get_another_users_draft_is_404",
     "test:backend/tests/unit/api/test_wizard_drafts_per_user.py::test_put_step_on_another_users_draft_is_404_and_changes_nothing",
+]
+
+[[unit]]
+text = "A user keeps at most 20 drafts, so creating one more drops that user's oldest."
+by = [
+    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_the_draft_after_the_limit_drops_the_users_oldest",
+    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_the_numbers_the_docs_state_are_the_limits",
+]
+
+[[unit]]
+text = "All users together keep at most 350, and the oldest is dropped first."
+by = [
+    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_drafts_of_all_users_together_are_capped_oldest_first",
+    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_the_numbers_the_docs_state_are_the_limits",
+]
+
+[[unit]]
+text = "A step field larger than its limit, such as a description over 2000 characters, answers 422 and leaves the draft unchanged, as PUT /api/v1/wizard/drafts/{draft_id}/step says below."
+by = [
+    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_a_text_field_over_its_limit_is_refused_and_not_stored",
+    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_the_numbers_the_docs_state_are_the_limits",
+]
+
+[[unit]]
+text = "So does a step field over its limit, such as a description over 2000 characters."
+by = [
+    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_a_text_field_over_its_limit_is_refused_and_not_stored",
+    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_the_numbers_the_docs_state_are_the_limits",
 ]
 
 [[unit]]

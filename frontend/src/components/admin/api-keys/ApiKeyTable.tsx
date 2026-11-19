@@ -37,8 +37,9 @@ const STATE_CLASSES: Record<KeyState, string> = {
  * Lists the caller's API keys (`GET /api/v1/api-keys`). Administrators can
  * switch to every user's keys (`?all=true`). Keys carry no retrievable
  * secret and no prefix: the plaintext is shown once at creation, so rows are
- * identified by name and creation time. Deleting a key is permanent
- * (`DELETE /api/v1/api-keys/{id}`); there is no soft revoke on this route.
+ * identified by name and creation time. Revoking a key is permanent: it
+ * removes the row (`DELETE /api/v1/api-keys/{id}`), the same call Your API
+ * keys makes, and the audit log records it as "API key revoked".
  */
 export function ApiKeyTable({ onCreateKey, refreshToken = 0 }: ApiKeyTableProps) {
   const [keys, setKeys] = useState<ApiKey[]>([]);
@@ -83,7 +84,7 @@ export function ApiKeyTable({ onCreateKey, refreshToken = 0 }: ApiKeyTableProps)
       setPendingDelete(null);
       await fetchKeys();
     } catch (err) {
-      setDeleteError((err as Error).message || 'Failed to delete API key');
+      setDeleteError((err as Error).message || 'Failed to revoke API key');
     } finally {
       setDeleting(false);
     }
@@ -137,11 +138,11 @@ export function ApiKeyTable({ onCreateKey, refreshToken = 0 }: ApiKeyTableProps)
         <div
           data-testid="delete-confirm"
           role="alertdialog"
-          aria-label={`Delete API key ${pendingDelete.name}`}
+          aria-label={`Revoke API key ${pendingDelete.name}`}
           className="flex flex-wrap items-center justify-between gap-3 px-6 py-3 bg-red-50 border-b border-red-200 text-sm text-red-800"
         >
           <span>
-            Delete <strong>{pendingDelete.name}</strong>? Applications using it stop working
+            Revoke <strong>{pendingDelete.name}</strong>? Applications using it stop working
             immediately. This cannot be undone.
           </span>
           <span className="flex items-center gap-3">
@@ -166,7 +167,7 @@ export function ApiKeyTable({ onCreateKey, refreshToken = 0 }: ApiKeyTableProps)
               disabled={deleting}
               className="px-3 py-1 rounded-md bg-red-600 text-white font-medium disabled:opacity-60"
             >
-              {deleting ? 'Deleting…' : 'Delete key'}
+              {deleting ? 'Revoking…' : 'Revoke key'}
             </button>
           </span>
         </div>
@@ -255,7 +256,7 @@ export function ApiKeyTable({ onCreateKey, refreshToken = 0 }: ApiKeyTableProps)
                         }}
                         className="text-red-600 hover:text-red-800 text-sm font-medium"
                       >
-                        Delete
+                        Revoke
                       </button>
                     </td>
                   </tr>

@@ -143,6 +143,22 @@ def test_the_shard_env_is_on_the_suite_step_and_the_report_is_uploaded():
     assert not set(env) & set(_jobs()[SHARD_JOB].get("env") or {})
 
 
+def test_the_shards_require_the_editable_install_as_the_pr_gate_does():
+    """Nightly run 43751698858: every shard passed, but shard 3 skipped
+    test_the_integration_job_is_armed (it skips unless
+    the editable-install switch is "1") and the summary's checker refused the
+    skip. The shards install the package editable; they have to say so."""
+    step = [
+        s
+        for s in _jobs()[SHARD_JOB]["steps"]
+        if "backend/tests/integration/" in s.get("run", "")
+    ]
+    assert len(step) == 1, step
+    assert step[0]["env"].get("EXPERIMENTLY_REQUIRE_EDITABLE") == "1", step[0]["env"]
+    install = _step(SHARD_JOB, "Install dependencies")["run"]
+    assert "pip install -e . --no-deps" in install, install
+
+
 def test_the_summary_runs_the_shard_checker_over_the_downloaded_reports():
     """The one gate that notices a shard that collected nothing (no report), a
     test in no shard, and a test in two. Its exact arguments are pinned: a

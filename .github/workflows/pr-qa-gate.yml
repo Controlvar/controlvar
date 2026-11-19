@@ -566,20 +566,27 @@ jobs:
   # which is why a docs-only pull request still starts both jobs and their
   # Postgres service.
   #
-  # Both jobs have 120 minutes. On 2026-11-03 core-build's passing runs took
-  # up to about 75.5 minutes (median 63, p95 75 on the day) and four runs were
-  # cancelled at the old 75-minute limit, one 3 s after its script printed OK.
-  # The time grows with the test count (about 1.8 minutes a day over the ten
-  # days to 11-03) and GitHub's runners vary up to 1.6x in speed for the same
-  # commit, so 120 is headroom for a few weeks, not room for more tests.
+  # Both jobs have 180 minutes. On 2026-11-03 core-build's passing runs took
+  # up to about 75.5 minutes and four runs were cancelled at the old 75-minute
+  # limit, one 3 s after its script printed OK; the limit went to 120. On
+  # 2026-11-16 the last eight passing runs took 76-116 minutes (median 98) and
+  # one was cancelled at 120 with every test session it reached passed: the
+  # same sessions as a 98-minute run that started under 2 hours earlier, on a
+  # runner about 1.25x
+  # slower (unit 42:48 vs 32:26, integration 71:06 vs 59:10). GitHub's
+  # runners vary up to 1.6x in speed for the same commit (measured 11-03).
+  # 180 gives a 98-minute run room for a 1.6x runner (about 157). The time
+  # grows with the test count (about 2-3 minutes a day since 11-03), so 180 is
+  # headroom for a few weeks, not room for more tests.
   # full-build takes a few minutes and has the same limit only because the
-  # two jobs are kept alike. Running the slowest sessions in parallel shards
-  # (#869) is the fix for the time itself.
+  # two jobs are kept alike. Running core-build's integration session in
+  # parallel shards behind the existing check name, as the nightly
+  # integration workflow does since #1986, is the fix for the time itself.
   core-build:
     needs: changes
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
     services:
       postgres:
         image: postgres:16
@@ -752,7 +759,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
     services:
       postgres:
         image: postgres:16
@@ -985,6 +992,33 @@ jobs:
         env:
           PLAYWRIGHT_API_URL: http://localhost:8000
         run: cd frontend && npx playwright test --project=journeys
+
+      # --- Two-step sign-in required for a role (#1812, U9 of PR 4). A second
+      # API process on :8002 with LOCAL_AUTH_2FA_REQUIRED_ROLES=ANALYST, the
+      # same database and SECRET_KEY, and ENVIRONMENT=test like the SSO API
+      # below (rate limiter and schedulers off). The journeys above sign in as
+      # the seeded analyst, so the policy cannot be set on their API. Playwright
+      # serves the same export on :3102 with /api proxied to :8002.
+      - name: Start an API that requires two-step sign-in for analysts
+        env:
+          ENVIRONMENT: test
+          APP_ENV: test
+          LOCAL_AUTH_2FA_REQUIRED_ROLES: ANALYST
+        run: |
+          python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8002 \
+            --log-level warning > api-required-roles.log 2>&1 &
+          deadline=$((SECONDS + 90))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            curl -sf localhost:8002/health/ready >/dev/null && exit 0
+            sleep 1
+          done
+          echo "the API did not become healthy"; tail -n 100 api-required-roles.log; exit 1
+
+      - name: Run the role-required sign-in journey
+        env:
+          PLAYWRIGHT_API_URL: http://localhost:8002
+          PLAYWRIGHT_PORT: '3102'
+        run: cd frontend && npx playwright test --project=required-roles
 
       # --- Sign in with SSO from the dashboard (C2b, launch-readiness
       # stream-c/c2b/spec-v3.md §12). A second API process on :8001 with

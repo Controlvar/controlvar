@@ -274,11 +274,11 @@ def test_each_wrong_exposure_report_gives_exactly_its_problem(
     assert runner.validate(sdk, report) == [problem]
 
 
-def test_java_js_python_react_and_react_native_are_the_sdks_that_send_one_event_twice_with_one_id(
+def test_java_js_python_react_react_native_and_dotnet_are_the_sdks_that_send_one_event_twice_with_one_id(
     runner,
 ):
     assert runner.EVENT_ID_SDKS == frozenset(
-        {"java", "js", "python", "react", "react-native"}
+        {"java", "js", "python", "react", "react-native", "dotnet"}
     )
     for sdk in sorted(runner.EVENT_ID_SDKS):
         assert good(runner, sdk)["event_id"] == EVENT_ID

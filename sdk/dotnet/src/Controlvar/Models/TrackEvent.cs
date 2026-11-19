@@ -36,12 +36,33 @@ public class TrackEvent
     /// <summary>Optional event time; sent as ISO-8601 (UTC). The server stamps the event when omitted.</summary>
     public DateTimeOffset? Timestamp { get; set; }
 
+    /// <summary>
+    /// Optional id of this event, sent as <c>event_id</c>: the server stores an event sent again with
+    /// the same id, user, experiment, flag and event name only once. When <c>null</c> or empty the
+    /// client makes a new lowercase UUID for each event it sends; make one yourself, once, when the
+    /// event happens, for an event your code may send again. The SDK does not check it: the server
+    /// refuses (422) one of more than 255 characters or one holding NUL.
+    /// </summary>
+    public string? EventId { get; set; }
+
     /// <summary><c>true</c> when the event is attributed to an experiment or a feature flag.</summary>
     [JsonIgnore]
     public bool HasKey => ExperimentKey != null || FeatureFlagKey != null;
 
-    /// <summary>Returns a copy attributed to the given experiment and/or flag.</summary>
-    public TrackEvent Attributed(string? experimentKey = null, string? featureFlagKey = null) => new()
+    /// <summary>Returns a copy attributed to the given experiment and/or flag (the event id is kept).</summary>
+    public TrackEvent Attributed(string? experimentKey = null, string? featureFlagKey = null) =>
+        Copy(EventId, experimentKey, featureFlagKey);
+
+    /// <summary>
+    /// Returns a copy that carries an event id: the caller's own when it gave one, else a new
+    /// lowercase UUID. The event itself is not changed.
+    /// </summary>
+    internal TrackEvent WithEventId() =>
+        string.IsNullOrEmpty(EventId)
+            ? Copy(Guid.NewGuid().ToString("D"), ExperimentKey, FeatureFlagKey)
+            : this;
+
+    private TrackEvent Copy(string? eventId, string? experimentKey, string? featureFlagKey) => new()
     {
         EventName = EventName,
         UserId = UserId,
@@ -50,7 +71,8 @@ public class TrackEvent
         FeatureFlagKey = featureFlagKey,
         Value = Value,
         Properties = Properties,
-        Timestamp = Timestamp
+        Timestamp = Timestamp,
+        EventId = eventId
     };
 
     /// <summary>Builds the wire representation (<c>event_type</c> defaults to the event name).</summary>
@@ -63,7 +85,8 @@ public class TrackEvent
         FeatureFlagKey = FeatureFlagKey,
         Value = Value,
         Metadata = Properties,
-        Timestamp = Timestamp?.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture)
+        Timestamp = Timestamp?.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture),
+        EventId = string.IsNullOrEmpty(EventId) ? null : EventId
     };
 }
 
@@ -96,4 +119,7 @@ internal sealed class TrackBody
 
     [JsonPropertyName("timestamp")]
     public string? Timestamp { get; set; }
+
+    [JsonPropertyName("event_id")]
+    public string? EventId { get; set; }
 }

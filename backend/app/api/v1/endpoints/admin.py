@@ -9,7 +9,7 @@ import json
 import uuid
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -28,6 +28,7 @@ from backend.app.api.v1.endpoints.users import (
     refuse_if_own_access_removed,
     refuse_if_username_held,
     removes_an_active_superuser,
+    require_local_provider,
     require_still_active_superuser,
 )
 from backend.app.core.config import settings
@@ -45,6 +46,7 @@ from backend.app.services.audit_service import (
     audit_snapshot,
     role_value,
 )
+from backend.app.services.two_factor_service import two_factor_service
 
 router = APIRouter(route_class=OffLoopRoute)
 
@@ -338,6 +340,53 @@ async def delete_user(
         entity_name=deleted["username"] or str(deleted_id),
         before=deleted,
     )
+
+
+#: ``DELETE /admin/users/{id}/2fa`` for the caller's own account.
+OWN_TWO_FACTOR_RESET_REFUSED = (
+    "You can't reset your own two-step sign-in. Ask another administrator to do it."
+)
+
+
+@router.delete(
+    "/users/{user_id}/2fa",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    dependencies=[Depends(require_local_provider)],
+    responses={
+        400: {"description": OWN_TWO_FACTOR_RESET_REFUSED},
+        404: {"description": "No such user, or AUTH_PROVIDER is not 'local'."},
+    },
+)
+def reset_user_two_factor(
+    user_id: uuid.UUID = Path(..., description="The account to reset"),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_superuser),
+) -> Response:
+    """
+    Turn off someone else's two-step sign-in (superusers only).
+
+    For an account that lost its authenticator app and its recovery codes:
+    its next sign-in asks for the password alone, and it can set two-step
+    sign-in up again. The wrong-code count goes with it. A session the account
+    already holds stays valid until it expires. Writes `user_2fa_reset`
+    (nothing when the account had no two-step sign-in, which still answers
+    204). Your own account answers 400: another administrator resets yours.
+    """
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
+    if user.id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=OWN_TWO_FACTOR_RESET_REFUSED,
+        )
+    # The delete and its entry are one transaction: kept or lost together.
+    two_factor_service.reset(db, [user], actor=current_user)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/stats", response_model=Dict[str, Any])

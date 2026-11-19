@@ -270,8 +270,11 @@ by = [
 ]
 
 [[unit]]
-text = "CUPED | Variance reduction from each user's own events before assignment (API only)"
-by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_cuped_recovers_the_seeded_history"]
+text = "CUPED | Variance reduction from each user's own events before assignment (the results page's CUPED tab when the experiment uses it, and the API)"
+by = [
+    "test:backend/tests/integration/api/test_cuped_results_api.py::test_cuped_recovers_the_seeded_history",
+    "test:frontend/src/tests/pages/results-cuped.test.tsx::sits after the Overview, Trends and Sample Size tabs and before Breakdowns",
+]
 
 [[unit]]
 text = "Bayesian (Beta-Binomial) | Posterior credible intervals, Bayes factors, probability of superiority, ROPE (the priors, loss threshold and credible level are set on the new-experiment form or through the API; the ROPE through the API only)"
@@ -297,10 +300,11 @@ by = [
 ]
 
 [[unit]]
-text = "Interaction detection (beta) | Jaccard overlap between experiments; whether one experiment's lift on its primary conversion metric differs across another's arms (API only)"
+text = "Interaction detection (beta) | Jaccard overlap between experiments; whether one experiment's lift on its primary conversion metric differs across another's arms (the Interactions page and the API)"
 by = [
     "test:backend/tests/unit/services/test_interaction_detection_service.py::TestOverlapDetection::test_compute_user_overlap_partial_overlap",
     "test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_every_treatment_has_a_row",
+    "test:frontend/src/tests/pages/interactions.test.tsx::sends one GET for the two chosen, with no query, and shows the answer the server gave",
 ]
 
 [[unit]]

@@ -44,6 +44,7 @@ if not database_uri:
 # Create engine with appropriate configuration
 engine = create_engine(
     database_uri,
+    hide_parameters=True,  # Errors omit SQLAlchemy's "[parameters: ...]" listing
     pool_pre_ping=True,  # Test connections before using them
     pool_size=20,  # Increased pool size
     max_overflow=20,  # Increased overflow

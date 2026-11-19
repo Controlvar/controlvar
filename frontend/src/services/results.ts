@@ -1,6 +1,7 @@
 import {
   BalancedGroupsResponse,
   CorrectionMethod,
+  CupedResultsResponse,
   ExperimentResultsResponse,
   DailyResultsResponse,
   SampleSizeOverrides,
@@ -98,6 +99,17 @@ export class ResultsService {
    */
   static async getBalancedGroups(experimentId: string): Promise<BalancedGroupsResponse> {
     return apiFetch<BalancedGroupsResponse>(`/api/v1/results/${experimentId}/balanced-groups`, {
+      timeoutMs: LONG_REQUEST_TIMEOUT_MS,
+    });
+  }
+
+  /**
+   * The conversion metrics adjusted for each user's pre-experiment history
+   * (beta). The route reads nothing from a query: the experiment's stored
+   * method, settings and lookback decide everything.
+   */
+  static async getCupedResults(experimentId: string): Promise<CupedResultsResponse> {
+    return apiFetch<CupedResultsResponse>(`/api/v1/results/${experimentId}/cuped`, {
       timeoutMs: LONG_REQUEST_TIMEOUT_MS,
     });
   }

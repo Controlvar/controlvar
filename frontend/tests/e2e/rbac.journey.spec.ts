@@ -1,7 +1,7 @@
 import { readFileSync } from "fs";
 import { test, expect, TEST_USERS, type UserRole } from "./fixtures/auth.fixture";
 import { API_URL, TOKEN_STORAGE_KEY } from "./env";
-import { ExperimentsPage } from "./pages/experiments.page";
+import { ESTIMATE_STEP_HEADING, ExperimentsPage } from "./pages/experiments.page";
 import { FeatureFlagsPage } from "./pages/feature-flags.page";
 
 /**
@@ -320,13 +320,24 @@ test.describe("Journey: RBAC", () => {
   }
 
   // Reading a bandit's current weights is allowed to every signed-in role
-  // (`GET /api/v1/bandit/{id}`), and the panel changes nothing, so all four
-  // roles get the same read-only panel. What it shows is compared with the
-  // server's own answer to the page's request, not with a value typed here:
-  // before the first update (`last_updated` null) the panel says so instead
-  // of showing the even split the server fills in.
+  // (`GET /api/v1/bandit/{id}`). Setting them by hand (#1957,
+  // `PUT /api/v1/bandit/{id}/weights`) is offered to an ADMIN or a superuser
+  // only: admin@demo.com is both, so it also sees "Set weights by hand"; the
+  // other three see Refresh alone. Nothing here clicks it, so the journey
+  // still only reads (no non-GET request). What the panel shows is compared
+  // with the server's own answer to the page's request, not with a value typed
+  // here: before the first update (`last_updated` null) the panel says so
+  // instead of showing the even split the server fills in.
+  const banditControls = {
+    admin: ["Refresh", "Set weights by hand"],
+    developer: ["Refresh"],
+    analyst: ["Refresh"],
+    viewer: ["Refresh"],
+  } as const;
   for (const role of ["admin", "developer", "analyst", "viewer"] as const) {
-    test(`${role} reads a bandit's current traffic weights and is offered no change`, async ({ sessions }) => {
+    test(`${role} reads a bandit's current traffic weights and is offered only its own controls`, async ({
+      sessions,
+    }) => {
       const page = await (await sessions(role)).newPage();
       const experiments = new ExperimentsPage(page);
       const writes: string[] = [];
@@ -358,7 +369,7 @@ test.describe("Journey: RBAC", () => {
         await expect(panel).toBeVisible();
         await expect(panel.getByTestId("bandit-weights-loading")).toHaveCount(0, { timeout: 15_000 });
         await expect(panel.getByTestId("bandit-weights-error")).toHaveCount(0);
-        await expect(panel.getByRole("button")).toHaveText(["Refresh"]);
+        await expect(panel.getByRole("button")).toHaveText([...banditControls[role]]);
 
         if (body.last_updated === null) {
           await expect(panel.getByTestId("bandit-weights-empty")).toBeVisible();
@@ -380,6 +391,124 @@ test.describe("Journey: RBAC", () => {
     });
   }
 
+  // The bandit's weight history (#1958, beta route): the read rule is every
+  // role's, so a VIEWER opens it. Nothing is requested until it is opened; the
+  // rows are compared with the server's own answer, not a value typed here.
+  test("viewer opens a bandit's weight history and it only reads", async ({ sessions }) => {
+    const page = await (await sessions("viewer")).newPage();
+    const experiments = new ExperimentsPage(page);
+    const writes: string[] = [];
+    page.on("request", (request) => {
+      const { pathname } = new URL(request.url());
+      if (pathname.startsWith("/api/v1/bandit/") && request.method() !== "GET") {
+        writes.push(`${request.method()} ${pathname}`);
+      }
+    });
+    try {
+      await experiments.goto();
+      await expect(experiments.experimentList).toBeVisible({ timeout: 15_000 });
+      // Seeded ACTIVE with Thompson sampling by seed_demo_data.py.
+      await experiments.clickExperiment("Recommendation Algorithm MAB");
+      const section = page.getByTestId("bandit-weight-history-section");
+      await expect(section).toBeVisible({ timeout: 15_000 });
+      const answer = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname.endsWith("/history") &&
+          new URL(response.url()).pathname.startsWith("/api/v1/bandit/") &&
+          response.request().method() === "GET",
+        { timeout: 20_000 },
+      );
+      await section.getByRole("button", { name: "Show weight history" }).click();
+      const response = await answer;
+      expect(response.status(), "a viewer may read the weight history").toBe(200);
+      const ticks = (await response.json()) as { tick_at: string; weights: Record<string, number> }[];
+
+      await expect(section.getByTestId("bandit-weight-history-error")).toHaveCount(0);
+      await expect(section.getByTestId("bandit-weight-history")).toBeVisible();
+      if (ticks.length === 0) {
+        await expect(section.getByTestId("bandit-weight-history-table")).toHaveCount(0);
+      } else {
+        await expect(section.getByTestId("bandit-weight-history-row")).toHaveCount(Math.min(ticks.length, 200));
+      }
+      expect(writes, "the history only reads").toEqual([]);
+    } finally {
+      await page.close();
+    }
+  });
+
+  // #1960: interaction analysis is for a superuser or the ANALYST, DEVELOPER
+  // and ADMIN roles (`interactions._require_developer`). An ANALYST -- not a
+  // superuser, so this is the role's own evidence -- follows the Experiments
+  // page's Interactions link and runs the scan against the real API; what the
+  // page shows is compared with the server's own answer. The page only reads,
+  // so no request but a GET is sent. A VIEWER is offered no link, and opening
+  // the page by URL sends no interactions request.
+  test("analyst scans the active experiments for shared users; a viewer has no Interactions link", async ({
+    sessions,
+  }) => {
+    const page = await (await sessions("analyst")).newPage();
+    const nonGets: string[] = [];
+    page.on("request", (request) => {
+      const { pathname } = new URL(request.url());
+      if (pathname.startsWith("/api/") && request.method() !== "GET") nonGets.push(`${request.method()} ${pathname}`);
+    });
+    try {
+      await page.goto("/experiments");
+      await expect(page.getByTestId("experiments-table")).toBeVisible({ timeout: 15_000 });
+      await page.getByTestId("interactions-link").click();
+      await expect(page).toHaveURL(/\/experiments\/interactions\/?$/);
+      await expect(page.getByTestId("interactions-page")).toBeVisible({ timeout: 15_000 });
+
+      const answer = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === "/api/v1/interactions/scan" && response.request().method() === "GET",
+        { timeout: 30_000 },
+      );
+      await page.getByTestId("interactions-scan-button").click();
+      const response = await answer;
+      expect(response.status(), "an ANALYST may run the scan").toBe(200);
+      const body = (await response.json()) as { total_active_experiments: number; analyses: unknown[] };
+
+      if (body.total_active_experiments < 2) {
+        await expect(page.getByTestId("interactions-scan-too-few")).toBeVisible();
+      } else if (body.analyses.length === 0) {
+        await expect(page.getByTestId("interactions-scan-empty")).toBeVisible();
+      } else {
+        await expect(page.getByTestId("interactions-scan-summary")).toContainText(
+          `${body.total_active_experiments} active experiments.`,
+        );
+        await expect(page.getByTestId("interactions-scan-row")).toHaveCount(body.analyses.length);
+      }
+      await expect(page.getByTestId("interactions-scan-error")).toHaveCount(0);
+      await expect(page.getByTestId("interactions-scan-refused")).toHaveCount(0);
+      expect(nonGets, "the page only reads").toEqual([]);
+    } finally {
+      await page.close();
+    }
+
+    const viewer = await (await sessions("viewer")).newPage();
+    const interactionRequests: string[] = [];
+    viewer.on("request", (request) => {
+      const { pathname } = new URL(request.url());
+      if (pathname.startsWith("/api/v1/interactions")) interactionRequests.push(`${request.method()} ${pathname}`);
+    });
+    try {
+      await viewer.goto("/experiments");
+      await expect(viewer.getByTestId("experiments-table")).toBeVisible({ timeout: 15_000 });
+      await expect(viewer.getByTestId("interactions-link")).toHaveCount(0);
+
+      await viewer.goto("/experiments/interactions");
+      await expect(viewer.getByTestId("interactions-refused")).toHaveText(
+        "Interaction analysis needs the ANALYST, DEVELOPER or ADMIN role; you are VIEWER.",
+        { timeout: 15_000 },
+      );
+      await expect(viewer.getByTestId("interactions-page")).toHaveCount(0);
+      expect(interactionRequests, "no interactions request for a VIEWER").toEqual([]);
+    } finally {
+      await viewer.close();
+    }
+  });
+
   // The reported path end to end: guided setup redirects to the new
   // experiment's page, and its creator -- an ordinary DEVELOPER -- must be able
   // to open it. `createExperiment` resolves only once the detail has rendered.
@@ -397,6 +526,75 @@ test.describe("Journey: RBAC", () => {
       await page.reload();
       await expect(experiments.detail).toBeVisible({ timeout: 15_000 });
     } finally {
+      await page.close();
+    }
+  });
+
+  // #1956: an ordinary DEVELOPER (not a superuser) creates a bandit from guided
+  // setup against the real API. The create's own answer is the evidence: 201,
+  // a bandit with the algorithm chosen. The page it lands on is the new
+  // bandit's, whose weights panel says no weights yet. The name is this
+  // attempt's own, and the draft is deleted at the end: the journey database
+  // is shared.
+  test("developer creates a bandit experiment from guided setup", async ({ sessions }) => {
+    const page = await (await sessions("developer")).newPage();
+    const experiments = new ExperimentsPage(page);
+    const name = `j442-bandit-${Date.now()}`;
+    let createdId: string | null = null;
+    try {
+      await experiments.gotoGuided();
+      await expect(experiments.stepHeading).toHaveText("What kind of experiment?", { timeout: 15_000 });
+      await page.getByTestId("wizard-type-bandit").check();
+      const algorithm = page.getByLabel("Optimization algorithm");
+      await expect(algorithm).toHaveValue("thompson_sampling");
+      await algorithm.selectOption("ucb1");
+      await experiments.nextStep("Name it and choose what to measure");
+      await experiments.nameInput.fill(name);
+      await experiments.nextStep("Set up the versions users will see");
+      await expect(page.getByTestId("balance-unavailable")).toBeVisible();
+      await expect(page.getByTestId("balance-switch")).toHaveCount(0);
+      await experiments.nextStep(ESTIMATE_STEP_HEADING);
+      await experiments.nextStep("Check and create");
+      await expect(page.getByTestId("review-type")).toHaveText("Bandit (UCB1)");
+
+      // The create itself, not the redirect the API may answer first for the
+      // path without its trailing slash.
+      const answer = page.waitForResponse(
+        (response) =>
+          response.request().method() === "POST" &&
+          /^\/api\/v1\/experiments\/?$/.test(new URL(response.url()).pathname) &&
+          (response.status() < 300 || response.status() >= 400),
+        { timeout: 20_000 },
+      );
+      await experiments.createStepButton.click();
+      const response = await answer;
+      expect(response.status(), "POST /api/v1/experiments/ creates the bandit").toBe(201);
+      const created = (await response.json()) as { id: string; experiment_type: string; optimization_type: string };
+      createdId = created.id;
+      expect(created.experiment_type).toBe("bandit");
+      expect(created.optimization_type).toBe("ucb1");
+
+      await page.waitForURL((url) => url.pathname === `/experiments/${created.id}`, { timeout: 15_000 });
+      await expect(experiments.detail).toBeVisible({ timeout: 15_000 });
+      await expect(experiments.detailName).toContainText(name);
+      const panel = page.getByTestId("bandit-weights");
+      await expect(panel).toBeVisible({ timeout: 15_000 });
+      await expect(panel).toContainText("Current traffic weights");
+      await expect(panel.getByTestId("bandit-weights-empty")).toHaveText(
+        "No weights yet. Weights appear after the first update; until then new users are split by each variant's starting allocation.",
+        { timeout: 15_000 },
+      );
+    } finally {
+      // Its own draft only, deleted even when a step above failed. Only a
+      // draft can be deleted, and the route takes its id again as `experiment_key`.
+      if (createdId) {
+        const token = await page.evaluate((key) => window.localStorage.getItem(key), TOKEN_STORAGE_KEY);
+        const removed = await page.request.delete(
+          `${API_URL}/api/v1/experiments/${createdId}?experiment_key=${createdId}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        expect.soft(removed.status(), `DELETE the journey's bandit ${createdId}`).toBe(204);
+      }
       await page.close();
     }
   });

@@ -190,7 +190,107 @@
 # the superuser pass at this seed on the pull request's head, which gave the
 # counts of its fuzz.yml run.
 
+# Then #2000 (#1958) added GET /api/v1/bandit/{experiment_id}/history. As
+# #1607 found, a new operation changes the ids reused by the operations after
+# it: the superuser pass again reaches the GET /api/v1/bandit/{experiment_id},
+# GET /api/v1/experiments/{experiment_id}/results,
+# GET /api/v1/results/{experiment_id}/sequential and
+# POST /api/v1/experiments/{experiment_id}/pause that #1978 listed, so they
+# are no longer listed and its list is 107. The new operation needs no entry.
+# The viewer and sdk lists do not change. Read from fuzz_check's evaluation of
+# a local run of the superuser pass at this seed on the pull request's head
+# (1b42502e), which gave the counts of its fuzz.yml run.
+
+# Then #1812 added two-step sign-in's seven operations, listed from the
+# following reasoning before the pull request's own fuzz run.
+# POST /api/v1/auth/mfa/verify takes the short token the password step issues
+# to an account with two-step sign-in on; no generated token is one, so the
+# superuser and viewer passes get 401 (or 422, or 429 past its 10 a minute) and
+# reach it in neither. DELETE /api/v1/admin/users/{user_id}/2fa is a
+# superuser's: the viewer gets 403, and the superuser pass's stored id is its
+# own account's (400, as its DELETE /api/v1/admin/users/{user_id} gets), so
+# neither reaches it. The other five are reached: GET /api/v1/users/me/2fa and
+# POST /api/v1/users/me/2fa/enroll answer 200 to every account, and confirm,
+# disable and recovery-codes answer 409 while the account has no secret in the
+# state they need (they are declared in that order, confirm and disable before
+# enroll), or 423 once wrong codes have locked the address. None is an SDK
+# route, so the sdk pass selects none. Its fuzz.yml run, on a head without
+# #2000, gave 113 for superuser, 187 for viewer and 9 for sdk; merged with
+# #2000 the lists are 109, 187 and 9.
+
+# Then #2008 made POST /api/v1/users/me/2fa/enroll ask for the current
+# password, as POST /api/v1/users/me/password does. No generated
+# current_password is the account's own, so the superuser and viewer passes
+# get 403 (none, an empty one or a wrong one), 422 for a body that fails
+# validation, and 429 once its 5 a minute are spent; their wrong passwords
+# stay below the 10 that lock the address (423). It is reached in neither, so
+# it is listed for both, and the sentence above that it answers 200 to every
+# account no longer holds. The lists are 110 for superuser, 188 for viewer and
+# 9 for sdk: this pull request's fuzz.yml run at seed 20261006, on a head
+# without #2000, counted one more operation unreached and not listed in each
+# of those two passes, and no other change; merged with #2000 that is one more
+# than the 109, 187 and 9 above.
+
+# Then #1997 (#1933) added GET /api/v1/results/{experiment_id}/segments/{segment_id}
+# (beta). As #1607 found, a new operation changes the ids reused by the
+# operations after it: the superuser pass no longer sends the segment id that
+# named a stored segment to the five segment operations after it, so it reaches
+# none of GET /api/v1/segments/{segment_id}/experiments and
+# POST /api/v1/segments/{segment_id}/evaluate, /members, /members/remove and
+# /preview, and they are listed again. The new route is unreached in both
+# bearer passes: no request names a stored segment, so it answers 404 or 422.
+# The lists are 116 for superuser, 189 for viewer and 9 for sdk: the 110, 188
+# and 9 above (main with #2000 and #2008) plus this pull request's six
+# superuser entries and one viewer entry. Those totals are the merged counts
+# of the file, updated at the merge of main; the 117 and 186 this pull request
+# first gave were read from fuzz_check's evaluation of local runs of the
+# superuser and viewer passes at this seed on its head (7e4591cc), before
+# #2000 and the two-step sign-in routes.
+#
+# Then, on the same pull request's head (b5640968), a local run of the
+# superuser pass at this seed, read from fuzz_check's evaluation, found the
+# same effect once more: as #1607 found, a new operation changes the ids
+# reused by the operations after it. The superuser pass no longer sends the
+# GET /api/v1/bandit/{experiment_id},
+# GET /api/v1/experiments/{experiment_id}/results and
+# POST /api/v1/experiments/{experiment_id}/pause that named a stored
+# experiment, so it reaches none of them, and they are listed again; and it
+# now sends a POST /api/v1/experiments/{experiment_id}/complete that names an
+# active experiment, so that entry is gone. The superuser list is 118: the 116
+# above, plus these three, less that one (counted from the parsed file, the
+# entries whose pass is superuser). The viewer and sdk lists do not change.
+# The counts equal those of the pull request's fuzz.yml run at that head.
+
+# Then #1812's required roles added POST /api/v1/auth/mfa/enroll and
+# POST /api/v1/auth/mfa/enroll/confirm. The pull request's fuzz.yml run
+# 43802032619 at seed 20261006, on a head without #2008 and #2000, counted both
+# unreached in the superuser and viewer passes, and the run 44307951324 on its
+# head with main at 108710f1 (before #1997) counted the same two and no other
+# change. Both take the short token the password step issues to an account
+# whose role LOCAL_AUTH_2FA_REQUIRED_ROLES names; the fuzz stack requires no
+# role, and no generated token is one, so the superuser and viewer passes get
+# 401 (or 422, or 429 past its 10 a minute) and reach them in neither. Neither
+# is an SDK route. The lists are 120 for superuser, 191 for viewer and 9 for
+# sdk: two more than the 118, 189 and 9 above in the first two passes. That is
+# a prediction for the merged head, which also carries #1997's shifted ids,
+# until its own fuzz.yml run.
+
 # --- superuser: the seeded demo administrator's bearer token ----------------
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/auth/mfa/verify"
+reason = "The code step of two-step sign-in: no generated mfa_token is one the stack issued, so it answers 401, 422 for a body that fails validation, and 429 once its 10 a minute are spent."
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/auth/mfa/enroll"
+reason = "Setting up two-step sign-in during a sign-in, for a role LOCAL_AUTH_2FA_REQUIRED_ROLES names: the stack requires no role and no generated mfa_token is one it issued, so it answers 401, 422 for a body that fails validation, and 429 once its 10 a minute are spent."
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/auth/mfa/enroll/confirm"
+reason = "Setting up two-step sign-in during a sign-in, for a role LOCAL_AUTH_2FA_REQUIRED_ROLES names: the stack requires no role and no generated mfa_token is one it issued, so it answers 401, 422 for a body that fails validation, and 429 once its 10 a minute are spent."
 
 [[unreached]]
 pass = "superuser"
@@ -229,6 +329,11 @@ reason = "Every generated request fails the operation's own validation (422)."
 
 [[unreached]]
 pass = "superuser"
+operation = "POST /api/v1/users/me/2fa/enroll"
+reason = "Asks for the current password: no generated current_password is the account's own, so it answers 403 (none, an empty one or a wrong one), 422 for a body that fails validation, and 429 once its 5 a minute are spent."
+
+[[unreached]]
+pass = "superuser"
 operation = "DELETE /api/v1/users/{user_id}"
 reason = "An id that is not a UUID answers 400 (#959), one that names no account 404, and the caller's own account 400."
 
@@ -239,18 +344,18 @@ reason = "The handler refuses the generated values (400); ids that name no store
 
 [[unreached]]
 pass = "superuser"
-operation = "POST /api/v1/experiments/{experiment_id}/complete"
-reason = "No request names an active or paused experiment: every id sent that passes validation names a draft (400), and the other requests fail validation (422)."
-
-[[unreached]]
-pass = "superuser"
-operation = "POST /api/v1/experiments/{experiment_id}/pause"
-reason = "No request names a stored experiment: an id that names no stored row answers 404, and the other requests fail validation (422)."
+operation = "GET /api/v1/bandit/{experiment_id}"
+reason = "No request names a stored bandit experiment: every id sent that passes validation answers 404, and the other requests fail validation (422)."
 
 [[unreached]]
 pass = "superuser"
 operation = "GET /api/v1/experiments/{experiment_id}/results"
-reason = "No request names a stored experiment: an id that names no stored row answers 404, and the other requests fail validation (422)."
+reason = "The handler refuses every id sent that passes validation (400), and the other requests fail validation (422)."
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/experiments/{experiment_id}/pause"
+reason = "No request names an active experiment: every id sent that passes validation names one the handler refuses to pause (400), and the other requests fail validation (422)."
 
 [[unreached]]
 pass = "superuser"
@@ -384,8 +489,13 @@ reason = "The handler refuses the generated values (400); ids that name no store
 
 [[unreached]]
 pass = "superuser"
-operation = "GET /api/v1/results/{experiment_id}/sequential"
-reason = "No request names a stored experiment: an id that names no stored row answers 404, and the other requests fail validation (422)."
+operation = "DELETE /api/v1/admin/users/{user_id}/2fa"
+reason = "The stored id this pass sends is its own account's, which the reset refuses (400); ids that name no stored row answer 404 and invalid requests answer 422."
+
+[[unreached]]
+pass = "superuser"
+operation = "GET /api/v1/results/{experiment_id}/segments/{segment_id}"
+reason = "No request names a stored ID-list segment: an id that names no stored row answers 404, and the other requests fail validation (422)."
 
 [[unreached]]
 pass = "superuser"
@@ -434,6 +544,31 @@ reason = "Generated ids never name a stored row (404); the other requests fail v
 
 [[unreached]]
 pass = "superuser"
+operation = "POST /api/v1/segments/{segment_id}/evaluate"
+reason = "Generated ids never name a stored segment (404); the other requests fail validation (422), and one the handler refuses (400)."
+
+[[unreached]]
+pass = "superuser"
+operation = "GET /api/v1/segments/{segment_id}/experiments"
+reason = "Generated ids never name a stored segment (404); the other requests fail validation (422)."
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/segments/{segment_id}/preview"
+reason = "Generated ids never name a stored segment (404); the other requests fail validation (422)."
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/segments/{segment_id}/members"
+reason = "Generated ids never name a stored segment (404); the other requests fail validation (422), and one the handler refuses (400)."
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/segments/{segment_id}/members/remove"
+reason = "Generated ids never name a stored segment (404); the other requests fail validation (422), and one the handler refuses (400)."
+
+[[unreached]]
+pass = "superuser"
 operation = "POST /api/v1/mutual-exclusion-groups/{group_id}/experiments"
 reason = "The handler refuses the generated values (400); invalid requests answer 422."
 
@@ -446,11 +581,6 @@ reason = "The handler refuses the generated values (400); invalid requests answe
 pass = "superuser"
 operation = "GET /api/v1/holdout/{holdout_id}/results"
 reason = "Generated ids never name a stored row (404); the other requests fail validation (422)."
-
-[[unreached]]
-pass = "superuser"
-operation = "GET /api/v1/bandit/{experiment_id}"
-reason = "No request names a stored bandit experiment: an id that names no stored row, or a fixed-allocation experiment, answers 404; the other requests fail validation (422)."
 
 [[unreached]]
 pass = "superuser"
@@ -751,6 +881,21 @@ reason = "Every generated request fails the operation's own validation (422)."
 
 [[unreached]]
 pass = "viewer"
+operation = "POST /api/v1/auth/mfa/verify"
+reason = "The code step of two-step sign-in: no generated mfa_token is one the stack issued, so it answers 401, 422 for a body that fails validation, and 429 once its 10 a minute are spent."
+
+[[unreached]]
+pass = "viewer"
+operation = "POST /api/v1/auth/mfa/enroll"
+reason = "Setting up two-step sign-in during a sign-in, for a role LOCAL_AUTH_2FA_REQUIRED_ROLES names: the stack requires no role and no generated mfa_token is one it issued, so it answers 401, 422 for a body that fails validation, and 429 once its 10 a minute are spent."
+
+[[unreached]]
+pass = "viewer"
+operation = "POST /api/v1/auth/mfa/enroll/confirm"
+reason = "Setting up two-step sign-in during a sign-in, for a role LOCAL_AUTH_2FA_REQUIRED_ROLES names: the stack requires no role and no generated mfa_token is one it issued, so it answers 401, 422 for a body that fails validation, and 429 once its 10 a minute are spent."
+
+[[unreached]]
+pass = "viewer"
 operation = "POST /api/v1/auth/signup"
 reason = "Cognito sign-up and recovery: the stack signs in with the local provider, so it answers 404 (and 429 once the sign-in limit is spent)."
 
@@ -783,6 +928,11 @@ reason = "The Cognito Hosted UI's code exchange: the stack signs in with the loc
 pass = "viewer"
 operation = "POST /api/v1/users/"
 reason = "The VIEWER role may not use it, so the role check answers 403; requests that fail validation first answer 422."
+
+[[unreached]]
+pass = "viewer"
+operation = "POST /api/v1/users/me/2fa/enroll"
+reason = "Asks for the current password: no generated current_password is the account's own, so it answers 403 (none, an empty one or a wrong one), 422 for a body that fails validation, and 429 once its 5 a minute are spent."
 
 [[unreached]]
 pass = "viewer"
@@ -1021,6 +1171,11 @@ reason = "The VIEWER role may not use it, so the role check answers 403."
 
 [[unreached]]
 pass = "viewer"
+operation = "DELETE /api/v1/admin/users/{user_id}/2fa"
+reason = "Only a superuser may use it, so the role check answers 403."
+
+[[unreached]]
+pass = "viewer"
 operation = "GET /api/v1/admin/stats"
 reason = "The VIEWER role may not use it, so the role check answers 403."
 
@@ -1033,6 +1188,11 @@ reason = "The VIEWER role may not use it, so the role check answers 403."
 pass = "viewer"
 operation = "POST /api/v1/results/{experiment_id}/invalidate-cache"
 reason = "The VIEWER role may not use it, so the role check answers 403."
+
+[[unreached]]
+pass = "viewer"
+operation = "GET /api/v1/results/{experiment_id}/segments/{segment_id}"
+reason = "No request names a stored ID-list segment (the seed has none, and the VIEWER role may not create one): an id that names no stored row answers 404, and the other requests fail validation (422)."
 
 [[unreached]]
 pass = "viewer"

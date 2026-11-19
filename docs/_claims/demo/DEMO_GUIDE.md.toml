@@ -708,14 +708,14 @@ by = [
 ]
 
 [[unit]]
-text = "CUPED has no tab in the dashboard; it is in the API (GET /api/v1/results/{id}/cuped)."
+text = "Checkout Button Color's results have a CUPED (beta) tab (GET /api/v1/results/{id}/cuped in the API), where its history narrows the interval."
 by = [
-    "test:frontend/src/tests/components/ResultsDashboard.test.tsx::offers no CUPED tab, toggle or control: CUPED-adjusted results are API only",
+    "test:frontend/src/tests/components/ResultsDashboard.test.tsx::offers the CUPED (beta) tab for an experiment whose method is cuped, and asks nothing until it opens",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
 
 [[unit]]
-text = "On ShopLab's checkout it adjusts almost nothing, because the simulator's visitors are new and have no history; the Quick Start's checkout_button_color has history and shows the reduction (see docs/api/cuped.md)."
+text = "On ShopLab's checkout it adjusts almost nothing, because the simulator's visitors are new and have no history (see docs/api/cuped.md)."
 by = [
     "test:backend/tests/integration/api/test_cuped_results_api.py::test_n2_n4_zero_coverage_is_theta_zero_and_still_ga",
     "test:backend/tests/unit/scripts/test_seed_demo_history.py::test_history_is_equally_likely_in_both_arms",
@@ -803,14 +803,10 @@ text = "\"While we're talking, the platform is learning and reallocating.\""
 by = ["test:backend/tests/unit/infrastructure/test_setup_local_runs_the_demo.py::test_the_bandit_weights_are_recomputed_every_minute_and_every_5_by_default"]
 
 [[unit]]
-text = "The dashboard shows the current weights only."
-by = ["test:frontend/src/tests/components/BanditWeightsSection.test.tsx::shows each variant with the server values, in its order, and when they were computed"]
-
-[[unit]]
-text = "It has no chart of how they changed over time"
+text = "Open Weight history below the panel to show how the weights moved: one row per update, newest first"
 by = [
-    "test:frontend/src/tests/components/BanditWeightsSection.test.tsx::shows each variant with the server values, in its order, and when they were computed",
-    "test:frontend/src/tests/components/BanditWeightsSection.test.tsx::offers no control but Refresh, for anyone",
+    "test:frontend/src/tests/pages/experiment-detail-bandit-history.test.tsx::shows the server weights as shares, columns in the variant order",
+    "test:frontend/src/tests/pages/experiment-detail-bandit-history.test.tsx::sits below the weights panel, outside it, and only reads",
 ]
 
 [[unit]]

@@ -480,7 +480,10 @@ export class ExperimentationClient {
   // ─── Tracking ──────────────────────────────────────────────────────────────
 
   /**
-   * Track an event. Never rejects; failures go to `config.onError`.
+   * Track an event. Never rejects; a request that fails (network error or a non-2xx status)
+   * goes to `config.onError`. The answer to a 2xx is not inspected: an entry the server refuses
+   * inside a 200 (the `errors` of a batch answer) does not reach `onError`; `trackBatch` returns
+   * those.
    *
    * - With `experimentKey` / `featureFlagKey`: one `POST /api/v1/tracking/track`.
    * - Without keys: one `POST /api/v1/tracking/batch` (chunked at 100) with one

@@ -34,7 +34,10 @@ from backend.app.core.config import Settings
 from backend.app.main import app
 from backend.app.models.user import UserRole
 from backend.app.schemas.notification import NotificationPreferenceUpdate
-from backend.app.services.email_notifier import EmailNotifier
+from backend.app.services.email_notifier import (
+    EMAIL_SEND_TIMEOUT_SECONDS,
+    EmailNotifier,
+)
 from backend.app.services.notification_service import NotificationService
 from backend.app.services.slack_notifier import SlackNotifier
 
@@ -272,7 +275,9 @@ def test_smtp_uses_port_587_by_default(monkeypatch):
         notifier = EmailNotifier()
     with patch("backend.app.services.email_notifier.smtplib.SMTP") as smtp:
         assert notifier._send_email(["to@example.org"], "s", "<p>b</p>")
-    smtp.assert_called_once_with("smtp.example.org", 587)
+    smtp.assert_called_once_with(
+        "smtp.example.org", 587, timeout=EMAIL_SEND_TIMEOUT_SECONDS
+    )
 
 
 def test_every_email_is_sent_from_the_configured_sender():
