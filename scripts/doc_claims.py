@@ -2023,6 +2023,43 @@ MECHANISMS: Dict[str, Mechanism] = {
             ),
         ),
     ),
+    # The visual script's stored-keys table: each row is a key the closed key
+    # list (tests/sdk-contract/visual-storage-keys.json) marks written, with
+    # that file's storage, holds and kept, in its order.
+    "visual-stored-keys": Mechanism(
+        "backend/tests/unit/docs/test_visual_install_guide.py"
+        "::test_the_stored_keys_table_is_the_contract_files_written_keys",
+        holds=(
+            (
+                "docs/sdk/visual.md",
+                r"^controlvar_[a-z_]{1,30} \| (?:cookie|localStorage|sessionStorage)"
+                r" \| [^|]{1,300} \| [^|]{1,100}$",
+            ),
+        ),
+    ),
+    # While the visual editor is not offered: the page says so, is not in the
+    # navigation, and nothing in the dashboard names the script.
+    "visual-not-yet-available": Mechanism(
+        "backend/tests/unit/docs/test_visual_install_guide.py"
+        "::test_the_page_says_not_yet_available_nothing_offers_the_script_and_no_nav_lists_it",
+        holds=_whole(
+            "docs/sdk/visual.md",
+            "Not yet available",
+            "The visual editor is not yet available in Controlvar, and nothing in"
+            " Controlvar offers this script yet.",
+        ),
+    ),
+    # The limitations page's lines about the visual script sit under a heading
+    # that says the editor is not yet available.
+    "visual-limitations-heading": Mechanism(
+        "backend/tests/unit/docs/test_visual_install_guide.py"
+        "::test_the_limitations_lines_sit_under_a_heading_that_says_not_yet_available",
+        holds=_whole(
+            "docs/getting-started/limitations.md",
+            "Visual experiments (not yet available)",
+            "The visual editor is not yet available.",
+        ),
+    ),
 }
 
 #: The mobile and not-yet-published SDK pages (#1107): their registries wait

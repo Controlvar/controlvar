@@ -9,6 +9,7 @@ import { html, snippet, type ApiAnswer, type ApiCall, type Site } from "./editor
 export const VISUAL_PATH = "/api/v1/tracking/visual";
 export const ERRORS_PATH = "/api/v1/tracking/errors";
 export const BATCH_PATH = "/api/v1/tracking/batch";
+export const PREVIEW_PATH = "/api/v1/tracking/visual/preview";
 
 export interface Experiment {
   experiment_key: string;
@@ -40,11 +41,31 @@ export interface Answers {
   status?: number;
   /** Wait for this before answering S3. */
   hold?: Promise<void>;
+  /** The preview read's answer (POST /api/v1/tracking/visual/preview); 404 when absent. */
+  preview?: ApiAnswer;
+  /** Wait for this before answering the preview read. */
+  holdPreview?: Promise<void>;
+}
+
+/** The preview read's answer for variant B of *key*, on every page of the host unless *rules* say otherwise. */
+export function previewAnswer(
+  key: string,
+  changes: unknown[],
+  rules: { match: "exact" | "prefix"; path: string }[] = [{ match: "prefix", path: "/" }],
+): ApiAnswer {
+  return {
+    status: 200,
+    body: { experiment_key: key, variant_name: "B", changes: { version: 1, changes }, pages: { host: "localhost", rules, max_age: 60 } },
+  };
 }
 
 /** An answer function for routeSite: S3 per `answers`, error reports 201, batch calls 200. */
 export function answering(answers: Answers): (call: ApiCall) => Promise<ApiAnswer> {
   return async (call) => {
+    if (call.path === PREVIEW_PATH) {
+      if (answers.holdPreview) await answers.holdPreview;
+      return answers.preview ?? { status: 404, body: { detail: "gone" } };
+    }
     if (call.path === VISUAL_PATH) {
       if (answers.hold) await answers.hold;
       const status = answers.status ?? 200;

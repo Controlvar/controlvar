@@ -22,7 +22,7 @@ by = ["exempt:label"]
 [[unit]]
 text = "What you might expect | What happens instead"
 by = ["exempt:label"]
-count = 7
+count = 8
 
 [[unit]]
 text = "A flag that serves one of several values | A flag serves two values: its on value to the users it is on for (a matching targeting rule's percentage, or the rollout percentage), and its off value to everyone else and to everyone while it is off. No rule or rollout splits users among three or more values. GET /api/v1/feature-flags/user/{user_id} answers every flag as on or off. For three or more experiences, run a multivariate experiment: each variant carries a configuration, which POST /api/v1/tracking/assign returns."
@@ -498,4 +498,31 @@ by = [
     "test:backend/tests/integration/api/test_balanced_assignment.py::test_a_held_counter_row_holds_up_nothing_else",
     "test:backend/tests/integration/api/test_balanced_assignment.py::test_a_held_counter_row_is_answered_by_hash",
     "test:backend/tests/integration/database/test_balance_within_migration.py::test_the_previous_releases_statements_run_on_this_schema",
+]
+
+[[unit]]
+text = "Visual experiments (not yet available)"
+by = ["mechanism:visual-limitations-heading"]
+
+[[unit]]
+text = "The visual editor is not yet available."
+by = ["mechanism:visual-limitations-heading"]
+
+[[unit]]
+text = "These lines are about the browser script it will use."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "A text change on a page React renders on the server, with no error | On a site whose pages React renders on the server (Next.js and others), a text change makes React report at least one hydration error per page view (several on React 18), which your error monitoring will record. The change still shows."
+by = ["test:frontend/tests/e2e/runtime/hydration.runtime.spec.ts::on 25 targets is kept through hydration"]
+
+[[unit]]
+text = "A change to a text the page keeps updating | Do not change a text your site keeps updating while the page is open (a cart count, a timer, a price that loads late): once changed, either it stops showing your site's updates or your site's update replaces the change."
+by = ["test:frontend/tests/e2e/runtime/keep.runtime.spec.ts::a page that resets a text every 100 ms gets the change back each time until the bound, then keeps its own"]
+
+[[unit]]
+text = "A visual experiment on a site that routes after # | On a site that routes with the part of the address after # (hash routing), the visual editor always opens the site's default route, and page rules treat every route as one page."
+by = [
+    "test:frontend/tests/e2e/runtime/editor-link.runtime.spec.ts::is removed from the address, claimed once, and handed to the panel after hello",
+    "test:frontend/tests/e2e/runtime/spa.runtime.spec.ts::each kind of change after # re-evaluates exactly once, with no call and no page view",
 ]
