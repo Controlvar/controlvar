@@ -65,6 +65,8 @@ const FILES = [
   'components/experiments/new/AdvancedForm.tsx',
   'components/experiments/new/BalanceWithinFields.tsx',
   'pages/experiments/new.tsx',
+  // #1961: the Split URL type's Pages block.
+  'components/experiments/new/SplitUrlFields.tsx',
 ];
 
 /**

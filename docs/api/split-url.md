@@ -5,7 +5,7 @@
 
 A split URL experiment gives each variant its own page. When a visitor asks for the control's URL, your server or edge asks Controlvar which variant the visitor is in and, for a treatment, redirects them to that variant's URL. The visitor keeps their variant on later visits, and conversions tracked with their id and the experiment count for the variant they saw.
 
-Creating a split URL experiment is an API call, shown on this page. Starting, pausing and ending it, and reading its results, are in the dashboard, as for any experiment. Nothing sends a visitor anywhere until your server or edge asks Controlvar for each one: an active experiment with nothing installed in front of the site shows only as zero visitors in its results.
+You can create a split URL experiment in the dashboard: the new-experiment form offers **Split URL** and asks for each variant's page. The API call is shown on this page. The dashboard sets the pages only when it creates the experiment; to change them later, send `PUT /api/v1/experiments/{id}`. Starting, pausing and ending it, and reading its results, are in the dashboard, as for any experiment. Nothing sends a visitor anywhere until your server or edge asks Controlvar for each one: an active experiment with nothing installed in front of the site shows only as zero visitors in its results.
 
 On AWS, an optional CloudFront router can do the asking for your site: the [CloudFront edge router](#the-cloudfront-edge-router) (beta), a Lambda@Edge function you deploy on its own, which follows the same rules as any server or edge.
 
