@@ -114,6 +114,29 @@ export interface FeatureFlagToggleResponse {
   audit_log_id: string | null;
 }
 
+/** One flag's line in a `BulkToggleResponse`. */
+export interface BulkToggleResult {
+  flag_id: string;
+  flag_key: string;
+  success: boolean;
+  error?: string | null;
+  old_status?: string | null;
+  new_status?: string | null;
+}
+
+/**
+ * `BulkToggleResponse` from `POST /feature-flags/bulk-toggle`. Partial success
+ * by design: a flag the server refused (no permission, not found) is a result
+ * with `success: false` inside a 200, never an error status.
+ */
+export interface BulkToggleResponse {
+  total: number;
+  succeeded: number;
+  failed: number;
+  results: BulkToggleResult[];
+  audit_log_ids: string[];
+}
+
 // ---------------------------------------------------------------------------
 // Rollout schedules (`/api/v1/rollout-schedules`)
 // ---------------------------------------------------------------------------
@@ -213,6 +236,26 @@ export const FeatureFlagsService = {
       method: 'POST',
       json: { reason: reason ?? null },
     });
+  },
+
+  /**
+   * Archive one flag: the bulk toggle with `action: "archive"`, the only
+   * route that archives. It answers 200 even when it refused the flag, so the
+   * caller reads `results[0].success`, never the status alone.
+   */
+  async archive(id: string): Promise<BulkToggleResponse> {
+    return apiFetch<BulkToggleResponse>(`${BASE}/bulk-toggle`, {
+      method: 'POST',
+      json: { flag_ids: [id], action: 'archive' },
+    });
+  },
+
+  /**
+   * `POST /feature-flags/{id}/unarchive` (beta): an archived flag comes back
+   * INACTIVE, never ACTIVE; any other flag is returned unchanged.
+   */
+  async unarchive(id: string): Promise<FeatureFlag> {
+    return apiFetch<FeatureFlag>(`${BASE}/${id}/unarchive`, { method: 'POST' });
   },
 
   async listRolloutSchedules(flagId: string): Promise<RolloutScheduleListResponse> {

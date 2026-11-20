@@ -171,6 +171,20 @@ export interface ExperimentDesignUpdate {
   balance_within?: BalanceWithin | null;
 }
 
+/**
+ * `BayesianConfig` as the new-experiment form sends it (#442): its four numbers
+ * and `prior_family`, which the form always sends as "beta" (T337), never
+ * `rope`. The API refuses alpha, beta or loss_threshold <= 0 and a
+ * credible_level outside (0, 1).
+ */
+export interface BayesianConfigInput {
+  prior_family: 'beta' | 'normal' | 'gamma';
+  alpha: number;
+  beta: number;
+  loss_threshold: number;
+  credible_level: number;
+}
+
 /** `ExperimentCreate` */
 export interface CreateExperimentRequest {
   name: string;
@@ -188,8 +202,10 @@ export interface CreateExperimentRequest {
   confidence_level?: number;
   /** The API's default is `benjamini_hochberg`. */
   correction_method?: CorrectionMethod;
-  /** Sent only when true; the API then stores its default Bayesian settings. */
+  /** Sent only when true; with no `bayesian_config` the API then stores its default Bayesian settings. */
   bayesian_enabled?: boolean;
+  /** Sent only with `bayesian_enabled`, and only when a field differs from the API's default. */
+  bayesian_config?: BayesianConfigInput;
   /**
    * Sent only when true, and never with a `sequential_testing_config`: the
    * sequential analysis then uses the API's defaults (beta).

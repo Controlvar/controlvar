@@ -23,6 +23,12 @@ from pydantic import (
 )
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+from backend.app.core.demo_mode import (
+    OUTBOUND_SETTINGS,
+    demo_account_published,
+    demo_settings_refusals,
+    refusal_message,
+)
 from backend.app.core.settings_rules import (
     CANONICAL_ENVIRONMENTS,
     ENV_FILES,
@@ -33,6 +39,7 @@ from backend.app.core.settings_rules import (
     allowed_host_pattern_error,
     cognito_domain_error,
     parse_allowed_hosts,
+    parse_two_factor_roles,
     public_base_url_error,
     secret_is_placeholder,
     superuser_password_is_weak,
@@ -324,6 +331,31 @@ class Settings(BaseSettings):
     LOCAL_AUTH_TOKEN_TTL_MINUTES: int = 720  # 12 hours
     LOCAL_AUTH_MAX_FAILED_ATTEMPTS: int = 10
     LOCAL_AUTH_LOCKOUT_MINUTES: int = 15
+    # The roles whose local accounts must use two-step sign-in (#1812), as a
+    # comma-separated list of role names (ADMIN, DEVELOPER, ANALYST, VIEWER).
+    # Unset, empty or blank: no role. Any other entry (lower case, a
+    # misspelling, an empty entry such as `ADMIN,`) stops the API starting,
+    # naming it (`settings_rules.parse_two_factor_roles`; the start-up check
+    # applies the same rule). Superusers of a listed role included. NoDecode:
+    # the raw string reaches the "before" validator, which must not drop empty
+    # entries as the other list settings do.
+    LOCAL_AUTH_2FA_REQUIRED_ROLES: Annotated[List[str], NoDecode] = []
+
+    # Demo mode: a read-only switch for a public demo install
+    # (backend/app/core/demo_mode.py). Off by default. On, the API refuses
+    # every request that could create or change something except an exact
+    # allow-list of eight POSTs, refuses every websocket, and signs in only
+    # non-superuser viewers. Read at request time, so a test can flip it on
+    # the singleton.
+    DEMO_MODE: bool = False
+    # The shared account a demo visitor signs in with, published by
+    # GET /api/v1/auth/config; while it is published, failed sign-ins are not
+    # counted (`demo_account_published`). Both or neither; only with
+    # DEMO_MODE=true and AUTH_PROVIDER=local; never FIRST_SUPERUSER; an address
+    # with an @ of at most 254 characters and a password of at most 256
+    # (`refuse_an_unsafe_demo_mode`).
+    DEMO_ACCOUNT_EMAIL: str = ""
+    DEMO_ACCOUNT_PASSWORD: str = ""
 
     # The canonical absolute base URL this service is reached at, e.g.
     # `https://api.example.com`. Every absolute URL the app EMITS is built from
@@ -706,6 +738,17 @@ class Settings(BaseSettings):
         return []
 
     @property
+    def demo_account_published(self) -> bool:
+        """True when ``DEMO_MODE`` is on and the demo account is set.
+
+        ``GET /api/v1/auth/config`` then publishes the account, password
+        included, and the local sign-in counts no failed attempts.
+        """
+        return demo_account_published(
+            self.DEMO_MODE, self.DEMO_ACCOUNT_EMAIL, self.DEMO_ACCOUNT_PASSWORD
+        )
+
+    @property
     def dev_auth_bypass_active(self) -> bool:
         """True only when the dev-admin bypass is both enabled and permitted."""
         return (
@@ -783,6 +826,37 @@ class Settings(BaseSettings):
             )
         return self
 
+    @model_validator(mode="after")
+    def refuse_an_unsafe_demo_mode(self) -> "Settings":
+        """Refuse to start with a demo configuration that is unsafe or ambiguous.
+
+        The rules are ``demo_mode.demo_settings_refusals``: the demo account is
+        two settings set together, only with ``DEMO_MODE=true`` and the local
+        provider, never ``FIRST_SUPERUSER``, and of a shape a client accepts
+        (an address with an @, at most 254 characters; a password of at most
+        256); under ``DEMO_MODE=true`` no setting or variable that calls a
+        service outside the install is set.
+        The settings ignore an unknown name (``extra="ignore"``), so a misspelt
+        ``DEMO_MODE`` alone would start a writable API; with the account set,
+        the second rule turns that typo into a refusal.
+        """
+        message = refusal_message(
+            demo_settings_refusals(
+                demo_mode=self.DEMO_MODE,
+                account_email=self.DEMO_ACCOUNT_EMAIL,
+                account_password=self.DEMO_ACCOUNT_PASSWORD,
+                auth_provider=self.AUTH_PROVIDER,
+                first_superuser=str(self.FIRST_SUPERUSER),
+                outbound_settings={
+                    name: getattr(self, name) for name in OUTBOUND_SETTINGS
+                },
+                environment=os.environ,
+            )
+        )
+        if message:
+            raise ValueError(message)
+        return self
+
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
@@ -817,6 +891,15 @@ class Settings(BaseSettings):
         if error:
             raise ValueError(error)
         return v.strip().rstrip("/")
+
+    @field_validator("LOCAL_AUTH_2FA_REQUIRED_ROLES", mode="before")
+    @classmethod
+    def check_two_factor_roles(cls, v: Any) -> List[str]:
+        """Unset, empty or blank: no role. Otherwise every comma-separated
+        entry must be one of the role names (ADMIN, DEVELOPER, ANALYST,
+        VIEWER) exactly; anything else refuses to start, naming the entry
+        (`settings_rules.parse_two_factor_roles`)."""
+        return parse_two_factor_roles(v)
 
     @field_validator("COGNITO_DOMAIN")
     @classmethod

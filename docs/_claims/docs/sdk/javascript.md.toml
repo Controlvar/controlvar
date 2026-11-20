@@ -365,8 +365,9 @@ by = [
 ]
 
 [[unit]]
-text = "track | (userId, eventName, options?: TrackOptions) => Promise<void> | — | Never rejects; onError(err, 'track')"
+text = "track | (userId, eventName, options?: TrackOptions) => Promise<void> | — | Never rejects; onError(err, 'track') when a request fails (network error or non-2xx). A 2xx answer is not inspected, so an entry the server refuses inside a 200 does not reach onError; trackBatch returns those"
 by = [
+    "test:sdk/js/__tests__/client.test.ts::does not call onError for an entry a 200 batch answer refuses",
     "test:sdk/js/__tests__/client.test.ts::reports swallowed failures through onError",
     "test:sdk/js/__tests__/client.test.ts::never rejects when the batch request fails",
 ]
@@ -1318,6 +1319,14 @@ by = ["exempt:advice"]
 [[unit]]
 text = "Use a dedicated key for browser traffic so it can be revoked on its own, and never give it the sdk:ruleset scope, which lets a key download every flag's targeting rules."
 by = ["test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestContents::test_every_owners_flags_and_nothing_else"]
+
+[[unit]]
+text = "The two routes the visual editor's browser script calls refuse a key with any scope (Refused in a web page); the routes this SDK calls do not."
+by = [
+    "test:backend/tests/smoke/test_page_key_routes.py::test_the_page_key_routes_are_exactly_these",
+    "test:backend/tests/integration/api/test_visual_tracking_api.py::test_a_key_with_any_scope_is_refused",
+    "test:backend/tests/integration/api/test_visual_tracking_api.py::test_a_server_key_still_works_on_the_other_sdk_routes",
+]
 
 [[unit]]
 text = "Server-side, lower timeoutMs if the SDK sits on a request path:"

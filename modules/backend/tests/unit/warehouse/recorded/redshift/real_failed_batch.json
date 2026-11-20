@@ -1,0 +1,94 @@
+{
+  "_provenance": {
+    "source": "real account",
+    "real_run_id": "wl-redshift-20261118T011715Z-6b77b53f",
+    "check": "rs_missing_grant",
+    "request": {
+      "service": "redshift-data",
+      "operation": "DescribeStatement"
+    },
+    "note": "Recorded by the warehouse_live check; see evidence.json."
+  },
+  "status": 200,
+  "body": {
+    "Id": "85a64e1a-dcad-4c48-be70-c2a0645f8c0d",
+    "DbUser": "IAMR:controlvar-rs-sitting",
+    "Database": "dev",
+    "Duration": 177086153,
+    "Error": "Query #5 failed with ERROR: permission denied for relation pg_user_info",
+    "Status": "FAILED",
+    "CreatedAt": "datetime.datetime(2026, 11, 17, 17, 18, 30, 530000, tzinfo=tzlocal())",
+    "UpdatedAt": "datetime.datetime(2026, 11, 17, 17, 18, 31, 862000, tzinfo=tzlocal())",
+    "RedshiftPid": 1073881253,
+    "HasResultSet": false,
+    "ResultRows": -1,
+    "ResultSize": -1,
+    "RedshiftQueryId": 0,
+    "SubStatements": [
+      {
+        "Id": "85a64e1a-dcad-4c48-be70-c2a0645f8c0d:1",
+        "Duration": 48571591,
+        "Status": "FINISHED",
+        "CreatedAt": "datetime.datetime(2026, 11, 17, 17, 18, 30, 714000, tzinfo=tzlocal())",
+        "UpdatedAt": "datetime.datetime(2026, 11, 17, 17, 18, 31, 807000, tzinfo=tzlocal())",
+        "QueryString": "SET timezone TO 'UTC'",
+        "ResultRows": 0,
+        "ResultSize": 0,
+        "RedshiftQueryId": 0,
+        "HasResultSet": false
+      },
+      {
+        "Id": "85a64e1a-dcad-4c48-be70-c2a0645f8c0d:2",
+        "Duration": 50633962,
+        "Status": "FINISHED",
+        "CreatedAt": "datetime.datetime(2026, 11, 17, 17, 18, 30, 721000, tzinfo=tzlocal())",
+        "UpdatedAt": "datetime.datetime(2026, 11, 17, 17, 18, 31, 807000, tzinfo=tzlocal())",
+        "QueryString": "SET extra_float_digits TO 2",
+        "ResultRows": 0,
+        "ResultSize": 0,
+        "RedshiftQueryId": 0,
+        "HasResultSet": false
+      },
+      {
+        "Id": "85a64e1a-dcad-4c48-be70-c2a0645f8c0d:3",
+        "Duration": 50678269,
+        "Status": "FINISHED",
+        "CreatedAt": "datetime.datetime(2026, 11, 17, 17, 18, 30, 727000, tzinfo=tzlocal())",
+        "UpdatedAt": "datetime.datetime(2026, 11, 17, 17, 18, 31, 807000, tzinfo=tzlocal())",
+        "QueryString": "SET statement_timeout TO 70000",
+        "ResultRows": 0,
+        "ResultSize": 0,
+        "RedshiftQueryId": 0,
+        "HasResultSet": false
+      },
+      {
+        "Id": "85a64e1a-dcad-4c48-be70-c2a0645f8c0d:4",
+        "Duration": 27202331,
+        "Status": "FINISHED",
+        "CreatedAt": "datetime.datetime(2026, 11, 17, 17, 18, 30, 733000, tzinfo=tzlocal())",
+        "UpdatedAt": "datetime.datetime(2026, 11, 17, 17, 18, 31, 807000, tzinfo=tzlocal())",
+        "QueryString": "SELECT CAST(CAST(0.1 AS DOUBLE PRECISION) + CAST(0.2 AS DOUBLE PRECISION) AS VARCHAR) AS probe, current_setting('timezone') AS tz",
+        "ResultRows": 1,
+        "ResultSize": 22,
+        "RedshiftQueryId": 0,
+        "HasResultSet": true
+      },
+      {
+        "Id": "85a64e1a-dcad-4c48-be70-c2a0645f8c0d:5",
+        "Duration": -1,
+        "Error": "ERROR: permission denied for relation pg_user_info",
+        "Status": "FAILED",
+        "CreatedAt": "datetime.datetime(2026, 11, 17, 17, 18, 30, 739000, tzinfo=tzlocal())",
+        "UpdatedAt": "datetime.datetime(2026, 11, 17, 17, 18, 31, 807000, tzinfo=tzlocal())",
+        "QueryString": "SELECT COUNT(*) AS n FROM pg_user_info",
+        "ResultRows": -1,
+        "ResultSize": -1,
+        "RedshiftQueryId": 0,
+        "HasResultSet": false
+      }
+    ],
+    "WorkgroupName": "controlvar-rs-sitting",
+    "ResultFormat": "json",
+    "ExecutionMode": "TRANSACTION"
+  }
+}

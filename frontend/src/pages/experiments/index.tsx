@@ -13,7 +13,10 @@ import { PageTitle } from '@/components/PageTitle';
 import { FirstRunChecklist } from '@/components/experiments/FirstRunChecklist';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
-import { canCreateExperiment, canReadEligibility } from '@/utils/experimentPermissions';
+import { useDemoMode } from '@/contexts/AuthConfigContext';
+import { DemoNote } from '@/components/DemoNote';
+import { DEMO_EXPERIMENTS_ACTION } from '@/utils/demoMode';
+import { canAnalyseInteractions, canCreateExperiment, canReadEligibility } from '@/utils/experimentPermissions';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
 const STATUS_FILTERS: Array<{ label: string; value: ExperimentStatus | 'all' }> = [
@@ -38,6 +41,11 @@ export default function ExperimentsPage() {
   // names the group routes' own question, so the link follows them if the two
   // ever differ.
   const canManageEligibility = canReadEligibility(auth?.user, effective);
+  // The interaction scan and pair test (#1960): the roles the API names,
+  // and only once the user is known.
+  const canAnalyse = canAnalyseInteractions(auth?.user);
+  // A read-only demo puts the demo note where "+ New Experiment" would be.
+  const demo = useDemoMode();
 
   const { data, loading: isLoading, error } = useApi<ExperimentListResponse>(
     () => ExperimentsService.list(statusFilter !== 'all' ? { status: statusFilter } : undefined),
@@ -62,37 +70,54 @@ export default function ExperimentsPage() {
               Manage and monitor your A/B tests and feature experiments
             </p>
           </div>
-          {canCreate && (
-            <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
-              {/* Secondary links (#1455): the same roles as the API's group
-                  routes (canReadEligibility, EXPERIMENT CREATE). */}
-              {canManageEligibility && (
-                <Link
-                  href="/experiments/exclusion-groups"
-                  className="text-sm font-medium text-blue-700 underline"
-                  data-testid="exclusion-groups-link"
-                >
-                  Exclusion groups
-                </Link>
-              )}
-              {canManageEligibility && (
-                <Link
-                  href="/experiments/holdouts"
-                  className="text-sm font-medium text-blue-700 underline"
-                  data-testid="holdouts-link"
-                >
-                  Global holdouts
-                </Link>
-              )}
+          {/* One right-hand wrapper, so the header keeps two children. The
+              Interactions link (#1960) sits outside the create block: an
+              ANALYST may use it, and so may a demo's permitted roles (it
+              only reads). */}
+          <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+            {canAnalyse && (
               <Link
-                href="/experiments/new"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-                data-testid="new-experiment-btn"
+                href="/experiments/interactions"
+                className="text-sm font-medium text-blue-700 underline"
+                data-testid="interactions-link"
               >
-                + New Experiment
+                Interactions
               </Link>
-            </div>
-          )}
+            )}
+            {demo ? (
+              <DemoNote action={DEMO_EXPERIMENTS_ACTION} className="text-sm text-slate-600 max-w-md" />
+            ) : canCreate && (
+              <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+                {/* Secondary links (#1455): the same roles as the API's group
+                    routes (canReadEligibility, EXPERIMENT CREATE). */}
+                {canManageEligibility && (
+                  <Link
+                    href="/experiments/exclusion-groups"
+                    className="text-sm font-medium text-blue-700 underline"
+                    data-testid="exclusion-groups-link"
+                  >
+                    Exclusion groups
+                  </Link>
+                )}
+                {canManageEligibility && (
+                  <Link
+                    href="/experiments/holdouts"
+                    className="text-sm font-medium text-blue-700 underline"
+                    data-testid="holdouts-link"
+                  >
+                    Global holdouts
+                  </Link>
+                )}
+                <Link
+                  href="/experiments/new"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                  data-testid="new-experiment-btn"
+                >
+                  + New Experiment
+                </Link>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Status filter buttons */}

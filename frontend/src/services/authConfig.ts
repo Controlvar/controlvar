@@ -36,6 +36,34 @@ export type AuthConfig =
 
 export const LOCAL_AUTH_CONFIG: AuthConfig = Object.freeze({ kind: 'local' }) as AuthConfig;
 
+/** The shared account a read-only demo publishes, for its "Enter the demo" button. */
+export interface DemoAccount {
+  email: string;
+  password: string;
+}
+
+/**
+ * The API's demo mode: it refuses every write but sign-in and the SDK's
+ * tracking. `account` is the published sign-in, or null when the API names
+ * none (`/login` then keeps its email and password form).
+ */
+export interface DemoMode {
+  account: DemoAccount | null;
+}
+
+/** What one read of `/auth/config` says: how to sign in, and whether this is a demo. */
+export interface AuthConfigAnswer {
+  config: AuthConfig;
+  /** Null unless the API says `"demo_mode": true`. */
+  demo: DemoMode | null;
+}
+
+export const LOCAL_AUTH_ANSWER: AuthConfigAnswer = Object.freeze({ config: LOCAL_AUTH_CONFIG, demo: null });
+
+/** Generous bounds: the account is shown in no field, only sent back to the API. */
+const DEMO_EMAIL_MAX = 254;
+const DEMO_PASSWORD_MAX = 256;
+
 /** A host name only: letters, digits, dots and hyphens, with at least one dot. */
 const DOMAIN_RE = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/;
 /** A Cognito app client id: word characters and `+`, as Cognito defines it. */
@@ -85,19 +113,42 @@ export function parseAuthConfig(body: unknown): AuthConfig {
 }
 
 /**
+ * Whether an answer turns demo mode on: only `"demo_mode": true`, the boolean.
+ * The account is kept only when both its fields are non-empty strings within
+ * bounds; otherwise demo mode is on with no account.
+ */
+export function parseDemoMode(body: unknown): DemoMode | null {
+  if (!isRecord(body) || body.demo_mode !== true) return null;
+  const account = body.demo_account;
+  if (!isRecord(account)) return { account: null };
+  const { email, password } = account;
+  if (
+    typeof email !== 'string' ||
+    typeof password !== 'string' ||
+    !email.includes('@') ||
+    email.length > DEMO_EMAIL_MAX ||
+    password.length === 0 ||
+    password.length > DEMO_PASSWORD_MAX
+  ) {
+    return { account: null };
+  }
+  return { account: { email, password } };
+}
+
+/**
  * Read the configuration. Never rejects: a failure of any kind, the
  * {@link AUTH_CONFIG_TIMEOUT_MS} deadline passing included, is the local
- * provider.
+ * provider with demo mode off.
  */
-export async function fetchAuthConfig(): Promise<AuthConfig> {
+export async function fetchAuthConfig(): Promise<AuthConfigAnswer> {
   try {
     const body = await apiFetch<unknown>(AUTH_CONFIG_PATH, {
       auth: false,
       redirectOn401: false,
       timeoutMs: AUTH_CONFIG_TIMEOUT_MS,
     });
-    return parseAuthConfig(body);
+    return { config: parseAuthConfig(body), demo: parseDemoMode(body) };
   } catch {
-    return LOCAL_AUTH_CONFIG;
+    return LOCAL_AUTH_ANSWER;
   }
 }

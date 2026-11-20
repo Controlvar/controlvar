@@ -39,6 +39,7 @@ FIXED = frozenset(
         "sequential_testing_config",
         "bayesian_enabled",
         "bayesian_config",
+        "visual_config",
     }
 )
 
@@ -78,8 +79,9 @@ NEVER_WRITTEN = {
 }
 
 #: The list's order decides which field the 400 names when a body sends
-#: several: #580's six, then #448's balance_within, then #848's five, so a
-#: request refused before #848 keeps the field its detail names.
+#: several: #580's six, then #448's balance_within, then #848's five, then
+#: #1545's visual_config, so a request refused before keeps the field its
+#: detail names.
 ROUTE_ORDER = (
     "variants",
     "metrics",
@@ -93,6 +95,7 @@ ROUTE_ORDER = (
     "sequential_testing_config",
     "bayesian_enabled",
     "bayesian_config",
+    "visual_config",
 )
 
 NOT_FIELDS = ("start_date", "end_date")

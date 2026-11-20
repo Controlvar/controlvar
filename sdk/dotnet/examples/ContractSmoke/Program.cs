@@ -108,6 +108,16 @@ static async Task<int> RunAsync()
     if (!batchOk)
         return Fail("batch track failed");
 
+    // 4b. One keyed event sent twice with one fixed event id (#1543, C4). The server is to store
+    //     it once: the runner counts the rows for this user and event name.
+    var dedupName = "contract_dedup_" + Guid.NewGuid().ToString("D");
+    var dedupId = "contract-" + Guid.NewGuid().ToString("D");
+    for (int i = 0; i < 2; i++)
+    {
+        if (!await client.TrackAsync(dedupName, userId, experimentKey: experimentKey, eventId: dedupId))
+            return Fail("event_id: track failed");
+    }
+
     // 4c. The attributes reach flag evaluation (#1520, #1719). The seeded targeted flag is at 0%
     //     with one rule, plan equals pro, at 100%. A NEW client (so the fan-out above is untouched)
     //     asks for it with plan=pro, then, after ClearCache() (the cache key is user + flag), with
@@ -169,6 +179,21 @@ static async Task<int> RunAsync()
     if (thrown != 1)
         return Fail($"the OnExposure that throws was called {thrown} times, expected 1");
 
+    // 6. Flag values (#1810): a NEW client (so the fan-out above is untouched) reads the seed's
+    //    three value flags, each on at 100% while the SDK rows run, with defaults that are no flag
+    //    value, so a getter that falls back shows. The report is what they returned; the runner
+    //    requires the seed's on values.
+    string stringValue;
+    double numberValue;
+    JsonElement jsonValue;
+    using (var valued = new ExperimentationClient(config))
+    {
+        using var smokeDefault = JsonDocument.Parse("[\"smoke-default\"]");
+        stringValue = await valued.GetStringValueAsync("sdk_contract_value_string", userId, "smoke-default");
+        numberValue = await valued.GetNumberValueAsync("sdk_contract_value_number", userId, -1);
+        jsonValue = (await valued.GetJsonValueAsync("sdk_contract_value_json", userId, smokeDefault.RootElement)).Clone();
+    }
+
     var seen = exposures.ToArray();
     var payload = seen.Length == 0
         ? null
@@ -187,8 +212,10 @@ static async Task<int> RunAsync()
         flag = new { enabled = flag.Enabled },
         track = new { ok = trackOk },
         fanout = new { ok = fanoutOk && batchOk },
+        event_id = new { user_id = userId, event_name = dedupName, id = dedupId, sends = 2 },
         targeted = new { pro = pro.Enabled, free = free.Enabled, reason = answered[0] },
-        exposure = new { calls = seen.Length, payload }
+        exposure = new { calls = seen.Length, payload },
+        values = new { @string = stringValue, number = numberValue, json = jsonValue }
     });
     Console.Out.WriteLine(line);
     return 0;

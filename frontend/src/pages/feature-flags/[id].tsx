@@ -29,12 +29,14 @@ import {
 } from '@/services/featureFlags';
 import type { SafetyCheckResponse } from '@/types/safety';
 import { PageTitle } from '@/components/PageTitle';
+import { formatSafetyMetricValue } from '@/components/admin/safety/SafetyStatusCard';
 import { FlagToggle } from '@/components/feature-flags/FlagToggle';
 import {
   ARCHIVED_LABEL,
   ArchivedFlagNote,
   isFlagArchived,
 } from '@/components/feature-flags/ArchivedFlag';
+import { FlagManageSection, FlagStatusChange } from '@/components/feature-flags/FlagManageSection';
 import { RolloutScheduleManager } from '@/components/feature-flags/RolloutScheduleManager';
 import {
   FlagValueFields,
@@ -43,7 +45,10 @@ import {
 } from '@/components/feature-flags/FlagValueFields';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
-import { FLAG_ROLE_NOTE, canChangeFeatureFlags } from '@/utils/experimentPermissions';
+import { useDemoMode } from '@/contexts/AuthConfigContext';
+import { DemoNote } from '@/components/DemoNote';
+import { DEMO_FLAGS_ACTION } from '@/utils/demoMode';
+import { FLAG_ROLE_NOTE, canChangeFeatureFlags, canDeleteFeatureFlags } from '@/utils/experimentPermissions';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
 import {
   ROLLOUT_VALUE_HINT,
@@ -157,10 +162,16 @@ export default function FeatureFlagDetailPage() {
   const { effective, loading: permissionsLoading } = useEffectivePermissions();
   // A user without FEATURE_FLAG UPDATE (by role, custom role or direct grant)
   // reads a flag and changes none of it (#917, #891): no switch, the rule
-  // builder read-only, the slider disabled, no Save, and a note why -- the
-  // note only once the effective map has answered.
+  // builder read-only, the slider disabled, no Save, no Archive or Unarchive
+  // (#442), and a note why -- the note only once the effective map has
+  // answered. Delete asks its own question (FEATURE_FLAG DELETE), below.
   const canChange = canChangeFeatureFlags(auth?.user, effective);
+  // Delete is FEATURE_FLAG DELETE, which a custom role or grant can give
+  // without UPDATE, or withhold from a holder of it (#442).
+  const canDelete = canDeleteFeatureFlags(auth?.user, effective);
   const changePending = !canChange && permissionsLoading;
+  // A read-only demo shows the demo note in place of the role note.
+  const demo = useDemoMode();
 
   const [flag, setFlag] = useState<FeatureFlag | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -450,8 +461,14 @@ export default function FeatureFlagDetailPage() {
 
   const on = isFlagOn(flag);
   // The API refuses to turn an archived flag on (400), so the page offers no
-  // switch for one: it says how to unarchive it instead (#1748).
+  // switch for one: it says to unarchive it first (#1748), and Unarchive is
+  // in "Manage this flag" below (#442).
   const archived = isFlagArchived(flag);
+  /** An archive or unarchive has landed: the pill, the switch and the note follow it. */
+  const handleStatusChange = (change: FlagStatusChange) => {
+    setToggleError(null);
+    setFlag((current) => (current ? { ...current, ...change } : current));
+  };
   const schedule = schedules ? pickSchedule(schedules) : null;
   // A boolean flag (or one from a server without values) keeps the page it
   // had: no type, no Values section, "Serving" / "Not serving".
@@ -529,11 +546,24 @@ export default function FeatureFlagDetailPage() {
             </div>
           </div>
           {archived && <ArchivedFlagNote />}
-          {!canChange && !changePending && (
-            <p className="mt-4 text-sm text-slate-600" data-testid="flag-role-note">
-              {FLAG_ROLE_NOTE}
-            </p>
+          {demo ? (
+            <DemoNote action={DEMO_FLAGS_ACTION} className="mt-4 text-sm text-slate-600" />
+          ) : (
+            !canChange &&
+            !changePending && (
+              <p className="mt-4 text-sm text-slate-600" data-testid="flag-role-note">
+                {FLAG_ROLE_NOTE}
+              </p>
+            )
           )}
+          {/* Archive and Unarchive for a user who may change flags, Delete for one who may
+              delete them (#442); the role note above otherwise. */}
+          <FlagManageSection
+            flag={flag}
+            canChange={canChange}
+            canDelete={canDelete}
+            onChanged={handleStatusChange}
+          />
           {toggleError && (
             <div
               role="alert"
@@ -675,9 +705,8 @@ export default function FeatureFlagDetailPage() {
                         <span className="text-slate-800">{humanize(m.name)}</span>
                         <span className="flex items-center gap-2 shrink-0">
                           <span className="tabular-nums text-slate-700">
-                            {m.current_value}
-                            {m.unit ? ` ${m.unit}` : ''}{' '}
-                            <span className="text-slate-500">/ {m.threshold}{m.unit ? ` ${m.unit}` : ''}</span>
+                            {formatSafetyMetricValue(m.name, m.current_value, m.unit)}{' '}
+                            <span className="text-slate-500">/ {formatSafetyMetricValue(m.name, m.threshold, m.unit)}</span>
                           </span>
                           {unmeasured && RATE_METRICS.has(m.name) ? (
                             <span className="text-xs text-slate-700" data-testid="safety-metric-not-computed">

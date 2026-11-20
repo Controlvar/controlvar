@@ -69,14 +69,25 @@ CONFIG = "@react-native/typescript-config@0.73.1"
 #: with what the SDK was tested with.
 FROM_LOCK = ("react", "react-native", "@types/react", "@types/jest", "typescript")
 INSTALL = ("install", "--ignore-scripts", "--no-audit", "--no-fund")
+#: The app's one file: the client, the hooks and a typed read (#1810), so a
+#: missing export or an overload the app's settings refuse fails ``tsc``.
 APP_TSX = (
-    "import { ExperimentationClient, useFlag } from '@controlvar/react-native-sdk';\n"
+    "import {\n"
+    "  ExperimentationClient,\n"
+    "  useFlag,\n"
+    "  useFlagValue,\n"
+    "} from '@controlvar/react-native-sdk';\n"
     "\n"
     "export const client = new ExperimentationClient({\n"
     "  apiKey: 'key',\n"
     "  baseUrl: 'http://localhost:8000',\n"
     "});\n"
     "export const hook = useFlag;\n"
+    "export function useHeadline(): string {\n"
+    "  return useFlagValue('headline', 'string', 'Welcome').value;\n"
+    "}\n"
+    "export const headline = (userId: string): Promise<string> =>\n"
+    "  client.getStringValue('headline', userId, 'Welcome');\n"
 )
 TSCONFIG = {
     "extends": "@react-native/typescript-config/tsconfig.json",

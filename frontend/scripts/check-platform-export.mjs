@@ -20,7 +20,17 @@
  *     are allowed: public/ is copied into every export, and they are capped
  *     and show demo data (#1459 PE 2);
  *   - `out/media` exists, or an `.mp4`, `.webm`, `.vtt` or `.srt` file is
- *     anywhere in the export.
+ *     anywhere in the export;
+ *   - a page of the marketing build only is in the export: /walkthroughs (the
+ *     videos' page) or /books (site design 2026-11-11), as `<page>.html` or
+ *     `<page>/`. Their `getStaticProps` answers notFound outside the
+ *     marketing build (src/utils/marketing-only.ts), so `next build` writes
+ *     neither; one here means that gate stopped working;
+ *   - the marketing site's crawler files are in the export: `sitemap.xml`, a
+ *     `Sitemap:` line in robots.txt (the plain public/robots.txt has none), or
+ *     a `<link rel="canonical">` in a page. They name controlvar.com's pages,
+ *     and the marketing build writes them (scripts/marketing-seo.mjs), never
+ *     public/, which every export, the dashboard image's among them, gets.
  */
 import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
@@ -31,6 +41,10 @@ const MEDIA_FILE = /\.(mp4|webm|vtt|srt)$/i;
 const MEDIA_REFERENCE = /(?<![\w.~%/-])\/media\//;
 // The same for the screenshots in public/screens/ (components/homepage/Screenshot.tsx).
 const SCREENS_REFERENCE = /(?<![\w.~%/-])\/screens\//;
+// Any <link> whose rel is canonical, in either attribute order or quote style.
+const CANONICAL_LINK = /<link\b[^>]*\brel\s*=\s*["']?canonical\b/i;
+/** The marketing build's own pages (src/pages/walkthroughs.tsx, src/pages/books.tsx). */
+export const MARKETING_ONLY_PAGES = ['walkthroughs', 'books'];
 
 function* walk(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -52,7 +66,18 @@ export function platformProblems(outDir) {
   if (MEDIA_REFERENCE.test(html)) problems.push('out/index.html references /media/');
   if (SCREENS_REFERENCE.test(html)) problems.push('out/index.html references /screens/: a screenshot rendered in the platform build');
   if (existsSync(join(outDir, 'media'))) problems.push('out/media exists in the platform export');
+  for (const page of MARKETING_ONLY_PAGES) {
+    for (const found of [`${page}.html`, page]) {
+      if (existsSync(join(outDir, found))) problems.push(`out/${found} exists: /${page} is a page of the marketing build only`);
+    }
+  }
+  if (existsSync(join(outDir, 'sitemap.xml'))) problems.push('out/sitemap.xml exists: the sitemap is the marketing build\'s only');
+  const robots = join(outDir, 'robots.txt');
+  if (existsSync(robots) && /^\s*sitemap:/im.test(readFileSync(robots, 'utf8'))) problems.push('out/robots.txt has a Sitemap: line: it is the marketing build\'s only');
   for (const path of walk(outDir)) {
+    if (path.endsWith('.html') && CANONICAL_LINK.test(readFileSync(path, 'utf8'))) {
+      problems.push(`${relative(outDir, path)} has a <link rel="canonical">: it is the marketing build's only`);
+    }
     if (MEDIA_FILE.test(path)) problems.push(`the platform export carries ${relative(outDir, path)}`);
   }
   return problems;
@@ -74,6 +99,8 @@ if (invokedAsScript()) {
     for (const p of problems) console.error(`check-platform-export: FAIL ${p}`);
     process.exitCode = 1;
   } else {
-    console.log(`check-platform-export: ${outDir}: no walkthrough section, no media and no screenshot; the platform homepage is there`);
+    console.log(
+      `check-platform-export: ${outDir}: no walkthrough section, no media, no screenshot, no sitemap or canonical link and no ${MARKETING_ONLY_PAGES.map((p) => `/${p}`).join(' or ')} page; the platform homepage is there`,
+    );
   }
 }

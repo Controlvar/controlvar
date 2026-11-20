@@ -22,6 +22,12 @@ Now the scheduler runs that same check before a draft's scheduled first start:
 * D7  a split URL draft with no ``split_url_config``, or one whose URL variants
       do not match its variants, stays a draft, as start would refuse it
       (#393); one whose configuration matches starts.
+* D8  a visual draft (#1545) with no page change stays a draft: one warning
+      per tick, no audit row (no API path dates a visual draft, so the start
+      date is written to the row, as a row written outside the API would be);
+* D9  a visual draft whose goal's metric was removed stays a draft;
+* D10 a valid visual draft starts, and its editor tickets and sessions end
+      with it (reason ``started``), as they do on ``POST /start``.
 
 The fixtures follow ``test_scheduler_pause_semantics.py``: real users and
 tokens, ``deps.get_db`` the only override, and the scheduler run against the
@@ -504,3 +510,125 @@ def test_d7_a_split_url_draft_that_cannot_split_stays_a_draft(
     assert _row(db_session, experiment_id) == (ExperimentStatus.ACTIVE, start)
     assert experiment_id in sent
     assert _not_ready_warnings(caplog, experiment_id) == []
+
+
+# --- D8, D9, D10: a visual draft (#1545) ------------------------------------------
+
+VISUAL_PAGE = {"match": "prefix", "url": "https://shop.example.com/"}
+VISUAL_CONFIG = {
+    "version": 1,
+    "editor_url": "https://shop.example.com/",
+    "pages": [VISUAL_PAGE],
+    "goals": [{"event_name": "purchase", "kind": "page_view", "page": VISUAL_PAGE}],
+}
+VISUAL_CHANGES = {"version": 1, "changes": [{"op": "hide", "selector": ".banner"}]}
+
+
+def _create_visual(client, user, changes=VISUAL_CHANGES):
+    treatment = {"name": "Treatment", "is_control": False, "traffic_allocation": 50}
+    if changes is not None:
+        treatment["visual_changes"] = changes
+    body = {
+        "name": f"draftcheck visual {uuid.uuid4().hex[:8]}",
+        "experiment_type": "a_b",
+        "visual_config": VISUAL_CONFIG,
+        "variants": [TWO_VARIANTS[0], treatment],
+        "metrics": ONE_METRIC,
+    }
+    return _ok(client.post(f"{BASE}/", json=body, headers=_auth(user)), 201)["id"]
+
+
+def _date_the_row(db_session, experiment_id):
+    """A start date one minute ago, written to the row: PUT /schedule refuses
+    one on a visual draft, so only a row written outside the API has one."""
+    start = _now() - timedelta(minutes=1)
+    session = _factory(db_session)()
+    try:
+        session.get(Experiment, uuid.UUID(experiment_id)).start_date = start
+        session.commit()
+    finally:
+        session.close()
+    return start
+
+
+def test_d8_a_visual_draft_with_no_page_change_stays_a_draft(
+    client, db_session, developer, caplog
+):
+    caplog.set_level(logging.WARNING, logger=SCHEDULER_LOGGER)
+    experiment_id = _create_visual(client, developer, changes=None)
+    start = _date_the_row(db_session, experiment_id)
+
+    sent = _tick(db_session)
+
+    assert _row(db_session, experiment_id) == (ExperimentStatus.DRAFT, start)
+    assert experiment_id not in sent
+    assert _starts_audited(db_session, experiment_id) == 0
+    assert _not_ready_warnings(caplog, experiment_id) == [
+        NOT_READY.format(id=experiment_id)
+    ]
+    caplog.clear()
+    _tick(db_session)
+    assert len(_not_ready_warnings(caplog, experiment_id)) == 1
+
+
+def test_d9_a_visual_draft_whose_goal_lost_its_metric_stays_a_draft(
+    client, db_session, developer, caplog
+):
+    caplog.set_level(logging.WARNING, logger=SCHEDULER_LOGGER)
+    experiment_id = _create_visual(client, developer)
+    session = _factory(db_session)()
+    try:
+        # A metric for the goal is removed with another left, as a row
+        # written outside the API would be (a PUT refuses it).
+        row = session.get(Experiment, uuid.UUID(experiment_id))
+        row.metric_definitions[0].event_name = "signup"
+        session.commit()
+    finally:
+        session.close()
+    start = _date_the_row(db_session, experiment_id)
+
+    sent = _tick(db_session)
+
+    assert _row(db_session, experiment_id) == (ExperimentStatus.DRAFT, start)
+    assert experiment_id not in sent
+    assert _not_ready_warnings(caplog, experiment_id) == [
+        NOT_READY.format(id=experiment_id)
+    ]
+
+
+def test_d10_a_valid_visual_draft_starts_and_its_editor_tokens_end(
+    client, db_session, developer, caplog
+):
+    from backend.app.models.visual_token import VisualToken
+
+    caplog.set_level(logging.WARNING, logger=SCHEDULER_LOGGER)
+    experiment_id = _create_visual(client, developer)
+    session = _factory(db_session)()
+    try:
+        tokens = [
+            VisualToken(
+                kind=kind,
+                token_hash=uuid.uuid4().hex * 2,
+                experiment_id=uuid.UUID(experiment_id),
+                expires_at=_now() + timedelta(hours=1),
+            )
+            for kind in ("editor_ticket", "editor_session", "preview")
+        ]
+        session.add_all(tokens)
+        session.commit()
+        ids = [token.id for token in tokens]
+    finally:
+        session.close()
+    start = _date_the_row(db_session, experiment_id)
+
+    sent = _tick(db_session)
+
+    assert _row(db_session, experiment_id) == (ExperimentStatus.ACTIVE, start)
+    assert experiment_id in sent
+    assert _not_ready_warnings(caplog, experiment_id) == []
+    session = _factory(db_session)()
+    try:
+        reasons = [session.get(VisualToken, i).revoked_reason for i in ids]
+    finally:
+        session.close()
+    assert reasons == ["started", "started", None]

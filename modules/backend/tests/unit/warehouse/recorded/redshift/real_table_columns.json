@@ -1,0 +1,70 @@
+{
+  "_provenance": {
+    "source": "real account",
+    "real_run_id": "wl-redshift-20261118T011715Z-6b77b53f",
+    "check": "rs_table_columns",
+    "request": {
+      "service": "redshift-data",
+      "operation": "DescribeTable"
+    },
+    "note": "Recorded by the warehouse_live check; see evidence.json."
+  },
+  "status": 200,
+  "body": {
+    "TableName": "dev.live_check.events",
+    "ColumnList": [
+      {
+        "isCaseSensitive": false,
+        "isCurrency": false,
+        "isSigned": false,
+        "name": "user_id",
+        "nullable": 0,
+        "precision": 64,
+        "scale": 0,
+        "schemaName": "live_check",
+        "tableName": "events",
+        "typeName": "varchar",
+        "length": 64
+      },
+      {
+        "isCaseSensitive": false,
+        "isCurrency": false,
+        "isSigned": false,
+        "name": "event_at",
+        "nullable": 0,
+        "precision": 29,
+        "scale": 6,
+        "schemaName": "live_check",
+        "tableName": "events",
+        "typeName": "timestamp",
+        "length": 29
+      },
+      {
+        "isCaseSensitive": false,
+        "isCurrency": false,
+        "isSigned": false,
+        "name": "amount",
+        "nullable": 0,
+        "precision": 17,
+        "scale": 17,
+        "schemaName": "live_check",
+        "tableName": "events",
+        "typeName": "float8",
+        "length": 17
+      },
+      {
+        "isCaseSensitive": false,
+        "isCurrency": false,
+        "isSigned": false,
+        "name": "kind",
+        "nullable": 0,
+        "precision": 16,
+        "scale": 0,
+        "schemaName": "live_check",
+        "tableName": "events",
+        "typeName": "varchar",
+        "length": 16
+      }
+    ]
+  }
+}

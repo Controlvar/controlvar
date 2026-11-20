@@ -65,6 +65,30 @@ describe('PageTitle link-preview tags', () => {
     expect(tags['og:url']).toBe('https://controlvar.com/');
   });
 
+  it('writes one canonical link equal to og:url on a marketing page, and none elsewhere', () => {
+    mode.mockReturnValue(true);
+    render(<PageTitle title="Power Calculator" path="/power-calculator" description={DESCRIPTION} />);
+    const links = document.querySelectorAll('link[rel="canonical"]');
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute('href', shareTags()['og:url']);
+    cleanup();
+    mode.mockReturnValue(false);
+    render(<PageTitle title="Power Calculator" path="/power-calculator" description={DESCRIPTION} />);
+    expect(document.querySelectorAll('link[rel="canonical"]')).toHaveLength(0);
+  });
+
+  it('takes marketingTitle as the whole title on the marketing build only', () => {
+    mode.mockReturnValue(true);
+    render(<PageTitle path="/" description={DESCRIPTION} marketingTitle="Controlvar: a long title" />);
+    expect(document.title).toBe('Controlvar: a long title');
+    expect(shareTags()['og:title']).toBe('Controlvar: a long title');
+    expect(shareTags()['twitter:title']).toBe('Controlvar: a long title');
+    cleanup();
+    mode.mockReturnValue(false);
+    render(<PageTitle path="/" description={DESCRIPTION} marketingTitle="Controlvar: a long title" />);
+    expect(document.title).toBe('Controlvar');
+  });
+
   it('writes none on the self-hosted dashboard', () => {
     mode.mockReturnValue(false);
     render(<PageTitle title="Power Calculator" path="/power-calculator" description={DESCRIPTION} />);

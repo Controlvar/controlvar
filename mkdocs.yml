@@ -85,6 +85,7 @@ nav:
 - Home: README.md
 - Getting Started:
   - Quick Start: getting-started/quick-start.md
+  - Live Demo: getting-started/live-demo.md
   - What Controlvar Does: capabilities.md
   - Limitations: getting-started/limitations.md
   - Roadmap: https://github.com/Controlvar/controlvar/blob/main/ROADMAP.md
@@ -193,6 +194,7 @@ nav:
 - Authentication:
   - How Auth Works: auth/flow.md
   - For Users: auth/auth-user-guide.md
+  - Two-step sign-in: auth/two-factor.md
   - Cognito Integration: cognito_integration.md
   - RBAC: rbac/README.md
 - Architecture:

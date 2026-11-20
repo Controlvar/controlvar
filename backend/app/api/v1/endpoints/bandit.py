@@ -6,6 +6,9 @@ Endpoints
 GET  /api/v1/bandit/{experiment_id}
     Returns the current BanditStatusResponse for a MAB experiment.
 
+GET  /api/v1/bandit/{experiment_id}/history
+    Returns the bandit's past weight updates, newest first (beta, #1958).
+
 POST /api/v1/bandit/{experiment_id}/update
     Triggers an immediate weight recalculation (DEVELOPER+ role required).
 
@@ -14,10 +17,12 @@ PUT  /api/v1/bandit/{experiment_id}/weights
 """
 
 import logging
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Dict, Iterable, List, Optional, Tuple
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
@@ -26,10 +31,11 @@ from backend.app.core.bandit_scheduler import BanditScheduler
 from backend.app.core.permissions import Action, ResourceType, check_permission
 from backend.app.core.stats_engine import ENGINE_VERSION
 from backend.app.models.audit_log import ActionType, EntityType
-from backend.app.models.bandit_state import BanditState
+from backend.app.models.bandit_state import BanditState, BanditStateHistory
 from backend.app.models.experiment import Experiment
 from backend.app.models.user import User, UserRole
 from backend.app.schemas.bandit import (
+    BanditHistoryTick,
     BanditStatusResponse,
     BanditUpdateRequest,
     BanditVariantWeight,
@@ -82,6 +88,26 @@ def _get_mab_experiment(experiment_id: UUID, db: Session) -> Experiment:
             ),
         )
     return experiment
+
+
+def group_history_rows(
+    rows: Iterable[Tuple[datetime, object, float]],
+) -> List[BanditHistoryTick]:
+    """
+    Group ``(tick_at, variant_id, weight)`` history rows into one tick each.
+
+    The rows of one update share its ``tick_at``, so a tick is never split;
+    the ticks keep the order the rows came in (newest first, from the query).
+    ``tick_at`` is converted to UTC here: the database returns it in its
+    session's TimeZone, and the answer must not depend on that setting.
+    """
+    grouped: Dict[datetime, Dict[str, float]] = {}
+    for tick_at, variant_id, weight in rows:
+        grouped.setdefault(tick_at, {})[str(variant_id)] = float(weight)
+    return [
+        BanditHistoryTick(tick_at=tick_at.astimezone(timezone.utc), weights=weights)
+        for tick_at, weights in grouped.items()
+    ]
 
 
 def _int_or_none(value: object) -> Optional[int]:
@@ -201,6 +227,50 @@ def get_bandit_status(
 
     scheduler = BanditScheduler(db=db)
     return _build_status_response(experiment, bandit_state, scheduler)
+
+
+@router.get(
+    "/{experiment_id}/history",
+    response_model=List[BanditHistoryTick],
+    dependencies=[Depends(deps.require_experiment_read)],
+    openapi_extra={"x-stability": "beta"},
+)
+def get_bandit_history(
+    experiment_id: UUID,
+    limit: int = Query(200, ge=1, le=1000),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user),
+) -> List[BanditHistoryTick]:
+    """
+    Return the bandit's past weight updates, newest first (beta).
+
+    Each update is its time (``tick_at``, UTC) and each variant's weight,
+    keyed by variant id. ``limit`` (default 200, 1 to 1000) counts updates,
+    not variants. A manual weight override is not an update and is not
+    listed. ``[]`` before the first update; ``404`` for an unknown experiment
+    or one whose ``optimization_type`` is ``fixed``. Requires permission to
+    view the experiment, as GET /api/v1/bandit/{experiment_id} does; every
+    role has it.
+    """
+    _get_mab_experiment(experiment_id, db)
+
+    history = BanditStateHistory
+    recent_ticks = (
+        select(history.tick_at)
+        .where(history.experiment_id == experiment_id)
+        .distinct()
+        .order_by(history.tick_at.desc())
+        .limit(limit)
+    )
+    rows = db.execute(
+        select(history.tick_at, history.variant_id, history.weight)
+        .where(
+            history.experiment_id == experiment_id,
+            history.tick_at.in_(recent_ticks),
+        )
+        .order_by(history.tick_at.desc(), history.variant_id)
+    ).all()
+    return group_history_rows(rows)
 
 
 @router.post("/{experiment_id}/update", response_model=BanditStatusResponse)

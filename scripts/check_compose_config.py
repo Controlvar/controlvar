@@ -21,8 +21,10 @@ Given a complete ``.env`` (``--env-file``), it asserts:
    its value from a copy that does. The shell's variables are not passed to
    compose, so the value can only have come from the file.
 6. so does each optional setting in ``PASSED_SETTINGS``: FORWARDED_ALLOW_IPS,
-   the proxies the API believes besides its own network, and the Cognito user
-   pool, app client and Hosted UI domain (#708).
+   the proxies the API believes besides its own network, the Cognito user
+   pool, app client and Hosted UI domain (#708), and the roles that must use
+   two-step sign-in, LOCAL_AUTH_2FA_REQUIRED_ROLES (#1812), whose empty value
+   the API reads as no role.
 
 Usage::
 
@@ -67,6 +69,7 @@ PASSED_SETTINGS = (
     "COGNITO_USER_POOL_ID",
     "COGNITO_CLIENT_ID",
     "COGNITO_DOMAIN",
+    "LOCAL_AUTH_2FA_REQUIRED_ROLES",
 )
 
 

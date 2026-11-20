@@ -13,6 +13,8 @@ from typing import List, Optional, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from backend.app.schemas.finite_number import FiniteFloat
+
 # ---------------------------------------------------------------------------
 # Enums / literals
 # ---------------------------------------------------------------------------
@@ -55,18 +57,18 @@ class SampleSizeRequest(BaseModel):
             "45.0 for an average order value of 45: any finite number above 0."
         ),
     )
-    minimum_detectable_effect: float = Field(
+    minimum_detectable_effect: FiniteFloat = Field(
         ...,
         gt=0,
         description="Minimum detectable effect as a relative lift (e.g. 0.10 = 10%).",
     )
-    alpha: float = Field(
+    alpha: FiniteFloat = Field(
         default=0.05,
         gt=0,
         lt=0.5,
         description="Type I error rate (significance level). Must be in (0, 0.5).",
     )
-    power: float = Field(
+    power: FiniteFloat = Field(
         default=0.80,
         gt=0,
         lt=1,
@@ -86,7 +88,7 @@ class SampleSizeRequest(BaseModel):
         default="proportion",
         description="Type of metric: 'proportion', 'mean', or 'ratio'.",
     )
-    baseline_std: Optional[float] = Field(
+    baseline_std: Optional[FiniteFloat] = Field(
         default=None,
         gt=0,
         description="Standard deviation of the baseline metric (required for metric_type='mean' or 'ratio').",
@@ -97,7 +99,7 @@ class SampleSizeRequest(BaseModel):
         le=MAX_COUNT,
         description="Daily users exposed to the experiment (used to compute runtime).",
     )
-    traffic_allocation: float = Field(
+    traffic_allocation: FiniteFloat = Field(
         default=1.0,
         gt=0,
         le=1.0,
@@ -168,19 +170,19 @@ class MDERequest(BaseModel):
         le=MAX_COUNT,
         description="Fixed sample size per variant.",
     )
-    baseline_rate: float = Field(
+    baseline_rate: FiniteFloat = Field(
         ...,
         gt=0,
         lt=1,
         description="Current baseline conversion/success rate (exclusive 0–1).",
     )
-    alpha: float = Field(
+    alpha: FiniteFloat = Field(
         default=0.05,
         gt=0,
         lt=0.5,
         description="Type I error rate. Must be in (0, 0.5).",
     )
-    power: float = Field(
+    power: FiniteFloat = Field(
         default=0.80,
         gt=0,
         lt=1,
@@ -213,7 +215,7 @@ class RuntimeRequest(BaseModel):
         le=MAX_COUNT,
         description="Total daily users exposed to the experiment.",
     )
-    traffic_allocation: float = Field(
+    traffic_allocation: FiniteFloat = Field(
         ...,
         gt=0,
         le=1.0,
@@ -269,19 +271,19 @@ class PlanRequest(BaseModel):
         max_length=500,
         description="Plain-English description of the primary metric.",
     )
-    baseline_rate: float = Field(
+    baseline_rate: FiniteFloat = Field(
         ...,
         gt=0,
         lt=1,
         description="Baseline metric rate (0–1).",
     )
-    mde: float = Field(
+    mde: FiniteFloat = Field(
         ...,
         gt=0,
         lt=1,
         description="Minimum detectable effect (relative, e.g. 0.10 = 10%).",
     )
-    runtime_days: float = Field(
+    runtime_days: FiniteFloat = Field(
         ...,
         gt=0,
         description="Estimated runtime in days.",

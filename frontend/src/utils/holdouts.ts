@@ -1,5 +1,6 @@
 import { isApiError } from '@/services/api';
 import { UNREACHABLE } from '@/components/experiments/ExperimentManageSection';
+import { demoRefusalMessage } from '@/utils/demoMode';
 import { GlobalHoldout, HoldoutChanges, HoldoutDetail, HoldoutUnavailableReason } from '@/types/eligibility';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
@@ -157,6 +158,8 @@ export function holdoutChanges(holdout: HoldoutDetail, draft: HoldoutDraft): Hol
 export function holdoutErrorCopy(err: unknown, { activates = false }: { activates?: boolean } = {}): string {
   if (!isApiError(err)) return HOLDOUT_COPY.saveFailed;
   if (err.timedOut) return err.message;
+  const demo = demoRefusalMessage(err);
+  if (demo) return demo;
   switch (err.status) {
     case 0:
       return UNREACHABLE;

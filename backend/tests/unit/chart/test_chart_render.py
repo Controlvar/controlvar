@@ -36,6 +36,7 @@ import re
 import shutil
 import subprocess
 import sys
+import textwrap
 from pathlib import Path
 from typing import Any, Dict, Iterator, List
 from urllib.parse import urlparse
@@ -355,6 +356,53 @@ def test_extra_env_cannot_reintroduce_what_the_chart_pins(name):
         "api.extraEnv[0].value=true",
     )
     assert f"api.extraEnv may not set {name}" in error, error
+
+
+#: The setting that requires two-step sign-in for chosen roles (#1812).
+TWO_STEP_ROLES = "LOCAL_AUTH_2FA_REQUIRED_ROLES"
+
+
+def two_step_roles_example() -> str:
+    """The values file shown in values.yaml's comment above ``api.extraEnv``:
+    the commented lines from its ``extraEnv:``, uncommented and put under
+    ``api:``."""
+    lines = (CHART / "values.yaml").read_text(encoding="utf-8").splitlines()
+    start = next(
+        i
+        for i, line in enumerate(lines)
+        if line.lstrip().startswith("#") and line.lstrip("# ") == "extraEnv:"
+    )
+    block = []
+    for line in lines[start:]:
+        if not line.lstrip().startswith("#"):
+            break
+        block.append(line.lstrip()[1:])
+    body = textwrap.dedent("\n".join(block))
+    return "api:\n" + textwrap.indent(body, "  ") + "\n"
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("container_name", ["api", "migrate"])
+def test_the_two_step_roles_example_reaches_both_api_containers(
+    container_name, tmp_path
+):
+    """V25 (Helm): the documented example renders the setting into the API's
+    environment exactly, and it is a value the settings accept."""
+    from backend.app.core.settings_rules import parse_two_factor_roles
+
+    example = tmp_path / "two-step-roles.yaml"
+    example.write_text(two_step_roles_example(), encoding="utf-8")
+    assert yaml.safe_load(example.read_text(encoding="utf-8")) == {
+        "api": {"extraEnv": [{"name": TWO_STEP_ROLES, "value": "ADMIN,DEVELOPER"}]}
+    }
+    environment = api_environment(render("core", "-f", str(example)), container_name)
+    assert environment.get(TWO_STEP_ROLES) == "ADMIN,DEVELOPER"
+    assert parse_two_factor_roles(environment[TWO_STEP_ROLES]) == ["ADMIN", "DEVELOPER"]
+
+
+def test_no_role_requires_two_step_sign_in_by_default(docs):
+    for name in ("api", "migrate"):
+        assert TWO_STEP_ROLES not in api_environment(docs, name), name
 
 
 # ---------------------------------------------------------------------------

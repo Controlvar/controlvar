@@ -9,6 +9,7 @@ import {
   type PowerCurvePoint,
 } from '@/utils/power';
 import { PageTitle } from '@/components/PageTitle';
+import { H1 } from '@/components/homepage/styles';
 import {
   LineChart,
   Line,
@@ -175,7 +176,7 @@ export default function PowerCalculatorPage() {
         <div className="max-w-7xl mx-auto px-6 lg:px-8 py-10">
           {/* Header */}
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            <h1 className={`mb-2 ${H1}`}>
               Pre-Experiment Power Calculator
             </h1>
             <p className="text-gray-500 text-base">

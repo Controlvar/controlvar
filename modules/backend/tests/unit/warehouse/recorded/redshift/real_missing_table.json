@@ -1,0 +1,17 @@
+{
+  "_provenance": {
+    "source": "real account",
+    "real_run_id": "wl-redshift-20261118T011715Z-6b77b53f",
+    "check": "rs_missing_table",
+    "request": {
+      "service": "redshift-data",
+      "operation": "DescribeTable"
+    },
+    "note": "Recorded by the warehouse_live check; see evidence.json."
+  },
+  "status": 200,
+  "body": {
+    "TableName": "dev.live_check.experimently_live_check_probe",
+    "ColumnList": []
+  }
+}

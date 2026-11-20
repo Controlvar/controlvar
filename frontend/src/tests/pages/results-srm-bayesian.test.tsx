@@ -563,6 +563,17 @@ describe('the page asks for nothing new', () => {
       ].sort()
     );
   });
+
+  it('asks nothing of /cuped: the set above dedupes, so this counts calls', async () => {
+    // An experiment whose method is none has no CUPED tab; one that uses CUPED
+    // has it, and asks only when it is opened (results-cuped.test.tsx).
+    install(results({ srm: SRM_MISMATCH, bayesian_results: BAYESIAN }), { bayesian_enabled: true });
+    await renderLoaded();
+    await waitFor(() => expect(screen.getByTestId('bayesian-panel')).toBeInTheDocument());
+    const cupedCalls = mockedApiFetch.mock.calls.filter(([p]) => String(p).endsWith('/cuped'));
+    expect(cupedCalls).toHaveLength(0);
+    expect(screen.queryByRole('tab', { name: /cuped/i })).toBeNull();
+  });
 });
 
 describe('a failed load shows fixed copy, never the server text', () => {

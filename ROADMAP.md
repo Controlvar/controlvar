@@ -18,20 +18,11 @@ to Next if something more urgent comes up.
   everything else on this page.
 - **A balanced split within each segment**, so test and control match within every group
   ([#448](https://github.com/Controlvar/controlvar/issues/448)).
-- **Analysis settings fixed once an experiment starts**, so it is read the way it was planned
-  ([#848](https://github.com/Controlvar/controlvar/issues/848)).
-- **A segment preview from real user attributes**
-  ([#830](https://github.com/Controlvar/controlvar/issues/830)), and **one accessible dialog
-  across the dashboard** ([#369](https://github.com/Controlvar/controlvar/issues/369)).
 - **Dashboard sign-in when Controlvar uses Amazon Cognito**
   ([#708](https://github.com/Controlvar/controlvar/issues/708)).
-- **A tested upgrade for Docker Compose installs:** a written procedure, rehearsed in CI from the
-  previous release's published images ([#1807](https://github.com/Controlvar/controlvar/issues/1807)).
-- **Stale-flag detection:** find the flags nobody has changed or evaluated lately
-  ([#1808](https://github.com/Controlvar/controlvar/issues/1808)).
-- **Warehouse analysis on Redshift, then Databricks**
-  ([#826](https://github.com/Controlvar/controlvar/issues/826),
-  [#1605](https://github.com/Controlvar/controlvar/issues/1605)).
+- **Warehouse analysis on Databricks**
+  ([#1605](https://github.com/Controlvar/controlvar/issues/1605)). Amazon Redshift is available
+  ([#826](https://github.com/Controlvar/controlvar/issues/826)).
 - **SDKs that do the same things:** every SDK reads a flag's value, not only on or off
   ([#1810](https://github.com/Controlvar/controlvar/issues/1810)), and sends user attributes on
   flag evaluation ([#438](https://github.com/Controlvar/controlvar/issues/438),
@@ -39,10 +30,14 @@ to Next if something more urgent comes up.
   today is published to its registry when someone asks for it, with event ids
   ([#1543](https://github.com/Controlvar/controlvar/issues/1543)) and the exposure hook.
 - **Two-factor sign-in for local accounts**
-  ([#1812](https://github.com/Controlvar/controlvar/issues/1812)).
+  ([#1812](https://github.com/Controlvar/controlvar/issues/1812)). Its first part, storing each
+  local account's two-step secret, is in 0.47.0
+  ([#1948](https://github.com/Controlvar/controlvar/pull/1948)). Signing in with it comes next.
 - **A visual page editor:** change a live page's text and layout to make a variant, with no code
   ([#1545](https://github.com/Controlvar/controlvar/issues/1545)). It is built in steps, carries on
-  into Next, and reaches users once it is complete.
+  into Next, and reaches users once it is complete. Its first part, storing a visual experiment's
+  page changes, pages and goals, is in 0.47.0
+  ([#1940](https://github.com/Controlvar/controlvar/pull/1940)).
 
 ## Next
 
@@ -114,7 +109,8 @@ install.
 - **No product analytics or session replay.** Controlvar sends exposures to the tools that do this,
   and its warehouse analysis (beta) reads your own tables.
 - **Not planned unless users ask:** interleaving, switchbacks, contextual bandits, an AI-assisted
-  visual editor, post-stratification, retention metrics, and effects by segment beyond breakdowns.
+  visual editor, post-stratification, retention metrics, and effects for a rules segment's members
+  beyond breakdowns.
 - **No dates on this page.** A date we cannot keep is worse than none.
 
 ## How to influence it

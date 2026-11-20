@@ -683,9 +683,13 @@ def test_the_two_balance_rows_are_drawn_as_the_mirrors_say():
         '      <dd data-testid="experiment-balance">{balanceSummary(setting ?? null,'
         " names)}</dd>"
     ) in page
+    # Main now passes ``resultsHref`` (a link shown only once there are
+    # results, so a fresh draft draws the row exactly as before).
     assert (
-        "{experiment.balance_within !== undefined && <BalanceRow"
-        " setting={experiment.balance_within} />}"
+        "{experiment.balance_within !== undefined && (\n"
+        "                  <BalanceRow\n"
+        "                    setting={experiment.balance_within}\n"
+        "                    resultsHref={resultsAvailable ?"
     ) in page
 
 

@@ -1536,7 +1536,7 @@ reason = "K18: CI arming switches; a mismatch fails open (env-inventory.md)"
 [[keep]]
 path = ".github/workflows/nightly-qa.yml"
 literal = "EXPERIMENTLY_REQUIRE_"
-count = 2
+count = 3
 reason = "K18: CI arming switches; a mismatch fails open (env-inventory.md)"
 
 [[keep]]
@@ -1654,6 +1654,12 @@ count = 2
 reason = "K18: CI plumbing (env-inventory.md)"
 
 [[keep]]
+path = ".github/workflows/nightly-qa.yml"
+literal = "EXPERIMENTLY_TEST_SHARD"
+count = 2
+reason = "K18: CI plumbing (env-inventory.md)"
+
+[[keep]]
 path = "backend/tests/shard.py"
 literal = "EXPERIMENTLY_TEST_SHARD"
 count = 6
@@ -1672,9 +1678,27 @@ count = 3
 reason = "K18: CI plumbing (env-inventory.md)"
 
 [[keep]]
+path = "backend/tests/unit/scripts/test_nightly_workflow.py"
+literal = "EXPERIMENTLY_REQUIRE_"
+count = 1
+reason = "K18: CI arming switches; a mismatch fails open (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/scripts/test_nightly_workflow.py"
+literal = "EXPERIMENTLY_TEST_SHARD"
+count = 2
+reason = "K18: CI plumbing (env-inventory.md)"
+
+[[keep]]
 path = "conftest.py"
 literal = "EXPERIMENTLY_TEST_SHARD"
 count = 1
+reason = "K18: CI plumbing (env-inventory.md)"
+
+[[keep]]
+path = "scripts/rc_evidence.py"
+literal = "EXPERIMENTLY_TEST_SHARD"
+count = 2
 reason = "K18: CI plumbing (env-inventory.md)"
 
 [[keep]]
@@ -2390,6 +2414,18 @@ path = "modules/backend/tests/live_warehouse/harness.py"
 literal = "experimently"
 count = 3
 reason = "names objects in the live warehouse sandbox and its recorded evidence"
+
+[[keep]]
+path = "modules/backend/tests/unit/warehouse/recorded/redshift/real_missing_table.json"
+literal = "experimently_live_check_probe"
+count = 1
+reason = "the live check's probe table, as the green Redshift run recorded it; the fixture is kept byte for byte"
+
+[[keep]]
+path = "modules/backend/tests/unit/warehouse/test_redshift_recorded.py"
+literal = "experimently_live_check_probe"
+count = 1
+reason = "the replay asks for the probe table the recorded run named"
 
 [[keep]]
 path = "modules/backend/tests/unit/warehouse/test_live_check_harness.py"

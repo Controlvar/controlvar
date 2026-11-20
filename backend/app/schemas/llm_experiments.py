@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from backend.app.core.config import settings
+from backend.app.schemas.finite_number import FiniteFloat
 
 # ---------------------------------------------------------------------------
 # Variant schemas
@@ -19,13 +20,13 @@ class CreateLLMVariantRequest(BaseModel):
 
     name: str
     is_control: bool = False
-    traffic_split: float  # 0.0 – 1.0
+    traffic_split: FiniteFloat  # 0.0 – 1.0
 
     provider: str
     model_name: str
     system_prompt: str = ""
     prompt_template: str
-    temperature: float = 0.7
+    temperature: FiniteFloat = 0.7
     max_tokens: int = 1000
     additional_params: Dict[str, Any] = {}
 
@@ -55,10 +56,10 @@ class UpdateLLMVariantRequest(BaseModel):
     """Request schema for updating an LLM variant."""
 
     name: Optional[str] = None
-    traffic_split: Optional[float] = None
+    traffic_split: Optional[FiniteFloat] = None
     system_prompt: Optional[str] = None
     prompt_template: Optional[str] = None
-    temperature: Optional[float] = None
+    temperature: Optional[FiniteFloat] = None
     max_tokens: Optional[int] = None
     additional_params: Optional[Dict[str, Any]] = None
 
@@ -258,8 +259,8 @@ class SubmitEvaluationRequest(BaseModel):
     """Request to submit evaluation scores for a prior completion."""
 
     evaluation_id: str
-    human_rating: Optional[float] = None  # 1–5
-    business_metric_value: Optional[float] = None
+    human_rating: Optional[FiniteFloat] = None  # 1–5
+    business_metric_value: Optional[FiniteFloat] = None
 
     @field_validator("human_rating")
     @classmethod

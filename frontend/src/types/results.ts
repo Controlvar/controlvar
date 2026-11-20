@@ -28,6 +28,55 @@ export interface DimensionalBreakdownResponse {
   segments: SegmentBreakdown[];
 }
 
+/** Why a balanced experiment's estimate over its groups is null (#448). */
+export type BalancedGroupsNoEstimateReason = 'mean_metric' | 'sequential_testing' | 'too_few_users';
+
+/** `BalancedGroupsEstimate`: one treatment against the control, over every group. */
+export interface BalancedGroupsEstimate {
+  variant_id: string;
+  variant_name: string;
+  /** A difference of shares (0.02 is 2 percentage points); null when the treatment has no users. */
+  absolute_difference: number | null;
+  /** At the response's confidence_level, not adjusted; null when standard_error is 0 or null. */
+  absolute_difference_ci: [number, number] | null;
+  standard_error: number | null;
+  relative_improvement_pct: number | null;
+  /** Null when standard_error is 0 or null, never 0.0. */
+  p_value: number | null;
+  /** Corrected across the treatments; null with no correction. */
+  adjusted_p_value: number | null;
+  /** Not a verdict: the experiment's results carry its decision. */
+  is_significant: boolean;
+}
+
+/** `MergedGroup`: a group with too few users, counted in the estimate with a larger one. */
+export interface MergedGroup {
+  group: string;
+  into: string;
+}
+
+/**
+ * `GET /results/{id}/balanced-groups` (beta, #448): an experiment that
+ * balances its split within groups, by the group each user was balanced in
+ * when they were assigned, and one estimate over the groups.
+ */
+export interface BalancedGroupsResponse {
+  experiment_id: string;
+  confidence_level: number;
+  correction_method: CorrectionMethod;
+  /** One row per stored group: the breakdown's rows, `other` and `unknown` last. */
+  groups: DimensionalBreakdownResponse;
+  /** One entry per treatment; null with `reason`. */
+  overall: BalancedGroupsEstimate[] | null;
+  reason: BalancedGroupsNoEstimateReason | null;
+  merged_groups: MergedGroup[];
+  /** Users split without balancing, those whose row stored no group included. */
+  users_outside_blocks: number;
+  /** The share in `unknown` of the users whose group was stored; null when none was. */
+  unknown_share: number | null;
+  engine_version: string;
+}
+
 export type RecommendationAction =
   | 'SHIP_VARIANT'
   | 'KEEP_CONTROL'
@@ -297,4 +346,61 @@ export interface SampleSizeOverrides {
   power_target?: number;
   confidence_level?: number;
   correction_method?: CorrectionMethod;
+}
+
+/** The method an experiment's `variance_reduction_config` names. */
+export type VarianceReductionMethod = 'none' | 'cuped' | 'cuped_plus' | 'winsorization';
+
+/**
+ * `CupedMetricResult` (beta): one treatment against the control on one metric,
+ * adjusted for each user's pre-experiment history. A comparison that could not
+ * be computed has `unavailable_reason` and null numbers; it is still listed.
+ * `adjusted_p_value` is the p-value before any correction (the opposite of
+ * `GET /results/{id}`); the corrected one is `corrected_p_value`.
+ */
+export interface CupedMetricResult {
+  metric_id: string;
+  metric_name: string;
+  /** Null only when the experiment has no control or no treatment. */
+  variant_id: string | null;
+  variant_name: string | null;
+  control_variant_id: string | null;
+  control_sample_size: number | null;
+  treatment_sample_size: number | null;
+  adjusted_control_mean: number | null;
+  adjusted_treatment_mean: number | null;
+  adjusted_effect: number | null;
+  adjusted_se: number | null;
+  adjusted_p_value: number | null;
+  adjusted_ci_lower: number | null;
+  adjusted_ci_upper: number | null;
+  unadjusted_effect: number | null;
+  unadjusted_se: number | null;
+  /** Null for the correction 'none'. */
+  corrected_p_value: number | null;
+  is_significant: boolean;
+  /** Percent; can be negative. */
+  variance_reduction_pct: number | null;
+  theta: number | null;
+  covariate_event_name: string | null;
+  /** Percent, 0-100. */
+  covariate_coverage_pct: number | null;
+  unavailable_reason: string | null;
+  method: VarianceReductionMethod;
+}
+
+/** `GET /results/{id}/cuped` (beta): `CupedResultsResponse`. */
+export interface CupedResultsResponse {
+  experiment_id: string;
+  method: VarianceReductionMethod;
+  confidence_level: number | null;
+  correction_method: string | null;
+  covariate_lookback_days: number | null;
+  metrics: CupedMetricResult[];
+  computed_at: string;
+  seed?: number | null;
+  n_samples?: number | null;
+  engine_version?: string | null;
+  analysis_status?: 'ga' | 'beta' | null;
+  analysis_notice?: string | null;
 }

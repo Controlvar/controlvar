@@ -142,10 +142,15 @@ describe('ApiKeyTable', () => {
     render(<ApiKeyTable onCreateKey={jest.fn()} />);
 
     await waitFor(() => expect(screen.getByTestId('delete-button-key-99')).toBeInTheDocument());
+    // One action, one name: Your API keys says Revoke, so does this page (#1974).
+    expect(screen.getByTestId('delete-button-key-99')).toHaveTextContent(/^Revoke$/);
     fireEvent.click(screen.getByTestId('delete-button-key-99'));
 
     // Nothing deleted yet; the confirmation names the key.
     expect(screen.getByTestId('delete-confirm')).toHaveTextContent('To Delete');
+    expect(screen.getByTestId('delete-confirm')).toHaveTextContent(/^Revoke To Delete\?/);
+    expect(screen.getByTestId('confirm-delete')).toHaveTextContent('Revoke key');
+    expect(screen.queryByText(/Delete/i, { selector: 'button' })).toBeNull();
     expect(
       fetchMock.mock.calls.some((c: [string, { method?: string }?]) => c[1]?.method === 'DELETE'),
     ).toBe(false);

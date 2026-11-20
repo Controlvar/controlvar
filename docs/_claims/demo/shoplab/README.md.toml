@@ -74,7 +74,7 @@ by = [
 ]
 
 [[unit]]
-text = "Checkout /checkout | shoplab_checkout_flow — 3-step stepper vs. one-page form | CUPED (API only; the simulator's visitors are new, so they have no history), revenue metric from purchase value"
+text = "Checkout /checkout | shoplab_checkout_flow — 3-step stepper vs. one-page form | CUPED (the results page's CUPED tab; the simulator's visitors are new, so they have no history), revenue metric from purchase value"
 by = [
     "journey:demo-shoplab#checkout-flow",
     "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_shoplab_seeds_four_experiments_of_the_kinds_its_pages_show",
@@ -347,11 +347,12 @@ by = [
 ]
 
 [[unit]]
-text = "Press Refresh to see the latest weights; the panel does not update by itself, and the dashboard has no chart of past weights."
+text = "Press Refresh to see the latest weights; the panel does not update by itself; Weight history below it lists each past update."
 by = [
     "test:frontend/src/tests/components/BanditWeightsSection.test.tsx::reads GET /api/v1/bandit/{id} once on load, with no options, and again on Refresh",
     "test:frontend/src/tests/components/BanditWeightsSection.test.tsx::never polls: no further request without a click",
-    "test:frontend/src/tests/components/BanditWeightsSection.test.tsx::offers no control but Refresh, for anyone",
+    "test:frontend/src/tests/components/BanditWeightsSection.test.tsx::offers no control but Refresh to anyone but an ADMIN or a superuser",
+    "test:frontend/src/tests/pages/experiment-detail-bandit-history.test.tsx::shows the server weights as shares, columns in the variant order",
 ]
 
 [[unit]]
@@ -382,8 +383,8 @@ text = "Its primary metric is the purchase conversion, and its secondary the rev
 by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_checkout_flow_counts_purchases_with_order_value_second"]
 
 [[unit]]
-text = "There is no CUPED toggle in the dashboard."
-by = ["test:frontend/src/tests/components/ResultsDashboard.test.tsx::offers no CUPED tab, toggle or control: CUPED-adjusted results are API only"]
+text = "Its CUPED (beta) tab shows the adjustment."
+by = ["test:frontend/src/tests/components/ResultsDashboard.test.tsx::offers the CUPED (beta) tab for an experiment whose method is cuped, and asks nothing until it opens"]
 
 [[unit]]
 text = "CUPED adjusts for each user's own purchases before assignment, and the simulator's visitors are new, so its covariate_coverage_pct is near 0 and it does not narrow the interval here; the Quick Start's checkout_button_color has history and shows a reduction (CUPED)."

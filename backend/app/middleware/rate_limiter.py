@@ -303,13 +303,26 @@ RATE_LIMIT_CONFIG: Dict[str, Tuple[int, int]] = {
     # Authentication endpoints — strict limits to slow brute-force attempts
     "/api/v1/auth/token": (10, 60),
     "/api/v1/auth/login": (10, 60),
+    # The code step of two-step sign-in: limited like the password step it
+    # follows. Its wrong codes also count toward the sign-in lockout.
+    "/api/v1/auth/mfa/verify": (10, 60),
+    # Setting two-step sign-in up during a sign-in (a role that requires it):
+    # the same limit; wrong first codes count toward the lockout like the others.
+    "/api/v1/auth/mfa/enroll": (10, 60),
+    "/api/v1/auth/mfa/enroll/confirm": (10, 60),
     "/api/v1/auth/signup": (5, 60),
+    # Where the 6-digit sign-up code is guessed; its own counter, apart from
+    # sign-up's (#700).
+    "/api/v1/auth/confirm": (5, 60),
     "/api/v1/auth/forgot-password": (5, 60),
     "/api/v1/auth/reset-password": (5, 60),
     # A signed-in user's own password change: it checks the current password,
     # so it is limited like the other password endpoints. The failures also
     # count toward the sign-in lockout (LocalAuthService).
     "/api/v1/users/me/password": (5, 60),
+    # Setting up two-step sign-in checks the current password as the password
+    # change does, so it is limited like it, with the same lockout (#1812).
+    "/api/v1/users/me/2fa/enroll": (5, 60),
     # SSO hand-off exchange (the modules' SSO routes): a public route that
     # mints an access token, limited like the password login.
     "/api/v1/auth/sso/exchange": (10, 60),

@@ -3,12 +3,13 @@ import Link from 'next/link';
 import { TargetingRuleBuilder } from '@/components/targeting';
 import { ExperimentFormAction, ExperimentFormState } from './formState';
 import { BasicInfoFields } from './BasicInfoFields';
-import { ExperimentTypeField } from './ExperimentTypeField';
+import { BANDIT_ALLOCATION_LINE, ExperimentTypeField } from './ExperimentTypeField';
 import { VariantsEditor } from './VariantsEditor';
 import { MetricsEditor } from './MetricsEditor';
 import { CreateError, footMessage } from './createErrors';
 import { TargetingProblems } from './TargetingProblems';
-import { BalanceWithinFields, splitProblemShown } from './BalanceWithinFields';
+import { BalanceUnavailable, BalanceWithinFields, splitProblemShown } from './BalanceWithinFields';
+import { BALANCE_BANDIT_LINE } from './balanceWithin';
 import { AnalysisSettingsFields } from './AnalysisSettingsFields';
 import { correctionName, formatConfidence } from '@/components/results/shared/analysisSettings';
 import { formatEffect, plannedEffectFraction, plannedEffectProblem } from './estimate';
@@ -39,6 +40,8 @@ interface AdvancedFormProps {
   onSubmit: (e: React.FormEvent) => void;
   /** Changed each time a create was refused before sending; see `VariantsEditor`. */
   revealProblems?: number;
+  /** Changed each time a create was refused for an Advanced Bayesian setting; see `AnalysisSettingsFields`. */
+  revealBayesianProblems?: number;
 }
 
 /** Every field of a new experiment on one page, submitted with one button. */
@@ -49,6 +52,7 @@ export function AdvancedForm({
   isSubmitting,
   onSubmit,
   revealProblems = 0,
+  revealBayesianProblems = 0,
 }: AdvancedFormProps) {
   // The key field is on this page: take the user straight to it.
   // A targeting problem is shown at the rules; anything else the error says goes here.
@@ -68,10 +72,10 @@ export function AdvancedForm({
       <section className="bg-white rounded-lg border border-slate-200 p-6 space-y-4">
         <h2 className="text-base font-semibold text-slate-800">Basic Information</h2>
         <BasicInfoFields state={state} dispatch={dispatch} />
-        <ExperimentTypeField value={state.type} dispatch={dispatch} />
+        <ExperimentTypeField value={state.type} optimizationType={state.optimizationType} dispatch={dispatch} />
       </section>
 
-      {/* Variants */}
+      {/* Variants. A bandit cannot balance its split (#1956): the line says why, and nothing is sent. */}
       <section className="bg-white rounded-lg border border-slate-200 p-6 space-y-4">
         <VariantsEditor
           variants={state.variants}
@@ -79,7 +83,16 @@ export function AdvancedForm({
           revealProblems={revealProblems}
           splitProblem={splitProblemShown(state, error?.balance)}
         />
-        <BalanceWithinFields balance={state.balance} dispatch={dispatch} issue={error?.balance ?? null} />
+        {state.type === 'bandit' ? (
+          <>
+            <p className="text-sm text-slate-700" data-testid="bandit-allocation-line">
+              {BANDIT_ALLOCATION_LINE}
+            </p>
+            <BalanceUnavailable line={BALANCE_BANDIT_LINE} />
+          </>
+        ) : (
+          <BalanceWithinFields balance={state.balance} dispatch={dispatch} issue={error?.balance ?? null} />
+        )}
       </section>
 
       {/* Metrics */}
@@ -107,7 +120,9 @@ export function AdvancedForm({
             dispatch={dispatch}
             variantCount={state.variants.length}
             bayesianEnabled={state.bayesianEnabled}
+            bayesianConfig={state.bayesianConfig}
             sequentialEnabled={state.sequentialEnabled}
+            revealProblems={revealBayesianProblems}
           />
         </div>
       </details>

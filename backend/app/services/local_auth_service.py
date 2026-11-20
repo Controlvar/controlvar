@@ -24,9 +24,12 @@ draws on one budget.  After
 ``LOCAL_AUTH_MAX_FAILED_ATTEMPTS`` failures inside a rolling window of
 ``LOCAL_AUTH_LOCKOUT_MINUTES`` the address is locked for the remainder of
 that window and ``/auth/login`` answers ``423 Locked``.  A successful login
-clears the counter.  A wrong current password on ``POST /users/me/password``
-counts against the same address and is locked by the same counter (see
-``LocalAuthService.verify_current_password``).
+clears the counter; for an account with two-step sign-in on, only a code (or
+recovery code) accepted at ``POST /auth/mfa/verify`` clears it, never the
+password alone, and every wrong code counts against the same address
+(``two_factor_service``).  A wrong current password on ``POST /users/me/password``
+or ``POST /users/me/2fa/enroll`` counts against the same address and is locked
+by the same counter (see ``LocalAuthService.verify_current_password``).
 
 The counter is an **in-process** dictionary.  That is deliberate: it
 needs no extra infrastructure and is correct for the default single-worker
@@ -41,6 +44,13 @@ reveal whether the address exists either.
 
 The tracker sweeps expired windows periodically and caps the number of
 tracked addresses, so unauthenticated traffic cannot grow it without bound.
+
+Demo mode
+---------
+With ``DEMO_MODE=true`` (``backend/app/core/demo_mode.py``) only an active
+non-superuser VIEWER signs in, and while a demo account is published the
+counter is neither checked nor written, for any address; see
+``LocalAuthService.authenticate``.
 """
 
 from __future__ import annotations
@@ -58,7 +68,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.config import settings
 from backend.app.core.security import get_password_hash, verify_password
-from backend.app.models.user import User
+from backend.app.models.user import User, UserRole
 
 # Upper bound on distinct addresses kept in memory.  When exceeded (after a
 # sweep) the entries with the oldest most-recent failure are evicted; an
@@ -100,6 +110,26 @@ class NoLocalPasswordError(Exception):
 
 class CurrentPasswordMissingError(Exception):
     """Raised when a password change arrives without the current password."""
+
+
+def _is_demo_viewer(user: User) -> bool:
+    """The only account demo mode signs in: a non-superuser VIEWER."""
+    return user.role == UserRole.VIEWER and not user.is_superuser
+
+
+def account_may_sign_in(user: User) -> bool:
+    """Whether ``user``, as the database holds it now, may be signed in: the
+    account is active and, in demo mode, a non-superuser VIEWER.
+
+    The password step applies it after the password matched; the code step of
+    two-step sign-in (``POST /auth/mfa/verify``) applies it again to the row it
+    re-loads, so an account deactivated between the two steps is refused.
+    """
+    if not user.is_active:
+        return False
+    if settings.DEMO_MODE and not _is_demo_viewer(user):
+        return False
+    return True
 
 
 def _normalise_email(email: str) -> str:
@@ -242,18 +272,37 @@ class LocalAuthService:
             )
         )
 
-    def authenticate(self, db: Session, email: str, password: str) -> User:
+    def authenticate(
+        self, db: Session, email: str, password: str, *, reset: bool = True
+    ) -> User:
         """
         Return the active ``User`` matching *email*/*password*.
 
         *email* is trimmed and matched whatever its letter case, as the
         database's ``lower()`` matches (see the module docstring).
 
+        A right password clears the address's failure count, unless *reset*
+        is false. The sign-in routes pass ``reset=False`` and clear it
+        themselves (:meth:`reset_failures`) only for an account without
+        two-step sign-in: for one with it, the count is cleared only when the
+        code step accepts a code.
+
+        Demo mode (``DEMO_MODE=true``) compares no addresses. Only an active
+        non-superuser VIEWER signs in: any other account, with its right
+        password, gets the same refusal as a wrong password. And while a demo
+        account is published (``settings.demo_account_published``: its
+        password is public) failed attempts are neither counted nor checked,
+        for any address, so the shared account cannot be made to answer 423.
+        Demo mode without a published account counts them as usual.
+
         Raises:
-            AccountLockedError: the address is currently locked out.
+            AccountLockedError: the address is currently locked out (never
+                while a demo account is published).
             InvalidCredentialsError: unknown address, wrong password or the
-                account is inactive.  The caller must not distinguish these.
+                account is inactive, or, in demo mode, not a non-superuser
+                viewer.  The caller must not distinguish these.
         """
+        counted = not settings.demo_account_published
         typed = (email or "").strip()
         if not typed or "\x00" in typed or len(typed) > MAX_EMAIL_LENGTH:
             # No account can hold this address, so there is no budget to
@@ -264,11 +313,14 @@ class LocalAuthService:
 
         # The counter key is the database's own lower() of the typed address:
         # the same function the lookup applies, so every spelling that can
-        # match one account lands on one key.
-        email_key = _counter_key(db.scalar(select(func.lower(typed))))
-        status = self.tracker.status(email_key)
-        if status.locked:
-            raise AccountLockedError(status.retry_after_seconds)
+        # match one account lands on one key.  No counter while a demo account
+        # is published.
+        email_key: Optional[str] = None
+        if counted:
+            email_key = _counter_key(db.scalar(select(func.lower(typed))))
+            status = self.tracker.status(email_key)
+            if status.locked:
+                raise AccountLockedError(status.retry_after_seconds)
 
         rows: List[User] = (
             db.query(User)
@@ -295,16 +347,35 @@ class LocalAuthService:
             # (SSO-only accounts): burn a bcrypt verification anyway.
             verify_password(password or "", _DUMMY_PASSWORD_HASH)
             password_ok = False
-        ok = password_ok and user is not None and bool(user.is_active)
+        ok = password_ok and user is not None and account_may_sign_in(user)
         if not ok:
             # The failure that reaches the threshold is still answered with
             # 401; every attempt after it (correct password or not) gets 423
             # until the oldest failure ages out of the window.
-            self.tracker.record_failure(email_key)
+            if email_key is not None:
+                self.tracker.record_failure(email_key)
             raise InvalidCredentialsError("Invalid email or password")
 
-        self.tracker.reset(email_key)
+        if email_key is not None and reset:
+            self.tracker.reset(email_key)
         return user
+
+    def reset_failures(self, db: Session, user: User) -> None:
+        """Clear *user*'s failure count, as a right password does in
+        :meth:`authenticate` with ``reset=True``.
+
+        The key is the database's ``lower()`` of the account's address, which
+        is ``authenticate``'s key for every spelling that matched this
+        account. Nothing is cleared while a demo account is published, when no
+        count is kept.
+        """
+        if settings.demo_account_published:
+            return
+        if user.email is None:
+            email_key = "\x00id:" + str(user.id)
+        else:
+            email_key = _counter_key(db.scalar(select(func.lower(user.email))))
+        self.tracker.reset(email_key)
 
     def verify_current_password(
         self, db: Session, user: User, password: Optional[str]
@@ -312,8 +383,9 @@ class LocalAuthService:
         """
         Check that *password* is *user*'s current password, or raise.
 
-        Used by a signed-in user's own password change. It draws on the SAME
-        failure budget as ``/auth/login`` (``self.tracker``), so a session
+        Used by a signed-in user's own password change, and when they set up
+        two-step sign-in (``POST /users/me/2fa/enroll``). It draws on the
+        SAME failure budget as ``/auth/login`` (``self.tracker``), so a session
         cannot be used to guess the password faster than the sign-in form
         allows, and a lockout from either place applies to both.
 
@@ -327,7 +399,10 @@ class LocalAuthService:
            Not counted either;
         4. the password does not match: the failure is recorded, then
            ``InvalidCredentialsError``;
-        5. it matches: the counter is cleared.
+        5. it matches: the counter is cleared, unless the account has
+           two-step sign-in on. Its count is shared with its codes, so only a
+           code accepted at sign-in (``POST /auth/mfa/verify``) clears it, as
+           at ``/auth/login``.
 
         The counter is keyed on the database's ``lower()`` of the account's
         e-mail address -- the key ``authenticate`` uses for any spelling of
@@ -356,11 +431,14 @@ class LocalAuthService:
             self.tracker.record_failure(email_key)
             raise InvalidCredentialsError("The current password is incorrect.")
 
-        self.tracker.reset(email_key)
+        # For an account with two-step sign-in on, only an accepted code at
+        # sign-in clears the count it shares with its codes (#1812).
+        if not user.totp_enabled:
+            self.tracker.reset(email_key)
 
 
-# Process-wide tracker shared by /auth/login, /auth/token (local provider) and
-# POST /users/me/password.
+# Process-wide tracker shared by /auth/login, /auth/token (local provider),
+# POST /users/me/password and POST /users/me/2fa/enroll.
 login_attempt_tracker = LoginAttemptTracker(
     max_attempts=settings.LOCAL_AUTH_MAX_FAILED_ATTEMPTS,
     window_seconds=settings.LOCAL_AUTH_LOCKOUT_MINUTES * 60,

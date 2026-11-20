@@ -11,13 +11,16 @@
 import React from 'react';
 import { Text, View } from 'react-native';
 import { render, waitFor, act } from '@testing-library/react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ExperimentationProvider } from '../src/context/ExperimentationProvider';
 import { useExperimentationContext } from '../src/context/ExperimentationContext';
-import { ExperimentationClient } from '../src/client';
+import { ApiError, ExperimentationClient, FlagValueError, readFlagValue } from '../src/client';
+import { OfflineStorage } from '../src/storage';
 import { useFlag } from '../src/hooks/useFlag';
+import { useFlagValue } from '../src/hooks/useFlagValue';
 import { useExperiment } from '../src/hooks/useExperiment';
 import { useExperimentationClient } from '../src/hooks/useExperimentationClient';
-import type { Assignment, ExperimentState, FlagEvaluation, FlagState } from '../src/types';
+import type { Assignment, ExperimentState, FlagEvaluation, FlagState, SdkConfig } from '../src/types';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -682,5 +685,236 @@ describe('hooks with a real ExperimentationClient', () => {
 
     await waitFor(() => expect(settled(latest())).toBe(true));
     expect(latest()).toMatchObject({ enabled: false, value: false, config: null, error: null });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// useFlagValue (#1810), with a real ExperimentationClient and a mocked fetch
+// ---------------------------------------------------------------------------
+
+describe('useFlagValue', () => {
+  const BASE_URL = 'https://api.example.com';
+
+  function jsonResponse(body: unknown, status = 200) {
+    return { ok: status >= 200 && status < 300, status, json: async () => body };
+  }
+
+  function valueBody(key: string, value: unknown, valueType: string, enabled = true) {
+    return { key, enabled, config: null, value, value_type: valueType };
+  }
+
+  function realClient(overrides: Partial<SdkConfig> = {}) {
+    return new ExperimentationClient({ apiKey: 'k', baseUrl: BASE_URL, offlineFallback: false, ...overrides });
+  }
+
+  beforeEach(async () => {
+    global.fetch = jest.fn();
+    await AsyncStorage.clear();
+  });
+
+  afterAll(async () => {
+    await AsyncStorage.clear();
+  });
+
+  test('starts with the default and loading true, then answers the value the server serves', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(jsonResponse(valueBody('headline', 'on-copy', 'string')));
+    const { states, latest } = renderHookInProvider(() => useFlagValue('headline', 'string', 'Welcome'), {
+      client: realClient(),
+      userId: 'u1',
+    });
+
+    expect(states[0]).toEqual({ value: 'Welcome', loading: true, error: null });
+    await waitFor(() => expect(settled(latest())).toBe(true));
+    expect(latest()).toEqual({ value: 'on-copy', loading: false, error: null });
+    expect((global.fetch as jest.Mock).mock.calls.map(([url]) => url)).toEqual([
+      `${BASE_URL}/api/v1/feature-flags/evaluate/headline?user_id=u1`,
+    ]);
+  });
+
+  test('sends its own attributes as context, else the provider attributes', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(jsonResponse(valueBody('f', 10, 'number')));
+    const { latest } = renderHookInProvider(() => useFlagValue('f', 'number', -1, { plan: 'pro' }), {
+      client: realClient(),
+      userId: 'u1',
+      attributes: { plan: 'free' },
+    });
+    await waitFor(() => expect(settled(latest())).toBe(true));
+    expect(latest().value).toBe(10);
+    expect((global.fetch as jest.Mock).mock.calls[0][0]).toBe(
+      `${BASE_URL}/api/v1/feature-flags/evaluate/f?user_id=u1&context=%7B%22plan%22%3A%22pro%22%7D`
+    );
+  });
+
+  test('another type: the default, a FlagValueError TYPE_MISMATCH, and one onError with "value"', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(jsonResponse(valueBody('f', 10, 'number')));
+    const onError = jest.fn();
+    const { latest } = renderHookInProvider(() => useFlagValue('f', 'string', 'fb'), {
+      client: realClient({ onError }),
+      userId: 'u1',
+    });
+    await waitFor(() => expect(settled(latest())).toBe(true));
+    expect(latest().value).toBe('fb');
+    expect(latest().error).toBeInstanceOf(FlagValueError);
+    expect(latest().error?.code).toBe('TYPE_MISMATCH');
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0][1]).toBe('value');
+  });
+
+  test('a failed request: the default, REQUEST_FAILED with the request error as cause, never a throw', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(jsonResponse({ detail: 'down' }, 503));
+    const onError = jest.fn();
+    const { latest } = renderHookInProvider(() => useFlagValue('f', 'json', { fallback: true }), {
+      client: realClient({ onError }),
+      userId: 'u1',
+    });
+    await waitFor(() => expect(settled(latest())).toBe(true));
+    expect(latest().value).toEqual({ fallback: true });
+    expect(latest().error?.code).toBe('REQUEST_FAILED');
+    expect(latest().error?.cause).toBeInstanceOf(ApiError);
+    expect((latest().error?.cause as ApiError).status).toBe(503);
+    // The client's onError gets the request's own error, once.
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0][0]).toBe(latest().error?.cause);
+  });
+
+  test('a new inline default on every render asks once (the default is not a dependency)', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(jsonResponse(valueBody('f', { color: 'blue' }, 'json')));
+    // cacheTtlMs 0: a second read would reach the client and the server again, not a cache.
+    const client = realClient({ cacheTtlMs: 0 });
+    const read = jest.spyOn(client, readFlagValue);
+    const { latest, rerenderWith } = renderHookInProvider(
+      () => useFlagValue('f', 'json', { color: 'none' }),
+      { client, userId: 'u1' }
+    );
+    await waitFor(() => expect(settled(latest())).toBe(true));
+    for (let i = 0; i < 3; i++) rerenderWith({ client, userId: 'u1' });
+    await act(async () => {});
+
+    expect(latest().value).toEqual({ color: 'blue' });
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  test('a JSON value keeps its identity across re-renders and is the hook\'s own copy', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(jsonResponse(valueBody('f', { color: 'blue' }, 'json')));
+    const client = realClient();
+    const { latest, rerenderWith } = renderHookInProvider(
+      () => useFlagValue<{ color: string } | null>('f', 'json', null),
+      { client, userId: 'u1' }
+    );
+    await waitFor(() => expect(settled(latest())).toBe(true));
+    const first = latest().value as { color: string };
+    rerenderWith({ client, userId: 'u1' });
+    expect(latest().value).toBe(first);
+    first.color = 'red';
+    expect(await client.getJsonValue('f', 'u1', null)).toEqual({ color: 'blue' });
+  });
+
+  test('a changed flag key or user is never answered with the previous one\'s value', async () => {
+    (global.fetch as jest.Mock).mockImplementation(async (url: string) => {
+      const key = url.includes('/evaluate/name?') ? 'name' : 'title';
+      const user = new URL(url).searchParams.get('user_id');
+      return jsonResponse(valueBody(key, `${key}-${user}`, 'string'));
+    });
+    const client = realClient();
+    let flagKey = 'title';
+    const { states, latest, rerenderWith } = renderHookInProvider(() => useFlagValue(flagKey, 'string', 'fb'), {
+      client,
+      userId: 'alice',
+    });
+    await waitFor(() => expect(latest().value).toBe('title-alice'));
+
+    let before = states.length;
+    flagKey = 'name';
+    rerenderWith({ client, userId: 'alice' });
+    await waitFor(() => expect(latest().value).toBe('name-alice'));
+    expect(states.slice(before).map((s) => s.value)).not.toContain('title-alice');
+    expect(states[before]).toEqual({ value: 'fb', loading: true, error: null });
+
+    before = states.length;
+    rerenderWith({ client, userId: 'bob' });
+    await waitFor(() => expect(latest().value).toBe('name-bob'));
+    expect(states.slice(before).map((s) => s.value)).not.toContain('name-alice');
+    expect(states[before]).toEqual({ value: 'fb', loading: true, error: null });
+  });
+
+  test('useFlag().value stays the boolean alias of enabled for a string flag', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(jsonResponse(valueBody('f', 'on-copy', 'string')));
+    const { latest } = renderHookInProvider(() => useFlag('f'), { client: realClient(), userId: 'u1' });
+    await waitFor(() => expect(settled(latest())).toBe(true));
+    expect(latest().value).toBe(true);
+    expect(latest().enabled).toBe(true);
+  });
+
+  test('an answer stored by 0.1 (no value) gives the default and INVALID_RESPONSE', async () => {
+    const storage = new OfflineStorage();
+    await storage.setFlag('u1', 'f', { key: 'f', enabled: true, config: null }, 60_000);
+    const client = new ExperimentationClient({ apiKey: 'k', baseUrl: BASE_URL }, storage);
+    const { latest } = renderHookInProvider(() => useFlagValue('f', 'string', 'fb'), { client, userId: 'u1' });
+    await waitFor(() => expect(settled(latest())).toBe(true));
+    expect(latest().value).toBe('fb');
+    expect(latest().error?.code).toBe('INVALID_RESPONSE');
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  // docs/sdk/react-native.md "Mocking the client": a plain object, not a client this SDK built.
+  test('under the documented mock client it reads the mocked evaluateFlag, and never throws', async () => {
+    const mockClientWith = (evaluateFlag: jest.Mock) =>
+      ({
+        evaluateFlag,
+        getAssignment: jest.fn().mockResolvedValue({
+          experimentKey: 'exp', userId: 'u1', variantId: 'v2', variantName: 'treatment', isControl: false, configuration: null,
+        }),
+        track: jest.fn().mockResolvedValue(undefined),
+        clearCache: jest.fn(),
+      }) as unknown as ExperimentationClient;
+
+    const valued = jest
+      .fn()
+      .mockResolvedValue({ key: 'my-flag', enabled: true, config: null, value: 'on-copy', valueType: 'string' });
+    const first = renderHookInProvider(() => useFlagValue('my-flag', 'string', 'fb'), {
+      client: mockClientWith(valued),
+      userId: 'u1',
+    });
+    await waitFor(() => expect(settled(first.latest())).toBe(true));
+    expect(first.latest()).toEqual({ value: 'on-copy', loading: false, error: null });
+    expect(valued.mock.calls[0]).toEqual(['my-flag', 'u1', undefined]);
+
+    const plain = jest.fn().mockResolvedValue({ key: 'my-flag', enabled: true, config: null });
+    const second = renderHookInProvider(() => useFlagValue('my-flag', 'string', 'fb'), {
+      client: mockClientWith(plain),
+      userId: 'u1',
+    });
+    await waitFor(() => expect(settled(second.latest())).toBe(true));
+    expect(second.latest().value).toBe('fb');
+    expect(second.latest().error?.code).toBe('INVALID_RESPONSE');
+
+    const failing = jest.fn().mockRejectedValue(new Error('API error'));
+    const third = renderHookInProvider(() => useFlagValue('my-flag', 'string', 'fb'), {
+      client: mockClientWith(failing),
+      userId: 'u1',
+    });
+    await waitFor(() => expect(settled(third.latest())).toBe(true));
+    expect(third.latest().value).toBe('fb');
+    expect(third.latest().error).toBeInstanceOf(FlagValueError);
+    expect(third.latest().error?.code).toBe('REQUEST_FAILED');
+    expect((third.latest().error?.cause as Error).message).toBe('API error');
+  });
+
+  test('ignores an answer that arrives after unmount', async () => {
+    let resolve!: (r: unknown) => void;
+    (global.fetch as jest.Mock).mockImplementation(() => new Promise((r) => (resolve = r)));
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const { unmount, states } = renderHookInProvider(() => useFlagValue('f', 'string', 'fb'), {
+      client: realClient(),
+      userId: 'u1',
+    });
+    unmount();
+    await act(async () => {
+      resolve(jsonResponse(valueBody('f', 'on-copy', 'string')));
+    });
+    expect(states.every((s) => s.loading)).toBe(true);
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 });

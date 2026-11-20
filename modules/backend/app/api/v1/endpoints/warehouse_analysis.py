@@ -75,7 +75,10 @@ from modules.backend.app.core.credential_crypto import (
 )
 from modules.backend.app.core.warehouse_identifiers import WarehouseQueryRefused
 from modules.backend.app.models.warehouse_analysis_run import WarehouseAnalysisRun
-from modules.backend.app.models.warehouse_connection import WarehouseConnection
+from modules.backend.app.models.warehouse_connection import (
+    ROLE_TYPES,
+    WarehouseConnection,
+)
 from modules.backend.app.models.warehouse_source import WarehouseSource
 from modules.backend.app.schemas import responses_warehouse as out
 from modules.backend.app.schemas.warehouse_connections import (
@@ -568,7 +571,10 @@ def _parameters(body: Any) -> Dict[str, str]:
             field="role",
         )
     fields = [f for f in clients.PARAMETER_FIELDS[kind] if f != "client_email"]
-    return {name: getattr(body, name) for name in fields}
+    # A field the body leaves out is not stored: an Amazon Redshift connection
+    # names a workgroup or a cluster (with its database user), never both.
+    values = {name: getattr(body, name, None) for name in fields}
+    return {name: value for name, value in values.items() if value is not None}
 
 
 def _service_account(text: str) -> Any:
@@ -607,6 +613,7 @@ def list_connectors(
         "bigquery": "BigQuery",
         "snowflake": "Snowflake",
         "athena": "Amazon Athena",
+        "redshift": "Amazon Redshift",
     }
     return {
         "connectors": [
@@ -677,8 +684,10 @@ def create_connection(
             connection.public_key_fingerprint = pair.shown.fingerprint
             connection.parameters = {**parameters, "key_slot": "1"}
             shown = pair.shown.to_body()
-        else:
+        elif body.warehouse_type in ROLE_TYPES:
             connection.external_id = clients.new_external_id()
+        else:  # every create schema is one of the branches above
+            raise _warehouse_error(WarehouseError(WarehouseErrorCode.INTERNAL))
     except CredentialKeysUnavailable as exc:
         raise _credential_error(exc) from None
     db.add(connection)

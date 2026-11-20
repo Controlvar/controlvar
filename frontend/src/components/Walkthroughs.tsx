@@ -1,17 +1,22 @@
 import React from 'react';
 import manifest from '@/content/videos.json';
-import { FOCUS } from '@/components/homepage/styles';
+import { CARD_TITLE, FOCUS, H1 } from '@/components/homepage/styles';
 
 /**
- * The walkthrough videos on controlvar.com (#1290): the homepage section the
- * MARKETING build renders, one row per entry of `content/videos.json`.
+ * The walkthrough videos on controlvar.com (#1290): the /walkthroughs page of
+ * the MARKETING build, one row per entry of `content/videos.json`. The
+ * homepage has a teaser of posters that link here
+ * (`components/homepage/WalkthroughsTeaser.tsx`) and no player: the section
+ * was 23% of the homepage's height at 1440 px and 34% on a phone (site design
+ * 2026-11-11).
  *
- * Rendered only when `isMarketingSite()` is true (`pages/index.tsx`). The
- * files live in no build: `scripts/fetch-site-media.mjs`, the last command of
- * `build:marketing`, downloads them from the `media` release, checks each
- * against the size and sha256 pinned in the manifest, and places them in
- * `out/media/`. A self-hoster's dashboard has neither the section nor the
- * files.
+ * The page exists in the marketing build only (`pages/walkthroughs.tsx`,
+ * `utils/marketing-only.ts`; `scripts/check-platform-export.mjs` refuses it in
+ * a platform export). The files live in no build:
+ * `scripts/fetch-site-media.mjs`, the last command of `build:marketing`,
+ * downloads them from the `media` release, checks each against the size and
+ * sha256 pinned in the manifest, and places them in `out/media/`. A
+ * self-hoster's dashboard has neither the page nor the files.
  *
  * Two kinds of video, declared by the transcript's `kind`:
  *   - a recording (no `kind`): the dashboard filmed on a local stack with demo
@@ -144,20 +149,21 @@ function TranscriptItemView({ item }: { item: TranscriptItem }) {
 }
 
 /**
- * The section: a grid of one card per entry, three columns from `lg`, two
- * from `sm`, one below (#1459). It takes any number of entries in manifest
- * order. Each card is, in DOM order: its h3 title (so heading navigation lands
- * before the player), the player, the description, the kind, the length and
- * the transcript. No thumbnail, no play button over the video and no badge on
- * it: the browser's own controls, as before.
+ * The page's body: the h1, then a grid of one card per entry, three columns
+ * from `lg`, two from `sm`, one below (#1459). It takes any number of entries
+ * in manifest order. Each card is, in DOM order: its h2 title (so heading
+ * navigation lands before the player), the player, the description, the kind,
+ * the length and the transcript. No thumbnail, no play button over the video
+ * and no badge on it: the browser's own controls, as before. Each card's id is
+ * its anchor (`anchorFor`), which the homepage teaser links.
  */
 export function Walkthroughs() {
   return (
-    <section id="walkthroughs" aria-labelledby="walkthroughs-heading" className="scroll-mt-20 border-t border-slate-200">
-      <div className="mx-auto max-w-[1180px] px-6 py-16">
-        <h2 id="walkthroughs-heading" className="text-3xl font-semibold tracking-tight">
+    <section id="walkthroughs" aria-labelledby="walkthroughs-heading" className="scroll-mt-20">
+      <div className="mx-auto max-w-[1180px] px-6 py-14 lg:py-16">
+        <h1 id="walkthroughs-heading" className={H1}>
           Walkthroughs
-        </h2>
+        </h1>
         <p className="mt-3 max-w-2xl text-slate-600">
           The recordings were made on a local stack with demo data. Turn captions on in the player; the transcript is
           below each video.
@@ -170,9 +176,9 @@ export function Walkthroughs() {
             const kind = kindOf(transcript);
             return (
               <li key={video.slug} id={id} className="min-w-0 scroll-mt-20">
-                <h3 id={`${id}-title`} className="text-lg font-semibold">
+                <h2 id={`${id}-title`} className={CARD_TITLE}>
                   {video.title}
-                </h3>
+                </h2>
                 <video
                   className={`mt-3 block h-auto w-full rounded-lg border border-slate-200 bg-slate-900 ${FOCUS}`}
                   controls

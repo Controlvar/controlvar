@@ -73,6 +73,28 @@ by = [
 ]
 
 [[unit]]
+text = "Error reports from every SDK reaching automatic safety rollback | Only the JavaScript SDK (reportError) and the Python SDK (report_error) send error reports to POST /api/v1/tracking/errors; no other SDK has its own call for it, and neither OpenFeature provider has one of its own (its client property is the JavaScript or Python client, which does). See Which errors count."
+by = [
+    "test:backend/tests/unit/sdk/test_sdk_error_reports_and_retries.py::test_only_the_javascript_and_python_sdks_send_error_reports",
+    "test:backend/tests/unit/sdk/test_sdk_error_reports_and_retries.py::test_the_error_report_path_is_in_both_clients",
+    "test:backend/tests/unit/sdk/test_sdk_error_reports_and_retries.py::test_both_openfeature_providers_delegate_to_the_clients_that_retry",
+    "test:sdk/js/__tests__/client.test.ts::POSTs one report to /api/v1/tracking/errors with the server field names and resolves true on 201",
+    "test:sdk/python/tests/test_client.py::TestReportError::test_posts_one_report_with_the_server_field_names_and_returns_true_on_201",
+]
+
+[[unit]]
+text = "Every SDK retrying after a 429 | Only the JavaScript and Python SDKs retry, once, after the Retry-After the API sends (the JavaScript SDK waits up to its timeoutMs, the Python SDK up to 5 seconds). The two OpenFeature providers retry because they call those clients; no other SDK retries: a call that was answered 429 does not complete, and the Go SDK's error carries the header in RetryAfter."
+by = [
+    "test:backend/tests/unit/sdk/test_sdk_error_reports_and_retries.py::test_only_four_sdk_directories_read_a_retry_after_header",
+    "test:backend/tests/unit/sdk/test_sdk_error_reports_and_retries.py::test_only_the_javascript_and_python_clients_send_the_request_again_after_a_429",
+    "test:backend/tests/unit/sdk/test_sdk_error_reports_and_retries.py::test_the_two_retrying_clients_cap_the_wait_at_their_own_figures",
+    "test:backend/tests/unit/sdk/test_sdk_error_reports_and_retries.py::test_no_other_sdk_waits_or_retries_near_a_429",
+    "test:backend/tests/unit/sdk/test_sdk_error_reports_and_retries.py::test_both_openfeature_providers_delegate_to_the_clients_that_retry",
+    "test:sdk/js/__tests__/client.test.ts::resolves true when the retry after a 429 is answered 201",
+    "test:sdk/python/tests/test_client.py::TestReportError::test_returns_true_when_the_retry_after_a_429_is_answered_201",
+]
+
+[[unit]]
 text = "Experiments and results"
 by = ["exempt:label"]
 
@@ -100,6 +122,28 @@ by = ["test:backend/tests/integration/api/test_revenue_per_user_results.py::test
 [[unit]]
 text = "A breakdown by segment of a revenue, count, duration or custom metric by its values | The Breakdowns view of such a metric shows, in its column headed Mean, the share of users who sent the metric's event in each segment. The metric's headline row is its mean per user."
 by = ["test:backend/tests/integration/api/test_revenue_breakdown_share_of_buyers.py::test_a_revenue_metric_breakdown_is_the_share_of_buyers"]
+
+[[unit]]
+text = "An experiment's results for the members of a rules segment | Not offered: GET /api/v1/results/{experiment_id}/segments/{segment_id} answers 422 for a rules segment, because the attributes its rules match are not stored for every assigned user. An ID-list segment's members can be read."
+by = [
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_a_rules_segment_is_refused",
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_fixture_m_matches_the_hand_counts",
+]
+
+[[unit]]
+text = "A saved segment applied to the other results views or the export | Only GET /api/v1/results/{experiment_id}/segments/{segment_id} filters by a saved segment. The other results routes, GET /api/v1/experiments/{experiment_id}/results and the export answer for all users, and ignore a segment_id parameter."
+by = [
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_the_other_routes_ignore_segment_id",
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_the_export_report_ignores_segment_id",
+]
+
+[[unit]]
+text = "A segment's results counted by membership when each user was assigned, and corrected for the segments you look at | A segment's results count the list as it is when they are computed: users added since are counted, users removed are not. The correction covers the comparisons inside the segment, not how many segments you look at, so the answer is exploratory."
+by = [
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_membership_is_now_and_never_cached",
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_the_correction_runs_across_the_segments_treatments",
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_the_answer_is_labelled_and_carries_no_whole_experiment_block",
+]
 
 [[unit]]
 text = "The average time one event takes, such as page load time | A duration metric is each user's total of its events' values, 0 for a user with none, averaged over every assigned user: a variant whose users send the event less often reads as less time. No metric averages over events rather than users."
@@ -233,8 +277,13 @@ text = "Sign-in and access"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Multi-factor sign-in | Not available: a local account signs in with its email and password alone."
-by = ["test:backend/tests/unit/api/test_documented_limits.py::test_a_local_sign_in_takes_an_email_and_a_password_alone"]
+text = "Requiring two-step sign-in for a role on an AWS CDK install | Not available yet: the CDK app cannot set LOCAL_AUTH_2FA_REQUIRED_ROLES, so each local account turns two-step sign-in on or off for itself there. Docker Compose and the Helm chart can set it. See Requiring it for a role."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_role_can_require_two_step_sign_in_on_compose_and_helm_not_cdk_yet",
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_every_role_manages_its_own_and_only_a_superuser_resets_others",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestTwoStepRoles",
+    "test:backend/tests/unit/chart/test_chart_render.py::test_the_two_step_roles_example_reaches_both_api_containers",
+]
 
 [[unit]]
 text = "SAML sign-in | Not available. OIDC sign-in is, with the sso module (full profile)."
@@ -359,8 +408,11 @@ by = [
 ]
 
 [[unit]]
-text = "An event_id sent by the SDK, so that an event sent again is stored once | The Java SDK sends one with every event (Event ids). The JavaScript SDK sends the eventId you give it and the Python SDK the event_id you give it (JavaScript, Python). No other SDK has an event_id option yet: not the React, React Native, edge, Go, Android, iOS, Flutter, .NET, PHP, Ruby or Elixir SDK, nor the OpenFeature providers. Send an event that may be sent again to POST /api/v1/tracking/track or POST /api/v1/tracking/batch with its event_id (#1543)."
+text = "An event_id sent by the SDK, so that an event sent again is stored once | The Java SDK sends one with every event (Event ids). The JavaScript SDK sends the eventId you give it and the Python SDK the event_id you give it (JavaScript, Python). The React and React Native SDKs send an event_id with every event, from their next published version (React, React Native). The .NET SDK sends an event_id with every event, from its next published version (.NET). No other SDK has an event_id option yet: not the edge, Go, Android, iOS, Flutter, PHP, Ruby or Elixir SDK, nor the OpenFeature providers. Send an event that may be sent again to POST /api/v1/tracking/track or POST /api/v1/tracking/batch with its event_id (#1543)."
 by = [
+    "test:sdk/react/src/__tests__/event-id.test.ts::sends a generated lowercase UUID v4 as event_id on a keyed track",
+    "test:sdk/react-native/__tests__/event-id.test.ts::track() with a key sends a generated lowercase UUID v4 as event_id",
+    "test:sdk/dotnet/tests/Controlvar.Tests/EventIdTests.cs::Track_WithAKey_SendsAGeneratedLowercaseUuidV4AsEventId",
     "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::trackSendsAGeneratedEventId",
     "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::fanOutEntriesShareOneEventId",
     "test:sdk/js/__tests__/event-id.test.ts::sends event_id on a track with an explicit key",

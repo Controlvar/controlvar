@@ -498,7 +498,10 @@ def binomial_metric_result(
             ``lower_is_better`` (absent or None reads as False).  When it is
             true the winner is the significant treatment with the LOWEST
             rate below the control's; otherwise the highest above it.
-            ``relative_improvement_pct`` stays the signed change either way.
+            Above or below is the sign of ``absolute_difference``, so a
+            control with no conversions can be beaten (engine 1.11.0).
+            ``relative_improvement_pct`` stays the signed change either way,
+            and None against a control with no conversions.
 
     Each treatment also carries its difference from the control (#1496), at
     the level ``1 - alpha`` and not adjusted for multiple comparisons:
@@ -607,6 +610,14 @@ def binomial_metric_result(
             )
         results.append(entry)
 
+    # A winner is significant and on the good side of the control (above it,
+    # or below it when lower is better).  The side is the sign of
+    # ``absolute_difference``, the treatment's rate minus the control's, as
+    # ``mean_metric_result`` reads the difference of the means.  It is not
+    # read from ``relative_improvement_pct``, which is None against a control
+    # with no conversions: until 1.11.0 a significant treatment against such
+    # a control was never the winner.  A treatment with no difference (an arm
+    # with no users, never significant) is on neither side.
     lower_is_better = metric_lower_is_better(metric)
     if lower_is_better:
         winners = [
@@ -614,7 +625,7 @@ def binomial_metric_result(
             for v in results
             if not v["is_control"]
             and v["is_significant"]
-            and (v["relative_improvement_pct"] or 0) < 0
+            and (v["absolute_difference"] or 0) < 0
         ]
         winner = min(winners, key=lambda v: v["mean"]) if winners else None
     else:
@@ -623,7 +634,7 @@ def binomial_metric_result(
             for v in results
             if not v["is_control"]
             and v["is_significant"]
-            and (v["relative_improvement_pct"] or 0) > 0
+            and (v["absolute_difference"] or 0) > 0
         ]
         winner = max(winners, key=lambda v: v["mean"]) if winners else None
     metric_type = (

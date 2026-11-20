@@ -42,7 +42,7 @@ class HttpClient
      * @throws AuthException    if the server returns HTTP 401
      * @throws ApiException     if the server returns any other 4xx or 5xx status
      */
-    public function get(string $path, array $headers = []): array
+    public function get(#[\SensitiveParameter] string $path, array $headers = []): array
     {
         return $this->request('GET', $path, null, $headers);
     }
@@ -84,7 +84,7 @@ class HttpClient
      * @throws AuthException
      * @throws ApiException
      */
-    protected function request(string $method, string $path, ?array $body, array $headers): array
+    protected function request(string $method, #[\SensitiveParameter] string $path, ?array $body, array $headers): array
     {
         $url = $this->baseUrl . '/' . ltrim($path, '/');
 
@@ -120,7 +120,7 @@ class HttpClient
         [$responseBody, $httpCode, $curlError] = $this->executeCurl($options);
 
         if ($curlError !== '') {
-            throw new NetworkException('cURL error: ' . $curlError);
+            throw new NetworkException(self::withoutQuery('cURL error: ' . $curlError, $path));
         }
 
         $decoded = null;
@@ -143,7 +143,7 @@ class HttpClient
             } elseif (!is_string($message)) {
                 $message = (string) json_encode($message);
             }
-            throw new ApiException($message, $httpCode);
+            throw new ApiException(self::withoutQuery($message, $path), $httpCode);
         }
 
         return is_array($decoded) ? $decoded : [];
@@ -157,7 +157,7 @@ class HttpClient
      * @param array<int,mixed> $options cURL options array
      * @return array{0: string, 1: int, 2: string}
      */
-    protected function executeCurl(array $options): array
+    protected function executeCurl(#[\SensitiveParameter] array $options): array
     {
         $ch = curl_init();
         curl_setopt_array($ch, $options);
@@ -169,6 +169,22 @@ class HttpClient
         curl_close($ch);
 
         return [$responseBody, $httpCode, $curlError];
+    }
+
+    /**
+     * Removes the request's query from the message: $text without $path's query string,
+     * with or without its '?'. Every exception built from a request with a query goes
+     * through this and carries no previous exception.
+     */
+    private static function withoutQuery(string $text, #[\SensitiveParameter] string $path): string
+    {
+        $mark = strpos($path, '?');
+        $query = $mark === false ? '' : substr($path, $mark + 1);
+        if ($query === '') {
+            return $text;
+        }
+
+        return str_replace([substr($path, $mark), $query], '', $text);
     }
 
     /**

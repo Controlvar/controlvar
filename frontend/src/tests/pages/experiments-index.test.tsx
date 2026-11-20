@@ -2,6 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import ExperimentsPage from '@/pages/experiments/index';
 import { apiFetch } from '@/services/api';
+import type { DemoMode } from '@/services/authConfig';
 import { docsUrl } from '@/services/docs';
 import { Experiment } from '@/types/experiments';
 import { apiError, makeRouter, routedApi } from './helpers/apiMock';
@@ -17,6 +18,13 @@ jest.mock('next/router', () => ({ useRouter: () => mockRouter }));
 // The page asks for the current role to decide whether to offer "+ New Experiment".
 const mockAuth = jest.fn().mockReturnValue(null);
 jest.mock('@/contexts/AuthContext', () => ({ useOptionalAuth: () => mockAuth() }));
+
+// Demo mode is off unless a test turns it on (the Interactions link, #1960).
+let mockDemo: DemoMode | null = null;
+jest.mock('@/contexts/AuthConfigContext', () => ({
+  ...jest.requireActual('@/contexts/AuthConfigContext'),
+  useDemoMode: () => mockDemo,
+}));
 
 jest.mock('next/head', () => {
   const Head = ({ children }: { children: React.ReactNode }) => <>{children}</>;
@@ -120,9 +128,9 @@ describe('ExperimentsPage', () => {
     const card = await screen.findByTestId('first-run-checklist');
     expect(within(card).getByTestId('checklist-create-experiment')).toHaveAttribute('href', '/experiments/new');
     // No account is known here (useOptionalAuth gives null), so step 2 names
-    // the route rather than the superuser-only Admin page (#920).
+    // the page every role can open rather than the superuser-only Admin page (#920, #1974).
     expect(within(card).queryByTestId('checklist-api-keys')).toBeNull();
-    expect(within(card).getByTestId('checklist-api-key-route')).toHaveTextContent('POST /api/v1/api-keys');
+    expect(within(card).getByTestId('checklist-api-key-route')).toHaveTextContent('More → Your API keys');
 
     const curl = within(card).getByTestId('checklist-curl').textContent ?? '';
     expect(curl).toContain('http://api.test/api/v1/tracking/assign');
@@ -267,6 +275,85 @@ describe('ExperimentsPage — create button by role', () => {
   });
 });
 
+describe('ExperimentsPage — the Interactions link (#1960)', () => {
+  // The roles `interactions._require_developer` admits, or a superuser of any
+  // role; never the create block's, so an ANALYST sees it too.
+  const signIn = (role: string | null, is_superuser = false) =>
+    mockAuth.mockReturnValue({
+      user: { id: 'u1', email: 'u@example.com', username: 'u', role, is_superuser, is_active: true },
+      status: 'authenticated' as const,
+      login: jest.fn(),
+      logout: jest.fn(),
+      hasRole: (...roles: string[]) => roles.includes(String(role)),
+    });
+
+  beforeEach(() => {
+    mockedApiFetch.mockImplementation(
+      routedApi([{ path: '/api/v1/experiments', handler: () => listResponse([exp({})]) }]) as unknown as typeof apiFetch,
+    );
+  });
+
+  afterEach(() => {
+    mockAuth.mockReturnValue(null);
+    mockDemo = null;
+  });
+
+  /** The header's two children: the title block, and the right-hand wrapper holding the link. */
+  function headerOf(link: HTMLElement) {
+    const wrapper = link.parentElement!;
+    const header = wrapper.parentElement!;
+    expect(header.children).toHaveLength(2);
+    expect(header.children[1]).toBe(wrapper);
+    expect(header.children[0]).toHaveTextContent(/^Experiments/);
+    return wrapper;
+  }
+
+  it.each(['ANALYST', 'DEVELOPER', 'ADMIN'])('offers %s the "Interactions" link, underlined, beside the create block', async (role) => {
+    signIn(role);
+    render(<ExperimentsPage />);
+    const link = await screen.findByTestId('interactions-link');
+    expect(link).toHaveTextContent(/^Interactions$/);
+    expect(link).toHaveAttribute('href', '/experiments/interactions');
+    expect(Array.from(link.classList)).toContain('underline');
+    const wrapper = headerOf(link);
+    // Outside the create block: that block's children stay exactly its three.
+    expect(screen.queryByTestId('holdouts-link')?.parentElement ?? null).not.toBe(wrapper);
+  });
+
+  it('offers it to a superuser whose role is VIEWER', async () => {
+    signIn('VIEWER', true);
+    render(<ExperimentsPage />);
+    headerOf(await screen.findByTestId('interactions-link'));
+  });
+
+  it('offers it to an ANALYST in a read-only demo, beside the demo note', async () => {
+    signIn('ANALYST');
+    mockDemo = { account: null };
+    render(<ExperimentsPage />);
+    const link = await screen.findByTestId('interactions-link');
+    const wrapper = headerOf(link);
+    expect(within(wrapper).getByTestId('demo-note')).toBeInTheDocument();
+    expect(screen.queryByTestId('new-experiment-btn')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['VIEWER', 'VIEWER'],
+    ['an account with no role', null],
+  ])('shows %s no "Interactions" link', async (_, role) => {
+    signIn(role);
+    render(<ExperimentsPage />);
+    await screen.findByTestId('experiments-table');
+    expect(screen.queryByTestId('interactions-link')).not.toBeInTheDocument();
+  });
+
+  it('shows no link before the user is known', async () => {
+    mockAuth.mockReturnValue(null);
+    render(<ExperimentsPage />);
+    await screen.findByTestId('experiments-table');
+    expect(screen.queryByTestId('interactions-link')).not.toBeInTheDocument();
+  });
+});
+
 describe("ExperimentsPage — the checklist's API-key step by account (#920)", () => {
   // /admin/api-keys opens only for a superuser (withAdminGuard). The step
   // links there for a superuser alone; everyone else gets the route any
@@ -298,7 +385,7 @@ describe("ExperimentsPage — the checklist's API-key step by account (#920)", (
   });
 
   it.each(['ADMIN', 'DEVELOPER', 'ANALYST', 'VIEWER'])(
-    'gives %s, who cannot open that page, the route and the docs page instead',
+    'points %s, who cannot open that page, to More → Your API keys and the docs page instead',
     async (role) => {
       signIn(role, false);
       const card = await checklist();
@@ -306,7 +393,13 @@ describe("ExperimentsPage — the checklist's API-key step by account (#920)", (
       expect(card.querySelector('a[href="/admin/api-keys"]')).toBeNull();
       const route = within(card).getByTestId('checklist-api-key-route');
       expect(route).toHaveTextContent(
-        'Create one for yourself with POST /api/v1/api-keys (see API Key Management) or ask an administrator.',
+        'Create one for yourself under More → Your API keys (see API Key Management).',
+      );
+      expect(route).not.toHaveTextContent('ask an administrator');
+      expect(route).not.toHaveTextContent('POST /api/v1/api-keys');
+      expect(within(route).getByRole('link', { name: 'Your API keys' })).toHaveAttribute(
+        'href',
+        '/account/api-keys',
       );
       expect(within(route).getByRole('link', { name: 'API Key Management' })).toHaveAttribute(
         'href',

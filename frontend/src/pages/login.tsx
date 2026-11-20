@@ -1,9 +1,19 @@
 import React, { FormEvent, useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
-import { INACTIVE_ACCOUNT_MESSAGE, useAuth } from '@/contexts/AuthContext';
+import { INACTIVE_ACCOUNT_MESSAGE, SignInEnrolment, useAuth } from '@/contexts/AuthContext';
 import { useAuthConfig } from '@/contexts/AuthConfigContext';
 import { ApiError, safeNextPath, signInTimeoutMessage, unreachableMessage } from '@/services/api';
-import type { AuthConfig } from '@/services/authConfig';
+import type { AuthConfig, DemoAccount } from '@/services/authConfig';
+import {
+  DEMO_ENTER_FAILED,
+  DEMO_ENTER_LABEL,
+  DEMO_LOGIN_HEADING,
+  DEMO_LOGIN_INTRO,
+  DEMO_LOGIN_SMALL_PRINT,
+  DEMO_UNREACHABLE,
+  demoAppLinks,
+  demoRateLimitedMessage,
+} from '@/utils/demoMode';
 import {
   SignInNotice,
   beginHostedUiSignIn,
@@ -13,6 +23,22 @@ import {
 } from '@/services/hostedUi';
 import { PageTitle } from '@/components/PageTitle';
 import { Wordmark } from '@/components/Wordmark';
+import { AuthenticatorKey } from '@/components/account/AuthenticatorKey';
+import { RecoveryCodesPanel } from '@/components/account/RecoveryCodesPanel';
+import { TwoStepCodeInput } from '@/components/account/TwoStepCodeInput';
+import {
+  CODE_STEP_LOCKED_TEXT,
+  CONFIRM_CLOCK_HINT,
+  ENROL_STEP_INTRO,
+  LOST_DEVICE_HELP,
+  SIGN_IN_TIMED_OUT_MESSAGE,
+  TwoFactorEnrolment,
+  UNAVAILABLE_TEXT,
+  WRONG_CODE_DETAIL,
+  WRONG_CODE_MESSAGE,
+  WRONG_RECOVERY_CODE_MESSAGE,
+  startSignInEnrolment,
+} from '@/services/twoFactor';
 // The SSO button and `/login?sso_error=` copy: the SSO module's; a core build
 // resolves this to a stub that renders nothing.
 import SsoSignIn from '@modules/components/sso/SsoSignIn';
@@ -68,6 +94,75 @@ export function loginErrorMessage(err: unknown): string {
   return 'Something went wrong. Please try again.';
 }
 
+/**
+ * The code step's 401 that means "start again": the mfa_token expired, or the
+ * account can no longer finish signing in. Any 401 but a wrong code is one.
+ */
+export function codeStepExpired(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 401 && err.detail !== WRONG_CODE_DETAIL;
+}
+
+/**
+ * Map a failed code step (`POST /auth/mfa/verify`) to the copy in its alert.
+ * Never `loginErrorMessage`'s: a 401 here is a wrong code, not a wrong
+ * password. The cap's 423 shows the API's own sentence, which says waiting
+ * will not help; the address lock's 423 shows its detail, as the password step
+ * does.
+ */
+export function codeStepErrorMessage(err: unknown, recovery: boolean): string {
+  if (err instanceof ApiError) {
+    if (err.status === 401) {
+      if (codeStepExpired(err)) return SIGN_IN_TIMED_OUT_MESSAGE;
+      return recovery ? WRONG_RECOVERY_CODE_MESSAGE : WRONG_CODE_MESSAGE;
+    }
+    if (err.status === 423) {
+      if (err.detail === CODE_STEP_LOCKED_TEXT) return CODE_STEP_LOCKED_TEXT;
+      return typeof err.detail === 'string' && err.detail
+        ? err.detail
+        : 'Too many failed attempts. Try again in a few minutes.';
+    }
+    if (err.status === 503 && err.detail === UNAVAILABLE_TEXT) return UNAVAILABLE_TEXT;
+    if (err.status === 422) {
+      return recovery
+        ? 'Enter one of your recovery codes as you saved it.'
+        : 'Enter the 6-digit code your authenticator app shows.';
+    }
+    if (err.status === 429) return RATE_LIMITED_MESSAGE;
+    if (err.status === 400 && err.detail === INVALID_HOST_DETAIL) return wrongHostMessage();
+    if (err.unreadableAnswer) return SIGN_IN_UNREADABLE_MESSAGE;
+    if (err.timedOut) return signInTimeoutMessage();
+    if (err.status === 0) return unreachableMessage();
+    return err.message;
+  }
+  if (err instanceof Error && err.message) return err.message;
+  return 'Something went wrong. Please try again.';
+}
+
+/** The set-up a sign-in asks for could not go on, and starts again at the password. */
+export const ENROL_RESTART_MESSAGE =
+  'Setting up two-step sign-in could not be finished. Enter your email and password again.';
+
+/**
+ * The set-up a sign-in asks for (`POST /auth/mfa/enroll[/confirm]`) has
+ * ended and sign-in starts again: the token expired, or the account changed
+ * (any 401 but a wrong code), or no secret is waiting any more (409).
+ */
+export function enrolStepEnded(err: unknown): boolean {
+  return codeStepExpired(err) || (err instanceof ApiError && err.status === 409);
+}
+
+/**
+ * Map a refused first code during that set-up to the copy in its alert. A
+ * wrong first code shows the phone's clock hint, where a wrong clock is first
+ * met; everything else reads as at the code step.
+ */
+export function enrolStepErrorMessage(err: unknown): string {
+  if (err instanceof ApiError && err.status === 401 && err.detail === WRONG_CODE_DETAIL) {
+    return CONFIRM_CLOCK_HINT;
+  }
+  return codeStepErrorMessage(err, false);
+}
+
 function firstQueryValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
@@ -77,14 +172,144 @@ function firstQueryValue(value: string | string[] | undefined): string | undefin
  * (#708): the Cognito Hosted UI's one button when the API answers with a
  * well-formed Cognito configuration, and otherwise -- the local provider, or
  * any answer that is not one (an older API's 404, no answer, a page that is
- * not JSON) -- the email and password form. Until the answer arrives the page
- * says it is loading and shows neither.
+ * not JSON) -- the email and password form. A read-only demo that publishes
+ * its account gets one "Enter the demo" button and no form. Until the answer
+ * arrives the page says it is loading and shows none of them.
  */
 export default function LoginPage() {
-  const { loading, config } = useAuthConfig();
+  const { loading, config, demo } = useAuthConfig();
   if (loading) return <SignInLoading />;
+  if (config.kind === 'local' && demo?.account) return <DemoSignIn account={demo.account} />;
   if (config.kind === 'local') return <LocalSignIn />;
   return <HostedUiSignIn config={config} />;
+}
+
+/** The demo sign-in's copy for a failure: never the API's own words. */
+export function demoEnterErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.status === 429) return demoRateLimitedMessage(err.retryAfter);
+    if (err.status === 400 && err.detail === INVALID_HOST_DETAIL) return wrongHostMessage();
+    if (err.unreadableAnswer) return DEMO_ENTER_FAILED;
+    if (err.timedOut) return signInTimeoutMessage();
+    if (err.status === 0 || err.status >= 500) return DEMO_UNREACHABLE;
+  }
+  return DEMO_ENTER_FAILED;
+}
+
+/**
+ * `/login` on a read-only demo: what it is, one button that signs in with the
+ * account `/auth/config` publishes (`POST /auth/login`, as the form would),
+ * the two demo apps, and no password field. `?next=` is honoured.
+ */
+function DemoSignIn({ account }: { account: DemoAccount }) {
+  const router = useRouter();
+  const { login, status, sessionError } = useAuth();
+  const [entering, setEntering] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const messageRef = useRef<HTMLDivElement>(null);
+  // Only ever rendered in the browser (after `/auth/config` has answered), so
+  // the page's own host is there to read.
+  const links = demoAppLinks();
+
+  const nextPath = safeNextPath(firstQueryValue(router.query.next), DEFAULT_AFTER_LOGIN);
+
+  // Already signed in: go straight through.
+  useEffect(() => {
+    if (status === 'authenticated' && !entering && router.isReady) {
+      void router.replace(nextPath);
+    }
+  }, [status, entering, router, nextPath]);
+
+  useEffect(() => {
+    if (error) messageRef.current?.focus();
+  }, [error]);
+
+  const enter = async () => {
+    if (entering) return;
+    setEntering(true);
+    setError(null);
+    try {
+      const result = await login(account.email, account.password);
+      if (result.status !== 'signed-in') {
+        // The demo account cannot take a second step: demo mode refuses it.
+        setError(DEMO_ENTER_FAILED);
+        setEntering(false);
+        return;
+      }
+      await router.replace(nextPath);
+    } catch (err) {
+      setError(demoEnterErrorMessage(err));
+      setEntering(false);
+    }
+  };
+
+  return (
+    <>
+      <PageTitle title="Live demo" />
+      <main className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4 py-12">
+        <div className="w-full max-w-md">
+          <div className="flex justify-center mb-8">
+            <Wordmark href={null} />
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 sm:p-8">
+            <h1 className="text-xl font-semibold text-slate-900 mb-2">{DEMO_LOGIN_HEADING}</h1>
+            <p className="text-sm text-slate-600 mb-6" data-testid="demo-login-intro">
+              {DEMO_LOGIN_INTRO}
+            </p>
+
+            {!error && sessionError && (
+              <div
+                role="alert"
+                data-testid="login-session-error"
+                className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+              >
+                {sessionError}
+              </div>
+            )}
+            {error && (
+              <div
+                ref={messageRef}
+                tabIndex={-1}
+                role="alert"
+                data-testid="login-error"
+                className="login-error mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+              >
+                {error}
+              </div>
+            )}
+
+            <button
+              type="button"
+              data-testid="demo-enter"
+              onClick={() => void enter()}
+              disabled={entering}
+              aria-busy={entering}
+              className="w-full min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-base font-medium rounded-md hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+            >
+              {entering ? 'Entering…' : DEMO_ENTER_LABEL}
+            </button>
+
+            {links.length > 0 && (
+              <ul className="mt-6 space-y-2 text-sm" data-testid="demo-app-links">
+                {links.map((link) => (
+                  <li key={link.href}>
+                    <a href={link.href} data-testid={link.testId} className="text-blue-700 underline hover:text-blue-900">
+                      {link.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <p className="mt-6 text-center text-xs text-slate-500" data-testid="demo-login-small-print">
+            {DEMO_LOGIN_SMALL_PRINT}
+          </p>
+        </div>
+      </main>
+    </>
+  );
 }
 
 function SignInLoading() {
@@ -257,13 +482,23 @@ function HostedUiSignIn({ config }: { config: CognitoSignInConfig }) {
   );
 }
 
-/** `/login` under the local provider: the email and password form. */
+/**
+ * `/login` under the local provider: the email and password form, then, for an
+ * account with two-step sign-in on (#1812), the code step in the same card;
+ * for an account whose role requires it and that has not set it up, the
+ * set-up (add the key to an app, its first code, the recovery codes) before
+ * the session starts. The `mfa_token` is held in this component's state only:
+ * a reload, or "Back to sign-in", starts again at the password.
+ */
 function LocalSignIn() {
   const router = useRouter();
-  const { login, status, sessionError } = useAuth();
+  const { login, verifySecondStep, confirmSignInEnrolment, status, sessionError } = useAuth();
   const emailId = useId();
   const passwordId = useId();
   const errorId = useId();
+  const codeId = useId();
+  const codeErrorId = useId();
+  const codeIntroId = useId();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -274,7 +509,32 @@ function LocalSignIn() {
   const [ssoRetry, setSsoRetry] = useState<(() => void) | null>(null);
   const emailRef = useRef<HTMLInputElement>(null);
 
+  // The code step. `mfaToken` set means the password was right and a code is
+  // needed; it lives here and nowhere else.
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
+  const [recovery, setRecovery] = useState(false);
+  const [code, setCode] = useState('');
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const codeRef = useRef<HTMLInputElement>(null);
+  // "Back to sign-in" gives focus back to the email field.
+  const [backToPassword, setBackToPassword] = useState(0);
+
+  // The set-up a required role is asked for. `enrolToken` set means the
+  // password was right and two-step sign-in must be set up first; `enrolled`
+  // holds the recovery codes and the sign-in to finish once they are saved.
+  const enrolCodeId = useId();
+  const enrolErrorId = useId();
+  const [enrolToken, setEnrolToken] = useState<string | null>(null);
+  const [enrolment, setEnrolment] = useState<TwoFactorEnrolment | null>(null);
+  const [enrolCode, setEnrolCode] = useState('');
+  const [enrolError, setEnrolError] = useState<string | null>(null);
+  const [enrolled, setEnrolled] = useState<SignInEnrolment | null>(null);
+  const enrolHeadingRef = useRef<HTMLHeadingElement>(null);
+  const enrolCodeRef = useRef<HTMLInputElement>(null);
+
   const nextPath = safeNextPath(firstQueryValue(router.query.next), DEFAULT_AFTER_LOGIN);
+  const codeStep = mfaToken !== null;
+  const enrolStep = enrolToken !== null || enrolled !== null;
 
   // Already signed in (e.g. the user typed /login by hand): go straight through.
   useEffect(() => {
@@ -287,6 +547,50 @@ function LocalSignIn() {
     // An SSO error focuses the SSO form's email instead (SsoSignIn does).
     if (error && !ssoRetry) emailRef.current?.focus();
   }, [error, ssoRetry]);
+
+  useEffect(() => {
+    if (backToPassword) emailRef.current?.focus();
+  }, [backToPassword]);
+
+  // The code step's field gets focus when the step opens, when it switches
+  // between a code and a recovery code, and after a refused code.
+  useEffect(() => {
+    if (codeStep) codeRef.current?.focus();
+  }, [codeStep, recovery, codeError]);
+
+  // The set-up's heading gets focus when the key is shown and when the
+  // recovery codes are.
+  const enrolView = enrolled ? 'codes' : enrolment ? 'key' : null;
+  useEffect(() => {
+    if (enrolView) enrolHeadingRef.current?.focus();
+  }, [enrolView]);
+
+  // A refused first code gives focus back to the field, as at the code step.
+  useEffect(() => {
+    if (enrolError) enrolCodeRef.current?.focus();
+  }, [enrolError]);
+
+  const leaveCodeStep = () => {
+    setMfaToken(null);
+    setRecovery(false);
+    setCode('');
+    setCodeError(null);
+  };
+
+  const leaveEnrolStep = () => {
+    setEnrolToken(null);
+    setEnrolment(null);
+    setEnrolCode('');
+    setEnrolError(null);
+    setEnrolled(null);
+  };
+
+  /** The set-up ended (expired, or the account changed): sign in again. */
+  const restartFromEnrolStep = (message: string) => {
+    leaveEnrolStep();
+    setFormState('idle');
+    setError(message);
+  };
 
   const handleSsoError = useCallback((message: string | null, retry: (() => void) | null) => {
     setError(message);
@@ -308,7 +612,39 @@ function LocalSignIn() {
     setError(null);
     setSsoRetry(null);
     try {
-      await login(trimmedEmail, password);
+      const result = await login(trimmedEmail, password);
+      if (result.status === 'second-step') {
+        // The password is not needed again: the code step starts.
+        setPassword('');
+        setShowPassword(false);
+        setRecovery(false);
+        setCode('');
+        setCodeError(null);
+        setMfaToken(result.mfaToken);
+        setFormState('idle');
+        return;
+      }
+      if (result.status === 'enrol-step') {
+        // The password is not needed again: the set-up starts with a new
+        // secret for the authenticator app.
+        setPassword('');
+        setShowPassword(false);
+        setEnrolCode('');
+        setEnrolError(null);
+        setEnrolToken(result.mfaToken);
+        try {
+          setEnrolment(await startSignInEnrolment(result.mfaToken));
+        } catch (err) {
+          if (enrolStepEnded(err)) {
+            restartFromEnrolStep(SIGN_IN_TIMED_OUT_MESSAGE);
+            return;
+          }
+          leaveEnrolStep();
+          setError(codeStepErrorMessage(err, false));
+        }
+        setFormState('idle');
+        return;
+      }
       await router.replace(nextPath);
     } catch (err) {
       setError(loginErrorMessage(err));
@@ -316,7 +652,311 @@ function LocalSignIn() {
     }
   };
 
+  const handleVerify = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (formState === 'submitting' || mfaToken === null) return;
+    if (!code.trim()) {
+      setCodeError(recovery ? 'Enter one of your recovery codes.' : 'Enter the 6-digit code from your authenticator app.');
+      return;
+    }
+    setFormState('submitting');
+    setCodeError(null);
+    try {
+      // Sent as typed: the API drops spaces and hyphens and ignores a
+      // recovery code's letter case.
+      await verifySecondStep(mfaToken, recovery ? { recovery_code: code } : { code });
+      await router.replace(nextPath);
+    } catch (err) {
+      setFormState('idle');
+      if (codeStepExpired(err)) {
+        // The step ran out (or the account changed): sign in again.
+        leaveCodeStep();
+        setError(SIGN_IN_TIMED_OUT_MESSAGE);
+        return;
+      }
+      setCode('');
+      setCodeError(codeStepErrorMessage(err, recovery));
+    }
+  };
+
+  const handleEnrolConfirm = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (formState === 'submitting' || enrolToken === null) return;
+    if (!enrolCode.trim()) {
+      setEnrolError('Enter the 6-digit code from your authenticator app.');
+      return;
+    }
+    setFormState('submitting');
+    setEnrolError(null);
+    try {
+      const done = await confirmSignInEnrolment(enrolToken, enrolCode);
+      // The token is spent: only the codes and the sign-in to finish remain.
+      setEnrolToken(null);
+      setEnrolment(null);
+      setEnrolCode('');
+      setEnrolled(done);
+      setFormState('idle');
+    } catch (err) {
+      if (enrolStepEnded(err)) {
+        restartFromEnrolStep(
+          err instanceof ApiError && err.status === 409 ? ENROL_RESTART_MESSAGE : SIGN_IN_TIMED_OUT_MESSAGE,
+        );
+        return;
+      }
+      setFormState('idle');
+      setEnrolCode('');
+      setEnrolError(enrolStepErrorMessage(err));
+    }
+  };
+
+  const finishEnrolment = async () => {
+    if (enrolled === null || formState === 'submitting') return;
+    setFormState('submitting');
+    try {
+      enrolled.finish();
+    } catch (err) {
+      restartFromEnrolStep(loginErrorMessage(err));
+      return;
+    }
+    await router.replace(nextPath);
+  };
+
+  const switchCodeKind = () => {
+    setRecovery((value) => !value);
+    setCode('');
+    setCodeError(null);
+  };
+
+  const backToSignIn = () => {
+    leaveCodeStep();
+    leaveEnrolStep();
+    setError(null);
+    setBackToPassword((n) => n + 1);
+  };
+
   const submitting = formState === 'submitting';
+
+  if (enrolStep) {
+    return (
+      <>
+        <PageTitle title="Sign in" />
+        <main className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4 py-12">
+          <div className="w-full max-w-sm">
+            <div className="flex justify-center mb-8">
+              <Wordmark href={null} />
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 sm:p-8">
+              {enrolled ? (
+                <section className="flex flex-col gap-4" data-testid="enrol-codes">
+                  <h1
+                    ref={enrolHeadingRef}
+                    tabIndex={-1}
+                    className="text-xl font-semibold text-slate-900 focus:outline-none"
+                    data-testid="enrol-heading"
+                  >
+                    Save your recovery codes
+                  </h1>
+                  <p className="text-sm text-slate-600">
+                    Two-step sign-in is on. From now on, signing in asks for a code from your authenticator app
+                    after your password.
+                  </p>
+                  <RecoveryCodesPanel
+                    codes={enrolled.recoveryCodes}
+                    onDone={() => void finishEnrolment()}
+                    busy={submitting}
+                  />
+                </section>
+              ) : (
+                <section className="flex flex-col gap-5" data-testid="enrol-step">
+                  <div>
+                    <h1
+                      ref={enrolHeadingRef}
+                      tabIndex={-1}
+                      className="text-xl font-semibold text-slate-900 mb-1 focus:outline-none"
+                      data-testid="enrol-heading"
+                    >
+                      Set up two-step sign-in
+                    </h1>
+                    <p className="text-sm text-slate-500" data-testid="enrol-intro">
+                      {ENROL_STEP_INTRO}
+                    </p>
+                  </div>
+
+                  {enrolment ? (
+                    <>
+                      <div className="flex flex-col gap-3">
+                        <h2 className="text-base font-medium text-slate-900">
+                          1. Add Controlvar to your authenticator app
+                        </h2>
+                        <AuthenticatorKey enrolment={enrolment} />
+                      </div>
+
+                      <form onSubmit={handleEnrolConfirm} noValidate data-testid="enrol-form" className="flex flex-col gap-3">
+                        <h2 className="text-base font-medium text-slate-900">2. Enter the code it shows</h2>
+                        {enrolError && (
+                          <div
+                            id={enrolErrorId}
+                            role="alert"
+                            data-testid="enrol-error"
+                            className="login-error rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+                          >
+                            {enrolError}
+                          </div>
+                        )}
+                        <TwoStepCodeInput
+                          ref={enrolCodeRef}
+                          id={enrolCodeId}
+                          label="Code from your authenticator app"
+                          value={enrolCode}
+                          onChange={setEnrolCode}
+                          errorId={enrolError ? enrolErrorId : null}
+                          readOnly={submitting}
+                          testId="enrol-code-input"
+                        />
+                        <button
+                          type="submit"
+                          data-testid="enrol-submit"
+                          disabled={submitting}
+                          aria-busy={submitting}
+                          className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                        >
+                          {submitting ? 'Turning on…' : 'Turn on two-step sign-in'}
+                        </button>
+                      </form>
+                    </>
+                  ) : (
+                    <p className="text-sm text-slate-600" data-testid="enrol-loading">
+                      Loading...
+                    </p>
+                  )}
+
+                  <div className="text-sm">
+                    <button
+                      type="button"
+                      data-testid="enrol-back"
+                      onClick={backToSignIn}
+                      disabled={submitting}
+                      className="text-slate-600 underline hover:text-slate-900 disabled:opacity-60"
+                    >
+                      Back to sign-in
+                    </button>
+                  </div>
+                </section>
+              )}
+            </div>
+
+            <p className="mt-6 text-center text-xs text-slate-500">
+              No public sign-up. Accounts are created by an administrator.
+            </p>
+          </div>
+        </main>
+      </>
+    );
+  }
+
+  if (codeStep) {
+    return (
+      <>
+        <PageTitle title="Sign in" />
+        <main className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4 py-12">
+          <div className="w-full max-w-sm">
+            <div className="flex justify-center mb-8">
+              <Wordmark href={null} />
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 sm:p-8">
+              <h1 className="text-xl font-semibold text-slate-900 mb-1" data-testid="mfa-heading">
+                {recovery ? 'Enter a recovery code' : 'Enter your code'}
+              </h1>
+              <p id={codeIntroId} className="text-sm text-slate-500 mb-6" data-testid="mfa-intro">
+                {recovery
+                  ? 'Enter one of the recovery codes you saved when you turned on two-step sign-in. Each works once.'
+                  : 'Open your authenticator app and enter the 6-digit code for Controlvar.'}
+              </p>
+
+              <form onSubmit={handleVerify} noValidate data-testid="mfa-form" aria-describedby={codeIntroId}>
+                {codeError && (
+                  <div
+                    id={codeErrorId}
+                    role="alert"
+                    data-testid="mfa-error"
+                    className="login-error mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+                  >
+                    {codeError}
+                  </div>
+                )}
+
+                <div className="mb-6">
+                  <TwoStepCodeInput
+                    ref={codeRef}
+                    id={codeId}
+                    label={recovery ? 'Recovery code' : 'Code'}
+                    recovery={recovery}
+                    value={code}
+                    onChange={setCode}
+                    errorId={codeError ? codeErrorId : null}
+                    readOnly={submitting}
+                    testId="mfa-code-input"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  data-testid="mfa-submit"
+                  disabled={submitting}
+                  aria-busy={submitting}
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                >
+                  {submitting && (
+                    <span
+                      aria-hidden="true"
+                      className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"
+                    />
+                  )}
+                  {submitting ? 'Verifying…' : 'Verify'}
+                </button>
+              </form>
+
+              <div className="mt-4 flex flex-col items-start gap-2 text-sm">
+                <button
+                  type="button"
+                  data-testid="mfa-switch"
+                  onClick={switchCodeKind}
+                  disabled={submitting}
+                  className="font-medium text-blue-700 underline hover:text-blue-900 disabled:opacity-60"
+                >
+                  {recovery ? 'Use a code from your authenticator app instead' : 'Use a recovery code instead'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="mfa-back"
+                  onClick={backToSignIn}
+                  disabled={submitting}
+                  className="text-slate-600 underline hover:text-slate-900 disabled:opacity-60"
+                >
+                  Back to sign-in
+                </button>
+              </div>
+
+              <details className="mt-5 text-sm" data-testid="lost-device">
+                <summary className="cursor-pointer text-slate-500 hover:text-slate-800 select-none">
+                  Lost your phone and your recovery codes?
+                </summary>
+                <p className="mt-2 text-slate-600" data-testid="lost-device-help">
+                  {LOST_DEVICE_HELP}
+                </p>
+              </details>
+            </div>
+
+            <p className="mt-6 text-center text-xs text-slate-500">
+              No public sign-up. Accounts are created by an administrator.
+            </p>
+          </div>
+        </main>
+      </>
+    );
+  }
 
   return (
     <>

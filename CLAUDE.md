@@ -45,12 +45,12 @@ pytest backend/tests/integration/  # Integration tests only
 
 # Code quality (ruff replaces black, isort and flake8). The scope is
 # `backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/
-# tests/usecases/` -- exactly what `make format` / `make lint` and the lint CI
-# job pass; linting backend/ alone leaves the modules, the repository tooling,
-# the acceptance runner, the ground-truth library and the use-case harness
-# unchecked.
-ruff format backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/        # Format code
-ruff check backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/ --fix   # Lint and auto-fix (includes import sorting)
+# tests/usecases/ tests/personas/` -- exactly what `make format` / `make lint`
+# and the lint CI job pass; linting backend/ alone leaves the modules, the
+# repository tooling, the acceptance runner, the ground-truth library, the
+# use-case harness and the persona catalogue unchecked.
+ruff format backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/ tests/personas/        # Format code
+ruff check backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/ tests/personas/ --fix   # Lint and auto-fix (includes import sorting)
 mypy backend/app/                             # Type checking: NOT gated, NOT clean (#788)
 make format                 # The two ruff commands above
 make lint                   # Everything the `lint` CI job runs (see below)
@@ -252,18 +252,6 @@ source venv/bin/activate && pytest -m "unit" -v
 
 ## Monitoring & Deployment
 
-### CloudWatch Integration
-```bash
-# Create log groups
-aws logs create-log-group --log-group-name /experimentation-platform/api
-aws logs create-log-group --log-group-name /experimentation-platform/services
-aws logs create-log-group --log-group-name /experimentation-platform/errors
-
-# Deploy monitoring dashboards
-cd infrastructure/cloudwatch
-./deploy-dashboards.sh
-```
-
 ### Application URLs
 - Backend API: http://localhost:8000
 - Frontend (dashboard, `npm run dev` = `next dev -p 3100`): http://localhost:3100
@@ -384,7 +372,7 @@ alembic stamp heads
 
 #### Role-Based Access Control (RBAC)
 The `core/permissions.py` module implements a comprehensive RBAC system with four roles:
-- **ADMIN**: Full access to all resources and actions
+- **ADMIN**: Manages experiments, flags, integrations and compliance exports, but is not a superuser: user management, changing safety settings and the dashboard's Users, API Keys and Roles pages need `is_superuser` (`docs/rbac/README.md`)
 - **DEVELOPER**: Can create and manage experiments and feature flags
 - **ANALYST**: Can view all data but cannot create or modify resources
 - **VIEWER**: Read-only access to approved resources
@@ -479,7 +467,7 @@ def admin_token(admin_user, monkeypatch):
 - Verify that proper 403 responses are returned when unauthorized actions are attempted
 - Use mock objects that accurately represent actual objects including ownership properties
 - All permission tests should validate that:
-  - ADMIN users can perform all actions
+  - ADMIN users can manage experiments, flags, integrations and compliance exports, but not the superuser-gated routes (`/api/v1/admin/users`, changing safety settings) unless `is_superuser`
   - DEVELOPER users can create and manage resources
   - ANALYST users can view but not modify resources
   - VIEWER users have read-only access
@@ -1280,13 +1268,14 @@ python -m alembic -c backend/app/db/alembic.ini current
 ### Code Quality Checks
 ```bash
 # Format and auto-fix backend/, modules/, scripts/, tests/acceptance/,
-# tests/ground_truth/ and tests/usecases/ in place (ruff: format + lint +
-# import order)
+# tests/ground_truth/, tests/usecases/ and tests/personas/ in place (ruff:
+# format + lint + import order)
 make format
 
 # The full lint gate, in this order:
 #   ruff check / ruff format --check   backend/ modules/ scripts/ tests/acceptance/
 #                                      tests/ground_truth/ tests/usecases/
+#                                      tests/personas/
 #   lint-imports                       the core/modules import boundary
 #                                      ([tool.importlinter] in pyproject.toml,
 #                                      backend/lambda/.importlinter)

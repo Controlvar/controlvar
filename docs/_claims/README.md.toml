@@ -19,11 +19,8 @@ text = "Website: controlvar.com · Documentation: docs.controlvar.com"
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "The results page of a ShopLab demo experiment in the Controlvar dashboard: its users, the planned sample reached, the leading variant and the sample ratio check."
-by = [
-    "journey:experiment-results#results-page",
-    "journey:experiment-results#ratio-results-page",
-]
+text = "The power calculator: the baseline conversion rate, the minimum detectable effect, the sample size each variant needs, and a power curve."
+by = ["journey:power-calculator#calculator"]
 
 [[unit]]
 text = "Watch the walkthrough videos on controlvar.com."
@@ -43,6 +40,36 @@ by = [
     "test:backend/tests/unit/infrastructure/test_release_chart_job.py::test_every_site_that_follows_the_chart_name_agrees",
     "test:backend/tests/unit/infrastructure/test_release_publishes.py::test_the_image_path_and_signing_identity_follow_the_repository",
 ]
+
+[[unit]]
+text = "Try the live demo"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A read-only copy runs at https://demo.controlvar.com: the dashboard as a viewer, with ShopLab and StreamPulse sending it simulated traffic."
+by = [
+    "test:backend/tests/unit/infrastructure/test_demo_box.py::test_the_sites_are_exactly_the_demo_host_and_its_two_storefronts",
+    "test:backend/tests/unit/infrastructure/test_demo_box.py::test_the_overlay_turns_demo_mode_on_itself",
+    "test:backend/tests/integration/demo/test_demo_mode_sign_in.py::test_only_a_non_superuser_viewer_signs_in",
+    "test:backend/tests/unit/infrastructure/test_demo_box.py::test_the_two_demo_apps_send_simulated_traffic",
+]
+
+[[unit]]
+text = "Creating and changing things is turned off there, and everything is rebuilt every night at 08:00 UTC."
+by = [
+    "test:backend/tests/smoke/test_demo_mode_routes.py::test_every_mutating_route_is_refused_for_a_signed_in_viewer",
+    "test:backend/tests/unit/middleware/test_demo_mode_middleware.py::test_the_allow_list_is_eight_posts_under_the_api_prefix",
+    "test:backend/tests/unit/infrastructure/test_demo_box.py::test_the_reset_time_is_the_one_the_dashboard_shows",
+    "test:backend/tests/unit/infrastructure/test_demo_box.py::TestTheBoxScripts::test_no_answer_twice_rebuilds_and_reopens",
+]
+
+[[unit]]
+text = "To create experiments, run it on your machine (below)."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The live demo says what is turned off there, and why."
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Try it on your machine"
@@ -233,8 +260,9 @@ by = [
 ]
 
 [[unit]]
-text = "Sequential testing: mSPRT with always-valid confidence intervals, so you can read results at any time."
+text = "Sequential testing (beta): mSPRT with always-valid confidence intervals, so you can read results at any time."
 by = [
+    "test:backend/tests/unit/core/test_analysis_status.py::test_the_table_holds_exactly_the_expected_statuses",
     "test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_aa_false_rejections_under_peeking",
     "test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_cs_anytime_coverage",
 ]
@@ -376,9 +404,10 @@ text = "One deployment is one environment: run staging and production as separat
 by = ["test:backend/tests/unit/api/test_documented_limits.py::test_flags_experiments_and_keys_carry_no_environment"]
 
 [[unit]]
-text = "Sign-in has no multi-factor step, and SAML sign-in is not available (OIDC is, with the sso module)."
+text = "Two-step sign-in can be required for chosen roles on Docker Compose and Helm installs, not yet on an AWS CDK install, and SAML sign-in is not available (OIDC is, with the sso module)."
 by = [
-    "test:backend/tests/unit/api/test_documented_limits.py::test_a_local_sign_in_takes_an_email_and_a_password_alone",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_role_can_require_two_step_sign_in_on_compose_and_helm_not_cdk_yet",
+    "test:backend/tests/integration/api/test_two_factor_required_roles_api.py::test_a_required_role_sets_it_up_at_its_first_sign_in",
     "test:modules/backend/tests/integration/api/test_sso_provisioning_scope.py::test_a_saml_acs_token_is_still_not_a_session",
     "test:modules/backend/tests/unit/services/test_sso_service.py::TestNonceInTheAuthorizationURL::test_an_oidc_provider_gets_the_nonce",
 ]

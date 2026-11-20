@@ -4,7 +4,7 @@ import { docsUrl } from '@/services/docs';
 import { isMarketingSite } from '@/utils/site-mode';
 import { Quote } from '@/components/homepage/Quote';
 import { Screenshot, type ScreenId } from '@/components/homepage/Screenshot';
-import { FOCUS, WIDTH } from '@/components/homepage/styles';
+import { FOCUS, H2, WIDTH } from '@/components/homepage/styles';
 
 interface Row {
   id: string;
@@ -15,7 +15,8 @@ interface Row {
   /** A paragraph after the bullets, if the row has one. */
   after?: React.ReactNode;
   link: { text: string; href: string };
-  screen: ScreenId;
+  /** None for the statistics row: its screenshot, the power calculator, is the hero's. */
+  screen?: ScreenId;
   /** From `lg` up, the screenshot sits on the left. The DOM order is always text, then screenshot. */
   reverse?: boolean;
 }
@@ -32,8 +33,8 @@ const ROWS: Row[] = [
   {
     id: 'rollouts',
     icon: icon(['M4 22V4', 'M4 4h12l-2 4 2 4H4']),
-    heading: 'Roll features out gradually, and watch their safety signals',
-    body: 'Sticky assignment, gradual rollouts with configurable stages, and automated safety rollback on error-rate and latency thresholds.',
+    heading: 'Roll features out gradually, with automatic rollback',
+    body: 'Sticky assignment, gradual rollouts with configurable stages, and automated safety rollback on error-rate and latency thresholds once you turn it on.',
     bullets: [
       'Targeting with 20+ operators: semantic version comparison, geo-distance, time windows and array operations',
       'Switch a flag on and off, and find each change in the audit log',
@@ -45,34 +46,33 @@ const ROWS: Row[] = [
   {
     id: 'statistics',
     icon: icon(['M3 3v18h18', 'M7 15l4-4 3 3 5-6']),
-    heading: 'Statistics beyond a p-value',
+    heading: 'Plan tests and analyse results',
     body: "Work out a test's sample size in the power calculator, which needs no account.",
     bullets: [
       'Frequentist and Bayesian analysis',
-      'Sequential testing with mSPRT for early stopping',
+      'Sequential testing with mSPRT for early stopping (beta)',
       'Multi-armed bandits',
       'Per-segment breakdowns with a Bonferroni correction across segments',
-      'Mutual-exclusion groups and a global holdout',
+      'Mutual-exclusion groups and a global holdout, whose results are beta',
     ],
     // A <Quote> is a sentence from content/home-quotes.json, held to the docs
     // page it quotes (tests/content/home-quotes.test.tsx).
     after: <Quote id="revenue-metric" />,
     link: { text: 'Open the power calculator', href: '/power-calculator' },
-    screen: 'power-calculator',
-    reverse: true,
   },
   {
     id: 'teams',
     icon: icon(['M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z', 'M9 12l2 2 4-4']),
     heading: 'Invite teammates, each with a role',
     body: 'Admins and developers change experiments and flags; analysts and viewers read them.',
-    bullets: ['An audit log you can filter by action, entity and date', 'Download it as CSV or JSON'],
+    bullets: ['An audit log you can filter by action, entity and date', 'Download it as CSV or JSON (the download is beta)'],
     link: { text: 'Role-based access control in the docs', href: docsUrl('rbac/README') },
     screen: 'audit-log',
   },
 ];
 
 function ProductRow({ row, marketing }: { row: Row; marketing: boolean }) {
+  const screen = marketing ? row.screen : undefined;
   const link = (
     <>
       {row.link.text} <span aria-hidden="true">→</span>
@@ -81,10 +81,10 @@ function ProductRow({ row, marketing }: { row: Row; marketing: boolean }) {
   const linkClass = `font-semibold text-blue-700 hover:text-blue-900 ${FOCUS}`;
   return (
     <section aria-labelledby={`${row.id}-heading`} className={`${WIDTH} py-12 lg:py-16`}>
-      <div className={marketing ? 'grid gap-10 lg:grid-cols-5 lg:items-center lg:gap-14' : 'max-w-2xl'}>
+      <div className={screen ? 'grid gap-10 lg:grid-cols-5 lg:items-center lg:gap-14' : 'max-w-2xl'}>
         <div className="min-w-0 lg:col-span-2">
           <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-700">{row.icon}</span>
-          <h2 id={`${row.id}-heading`} className="mt-4 text-2xl font-semibold tracking-tight sm:text-3xl">
+          <h2 id={`${row.id}-heading`} className={`mt-4 ${H2}`}>
             {row.heading}
           </h2>
           <p className="mt-3 leading-relaxed text-slate-600">{row.body}</p>
@@ -111,9 +111,9 @@ function ProductRow({ row, marketing }: { row: Row; marketing: boolean }) {
             )}
           </p>
         </div>
-        {marketing && (
+        {screen && (
           <div className={`min-w-0 lg:col-span-3${row.reverse ? ' lg:order-first' : ''}`}>
-            <Screenshot id={row.screen} />
+            <Screenshot id={screen} />
           </div>
         )}
       </div>
@@ -122,8 +122,9 @@ function ProductRow({ row, marketing }: { row: Row; marketing: boolean }) {
 }
 
 /**
- * Three rows, each a feature with its screenshot: rollouts and safety,
- * statistics, and teams with the audit log.
+ * Three rows, each a feature: rollouts and safety, statistics, and teams with
+ * the audit log. The first and the last have a screenshot; the statistics
+ * row's, the power calculator, is the hero's now, so that row is text only.
  *
  * The platform build renders them as text only (#1459 C2), so the rows keep
  * their words and lose their pictures there.
