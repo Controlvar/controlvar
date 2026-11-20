@@ -43,14 +43,16 @@ pytestmark = [pytest.mark.integration]
 #: This revision, and the core revision it extends: ``7b6b4b4fe246`` (#1528).
 REVISION = "c448_balance_within"
 PREVIOUS_CORE_HEAD = "7b6b4b4fe246"
-#: The core head of this tree: ``t1812_user_totp`` (#1812), whose downgrade
-#: drops ``user_totp``, after ``4955571d232c`` (#1545), the revision after this
-#: one, whose downgrade drops ``visual_tokens``, ``experiments.visual_config``
-#: and ``variants.visual_changes``.
-CORE_HEAD = "t1812_user_totp"
+#: The core head of this tree: ``t449_identity_aliases`` (#449), whose
+#: downgrade drops ``identity_aliases``, after ``t1812_user_totp`` (#1812),
+#: whose downgrade drops ``user_totp``, after ``4955571d232c`` (#1545), the
+#: revision after this one, whose downgrade drops ``visual_tokens``,
+#: ``experiments.visual_config`` and ``variants.visual_changes``.
+CORE_HEAD = "t449_identity_aliases"
 #: What a later core revision's downgrade drops: a downgrade from the head to
-#: this test's target unapplies ``4955571d232c`` and ``t1812_user_totp`` too.
-LATER_DOWNGRADE_TABLES = {"visual_tokens", "user_totp"}
+#: this test's target unapplies ``4955571d232c``, ``t1812_user_totp`` and
+#: ``t449_identity_aliases`` too.
+LATER_DOWNGRADE_TABLES = {"visual_tokens", "user_totp", "identity_aliases"}
 LATER_DOWNGRADE_EXPERIMENT_COLUMNS = {"visual_config"}
 #: The modules branch's head in this tree, recorded on both sides of every
 #: step here: this file is about the core chain.
