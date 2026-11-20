@@ -13,8 +13,6 @@ reason fails (EMD-1). The routes:
 * ``POST /api/v1/experiments/``, ``PUT /api/v1/experiments/{experiment_id}``;
 * ``POST /api/v1/segments``, ``PUT /api/v1/segments/{segment_id}``, and the
   preview, which takes the same body;
-* the wizard's ``POST /api/v1/wizard/drafts/{draft_id}/submit``, which reports
-  the refusal in ``errors`` and creates nothing.
 
 Nothing is written on a refusal. A request that leaves the rules out is
 unaffected; stored rules keep their answers, and one sent back unchanged is
@@ -632,50 +630,6 @@ def test_a_stored_segment_with_an_unknown_unit_is_still_evaluated(
 
 
 # ---------------------------------------------------------------------------
-# The wizard launch
-# ---------------------------------------------------------------------------
-
-
-def _step(client, draft_id: str, step: str, data: Dict[str, Any]) -> None:
-    response = client.put(
-        f"/api/v1/wizard/drafts/{draft_id}/step", json={"step": step, "data": data}
-    )
-    assert response.status_code == 200, response.text
-
-
-@pytest.mark.regression
-def test_the_wizard_launch_reports_the_refusal_and_creates_nothing(
-    admin_client, db_session
-):
-    title = f"Wizard {uuid.uuid4().hex[:8]}"
-    created = admin_client.post("/api/v1/wizard/drafts", json={"experiment_type": "ab"})
-    assert created.status_code in (200, 201), created.text
-    draft_id = created.json()["id"]
-    _step(admin_client, draft_id, "choose_type", {"experiment_type": "ab"})
-    _step(
-        admin_client,
-        draft_id,
-        "define_hypothesis",
-        {
-            "name": title,
-            "hypothesis": "A word the evaluator never matches is refused",
-            "primary_metric_id": "checkout_completed",
-        },
-    )
-    conditions = FRONTEND_FIXTURE["rules"]["groups"][0]["conditions"]
-    _step(admin_client, draft_id, "targeting", {"targeting_rules": conditions})
-    _step(admin_client, draft_id, "sample_size", {"baseline_rate": 0.1, "mde": 0.05})
-
-    submitted = admin_client.post(f"/api/v1/wizard/drafts/{draft_id}/submit")
-
-    assert submitted.status_code == 200, submitted.text
-    assert submitted.json()["success"] is False
-    assert submitted.json()["experiment_id"] is None
-    assert submitted.json()["errors"] == [f"targeting_rules: {DASHBOARD_UNIT_MSG}"]
-    assert _count(db_session, Experiment, name=title) == 0
-
-
-# ---------------------------------------------------------------------------
 # What stays accepted
 # ---------------------------------------------------------------------------
 
@@ -873,44 +827,6 @@ def test_segment_create_update_and_preview_refuse_an_unreadable_value(
 
 
 @pytest.mark.regression
-def test_the_wizard_launch_reports_a_dashboard_comparison_and_creates_nothing(
-    admin_client, db_session
-):
-    title = f"Wizard {uuid.uuid4().hex[:8]}"
-    created = admin_client.post("/api/v1/wizard/drafts", json={"experiment_type": "ab"})
-    assert created.status_code in (200, 201), created.text
-    draft_id = created.json()["id"]
-    _step(admin_client, draft_id, "choose_type", {"experiment_type": "ab"})
-    _step(
-        admin_client,
-        draft_id,
-        "define_hypothesis",
-        {
-            "name": title,
-            "hypothesis": "A geo comparison the converter drops is refused",
-            "primary_metric_id": "checkout_completed",
-        },
-    )
-    conditions = [
-        {"attribute": "country", "operator": "equals", "value": "US"},
-        *ROWS["comparison, dashboard"][1]["groups"][0]["conditions"],
-    ]
-    _step(admin_client, draft_id, "targeting", {"targeting_rules": conditions})
-    _step(admin_client, draft_id, "sample_size", {"baseline_rate": 0.1, "mde": 0.05})
-
-    submitted = admin_client.post(f"/api/v1/wizard/drafts/{draft_id}/submit")
-
-    assert submitted.status_code == 200, submitted.text
-    assert submitted.json()["success"] is False
-    assert submitted.json()["experiment_id"] is None
-    assert submitted.json()["errors"] == [
-        "targeting_rules: Value error, groups[0].conditions[1].value: "
-        f"{DASH_COMPARISON}"
-    ]
-    assert _count(db_session, Experiment, name=title) == 0
-
-
-@pytest.mark.regression
 def test_a_stored_flag_with_an_unreadable_value_keeps_its_answer_and_cannot_be_sent_back(
     admin_client, db_session, make_feature_flag
 ):
@@ -1012,53 +928,6 @@ def test_the_check_script_lists_a_value_a_save_now_refuses(
 # ---------------------------------------------------------------------------
 # #1666, #1669, #1672, #1673 (plan D211 v1.4-B3-1666)
 # ---------------------------------------------------------------------------
-
-#: The addendum's rows the wizard can carry: it collects dashboard conditions
-#: only (``ExperimentWizardService.build_experiment_payload``), so a native
-#: between or geo_distance never reaches it.
-WIZARD_ROWS = [n for n in ADDENDUM_ROWS if n in _rows("segment")]
-
-
-@pytest.mark.regression
-@pytest.mark.parametrize("name", WIZARD_ROWS)
-def test_the_wizard_launch_reports_the_addendums_refusals_and_creates_nothing(
-    admin_client, db_session, name
-):
-    """A window, a geo number and a number comparison, each beside
-    ``country equals US``: ``success: false`` with the message, and no
-    experiment (a geo number too large for a float answered 500 before)."""
-    _, rules, msg = ROWS[name]
-    title = f"Wizard {uuid.uuid4().hex[:8]}"
-    created = admin_client.post("/api/v1/wizard/drafts", json={"experiment_type": "ab"})
-    assert created.status_code in (200, 201), created.text
-    draft_id = created.json()["id"]
-    _step(admin_client, draft_id, "choose_type", {"experiment_type": "ab"})
-    _step(
-        admin_client,
-        draft_id,
-        "define_hypothesis",
-        {
-            "name": title,
-            "hypothesis": "A value the evaluator cannot read is refused",
-            "primary_metric_id": "checkout_completed",
-        },
-    )
-    conditions = [
-        {"attribute": "country", "operator": "equals", "value": "US"},
-        *copy.deepcopy(rules["groups"][0]["conditions"]),
-    ]
-    _step(admin_client, draft_id, "targeting", {"targeting_rules": conditions})
-    _step(admin_client, draft_id, "sample_size", {"baseline_rate": 0.1, "mde": 0.05})
-
-    submitted = admin_client.post(f"/api/v1/wizard/drafts/{draft_id}/submit")
-
-    assert submitted.status_code == 200, submitted.text
-    assert submitted.json()["success"] is False
-    assert submitted.json()["experiment_id"] is None
-    # The condition is the second, after country equals US.
-    second = msg.replace("groups[0].conditions[0]", "groups[0].conditions[1]", 1)
-    assert submitted.json()["errors"] == [f"targeting_rules: {second}"]
-    assert _count(db_session, Experiment, name=title) == 0
 
 
 @pytest.mark.regression

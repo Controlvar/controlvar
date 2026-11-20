@@ -68,9 +68,6 @@ WORDS = {
     (E + "bulk_toggle.py", "stream_audit_logs"): [
         (("audit_log", "read"), "other users' entries")
     ],
-    (E + "experiment_wizard.py", "submit_draft"): [
-        (("experiment", "create"), "experiment wizard")
-    ],
     (E + "experiments.py", "clone_experiment"): [(("experiment", "create"), "clone")],
     (E + "experiments.py", "create_experiment"): [(("experiment", "create"), "Create")],
     (E + "feature_flags.py", "activate_feature_flag"): [

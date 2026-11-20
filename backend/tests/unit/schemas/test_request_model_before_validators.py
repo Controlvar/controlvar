@@ -46,9 +46,11 @@ pytestmark = [pytest.mark.unit]
 #: (TwoFactorCodeRequest) and /users/me/2fa/disable (TwoFactorDisableRequest);
 #: its required roles 2 more to both: /auth/mfa/enroll (MfaEnrolRequest) and
 #: /auth/mfa/enroll/confirm (MfaEnrolConfirmRequest). Then 1 more to both: the
-#: current password at /users/me/2fa/enroll (TwoFactorEnrolRequest).
-CORE_MODEL_COUNT = 99
-FULL_MODEL_COUNT = 143
+#: current password at /users/me/2fa/enroll (TwoFactorEnrolRequest). #537
+#: removed 3 from both with the wizard routes: WizardDraftCreate,
+#: WizardStepUpdate and WizardValidationRequest.
+CORE_MODEL_COUNT = 96
+FULL_MODEL_COUNT = 140
 
 #: ``(model, field)`` pairs that a ``mode="before"`` field validator covers.
 CORE_BEFORE_COUNT = 46

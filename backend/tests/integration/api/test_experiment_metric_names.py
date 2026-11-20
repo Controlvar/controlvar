@@ -10,8 +10,6 @@ Create and update give one answer for the same metric list:
   spaces count, so ``Revenue`` and ``revenue`` are two metrics, as before;
 * ``metrics: []`` on update answers 422 ``too_short``, as on create, where it
   removed every metric; ``metrics`` left out or null leaves them unchanged;
-* the wizard's submit, which builds the same create schema, answers
-  ``success: false`` with the message;
 * the order is 401, then the schema's 422, then the role's 403 or the
   missing experiment's 404, then the experiment's state (400): a non-draft
   experiment sent ``[]`` or a repeat answers 422, for a superuser too.
@@ -41,7 +39,6 @@ from backend.app.models.user import User, UserRole
 pytestmark = [pytest.mark.integration]
 
 BASE = "/api/v1/experiments"
-WIZARD = "/api/v1/wizard"
 
 #: The 422 message for a repeated name, as the UX text gives it.
 DUPLICATE = (
@@ -354,7 +351,7 @@ def test_an_update_without_metrics_leaves_them_unchanged(client, db_session, dev
     assert _stored_names(db_session, experiment_id) == ["Conversion", "Revenue"]
 
 
-# --- 4g: the create route's second build, and the wizard ------------------------
+# --- 4g: the create route's second build ----------------------------------------
 
 
 def test_a_create_with_distinct_names_passes_the_routes_second_build(
@@ -375,45 +372,6 @@ def test_a_create_with_distinct_names_passes_the_routes_second_build(
     assert first.status_code == 201, first.text
     assert second.status_code == 201, second.text
     assert _stored_names(db_session, second.json()["id"]) == ["Purchase", "Signup"]
-
-
-@pytest.mark.regression
-def test_the_wizard_refuses_a_guardrail_that_repeats_the_primary_metric(
-    client, db_session, developer
-):
-    """Main answered success false with "The experiment could not be
-    created. Please try again." from the database's refusal."""
-    headers = _auth(developer)
-    draft = client.post(
-        f"{WIZARD}/drafts", json={"experiment_type": "ab"}, headers=headers
-    )
-    assert draft.status_code == 201, draft.text
-    draft_id = draft.json()["id"]
-    step = client.put(
-        f"{WIZARD}/drafts/{draft_id}/step",
-        json={
-            "step": "define_hypothesis",
-            "data": {
-                "name": f"metric names wizard {uuid.uuid4().hex[:8]}",
-                "hypothesis": "A green button raises checkout completion",
-                "primary_metric_id": "checkout_completed",
-                "guardrail_metric_ids": ["checkout_completed"],
-            },
-        },
-        headers=headers,
-    )
-    assert step.status_code == 200, step.text
-    before = _experiments_owned_by(db_session, developer)
-
-    submitted = client.post(f"{WIZARD}/drafts/{draft_id}/submit", headers=headers)
-
-    assert submitted.status_code == 200, submitted.text
-    assert submitted.json() == {
-        "success": False,
-        "experiment_id": None,
-        "errors": ["metrics: " + DUPLICATE.format(first=0, second=1)],
-    }
-    assert _experiments_owned_by(db_session, developer) == before
 
 
 # --- 4h: the order of the answers -----------------------------------------------
