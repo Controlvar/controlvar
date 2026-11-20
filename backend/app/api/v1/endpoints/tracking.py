@@ -897,6 +897,29 @@ async def track_event(
         HTTPException 401: If the API key is invalid
         HTTPException 422: If the event data is invalid
     """
+    # Closes ``db`` before it returns: the event is stored in a worker thread
+    # on the same session, closed again when the work is done.
+    db.close()
+    return await run_in_threadpool(_track_in_worker, request, db)
+
+
+def _track_in_worker(request: EventRequest, db: Session) -> EventResponse:
+    """:func:`track_one` on *db*, in a worker thread; closes *db*."""
+    try:
+        return track_one(request, db)
+    finally:
+        db.close()
+
+
+def track_one(request: EventRequest, db: Session) -> EventResponse:
+    """``POST /api/v1/tracking/track``'s answer for *request*, worked out on
+    *db*, which is left open.
+
+    Synchronous: it reads and writes through *db* as it goes, so call it from
+    a worker thread, never from a coroutine on the event loop. Raises the
+    route's ``HTTPException`` for every refusal and failure, with the route's
+    status codes and fixed texts.
+    """
     # Find experiment ID if specified
     experiment_id = None
     variant_id = None
@@ -1021,6 +1044,29 @@ async def track_event_by_ids(
 
     **Authentication**: Requires a valid API key in the X-API-Key header.
     """
+    # Closes ``db`` before it returns: the event is stored in a worker thread
+    # on the same session, closed again when the work is done.
+    db.close()
+    return await run_in_threadpool(_track_by_ids_in_worker, event_data, db)
+
+
+def _track_by_ids_in_worker(event_data: EventCreate, db: Session) -> EventResponse:
+    """:func:`track_by_ids_one` on *db*, in a worker thread; closes *db*."""
+    try:
+        return track_by_ids_one(event_data, db)
+    finally:
+        db.close()
+
+
+def track_by_ids_one(event_data: EventCreate, db: Session) -> EventResponse:
+    """``POST /api/v1/tracking/events``'s answer for *event_data*, worked out
+    on *db*, which is left open.
+
+    Synchronous: it reads and writes through *db* as it goes, so call it from
+    a worker thread, never from a coroutine on the event loop. Raises the
+    route's ``HTTPException`` for every refusal and failure, with the route's
+    status codes and fixed texts.
+    """
     service = EventService(db)
     try:
         # Raises ValueError for an id that is not a UUID, as track_event does.
@@ -1133,6 +1179,31 @@ async def track_events_batch(
         HTTPException 401: If the API key is invalid
         HTTPException 413: If the batch size exceeds the limit
         HTTPException 422: If the batch request format is invalid
+    """
+    # Closes ``db`` before it returns: the batch is stored in a worker thread
+    # on the same session, closed again when the work is done.
+    db.close()
+    return await run_in_threadpool(_track_batch_in_worker, request, db)
+
+
+def _track_batch_in_worker(
+    request: EventBatchRequest, db: Session
+) -> EventBatchResponse:
+    """:func:`track_batch_one` on *db*, in a worker thread; closes *db*."""
+    try:
+        return track_batch_one(request, db)
+    finally:
+        db.close()
+
+
+def track_batch_one(request: EventBatchRequest, db: Session) -> EventBatchResponse:
+    """``POST /api/v1/tracking/batch``'s answer for *request*, worked out on
+    *db*, which is left open.
+
+    Synchronous: it reads and writes through *db* as it goes, so call it from
+    a worker thread, never from a coroutine on the event loop. Raises the
+    route's ``HTTPException`` for a refused batch, with the route's status
+    code and text; an event's own failure is listed in the answer.
     """
     # Check batch size
     if len(request.events) > 100:
@@ -1302,6 +1373,33 @@ async def get_user_assignments(
     Raises:
         HTTPException 401: If the API key is invalid
         HTTPException 404: If user has no assignments
+    """
+    # Closes ``db`` before it returns: the assignments are read in a worker
+    # thread on the same session, closed again when the work is done.
+    db.close()
+    return await run_in_threadpool(
+        _user_assignments_in_worker, user_id, active_only, db
+    )
+
+
+def _user_assignments_in_worker(
+    user_id: str, active_only: bool, db: Session
+) -> List[Dict[str, Any]]:
+    """:func:`user_assignments_one` on *db*, in a worker thread; closes *db*."""
+    try:
+        return user_assignments_one(user_id, active_only, db)
+    finally:
+        db.close()
+
+
+def user_assignments_one(
+    user_id: str, active_only: bool, db: Session
+) -> List[Dict[str, Any]]:
+    """``GET /api/v1/tracking/assignments/{user_id}``'s answer, read on *db*,
+    which is left open.
+
+    Synchronous: it reads through *db*, so call it from a worker thread,
+    never from a coroutine on the event loop.
     """
     # Create assignment service
     assignment_service = AssignmentService(db)
