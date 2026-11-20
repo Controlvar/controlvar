@@ -6,8 +6,8 @@ flags and experiments, turning flags on and off, starting, pausing and completin
 experiments, rollout schedule changes, API keys, holdouts, mutual exclusion groups,
 segments, creating and deleting users, changes to a user's role, superuser flag or active
 status, signing in with a password or through Cognito (`POST /auth/token`; a sign-in
-through the Cognito Hosted UI does not pass through the API and is not recorded), and
-safety rollbacks and saves of the global safety settings. In the full profile it also records custom roles defined, changed,
+through the Cognito Hosted UI does not pass through the API and is not recorded),
+safety rollbacks and saves of the global safety settings, and erasing one app user's data. In the full profile it also records custom roles defined, changed,
 deleted, assigned and revoked, direct permissions granted and revoked, a workspace
 member's role changes, and single sign-on (SSO) sign-ins.
 [Action Types](#action-types) lists every action and when it is written.
@@ -121,7 +121,7 @@ Query the audit log with filters. The URL ends with a slash; without it the API 
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `entity_type` | string | `feature_flag`, `experiment`, `user`, `role`, `permission`, `safety_config`, `rollout_schedule`, `api_key`, `holdout`, `mutual_exclusion_group`, `segment` |
+| `entity_type` | string | `feature_flag`, `experiment`, `user`, `role`, `permission`, `safety_config`, `rollout_schedule`, `api_key`, `holdout`, `mutual_exclusion_group`, `segment`, `app_user` |
 | `entity_id` | UUID | Filter by specific entity ID |
 | `action_type` | string | Filter by action (see Action Types below) |
 | `user_id` | UUID | Filter by the user who performed the action |
@@ -318,6 +318,7 @@ No entry holds a password, a token, any part of an API key, or a request body.
 | `user_login` | `user` | Signing in through Cognito (`POST /auth/token` with the Cognito provider) as a user who already has an account; `new_value` is `{"provider": "cognito"}`. A user's first Cognito sign-in writes no `user_login`: their account is created by the first request they make with the token, which writes `user_create`. A sign-in through the Cognito Hosted UI does not pass through this API and writes nothing |
 | `safety_rollback` | `feature_flag` | A safety rollback, manual (`POST /safety/feature-flags/{id}/rollback`, by the calling user) or by the safety monitor. `new_value` is `{"trigger_type", "previous_percentage", "new_percentage", "deactivated", "paused_schedules"}`; `reason` is the rollback's reason. It appears in the flag's history |
 | `safety_config_update` | `safety_config` | `POST /safety/settings` saves the global safety settings; one entry per save, by the calling superuser, whether or not a value changed. `old_value` and `new_value` are `{"enable_automatic_rollbacks", "default_metrics"}`; `old_value` is empty when the save creates the settings. A refused or invalid save writes none. A flag's own safety config (`POST /safety/feature-flags/{id}/config`) writes none |
+| `app_user_erase_started`, `app_user_erased` | `app_user` | `POST /admin/app-users/erase` (beta), by the calling superuser: one entry when the call starts, before anything is deleted, and one when it finishes, both with the response's `receipt_id` as `entity_id` and `app user` as `entity_name`. `app_user_erased`'s `new_value` is `{"deleted", "ids_erased", "complete"}`: counts only, never the id. A start entry with no finish entry: the call did not finish; some rows may be gone, or none. See [Erase one app user's data](erase-user-data.md#the-record) |
 | `experiment_start`, `experiment_complete` | `experiment` | The experiment scheduler starts an experiment at its start date or scheduled resume, or completes it at its end date (also when `POST /experiments/schedules/process` runs it). `reason` is `scheduled start`, `scheduled resume` or `scheduled end` |
 | `feature_flag_update` | `feature_flag` | The rollout scheduler starts a rollout stage and sets the flag's rollout percentage. `reason` is `rollout schedule stage started` |
 | `user_create` | `user` | A user's first Cognito sign-in creates their account. The actor is the new user; `reason` is `first sign-in` |

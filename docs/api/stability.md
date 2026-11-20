@@ -89,6 +89,9 @@ an experiment that balances its split within groups, and its response may
 still change.
 `GET /api/v1/results/{id}/segments/{segment_id}` is beta too (#1933): it
 answers for one ID-list segment's members, and its response may still change.
+`POST /api/v1/admin/app-users/erase` is beta too (#2042): it erases one app user's
+data for a superuser, and its response may still change
+([Erase one app user's data](erase-user-data.md)).
 
 ## Changing a stable route
 

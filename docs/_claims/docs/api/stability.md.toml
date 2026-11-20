@@ -177,6 +177,13 @@ by = [
 ]
 
 [[unit]]
+text = "POST /api/v1/admin/app-users/erase is beta too (#2042): it erases one app user's data for a superuser, and its response may still change (Erase one app user's data)."
+by = [
+    "test:backend/tests/unit/api/test_capabilities_beta_operations.py::test_a_core_operation_the_page_calls_beta_is_beta",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_only_a_superuser_may_erase",
+]
+
+[[unit]]
 text = "Changing a stable route"
 by = ["exempt:baseline"]
 

@@ -223,6 +223,8 @@ WRITTEN_ACTION_TYPES: frozenset = frozenset(
         ActionType.SEGMENT_ARCHIVE,
         ActionType.SAFETY_ROLLBACK,
         ActionType.SAFETY_CONFIG_UPDATE,
+        ActionType.APP_USER_ERASE_STARTED,
+        ActionType.APP_USER_ERASED,
     }
 )
 

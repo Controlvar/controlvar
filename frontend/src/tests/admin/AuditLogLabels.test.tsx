@@ -42,6 +42,18 @@ describe('audit action labels (#221)', () => {
     }
   });
 
+  it('labels the two entries of an app-user erase (#2042)', () => {
+    const labelled = {
+      app_user_erase_started: 'App user erase started',
+      app_user_erased: 'App user data erased',
+    };
+    for (const [type, label] of Object.entries(labelled)) {
+      expect(actionTypes).toContain(type);
+      expect(actionLabel(type)).toBe(label);
+      expect(ACTIONS[type].group).toBe('Users and access');
+    }
+  });
+
   it('shows an unknown type as itself', () => {
     expect(actionLabel('user_update')).toBe('user_update');
   });
@@ -77,6 +89,16 @@ describe('the action filter (#221)', () => {
     expect(values).not.toContain('permission');
     expect(values).not.toContain('rollout_schedule');
     expect(values[0]).toBe('');
+  });
+
+  it('offers the app user entity the erase writes (#2042)', () => {
+    render(<AuditLogFilter filters={{}} onFilterChange={jest.fn()} />);
+    const select = screen.getByTestId('filter-entity-type');
+    const appUser = Array.from(select.querySelectorAll('option')).find(
+      (o) => o.value === 'app_user',
+    );
+    expect(appUser).toBeDefined();
+    expect(appUser).toHaveTextContent('App user');
   });
 
   it('offers the custom role entity the rbac module writes (#891)', () => {

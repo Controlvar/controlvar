@@ -48,8 +48,8 @@ from backend.app.main import app
 
 pytestmark = [pytest.mark.smoke]
 
-CORE_JSON_BODY_COUNT = 84
-FULL_JSON_BODY_COUNT = 114
+CORE_JSON_BODY_COUNT = 85
+FULL_JSON_BODY_COUNT = 115
 
 FORM_OPERATIONS = {("POST", "/api/v1/auth/token")}
 MODULE_FORM_OPERATIONS = {("POST", "/api/v1/auth/sso/saml/{config_id}/acs")}

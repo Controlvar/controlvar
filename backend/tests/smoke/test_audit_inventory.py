@@ -73,6 +73,10 @@ INVENTORY = {
     ("PUT", f"{V1}/admin/users/{{user_id}}"): ACCESS,
     # A superuser turning off someone else's two-step sign-in (#1812).
     ("DELETE", f"{V1}/admin/users/{{user_id}}/2fa"): Audited(A.USER_2FA_RESET),
+    # Erasing one app user's data (#2042): a start entry and a final entry.
+    ("POST", f"{V1}/admin/app-users/erase"): Audited(
+        A.APP_USER_ERASE_STARTED, A.APP_USER_ERASED
+    ),
     # --- AI design helpers ---------------------------------------------------
     ("POST", f"{V1}/ai/design"): CALCULATION,
     ("POST", f"{V1}/ai/interpret/{{experiment_id}}"): CALCULATION,
@@ -327,7 +331,7 @@ def test_the_inventory_is_exact():
         f"unclassified: {sorted(found - set(INVENTORY))}; "
         f"gone: {sorted(set(INVENTORY) - found)}"
     )
-    assert len(INVENTORY) == 119
+    assert len(INVENTORY) == 120
 
 
 def test_every_mutating_route_is_under_backend_or_modules():

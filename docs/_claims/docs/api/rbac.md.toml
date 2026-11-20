@@ -233,8 +233,11 @@ text = "Whatever a user's roles and grants hold, these stay with the built-in ro
 by = ["test:modules/backend/tests/integration/rbac/test_rbac_no_escalation.py::test_all_forty_pairs_reach_no_administration"]
 
 [[unit]]
-text = "Administration: managing users; defining custom roles, assigning them and making grants (ADMIN); other users' API keys; creating, activating and ending global holdouts, and archiving or unarchiving exclusion groups (ADMIN); safety settings; and the optional modules' administration (ETL, HIPAA, integrations, SSO, resetting counters)."
-by = ["test:modules/backend/tests/integration/rbac/test_rbac_no_escalation.py::test_all_forty_pairs_reach_no_administration"]
+text = "Administration: managing users; defining custom roles, assigning them and making grants (ADMIN); other users' API keys; creating, activating and ending global holdouts, and archiving or unarchiving exclusion groups (ADMIN); erasing one app user's data (superuser); safety settings; and the optional modules' administration (ETL, HIPAA, integrations, SSO, resetting counters)."
+by = [
+    "test:modules/backend/tests/integration/rbac/test_rbac_no_escalation.py::test_all_forty_pairs_reach_no_administration",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_only_a_superuser_may_erase",
+]
 
 [[unit]]
 text = "The compliance audit trail: the compliance audit events (GET /api/v1/compliance/audit-events) and reports (GET /api/v1/compliance/reports/{standard}) need ADMIN or ANALYST, and the compliance export (GET /api/v1/compliance/export) needs ADMIN; a superuser reads all three."

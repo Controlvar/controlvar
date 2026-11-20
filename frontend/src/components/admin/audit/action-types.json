@@ -1,6 +1,8 @@
 [
   "api_key_create",
   "api_key_revoke",
+  "app_user_erase_started",
+  "app_user_erased",
   "experiment_complete",
   "experiment_create",
   "experiment_delete",

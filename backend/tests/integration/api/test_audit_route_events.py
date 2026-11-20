@@ -1285,6 +1285,32 @@ def test_user_delete(client, fresh, superuser, target, route):
     assert _values(row)[0]["username"] == target.username
 
 
+def test_an_app_user_erase_writes_a_start_and_a_final_entry(client, fresh, superuser):
+    """#2042: two entries under the receipt, counts only, no audit_events_v2."""
+    needle = f"{P}-erase-{uuid.uuid4().hex}"
+    w = Written(fresh)
+    response = client.post(
+        f"{V1}/admin/app-users/erase",
+        json={"user_id": needle},
+        headers=_auth(superuser),
+    )
+    assert response.status_code == 200, response.text
+    receipt = response.json()["receipt_id"]
+    rows = w.rows()
+    assert sorted(r.action_type for r in rows) == [
+        "app_user_erase_started",
+        "app_user_erased",
+    ]
+    for row in rows:
+        assert row.entity_type == "app_user"
+        assert str(row.entity_id) == receipt
+        assert row.user_id == superuser.id
+        assert needle not in json.dumps(
+            [row.old_value, row.new_value, row.reason, row.entity_name]
+        )
+    assert w.v2_delta() == 0
+
+
 def test_deleting_your_own_account_is_recorded_without_a_user_id(
     client, fresh, db_session
 ):

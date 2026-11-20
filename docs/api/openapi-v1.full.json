@@ -471,6 +471,122 @@
         "title": "AlphaSpendingBoundaryResponse",
         "type": "object"
       },
+      "AppUserEraseCounts": {
+        "description": "Rows this call deleted, per table.",
+        "properties": {
+          "assignments": {
+            "description": "Experiment assignments.",
+            "title": "Assignments",
+            "type": "integer"
+          },
+          "error_logs": {
+            "description": "Client errors.",
+            "title": "Error Logs",
+            "type": "integer"
+          },
+          "event_dedup_keys": {
+            "description": "Keys of events sent with an id.",
+            "title": "Event Dedup Keys",
+            "type": "integer"
+          },
+          "events": {
+            "description": "Events, exposures included.",
+            "title": "Events",
+            "type": "integer"
+          },
+          "feature_flag_overrides": {
+            "description": "Per-user flag overrides.",
+            "title": "Feature Flag Overrides",
+            "type": "integer"
+          },
+          "holdout_population": {
+            "description": "Global-holdout rows.",
+            "title": "Holdout Population",
+            "type": "integer"
+          },
+          "llm_evaluations": {
+            "description": "LLM experiment evaluations.",
+            "title": "Llm Evaluations",
+            "type": "integer"
+          },
+          "raw_metrics": {
+            "description": "Flag evaluations and latencies.",
+            "title": "Raw Metrics",
+            "type": "integer"
+          },
+          "segment_members": {
+            "description": "Id-list segment memberships.",
+            "title": "Segment Members",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "events",
+          "raw_metrics",
+          "error_logs",
+          "llm_evaluations",
+          "event_dedup_keys",
+          "assignments",
+          "holdout_population",
+          "segment_members",
+          "feature_flag_overrides"
+        ],
+        "title": "AppUserEraseCounts",
+        "type": "object"
+      },
+      "AppUserEraseRequest": {
+        "additionalProperties": false,
+        "description": "The app user to erase. Any other field is refused with 422.",
+        "example": {
+          "user_id": "user-to-erase"
+        },
+        "properties": {
+          "user_id": {
+            "description": "The id your app sent as user_id. Matched exactly, case and spaces included.",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id"
+        ],
+        "title": "AppUserEraseRequest",
+        "type": "object"
+      },
+      "AppUserEraseResponse": {
+        "description": "What one call did. Counts only: never the id.",
+        "properties": {
+          "complete": {
+            "description": "True when no row of the id is left. False when time ran out or a statement timed out: send the same request again.",
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "deleted": {
+            "$ref": "#/components/schemas/AppUserEraseCounts"
+          },
+          "ids_erased": {
+            "description": "How many ids the erase covered.",
+            "title": "Ids Erased",
+            "type": "integer"
+          },
+          "receipt_id": {
+            "description": "The entity_id of this call's two audit-log entries: GET /api/v1/audit-logs/?entity_id=<receipt_id>.",
+            "format": "uuid",
+            "title": "Receipt Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "receipt_id",
+          "complete",
+          "ids_erased",
+          "deleted"
+        ],
+        "title": "AppUserEraseResponse",
+        "type": "object"
+      },
       "AssignRoleRequest": {
         "properties": {
           "reason": {
@@ -20952,6 +21068,57 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/admin/app-users/erase": {
+      "post": {
+        "description": "Erase one app user's data (beta, superusers only).\n\nDeletes every row stored under one `user_id` your app sent: events\n(exposures included), flag-evaluation metrics, client errors, LLM\nevaluations, event dedup keys, assignments, global-holdout rows, id-list\nsegment memberships and flag overrides. The id is matched exactly. It does\nnot delete dashboard accounts (`DELETE /api/v1/admin/users/{user_id}`).\nThere is no undo.\n\nA call works for at most 20 seconds. `complete: false` means rows may be\nleft: send the same request again until it is `true`. An id with nothing\nstored answers 200 with every count 0. Each call writes two audit-log\nentries with `receipt_id` as their `entity_id`, one when it starts and one\nwhen it finishes; they hold counts only.",
+        "operationId": "erase_app_user_data_api_v1_admin_app_users_erase_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppUserEraseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppUserEraseResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "500": {
+            "description": "An unplanned failure. Nothing was erased if the start entry could not be written; otherwise part of the data may already be erased: send the request again."
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Erase App User Data",
+        "tags": [
+          "Administration"
+        ],
+        "x-stability": "beta"
+      }
+    },
     "/api/v1/admin/cache/clear": {
       "post": {
         "description": "Clear system cache.\n\nThis endpoint is only accessible by superusers and clears all Redis cache entries\nfor the application.",

@@ -86,6 +86,7 @@ def test_the_entity_types():
         "holdout",
         "mutual_exclusion_group",
         "segment",
+        "app_user",
     }
 
 

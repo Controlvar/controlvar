@@ -63,6 +63,8 @@ export const ACTIONS: Readonly<Record<string, { label: string; group: ActionGrou
   user_login: { label: 'Signed in', group: 'Users and access' },
   api_key_create: { label: 'API key created', group: 'Users and access' },
   api_key_revoke: { label: 'API key revoked', group: 'Users and access' },
+  app_user_erase_started: { label: 'App user erase started', group: 'Users and access' },
+  app_user_erased: { label: 'App user data erased', group: 'Users and access' },
   holdout_create: { label: 'Holdout created', group: 'Holdouts, groups and segments' },
   holdout_update: { label: 'Holdout changed', group: 'Holdouts, groups and segments' },
   holdout_activate: { label: 'Holdout activated', group: 'Holdouts, groups and segments' },
@@ -112,6 +114,7 @@ export const ENTITY_LABELS: Readonly<Record<string, string>> = {
   mutual_exclusion_group: 'Exclusion group',
   segment: 'Segment',
   safety_config: 'Safety settings',
+  app_user: 'App user',
 };
 
 /** The label for an entity type; an unknown one shows as itself. */
