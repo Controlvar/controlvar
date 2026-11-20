@@ -132,7 +132,7 @@ export default {
       baseUrl: 'https://api.your-platform.example.com',
       kvNamespace: env.EP_FLAGS_KV, // optional: share cached results across worker instances
     });
-    const userId = request.headers.get('X-User-Id') ?? 'anon';
+    const userId = request.headers.get('X-User-Id') ?? crypto.randomUUID();
 
     const { enabled } = await client.evaluateFlag('new-checkout', userId);
     ctx.waitUntil(client.track('page_view', userId, { path: new URL(request.url).pathname }));
@@ -141,6 +141,11 @@ export default {
   },
 };
 ```
+
+A request without `X-User-Id` gets a new id of its own here; keep the visitor's id in a cookie so
+they keep their answers. Never fall back to a placeholder such as `'anon'`: every visitor without
+an id would share it, and with it one assignment. When the visitor signs in, your backend links
+their id to their account's ([Link a visitor's ids when they sign in](../guides/identity.md)).
 
 `withExperimentation(handler, config, clientEnvKey = 'EP_CLIENT')` wraps a
 `(request, env, ctx)` handler: it builds a `CloudflareExperimentationClient` from `config` on every

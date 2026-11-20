@@ -193,6 +193,17 @@ text = "Identity aliasing: a visitor who signs in keeps one assignment (#449)."
 by = ["exempt:policy"]
 
 [[unit]]
+text = "Its first part, POST /api/v1/tracking/alias (beta), links a visitor's anonymous id to their account's id from your backend (the guide)."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_link_made_through_the_route_is_the_one_the_tracking_routes_follow",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_server_key_whose_owner_can_change_flags_is_accepted",
+]
+
+[[unit]]
+text = "The JavaScript and Python SDKs gain the call in their next releases."
+by = ["exempt:policy"]
+
+[[unit]]
 text = "Data retention by age, and erasing one person's data."
 by = ["exempt:policy"]
 

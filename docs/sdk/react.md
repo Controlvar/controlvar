@@ -272,6 +272,7 @@ disabled evaluation or the control defaults with `error` set.
 
 ```tsx
 // pages/checkout.tsx
+import { randomUUID } from 'node:crypto';
 import { ServerClient } from '@controlvar/react-sdk';
 import type { GetServerSideProps } from 'next';
 
@@ -280,7 +281,7 @@ export const getServerSideProps: GetServerSideProps = async ({ req }) => {
     apiKey: process.env.CONTROLVAR_API_KEY!,
     baseUrl: process.env.CONTROLVAR_API_URL!,
   });
-  const user = { userId: req.cookies['visitor_id'] ?? 'anonymous' };
+  const user = { userId: req.cookies['visitor_id'] ?? randomUUID() };
 
   const [checkout, flags] = await Promise.all([
     client.assignExperiment('checkout_flow', user),
@@ -290,6 +291,12 @@ export const getServerSideProps: GetServerSideProps = async ({ req }) => {
   return { props: { variantKey: checkout.variantKey, flags } };
 };
 ```
+
+A visitor without a `visitor_id` cookie gets a new id of their own; set it as their cookie so they
+keep it. Never fall back to a placeholder such as `'anonymous'`: every visitor without the cookie
+would share it, and with it one assignment. When the visitor signs in, your backend links their
+`visitor_id` to their account's id
+([Link a visitor's ids when they sign in](../guides/identity.md)).
 
 In the App Router, import `ServerClient` from `@controlvar/react-sdk/ssr` in an async server
 component and call the same methods there. Use the `/ssr` subpath rather than the package root: the

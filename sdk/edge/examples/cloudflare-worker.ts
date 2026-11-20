@@ -44,7 +44,7 @@ export default {
       timeout: 500,
     });
 
-    const userId = getUserId(request) ?? 'anonymous';
+    const userId = getUserId(request) ?? crypto.randomUUID();
     const url = new URL(request.url);
 
     // Ask the server once (parallel) — results are cached per user + key.

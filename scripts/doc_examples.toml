@@ -12,8 +12,8 @@
 # scripts/doc_examples.py), and each page's residual counts can only fall.
 
 [meta]
-documents = 60
-exec = 338
+documents = 61
+exec = 348
 universe = [
     ".github/pull_request_template.md",
     ".github/qa-templates/README.md",
@@ -110,6 +110,7 @@ universe = [
     "docs/guides/experiment-wizard.md",
     "docs/guides/guided-examples.md",
     "docs/guides/how-events-count.md",
+    "docs/guides/identity.md",
     "docs/guides/segments.md",
     "docs/guides/user-guide.md",
     "docs/hipaa/overview.md",
@@ -560,6 +561,15 @@ environment = "stack"
 exec = 9
 skip = 1
 expects = 11
+
+# #449: assign an anonymous id, link it to a known id, assign the known id and
+# read its assignments, through the REST route.
+[[document]]
+path = "docs/guides/identity.md"
+environment = "stack"
+exec = 10
+skip = 0
+expects = 10
 
 [[document]]
 path = "docs/guides/segments.md"

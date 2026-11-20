@@ -1,0 +1,561 @@
+# What verifies each unit of docs/guides/identity.md (#449).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/guides/identity.md"
+
+[[unit]]
+text = "Link a visitor's ids when they sign in"
+by = ["exempt:label"]
+
+[[unit]]
+text = "To an experiment, a user is a user id."
+by = ["test:backend/tests/unit/api/test_documented_limits.py::test_the_alias_route_is_the_one_call_that_links_two_user_ids"]
+
+[[unit]]
+text = "A visitor who browses under an anonymous id and then signs in under their account's id is two users, each with an assignment of their own, until the two ids are linked."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_alias_route_is_the_one_call_that_links_two_user_ids",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_the_earliest_assignment_wins_for_both_ids",
+]
+
+[[unit]]
+text = "POST /api/v1/tracking/alias (beta) links the anonymous id to the known id of the same person."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_link_is_stored_once_and_answered_again_with_created_false",
+    "test:backend/tests/unit/api/test_alias_route_contract.py::test_the_answer_is_the_two_ids_and_created",
+]
+
+[[unit]]
+text = "From then on, in each experiment, both ids are answered with the assignment stored first among them, and an event either id sends to the experiment counts for it."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_link_made_through_the_route_is_the_one_the_tracking_routes_follow",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_known_id_answers_the_variant_its_anonymous_id_holds",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_the_earliest_assignment_wins_for_both_ids",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_known_ids_conversion_counts_for_its_persons_variant",
+]
+
+[[unit]]
+text = "It needs a server-side key and is called from your backend."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_the_route_refuses_each_key_as_batch_assignment_does",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_server_key_whose_owner_can_change_flags_is_accepted",
+]
+
+[[unit]]
+text = "The full contract and every error are in the API reference."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The examples run against the Quick Start stack and its demo data."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Start with a stable id"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Assign with the id you will track purchases with:"
+by = ["exempt:advice"]
+
+[[unit]]
+text = "A signed-in visitor: their account's id, the same on every device."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "A visitor who has not signed in: an id of their own that stays with them, made on their first visit and kept in a cookie or on the device."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Never a placeholder such as anonymous that every visitor without an id would share."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "The same user id always gets the same variant, so they would all be one user (below)."
+by = [
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_assigns_user_to_a_variant_and_is_sticky",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_assignment_hashes_the_experiment_key_and_the_user",
+]
+
+[[unit]]
+text = "A link joins two ids only from the moment it is stored (What is not merged)."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_counting.py::test_linked_people_count_per_row_on_every_endpoint",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_the_earliest_assignment_wins_for_both_ids",
+]
+
+[[unit]]
+text = "If every visitor signs in before they reach the experiment, there is nothing to link."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "When to link"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Link when your backend learns who the visitor is: when they sign in, or sign up, on a device where they were assigned under an anonymous id."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Send the anonymous id that device used and the account's id."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Link before the account's id is used."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "An assignment or event recorded under either id before the link stays as it was (What is not merged), so link as soon as you know, before the page assigns or tracks under the account's id."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_counting.py::test_linked_people_count_per_row_on_every_endpoint",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_the_earliest_assignment_wins_for_both_ids",
+]
+
+[[unit]]
+text = "Link each device."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Each browser or device has its own anonymous id; link each one when the person signs in there."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "A known id can have up to 100 anonymous ids linked to it."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_known_id_takes_100_anonymous_ids_and_not_the_101st",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_second_anonymous_id_is_linked_to_the_same_known_id",
+]
+
+[[unit]]
+text = "Link at every sign-in if that is simpler."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "The same link sent again answers \"created\": false and writes nothing."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_link_is_stored_once_and_answered_again_with_created_false",
+    "docex:docs/guides/identity.md#{\"created\":false}",
+]
+
+[[unit]]
+text = "What you need"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Sign in as the demo administrator:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints \"ADMIN\"."
+by = ["docex:docs/guides/identity.md#\"ADMIN\""]
+
+[[unit]]
+text = "An ACTIVE experiment."
+by = ["exempt:label"]
+
+[[unit]]
+text = "This creates one with two welcome banners and starts it:"
+by = ["docex:docs/guides/identity.md#active"]
+
+[[unit]]
+text = "It prints active."
+by = ["docex:docs/guides/identity.md#active"]
+
+[[unit]]
+text = "A server-side key: an API key with the sdk:ruleset scope whose owner can change feature flags, such as an ADMIN or a DEVELOPER."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_server_key_whose_owner_can_change_flags_is_accepted",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_the_route_refuses_each_key_as_batch_assignment_does",
+]
+
+[[unit]]
+text = "The same scope lets the key download every feature flag's targeting rules, so keep it on your server and never ship it to a browser or a mobile app."
+by = ["test:backend/tests/smoke/test_sdk_scoped_routes.py"]
+
+[[unit]]
+text = "This creates one and saves it in $KEY:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints eptk_."
+by = ["docex:docs/guides/identity.md#eptk_"]
+
+[[unit]]
+text = "Assign the visitor"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The visitor's first page assigns them under their anonymous id, visitor-7f3a92."
+by = ["exempt:example"]
+
+[[unit]]
+text = "In your app that request usually comes from a browser or mobile SDK with a key of its own; here it is sent with $KEY, and the answer is saved in $VISITOR:"
+by = ["exempt:example"]
+
+[[unit]]
+text = "It prints {\"user_id\":\"visitor-7f3a92\",\"assigned\":true}."
+by = ["docex:docs/guides/identity.md#{\"user_id\":\"visitor-7f3a92\",\"assigned\":true}"]
+
+[[unit]]
+text = "$VISITOR also holds the variant, control or personal."
+by = ["docex:docs/guides/identity.md#{\"user_id\":\"customer-1042\",\"same_variant\":true}"]
+
+[[unit]]
+text = "Link the ids at sign-in"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The visitor signs in as customer-1042, and your backend links the two ids:"
+by = ["exempt:example"]
+
+[[unit]]
+text = "It prints the two ids as sent and \"created\":true: this request stored the link."
+by = [
+    "docex:docs/guides/identity.md#{\"anonymous_id\":\"visitor-7f3a92\",\"user_id\":\"customer-1042\",\"created\":true}",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_link_is_stored_once_and_answered_again_with_created_false",
+]
+
+[[unit]]
+text = "Send it again:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints {\"created\":false}: the link already exists, and nothing was written."
+by = [
+    "docex:docs/guides/identity.md#{\"created\":false}",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_link_is_stored_once_and_answered_again_with_created_false",
+]
+
+[[unit]]
+text = "Assign the known id"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The next page assigns under the account's id."
+by = ["exempt:example"]
+
+[[unit]]
+text = "The answer names customer-1042, the id that was sent, with the variant the visitor already holds, and no second assignment is stored:"
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_link_made_through_the_route_is_the_one_the_tracking_routes_follow",
+    "docex:docs/guides/identity.md#{\"user_id\":\"customer-1042\",\"same_variant\":true}",
+]
+
+[[unit]]
+text = "It prints {\"user_id\":\"customer-1042\",\"same_variant\":true}."
+by = ["docex:docs/guides/identity.md#{\"user_id\":\"customer-1042\",\"same_variant\":true}"]
+
+[[unit]]
+text = "A purchase tracked under customer-1042 with the experiment's key now counts for that variant."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_link_made_through_the_route_is_the_one_the_tracking_routes_follow",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_known_ids_conversion_counts_for_its_persons_variant",
+]
+
+[[unit]]
+text = "Read the person's assignments"
+by = ["exempt:label"]
+
+[[unit]]
+text = "GET /api/v1/tracking/assignments/{user_id} answers a linked id with its person's assignments, one per experiment, each with user_id the id in the path:"
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_the_assignments_list_answers_a_linked_id_with_one_row_per_experiment",
+    "docex:docs/guides/identity.md#[{\"user_id\":\"customer-1042\",\"experiment_name\":\"Welcome banner\",\"same_variant\":true}]",
+]
+
+[[unit]]
+text = "It prints [{\"user_id\":\"customer-1042\",\"experiment_name\":\"Welcome banner\",\"same_variant\":true}]: one assignment, the visitor's."
+by = ["docex:docs/guides/identity.md#[{\"user_id\":\"customer-1042\",\"experiment_name\":\"Welcome banner\",\"same_variant\":true}]"]
+
+[[unit]]
+text = "Which assignment answers"
+by = ["exempt:label"]
+
+[[unit]]
+text = "In each experiment, every id of a linked person is answered with one assignment:"
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_the_earliest_assignment_wins_for_both_ids",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_an_anonymous_id_and_a_second_device_answer_the_known_ids_variant",
+]
+
+[[unit]]
+text = "The one stored first."
+by = ["exempt:label"]
+
+[[unit]]
+text = "Of the person's ids that have an assignment in the experiment, the one stored first, by the API's clock, answers for all of them."
+by = [
+    "test:backend/tests/integration/services/test_identity_aliases_service.py::test_the_holder_is_the_earliest_row_then_the_smallest_id",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_the_earliest_assignment_wins_for_both_ids",
+]
+
+[[unit]]
+text = "Of two stored at the same instant, the one whose assignment id sorts first answers."
+by = ["test:backend/tests/integration/services/test_identity_aliases_service.py::test_the_holder_is_the_earliest_row_then_the_smallest_id"]
+
+[[unit]]
+text = "None yet."
+by = ["exempt:label"]
+
+[[unit]]
+text = "When none of the person's ids has one, the person is assigned once, under the known id, whichever of their ids asks first."
+by = ["test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_person_with_no_row_is_assigned_once_under_the_known_id"]
+
+[[unit]]
+text = "Two already."
+by = ["exempt:label"]
+
+[[unit]]
+text = "When both ids were assigned before the link (the visitor had already signed in on another device, say), both assignments stay, and both ids are answered with the earlier one from then on, so the person can see their variant change at the link."
+by = ["test:backend/tests/integration/api/test_identity_alias_resolution.py::test_the_earliest_assignment_wins_for_both_ids"]
+
+[[unit]]
+text = "Both assignments still count in the experiment's results, one each (below)."
+by = ["test:backend/tests/integration/api/test_identity_alias_counting.py::test_linked_people_count_per_row_on_every_endpoint"]
+
+[[unit]]
+text = "One that races the link."
+by = ["exempt:label"]
+
+[[unit]]
+text = "An assignment made under the known id while the link is being stored can still be stored under that id."
+by = ["test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_link_racing_the_known_ids_first_assignment"]
+
+[[unit]]
+text = "It stays, and the earlier assignment answers for both ids from then on."
+by = ["test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_link_racing_the_known_ids_first_assignment"]
+
+[[unit]]
+text = "Whichever of the person's ids asks, from whichever device, it gets the person's assignment."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_an_anonymous_id_and_a_second_device_answer_the_known_ids_variant",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_known_id_answers_the_variant_its_anonymous_id_holds",
+]
+
+[[unit]]
+text = "What is not merged"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A link changes how requests from then on are answered and stored."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_link_made_through_the_route_is_the_one_the_tracking_routes_follow",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_known_ids_conversion_counts_for_its_persons_variant",
+]
+
+[[unit]]
+text = "It merges nothing recorded before it:"
+by = ["test:backend/tests/integration/api/test_identity_alias_counting.py::test_linked_people_count_per_row_on_every_endpoint"]
+
+[[unit]]
+text = "Anything recorded before the link keeps the id and the variant it was stored with: assignments and events are not moved, rewritten or copied."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_counting.py::test_linked_people_count_per_row_on_every_endpoint",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_the_earliest_assignment_wins_for_both_ids",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_link_racing_the_known_ids_first_assignment",
+]
+
+[[unit]]
+text = "A person assigned under both ids before the link counts once for each of the two assignments in that experiment's results."
+by = ["test:backend/tests/integration/api/test_identity_alias_counting.py::test_linked_people_count_per_row_on_every_endpoint"]
+
+[[unit]]
+text = "Holdout results."
+by = ["exempt:label"]
+
+[[unit]]
+text = "Holdout membership follows the person; holdout results do not: a linked person's conversions count only under the id the holdout first recorded."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_holdout_membership_comes_from_the_persons_first_population_row",
+    "test:backend/tests/integration/api/test_identity_alias_counting.py::test_holdout_results_count_a_linked_person_under_its_recorded_id",
+    "test:backend/tests/integration/api/test_identity_alias_counting.py::test_a_linked_persons_holdout_follows_the_first_recorded_row",
+]
+
+[[unit]]
+text = "Interaction detection, the audience preview and CUPED's history count each id on its own."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_counting.py::test_interaction_detection_counts_ids",
+    "test:backend/tests/integration/api/test_identity_alias_counting.py::test_the_audience_preview_counts_ids",
+    "test:backend/tests/integration/api/test_identity_alias_counting.py::test_cuped_history_is_read_per_id",
+]
+
+[[unit]]
+text = "An event_id is remembered per id as sent: the same event_id sent once under each of two linked ids is stored twice."
+by = ["test:backend/tests/integration/api/test_identity_alias_resolution.py::test_an_event_id_is_stored_once_per_id_as_sent"]
+
+[[unit]]
+text = "Flags are not linked."
+by = ["test:backend/tests/integration/api/test_identity_alias_resolution.py::test_flags_are_not_resolved_through_a_link"]
+
+[[unit]]
+text = "Each id is evaluated on its own, so a flag can answer the two ids differently."
+by = ["test:backend/tests/integration/api/test_identity_alias_resolution.py::test_flags_are_not_resolved_through_a_link"]
+
+[[unit]]
+text = "How events count says how events sent after a link are stored and counted."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Erasing a linked person means erasing the rows of every one of their ids, and their links (How events count)."
+by = [
+    "test:backend/tests/integration/services/test_identity_aliases_service.py::test_every_id_of_a_star_gives_the_whole_person",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_known_ids_conversion_counts_for_its_persons_variant",
+]
+
+[[unit]]
+text = "The rules a link follows"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A link that breaks one of these rules is refused with 409, and nothing is written:"
+by = [
+    "test:backend/tests/unit/api/test_alias_route_contract.py::test_each_refusal_is_its_409",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_an_anonymous_id_linked_to_one_known_id_is_not_moved",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_known_id_takes_100_anonymous_ids_and_not_the_101st",
+]
+
+[[unit]]
+text = "An anonymous id is linked to one known id and is never moved to another."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_an_anonymous_id_linked_to_one_known_id_is_not_moved",
+    "test:backend/tests/integration/services/test_identity_aliases_service.py::test_an_anonymous_id_is_linked_to_one_known_id",
+]
+
+[[unit]]
+text = "Links are one level deep: an id that has anonymous ids linked to it is not itself linked, and nothing is linked to an id linked as an anonymous id."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_known_id_with_links_is_not_itself_linked",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_the_two_ids_swapped_are_refused",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_nothing_is_linked_to_an_id_linked_as_an_anonymous_id",
+]
+
+[[unit]]
+text = "A 409 for this rule often means the two ids were sent the wrong way round."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "A known id has at most 100 anonymous ids; the 101st is refused."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_known_id_takes_100_anonymous_ids_and_not_the_101st",
+    "test:backend/tests/integration/services/test_identity_aliases_service.py::test_a_known_id_takes_100_anonymous_ids_and_not_101",
+]
+
+[[unit]]
+text = "The ids are compared exactly: Customer-1042 and customer-1042 are two ids, and two equal ids are refused with 422."
+by = [
+    "test:backend/tests/unit/api/test_alias_route_contract.py::test_ids_are_compared_exactly",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_two_equal_ids_are_refused",
+]
+
+[[unit]]
+text = "The visitor's id is linked to customer-1042, so linking it to another account is refused:"
+by = [
+    "docex:docs/guides/identity.md#already linked to a different user_id",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_an_anonymous_id_linked_to_one_known_id_is_not_moved",
+]
+
+[[unit]]
+text = "It prints the refusal's detail, which names neither id."
+by = [
+    "docex:docs/guides/identity.md#already linked to a different user_id",
+    "test:backend/tests/unit/api/test_alias_route_contract.py::test_no_conflict_text_has_room_for_an_id",
+]
+
+[[unit]]
+text = "When a link fails"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A 409 means one of the rules above refused the link."
+by = ["test:backend/tests/unit/api/test_alias_route_contract.py::test_each_refusal_is_its_409"]
+
+[[unit]]
+text = "A network error, a 429 or a 500: send the same link again."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Sending it twice is safe."
+by = ["test:backend/tests/integration/api/test_identity_alias_route.py::test_a_link_is_stored_once_and_answered_again_with_created_false"]
+
+[[unit]]
+text = "Until a link is stored, the known id is an id of its own: an assignment made under it in the meantime is stored under it and stays, and the rules above decide which assignment answers once the link is stored."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_link_racing_the_known_ids_first_assignment",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_the_earliest_assignment_wins_for_both_ids",
+]
+
+[[unit]]
+text = "Never link a shared placeholder"
+by = ["exempt:label"]
+
+[[unit]]
+text = "If many visitors share one id, such as an anonymous a page falls back to when it has no cookie, a link from it would make every one of those visitors the person it is linked to."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "So the route refuses exactly anonymous and anon, in either field, with 422:"
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_shared_placeholder_is_refused_in_either_field",
+    "test:backend/tests/unit/api/test_alias_route_contract.py::test_each_placeholder_is_refused_in_each_field",
+    "docex:docs/guides/identity.md#placeholders shared by many",
+]
+
+[[unit]]
+text = "It prints must identify one visitor or customer: 'anonymous' and 'anon' are placeholders shared by many and cannot be linked."
+by = ["docex:docs/guides/identity.md#placeholders shared by many"]
+
+[[unit]]
+text = "Only those two are refused, compared exactly: Anonymous, ANON or anonymous-1 is linked like any other id, and so is any other placeholder your code uses, such as guest."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_only_the_two_exact_placeholders_are_refused",
+    "test:backend/tests/unit/api/test_alias_route_contract.py::test_only_the_exact_placeholders_are_refused",
+]
+
+[[unit]]
+text = "Give each visitor an id of their own instead."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Links have no environment"
+by = ["exempt:label"]
+
+[[unit]]
+text = "One deployment is one environment (Limitations), and a link has no environment of its own: a deployment keeps one set of links, and its tracking routes follow them whichever API key a request carries."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_flags_experiments_and_keys_carry_no_environment",
+    "test:backend/tests/integration/database/test_identity_aliases_migration.py::test_an_upgraded_database_and_a_bootstrapped_one_have_the_same_table",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_link_made_through_the_route_is_the_one_the_tracking_routes_follow",
+]
+
+[[unit]]
+text = "Link the ids your production traffic sends on your production deployment."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "While a 0.47.0 API serves"
+by = ["exempt:label"]
+
+[[unit]]
+text = "During 0.48.0's rolling upgrade, and after an API-only rollback to 0.47.0, an API running 0.47.0 answers 404 on POST /api/v1/tracking/alias and ignores every link: it answers each id with that id's own assignment, and assigns it under that id."
+by = [
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_api_serves_a_database_a_newer_release_migrated",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_alias_route_is_the_one_call_that_links_two_user_ids",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_row_a_release_without_links_wrote_is_answered_by_the_earliest",
+]
+
+[[unit]]
+text = "Send a link answered 404 again once the upgrade is done."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "A linked id with no assignment of its own in an experiment is given one by such an API; once a release that reads links serves again, the person's earlier assignment answers for both ids, and the second one stays and counts in the experiment's results (Rolling back past identity aliasing)."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_row_a_release_without_links_wrote_is_answered_by_the_earliest",
+    "test:backend/tests/integration/api/test_identity_alias_counting.py::test_linked_people_count_per_row_on_every_endpoint",
+]
+
+[[unit]]
+text = "Downgrading the database below t449_identity_aliases drops every link and keeps every assignment and event; an upgrade afterwards starts with no links, and they must be sent again (Migrations)."
+by = [
+    "test:backend/tests/integration/database/test_identity_aliases_migration.py::test_the_downgrade_drops_every_link_and_keeps_assignments_and_events",
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_after_the_newer_release_downgrades_the_database_the_older_one_starts",
+]
