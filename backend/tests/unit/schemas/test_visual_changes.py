@@ -580,7 +580,7 @@ def test_page_rules_give_exact_answers(case_id, rule, host, path, expected):
 
 
 def test_the_page_rule_corpus_has_exactly_these_entries():
-    assert len(PAGE_RULES) == 19
+    assert len(PAGE_RULES) == 20
     assert {expected for *_, expected in PAGE_RULES} == {True, False}
 
 

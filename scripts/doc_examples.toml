@@ -13,7 +13,7 @@
 
 [meta]
 documents = 60
-exec = 347
+exec = 338
 universe = [
     ".github/pull_request_template.md",
     ".github/qa-templates/README.md",
@@ -139,6 +139,7 @@ universe = [
     "docs/sdk/react-native.md",
     "docs/sdk/react.md",
     "docs/sdk/ruby.md",
+    "docs/sdk/visual.md",
     "docs/security/README.md",
     "docs/security/api-keys.md",
     "docs/security/hardening-changes.md",
@@ -178,6 +179,7 @@ universe = [
     "sdk/react-native/README.md",
     "sdk/react/README.md",
     "sdk/ruby/README.md",
+    "sdk/visual/README.md",
     "tests/sdk-contract/README.md",
 ]
 
@@ -318,9 +320,9 @@ expects = 15
 [[document]]
 path = "docs/guides/experiment-wizard.md"
 environment = "stack"
-exec = 12
+exec = 3
 skip = 0
-expects = 22
+expects = 6
 
 [[document]]
 path = "docs/llm-evaluation/quickstart.md"

@@ -25,8 +25,8 @@ import type { LaunchOptions } from "@playwright/test";
  * 1.63's list, and with a default list where both are replaced by another
  * name).
  *
- * Only the `launch` project (playwright.config.ts) uses this today; the other
- * projects keep Playwright's default launch.
+ * The `launch` and `page-runtime` projects (playwright.config.ts) use this;
+ * the other projects keep Playwright's default launch.
  */
 
 // Intent: this is playwright-core 1.64.0's default; V112 fails if a bump changes it.

@@ -451,7 +451,7 @@ reason = "its API steps run on a stack in Doc Examples"
 [pages."guides/experiment-wizard.md"]
 class = "journey"
 journey = "experiment-wizard"
-reason = "the wizard's five steps to a draft, then started; its API steps run in Doc Examples"
+reason = "guided setup's five steps to a draft, then started; its sample-size commands run in Doc Examples"
 
 [pages."api/interaction-detection.md"]
 class = "exec"
@@ -725,7 +725,7 @@ note = "sign-in per role and a password change, a first API key used for an assi
 # above says what each field means.
 # ---------------------------------------------------------------------------
 [meta]
-walked = 164
+walked = 166
 
 # The front door, the policy beside it, and the plan.
 
@@ -805,6 +805,11 @@ reason = "the deployment index and quick reference: the GitHub environments, the
 scope = "in"
 class = "reference"
 reason = "an index of the getting-started pages; no steps to follow"
+
+[documents."docs/sdk/visual.md"]
+scope = "in"
+class = "reference"
+reason = "the visual editor's browser script, not yet available and not in the navigation; its tag and policy are held by the page-runtime browser tests"
 
 [documents."docs/security/README.md"]
 scope = "in"
@@ -991,6 +996,11 @@ reason = "the index of the contributor pages"
 scope = "out"
 out = "contributor"
 reason = "how to develop and build the dashboard from a checkout"
+
+[documents."sdk/visual/README.md"]
+scope = "out"
+out = "contributor"
+reason = "how to build and test the visual experiments' browser script from a checkout; it is not published"
 
 [documents."tests/sdk-contract/README.md"]
 scope = "out"

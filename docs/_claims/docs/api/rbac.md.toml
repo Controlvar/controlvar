@@ -163,7 +163,7 @@ text = "Permission | What a custom role or direct grant of it allows"
 by = ["exempt:label"]
 
 [[unit]]
-text = "experiment (create) | Create and clone experiments, including through the experiment wizard and LLM experiments. Also: read the global holdout, and manage exclusion groups (list, create, view, change other than their status, add and remove experiments). Create segments."
+text = "experiment (create) | Create and clone experiments, including through LLM experiments. Also: read the global holdout, and manage exclusion groups (list, create, view, change other than their status, add and remove experiments). Create segments."
 by = [
     "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
     "test:backend/tests/integration/api/test_eligibility_read_roles.py",

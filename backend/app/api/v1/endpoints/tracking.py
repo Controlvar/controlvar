@@ -56,6 +56,7 @@ from backend.app.services.assignment_service import (
 )
 from backend.app.services.bandit_routing import bandit_chooser
 from backend.app.services.event_service import EventService
+from backend.app.services.identity_aliases import holder_of, person_of
 
 # Create router
 router = APIRouter(route_class=OffLoopRoute)
@@ -151,11 +152,47 @@ def _variant_at_receipt(db: Session, experiment: Experiment, user_id: str) -> An
     return assignment.variant_id if assignment else None
 
 
+def _holder_at_receipt(
+    db: Session,
+    experiment_id: Any,
+    presented: str,
+    experiment: Optional[Experiment] = None,
+) -> tuple[str, Any]:
+    """``(user id, variant)`` an event that names an experiment is stored with,
+    when it was sent as *presented* (#449).
+
+    An id never linked: itself, after one read of ``identity_aliases``. A
+    linked id: the person's holder in the experiment
+    (``identity_aliases.holder_of``, whatever the experiment's status). So a
+    conversion sent under a known id after its anonymous id was assigned is
+    stored under the assigned id and counts for it, with no change to any
+    analysis path.
+
+    With *experiment* (``/track`` and ``/batch``), the variant is the one the
+    event is tagged with: :func:`_variant_at_receipt`'s for an id never
+    linked, exactly as before; for a linked id, the holder's stored variant
+    while the experiment is ACTIVE. Without it (``/events``, which keeps the
+    variant it was given), the variant is None.
+    """
+    person = person_of(db, presented)
+    if not person.linked:
+        if experiment is None:
+            return presented, None
+        return presented, _variant_at_receipt(db, experiment, presented)
+    holder, row = holder_of(db, person, experiment_id)
+    if experiment is None or row is None:
+        return holder, None
+    if experiment.status != ExperimentStatus.ACTIVE:
+        return holder, None
+    return holder, row.variant_id
+
+
 def _event_response(
     event: Event,
     *,
     event_id: Optional[str],
     stored_id: Any = None,
+    user_id: Optional[str] = None,
 ) -> EventResponse:
     """Build the public response model from an Event.
 
@@ -164,13 +201,15 @@ def _event_response(
     stored, and ``stored_id`` is the id of the event already stored with the
     same key: the answer's ``id`` is that one, and every other field comes
     from this request or this request's time, never from the stored row.
+    ``user_id`` is the id the request sent, when the event is stored under
+    the holder of a linked id (#449): the answer echoes what was sent.
     """
     duplicate = stored_id is not None
     return EventResponse(
         id=str(stored_id if duplicate else event.id),
         event_type=event.event_type,
         event_name=event.event_name or event.event_type,
-        user_id=event.user_id,
+        user_id=user_id if user_id is not None else event.user_id,
         experiment_id=str(event.experiment_id) if event.experiment_id else None,
         feature_flag_id=str(event.feature_flag_id) if event.feature_flag_id else None,
         variant_id=str(event.variant_id) if event.variant_id else None,
@@ -191,6 +230,7 @@ def _store_once(
     *,
     route: str,
     allow_untagged: bool,
+    claim_user_id: Optional[str],
 ) -> tuple[Event, Any]:
     """Store one event unless its ``event_id`` was already stored (#1543).
 
@@ -198,9 +238,19 @@ def _store_once(
     duplicate, the event this request built (never stored) and the id of the
     event already stored. Counts the event in ``events_tracked_total`` only
     when a row was written, and a duplicate in ``events_duplicate_total``.
+    ``claim_user_id`` is the id the request sent: an event is stored once per
+    user id as sent, also when it is stored under a linked id's holder
+    (#449), so a retry that straddles a link is still one event. It is passed
+    on only when it differs from the event's user, so an id never linked is
+    stored as before.
     """
+    claim = (
+        {"claim_user_id": claim_user_id}
+        if claim_user_id is not None and claim_user_id != event_data.user_id
+        else {}
+    )
     stored_id, created, event = EventService(db).track_event_once(
-        event_data, event_id, allow_untagged=allow_untagged
+        event_data, event_id, allow_untagged=allow_untagged, **claim
     )
     if created:
         record_event_tracked(str(event_data.event_type))
@@ -716,6 +766,7 @@ async def track_event(
     # Find experiment ID if specified
     experiment_id = None
     variant_id = None
+    stored_user_id = request.user_id
     if request.experiment_key:
         experiment = (
             db.query(Experiment)
@@ -726,7 +777,9 @@ async def track_event(
 
         if experiment:
             experiment_id = experiment.id
-            variant_id = _variant_at_receipt(db, experiment, request.user_id)
+            stored_user_id, variant_id = _holder_at_receipt(
+                db, experiment.id, request.user_id, experiment
+            )
 
     # Find feature flag ID if specified
     feature_flag_id = None
@@ -755,7 +808,7 @@ async def track_event(
     try:
         # Create event data
         event_data = _event_model(experiment_id, feature_flag_id)(
-            user_id=request.user_id,
+            user_id=stored_user_id,
             event_type=request.event_type,
             event_name=request.event_name or request.event_type,
             experiment_id=str(experiment_id) if experiment_id else None,
@@ -767,11 +820,21 @@ async def track_event(
             event_id=request.event_id,
         )
 
-        # Track the event, once per event_id (#1543)
+        # Track the event, once per event_id (#1543) and id as sent
         event, stored_id = _store_once(
-            db, event_data, request.event_id, route="track", allow_untagged=True
+            db,
+            event_data,
+            request.event_id,
+            route="track",
+            allow_untagged=True,
+            claim_user_id=request.user_id,
         )
-        return _event_response(event, event_id=request.event_id, stored_id=stored_id)
+        return _event_response(
+            event,
+            event_id=request.event_id,
+            stored_id=stored_id,
+            user_id=request.user_id,
+        )
     except ValidationError as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -829,16 +892,30 @@ async def track_event_by_ids(
         # Raises ValueError for an id that is not a UUID, as track_event does.
         unknown = service.unknown_id_fields(event_data)
         if not unknown:
-            # Once per event_id (#1543), with the rule /track and /batch use.
+            # An event that names an experiment is stored under the holder of
+            # a linked id, with the variant it was given (#449).
+            presented = event_data.user_id
+            stored = event_data
+            if event_data.experiment_id and presented is not None:
+                holder, _ = _holder_at_receipt(
+                    db, uuid.UUID(str(event_data.experiment_id)), presented
+                )
+                if holder != presented:
+                    stored = event_data.model_copy(update={"user_id": holder})
+            # Once per event_id (#1543) and id as sent, as /track and /batch.
             event, stored_id = _store_once(
                 db,
-                event_data,
+                stored,
                 event_data.event_id,
                 route="events",
                 allow_untagged=False,
+                claim_user_id=presented,
             )
             return _event_response(
-                event, event_id=event_data.event_id, stored_id=stored_id
+                event,
+                event_id=event_data.event_id,
+                stored_id=stored_id,
+                user_id=presented,
             )
     except ValidationError as e:
         raise HTTPException(
@@ -943,6 +1020,7 @@ async def track_events_batch(
             # Find experiment ID if specified
             experiment_id = None
             variant_id = None
+            stored_user_id = event_request.user_id
             if event_request.experiment_key:
                 experiment = (
                     db.query(Experiment)
@@ -953,8 +1031,8 @@ async def track_events_batch(
 
                 if experiment:
                     experiment_id = experiment.id
-                    variant_id = _variant_at_receipt(
-                        db, experiment, event_request.user_id
+                    stored_user_id, variant_id = _holder_at_receipt(
+                        db, experiment.id, event_request.user_id, experiment
                     )
 
             # Find feature flag ID if specified
@@ -991,7 +1069,7 @@ async def track_events_batch(
 
             # Create event data
             event_data = _event_model(experiment_id, feature_flag_id)(
-                user_id=event_request.user_id,
+                user_id=stored_user_id,
                 event_type=event_request.event_type,
                 event_name=event_request.event_name or event_request.event_type,
                 experiment_id=str(experiment_id) if experiment_id else None,
@@ -1003,14 +1081,16 @@ async def track_events_batch(
                 event_id=event_request.event_id,
             )
 
-            # Track the event, once per event_id (#1543). Items commit one at
-            # a time, so a repeat later in this batch finds the earlier one.
+            # Track the event, once per event_id (#1543) and id as sent.
+            # Items commit one at a time, so a repeat later in this batch
+            # finds the earlier one.
             _, stored_id = _store_once(
                 db,
                 event_data,
                 event_request.event_id,
                 route="batch",
                 allow_untagged=True,
+                claim_user_id=event_request.user_id,
             )
             success_count += 1
             if stored_id is not None:
@@ -1091,6 +1171,15 @@ async def get_user_assignments(
     """
     # Create assignment service
     assignment_service = AssignmentService(db)
+
+    # A linked id answers with its person's assignments, one per experiment
+    # by the holder rule, each under the id that was sent (#449). An id never
+    # linked is answered exactly as before.
+    person = person_of(db, user_id)
+    if person.linked:
+        return assignment_service.get_person_assignments(
+            person, user_id, active_only=active_only
+        )
 
     # Get user assignments
     assignments = assignment_service.get_user_assignments(
