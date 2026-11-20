@@ -8,11 +8,13 @@ Flag evaluation and experiment assignment are decided **by the server**: every c
 public API with your `X-API-Key`, the server buckets the user (sticky per user + experiment), and
 the SDK caches the answer per user + key for a TTL. Nothing is bucketed on device.
 
-> **Flag evaluation sends only the user id.** `GET /api/v1/feature-flags/evaluate/{key}?user_id=…`
-> carries none of the user's attributes, so the server evaluates a flag's targeting rules against
-> an empty context. Experiment assignment sends them: `getAssignment`, with `user.attributes`, sends the attributes as
-> `context`. To evaluate a flag with attributes, call the evaluate endpoint with a `context`
-> query parameter (a URL-encoded JSON object of the attributes).
+> **Flag evaluation sends the user's attributes.** `evaluateFlag(_:user:)` sends `user.attributes`
+> as `context` on `GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=<URL-encoded JSON object>`,
+> so the flag's targeting rules are evaluated against them. With no attributes, or an empty map,
+> no `context` is sent and the request carries the user id alone. The change is in this
+> repository ([#438](https://github.com/Controlvar/controlvar/issues/438)); it reaches a registry
+> at this SDK's first publish, so a build from a clone of `main` has it and a copy installed
+> earlier does not.
 
 Source: `sdk/ios`. A SwiftUI demo lives in `sdk/ios/Examples/SwiftUIExample/ExampleApp.swift`.
 
@@ -48,7 +50,7 @@ let client = ExperimentationClient(config: SdkConfig(
     baseURL: "http://localhost:8000",             // origin only; the SDK appends /api/v1/...
     apiKey: Secrets.controlvarApiKey            // sent as X-API-Key
 ))
-let user = User(id: "user-123", attributes: ["plan": "pro"])   // attributes = assignment context
+let user = User(id: "user-123", attributes: ["plan": "pro"])   // sent as context on assignment and flag evaluation
 
 // 1. Assignment — POST /api/v1/tracking/assign (sticky, records the exposure)
 var headline = "Buy now"
@@ -61,7 +63,7 @@ do {
     // network / server error and nothing cached: keep control
 }
 
-// 2. Feature flag — GET /api/v1/feature-flags/evaluate/new_search?user_id=user-123
+// 2. Feature flag — GET /api/v1/feature-flags/evaluate/new_search?user_id=user-123&context=%7B%22plan%22%3A%22pro%22%7D
 let flag = try? await client.evaluateFlag("new_search", user: user)
 if flag?.enabled == true { /* ... */ }
 
@@ -112,7 +114,7 @@ let client = ExperimentationClient(config: config, session: .shared, offlineStor
 
 | Method | Endpoint | Returns | On failure |
 |---|---|---|---|
-| `evaluateFlag(_ flagKey: String, user: User) async throws` | `GET /feature-flags/evaluate/{key}?user_id=` | `EvalResult` | throws `ExperimentationError` (see below) |
+| `evaluateFlag(_ flagKey: String, user: User) async throws` | `GET /feature-flags/evaluate/{key}?user_id=…&context=…` | `EvalResult` | throws `ExperimentationError` (see below) |
 | `getAssignment(_ experimentKey: String, user: User) async throws` | `POST /tracking/assign` | `Assignment` | throws `ExperimentationError` |
 | `track(_ event: TrackEvent) async throws` | `/tracking/track` or `/tracking/batch` | `Void` | **never throws**; `throws` kept for source compatibility |
 | `trackWithStatus(_ event: TrackEvent) async` | same | `Bool` | `false` on any failed request |
@@ -129,7 +131,7 @@ let client = ExperimentationClient(config: config, session: .shared, offlineStor
 
 | Type | Members |
 |---|---|
-| `User(id:attributes:)` | `id: String`, `attributes: [String: AnyCodable]?` — sent as `context` on assignment |
+| `User(id:attributes:)` | `id: String`, `attributes: [String: AnyCodable]?` — `attributes` is sent as `context` on assignment and on flag evaluation |
 | `EvalResult` | `key: String`, `enabled: Bool`, `config: [String: Any]?` (`nil` when the server returned `null` or a non-object) |
 | `Assignment` | `experimentKey: String`, `userId: String`, `variantId: String?` (UUID), `variantName: String` (`"control"`, `"treatment"`, …), `isControl: Bool`, `configuration: [String: Any]?`; `variantKey` is a deprecated alias of `variantName` |
 | `TrackEvent(userId:eventName:properties:experimentKey:featureFlagKey:value:eventType:timestamp:)` | `properties` → `metadata`; `eventType` defaults to `eventName`; `value: Double?`; `timestamp: Date?` → ISO-8601 (server-stamped when nil); `hasKey`, `attributed(experimentKey:featureFlagKey:)` |
@@ -140,17 +142,27 @@ let client = ExperimentationClient(config: config, session: .shared, offlineStor
 ## Caching and failure behaviour
 
 - Successful results are cached in memory per **user + key** (`UserKeyCache`, NSCache-backed,
-  TTL `cacheTTL`); a hit makes no request. Concurrent calls for the same user + key share one
-  in-flight request, so mounting several views on the same experiment yields one assignment
-  (and one exposure). **Failures are never cached** — the next call retries.
+  TTL `cacheTTL`); a hit makes no request. Concurrent calls for the same user + key (for a
+  flag, with the same attributes) share one in-flight request, so mounting several views on
+  the same experiment yields one assignment (and one exposure). **Failures are never cached**
+  — the next call retries.
+- The SDK keeps one cached answer per user and flag, together with the attributes it was asked
+  with. A later call is answered from the cache only if its attributes are exactly the same;
+  otherwise the SDK asks the server, and the new answer replaces the cached one. So two calls
+  that differ only in attributes get two answers. The attributes are written with their keys
+  sorted, so the same attributes always find the same cached answer.
 - With `enableOfflineFallback` (default) every successful result is also written to
-  `UserDefaults`; those entries have no TTL and survive relaunches.
+  `UserDefaults`; those entries have no TTL and survive relaunches. The SDK stores the last
+  answer the server gave for each user and flag, whatever attributes it was asked with, and
+  serves it only when the server cannot answer (below).
 - **HTTP 404** (an unknown experiment or flag key, or a draft experiment with no control variant): throws
   `.flagNotFound(key)` / `.experimentNotFound(key)`, removes the persisted entry and never serves a stale
   value. An experiment that is not ACTIVE is not an error: it answers its control variant.
 - **Network error, timeout, 401, 422, 429, 5xx, undecodable body**: returns the persisted value
   for that user + key when offline fallback is on and one exists; otherwise throws
   `.networkError`, `.serverError(status, body)`, `.decodingError` or `.cancelled`.
+- If the attributes cannot be written as JSON (a `Date`, say, or a NaN), `evaluateFlag` throws
+  `invalidConfig` ("user.attributes cannot be sent as JSON") and sends nothing.
 - `track`, `trackWithStatus`, `trackBatch` never throw.
 - The client is safe to use from any thread or task: caches and the in-flight table are
   `NSLock`-protected and the lock is never held across a suspension point.
@@ -215,7 +227,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
-| `evaluateFlag` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
+| `evaluateFlag` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=…` | `context`: the user's attributes as JSON, left out when there are none | `{key, enabled, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
 | `getAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
 | `track` without keys, `trackBatch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored |
