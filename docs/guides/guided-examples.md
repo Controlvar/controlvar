@@ -188,9 +188,10 @@ You will see "Free shipping on every order this week — no minimum." again.
 StreamPulse draws a phone in a web page with the React SDK, a web SDK that sends the device's
 attributes with every flag evaluation. The flag `streampulse_ai_search` is on for
 `os = iOS`, `os_version ≥ 17.0.0`, `region = US` and `tier = premium`, and its own rollout is
-0%. The native iOS, Android and Flutter SDKs do not send attributes on flag
+0%. The native Android and Flutter SDKs do not send attributes on flag
 evaluation yet ([#438](https://github.com/Controlvar/controlvar/issues/438)), so a rule like
-this one would not match from them. The React Native SDK sends them, as the React SDK does.
+this one would not match from them; the iOS SDK sends them. The React Native SDK sends them, as
+the React SDK does.
 
 ### 1. Open StreamPulse {#device-open}
 

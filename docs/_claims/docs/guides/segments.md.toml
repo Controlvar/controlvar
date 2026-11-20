@@ -310,6 +310,10 @@ text = "See Results for one saved segment."
 by = ["exempt:navigation"]
 
 [[unit]]
+text = "On the results page, Show results for does the same."
+by = ["test:frontend/src/tests/pages/results-saved-segment.test.tsx::F2, F8: choosing a segment makes one call, with the stored settings, and nothing else is fetched"]
+
+[[unit]]
 text = "Archive a segment"
 by = ["exempt:baseline"]
 

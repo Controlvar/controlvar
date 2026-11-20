@@ -111,3 +111,79 @@ export function SrmNotice({ srm, metrics }: SrmNoticeProps) {
     </section>
   );
 }
+
+/** What a sample ratio notice says about whose split it checked (#1933). */
+export interface SrmWording {
+  /** The line when the check passed; `p` is the formatted p-value. */
+  passed: (p: React.ReactNode) => React.ReactNode;
+  heading: string;
+  body: string;
+  /** Said when there is no check; nothing when absent. */
+  missing?: string;
+  /** Prefix of the test ids and of the heading's id. */
+  idPrefix: string;
+}
+
+/**
+ * The same notice, worded for one population: all users, or a saved segment's
+ * users (#1933). The plain `SrmNotice` is unchanged for the page without a
+ * segment.
+ */
+export function WordedSrmNotice({
+  srm,
+  metrics,
+  wording,
+}: SrmNoticeProps & { wording: SrmWording }) {
+  const prefix = wording.idPrefix;
+  if (!srm) {
+    return wording.missing ? (
+      <p className="text-sm text-slate-600" data-testid={`${prefix}-check-missing`}>
+        {wording.missing}
+      </p>
+    ) : null;
+  }
+
+  if (!srm.warning) {
+    return (
+      <p className="text-sm text-slate-600" data-testid={`${prefix}-check-passed`}>
+        {wording.passed(<span data-testid={`${prefix}-p`}>{formatSrmP(srm.p_value)}</span>)}
+      </p>
+    );
+  }
+
+  const ids = orderedIds(srm, metrics);
+  return (
+    <section
+      aria-labelledby={`${prefix}-notice-heading`}
+      data-testid={`${prefix}-notice`}
+      className="rounded-lg border border-amber-400 bg-amber-50 p-4 space-y-2"
+    >
+      <h3 id={`${prefix}-notice-heading`} className="text-sm font-semibold text-amber-900">
+        <span aria-hidden="true">⚠ </span>
+        {wording.heading}
+      </h3>
+      <ul className="text-sm text-amber-900" data-testid={`${prefix}-counts`}>
+        {ids.map((id) => (
+          <li key={id} data-testid={`${prefix}-count`}>
+            {variantName(id, metrics)}: {formatCount(srm.observed[id])} users (expected{' '}
+            {formatCount(srm.expected[id])})
+          </li>
+        ))}
+      </ul>
+      <p className="text-sm text-amber-900">
+        Chi-square {isFiniteNumber(srm.chi2) ? srm.chi2.toFixed(1) : '—'},{' '}
+        <span data-testid={`${prefix}-p`}>{formatSrmP(srm.p_value)}</span>.
+      </p>
+      <p className="text-sm text-amber-900">{wording.body}</p>
+      <a
+        href={docsUrl('guides/user-guide', 'sample-ratio-check')}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-sm text-amber-900 underline"
+        data-testid={`${prefix}-docs-link`}
+      >
+        What a sample ratio mismatch is
+      </a>
+    </section>
+  );
+}

@@ -7,10 +7,14 @@ import Foundation
 private final class CacheBox<T> {
     let value: T
     let expiresAt: Date
+    /// What the value was answered for: in ``UserKeyCache``, the exact `context` a flag
+    /// evaluation sent (`""` for none). ``Cache`` leaves it empty.
+    let context: String
 
-    init(_ value: T, expiresAt: Date) {
+    init(_ value: T, expiresAt: Date, context: String = "") {
         self.value = value
         self.expiresAt = expiresAt
+        self.context = context
     }
 
     var isExpired: Bool { Date() > expiresAt }
@@ -78,6 +82,11 @@ public final class Cache<Key: AnyObject, Value: AnyObject> {
 /// Used by ``ExperimentationClient`` for flag evaluations and experiment assignments. Only
 /// successful results are ever stored. Unlike a bare NSCache it can enumerate the live entries
 /// of one user (needed for the track fan-out), via a small per-user key index.
+///
+/// Each user + key has one entry. It can remember a `context`, the attributes it was answered
+/// for: a flag evaluation stores the exact `context` it sent and reads only an entry stored
+/// with the same one, so a call with other attributes asks the server, and its answer replaces
+/// the entry. The listing (``entries(userId:)``) is unchanged: still one entry per key.
 public final class UserKeyCache<Value> {
     private let store = NSCache<NSString, CacheBox<Value>>()
     /// userId → keys in insertion order. Entries evicted by NSCache are dropped lazily.
@@ -94,7 +103,11 @@ public final class UserKeyCache<Value> {
     }
 
     /// Returns the cached value for the user + key, or `nil` if absent or expired.
-    public func get(userId: String, key: String) -> Value? {
+    ///
+    /// - Parameter context: when given, the entry must also have been stored with exactly this
+    ///   `context`; otherwise the result is `nil` and the entry is kept (a new answer replaces
+    ///   it). `nil` means no check, which is what assignments use.
+    public func get(userId: String, key: String, context: String? = nil) -> Value? {
         lock.lock()
         defer { lock.unlock() }
         let storageKey = Self.storageKey(userId, key)
@@ -107,14 +120,18 @@ public final class UserKeyCache<Value> {
             dropFromIndex(userId, key)
             return nil
         }
+        if let context = context, box.context != context {
+            return nil
+        }
         return box.value
     }
 
-    /// Stores `value` for the user + key with a TTL expiry.
-    public func set(userId: String, key: String, value: Value) {
+    /// Stores `value` for the user + key with a TTL expiry, replacing any entry, together with
+    /// the `context` it was answered for (`""` for none).
+    public func set(userId: String, key: String, value: Value, context: String = "") {
         lock.lock()
         defer { lock.unlock() }
-        let box = CacheBox(value, expiresAt: Date().addingTimeInterval(ttl))
+        let box = CacheBox(value, expiresAt: Date().addingTimeInterval(ttl), context: context)
         store.setObject(box, forKey: Self.storageKey(userId, key))
         var keys = index[userId] ?? []
         if !keys.contains(key) {

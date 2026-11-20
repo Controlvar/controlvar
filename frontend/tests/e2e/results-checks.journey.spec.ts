@@ -321,4 +321,94 @@ test.describe("Journey: results checks", () => {
     expect(reached.impactWithInterval, JSON.stringify(reached)).toBeGreaterThan(0);
     expect(scanned, "a results page with an impact was scanned with axe").toBe(true);
   });
+
+  // #1933: the page with one saved segment chosen. Its own test, not a step
+  // in the loop above (that loop has its 180 s budget). The list is created
+  // here under a stamped name (the seed has no segment, and an earlier
+  // journey leaves an archived list behind), chosen by name, and the page is
+  // compared with the segment route's own answer.
+  test("the results page shows one saved segment's users, as the segment route counts them", async ({
+    adminPage,
+  }) => {
+    test.setTimeout(120_000);
+    await adminPage.goto("/experiments");
+    const token = (await adminPage.evaluate((key) => window.localStorage.getItem(key), TOKEN_STORAGE_KEY)) as string;
+    expect(token, "the admin session has a token").toBeTruthy();
+    const auth = { Authorization: `Bearer ${token}` };
+    const stamp = Date.now();
+
+    const list = await api<{ items: ExperimentRow[] }>(adminPage, token, "/api/v1/experiments/?limit=100");
+    const experiment = list.items.find((e) => e.key === "checkout_button_color");
+    expect(experiment, "the seed's checkout_button_color experiment").toBeTruthy();
+    const experimentId = (experiment as ExperimentRow).id;
+
+    // Four users assigned through the API, so the test does not depend on
+    // which ids the seed used.
+    const keyResponse = await adminPage.request.post(`${API_URL}/api/v1/api-keys`, {
+      headers: auth,
+      data: { name: `E2E segment results ${stamp}` },
+    });
+    expect(keyResponse.status(), "POST /api/v1/api-keys").toBe(201);
+    const apiKey = ((await keyResponse.json()) as { key: string }).key;
+    const users = [1, 2, 3, 4].map((i) => `e2e-seg-${stamp}-${i}`);
+    for (const user of users) {
+      const assigned = await adminPage.request.post(`${API_URL}/api/v1/tracking/assign`, {
+        headers: { "X-API-Key": apiKey },
+        data: { experiment_key: "checkout_button_color", user_id: user },
+      });
+      expect(assigned.status(), `assign ${user}`).toBe(200);
+    }
+
+    const name = `E2E results list ${stamp}`;
+    const created = await adminPage.request.post(`${API_URL}/api/v1/segments`, {
+      headers: auth,
+      data: { name, kind: "id_list" },
+    });
+    expect(created.status(), "POST /api/v1/segments").toBe(201);
+    const segmentId = ((await created.json()) as { id: string }).id;
+    const added = await adminPage.request.post(`${API_URL}/api/v1/segments/${segmentId}/members`, {
+      headers: auth,
+      data: { add: users },
+    });
+    expect(added.status(), "POST members").toBe(200);
+
+    const body = await api<{
+      summary: { total_users: number };
+      srm: SrmBlock | null;
+      segment: { member_count: number };
+    }>(adminPage, token, `/api/v1/results/${experimentId}/segments/${segmentId}`);
+    expect(body.segment.member_count).toBe(4);
+    const n = body.summary.total_users;
+
+    await adminPage.goto(`/results/${experimentId}`);
+    await expect(adminPage.getByTestId("results-dashboard")).toBeVisible({ timeout: 20_000 });
+    const picker = adminPage.getByRole("combobox", { name: "Show results for" });
+    // The list loads when the picker is about to be used.
+    await picker.hover();
+    await picker.selectOption({ label: name });
+    await expect(adminPage.getByTestId("segment-status")).toHaveText(
+      `Showing results for ${name}: ${n} ${n === 1 ? "user" : "users"}.`,
+      { timeout: 30_000 },
+    );
+    await expect(adminPage.getByTestId("segment-banner")).toContainText(`Exploratory: ${name} only`);
+    if (body.srm === null) {
+      await expect(adminPage.getByTestId("segment-srm-check-missing")).toBeVisible();
+    } else if (!body.srm.warning) {
+      await expect(adminPage.getByTestId("segment-srm-check-passed")).toContainText(
+        `passed for its ${n} users`,
+      );
+      await expect(adminPage.getByTestId("segment-srm-check-passed")).toContainText(`(${expectedP(body.srm.p_value)})`);
+    } else {
+      await expect(adminPage.getByTestId("segment-srm-notice").getByTestId("segment-srm-p")).toHaveText(
+        expectedP(body.srm.p_value),
+      );
+    }
+
+    const scan = await new AxeBuilder({ page: adminPage }).withTags(["wcag2a", "wcag2aa"]).analyze();
+    const severe = scan.violations.filter((v) => v.impact === "critical" || v.impact === "serious");
+    expect(
+      severe.map((v) => `[${v.impact}] ${v.id}: ${v.nodes.length} node(s)`),
+      `axe on /results/${experimentId} with ${name} chosen`,
+    ).toEqual([]);
+  });
 });

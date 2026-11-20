@@ -1,3 +1,8 @@
+---
+title: Creating Feature Flags, targeting and rollout steps
+description: "Create a feature flag, add targeting rules, turn it on for 10% of users and evaluate it, in the dashboard and with the REST API, step by step."
+---
+
 # Creating Feature Flags
 
 This guide creates a flag, adds targeting rules, turns it on for 10% of users and
