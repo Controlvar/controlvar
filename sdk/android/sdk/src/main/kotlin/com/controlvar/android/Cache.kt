@@ -9,7 +9,12 @@ import kotlin.concurrent.write
  */
 data class CacheEntry<T>(
     val value: T,
-    val expiresAt: Long  // System.currentTimeMillis() epoch ms
+    val expiresAt: Long,  // System.currentTimeMillis() epoch ms
+    /**
+     * What the value was answered for: for a flag evaluation, the exact `context` the request
+     * sent (`""` when it sent none). Assignments leave it empty and never check it.
+     */
+    val context: String = ""
 ) {
     val isExpired: Boolean get() = System.currentTimeMillis() > expiresAt
 }
@@ -36,13 +41,22 @@ class ResultCache<T>(
     }
 
     /**
-     * Retrieves a value from the cache.
+     * Retrieves a value from the cache, whatever context it was stored with.
      * Returns null if the key is absent or the entry has expired.
      */
-    fun get(key: String): T? = lock.write {
+    fun get(key: String): T? = get(key, null)
+
+    /**
+     * Retrieves a value from the cache, as [get] does, but only one stored with exactly
+     * [context]; for another context the result is null and the entry is kept (the new
+     * answer replaces it). A `null` [context] means no check.
+     */
+    fun get(key: String, context: String?): T? = lock.write {
         val entry = store[key] ?: return null
         if (entry.isExpired) {
             store.remove(key)
+            null
+        } else if (context != null && entry.context != context) {
             null
         } else {
             entry.value
@@ -50,10 +64,16 @@ class ResultCache<T>(
     }
 
     /**
-     * Stores a value in the cache with the configured TTL.
+     * Stores a value in the cache with the configured TTL, with no context (`""`).
      */
-    fun set(key: String, value: T) = lock.write {
-        store[key] = CacheEntry(value, System.currentTimeMillis() + ttlMs)
+    fun set(key: String, value: T) = set(key, value, "")
+
+    /**
+     * Stores a value in the cache with the configured TTL, replacing any entry for [key],
+     * together with the [context] it was answered for (`""` for none).
+     */
+    fun set(key: String, value: T, context: String) = lock.write {
+        store[key] = CacheEntry(value, System.currentTimeMillis() + ttlMs, context)
     }
 
     /**

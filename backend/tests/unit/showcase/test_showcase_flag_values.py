@@ -248,14 +248,17 @@ def test_no_line_of_video_10_reads_like_a_kept_value():
 
 def test_three_sentences_are_other_videos_word_for_word_and_keep_their_clips():
     """The dry run's 3 cached clips: each the same sentence (so the same key)
-    as an earlier video's; the other 12 sentences are new clips."""
+    as an earlier video's; the other 12 sentences are new clips. Only the
+    videos numbered before this one count: a later video that says one of
+    this one's sentences shares its clip (video 12 does), and that clip was
+    not in the cache when this one was voiced."""
     keys = {
         text: contract.clip_key("Ruth", contract.polly_text(text))
         for _s, _b, _l, text in storyboard.narration_lines(board())
     }
     elsewhere = set()
     for slug, relative in config.VIDEOS.items():
-        if slug == SLUG:
+        if int(slug[:2]) >= int(SLUG[:2]):
             continue
         other = storyboard.load(SHOWCASE / relative)
         elsewhere |= {

@@ -16,6 +16,17 @@ Video 10 (#1512) has the same: every sentence it says has a row of
 ``CLAIMS_10``, and its card's note says what docs/sdk/go.md says about
 installing the Go SDK. Its other checks are in test_showcase_flag_values.py;
 these are here because they read docs/, so they run on a docs-only change too.
+
+Video 11 (#1889) too: ``CLAIMS_11``, each sentence held to the flag list's
+own words in frontend/src and to docs/feature-flags/stale-flags.md, whose
+reasons table is the one the board's end state is derived from. Its other
+checks are in test_showcase_stale_flags.py.
+
+Video 12 (#1890) has ``CLAIMS_12``, one row per sentence, quoting the merged
+dashboard copy and docs/guides/balance-within-groups.md; its card quotes that
+guide's "Assign users" block (``test_every_code_card_quotes_its_page_of_the_docs``),
+and the key typed on camera is the block's. Its other checks are in
+test_showcase_balance_within.py.
 """
 
 from __future__ import annotations
@@ -946,3 +957,647 @@ def test_an_untagged_go_module_makes_the_note_false():
     )
     assert page != read_page(GO)
     assert squeezed(GO_INSTALL[1]) not in squeezed(page)
+
+
+# ---------------------------------------------------------------------------
+# Video 11: CLAIMS_11
+# ---------------------------------------------------------------------------
+
+STALE_SLUG = "11-stale-flags"
+STALE_DOC = "docs/feature-flags/stale-flags.md"
+CAPABILITIES = "docs/capabilities.md"
+QUICK_START = "docs/getting-started/quick-start.md"
+FLAG_LIST = "pages/feature-flags/index.tsx"
+FL = "flags"
+#: The list draws N as the API's stale_days, never a constant of its own.
+N_FROM_THE_API = Drawn("copy", "setStaleDays(data.stale_days);", FLAG_LIST)
+
+CLAIMS_11: Dict[str, Claim] = {
+    "The flag list marks flags that look ready to remove.": Claim(
+        FL,
+        1,
+        (
+            Drawn("testid", "flags-table"),
+            Drawn("copy", 'data-testid="flag-stale-pill"', FLAG_LIST),
+            Drawn("copy", "{flag.stale === true && (", FLAG_LIST),
+        ),
+        (
+            (
+                CAPABILITIES,
+                "the flag list marks a flag that looks ready to remove, and says why",
+            ),
+        ),
+    ),
+    "A flag must be at least 30 days old to be stale.": Claim(
+        FL,
+        1,
+        (Drawn("testid", "flags-table"), N_FROM_THE_API),
+        (
+            (STALE_DOC, "A flag is stale when it was created at least N days ago"),
+            (STALE_DOC, "N is 30 days by default"),
+        ),
+    ),
+    "The demo's own flags are new, so they are not stale.": Claim(
+        FL,
+        1,
+        (Drawn("testid", "flags-table"), Drawn("testid", "flag-row")),
+        (
+            (QUICK_START, "applies the `demo` seed (three experiments, two flags)"),
+            (STALE_DOC, "A flag is stale when it was created at least N days ago"),
+        ),
+    ),
+    "Each stale flag says why, under its Stale pill.": Claim(
+        FL,
+        1,
+        (
+            Drawn("copy", 'data-testid="flag-stale-reasons"', FLAG_LIST),
+            Drawn("copy", "staleReasonText(reason, staleDays)", FLAG_LIST),
+        ),
+        ((STALE_DOC, "The flag list marks such a flag as stale and says why."),),
+    ),
+    "Legacy signup form is on for everyone, unchanged for 30 days.": Claim(
+        FL,
+        2,
+        (
+            Drawn("testid", "flag-stale-reasons"),
+            Drawn("cue", "on for everyone, unchanged for 30 days"),
+            Drawn(
+                "copy", "return `On for everyone, unchanged for ${n} days`;", FLAG_LIST
+            ),
+            N_FROM_THE_API,
+        ),
+        (
+            (
+                STALE_DOC,
+                "| `on_for_everyone` | The flag is on at 100% with no targeting rules,"
+                " and unchanged for N days. |",
+            ),
+        ),
+    ),
+    "Everyone gets one answer, so it's usually ready to come out.": Claim(
+        FL,
+        2,
+        (Drawn("testid", "flag-row"),),
+        (
+            (
+                STALE_DOC,
+                "A flag that has served everyone the same answer for weeks, or that"
+                " nothing has asked about, is usually ready to come out of your code.",
+            ),
+        ),
+    ),
+    "Holiday banner is off for everyone, unchanged for 30 days.": Claim(
+        FL,
+        3,
+        (
+            Drawn("testid", "flag-stale-reasons"),
+            Drawn("cue", "left unchanged"),
+            Drawn(
+                "copy", "return `Off for everyone, unchanged for ${n} days`;", FLAG_LIST
+            ),
+            N_FROM_THE_API,
+        ),
+        (
+            (
+                STALE_DOC,
+                "| `off_for_everyone` | The flag is off, or on at 0% with no targeting"
+                " rules, and unchanged for N days. |",
+            ),
+        ),
+    ),
+    "The count starts at its last change, its Updated date.": Claim(
+        FL,
+        3,
+        (
+            Drawn("testid", "flag-row"),
+            Drawn("copy", ">Updated</th>", FLAG_LIST),
+            Drawn("copy", "{formatDate(flag.updated_at)}", FLAG_LIST),
+        ),
+        (
+            (STALE_DOC, "The count starts from the flag's `updated_at`."),
+            (STALE_DOC, "every change to a flag sets it"),
+        ),
+    ),
+    "Old search ranking: not evaluated in 30 days, while others were.": Claim(
+        FL,
+        4,
+        (
+            Drawn("testid", "flag-stale-reasons"),
+            Drawn("cue", "not evaluated in 30 days"),
+            Drawn("copy", "return `Not evaluated in ${n} days`;", FLAG_LIST),
+            N_FROM_THE_API,
+        ),
+        (
+            (
+                STALE_DOC,
+                "| `not_evaluated` | No evaluation of the flag was recorded in the last N"
+                " days, while evaluations of other flags were. |",
+            ),
+        ),
+    ),
+    "That means no evaluation was recorded, not that no code uses it.": Claim(
+        FL,
+        4,
+        (Drawn("testid", "flag-stale-reasons"),),
+        (
+            (
+                STALE_DOC,
+                "Not evaluated means no evaluation was recorded, not that no code uses"
+                " the flag.",
+            ),
+        ),
+    ),
+    "Press Stale to list only the flags marked stale.": Claim(
+        FL,
+        5,
+        (
+            Drawn("testid", "flag-stale-filter"),
+            Drawn("copy", "{ label: 'Stale', value: 'stale' },", FLAG_LIST),
+            Drawn(
+                "copy",
+                "...(staleFilter === 'stale' ? { stale: true } : {}),",
+                FLAG_LIST,
+            ),
+        ),
+        (
+            (
+                STALE_DOC,
+                "`GET /api/v1/feature-flags/?stale=true` lists only the stale flags",
+            ),
+        ),
+    ),
+    "Stale is a suggestion: nothing is changed or archived for you.": Claim(
+        FL,
+        6,
+        (
+            Drawn("testid", "flag-stale-hint"),
+            Drawn("cue", "nothing is changed or archived for you"),
+            Drawn(
+                "copy",
+                "Stale is a suggestion: nothing is changed or archived for you.",
+                FLAG_LIST,
+            ),
+        ),
+        (
+            (
+                STALE_DOC,
+                "It is a suggestion: listing changes no flag, and nothing is archived or"
+                " turned off for you.",
+            ),
+        ),
+    ),
+    "A flag tagged permanent is never stale.": Claim(
+        FL,
+        6,
+        (
+            Drawn("testid", "flag-stale-hint"),
+            Drawn("copy", "A flag tagged permanent is never stale;", FLAG_LIST),
+        ),
+        ((STALE_DOC, "A flag tagged `permanent` is never stale."),),
+    ),
+    "Tags are set through the API.": Claim(
+        FL,
+        6,
+        (
+            Drawn("testid", "flag-stale-hint"),
+            Drawn("copy", "tags are set through the API.", FLAG_LIST),
+        ),
+        ((STALE_DOC, "Tags are set through the API"),),
+    ),
+    "Listing the stale flags changes none of them.": Claim(
+        FL,
+        6,
+        (
+            Drawn("testid", "flags-table"),
+            Drawn("copy", "nothing is changed or archived for you", FLAG_LIST),
+        ),
+        (
+            (STALE_DOC, "Listing changes no flag."),
+            (CAPABILITIES, "listing changes no flag"),
+        ),
+    ),
+}
+
+
+def stale_board() -> storyboard.Storyboard:
+    return storyboard.load(STORYBOARDS / config.VIDEOS[STALE_SLUG])
+
+
+def stale_raw():
+    return yaml.safe_load(
+        (STORYBOARDS / config.VIDEOS[STALE_SLUG]).read_text(encoding="utf-8")
+    )
+
+
+def test_every_sentence_of_video_11_has_its_claims_row_and_it_holds():
+    made = stale_board()
+    sentences = [text for _s, _b, _l, text in storyboard.narration_lines(made)]
+    assert len(CLAIMS_11) == len(sentences) == 15
+    assert sorted(CLAIMS_11) == sorted(sentences)
+    assert claims_problems(made, CLAIMS_11) == []
+
+
+def test_a_video_11_sentence_with_no_claims_row_is_refused():
+    raw = stale_raw()
+    raw["scenes"][0]["beats"][3]["say"].append("Nothing will ever ask for it again.")
+    assert claims_problems(storyboard.parse(raw), CLAIMS_11) == [
+        "scene flags beat 4 says 'Nothing will ever ask for it again.', which has no"
+        " CLAIMS row"
+    ]
+
+
+def test_a_video_11_claim_whose_drawing_is_gone_is_refused():
+    raw = stale_raw()
+    raw["scenes"][0]["beats"][4]["focus"] = {
+        "role": "button",
+        "name": "Stale",
+        "exact": True,
+    }
+    assert claims_problems(storyboard.parse(raw), CLAIMS_11) == [
+        "scene flags beat 5 does not draw testid 'flag-stale-filter' while it says"
+        " 'Press Stale to list only the flags marked stale.'"
+    ]
+
+
+def test_a_video_11_claim_whose_page_no_longer_says_it_is_refused():
+    def changed(relative: str) -> str:
+        text = read_page(relative)
+        if relative == STALE_DOC:
+            return text.replace("`permanent` is never stale.", "`keep` is never stale.")
+        return text
+
+    assert claims_problems(stale_board(), CLAIMS_11, read=changed) == [
+        f"{STALE_DOC} no longer says 'A flag tagged `permanent` is never stale.'"
+        " ('A flag tagged permanent is never stale.')"
+    ]
+
+
+def test_a_video_11_claim_whose_product_copy_is_gone_is_refused():
+    def changed(relative: str) -> str:
+        text = read_page(relative)
+        if relative == f"frontend/src/{FLAG_LIST}":
+            return text.replace(
+                "return `Not evaluated in ${n} days`;", "return `Unused for ${n} days`;"
+            )
+        return text
+
+    assert claims_problems(stale_board(), CLAIMS_11, read=changed) == [
+        "scene flags beat 4 does not draw copy 'return `Not evaluated in ${n} days`;'"
+        " while it says 'Old search ranking: not evaluated in 30 days, while others"
+        " were.'"
+    ]
+
+
+def test_the_stale_guides_reasons_table_is_the_one_the_board_derives_from():
+    """``storyboard.derived_stale`` applies the guide's table; each row is
+    here, word for word, with the order the reasons are listed in and the
+    permanent tag's rule, so a docs-only change to the table meets the board
+    (test_showcase_stale_flags.py holds the derivation to the server's)."""
+    page = squeezed(read_page(STALE_DOC))
+    for words in (
+        "| Reason | When |",
+        "`stale_reasons` lists every reason that applies, in that order.",
+        "A flag tagged `permanent` is never stale. The tag must be exactly"
+        " permanent; case and surrounding spaces are ignored.",
+        "N is 30 days by default; `STALE_FLAG_DAYS` sets it",
+    ):
+        assert squeezed(words) in page, words
+    order = re.findall(r"^\| `([a-z_]+)` \|", read_page(STALE_DOC), re.MULTILINE)
+    assert tuple(order) == storyboard.STALE_REASONS
+
+
+# ---------------------------------------------------------------------------
+# Video 12: CLAIMS_12, and the card's key
+# ---------------------------------------------------------------------------
+
+BALANCE_SLUG = "12-balance-within"
+BALANCE_GUIDE = "docs/guides/balance-within-groups.md"
+BALANCE_WORDS = "components/experiments/new/balanceWithin.ts"
+BALANCE_FIELDS = "components/experiments/new/BalanceWithinFields.tsx"
+BASIC_FIELDS = "components/experiments/new/BasicInfoFields.tsx"
+FORM_STATE = "components/experiments/new/formState.ts"
+WIZARD = "components/experiments/new/Wizard.tsx"
+DETAIL = "pages/experiments/[id].tsx"
+B = "design"
+
+CLAIMS_12: Dict[str, Claim] = {
+    "An experiment can balance its split within groups of users.": Claim(
+        B,
+        1,
+        (
+            Drawn("cue", "Balance a split within groups"),
+            Drawn("testid", "new-experiment-btn"),
+        ),
+        (
+            (
+                BALANCE_GUIDE,
+                "An experiment that balances its split within groups gives each group"
+                " of users the same split as the whole experiment",
+            ),
+        ),
+    ),
+    "Choose New Experiment.": Claim(
+        B,
+        1,
+        (Drawn("testid", "new-experiment-btn"),),
+        ((WIZARD_GUIDE, "**Experiments → + New Experiment** opens guided setup"),),
+    ),
+    "Name it, and the key your code uses fills itself in.": Claim(
+        B,
+        2,
+        (
+            Drawn("testid", "experiment-name"),
+            Drawn("testid", "experiment-key"),
+            Drawn("copy", "Auto-generated from the name.", BASIC_FIELDS),
+        ),
+        ((WIZARD_GUIDE, "Name, key, description, hypothesis"),),
+    ),
+    "You can change it: here, to the key the docs use.": Claim(
+        B,
+        2,
+        (Drawn("testid", "experiment-key"), Drawn("cue", "you can change it")),
+        ((BALANCE_GUIDE, '{"experiment_key": "pricing-test", "user_id": "u-123"'),),
+    ),
+    "Make purchases the primary metric: the one you decide on.": Claim(
+        B,
+        3,
+        (Drawn("testid", "metric-name-0"), Drawn("cue", "the one you decide on")),
+        ((WIZARD_GUIDE, "one of them primary"),),
+    ),
+    "At 50/50, turn on Balance the split within groups.": Claim(
+        B,
+        4,
+        (
+            Drawn("testid", "balance-switch"),
+            Drawn("cue", "Turn on Balance the split within groups"),
+            Drawn(
+                "copy",
+                "export const BALANCE_SWITCH_LABEL = 'Balance the split within groups';",
+                BALANCE_WORDS,
+            ),
+            Drawn(
+                "copy",
+                "{ name: 'Control', description: '', traffic_allocation: 50,"
+                " is_control: true },",
+                FORM_STATE,
+            ),
+            Drawn(
+                "copy",
+                "{ name: 'Treatment', description: '', traffic_allocation: 50,"
+                " is_control: false },",
+                FORM_STATE,
+            ),
+        ),
+        (
+            (
+                BALANCE_GUIDE,
+                "The **Variants** step of guided setup and the single-page form have"
+                " **Balance the split within groups**, off until you turn it on.",
+            ),
+            (BALANCE_GUIDE, "(50/50, 20/80, 35/35/30 and 40/30/30 are allowed)"),
+        ),
+    ),
+    "Each group gets the same split as the whole experiment.": Claim(
+        B,
+        4,
+        (
+            Drawn("testid", "balance-switch"),
+            Drawn(
+                "copy",
+                "export const BALANCE_HELPER = 'Each group gets the same split as the"
+                " whole experiment.';",
+                BALANCE_WORDS,
+            ),
+        ),
+        (
+            (
+                BALANCE_GUIDE,
+                "gives each group of users the same split as the whole experiment",
+            ),
+        ),
+    ),
+    "Group users by another attribute: tier.": Claim(
+        B,
+        5,
+        (
+            Drawn("testid", "balance-group-by"),
+            Drawn("testid", "balance-custom-key"),
+            Drawn(
+                "copy",
+                "export const BALANCE_GROUP_BY_LABEL = 'Group users by';",
+                BALANCE_WORDS,
+            ),
+            Drawn(
+                "copy",
+                '<option value="custom">Another attribute…</option>',
+                BALANCE_FIELDS,
+            ),
+        ),
+        (
+            (
+                BALANCE_GUIDE,
+                "**Group users by** offers Platform, Country and User Tier, **Another"
+                " attribute…** (type its name)",
+            ),
+            (
+                BALANCE_GUIDE,
+                "`attribute` is a top-level key of the assign `context`, such as `tier`",
+            ),
+        ),
+    ),
+    "Then add the values to keep apart, one at a time.": Claim(
+        B,
+        5,
+        (
+            Drawn("testid", "balance-value-input"),
+            Drawn("testid", "balance-value-add"),
+            Drawn("testid", "balance-values"),
+            Drawn(
+                "copy",
+                "export const BALANCE_VALUES_LABEL = 'Values to keep apart (up to 20)';",
+                BALANCE_WORDS,
+            ),
+        ),
+        (
+            (
+                BALANCE_GUIDE,
+                '{"balance_within": {"attribute": "tier", "values": ["high_value",'
+                ' "churn_risk", "new"]}}',
+            ),
+            (
+                BALANCE_GUIDE,
+                "**Values to keep apart (up to 20)** takes one chip per value",
+            ),
+        ),
+    ),
+    "Review shows what the split is balanced within, then create it.": Claim(
+        B,
+        6,
+        (
+            Drawn("testid", "review-balance"),
+            Drawn("testid", "wizard-create"),
+            Drawn(
+                "copy",
+                "Balance: {balanceSummary(payload.balance_within ?? null, segmentNames)}",
+                WIZARD,
+            ),
+        ),
+        (
+            (
+                WIZARD_GUIDE,
+                "the Review step's **Variants** row ends **Balance: within**",
+            ),
+            (WIZARD_GUIDE, "**Create Experiment** creates it as a draft"),
+        ),
+    ),
+    "It's saved as a draft, balanced within tier and its values.": Claim(
+        B,
+        7,
+        (
+            Drawn("testid", "experiment-status"),
+            Drawn("testid", "experiment-balance"),
+            Drawn("cue", "Saved as a draft, balanced within tier"),
+            Drawn(
+                "copy",
+                '<dd data-testid="experiment-balance">{balanceSummary(setting ?? null,'
+                " names)}</dd>",
+                DETAIL,
+            ),
+        ),
+        (
+            (WIZARD_GUIDE, "**Create Experiment** creates it as a draft"),
+            (
+                BALANCE_GUIDE,
+                "The experiment page's **Balance** row says what the split is balanced"
+                " within, such as `within Platform (ios, android, web)`",
+            ),
+        ),
+    ),
+    "In your app, send tier at the top level of the context.": Claim(
+        "assign",
+        1,
+        (Drawn("cue", "Send each user's tier"),),
+        (
+            (
+                BALANCE_GUIDE,
+                "Put the attribute at the top level of `context` in every assign request",
+            ),
+        ),
+    ),
+    "A user without it is balanced as unknown.": Claim(
+        "assign",
+        1,
+        (
+            Drawn("cue", "or they are balanced as unknown"),
+            Drawn("copy", "and users without the attribute as unknown.", BALANCE_WORDS),
+        ),
+        (
+            (BALANCE_GUIDE, "and a user without the key in `unknown`"),
+            (BALANCE_GUIDE, "so that user is balanced in `unknown`"),
+        ),
+    ),
+}
+
+
+def balance_board() -> storyboard.Storyboard:
+    return storyboard.load(STORYBOARDS / config.VIDEOS[BALANCE_SLUG])
+
+
+def balance_raw():
+    return yaml.safe_load(
+        (STORYBOARDS / config.VIDEOS[BALANCE_SLUG]).read_text(encoding="utf-8")
+    )
+
+
+def test_every_sentence_of_video_12_has_its_claims_row_and_it_holds():
+    made = balance_board()
+    sentences = [text for _s, _b, _l, text in storyboard.narration_lines(made)]
+    assert len(CLAIMS_12) == len(sentences) == 13
+    assert sorted(CLAIMS_12) == sorted(sentences)
+    assert claims_problems(made, CLAIMS_12) == []
+
+
+def test_a_video_12_sentence_with_no_claims_row_is_refused():
+    raw = balance_raw()
+    raw["scenes"][0]["beats"][3]["say"].append("Small groups are merged.")
+    assert claims_problems(storyboard.parse(raw), CLAIMS_12) == [
+        "scene design beat 4 says 'Small groups are merged.', which has no CLAIMS row"
+    ]
+
+
+def test_a_video_12_claim_whose_drawing_is_gone_is_refused():
+    """The Review beat made to look only at the variants: its focus, its look
+    and its record of the balance row gone (and the end state's comparison of
+    it, which the loader would otherwise refuse)."""
+    raw = balance_raw()
+    review = raw["scenes"][0]["beats"][5]
+    review["focus"] = {"css": "div.py-3:has([data-testid=review-variants])"}
+    review["steps"] = [{"look": {"testid": "review-variants"}, "ms": 1000}]
+    review["record"].pop("review-balance")
+    raw["end_state"]["design"]["shown"].pop("review_balance")
+    assert claims_problems(storyboard.parse(raw), CLAIMS_12) == [
+        "scene design beat 6 does not draw testid 'review-balance' while it says"
+        " 'Review shows what the split is balanced within, then create it.'"
+    ]
+
+
+def test_a_video_12_claim_whose_page_no_longer_says_it_is_refused():
+    def changed(relative: str) -> str:
+        text = read_page(relative)
+        if relative == BALANCE_GUIDE:
+            return text.replace(
+                "in every assign request", "in the first assign request"
+            )
+        return text
+
+    assert claims_problems(balance_board(), CLAIMS_12, read=changed) == [
+        f"{BALANCE_GUIDE} no longer says 'Put the attribute at the top level of"
+        " `context` in every assign request' ('In your app, send tier at the top level"
+        " of the context.')"
+    ]
+
+
+def test_a_video_12_claim_whose_product_copy_is_gone_is_refused():
+    def changed(relative: str) -> str:
+        text = read_page(relative)
+        if relative == f"frontend/src/{BALANCE_WORDS}":
+            return text.replace(
+                "'Balance the split within groups'", "'Balance within groups'"
+            )
+        return text
+
+    assert claims_problems(balance_board(), CLAIMS_12, read=changed) == [
+        'scene design beat 4 does not draw copy "export const BALANCE_SWITCH_LABEL ='
+        " 'Balance the split within groups';\" while it says 'At 50/50, turn on"
+        " Balance the split within groups.'"
+    ]
+
+
+#: The key in the card's line: the guide's, the one typed on camera.
+EXPERIMENT_KEY = re.compile(r'"experiment_key": "([^"]+)"')
+
+
+def test_video_12s_card_is_the_guides_assign_line_with_the_key_typed_on_camera():
+    made = balance_board()
+    card = made.scenes[1].card
+    assert (card.label, card.code.doc, card.code.section) == (
+        "From the guide",
+        BALANCE_GUIDE,
+        "Assign users",
+    )
+    (line,) = card.code.lines
+    assert EXPERIMENT_KEY.findall(line) == [made.end_state.design.key]
+    assert '"context": {"tier": "high_value"}' in line
+    assert made.end_state.design.balance_within.attribute == "tier"
+    assert storyboard.quoted_lines(read_page(BALANCE_GUIDE), card.code) == []
+
+
+def test_a_guide_whose_assign_line_names_another_key_refuses_the_card():
+    """The plant: the guide's block keyed otherwise; the card no longer quotes it."""
+    card = balance_board().scenes[1].card
+    page = read_page(BALANCE_GUIDE).replace(
+        '{"experiment_key": "pricing-test", "user_id"',
+        '{"experiment_key": "price-test", "user_id"',
+    )
+    assert page != read_page(BALANCE_GUIDE)
+    assert "has no line" in storyboard.quoted_lines(page, card.code)[0]

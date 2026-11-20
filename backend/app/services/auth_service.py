@@ -11,7 +11,9 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 import boto3
 import jwt
-from botocore.exceptions import ClientError
+from botocore.config import Config
+from botocore.exceptions import ClientError, HTTPClientError
+from botocore.exceptions import ConnectionError as BotoConnectionError
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -43,6 +45,65 @@ class CognitoTokenRefused(Exception):
     def __init__(self, reason: str) -> None:
         super().__init__(reason)
         self.reason = reason
+
+
+class CognitoUnavailable(Exception):
+    """Cognito did not answer ``GetUser``: the call timed out, the connection
+    failed, or Cognito reported a throttle or a server error.
+
+    Deliberately not a ``ValueError``: a ``ValueError`` means Cognito refused
+    the token (a 401); this means nobody could say, and callers answer 503.
+    """
+
+
+# Cognito error codes that mean "busy or broken", not "this token is bad".
+# An allow-list: any other code (NotAuthorized, UserNotFound, Forbidden, ...)
+# keeps the 401 path.
+_UNAVAILABLE_CODES = frozenset(
+    {
+        "TooManyRequestsException",
+        "ThrottlingException",
+        "InternalErrorException",
+        "ServiceUnavailable",
+    }
+)
+
+# The Cognito client gives up after this many seconds to connect and to read,
+# and makes at most this many attempts (one retry). Not settings.
+COGNITO_CONNECT_TIMEOUT = 2
+COGNITO_READ_TIMEOUT = 3
+COGNITO_MAX_ATTEMPTS = 2
+
+
+def _error_code(exc: Exception) -> Optional[str]:
+    """A ClientError's ``Error.Code``, read with ``.get`` (a hand-built
+    ClientError has no ResponseMetadata)."""
+    if isinstance(exc, ClientError):
+        return exc.response.get("Error", {}).get("Code")
+    return None
+
+
+def _unavailable(exc: Exception) -> bool:
+    """True when ``exc`` from ``get_user`` means Cognito could not answer."""
+    if isinstance(exc, (BotoConnectionError, HTTPClientError)):
+        return True
+    if isinstance(exc, ClientError):
+        if _error_code(exc) in _UNAVAILABLE_CODES:
+            return True
+        status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode", 0)
+        return isinstance(status, int) and status >= 500
+    return False
+
+
+def _unavailable_error(exc: Exception) -> CognitoUnavailable:
+    """Log the botocore class and the Cognito error code (never the message,
+    which can carry the token) and return the exception to raise."""
+    logger.error(
+        "Cognito GetUser did not answer (%s, %s)",
+        type(exc).__name__,
+        _error_code(exc),
+    )
+    return CognitoUnavailable(type(exc).__name__)
 
 
 # The two answers to a sign-in Cognito met with a challenge instead of tokens.
@@ -169,7 +230,18 @@ class CognitoAuthService:
         that only matters once Cognito is actually called.
         """
         if self._client is None:
-            self._client = boto3.client("cognito-idp", region_name=self.region)
+            self._client = boto3.client(
+                "cognito-idp",
+                region_name=self.region,
+                config=Config(
+                    connect_timeout=COGNITO_CONNECT_TIMEOUT,
+                    read_timeout=COGNITO_READ_TIMEOUT,
+                    retries={
+                        "mode": "standard",
+                        "total_max_attempts": COGNITO_MAX_ATTEMPTS,
+                    },
+                ),
+            )
         return self._client
 
     @client.setter
@@ -374,15 +446,26 @@ class CognitoAuthService:
         validate_access_token_claims(claims, self.user_pool_id, self.client_id)
         return claims
 
+    def _get_user_call(self, access_token: str) -> Any:
+        """``GetUser``; a failure that means Cognito could not answer is raised
+        as :class:`CognitoUnavailable`, any other failure unchanged."""
+        try:
+            return self.client.get_user(AccessToken=access_token)
+        except Exception as e:
+            if _unavailable(e):
+                raise _unavailable_error(e) from e
+            raise
+
     def get_user(self, access_token: str) -> Dict[str, Any]:
         """Get user details from the access token.
 
         Raises :class:`CognitoTokenRefused` when the token was not issued to
-        this deployment's user pool and app client, and ``ValueError`` when
-        Cognito does not accept it.
+        this deployment's user pool and app client, :class:`CognitoUnavailable`
+        when Cognito does not answer, and ``ValueError`` when Cognito does not
+        accept the token.
         """
         try:
-            response = self.client.get_user(AccessToken=access_token)
+            response = self._get_user_call(access_token)
             self._check_token_audience(access_token)
 
             # Extract user attributes
@@ -397,7 +480,7 @@ class CognitoAuthService:
 
             return {"username": response.get("Username"), "attributes": user_attributes}
 
-        except CognitoTokenRefused:
+        except (CognitoTokenRefused, CognitoUnavailable):
             raise
         except ClientError as e:
             logger.error(f"Get user error: {e!s}")
@@ -437,11 +520,12 @@ class CognitoAuthService:
         Raises:
             CognitoTokenRefused: the token was not issued to this deployment's
                 user pool and app client.
+            CognitoUnavailable: Cognito did not answer.
             ValueError: Cognito did not accept the token.
         """
         try:
             # Get basic user details
-            response = self.client.get_user(AccessToken=access_token)
+            response = self._get_user_call(access_token)
             claims = self._check_token_audience(access_token)
 
             # Extract user attributes
@@ -461,7 +545,7 @@ class CognitoAuthService:
                 "attributes": user_attributes,
                 "groups": groups,
             }
-        except CognitoTokenRefused:
+        except (CognitoTokenRefused, CognitoUnavailable):
             raise
         except ClientError as e:
             logger.error(f"Get user with groups error: {e!s}")

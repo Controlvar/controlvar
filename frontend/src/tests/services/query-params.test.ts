@@ -111,11 +111,12 @@ const CORE_CALLS = [
   'services/results.ts GET /api/v1/results/{experiment_id}',
   'services/results.ts GET /api/v1/results/{experiment_id}/daily',
   'services/results.ts GET /api/v1/results/{experiment_id}/sample-size',
+  'services/results.ts GET /api/v1/results/{experiment_id}/segments/{segment_id}',
   'services/segments.ts GET /api/v1/segments',
 ];
 const FULL_CALLS = [...CORE_CALLS, 'modules/frontend/src/services/sso.ts GET /api/v1/auth/sso/login'].sort();
 const EXPECTED_CALLS = PROFILE === 'core' ? [...CORE_CALLS].sort() : FULL_CALLS;
-const EXPECTED_COUNT = PROFILE === 'core' ? 15 : 16;
+const EXPECTED_COUNT = PROFILE === 'core' ? 16 : 17;
 
 /**
  * Calls the matcher reads as more than one operation, and the one each means
@@ -139,8 +140,15 @@ const DISAMBIGUATE: Record<string, string> = {
 /** Beta operations a call targets; unread keys there are warnings. */
 const EXPECTED_BETA_TARGETS =
   PROFILE === 'core'
-    ? ['GET /api/v1/holdout/{holdout_id}/results']
-    : ['GET /api/v1/auth/sso/login', 'GET /api/v1/holdout/{holdout_id}/results'];
+    ? [
+        'GET /api/v1/holdout/{holdout_id}/results',
+        'GET /api/v1/results/{experiment_id}/segments/{segment_id}',
+      ]
+    : [
+        'GET /api/v1/auth/sso/login',
+        'GET /api/v1/holdout/{holdout_id}/results',
+        'GET /api/v1/results/{experiment_id}/segments/{segment_id}',
+      ];
 
 /**
  * Calls whose unread keys are accepted for now, as `file METHOD path [key]`.

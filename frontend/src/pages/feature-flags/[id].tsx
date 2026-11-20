@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useId, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { TargetingRuleBuilder } from '@/components/targeting';
+import { InlineConfirm } from '@/components/ui/InlineConfirm';
 import { OUTSIDE_BUILDER_NOTE, SaveAlert } from '@/components/experiments/TargetingSection';
 import { checkTargeting } from '@/components/experiments/new/formState';
 import { TargetingRules } from '@/types/targeting';
@@ -195,6 +196,18 @@ export default function FeatureFlagDetailPage() {
   const [targetingError, setTargetingError] = useState<TargetingSaveError | null>(null);
   const [rolloutPercentage, setRolloutPercentage] = useState(0);
   const saveErrorRef = useRef<HTMLDivElement>(null);
+  // Replace rules (#1797): the button the question replaces, the stored
+  // rules beside it, and the section the empty builder opens in. A confirmed
+  // replace moves focus to the builder's one control, + Add Group.
+  const replaceButton = useRef<HTMLButtonElement>(null);
+  const storedRulesRegion = useRef<HTMLPreElement>(null);
+  const targetingSection = useRef<HTMLElement>(null);
+  const replaceTextId = useId();
+  const [focusAddGroup, setFocusAddGroup] = useState<object | null>(null);
+
+  useEffect(() => {
+    if (focusAddGroup) targetingSection.current?.querySelector<HTMLElement>('[data-testid="add-group"]')?.focus();
+  }, [focusAddGroup]);
 
   // A value flag's two values (#1497). `storedValues` is the pair as last
   // loaded or saved; `initialTexts` the text each field started from, so a
@@ -765,7 +778,11 @@ export default function FeatureFlagDetailPage() {
           )}
 
           {/* Targeting Rules */}
-          <section className="bg-white rounded-lg border border-slate-200 p-6" data-testid="flag-targeting-section">
+          <section
+            ref={targetingSection}
+            className="bg-white rounded-lg border border-slate-200 p-6"
+            data-testid="flag-targeting-section"
+          >
             {rules !== null ? (
               <>
                 <TargetingRuleBuilder
@@ -798,6 +815,7 @@ export default function FeatureFlagDetailPage() {
                   <h3 className="text-sm font-semibold text-slate-700">Targeting Rules</h3>
                   {!confirmingReplace && canChange && (
                     <button
+                      ref={replaceButton}
                       type="button"
                       onClick={() => setConfirmingReplace(true)}
                       className="px-3 py-1.5 rounded-md text-sm font-medium bg-white text-slate-700 border border-slate-300 hover:bg-slate-50"
@@ -823,6 +841,7 @@ export default function FeatureFlagDetailPage() {
                   .
                 </p>
                 <pre
+                  ref={storedRulesRegion}
                   role="region"
                   aria-label="Stored targeting rules"
                   tabIndex={0}
@@ -832,18 +851,25 @@ export default function FeatureFlagDetailPage() {
                   {JSON.stringify(stored, null, 2)}
                 </pre>
                 {confirmingReplace && (
-                  <div
-                    role="dialog"
-                    aria-label="Replace rules"
-                    className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3"
-                    data-testid="targeting-replace-confirm"
+                  // Replace rules goes while this is open and comes back on
+                  // Cancel, so focus returns through its ref.
+                  <InlineConfirm
+                    label="Replace rules"
+                    describedBy={replaceTextId}
+                    onCancel={() => setConfirmingReplace(false)}
+                    returnFocus={replaceButton}
+                    fallbackFocus={storedRulesRegion}
+                    tone="warning"
+                    className="mt-3 rounded-lg border p-3"
+                    testId="targeting-replace-confirm"
                   >
-                    <p className="text-sm text-amber-900">
+                    <p id={replaceTextId} className="text-sm text-amber-900">
                       These rules will be discarded when you save new ones. Until you save, nothing changes.
                     </p>
                     <div className="mt-3 flex gap-2">
                       <button
                         type="button"
+                        data-autofocus
                         onClick={() => setConfirmingReplace(false)}
                         className="px-3 py-1.5 rounded-md text-sm font-medium text-slate-600 border border-slate-300 bg-white hover:bg-slate-50"
                         data-testid="targeting-replace-cancel"
@@ -856,6 +882,7 @@ export default function FeatureFlagDetailPage() {
                           setConfirmingReplace(false);
                           setReplaced(true);
                           setRules(createEmptyRules());
+                          setFocusAddGroup({});
                         }}
                         className="px-3 py-1.5 rounded-md text-sm font-medium bg-amber-600 text-white hover:bg-amber-700"
                         data-testid="targeting-replace-yes"
@@ -863,7 +890,7 @@ export default function FeatureFlagDetailPage() {
                         Start with no rules
                       </button>
                     </div>
-                  </div>
+                  </InlineConfirm>
                 )}
               </div>
             )}
