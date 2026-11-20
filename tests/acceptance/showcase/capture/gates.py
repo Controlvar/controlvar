@@ -1646,6 +1646,35 @@ API_SETTINGS_NOTE = (
 )
 
 
+#: The dashboard's breakdown keys and their labels, as the balance setting's
+#: "Group users by" offers them (frontend/src/components/experiments/new/
+#: balanceWithin.ts ``BALANCE_KEY_OPTIONS``; a unit test keeps them equal).
+BALANCE_KEY_LABELS: Dict[str, str] = {
+    "platform": "Platform",
+    "country": "Country",
+    "user_tier": "User Tier",
+}
+#: The Review step's balance row starts with this (Wizard.tsx, #448); the
+#: experiment page's row draws its "Balance" term apart from the value.
+REVIEW_BALANCE_TERM = "Balance:"
+
+
+def balance_words(setting: Any) -> str:
+    """``balanceSummary`` (balanceWithin.ts) for an attribute setting: "within
+    tier (high_value, churn_risk, new)", a breakdown key by its label, "within
+    tier" with no values, and "off" for none. A setting of saved segments is
+    named by the segments' names, which no design end state declares, so it
+    never reaches this: the echo is held to the declared attribute first."""
+    if not setting:
+        return "off"
+    attribute = str(setting.get("attribute") or "")
+    if attribute == "":
+        return "within an attribute not named yet"
+    label = BALANCE_KEY_LABELS.get(attribute, attribute)
+    values = [str(v) for v in setting.get("values") or []]
+    return f"within {label} ({', '.join(values)})" if values else f"within {label}"
+
+
 def holdout_label(name: str, percentage: Any) -> str:
     """``holdoutLabel`` (frontend/src/utils/holdouts.ts; a unit test keeps the two
     equal): the active holdout as the experiment page and the holdouts page draw it."""
@@ -1855,7 +1884,13 @@ def design_mirrors(
     its own source, never formatted here: ``start_shown`` (how the page itself
     drew the start at the ``date`` step), ``group_name`` (the group's name, read
     from the group) and ``holdout`` (the active holdout, read from the API). A
-    reading whose source is not given has no mirror, and is refused."""
+    reading whose source is not given has no mirror, and is refused.
+
+    The balance setting's two readings (#448) have mirrors only when the end
+    state declares ``balance_within``, each its own string from the API's
+    echo (PE 1): the Review row "Balance: within tier (...)", and the
+    experiment page's value "within tier (...)", whose "Balance" term is a
+    sibling element. Undeclared, the echo is not read here."""
     extra = extra or {}
     variants = {v["name"]: v for v in saved["variants"]}
     metrics = {m["name"]: m for m in saved["metrics"]}
@@ -1905,6 +1940,10 @@ def design_mirrors(
         mirrors["detail_holdout"] = holdout_label(
             str(holdout["name"]), holdout.get("holdout_percentage")
         )
+    if getattr(end, "balance_within", None) is not None:
+        words = balance_words(saved.get("balance_within"))
+        mirrors["review_balance"] = f"{REVIEW_BALANCE_TERM} {words}"
+        mirrors["detail_balance"] = words
     return mirrors
 
 
@@ -1942,9 +1981,13 @@ def design_end(
        primary's mde, null on the others) and lower_is_better;
     6. its targeting rule, as declared, less the builder's ids;
     7. its confidence level, correction and Bayesian setting;
-    8. nothing guided setup cannot set (``UNTOUCHED``);
-    9. each reading named in ``shown`` said what was saved, in the product's
-       words (``design_mirrors``).
+    8. when the end state declares ``balance_within`` (#448), the API's echo of
+       it, exactly: absent or null refuses (a server without the feature drops
+       the field and still answers 200). Undeclared, it is not read, and adds
+       nothing to the numbers (PE 2);
+    9. nothing guided setup cannot set (``UNTOUCHED``);
+    10. each reading named in ``shown`` said what was saved, in the product's
+        words (``design_mirrors``).
 
     A key absent from the API's answer refuses: no check passes on a default.
     """
@@ -2130,6 +2173,25 @@ def design_end(
             f"bayesian_enabled is {analysis[2]!r}; the storyboard turns it"
             f" {'on' if end.analysis.bayesian else 'off'}",
         )
+    balance = getattr(end, "balance_within", None)
+    if balance is not None:
+        if "balance_within" not in saved:
+            return (
+                False,
+                numbers,
+                f"the API's answer for {end.name!r} has no 'balance_within': a server"
+                " without it drops the setting and still answers 200",
+            )
+        echoed = saved["balance_within"]
+        numbers["balance_within"] = echoed
+        wanted = balance.model_dump()
+        if echoed != wanted:
+            return (
+                False,
+                numbers,
+                f"balance_within is {echoed!r}; the storyboard balances within"
+                f" {wanted!r}",
+            )
     moved = dict(moved or {})
     for key, value in UNTOUCHED:
         if key in moved:
