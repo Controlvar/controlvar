@@ -169,7 +169,7 @@ const sections = [
     links: [
       { label: 'Your First A/B Test', href: docsUrl('guides/user-guide'), desc: 'End-to-end experiment walkthrough' },
       { label: 'Bayesian Experimentation', href: docsUrl('api/bayesian'), desc: 'Beta-Binomial posteriors and stopping rules' },
-      { label: 'Guided Experiment Builder', href: docsUrl('guides/experiment-wizard'), desc: 'Guided setup in the dashboard, and the wizard API' },
+      { label: 'Guided Experiment Builder', href: docsUrl('guides/experiment-wizard'), desc: 'Guided setup in the dashboard, and sample size guidance' },
       { label: 'Interaction Detection', href: docsUrl('api/interaction-detection'), desc: 'Beta: find experiments that share users, and whether their effects interact' },
     ],
   },

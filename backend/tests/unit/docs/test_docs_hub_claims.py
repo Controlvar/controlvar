@@ -523,8 +523,9 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         says("Beta-Binomial model"),
         says("stopping rules"),
     ),
-    "Guided setup in the dashboard, and the wizard API": (
-        lede("the dashboard's guided setup, and the wizard API"),
+    "Guided setup in the dashboard, and sample size guidance": (
+        lede("the dashboard's guided setup"),
+        lede("the sample-size guidance its Estimate step uses"),
     ),
     "Beta: find experiments that share users, and whether their effects interact": (
         lede("Two experiments that run at the same time usually share users"),

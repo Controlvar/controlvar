@@ -27,7 +27,7 @@ day:
           path: docs/security/api-keys.md
           anchor: "**The `key` value is shown only once.**"
   - n: 2
-    intent: build an experiment in the wizard with two variants and one metric
+    intent: build an experiment in the dashboard's guided setup with two variants and one metric
     layer: A
     writes: true
     oracles:

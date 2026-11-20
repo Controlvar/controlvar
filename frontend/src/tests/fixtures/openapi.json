@@ -1513,40 +1513,6 @@
         "summary": "Check a source's table and columns against the warehouse's metadata"
       }
     },
-    "/api/v1/wizard/drafts": {
-      "get": {
-        "operationId": "list_drafts_api_v1_wizard_drafts_get",
-        "summary": "List wizard drafts for the current user (deprecated)"
-      },
-      "post": {
-        "operationId": "create_draft_api_v1_wizard_drafts_post",
-        "summary": "Create a new experiment wizard draft (deprecated)"
-      }
-    },
-    "/api/v1/wizard/drafts/{draft_id}": {
-      "get": {
-        "operationId": "get_draft_api_v1_wizard_drafts__draft_id__get",
-        "summary": "Get a wizard draft by ID (deprecated)"
-      }
-    },
-    "/api/v1/wizard/drafts/{draft_id}/step": {
-      "put": {
-        "operationId": "update_draft_step_api_v1_wizard_drafts__draft_id__step_put",
-        "summary": "Update a wizard draft with step data (deprecated)"
-      }
-    },
-    "/api/v1/wizard/drafts/{draft_id}/submit": {
-      "post": {
-        "operationId": "submit_draft_api_v1_wizard_drafts__draft_id__submit_post",
-        "summary": "Submit a completed wizard draft to create an experiment (deprecated)"
-      }
-    },
-    "/api/v1/wizard/validate": {
-      "post": {
-        "operationId": "validate_step_api_v1_wizard_validate_post",
-        "summary": "Validate wizard step data (deprecated)"
-      }
-    },
     "/api/v1/workspaces/": {
       "get": {
         "operationId": "list_my_workspaces_api_v1_workspaces__get",

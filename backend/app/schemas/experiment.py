@@ -329,8 +329,7 @@ def refuse_duplicate_metric_names(
 
     Pure: it reads the list and returns it unchanged, so a second run over the
     same list gives the same answer. The create route builds
-    ``ExperimentCreate`` twice, and the wizard builds it once from its own
-    payload. ``None`` (an update that leaves the metrics as they are) passes.
+    ``ExperimentCreate`` twice. ``None`` (an update that leaves the metrics as they are) passes.
     """
     if metrics is None:
         return None

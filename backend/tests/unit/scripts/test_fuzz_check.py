@@ -1016,26 +1016,6 @@ def test_no_known_entry_cites_963():
     assert [e for e in entries if e["operation"] == POST_STRAT] == []
 
 
-def test_deprecated_operations_stay_fuzzed():
-    """No deprecated operation is excluded for being deprecated: every
-    deprecated operation in the full API document is still selected in the
-    superuser and viewer passes."""
-    assert FULL_SNAPSHOT.is_file(), "the full API snapshot is missing"
-    document = json.loads(FULL_SNAPSHOT.read_text())
-    deprecated = {
-        f"{method.upper()} {path}"
-        for path, item in document["paths"].items()
-        for method, op in item.items()
-        if isinstance(op, dict) and op.get("deprecated") is True
-    }
-    assert deprecated, "no deprecated operation to protect"
-    operations = fuzz_check.load_operations(document)
-    excluded = fuzz_check.load_exclusions(fuzz_check.EXCLUSIONS, operations)
-    for pass_name in ("superuser", "viewer"):
-        selected = fuzz_check.selection(pass_name, operations, excluded)
-        assert [(o, pass_name) for o in sorted(deprecated) if o not in selected] == []
-
-
 def test_the_fuzz_commands_do_not_exclude_deprecated():
     """No fuzz command skips deprecated operations as a class."""
     texts = {
