@@ -99,6 +99,7 @@ const TRANSPORT = path.join(SRC_ROOT, 'services', 'api.ts');
 const CORE_CALLS = [
   'components/admin/api-keys/ApiKeyTable.tsx GET /api/v1/api-keys',
   'services/admin.ts GET /api/v1/admin/users',
+  'services/admin.ts GET /api/v1/api-keys',
   'services/admin.ts GET /api/v1/audit-logs/',
   'services/admin.ts GET /api/v1/notifications/delivery-log',
   'services/admin.ts POST /api/v1/safety/feature-flags/{feature_flag_id}/rollback',
@@ -115,7 +116,7 @@ const CORE_CALLS = [
 ];
 const FULL_CALLS = [...CORE_CALLS, 'modules/frontend/src/services/sso.ts GET /api/v1/auth/sso/login'].sort();
 const EXPECTED_CALLS = PROFILE === 'core' ? [...CORE_CALLS].sort() : FULL_CALLS;
-const EXPECTED_COUNT = PROFILE === 'core' ? 15 : 16;
+const EXPECTED_COUNT = PROFILE === 'core' ? 16 : 17;
 
 /**
  * Calls the matcher reads as more than one operation, and the one each means
