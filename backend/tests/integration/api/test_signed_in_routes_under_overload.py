@@ -475,7 +475,8 @@ ROWS = [
     ),
     pytest.param(
         "POST /api/v1/users/me/password",
-        Row(_change_password, 204, True),
+        # 200: a change answers with a new access token (#501).
+        Row(_change_password, 200, True),
         id="provider-user-active-handler",
     ),
     pytest.param(

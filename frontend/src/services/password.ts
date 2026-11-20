@@ -6,8 +6,14 @@
  * shows the text of a response: the three 403 details are matched to choose a
  * sentence, and every other answer is classed by its status alone. The one
  * exception is a read-only demo's refusal, told apart by its code.
+ *
+ * A change signs out every session of the account (#501). For an account that
+ * signs in with its password alone the route answers 200 with a new access
+ * token (the sign-in answer), which the page keeps so this tab stays signed
+ * in. For any other account (two-step sign-in on, or required for its role)
+ * it answers 204: this session has ended too, and the user signs in again.
  */
-import { apiFetch, isApiError } from '@/services/api';
+import { LoginResponse, apiFetch, isApiError } from '@/services/api';
 import { DEMO_READ_ONLY_MESSAGE, demoRefusalMessage } from '@/utils/demoMode';
 
 export const OWN_PASSWORD_PATH = '/api/v1/users/me/password';
@@ -23,6 +29,7 @@ const DETAIL_NO_PASSWORD =
 
 export type PasswordChangeOutcome =
   | 'changed'
+  | 'signed-out'
   | 'mismatch'
   | 'incorrect'
   | 'missing'
@@ -46,8 +53,11 @@ export const NOT_LOCAL_SENTENCE =
 
 const SENTENCES: Record<Exclude<PasswordChangeOutcome, 'locked' | 'timed-out' | 'read-only'>, string> = {
   changed:
-    'Your password has been changed. Use the new one the next time you sign in. ' +
-    'Anywhere else you are signed in stays signed in until that session expires.',
+    'Your password has been changed. Other browsers and devices signed in to your account have been ' +
+    'signed out. Use the new password the next time you sign in.',
+  'signed-out':
+    'Your password has been changed, and every session has been signed out, this one too. ' +
+    'Sign in again with the new password.',
   mismatch: 'The new password and its confirmation do not match.',
   incorrect: 'The current password is not correct. Check it and try again.',
   missing: 'Enter your current password.',
@@ -71,12 +81,18 @@ export interface PasswordChangeResult {
   message?: string;
 }
 
-/** Send the change. Resolves on 204; throws `ApiError` otherwise. */
-export async function changeOwnPassword(currentPassword: string, newPassword: string): Promise<void> {
-  await apiFetch<void>(OWN_PASSWORD_PATH, {
+/**
+ * Send the change. Resolves with the new access token when the answer carries
+ * one (200), or `null` when it does not (204, or a 200 without a token): the
+ * session that sent the change has then ended. Throws `ApiError` otherwise.
+ */
+export async function changeOwnPassword(currentPassword: string, newPassword: string): Promise<string | null> {
+  const answer = await apiFetch<Partial<LoginResponse> | undefined>(OWN_PASSWORD_PATH, {
     method: 'POST',
     json: { current_password: currentPassword, new_password: newPassword },
   });
+  const token = answer && typeof answer === 'object' ? answer.access_token : undefined;
+  return typeof token === 'string' && token !== '' ? token : null;
 }
 
 /**

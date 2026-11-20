@@ -16,7 +16,9 @@ with a column query, never from a response.
 
 from __future__ import annotations
 
+import base64
 import json
+import re
 import uuid
 
 import pytest
@@ -194,6 +196,22 @@ def _update_body(user, password):
     return {"username": user.username, "email": user.email, "password": password}
 
 
+#: Three base64url segments, the first a JWT header (``{"`` is ``eyJ``).
+_JWT = re.compile(
+    r"eyJ[A-Za-z0-9_-]{1,4096}\.[A-Za-z0-9_-]{1,4096}\.[A-Za-z0-9_-]{0,4096}"
+)
+
+
+def _jwts(text_: str):
+    return _JWT.findall(text_)
+
+
+def _jwt_payload(token: str) -> str:
+    """A JWT's claims as text, decoded without checking anything."""
+    payload = token.split(".")[1]
+    return base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)).decode("utf-8")
+
+
 def _assert_old_password_still_works(client, user, stored_hash):
     assert stored_hash(user) == OLD_HASH
     assert _login(client, user, OLD).status_code == 200
@@ -286,8 +304,11 @@ def test_correct_current_password_changes_it(client, make_user, stored_hash, rol
         headers=_auth(user),
     )
 
-    assert response.status_code == 204, response.text
-    assert response.content == b""
+    # #501: a new access token, as sign-in answers (the session that sent
+    # the change has ended; test_password_change_ends_sessions.py).
+    assert response.status_code == 200, response.text
+    assert set(response.json()) == {"access_token", "token_type", "expires_in", "user"}
+    assert response.json()["user"]["id"] == str(user.id)
     assert stored_hash(user) not in (None, OLD_HASH)
     assert _login(client, user, NEW).status_code == 200
     assert _login(client, user, OLD).status_code == 401
@@ -300,7 +321,7 @@ def test_a_72_byte_password_is_accepted(client, make_user):
         json={"current_password": OLD, "new_password": SEVENTY_TWO_BYTES},
         headers=_auth(user),
     )
-    assert response.status_code == 204, response.text
+    assert response.status_code == 200, response.text
     assert _login(client, user, SEVENTY_TWO_BYTES).status_code == 200
 
 
@@ -459,7 +480,7 @@ def test_a_correct_current_password_clears_the_counter(client, make_user):
     user = make_user()
     for _ in range(login_attempt_tracker.max_attempts - 1):
         assert _wrong(client, user).status_code == 403
-    assert _right(client, user).status_code == 204
+    assert _right(client, user).status_code == 200
     assert login_attempt_tracker.status(user.email).failures == 0
 
 
@@ -482,6 +503,28 @@ def test_superuser_resets_another_account(client, make_user, stored_hash, route)
     assert stored_hash(target) not in (None, OLD_HASH)
     assert _login(client, target, NEW).status_code == 200
     assert _login(client, target, OLD).status_code == 401
+
+
+@pytest.mark.parametrize("route", ["users", "admin"])
+def test_a_superuser_reset_ends_the_accounts_sessions(client, make_user, route):
+    """#501: every token the account held before the reset answers 401; the
+    superuser's own session is another account's and keeps working, and the
+    answer carries no token for the account."""
+    superuser = make_user(role=UserRole.ADMIN, is_superuser=True)
+    target = make_user()
+    theirs = _auth(target)
+    mine = _auth(superuser)
+    assert client.get(AUTH_ME, headers=theirs).status_code == 200
+    base = USERS if route == "users" else ADMIN_USERS
+
+    response = client.put(
+        f"{base}/{target.id}", json=_update_body(target, NEW), headers=mine
+    )
+
+    assert client.get(AUTH_ME, headers=theirs).status_code == 401
+    assert response.status_code == 200, response.text
+    assert "access_token" not in response.text
+    assert client.get(AUTH_ME, headers=mine).status_code == 200
 
 
 @pytest.mark.parametrize("route", ["users", "admin"])
@@ -540,7 +583,7 @@ def test_no_response_carries_a_password_or_a_hash(client, make_user, stored_hash
             json=_update_body(target, NEW + "2"),
             headers=_auth(superuser),
         ),
-        # 204: the change itself.
+        # 200: the change itself, with a new access token (#501).
         client.post(
             ME_PASSWORD,
             json={"current_password": OLD, "new_password": NEW},
@@ -555,7 +598,7 @@ def test_no_response_carries_a_password_or_a_hash(client, make_user, stored_hash
         403,
         200,
         200,
-        204,
+        200,
     ]
     secrets = [
         OLD,
@@ -567,11 +610,17 @@ def test_no_response_carries_a_password_or_a_hash(client, make_user, stored_hash
         stored_hash(user),
         stored_hash(target),
     ]
-    for response in responses:
+    # A token's claims are base64 inside the answer, where a substring check
+    # cannot see them: every JWT in an answer is decoded and checked too.
+    texts = [r.text for r in responses] + [
+        _jwt_payload(token) for r in responses for token in _jwts(r.text)
+    ]
+    assert any('"pwv"' in t for t in texts), "the change's token was not decoded"
+    for body in texts:
         for secret in secrets:
-            assert secret not in response.text, (response.status_code, response.text)
-        assert "hashed_password" not in response.text
-        assert "$2b$" not in response.text
+            assert secret not in body, body
+        assert "hashed_password" not in body
+        assert "$2b$" not in body
 
 
 # ---------------------------------------------------------------------------
@@ -579,15 +628,34 @@ def test_no_response_carries_a_password_or_a_hash(client, make_user, stored_hash
 # ---------------------------------------------------------------------------
 
 
-def test_a_token_issued_before_the_change_keeps_working(client, make_user):
-    """A password change does not end other sessions (documented in
-    docs/auth/auth-user-guide.md); an administrator sets ``is_active=false`` to
-    end them now. If revocation is built, this test changes with the docs."""
+def test_a_token_issued_before_the_change_is_refused(client, make_user):
+    """A password change signs out the account's other sessions (#501;
+    documented in docs/auth/auth-user-guide.md). The earlier token gets the
+    same answer as a token that does not decode at all, byte for byte: status,
+    body and ``WWW-Authenticate``. Checked before the change's own answer is
+    read, so it fails on the assertion wherever the change answers."""
     user = make_user()
     earlier = _auth(user)
-    assert _right(client, user).status_code == 204
+    change = client.post(
+        ME_PASSWORD,
+        json={"current_password": OLD, "new_password": NEW},
+        headers=earlier,
+    )
+
     response = client.get(AUTH_ME, headers=earlier)
-    assert response.status_code == 200, response.text
+    assert response.status_code == 401, response.text
+    malformed = client.get(AUTH_ME, headers={"Authorization": "Bearer abc.def.ghi"})
+    assert (
+        response.status_code,
+        response.content,
+        response.headers.get("www-authenticate"),
+    ) == (
+        malformed.status_code,
+        malformed.content,
+        malformed.headers.get("www-authenticate"),
+    )
+    assert response.headers.get("www-authenticate") == "Bearer"
+    assert change.status_code == 200, change.text
 
 
 # ---------------------------------------------------------------------------
