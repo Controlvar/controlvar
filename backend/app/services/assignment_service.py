@@ -4,7 +4,7 @@
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 from uuid import UUID
 
 from sqlalchemy import and_, desc, func
@@ -29,7 +29,11 @@ from backend.app.models.holdout_population import HoldoutPopulation
 from backend.app.schemas.targeting_rule import TargetingRules
 from backend.app.services import balanced_allocation
 from backend.app.services.event_service import EventService
-from backend.app.services.global_holdout_service import GlobalHoldoutService
+from backend.app.services.global_holdout_service import (
+    GlobalHoldoutService,
+    holdout_bucket,
+)
+from backend.app.services.identity_aliases import Person, holder_of, person_of
 from backend.app.services.mutual_exclusion_service import MutualExclusionService
 from backend.app.services.rules_evaluation_service import RulesEvaluationService
 from backend.app.services.segment_membership import (
@@ -228,8 +232,20 @@ class AssignmentService:
                 f"Cannot assign users to experiment with status: {experiment.status}"
             )
 
-        # Check for existing assignment (sticky assignment)
-        existing_assignment = self._stored_assignment(user_id, experiment_id)
+        # The person the id belongs to (#449), one read of identity_aliases.
+        # An id never linked runs everything below as it always has. For a
+        # linked id the stored row is the person's earliest in the experiment
+        # (holder_of), and everything below runs for that row's user id, the
+        # holder, or for the known id when the person holds no row: the sticky
+        # answer, the exposure, holdout, eligibility, balanced groups, the
+        # hash, the insert and the duplicate path. The caller answers with the
+        # id it was sent.
+        person = person_of(self.db, user_id)
+        if person.linked:
+            user_id, existing_assignment = holder_of(self.db, person, experiment_id)
+        else:
+            # Check for existing assignment (sticky assignment)
+            existing_assignment = self._stored_assignment(user_id, experiment_id)
 
         if existing_assignment:
             logger.debug(f"Using existing assignment in experiment {experiment_id}")
@@ -242,16 +258,26 @@ class AssignmentService:
         # answer below is (held out, assigned or refused): every user seen
         # goes in their arm.  The INSERT is executed, not committed: the
         # assigned path commits it with the assignment, the ineligible paths
-        # once, after building their result (#445).
+        # once, after building their result (#445).  A linked person one of
+        # whose ids is already in the population keeps that arm (#449).
         holdout = self.global_holdout_service.get_active_holdout()
-        holdout_check = self.global_holdout_service.is_user_in_holdout(
-            user_id, holdout=holdout
-        )
-        recorded = self._record_holdout_population(holdout, user_id, holdout_check[0])
+        holdout_check = self._recorded_holdout_arm(holdout, person)
+        recorded = False
+        if holdout_check is None:
+            holdout_check = self.global_holdout_service.is_user_in_holdout(
+                user_id, holdout=holdout
+            )
+            recorded = self._record_holdout_population(
+                holdout, user_id, holdout_check[0]
+            )
 
         # Eligibility gate for new users: holdout -> mutual exclusion -> targeting
         eligibility = self.check_eligibility(
-            user_id, experiment, context, holdout_check=holdout_check
+            user_id,
+            experiment,
+            context,
+            holdout_check=holdout_check,
+            person_ids=person.ids if person.linked else None,
         )
         if not eligibility["eligible"]:
             logger.debug(
@@ -378,12 +404,45 @@ class AssignmentService:
         )
         return True
 
+    def _recorded_holdout_arm(
+        self, holdout: Optional[GlobalHoldout], person: Person
+    ) -> Optional[Tuple[bool, int, int]]:
+        """The holdout answer a linked person already has, or None (#449).
+
+        For a linked person and a measurable active holdout, the population
+        row of the person's ids stored first (by ``first_seen_at``, then user
+        id) decides, as ``is_user_in_holdout``'s ``(in_holdout, percentage,
+        bucket)`` with that row's id's bucket, and no new row is written.
+        None for an id never linked, for no measurable active holdout, and for
+        a person none of whose ids is in the population: the caller then
+        buckets and records the user as always. One read, linked persons only.
+        """
+        if not person.linked or holdout is None or not holdout.is_measurable:
+            return None
+        row = (
+            self.db.query(HoldoutPopulation.user_id, HoldoutPopulation.in_holdout)
+            .filter(
+                HoldoutPopulation.holdout_id == holdout.id,
+                HoldoutPopulation.user_id.in_(person.ids),
+            )
+            .order_by(HoldoutPopulation.first_seen_at, HoldoutPopulation.user_id)
+            .first()
+        )
+        if row is None:
+            return None
+        return (
+            bool(row.in_holdout),
+            holdout.holdout_percentage,
+            holdout_bucket(row.user_id, holdout.hash_salt),
+        )
+
     def check_eligibility(
         self,
         user_id: str,
         experiment: Experiment,
         context: Optional[Dict[str, Any]] = None,
         holdout_check: Optional[Tuple[bool, int, int]] = None,
+        person_ids: Optional[Sequence[str]] = None,
     ) -> Dict[str, Any]:
         """
         Decide whether a *new* user may be assigned to ``experiment``.
@@ -404,6 +463,8 @@ class AssignmentService:
         ``holdout_check`` is ``GlobalHoldoutService.is_user_in_holdout``'s
         answer when the caller already has it (``assign_user`` does, from the
         holdout it loaded once); left out, it is computed here.
+        ``person_ids`` are a linked person's ids (#449): an assignment under
+        any of them in another experiment of the group excludes the user.
 
         Returns:
             ``{"eligible": bool, "reason": str, "detail": Optional[str]}``
@@ -426,8 +487,11 @@ class AssignmentService:
         # 2. Mutual exclusion group
         group_id = getattr(experiment, "mutual_exclusion_group_id", None)
         if group_id:
+            # Passed for a linked person only: an id never linked makes the
+            # call it always made.
+            linked = {"user_ids": person_ids} if person_ids else {}
             if not self.mutual_exclusion_service.is_user_eligible_for_experiment(
-                user_id, experiment.id
+                user_id, experiment.id, **linked
             ):
                 return {
                     "eligible": False,
@@ -619,6 +683,59 @@ class AssignmentService:
                 }
             )
 
+        return results
+
+    def get_person_assignments(
+        self, person: Person, presented: str, active_only: bool = True
+    ) -> List[Dict[str, Any]]:
+        """A linked person's assignments, one per experiment (#449).
+
+        In each experiment the row of the person's ids stored first (by
+        ``created_at``, then by the row's id), the row ``holder_of`` answers
+        with; ``active_only`` keeps ACTIVE experiments only, as
+        :meth:`get_user_assignments`. Each item has that method's keys, with
+        ``user_id`` the id that was sent (*presented*).
+        """
+        query = self.db.query(Assignment).filter(Assignment.user_id.in_(person.ids))
+        if active_only:
+            query = query.join(
+                Experiment, Assignment.experiment_id == Experiment.id
+            ).filter(Experiment.status == ExperimentStatus.ACTIVE)
+        rows = (
+            query.order_by(
+                Assignment.experiment_id, Assignment.created_at, Assignment.id
+            )
+            .distinct(Assignment.experiment_id)
+            .all()
+        )
+        results = []
+        for assignment in rows:
+            variant = (
+                self.db.query(Variant)
+                .filter(Variant.id == assignment.variant_id)
+                .first()
+            )
+            experiment = (
+                self.db.query(Experiment)
+                .filter(Experiment.id == assignment.experiment_id)
+                .first()
+            )
+            results.append(
+                {
+                    "id": str(assignment.id),
+                    "user_id": presented,
+                    "experiment_id": str(assignment.experiment_id),
+                    "experiment_name": experiment.name if experiment else None,
+                    "variant_id": str(assignment.variant_id),
+                    "variant_name": variant.name if variant else None,
+                    "is_control": variant.is_control if variant else None,
+                    "created_at": (
+                        assignment.created_at.isoformat()
+                        if hasattr(assignment.created_at, "isoformat")
+                        else assignment.created_at
+                    ),
+                }
+            )
         return results
 
     def assign_user_with_targeting(

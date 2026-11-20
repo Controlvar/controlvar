@@ -1448,8 +1448,11 @@ class TestAssignStatementCounts:
 #: reloads it and its variants -- the assigned path has always paid that);
 #: sticky +0.  With no holdout, or one that is not measurable, nothing moves.
 #: A commit moved before ``check_eligibility`` adds two more to "held out".
-HOLDOUT_COUNTS = {"held out": 8, "new": 14, "sticky": 10}
-NO_HOLDOUT_COUNTS = {"new": 13, "sticky": 10}
+#: #449 adds one to each (held out 8 -> 9, new 14 -> 15 and 13 -> 14, sticky
+#: 10 -> 11): the read of the person the id belongs to, before the sticky
+#: lookup.
+HOLDOUT_COUNTS = {"held out": 9, "new": 15, "sticky": 11}
+NO_HOLDOUT_COUNTS = {"new": 14, "sticky": 11}
 
 
 def _brief(statements) -> list:
