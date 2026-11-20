@@ -49,9 +49,10 @@ exporting this trail. `AuditAction` defines `READ`,
 `LOGIN`, `LOGOUT`, `LOGIN_FAILED`, `ROLE_GRANT`, `ROLE_REVOKE`, `KEY_REVOKE`, `EXPORT` and
 `REPORT_GENERATED`, and you can filter on them, but nothing in this release writes them.
 
-For flags, experiments and warehouse analysis runs, a failure to write the event does not
-fail the request that made the change: the change is kept and the failure is logged as a
-warning.
+A feature flag's event is written in the same transaction as the change: if it cannot be
+written, nothing is saved and the request answers `500`. For experiments and warehouse
+analysis runs, a failure to write the event does not fail the request that made the
+change: the change is kept and the failure is logged as a warning.
 
 **Base path**: `/api/v1/compliance`. Every route needs a Bearer token; without one it
 answers `401`.

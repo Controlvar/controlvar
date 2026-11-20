@@ -1,17 +1,19 @@
 """A flag status change answers 200 and keeps exactly one audit entry (#221).
 
 The four status routes (``/toggle``, ``/enable``, ``/disable``,
-``/unarchive``) commit the change first and write the ``audit_logs`` row after
-it. These tests drive the real routes on Postgres, as a DEVELOPER who is not a
-superuser and signs in with a local token, and read the result back in a
-session of their own:
+``/unarchive``) write the ``audit_logs`` row in the transaction that commits
+the change (#1042). These tests drive the real routes on Postgres, as a
+DEVELOPER who is not a superuser and signs in with a local token, and read
+the result back in a session of their own:
 
 * audit text is normalised before it is stored; each route answers 200,
   applies the change and writes exactly one row;
 * an account with no email is recorded under its username;
 * when the audit write itself fails (a trigger on ``audit_logs`` that refuses
-  every insert), the route still answers 200 with the change committed, and
-  the ERROR line it logs carries no values from the row.
+  every insert), the route answers 500 and nothing is changed, and the ERROR
+  lines logged carry no values from the row. The route's line carries the
+  traceback of the refusal (``unexpected_failure`` logs it); its text holds
+  no value either, and the audit writer's lines carry no traceback at all.
 """
 
 from __future__ import annotations
@@ -158,9 +160,8 @@ def audit_insert_refused(db_session):
         )
     )
     db_session.commit()
-    try:
-        yield
-    finally:
+
+    def drop():
         db_session.rollback()
         db_session.execute(
             text(f"DROP TRIGGER IF EXISTS au221_refuse_audit ON {SCHEMA}.audit_logs")
@@ -169,6 +170,11 @@ def audit_insert_refused(db_session):
             text(f"DROP FUNCTION IF EXISTS {SCHEMA}.au221_refuse_audit()")
         )
         db_session.commit()
+
+    try:
+        yield drop
+    finally:
+        drop()
 
 
 # --- helpers ------------------------------------------------------------------
@@ -308,17 +314,39 @@ def test_toggle_by_account_without_email_is_recorded_under_username(
 # --- (c) the audit write fails ------------------------------------------------
 
 
+AUDIT_LOGGER = "backend.app.services.audit_service"
+#: The routes' loggers. ``unexpected_failure`` logs a refused change with its
+#: traceback; the traceback's text must hold no value, as the message must not.
+ROUTE_LOGGERS = (
+    "backend.app.api.v1.endpoints.feature_flags",
+    "backend.app.api.v1.endpoints.bulk_toggle",
+)
+
+
 def _assert_no_values_logged(caplog, *values):
+    """No record's message carries any of ``values``. An ERROR record carries
+    no traceback, except a route's (#1042, deliberately relaxed), and that
+    traceback, formatted, carries none of ``values`` either."""
     for record in caplog.records:
         message = record.getMessage()
         for value in values:
             assert value not in message, (record.name, message)
-        if record.levelno >= logging.ERROR:
+        if record.levelno < logging.ERROR:
+            continue
+        if record.name in ROUTE_LOGGERS:
+            formatted = (
+                logging.Formatter().formatException(record.exc_info)
+                if record.exc_info
+                else record.exc_text or ""
+            )
+            for value in values:
+                assert value not in formatted, (record.name, message)
+        else:
             assert record.exc_info is None, (record.name, message)
             assert not record.exc_text, (record.name, message)
 
 
-def test_toggle_answers_200_when_the_audit_write_fails(
+def test_toggle_answers_500_when_the_audit_write_fails(
     client, db_session, fresh, developer, audit_insert_refused, caplog
 ):
     canary = f"au221-canary-{uuid.uuid4().hex}"
@@ -329,28 +357,34 @@ def test_toggle_answers_200_when_the_audit_write_fails(
         f"{FLAGS}/{flag.id}/toggle", json={"reason": canary}, headers=_auth(developer)
     )
 
-    assert response.status_code == 200, response.text
-    assert response.json()["status"] == FeatureFlagStatus.ACTIVE.value
-    assert response.json()["audit_log_id"] is None
+    assert response.status_code == 500, response.text
+    assert "audit_log_id" not in response.json()
     status_after, rows = _state(fresh, flag.id)
-    assert status_after == FeatureFlagStatus.ACTIVE
+    assert status_after == FeatureFlagStatus.INACTIVE
     assert rows == []
 
+    # Nothing is missing, so the audit writer logs no ERROR; the route does.
     errors = [
         r
         for r in caplog.records
-        if r.levelno >= logging.ERROR and r.name == "backend.app.services.audit_service"
+        if r.levelno >= logging.ERROR and r.name == AUDIT_LOGGER
     ]
-    assert len(errors) == 1, [r.getMessage() for r in caplog.records]
+    assert errors == [], [r.getMessage() for r in caplog.records]
+    assert any(
+        r.levelno >= logging.ERROR and r.name in ROUTE_LOGGERS for r in caplog.records
+    )
     _assert_no_values_logged(caplog, canary, "au221 refused", developer.email)
 
-    # The client saw the change succeed, so it has no reason to send it again;
-    # one more toggle, asked for, flips the flag once more and no further.
+    # The client saw nothing saved, so it sends the toggle again once the
+    # problem is fixed; that flips the flag once and no further.
+    audit_insert_refused()
     again = client.post(
         f"{FLAGS}/{flag.id}/toggle", json={"reason": canary}, headers=_auth(developer)
     )
     assert again.status_code == 200, again.text
-    assert _state(fresh, flag.id)[0] == FeatureFlagStatus.INACTIVE
+    status_after, rows = _state(fresh, flag.id)
+    assert status_after == FeatureFlagStatus.ACTIVE
+    assert len(rows) == 1
 
 
 def test_bulk_toggle_error_lines_carry_no_values(
@@ -366,7 +400,7 @@ def test_bulk_toggle_error_lines_carry_no_values(
         headers=_auth(developer),
     )
 
-    assert response.status_code == 200, response.text
+    assert response.status_code == 500, response.text
     assert any(r.levelno >= logging.ERROR for r in caplog.records)
     _assert_no_values_logged(caplog, canary, "au221 refused", developer.email)
 

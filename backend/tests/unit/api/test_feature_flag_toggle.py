@@ -89,9 +89,8 @@ class TestFeatureFlagToggleEndpoints:
         mock_db.commit = Mock()
         mock_db.refresh = Mock()
 
-        # Create async mock for audit service
-        async def mock_log_action(*args, **kwargs):
-            return uuid4()
+        # The entry the route writes with the change (#1042)
+        entry = Mock(id=uuid4())
 
         # Override dependencies
         app.dependency_overrides[deps.get_current_active_user] = lambda: mock_user
@@ -100,9 +99,9 @@ class TestFeatureFlagToggleEndpoints:
 
         # Mock audit service
         with patch(
-            "backend.app.services.audit_service.AuditService.log_action",
-            side_effect=mock_log_action,
-        ):
+            "backend.app.services.audit_service.AuditService.record",
+            return_value=entry,
+        ) as record:
             client = TestClient(app)
             response = client.post(
                 f"/api/v1/feature-flags/{feature_flag.id}/toggle",
@@ -117,8 +116,9 @@ class TestFeatureFlagToggleEndpoints:
         assert data["name"] == feature_flag.name
         assert data["key"] == feature_flag.key
         assert data["status"] == FeatureFlagStatus.ACTIVE.value
-        assert "audit_log_id" in data
+        assert data["audit_log_id"] == str(entry.id)
         assert "updated_at" in data
+        record.assert_called_once()
 
         # Verify feature flag was updated
         assert feature_flag.status == FeatureFlagStatus.ACTIVE.value
@@ -143,9 +143,8 @@ class TestFeatureFlagToggleEndpoints:
         mock_db.commit = Mock()
         mock_db.refresh = Mock()
 
-        # Create async mock for audit service
-        async def mock_log_action(*args, **kwargs):
-            return uuid4()
+        # The entry the route writes with the change (#1042)
+        entry = Mock(id=uuid4())
 
         # Override dependencies
         app.dependency_overrides[deps.get_current_active_user] = lambda: mock_user
@@ -154,9 +153,9 @@ class TestFeatureFlagToggleEndpoints:
 
         # Mock audit service
         with patch(
-            "backend.app.services.audit_service.AuditService.log_action",
-            side_effect=mock_log_action,
-        ):
+            "backend.app.services.audit_service.AuditService.record",
+            return_value=entry,
+        ) as record:
             client = TestClient(app)
             response = client.post(
                 f"/api/v1/feature-flags/{feature_flag.id}/toggle",
@@ -168,6 +167,8 @@ class TestFeatureFlagToggleEndpoints:
 
         # Verify response
         assert data["status"] == FeatureFlagStatus.INACTIVE.value
+        assert data["audit_log_id"] == str(entry.id)
+        record.assert_called_once()
 
         # Verify feature flag was updated
         assert feature_flag.status == FeatureFlagStatus.INACTIVE.value
@@ -188,9 +189,8 @@ class TestFeatureFlagToggleEndpoints:
         mock_db.commit = Mock()
         mock_db.refresh = Mock()
 
-        # Create async mock for audit service
-        async def mock_log_action(*args, **kwargs):
-            return uuid4()
+        # The entry the route writes with the change (#1042)
+        entry = Mock(id=uuid4())
 
         # Override dependencies
         app.dependency_overrides[deps.get_current_active_user] = lambda: mock_user
@@ -199,9 +199,9 @@ class TestFeatureFlagToggleEndpoints:
 
         # Mock audit service
         with patch(
-            "backend.app.services.audit_service.AuditService.log_action",
-            side_effect=mock_log_action,
-        ):
+            "backend.app.services.audit_service.AuditService.record",
+            return_value=entry,
+        ) as record:
             client = TestClient(app)
             response = client.post(
                 f"/api/v1/feature-flags/{feature_flag.id}/enable",
@@ -214,6 +214,8 @@ class TestFeatureFlagToggleEndpoints:
         # Verify response
         assert data["status"] == FeatureFlagStatus.ACTIVE.value
         assert feature_flag.status == FeatureFlagStatus.ACTIVE.value
+        assert data["audit_log_id"] == str(entry.id)
+        record.assert_called_once()
 
     def test_disable_feature_flag(self):
         """Test disabling a feature flag."""
@@ -231,9 +233,8 @@ class TestFeatureFlagToggleEndpoints:
         mock_db.commit = Mock()
         mock_db.refresh = Mock()
 
-        # Create async mock for audit service
-        async def mock_log_action(*args, **kwargs):
-            return uuid4()
+        # The entry the route writes with the change (#1042)
+        entry = Mock(id=uuid4())
 
         # Override dependencies
         app.dependency_overrides[deps.get_current_active_user] = lambda: mock_user
@@ -242,9 +243,9 @@ class TestFeatureFlagToggleEndpoints:
 
         # Mock audit service
         with patch(
-            "backend.app.services.audit_service.AuditService.log_action",
-            side_effect=mock_log_action,
-        ):
+            "backend.app.services.audit_service.AuditService.record",
+            return_value=entry,
+        ) as record:
             client = TestClient(app)
             response = client.post(
                 f"/api/v1/feature-flags/{feature_flag.id}/disable",
@@ -257,6 +258,8 @@ class TestFeatureFlagToggleEndpoints:
         # Verify response
         assert data["status"] == FeatureFlagStatus.INACTIVE.value
         assert feature_flag.status == FeatureFlagStatus.INACTIVE.value
+        assert data["audit_log_id"] == str(entry.id)
+        record.assert_called_once()
 
     def test_toggle_feature_flag_not_found(self):
         """Test toggling non-existent feature flag."""
@@ -331,9 +334,8 @@ class TestFeatureFlagToggleEndpoints:
         mock_db.commit = Mock()
         mock_db.refresh = Mock()
 
-        # Create async mock for audit service
-        async def mock_log_action(*args, **kwargs):
-            return uuid4()
+        # The entry the route writes with the change (#1042)
+        entry = Mock(id=uuid4())
 
         # Override dependencies
         app.dependency_overrides[deps.get_current_active_user] = lambda: mock_superuser
@@ -342,9 +344,9 @@ class TestFeatureFlagToggleEndpoints:
 
         # Mock audit service
         with patch(
-            "backend.app.services.audit_service.AuditService.log_action",
-            side_effect=mock_log_action,
-        ):
+            "backend.app.services.audit_service.AuditService.record",
+            return_value=entry,
+        ) as record:
             client = TestClient(app)
             response = client.post(
                 f"/api/v1/feature-flags/{feature_flag.id}/toggle",
@@ -354,6 +356,7 @@ class TestFeatureFlagToggleEndpoints:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == FeatureFlagStatus.ACTIVE.value
+        assert record.call_args.kwargs["actor"] is mock_superuser
 
     def test_toggle_without_reason(self):
         """Test toggling feature flag without providing a reason."""
@@ -371,11 +374,8 @@ class TestFeatureFlagToggleEndpoints:
         mock_db.commit = Mock()
         mock_db.refresh = Mock()
 
-        # Create async mock for audit service
-        async def mock_log_action(*args, **kwargs):
-            # Verify no reason is passed
-            assert kwargs.get("reason") is None
-            return uuid4()
+        # The entry the route writes with the change (#1042)
+        entry = Mock(id=uuid4())
 
         # Override dependencies
         app.dependency_overrides[deps.get_current_active_user] = lambda: mock_user
@@ -384,9 +384,9 @@ class TestFeatureFlagToggleEndpoints:
 
         # Mock audit service
         with patch(
-            "backend.app.services.audit_service.AuditService.log_action",
-            side_effect=mock_log_action,
-        ):
+            "backend.app.services.audit_service.AuditService.record",
+            return_value=entry,
+        ) as record:
             client = TestClient(app)
             response = client.post(
                 f"/api/v1/feature-flags/{feature_flag.id}/toggle",
@@ -394,6 +394,9 @@ class TestFeatureFlagToggleEndpoints:
             )
 
         assert response.status_code == 200
+        # Verify no reason is passed
+        record.assert_called_once()
+        assert record.call_args.kwargs["reason"] is None
 
     def test_toggle_database_error(self):
         """Test handling of database errors during toggle."""
@@ -423,8 +426,13 @@ class TestFeatureFlagToggleEndpoints:
 
         assert response.status_code == 500
 
-    def test_toggle_audit_logging_error(self):
-        """Test that toggle continues even if audit logging fails."""
+    def test_toggle_answers_500_when_audit_logging_fails(self):
+        """A toggle whose audit entry cannot be written commits nothing (#1042).
+
+        The entry is written in the change's transaction, so the route answers
+        500 and never commits. (This was ``test_toggle_audit_logging_error``,
+        which asserted that the toggle succeeded.)
+        """
         # Setup mocks
         mock_user = self.setup_test_user()
         mock_db = Mock(spec=Session)
@@ -439,10 +447,6 @@ class TestFeatureFlagToggleEndpoints:
         mock_db.commit = Mock()
         mock_db.refresh = Mock()
 
-        # Create async mock that raises exception
-        async def mock_log_action_error(*args, **kwargs):
-            raise Exception("Audit logging error")
-
         # Override dependencies
         app.dependency_overrides[deps.get_current_active_user] = lambda: mock_user
         app.dependency_overrides[deps.get_db] = lambda: mock_db
@@ -450,8 +454,8 @@ class TestFeatureFlagToggleEndpoints:
 
         # Mock audit service to raise exception
         with patch(
-            "backend.app.services.audit_service.AuditService.log_action",
-            side_effect=mock_log_action_error,
+            "backend.app.services.audit_service.AuditService.record",
+            side_effect=Exception("Audit logging error"),
         ):
             client = TestClient(app)
             response = client.post(
@@ -459,11 +463,10 @@ class TestFeatureFlagToggleEndpoints:
                 json={"reason": "Test audit error handling"},
             )
 
-        # Should still succeed (audit logging is non-blocking)
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == FeatureFlagStatus.ACTIVE.value
-        assert "audit_log_id" in data  # May be None
+        assert response.status_code == 500
+        assert response.json()["detail"].startswith("Could not toggle the feature flag")
+        mock_db.commit.assert_not_called()
+        mock_db.rollback.assert_called()
 
     def test_toggle_invalid_request_body(self):
         """Test toggle with invalid request body."""

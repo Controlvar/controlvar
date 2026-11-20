@@ -1403,6 +1403,18 @@ by = [
 ]
 
 [[unit]]
+text = "POST /api/v1/feature-flags/, PUT/DELETE /api/v1/feature-flags/{flag_id}, POST /api/v1/feature-flags/{flag_id}/activate, POST /api/v1/feature-flags/{flag_id}/deactivate, POST /api/v1/feature-flags/{flag_id}/unarchive, POST /api/v1/feature-flags/{flag_id}/toggle, POST /api/v1/feature-flags/{flag_id}/enable, POST /api/v1/feature-flags/{flag_id}/disable, POST /api/v1/feature-flags/bulk-toggle | #1042 | A change is saved together with its audit-log entry, and for create, update and delete with its compliance event. When an entry cannot be written, nothing is saved and the operation answers 500 with the request ID; it used to keep the change and answer 2xx with no entry. Bulk toggle saves all of its changes or none: when they cannot be saved it answers 500, where it used to answer 200 and report flags as changed that were not saved. A change whose entries are written answers as before. The OpenAPI document changes only in the descriptions of toggle, enable, disable, delete and bulk toggle, and of the Compliance tag. See When an entry can be missing."
+by = [
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_a_refused_entry_saves_nothing_and_answers_500",
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_a_refused_compliance_event_saves_nothing_and_answers_500",
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_bulk_toggle_answers_500_when_its_commit_fails",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_status_verbs",
+    "test:backend/tests/unit/services/test_compliance_trail_writers.py::test_the_compliance_tag_says_what_writes_an_event",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
 text = "POST /api/v1/users/me/password | #501 | A change signs out every session of the account: every access token issued before it, the one that sent the request included, answers 401 from then on, and a sign-in that has not finished starts again. For an account that signs in with its password alone the operation answers 200 with what POST /api/v1/auth/login answers (access_token, token_type, expires_in and user), where it answered an empty 204; for an account with two-step sign-in on, or required for its role, it still answers 204. The answer with a token is recorded as a user_login audit entry. The OpenAPI document changes: the operation's description, and its 200 response, now the LoginResponse schema, beside a 204 response."
 by = [
     "test:backend/tests/integration/api/test_own_password_change.py::test_a_token_issued_before_the_change_is_refused",

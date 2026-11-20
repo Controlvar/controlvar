@@ -49,16 +49,19 @@ PREVIOUS_CORE_HEAD = "1ab99332f0ba"
 #: three ``feature_flags`` columns and no table, ``85dd4796bb8b`` (#1543) and
 #: ``7b6b4b4fe246`` (#1528), whose downgrade drops ``rollout_stages.started_at``
 #: and no table, ``c448_balance_within`` (#448) and ``4955571d232c`` (#1545),
-#: whose downgrade drops ``visual_tokens`` and two columns:
-#: ``t1812_user_totp`` (#1812), whose downgrade drops ``user_totp``.
-CORE_HEAD = "t1812_user_totp"
+#: whose downgrade drops ``visual_tokens`` and two columns, and
+#: ``t1812_user_totp`` (#1812), whose downgrade drops ``user_totp``:
+#: ``t449_identity_aliases`` (#449), whose downgrade drops
+#: ``identity_aliases``.
+CORE_HEAD = "t449_identity_aliases"
 #: Tables that a later core revision's downgrade drops: a downgrade from the
 #: head to this test's target unapplies those revisions too.  ``d29a479daafe``
 #: (#445) drops ``holdout_population``; ``37dcb2969766`` (#440) drops
 #: ``segment_members``; ``85dd4796bb8b`` (#1543) drops ``event_dedup_keys``;
 #: ``c448_balance_within`` (#448) drops ``balance_group_counters``;
 #: ``4955571d232c`` (#1545) drops ``visual_tokens``; ``t1812_user_totp``
-#: (#1812) drops ``user_totp``.
+#: (#1812) drops ``user_totp``; ``t449_identity_aliases`` (#449) drops
+#: ``identity_aliases``.
 LATER_DOWNGRADE_TABLES = {
     "holdout_population",
     "segment_members",
@@ -66,6 +69,7 @@ LATER_DOWNGRADE_TABLES = {
     "balance_group_counters",
     "visual_tokens",
     "user_totp",
+    "identity_aliases",
 }
 #: The modules branch's head in this tree, recorded on both sides of every
 #: step here: this file is about the core chain.

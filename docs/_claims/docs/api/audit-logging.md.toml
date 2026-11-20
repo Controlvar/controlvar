@@ -101,6 +101,14 @@ text = "Each flag succeeds or fails on its own: the call answers 200 with a resu
 by = ["docex:docs/api/audit-logging.md#\"total\": 3"]
 
 [[unit]]
+text = "The changes and their audit entries are saved together: if they cannot be saved, no flag is changed and the call answers 500."
+by = [
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_a_refused_entry_saves_nothing_and_answers_500",
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_bulk_toggle_answers_500_when_its_commit_fails",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_bulk_toggle_keeps_nothing_when_the_audit_write_fails",
+]
+
+[[unit]]
 text = "These two flags give the call something to change."
 by = ["exempt:baseline"]
 
@@ -450,8 +458,12 @@ text = "Every action below is written by the route or the part of the platform n
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "A route writes it after the change is saved, with the signed-in user as the actor; the failure policy says what happens when an entry cannot be written."
-by = ["test:backend/tests/integration/api/test_audit_route_events.py::test_route_site_keeps_the_change_when_the_audit_write_fails"]
+text = "A route writes it with the signed-in user as the actor, after the change is saved, except a feature flag route, which writes it in the same transaction as the change; the failure policy says what happens when an entry cannot be written."
+by = [
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_route_site_keeps_the_change_when_the_audit_write_fails",
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_a_refused_entry_saves_nothing_and_answers_500",
+    "test:backend/tests/smoke/test_flag_audit_strict_sites.py::test_every_entry_is_written_inside_an_audit_with_change_block",
+]
 
 [[unit]]
 text = "An update records only the fields that changed, as old_value and new_value JSON; a create records the new entity's identifying fields in new_value, and a delete the old ones in old_value."
@@ -993,10 +1005,21 @@ text = "Where | If the entry cannot be written"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "A route (all the route actions above) | The change is kept and the response is 2xx; there is no entry"
+text = "A feature flag created, changed, deleted, activated, deactivated, unarchived, toggled, enabled or disabled, or a bulk toggle | Nothing is saved and the response is 500 with a request ID; a bulk toggle saves none of its flags. Resend it once the problem is fixed"
+by = [
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_a_refused_entry_saves_nothing_and_answers_500",
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_a_refused_compliance_event_saves_nothing_and_answers_500",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_bulk_toggle_keeps_nothing_when_the_audit_write_fails",
+]
+
+[[unit]]
+text = "Rollout schedule and stage changes (recorded on the flag) | The change is kept and the response is 2xx; there is no entry"
+by = ["test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_rollout_change_keeps_the_change_when_the_audit_write_fails"]
+
+[[unit]]
+text = "Any other route (the other route actions above) | The change is kept and the response is 2xx; there is no entry"
 by = [
     "test:backend/tests/integration/api/test_audit_route_events.py::test_route_site_keeps_the_change_when_the_audit_write_fails",
-    "test:backend/tests/integration/api/test_audit_route_events.py::test_bulk_toggle_keeps_the_change_when_the_audit_write_fails",
     "test:backend/tests/integration/api/test_change_audit_saved.py::test_failed_audit_write_keeps_the_answer_and_the_change",
 ]
 
@@ -1050,7 +1073,15 @@ text = "SSO sign-in changing a role | The role change is kept and the sign-in su
 by = ["test:modules/backend/tests/integration/api/test_audit_module_events.py::test_a_refused_entry_still_applies_the_sso_role_change"]
 
 [[unit]]
-text = "Each entry that cannot be written logs one ERROR line from the API:"
+text = "While feature flag changes are refused this way, a superuser can still turn a flag off with POST /api/v1/safety/feature-flags/{feature_flag_id}/rollback?percentage=0, and the rollback is kept even when its entry cannot be written."
+by = [
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_a_refused_entry_never_blocks_a_rollback",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_a_refused_monitor_entry_never_blocks_a_rollback",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p1_a_rule_matched_user_is_off_after_a_rollback_to_0",
+]
+
+[[unit]]
+text = "Each entry that cannot be written while its change is kept logs one ERROR line from the API:"
 by = [
     "test:backend/tests/integration/services/test_audit_service_sites.py",
     "test:modules/backend/tests/integration/api/test_audit_module_events.py",
@@ -1090,6 +1121,32 @@ text = "The API also counts these failures in a Prometheus counter, audit_write_
 by = [
     "test:backend/tests/unit/services/test_audit_log_rules.py::test_a_failed_write_logs_one_error_line_and_counts_it",
     "test:infrastructure/tests/test_api_task_and_data_resources.py::test_nothing_collects_the_apis_prometheus_metrics",
+]
+
+[[unit]]
+text = "A feature flag change refused because its entry cannot be written has no missing entry: it logs no Failed to create audit log line and does not count toward experimentation-api-audit-write-failed-<env> or audit_write_failures_total."
+by = [
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_a_refused_entry_saves_nothing_and_answers_500",
+    "test:backend/tests/unit/services/test_audit_with_change.py::test_it_never_commits_never_rolls_back_and_counts_no_lost_entry",
+    "test:backend/tests/unit/services/test_audit_write_failed_line.py::test_the_filter_does_not_count_a_written_entry_or_another_loggers_error",
+]
+
+[[unit]]
+text = "The route logs <operation> failed (AuditWriteFailed) at ERROR instead, such as Feature flag toggle failed (AuditWriteFailed), and a create or an update also logs Error creating feature flag or Error updating feature flag with the cause's type."
+by = ["test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_a_refused_entry_saves_nothing_and_answers_500"]
+
+[[unit]]
+text = "AuditWriteFailed means only that the entry could not be written with the change: the audit tables refused it, or the database stopped the request while it waited for a row that another change held."
+by = [
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_a_refused_entry_saves_nothing_and_answers_500",
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_waiting_for_a_row_another_change_holds_saves_nothing",
+]
+
+[[unit]]
+text = "These lines count toward experimentation-api-error-logs-<env>, which goes into alarm at 10 error lines in 5 minutes, not on each refusal."
+by = [
+    "test:infrastructure/tests/test_standing_alarms.py::test_the_error_filter_is_on_the_api_tasks_log_group",
+    "test:infrastructure/tests/test_standing_alarms.py::test_the_error_log_alarm_fires_on_10_lines_in_5_minutes",
 ]
 
 [[unit]]
