@@ -337,6 +337,8 @@ describe('guided setup sends exactly the request the single-page form sends', ()
     render(<NewExperimentPage />);
     const radios = screen.getAllByRole('radio') as HTMLInputElement[];
     expect(radios.map((r) => r.value)).toEqual(FORM_EXPERIMENT_TYPES);
+    // No ModulesProvider: the core profile, whose order is exactly this (#1961).
+    expect(radios.map((r) => r.value)).toEqual(['a_b', 'mv', 'bandit']);
     expect(screen.getByTestId('wizard-type-a_b')).toBeChecked();
   });
 
@@ -349,18 +351,13 @@ describe('guided setup sends exactly the request the single-page form sends', ()
     expect(mvCard?.textContent?.toLowerCase()).not.toContain('combination');
   });
 
-  it('says split URL experiments are created through the API, and no longer bandits', () => {
+  it('shows nothing about Split URL on the core profile: no card, no note', () => {
+    // The old note sent people to an API that answers 501 on core (#1961); the
+    // core order is pinned exactly in the test above.
     render(<NewExperimentPage />);
-    const note = screen.getByTestId('wizard-type-note');
-    expect(note).toHaveTextContent(
-      'Split URL experiments need settings this flow does not ask for. Create them through the API.',
-    );
-    expect(within(note).getAllByRole('link')).toHaveLength(1);
-    // Bandit is a type here now (#1956).
-    expect(note.textContent).not.toMatch(/bandit/i);
-    // No SDK creates an experiment (#393).
-    expect(note).toHaveTextContent(/Create them through the API\.$/);
-    expect(note.textContent).not.toMatch(/sdk/i);
+    expect(screen.queryByTestId('wizard-type-note')).toBeNull();
+    expect(screen.queryByTestId('wizard-type-split_url')).toBeNull();
+    expect(screen.getByTestId('wizard-panel-type').textContent ?? '').not.toMatch(/split url/i);
   });
 });
 

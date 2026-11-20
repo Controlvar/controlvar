@@ -51,11 +51,13 @@ export const TWO_FACTOR_NOT_LOCAL_MESSAGE =
 
 /**
  * What a reset does, said before it is confirmed. Deliberately says that the
- * session stays: a reset is not a way to sign someone out.
+ * session stays: a reset is not a way to sign someone out. The dialog does
+ * not know which roles the server requires it for, so it names both cases.
  */
 export function twoFactorResetWarning(name: string): string {
   return (
-    `${name} will sign in with their password alone until they set two-step sign-in up again. ` +
+    `${name} will sign in with their password alone until they set two-step sign-in up again, ` +
+    'or, if their role requires it, set it up at their next sign-in. ' +
     'Their current session stays valid until it expires.'
   );
 }

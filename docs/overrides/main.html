@@ -1,0 +1,37 @@
+{#-
+  Link-preview tags (Open Graph and Twitter card) for every page, from the
+  page's own front matter (title, description) with the site's values as the
+  fallback. Material emits none of these itself.
+
+  `page` is None while MkDocs renders 404.html, so everything that reads it is
+  inside `{% if page %}`; without the guard `mkdocs build --strict` fails on
+  the 404 page.
+
+  The image is the 1280x640 social card in docs/assets/brand/, as an absolute
+  URL because crawlers do not resolve a relative one; its size is declared so
+  a crawler need not fetch it first. If the file is replaced, change both
+  numbers.
+-#}
+{% extends "base.html" %}
+
+{% block extrahead %}
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ 'assets/brand/favicon-32.png' | url }}">
+  {% if page %}
+    {#- escaped once here: the attributes below are quoted, and a title such as "Power Analysis & Sample Size" must not leave a bare & -#}
+    {% set og_title = (page.meta.title or (config.site_name if page.is_homepage else page.title)) | e %}
+    {% set og_description = (page.meta.description or config.site_description) | e %}
+    {% set og_image = config.site_url.rstrip('/') ~ '/assets/brand/controlvar-social-1280x640.png' %}
+    <meta property="og:site_name" content="{{ config.site_name }}">
+    <meta property="og:type" content="{{ 'website' if page.is_homepage else 'article' }}">
+    <meta property="og:title" content="{{ og_title }}">
+    <meta property="og:description" content="{{ og_description }}">
+    <meta property="og:url" content="{{ page.canonical_url }}">
+    <meta property="og:image" content="{{ og_image }}">
+    <meta property="og:image:width" content="1280">
+    <meta property="og:image:height" content="640">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{ og_title }}">
+    <meta name="twitter:description" content="{{ og_description }}">
+    <meta name="twitter:image" content="{{ og_image }}">
+  {% endif %}
+{% endblock %}

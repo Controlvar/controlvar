@@ -13,6 +13,11 @@ import { launchOptions } from "./tests/e2e/launch";
  *   - `sso` — sign in with SSO from the dashboard (`*.sso.spec.ts`, C2b). It
  *     needs its own API process and the fake OIDC provider, which the
  *     `browser-e2e` job starts as steps; see tests/e2e/sso-sign-in.sso.spec.ts.
+ *   - `required-roles` — two-step sign-in required for a role
+ *     (`*.required-roles.spec.ts`, #1812). It needs its own API process,
+ *     started with LOCAL_AUTH_2FA_REQUIRED_ROLES, which the `browser-e2e` job
+ *     starts as a step, with PLAYWRIGHT_API_URL and PLAYWRIGHT_PORT pointing
+ *     at it and at a second served export.
  *   - `site` — the public site (`*.site.spec.ts`, #1459): phone width, axe
  *     and keyboard focus over the MARKETING export, which Frontend Tests has
  *     just built when it runs `--project=site`. Locally: `npm run
@@ -127,6 +132,14 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
     {
+      // #1812: an API that requires two-step sign-in for a role, which the
+      // `browser-e2e` job starts as a step; see
+      // tests/e2e/two-step-required-role.required-roles.spec.ts.
+      name: "required-roles",
+      testMatch: /\.required-roles\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"] },
+    },
+    {
       name: "extended",
       testMatch: /\.spec\.ts$/,
       // The visual spec has its own project below, until its baselines exist.
@@ -136,6 +149,7 @@ export default defineConfig({
       testIgnore: [
         /\.journey\.spec\.ts$/,
         /\.sso\.spec\.ts$/,
+        /\.required-roles\.spec\.ts$/,
         /\.site\.spec\.ts$/,
         /\.launch\.spec\.ts$/,
         /\.runtime\.spec\.ts$/,

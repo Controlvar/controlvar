@@ -89,6 +89,14 @@ INVENTORY = {
     # The code step of two-step sign-in (#1812): the sign-in, and a recovery
     # code used for it. A wrong code writes a log line, never an entry.
     ("POST", f"{V1}/auth/mfa/verify"): Audited(A.USER_LOGIN, A.USER_2FA_RECOVERY_USED),
+    # Setting it up during a sign-in, for a role that requires it (#1812): a
+    # secret waiting for its first code changes nothing; the first code turns
+    # it on and signs the account in.
+    ("POST", f"{V1}/auth/mfa/enroll"): NotAudited(
+        "a secret waiting for its first code changes nothing at sign-in; "
+        "confirming it writes user_2fa_enable"
+    ),
+    ("POST", f"{V1}/auth/mfa/enroll/confirm"): Audited(A.USER_2FA_ENABLE, A.USER_LOGIN),
     ("POST", f"{V1}/auth/logout"): NotAudited(
         "signing out is not on the audited event list: under local it changes "
         "nothing on the server (the tokens are stateless); under Cognito it "
@@ -319,7 +327,7 @@ def test_the_inventory_is_exact():
         f"unclassified: {sorted(found - set(INVENTORY))}; "
         f"gone: {sorted(set(INVENTORY) - found)}"
     )
-    assert len(INVENTORY) == 117
+    assert len(INVENTORY) == 119
 
 
 def test_every_mutating_route_is_under_backend_or_modules():

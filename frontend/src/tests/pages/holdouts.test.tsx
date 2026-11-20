@@ -505,7 +505,9 @@ describe('activating and ending', () => {
     expect(dialog).toHaveTextContent(
       'Activate “Q1 holdout”? “Q4 holdout” ends now, and an ended holdout cannot be activated again. From now on Q1 holdout keeps 3% of new users out of every experiment.',
     );
-    expect(document.activeElement).toBe(dialog);
+    // Focus lands on Cancel, not on the region (#1797); the sentence is the description.
+    expect(document.activeElement).toBe(screen.getByTestId('holdout-confirm-cancel'));
+    expect(dialog).toHaveAccessibleDescription(/^Activate “Q1 holdout”\?/);
     fireEvent.click(screen.getByTestId('holdout-confirm-yes'));
     await waitFor(() => expect(statuses()).toEqual(['Ended', 'Active', 'Ended']));
     expect(writes()).toEqual([['/api/v1/holdout/h-q1', { method: 'PUT', json: { is_active: true } }]]);
@@ -552,7 +554,8 @@ describe('activating and ending', () => {
       'End “Q4 holdout”? New users are no longer kept out of experiments. An ended holdout cannot be activated again; its results stay readable.',
     );
     expect(dialog).toHaveAttribute('role', 'dialog');
-    expect(document.activeElement).toBe(dialog);
+    expect(document.activeElement).toBe(screen.getByTestId('holdout-confirm-cancel'));
+    expect(dialog).toHaveAccessibleDescription(/^End “Q4 holdout”\?/);
     expect(writes()).toEqual([]);
     fireEvent.click(screen.getByTestId('holdout-confirm-yes'));
     await waitFor(() => expect(screen.getByTestId('holdout-none')).toHaveTextContent(HOLDOUT_COPY.none));
@@ -651,6 +654,52 @@ describe('activating and ending', () => {
     expect(screen.queryByTestId('holdout-confirm')).toBeNull();
     expect(document.activeElement).toBe(activate);
     expect(writes()).toEqual([]);
+  });
+
+  it('Escape from the focused Cancel closes the question, sends nothing, and returns to the button that asked', async () => {
+    serve();
+    await openAdmin();
+    fireEvent.click(screen.getByTestId('holdout-end'));
+    const cancel = screen.getByTestId('holdout-confirm-cancel');
+    expect(cancel).toHaveFocus();
+    fireEvent.keyDown(cancel, { key: 'Escape' });
+    expect(screen.queryByTestId('holdout-confirm')).toBeNull();
+    expect(screen.getByTestId('holdout-end')).toHaveFocus();
+    expect(writes()).toEqual([]);
+  });
+
+  it('opener gone: closing the form that asked leaves Escape on "New holdout"', async () => {
+    serve();
+    await openAdmin();
+    fireEvent.click(screen.getByTestId('new-holdout-btn'));
+    fireEvent.change(screen.getByTestId('holdout-name'), { target: { value: 'Q2 holdout' } });
+    fireEvent.click(screen.getByTestId('holdout-activate-now'));
+    fireEvent.click(screen.getByTestId('holdout-submit'));
+    const cancel = screen.getByTestId('holdout-confirm-cancel');
+    expect(cancel).toHaveFocus();
+    // The form's own Cancel is outside the question; it takes the Create button away.
+    fireEvent.click(screen.getByTestId('holdout-cancel'));
+    expect(screen.queryByTestId('holdout-submit')).toBeNull();
+    fireEvent.keyDown(cancel, { key: 'Escape' });
+    expect(screen.queryByTestId('holdout-confirm')).toBeNull();
+    expect(screen.getByTestId('new-holdout-btn')).toHaveFocus();
+    expect(writes()).toEqual([]);
+  });
+
+  it('fallback: while a confirmed End runs nothing takes focus, since "New holdout" and End are disabled', async () => {
+    let release: () => void = () => undefined;
+    serve({
+      update: () => new Promise<void>((resolve) => (release = resolve)),
+    });
+    await openAdmin();
+    fireEvent.click(screen.getByTestId('holdout-end'));
+    fireEvent.click(screen.getByTestId('holdout-confirm-yes'));
+    await waitFor(() => expect(writes()).toHaveLength(1));
+    expect(screen.queryByTestId('holdout-confirm')).toBeNull();
+    expect(screen.getByTestId('new-holdout-btn')).toBeDisabled();
+    expect(document.activeElement).toBe(document.body);
+    await act(async () => release());
+    await waitFor(() => expect(activeHeading()).toHaveFocus());
   });
 });
 

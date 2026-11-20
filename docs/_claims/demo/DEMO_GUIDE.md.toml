@@ -459,22 +459,6 @@ by = [
 ]
 
 [[unit]]
-text = "Native apps: kill switches and percentage rollouts work; attribute rules do not on iOS, Android and Flutter until #438."
-by = [
-    "test:backend/tests/integration/api/test_feature_flag_kill_switch.py::TestKillSwitch::test_disabled_flag_evaluates_off_for_sdk_clients",
-    "test:backend/tests/unit/api/test_documented_limits.py::test_a_rollout_percentage_is_the_share_of_users_turned_on",
-    "test:backend/tests/unit/api/test_documented_limits.py::test_the_native_sdks_send_no_context_on_flag_evaluation",
-    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_no_context_keeps_existing_behaviour",
-]
-
-[[unit]]
-text = "React Native sends the attributes."
-by = [
-    "test:sdk/react-native/__tests__/hooks.test.tsx::regression #1520: useFlag puts the attributes on the wire",
-    "test:sdk/react-native/__tests__/client.test.ts::isFeatureEnabled passes the attributes on",
-]
-
-[[unit]]
 text = "Run pieces by hand: python backend/scripts/seed_streampulse.py, cd demo/streampulse && npm run dev, python demo/streampulse/simulator/traffic.py --rate 3, python demo/streampulse/simulator/rollout_story.py --auto."
 by = [
     "test:backend/tests/unit/infrastructure/test_setup_local_runs_the_demo.py::test_the_first_run_installs_the_python_and_node_dependencies_and_seeds_the_data",

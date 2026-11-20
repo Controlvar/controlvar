@@ -815,6 +815,10 @@ by = [
 ]
 
 [[unit]]
+text = "An account whose role LOCAL_AUTH_2FA_REQUIRED_ROLES names is asked to set it up at its next sign-in instead."
+by = ["test:backend/tests/integration/api/test_two_factor_required_roles_api.py::test_a_reset_account_of_a_required_role_sets_it_up_again"]
+
+[[unit]]
 text = "No one can reset their own."
 by = [
     "test:backend/tests/unit/api/test_two_factor_routes.py::test_a_superuser_cannot_reset_their_own",

@@ -261,12 +261,49 @@
 # entries whose pass is superuser). The viewer and sdk lists do not change.
 # The counts equal those of the pull request's fuzz.yml run at that head.
 
+# Then #1812's required roles added POST /api/v1/auth/mfa/enroll and
+# POST /api/v1/auth/mfa/enroll/confirm. The pull request's fuzz.yml run
+# 43802032619 at seed 20261006, on a head without #2008 and #2000, counted both
+# unreached in the superuser and viewer passes, and the run 44307951324 on its
+# head with main at 108710f1 (before #1997) counted the same two and no other
+# change. Both take the short token the password step issues to an account
+# whose role LOCAL_AUTH_2FA_REQUIRED_ROLES names; the fuzz stack requires no
+# role, and no generated token is one, so the superuser and viewer passes get
+# 401 (or 422, or 429 past its 10 a minute) and reach them in neither. Neither
+# is an SDK route. The lists are 120 for superuser, 191 for viewer and 9 for
+# sdk: two more than the 118, 189 and 9 above in the first two passes. That is
+# a prediction for the merged head, which also carries #1997's shifted ids,
+# until its own fuzz.yml run.
+
+# Then #2053 enabled Amazon Redshift. A Redshift warehouse source takes a role,
+# not a secret, so the superuser pass's POST to the warehouse analysis route
+# now saves one (201) where it answered 422 (connector_disabled), and the ids
+# Schemathesis reuses from those answers name stored sources: it reaches the
+# GET, PUT and DELETE of one stored source (200, 200 and 204), so those three
+# are no longer listed and its list is 117. The viewer may not create one
+# (403), so the viewer and sdk lists do not change. #2010's fuzz.yml run 44438135568 on its head 87f87ace, with main at
+# 0b7e3cc5 (before #2053), gave the 120, 191 and 9 above; the scheduled run
+# 44544139061 on main at 373744b3 counted these three listed but reached and no
+# other change, and so did fuzz_check's evaluation of a local run of the
+# superuser pass at this seed on that commit, which named them. The lists are
+# 117 for superuser, 191 for viewer and 9 for sdk.
+
 # --- superuser: the seeded demo administrator's bearer token ----------------
 
 [[unreached]]
 pass = "superuser"
 operation = "POST /api/v1/auth/mfa/verify"
 reason = "The code step of two-step sign-in: no generated mfa_token is one the stack issued, so it answers 401, 422 for a body that fails validation, and 429 once its 10 a minute are spent."
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/auth/mfa/enroll"
+reason = "Setting up two-step sign-in during a sign-in, for a role LOCAL_AUTH_2FA_REQUIRED_ROLES names: the stack requires no role and no generated mfa_token is one it issued, so it answers 401, 422 for a body that fails validation, and 429 once its 10 a minute are spent."
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/auth/mfa/enroll/confirm"
+reason = "Setting up two-step sign-in during a sign-in, for a role LOCAL_AUTH_2FA_REQUIRED_ROLES names: the stack requires no role and no generated mfa_token is one it issued, so it answers 401, 422 for a body that fails validation, and 429 once its 10 a minute are spent."
 
 [[unreached]]
 pass = "superuser"
@@ -685,21 +722,6 @@ reason = "Generated ids never name a stored row (404); the other requests fail v
 
 [[unreached]]
 pass = "superuser"
-operation = "GET /api/v1/warehouse/analysis/connections/{connection_id}"
-reason = "Generated ids never name a stored row (404); the other requests fail validation (422)."
-
-[[unreached]]
-pass = "superuser"
-operation = "PUT /api/v1/warehouse/analysis/connections/{connection_id}"
-reason = "The handler refuses the generated values (400); ids that name no stored row answer 404 and invalid requests answer 422."
-
-[[unreached]]
-pass = "superuser"
-operation = "DELETE /api/v1/warehouse/analysis/connections/{connection_id}"
-reason = "Generated ids never name a stored row (404); the other requests fail validation (422)."
-
-[[unreached]]
-pass = "superuser"
 operation = "POST /api/v1/warehouse/analysis/connections/{connection_id}/regenerate-key"
 reason = "Generated ids never name a stored row (404); the other requests fail validation (422)."
 
@@ -859,6 +881,16 @@ reason = "Every generated request fails the operation's own validation (422)."
 pass = "viewer"
 operation = "POST /api/v1/auth/mfa/verify"
 reason = "The code step of two-step sign-in: no generated mfa_token is one the stack issued, so it answers 401, 422 for a body that fails validation, and 429 once its 10 a minute are spent."
+
+[[unreached]]
+pass = "viewer"
+operation = "POST /api/v1/auth/mfa/enroll"
+reason = "Setting up two-step sign-in during a sign-in, for a role LOCAL_AUTH_2FA_REQUIRED_ROLES names: the stack requires no role and no generated mfa_token is one it issued, so it answers 401, 422 for a body that fails validation, and 429 once its 10 a minute are spent."
+
+[[unreached]]
+pass = "viewer"
+operation = "POST /api/v1/auth/mfa/enroll/confirm"
+reason = "Setting up two-step sign-in during a sign-in, for a role LOCAL_AUTH_2FA_REQUIRED_ROLES names: the stack requires no role and no generated mfa_token is one it issued, so it answers 401, 422 for a body that fails validation, and 429 once its 10 a minute are spent."
 
 [[unreached]]
 pass = "viewer"

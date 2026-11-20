@@ -118,16 +118,18 @@ final class ExperimentationClientTests: XCTestCase {
     private func makeClient(
         ttl: TimeInterval = 300,
         offlineFallback: Bool = false,
-        apiKey: String = "test-key"
+        apiKey: String = "test-key",
+        baseURL: String = "http://localhost:8000",
+        keyPrefix: String = "test_ep_\(UUID().uuidString)_"
     ) -> (client: ExperimentationClient, store: OfflineStore) {
         let sessionConfig = URLSessionConfiguration.ephemeral
         sessionConfig.protocolClasses = [MockURLProtocol.self]
         let session = URLSession(configuration: sessionConfig)
 
-        let store = OfflineStore(keyPrefix: "test_ep_\(UUID().uuidString)_")
+        let store = OfflineStore(keyPrefix: keyPrefix)
         stores.append(store)
         let config = SdkConfig(
-            baseURL: "http://localhost:8000",
+            baseURL: baseURL,
             apiKey: apiKey,
             cacheTTL: ttl,
             enableOfflineFallback: offlineFallback
@@ -217,6 +219,17 @@ final class ExperimentationClientTests: XCTestCase {
         let cache = UserKeyCache<EvalResult>(ttl: 300)
         cache.set(userId: "a:b", key: "c", value: EvalResult(key: "c", enabled: true))
         XCTAssertNil(cache.get(userId: "a", key: "b:c"))
+    }
+
+    func testUserKeyCache_contextIsCheckedOnlyWhenGiven() {
+        let cache = UserKeyCache<EvalResult>(ttl: 300)
+        cache.set(userId: "u1", key: "f", value: EvalResult(key: "f", enabled: true), context: #"{"plan":"pro"}"#)
+
+        XCTAssertEqual(cache.get(userId: "u1", key: "f", context: #"{"plan":"pro"}"#)?.enabled, true)
+        XCTAssertNil(cache.get(userId: "u1", key: "f", context: #"{"plan":"free"}"#))
+        XCTAssertNil(cache.get(userId: "u1", key: "f", context: ""))
+        XCTAssertEqual(cache.get(userId: "u1", key: "f")?.enabled, true, "no context given: no check (assignments)")
+        XCTAssertEqual(cache.entries(userId: "u1").map { $0.key }, ["f"], "a miss on the context keeps the entry")
     }
 
     // MARK: - OfflineStore
@@ -448,6 +461,524 @@ final class ExperimentationClientTests: XCTestCase {
             // expected: a definitive 404 never serves a stale value
         }
         XCTAssertNil(store.loadEvaluation(flagKey: "new-ui", userId: user.id))
+    }
+
+    // MARK: - evaluateFlag: the user's attributes as `context` (#438)
+
+    /// For errors and logs: alphanumeric, so percent-encoding cannot hide it.
+    private static let canary = "attrcanary7f3"
+    private static let planPro: [String: Any] = ["plan": "pro"]
+    private static let planFree: [String: Any] = ["plan": "free"]
+
+    /// A recorded URL's query as the server reads it (Starlette's `parse_qsl`): the part after
+    /// `?` and before any `#`, split on `&`, then on the first `=`; `+` is a space; then
+    /// percent-decoded as UTF-8. Not `URLComponents.queryItems`, which leaves `+` as `+` where
+    /// the server reads a space.
+    static func serverQuery(of url: URL?) -> [(name: String, value: String)] {
+        let string = url?.absoluteString ?? ""
+        let sent = string.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false)[0]
+        guard let mark = sent.firstIndex(of: "?") else { return [] }
+        return sent[sent.index(after: mark)...].split(separator: "&").map { pair in
+            let parts = pair.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            func decode(_ part: Substring) -> String {
+                let spaced = part.replacingOccurrences(of: "+", with: " ")
+                return spaced.removingPercentEncoding ?? spaced
+            }
+            return (decode(parts[0]), parts.count > 1 ? decode(parts[1]) : "")
+        }
+    }
+
+    /// The `context` the server reads from a recorded URL, parsed as JSON; `nil` without one.
+    static func serverContext(of url: URL?) -> [String: Any]? {
+        guard let value = serverQuery(of: url).first(where: { $0.name == "context" })?.value else {
+            return nil
+        }
+        return (try? JSONSerialization.jsonObject(with: Data(value.utf8))) as? [String: Any]
+    }
+
+    /// A fake evaluate route for one flag, `f`, with the rule `plan equals pro` and a 0% rollout:
+    /// on only when the `context` it reads has `plan == "pro"`.
+    private static func answerByRule(delay: TimeInterval = 0) {
+        MockURLProtocol.handler = { request in
+            if delay > 0 { Thread.sleep(forTimeInterval: delay) }
+            let matched = (ExperimentationClientTests.serverContext(of: request.url)?["plan"] as? String) == "pro"
+            let json = matched
+                ? #"{"key":"f","enabled":true,"config":null,"reason":"targeting_rule"}"#
+                : #"{"key":"f","enabled":false,"config":null,"reason":"rollout"}"#
+            return (200, Data(json.utf8))
+        }
+    }
+
+    private func enabled(_ client: ExperimentationClient, _ attributes: [String: Any]?) async throws -> Bool {
+        try await client.evaluateFlag("f", user: makeUser("u1", attributes: attributes)).enabled
+    }
+
+    /// P1, V2, byte for byte: `user_id` first, then `context`.
+    func testRegression438_evaluateFlag_sendsAttributesAsContextAfterUserId() async throws {
+        MockURLProtocol.respond(json: Self.flagJSON)
+        let (client, _) = makeClient()
+
+        _ = try await client.evaluateFlag("f", user: makeUser("u1", attributes: Self.planPro))
+
+        XCTAssertEqual(
+            MockURLProtocol.requests.map { $0.request.url?.absoluteString },
+            ["http://localhost:8000/api/v1/feature-flags/evaluate/f?user_id=u1&context=%7B%22plan%22%3A%22pro%22%7D"]
+        )
+    }
+
+    /// P2, V0 and V1, byte for byte: the request sent before attributes were.
+    func testEvaluateFlag_noOrEmptyAttributesSendTheUserIdAlone() async throws {
+        for attributes in [nil, [:]] as [[String: Any]?] {
+            MockURLProtocol.reset()
+            MockURLProtocol.respond(json: Self.flagJSON)
+            let (client, _) = makeClient()
+
+            _ = try await client.evaluateFlag("f", user: makeUser("u1", attributes: attributes))
+
+            XCTAssertEqual(
+                MockURLProtocol.requests.map { $0.request.url?.absoluteString },
+                ["http://localhost:8000/api/v1/feature-flags/evaluate/f?user_id=u1"],
+                "attributes: \(String(describing: attributes))"
+            )
+        }
+    }
+
+    /// P1, V3, V3a and V4: the server reads back the attributes the caller passed, and nothing
+    /// else, with its own decoding (`+` is a space, then percent-decoding, then JSON).
+    func testEvaluateFlag_contextReadsBackAsTheAttributesWithTheServersRules() async throws {
+        let vectors: [(name: String, attributes: [String: Any])] = [
+            ("V3", ["q": "a+b&c=d#e f/é😀!'()*~"]),
+            ("V3a", ["q": "a+b&c=d#e fé"]),
+            ("V4", ["age": 30, "beta": true, "device": ["os": "ios", "version": "17.4.0"], "tags": ["a", "b"]]),
+        ]
+        for vector in vectors {
+            MockURLProtocol.reset()
+            MockURLProtocol.respond(json: Self.flagJSON)
+            let (client, _) = makeClient()
+
+            _ = try await client.evaluateFlag("f", user: makeUser("u1", attributes: vector.attributes))
+
+            let url = MockURLProtocol.requests.first?.request.url
+            let query = Self.serverQuery(of: url)
+            XCTAssertEqual(query.map { $0.name }, ["user_id", "context"], "\(vector.name): \(url?.absoluteString ?? "no request")")
+            XCTAssertEqual(query.first?.value, "u1", vector.name)
+            let context = Self.serverContext(of: url)
+            XCTAssertNotNil(context, "\(vector.name): no JSON object in \(url?.absoluteString ?? "no request")")
+            XCTAssertEqual(context.map { NSDictionary(dictionary: $0) }, NSDictionary(dictionary: vector.attributes), vector.name)
+        }
+    }
+
+    /// #1720's exact-URL test, on V3a. Measured at 0e7e4ce2 plus this change (Swift 6.2.4,
+    /// macOS 26); correctness is the decode assertion above, and this pins the bytes.
+    func testEvaluateFlag_exactURLForPlusAmpersandEqualsHashSpaceAndAccent() async throws {
+        MockURLProtocol.respond(json: Self.flagJSON)
+        let (client, _) = makeClient()
+
+        _ = try await client.evaluateFlag("f", user: makeUser("u1", attributes: ["q": "a+b&c=d#e fé"]))
+
+        XCTAssertEqual(
+            MockURLProtocol.requests.map { $0.request.url?.absoluteString },
+            ["http://localhost:8000/api/v1/feature-flags/evaluate/f?user_id=u1&context=%7B%22q%22%3A%22a%2Bb%26c%3Dd%23e%20f%C3%A9%22%7D"]
+        )
+    }
+
+    /// P4: a rule on an attribute matches from the attributes the SDK sends.
+    func testRegression438_aTargetingRuleOnAttributesMatches() async throws {
+        Self.answerByRule()
+        let (client, _) = makeClient()
+
+        let pro = try await client.evaluateFlag("f", user: makeUser("u1", attributes: Self.planPro))
+        let free = try await client.evaluateFlag("f", user: makeUser("u2", attributes: Self.planFree))
+        let none = try await client.evaluateFlag("f", user: makeUser("u3"))
+
+        XCTAssertTrue(pro.enabled, "the rule plan == pro must match from the user's attributes")
+        XCTAssertFalse(free.enabled)
+        XCTAssertFalse(none.enabled)
+    }
+
+    /// P5(a): two calls that differ only in attributes get two answers.
+    func testEvaluateFlag_cache_otherAttributesAskTheServerAgain() async throws {
+        Self.answerByRule()
+        let (client, _) = makeClient()
+
+        let first = try await enabled(client, Self.planPro)
+        let second = try await enabled(client, Self.planFree)
+
+        XCTAssertEqual([first, second], [true, false])
+        XCTAssertEqual(MockURLProtocol.requests.count, 2)
+    }
+
+    /// P5(b): the minimal pairs are two entries' worth of requests.
+    func testEvaluateFlag_cache_minimalPairsAskTwice() async throws {
+        let pairs: [([String: Any], [String: Any])] = [
+            (["plan": "pro"], ["tier": "pro"]),
+            (["n": 1], ["n": "1"]),
+        ]
+        for (a, b) in pairs {
+            MockURLProtocol.reset()
+            Self.answerByRule()
+            let (client, _) = makeClient()
+
+            _ = try await enabled(client, a)
+            _ = try await enabled(client, b)
+
+            XCTAssertEqual(MockURLProtocol.requests.count, 2, "\(a) then \(b)")
+        }
+    }
+
+    /// P5(c): one entry per user + flag, holding the newest answer: A, B, A is three requests.
+    func testEvaluateFlag_cache_oneEntryPerUserAndFlag() async throws {
+        Self.answerByRule()
+        let (client, _) = makeClient()
+
+        let first = try await enabled(client, Self.planPro)
+        let second = try await enabled(client, Self.planFree)
+        let third = try await enabled(client, Self.planPro)
+
+        XCTAssertEqual([first, second, third], [true, false, true])
+        XCTAssertEqual(MockURLProtocol.requests.count, 3)
+    }
+
+    /// P5(d): attributes, then none: the second call gets the answer for no attributes.
+    func testEvaluateFlag_cache_attributesThenNoneAsksAgain() async throws {
+        Self.answerByRule()
+        let (client, _) = makeClient()
+
+        let first = try await enabled(client, Self.planPro)
+        let second = try await enabled(client, nil)
+
+        XCTAssertEqual([first, second], [true, false])
+        XCTAssertEqual(MockURLProtocol.requests.count, 2)
+    }
+
+    /// P5(e): no attributes and an empty map are the same call.
+    func testEvaluateFlag_cache_noneAndEmptyAreOneEntry() async throws {
+        for (a, b) in [([:], [:]), (nil, [:])] as [([String: Any]?, [String: Any]?)] {
+            MockURLProtocol.reset()
+            Self.answerByRule()
+            let (client, _) = makeClient()
+
+            _ = try await enabled(client, a)
+            _ = try await enabled(client, b)
+
+            XCTAssertEqual(MockURLProtocol.requests.count, 1, "\(String(describing: a)) then \(String(describing: b))")
+        }
+    }
+
+    /// P5(f): the same attributes again are answered from the cache.
+    func testEvaluateFlag_cache_sameAttributesAreOneRequest() async throws {
+        Self.answerByRule()
+        let (client, _) = makeClient()
+
+        _ = try await enabled(client, Self.planPro)
+        let again = try await enabled(client, Self.planPro)
+
+        XCTAssertTrue(again)
+        XCTAssertEqual(MockURLProtocol.requests.count, 1)
+    }
+
+    /// P5(g): the keys are written sorted, so two dictionaries with the same 20 entries, whatever
+    /// order they iterate in, make one context and one request.
+    func testEvaluateFlag_cache_sameAttributesInAnotherOrderAreOneRequest() async throws {
+        Self.answerByRule()
+        let (client, _) = makeClient()
+        var small = [String: Any](minimumCapacity: 20)
+        var large = [String: Any](minimumCapacity: 1000)
+        for i in 0..<20 {
+            small["k\(i)"] = i
+            large["k\(i)"] = i
+        }
+
+        _ = try await enabled(client, small)
+        _ = try await enabled(client, large)
+
+        XCTAssertEqual(MockURLProtocol.requests.count, 1)
+    }
+
+    /// P6: concurrent calls share one request only when their attributes are the same.
+    func testEvaluateFlag_concurrentCallsWithOtherAttributesDoNotShareARequest() async throws {
+        Self.answerByRule(delay: 0.05)
+        let (client, _) = makeClient()
+
+        async let a = client.evaluateFlag("f", user: makeUser("u1", attributes: Self.planPro))
+        async let b = client.evaluateFlag("f", user: makeUser("u1", attributes: Self.planFree))
+        let answers = try await [a.enabled, b.enabled]
+
+        XCTAssertEqual(answers, [true, false])
+        XCTAssertEqual(MockURLProtocol.requests.count, 2)
+    }
+
+    func testEvaluateFlag_concurrentCallsWithTheSameAttributesShareARequest() async throws {
+        Self.answerByRule(delay: 0.05)
+        let (client, _) = makeClient()
+
+        async let a = client.evaluateFlag("f", user: makeUser("u1", attributes: Self.planPro))
+        async let b = client.evaluateFlag("f", user: makeUser("u1", attributes: Self.planPro))
+        let answers = try await [a.enabled, b.enabled]
+
+        XCTAssertEqual(answers, [true, true])
+        XCTAssertEqual(MockURLProtocol.requests.count, 1)
+    }
+
+    /// P8: a flag evaluated with two sets of attributes is still one flag in the keyless-track
+    /// fan-out, and its entry holds the latest answer.
+    func testTrack_withoutKey_aFlagEvaluatedWithTwoSetsOfAttributesIsSentOnce() async throws {
+        Self.answerByRule()
+        let (client, _) = makeClient()
+        _ = try await enabled(client, Self.planPro)
+        _ = try await enabled(client, Self.planFree)
+        XCTAssertEqual(client.getEvaluatedFlags(for: "u1"), ["f"])
+
+        MockURLProtocol.reset()
+        MockURLProtocol.respond(json: #"{"success_count":1,"failure_count":0,"errors":null}"#)
+        try await client.track(TrackEvent(userId: "u1", eventName: "page_view"))
+
+        XCTAssertEqual(MockURLProtocol.requests.count, 1)
+        let events = MockURLProtocol.requests.first?.json["events"] as? [[String: Any]]
+        XCTAssertEqual(events?.count, 1)
+        XCTAssertEqual(events?.first?["feature_flag_key"] as? String, "f")
+
+        MockURLProtocol.reset()
+        let latest = try await enabled(client, Self.planFree)
+        XCTAssertFalse(latest)
+        XCTAssertEqual(MockURLProtocol.requests.count, 0, "answered from the entry")
+    }
+
+    /// P9: the offline store's key is user + flag, as before: answers under two sets of
+    /// attributes land in one entry, holding the latest, and `clearOfflineCache` leaves nothing.
+    func testEvaluateFlag_offlineStoreKeyIsUserAndFlagAsBefore() async throws {
+        Self.answerByRule()
+        let prefix = "test_ep_\(UUID().uuidString)_"
+        let (client, store) = makeClient(offlineFallback: true, keyPrefix: prefix)
+        func stored() -> [String] {
+            UserDefaults.standard.dictionaryRepresentation().keys.filter { $0.hasPrefix(prefix) }.sorted()
+        }
+
+        _ = try await enabled(client, Self.planPro)
+        _ = try await enabled(client, Self.planFree)
+
+        XCTAssertEqual(stored(), [prefix + "_users", prefix + "flags.u1"])
+        let bucket = UserDefaults.standard.dictionary(forKey: prefix + "flags.u1") as? [String: Data]
+        XCTAssertEqual(bucket.map { Array($0.keys) }, ["f"])
+        XCTAssertEqual(store.loadEvaluation(flagKey: "f", userId: "u1")?.enabled, false, "the latest answer")
+
+        client.clearOfflineCache()
+        XCTAssertEqual(stored(), [])
+    }
+
+    /// P10: a 404 under any attributes removes the stored answer, which a later network error
+    /// under other attributes does not bring back.
+    func testEvaluateFlag_a404UnderOtherAttributesRemovesTheStoredAnswer() async throws {
+        Self.answerByRule()
+        let (client, store) = makeClient(offlineFallback: true)
+        let first = try await enabled(client, Self.planPro)
+        XCTAssertTrue(first)
+
+        MockURLProtocol.respond(status: 404, json: #"{"detail":"Feature flag with key 'f' not found"}"#)
+        do {
+            _ = try await enabled(client, Self.planFree)
+            XCTFail("Expected flagNotFound")
+        } catch ExperimentationError.flagNotFound {
+            // expected
+        }
+        XCTAssertNil(store.loadEvaluation(flagKey: "f", userId: "u1"))
+
+        client.clearCache()
+        MockURLProtocol.fail(with: URLError(.notConnectedToInternet))
+        do {
+            _ = try await enabled(client, Self.planPro)
+            XCTFail("the answer stored before the 404 must not be served")
+        } catch ExperimentationError.networkError {
+            // expected
+        }
+    }
+
+    /// No attribute, and no query at all, in anything the thrown error prints: its description,
+    /// its message, its userInfo, and the same for the error it wraps.
+    private func assertNoCanary(_ error: Error, file: StaticString = #filePath, line: UInt = #line) {
+        var errors = [error]
+        if case ExperimentationError.networkError(let inner) = error {
+            errors.append(inner)
+        }
+        for each in errors {
+            let texts = [
+                String(describing: each),
+                String(reflecting: each),
+                each.localizedDescription,
+                String(describing: (each as NSError).userInfo),
+            ]
+            for text in texts {
+                for marker in [Self.canary, "?", "context="] {
+                    XCTAssertFalse(text.contains(marker), "\(marker) in \(text)", file: file, line: line)
+                }
+            }
+        }
+    }
+
+    /// P11: URLSession's error names the request's URL, query and attributes included, in its
+    /// userInfo; the error the SDK throws keeps the code and the system's sentence, nothing else.
+    func testEvaluateFlag_aNetworkErrorCarriesNoAttribute() async throws {
+        MockURLProtocol.handler = { request in
+            throw URLError(.cannotConnectToHost, userInfo: [
+                NSURLErrorFailingURLStringErrorKey: request.url?.absoluteString ?? "",
+                NSURLErrorFailingURLErrorKey: request.url ?? URL(fileURLWithPath: "/"),
+            ])
+        }
+        let (client, _) = makeClient()
+
+        do {
+            _ = try await client.evaluateFlag("f", user: makeUser("u1", attributes: ["note": Self.canary]))
+            XCTFail("Expected networkError")
+        } catch {
+            guard case ExperimentationError.networkError(let inner) = error else {
+                return XCTFail("Expected networkError, got \(error)")
+            }
+            XCTAssertEqual((inner as? URLError)?.code, .cannotConnectToHost, "the code is kept")
+            assertNoCanary(error)
+        }
+    }
+
+    /// P11 for an error that is not a URLError (an injected URLProtocol's own): its domain and
+    /// code are kept, its userInfo is not.
+    func testEvaluateFlag_anotherErrorCarriesNoAttributeEither() async throws {
+        MockURLProtocol.handler = { request in
+            throw NSError(domain: "test.transport", code: 7, userInfo: [
+                NSURLErrorFailingURLStringErrorKey: request.url?.absoluteString ?? "",
+                NSLocalizedDescriptionKey: "failed: \(request.url?.absoluteString ?? "")",
+            ])
+        }
+        let (client, _) = makeClient()
+
+        do {
+            _ = try await client.evaluateFlag("f", user: makeUser("u1", attributes: ["note": Self.canary]))
+            XCTFail("Expected networkError")
+        } catch {
+            guard case ExperimentationError.networkError(let inner) = error else {
+                return XCTFail("Expected networkError, got \(error)")
+            }
+            XCTAssertEqual((inner as NSError).domain, "test.transport")
+            XCTAssertEqual((inner as NSError).code, 7)
+            assertNoCanary(error)
+        }
+    }
+
+    /// P11 on a real URLSession error: nothing listens on port 1 of the loopback address.
+    func testEvaluateFlag_aRealConnectionErrorCarriesNoAttribute() async throws {
+        let client = ExperimentationClient(
+            config: SdkConfig(baseURL: "http://127.0.0.1:1", apiKey: "k", timeout: 5, enableOfflineFallback: false),
+            session: URLSession(configuration: .ephemeral)
+        )
+
+        do {
+            _ = try await client.evaluateFlag("f", user: makeUser("u1", attributes: ["note": Self.canary]))
+            XCTFail("Expected networkError")
+        } catch {
+            guard case ExperimentationError.networkError = error else {
+                return XCTFail("Expected networkError, got \(error)")
+            }
+            assertNoCanary(error)
+        }
+    }
+
+    /// The error keeps the system's readable sentence for its code ("Could not connect to the
+    /// server."), taken here from a plain URLSession request to the same closed port rather than
+    /// typed, since a bare `URLError(code)` only reads "The operation couldn't be completed".
+    func testEvaluateFlag_aRealConnectionErrorKeepsTheSystemsSentence() async throws {
+        let systemSentence: String = await withCheckedContinuation { continuation in
+            URLSession(configuration: .ephemeral).dataTask(with: URL(string: "http://127.0.0.1:1/")!) { _, _, error in
+                continuation.resume(returning: error?.localizedDescription ?? "no error")
+            }.resume()
+        }
+        XCTAssertNotEqual(systemSentence, URLError(.cannotConnectToHost).localizedDescription,
+                          "the system's sentence is a readable one, not the bare code's")
+        let client = ExperimentationClient(
+            config: SdkConfig(baseURL: "http://127.0.0.1:1", apiKey: "k", timeout: 5, enableOfflineFallback: false),
+            session: URLSession(configuration: .ephemeral)
+        )
+
+        do {
+            _ = try await client.evaluateFlag("f", user: makeUser("u1", attributes: ["note": Self.canary]))
+            XCTFail("Expected networkError")
+        } catch {
+            guard case ExperimentationError.networkError(let inner) = error else {
+                return XCTFail("Expected networkError, got \(error)")
+            }
+            XCTAssertEqual((inner as? URLError)?.code, .cannotConnectToHost)
+            XCTAssertEqual(inner.localizedDescription, systemSentence)
+            assertNoCanary(error)
+        }
+    }
+
+    /// P11: a URL that cannot be built is named without its query.
+    func testEvaluateFlag_anInvalidURLIsNamedWithoutItsQuery() async throws {
+        let (client, _) = makeClient(baseURL: "http://local host:8000")
+
+        do {
+            _ = try await client.evaluateFlag("f", user: makeUser("u1", attributes: ["note": Self.canary]))
+            XCTFail("Expected invalidConfig")
+        } catch {
+            guard case ExperimentationError.invalidConfig(let message) = error else {
+                return XCTFail("Expected invalidConfig, got \(error)")
+            }
+            XCTAssertEqual(message, "Invalid URL: http://local host:8000/api/v1/feature-flags/evaluate/f")
+            assertNoCanary(error)
+        }
+        XCTAssertEqual(MockURLProtocol.requests.count, 0)
+    }
+
+    /// P16: a flag evaluation and an assignment send the same attributes as the same object.
+    func testEvaluateFlag_flagContextAndAssignmentContextAreTheSameObject() async throws {
+        let attributes: [String: Any] = [
+            "path": "a/b", "n": 3, "beta": true, "tags": ["x", "y"],
+            "device": ["os": "ios", "version": "17.4.0"],
+        ]
+        MockURLProtocol.handler = { request in
+            let assign = request.url?.path == "/api/v1/tracking/assign"
+            return (200, Data((assign ? ExperimentationClientTests.assignJSON : ExperimentationClientTests.flagJSON).utf8))
+        }
+        let (client, _) = makeClient()
+        let user = makeUser("u1", attributes: attributes)
+
+        _ = try await client.evaluateFlag("f", user: user)
+        _ = try await client.getAssignment("exp-1", user: user)
+
+        let requests = MockURLProtocol.requests
+        XCTAssertEqual(requests.count, 2)
+        let flag = Self.serverContext(of: requests.first?.request.url).map { NSDictionary(dictionary: $0) }
+        let assign = (requests.last?.json["context"] as? [String: Any]).map { NSDictionary(dictionary: $0) }
+        XCTAssertEqual(flag, NSDictionary(dictionary: attributes))
+        XCTAssertEqual(flag, assign)
+    }
+
+    /// P17: attributes that cannot be written as JSON (a `Date`, a NaN) throw a fixed sentence
+    /// that names no attribute; nothing is sent or cached, and the stored answer is not served.
+    func testEvaluateFlag_attributesThatAreNotJSONThrowAndSendNothing() async throws {
+        let unwritable: [[String: Any]] = [
+            [Self.canary: Date(timeIntervalSince1970: 0)],
+            ["n": Double.nan, "note": Self.canary],
+        ]
+        for attributes in unwritable {
+            MockURLProtocol.reset()
+            MockURLProtocol.respond(json: #"{"key":"f","enabled":true,"config":null}"#)
+            let (client, store) = makeClient(offlineFallback: true)
+            _ = try await enabled(client, nil)
+            client.clearCache()
+            XCTAssertEqual(store.loadEvaluation(flagKey: "f", userId: "u1")?.enabled, true)
+
+            do {
+                _ = try await enabled(client, attributes)
+                XCTFail("Expected invalidConfig for \(attributes.keys.sorted())")
+            } catch {
+                guard case ExperimentationError.invalidConfig(let message) = error else {
+                    XCTFail("Expected invalidConfig, got \(error)")
+                    continue
+                }
+                XCTAssertEqual(message, "user.attributes cannot be sent as JSON")
+                assertNoCanary(error)
+            }
+            XCTAssertEqual(MockURLProtocol.requests.count, 1, "nothing is sent for these attributes")
+            XCTAssertEqual(client.getEvaluatedFlags(for: "u1"), [], "nothing is cached")
+        }
     }
 
     // MARK: - getAssignment: request shape
