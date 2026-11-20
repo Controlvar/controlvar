@@ -37078,7 +37078,7 @@
     },
     "/api/v1/users/me/password": {
       "post": {
-        "description": "Change your own password.\n\nRequires your current password. The new password must be at least 8\ncharacters and at most 72 bytes (UTF-8), with an upper-case letter, a\nlower-case letter and a digit. Answers 204 with no body.\n\nA wrong current password answers 403 (not 401, which would read as a\nsigned-out session) and counts toward the same lockout as sign-in; after\ntoo many failures both answer 423 until ``Retry-After`` has passed.\n\nChanging the password does not end other sessions: a token issued before\nthe change keeps working until it expires.",
+        "description": "Change your own password.\n\nRequires your current password. The new password must be at least 8\ncharacters and at most 72 bytes (UTF-8), with an upper-case letter, a\nlower-case letter and a digit.\n\nA wrong current password answers 403 (not 401, which would read as a\nsigned-out session) and counts toward the same lockout as sign-in; after\ntoo many failures both answer 423 until ``Retry-After`` has passed.\n\nChanging the password signs out every session of the account: every\naccess token issued before the change answers 401 from then on, the one\nthat sent this request included, and a sign-in waiting for its code\nstarts again. An account that signs in with its password alone gets 200\nwith a new access token and the profile, as ``POST /api/v1/auth/login``\nanswers; use that token from then on. Any other account, such as one with\ntwo-step sign-in on or required for its role, gets 204 with no body and\nsigns in again with the new password.",
         "operationId": "change_own_password_api_v1_users_me_password_post",
         "requestBody": {
           "content": {
@@ -37091,8 +37091,18 @@
           "required": true
         },
         "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            },
+            "description": "The password is changed. A new access token for this account, as POST /api/v1/auth/login answers: every token issued before the change is refused, the one that sent this request included."
+          },
           "204": {
-            "description": "Successful Response"
+            "description": "The password is changed and every session of the account has ended, this one too. The answer for an account that the password alone does not sign in, such as one with two-step sign-in on or required for its role: sign in again with the new password."
           },
           "403": {
             "description": "The current password is missing or incorrect, or the account has no password of its own."

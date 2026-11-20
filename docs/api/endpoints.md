@@ -738,9 +738,11 @@ curl -s "http://localhost:8000/api/v1/audit-logs/?page=4611686018427387905&limit
 - **Endpoint**: `POST /api/v1/users/me/password`
 - **Description**: Change your own password. Available when `AUTH_PROVIDER`
   is `local`; otherwise the route answers 404 before the body is validated
-  against the schema. Changing the password does not end other sessions: a
-  token issued before the change keeps working until it expires. To end them
-  straight away, an administrator sets `is_active` to `false`.
+  against the schema. Changing the password signs out every session of the
+  account: every token issued before the change answers 401, the one that
+  sent the request included, and a sign-in that has not finished starts
+  again. An administrator can also end every session of an account by
+  setting `is_active` to `false`.
 - **Headers**: Authorization: Bearer {token}
 - **Request Body**: `new_password` follows the same rules as a new account's.
   ```json
@@ -749,7 +751,11 @@ curl -s "http://localhost:8000/api/v1/audit-logs/?page=4611686018427387905&limit
     "new_password": "string"
   }
   ```
-- **Response**: 204 No Content
+- **Response**: 200 with what `POST /api/v1/auth/login` answers (a new
+  `access_token`, `token_type`, `expires_in` and `user`): use that token from
+  then on. For an account with two-step sign-in on, or required for its role,
+  204 No Content instead: every session has ended, this one too, and it signs
+  in again.
 - **Errors**: 403 when `current_password` is missing or incorrect ("The
   current password is incorrect."), or when the account has no password of
   its own; 422 when `new_password` breaks the rules; 423 with `Retry-After`

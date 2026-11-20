@@ -124,9 +124,10 @@ Through the API, send your current password and the new one to
 - A wrong current password is refused with `403` and counts toward the same limit as
   failed logins.
 - The new password must meet the same requirements as registration.
-- Changing your password does **not** sign out your other sessions: a token issued before
-  the change keeps working until it expires. To end them straight away, an administrator
-  deactivates the account (sets `is_active` to `false`).
+- Changing your password signs out your other sessions. This one stays signed in. A script
+  holding an older token gets `401` and logs in again.
+- With two-step sign-in on, or required for your role, every session ends, this one too, and
+  you sign in again.
 - An administrator resets **another** user's password with `PUT /api/v1/admin/users/{id}`;
   nobody, administrators included, can change their own password that way.
 
@@ -295,7 +296,7 @@ What the dashboard's sign-in form shows (`AUTH_PROVIDER=local`):
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| `401` "Could not validate credentials" | The access token has expired, or is malformed or altered | Log in again (under `cognito`, you can also refresh the token) |
+| `401` "Could not validate credentials" | The access token has expired, or is malformed or altered, or your password was changed after it was issued | Log in again (under `cognito`, you can also refresh the token) |
 
 ### Password Reset Errors
 
@@ -339,13 +340,13 @@ To keep your account secure:
 
 If you notice suspicious activity on your account:
 
-1. Ask an administrator to deactivate the account (`is_active` set to `false`). That ends
-   every session straight away; changing the password alone does not.
-2. Have the administrator reset your password, and reactivate the account once the tokens
-   issued before it was deactivated have expired (12 hours with the default
-   `LOCAL_AUTH_TOKEN_TTL_MINUTES`). A deactivated account's tokens are refused only while
-   it stays deactivated.
+1. Change your password (`POST /api/v1/users/me/password`), or ask an administrator to
+   reset it; that signs out your other sessions.
+2. To be sure every session has ended while you check, ask an administrator to deactivate
+   the account (`is_active` set to `false`). A deactivated account's tokens are refused only
+   while it stays deactivated.
 3. The audit log records sign-ins with a password, through Cognito (`POST /auth/token`) or
    through SSO, and an administrator's
-   changes to your account's role, superuser flag or active status. A password change and other changes
-   to your profile are not recorded (#502); keep the account deactivated while you check.
+   changes to your account's role, superuser flag or active status. A password change that
+   returns a new token is recorded as a sign-in; other password changes and profile changes
+   are not (#502); keep the account deactivated while you check.
