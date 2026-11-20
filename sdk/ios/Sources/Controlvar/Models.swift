@@ -57,7 +57,7 @@ public struct User: Codable {
     /// Unique identifier for the user.
     public let id: String
     /// Optional key-value attributes. They are sent as `context` when assigning the user to an
-    /// experiment so the server can apply targeting rules.
+    /// experiment and when evaluating a flag, so the server can apply targeting rules.
     public let attributes: [String: AnyCodable]?
 
     public init(id: String, attributes: [String: Any]? = nil) {

@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import ExperimentDetailPage, { ACTIONS_BY_STATUS, keepOwnerName } from '@/pages/experiments/[id]';
 import { ModulesProvider } from '@/contexts/ModulesContext';
 import { apiFetch } from '@/services/api';
@@ -415,6 +416,112 @@ describe('ExperimentDetailPage — lifecycle actions', () => {
     );
     expect(screen.getByTestId('experiment-status')).toHaveTextContent('Draft');
     expect(screen.getByTestId('action-start')).not.toBeDisabled();
+  });
+});
+
+// #1797: the Complete / Archive question moves focus in, cancels on Escape and
+// gives focus back to the button that asked, which stays on the page. Once a
+// confirmed change answers, focus goes to the experiment's name (the status
+// and the buttons change) or, on a refusal, back to the button.
+describe('ExperimentDetailPage — the lifecycle confirmation and the keyboard (#1797)', () => {
+  it('focus opens on Cancel, and Escape sends nothing and gives focus back to Complete', async () => {
+    install(experiment({ status: 'active' }));
+    const user = userEvent.setup();
+    render(<ExperimentDetailPage />);
+    await screen.findByTestId('experiment-detail');
+    screen.getByTestId('action-complete').focus();
+    await user.keyboard('{Enter}');
+
+    const panel = screen.getByRole('dialog', { name: 'Confirm Complete' });
+    expect(panel).toHaveAccessibleDescription(
+      'Complete this experiment? Assignment stops and the status cannot be reverted.',
+    );
+    expect(screen.getByTestId('confirm-cancel')).toHaveFocus();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByTestId('confirm-action')).toBeNull();
+    expect(screen.getByTestId('action-complete')).toHaveFocus();
+
+    await user.keyboard('{Enter}');
+    await user.click(screen.getByTestId('confirm-cancel'));
+    expect(screen.getByTestId('action-complete')).toHaveFocus();
+    expect(calledWith('POST', '/api/v1/experiments/exp-1/complete')).toBe(false);
+    expect(screen.getByTestId('experiment-status')).toHaveTextContent('Active');
+  });
+
+  it.each([
+    ['Complete', 'active', 'complete', 'Completed'],
+    ['Archive', 'completed', 'archive', 'Archived'],
+  ] as const)('a confirmed %s moves focus to the experiment name once it lands', async (_label, status, action, after) => {
+    install(experiment({ status }));
+    const user = userEvent.setup();
+    render(<ExperimentDetailPage />);
+    await screen.findByTestId('experiment-detail');
+    await user.click(screen.getByTestId(`action-${action}`));
+    await user.click(screen.getByTestId('confirm-yes'));
+
+    await waitFor(() => expect(screen.getByTestId('experiment-status')).toHaveTextContent(after));
+    expect(calledWith('POST', `/api/v1/experiments/exp-1/${action}`)).toBe(true);
+    const name = screen.getByRole('heading', { level: 1, name: 'Checkout button colour' });
+    expect(name).toHaveAttribute('tabindex', '-1');
+    await waitFor(() => expect(name).toHaveFocus());
+  });
+
+  it('fallback: while a confirmed Complete runs nothing takes focus, since every lifecycle button is disabled', async () => {
+    // The opener-gone case is not reachable here: the button that asked stays
+    // rendered and enabled while the question is open, and only runAction
+    // disables or removes it, after closing the question. The fallback (the
+    // first enabled lifecycle button) acts only at confirm, and finds none.
+    let release: (value: unknown) => void = () => undefined;
+    mockedApiFetch.mockImplementation(
+      routedApi([
+        { path: '/api/v1/experiments/exp-1', handler: () => experiment({ status: 'active' }) },
+        {
+          method: 'POST',
+          path: '/api/v1/experiments/exp-1/complete',
+          handler: () => new Promise((resolve) => (release = resolve)),
+        },
+      ]) as unknown as typeof apiFetch,
+    );
+    const user = userEvent.setup();
+    render(<ExperimentDetailPage />);
+    await screen.findByTestId('experiment-detail');
+    await user.click(screen.getByTestId('action-complete'));
+    await user.click(screen.getByTestId('confirm-yes'));
+
+    expect(screen.queryByTestId('confirm-action')).toBeNull();
+    expect(screen.getByTestId('action-complete')).toBeDisabled();
+    expect(screen.getByTestId('action-pause')).toBeDisabled();
+    expect(document.activeElement).toBe(document.body);
+
+    release(experiment({ status: 'completed' }));
+    await waitFor(() => expect(screen.getByTestId('experiment-name')).toHaveFocus());
+  });
+
+  it('a refused Complete puts focus back on the Complete button, enabled again, beside the alert', async () => {
+    mockedApiFetch.mockImplementation(
+      routedApi([
+        { path: '/api/v1/experiments/exp-1', handler: () => experiment({ status: 'active' }) },
+        {
+          method: 'POST',
+          path: '/api/v1/experiments/exp-1/complete',
+          handler: () => {
+            throw apiError(409, 'The experiment changed since you opened it.');
+          },
+        },
+      ]) as unknown as typeof apiFetch,
+    );
+    const user = userEvent.setup();
+    render(<ExperimentDetailPage />);
+    await screen.findByTestId('experiment-detail');
+    await user.click(screen.getByTestId('action-complete'));
+    await user.click(screen.getByTestId('confirm-yes'));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('The experiment changed since you opened it.');
+    const complete = screen.getByTestId('action-complete');
+    await waitFor(() => expect(complete).toHaveFocus());
+    expect(complete).not.toBeDisabled();
+    expect(screen.getByTestId('experiment-status')).toHaveTextContent('Active');
   });
 });
 

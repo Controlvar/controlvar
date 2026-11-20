@@ -232,7 +232,7 @@ TWO_STEP_ROUTES = {
 TWO_STEP_ROLES_SETTING = "LOCAL_AUTH_2FA_REQUIRED_ROLES"
 
 
-def test_a_role_can_require_two_step_sign_in_on_compose_and_helm_not_cdk_yet(
+def test_a_role_can_require_two_step_sign_in_on_compose_helm_and_cdk(
     routes,
 ):
     """limitations.md and the README: an account turns it on for itself, with
@@ -240,7 +240,8 @@ def test_a_role_can_require_two_step_sign_in_on_compose_and_helm_not_cdk_yet(
     setting, ``LOCAL_AUTH_2FA_REQUIRED_ROLES``. The production compose file
     passes it to the API and the Helm chart takes it through ``api.extraEnv``
     (``test_chart_render.py`` renders the documented example); the AWS CDK
-    app gives the API a fixed environment that does not carry it yet."""
+    app passes it from the ``local_auth_2fa_required_roles`` context
+    (``infrastructure/tests/test_two_step_roles_context.py`` synthesises it)."""
     from backend.app.core.config import Settings
 
     # The password step still takes an email and a password alone; the code
@@ -257,7 +258,9 @@ def test_a_role_can_require_two_step_sign_in_on_compose_and_helm_not_cdk_yet(
     (chart,) = sorted((ROOT / "charts").glob("*/values.yaml"))
     assert "extraEnv: []" in chart.read_text(encoding="utf-8")
     cdk = ROOT / "infrastructure" / "cdk" / "stacks" / "fargate_service_stack.py"
-    assert TWO_STEP_ROLES_SETTING not in cdk.read_text(encoding="utf-8")
+    cdk_source = cdk.read_text(encoding="utf-8")
+    assert TWO_STEP_ROLES_SETTING in cdk_source
+    assert "local_auth_2fa_required_roles" in cdk_source
 
 
 def test_the_permission_check_reads_grants_only_through_the_capability():
@@ -452,19 +455,6 @@ def test_only_analysis_history_and_evaluation_counters_are_deleted_by_age():
 #: that evaluates a flag and the code that assigns a user to an experiment,
 #: each as (the line that starts it, the line after it) pairs.
 NATIVE_SDKS = {
-    "ios": (
-        "sdk/ios/Sources/Controlvar/ExperimentationClient.swift",
-        [("public func evaluateFlag(", "// MARK: - Experiments")],
-        [("public func getAssignment(", "// MARK: - Tracking")],
-    ),
-    "android": (
-        "sdk/android/sdk/src/main/kotlin/com/controlvar/android/ExperimentationClient.kt",
-        [
-            ("suspend fun evaluateFlag(", "suspend fun getAssignment("),
-            ("private fun evaluateFlagPath(", "private fun send("),
-        ],
-        [("suspend fun getAssignment(", "suspend fun track(")],
-    ),
     "flutter": (
         "sdk/flutter/lib/src/client.dart",
         [("Future<EvalResult> evaluateFlag(", "Future<bool> isEnabled(")],
@@ -494,12 +484,12 @@ def _native_code(rel: str, bounds) -> str:
 
 @pytest.mark.parametrize("sdk", sorted(NATIVE_SDKS))
 def test_the_native_sdks_send_no_context_on_flag_evaluation(sdk):
-    """iOS, Android and Flutter evaluate a flag with the user id alone (#438;
-    React Native sends the attributes since #1520), so a flag rule on
-    attributes cannot match from them; each sends the attributes as the context
-    of an experiment assignment. When this fails, the SDK has started to send a
-    context on flag evaluation: say so on the pages whose registries name this
-    test."""
+    """Flutter evaluates a flag with the user id alone (#438; React Native
+    sends the attributes since #1520, iOS and Android since their #438
+    changes, and all three are in SENDS), so a flag rule on attributes cannot
+    match from it; it sends the attributes as the context of an experiment
+    assignment. When this fails, the SDK has started to send a context on flag
+    evaluation: say so on the pages whose registries name this test."""
     rel, evaluate, assign = NATIVE_SDKS[sdk]
     evaluation = _native_code(rel, evaluate)
     assert "feature-flags/evaluate" in evaluation, f"{sdk}: no evaluate request read"
@@ -607,6 +597,23 @@ SENDS = {
         [("def evaluate_flag(", "{:ok, data} when is_map(data) ->")],
         '"&context=#{encode(context_json)}"',
     ),
+    # Since #438's iOS change: evaluateFlag builds the query itself, so that
+    # `user_id` comes before `context`.
+    "ios": (
+        "sdk/ios/Sources/Controlvar/ExperimentationClient.swift",
+        [("public func evaluateFlag(", "// MARK: - Experiments")],
+        '"&context=\\(HTTPClient.encodeComponent(context))"',
+    ),
+    # Since #438's Android change: evaluateFlagPath adds `context` after
+    # `user_id`, written by flagContext (sorted keys) and encoded by OkHttp.
+    "android": (
+        "sdk/android/sdk/src/main/kotlin/com/controlvar/android/ExperimentationClient.kt",
+        [
+            ("suspend fun evaluateFlag(", "suspend fun getAssignment("),
+            ("private fun evaluateFlagPath(", "private fun send("),
+        ],
+        'addQueryParameter("context", context)',
+    ),
 }
 
 #: Every directory under sdk/ whose flag evaluation sends the user id alone, so
@@ -614,19 +621,6 @@ SENDS = {
 #: file, and its code from the evaluate signature through the request call as
 #: (the line that starts it, the first line after the call) pairs.
 DOES_NOT_SEND = {
-    "ios": (
-        438,
-        "sdk/ios/Sources/Controlvar/ExperimentationClient.swift",
-        [("public func evaluateFlag(", "let result = EvalResult(")],
-    ),
-    "android": (
-        438,
-        "sdk/android/sdk/src/main/kotlin/com/controlvar/android/ExperimentationClient.kt",
-        [
-            ("suspend fun evaluateFlag(", "} catch (e: ExperimentationException) {"),
-            ("private fun evaluateFlagPath(", 'return "${url.encodedPath}'),
-        ],
-    ),
     "flutter": (
         438,
         "sdk/flutter/lib/src/client.dart",

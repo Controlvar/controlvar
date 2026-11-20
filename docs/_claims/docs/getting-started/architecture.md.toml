@@ -129,10 +129,10 @@ by = [
 ]
 
 [[unit]]
-text = "Bandit scheduler | 5 minutes (BANDIT_UPDATE_INTERVAL_MINUTES) | Recomputes variant weights for active multi-armed bandit experiments from DynamoDB counters when every variant has at least PostgreSQL's pulls and successes there, otherwise from PostgreSQL assignments + converting users (counted as /results counts them); /tracking/assign routes new users by these weights"
+text = "Bandit scheduler | 5 minutes (BANDIT_UPDATE_INTERVAL_MINUTES) | Recomputes variant weights for active multi-armed bandit experiments from PostgreSQL assignments + converting users (counted as /results counts them), or from the DynamoDB counters only when PostgreSQL has no assignments for the experiment or cannot be read; /tracking/assign routes new users by these weights"
 by = [
-    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestDynamoDBCompleteness::test_partial_dynamodb_count_loses_to_larger_postgres_count",
-    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestDynamoDBCompleteness::test_complete_pulls_but_partial_dynamodb_successes_uses_postgres",
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestDynamoDBCompleteness::test_postgres_wins_when_dynamodb_is_ahead_of_postgres",
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestDynamoDBCompleteness::test_dynamodb_used_when_postgres_has_no_pulls",
     "test:backend/tests/integration/api/test_tracking_api.py::TestBanditAssignment::test_new_users_follow_bandit_weights",
 ]
 
