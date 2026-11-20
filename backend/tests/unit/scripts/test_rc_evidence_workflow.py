@@ -642,7 +642,7 @@ def test_the_required_and_skippable_jobs_are_names_in_their_workflows():
         if workflow == "sdk-unit-tests.yml":
             assert "${{ matrix.sdk }}" in present
             # The Linux tier's jobs are its matrix's; the rest are named jobs.
-            present |= set(rc.SDK_JOBS[:13])
+            present |= set(rc.SDK_JOBS[:14])
         if workflow == "rc-evidence.yml":
             present |= {rc.suite_job(s) for s in rc.LEGS}
         assert set(names) <= present, (workflow, set(names) - present)
@@ -650,13 +650,13 @@ def test_the_required_and_skippable_jobs_are_names_in_their_workflows():
         assert name in _job_names(workflow), (workflow, name)
 
 
-def test_the_17_sdk_jobs_are_sdk_unit_tests_own_lists():
-    """The 16 SDKs' jobs and the MCP server's."""
+def test_the_18_sdk_jobs_are_sdk_unit_tests_own_lists():
+    """The 16 SDKs' jobs, the MCP server's and the visual browser script's."""
     text = (WORKFLOWS / "sdk-unit-tests.yml").read_text(encoding="utf-8")
     linux = ast.literal_eval(re.search(r"LINUX = (\{.*?\})\n", text, re.S).group(1))
     heavy = ast.literal_eval(re.search(r"HEAVY = (\[.*?\])\n", text).group(1))
     assert list(rc.SDK_JOBS) == list(linux) + list(heavy)
-    assert len(rc.SDK_JOBS) == 17
+    assert len(rc.SDK_JOBS) == 18
     assert rc.SDK_JOBS[: len(linux)] == tuple(linux)
 
 

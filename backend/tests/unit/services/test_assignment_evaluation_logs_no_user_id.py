@@ -3,8 +3,10 @@ Assignment and flag evaluation never log the user id, at any level (#269).
 
 Every per-request path in ``AssignmentService`` -- a new assignment, a sticky
 one, an ineligible user, targeting assignment, a targeting error, a
-reassignment -- the batch assignment route's two failure lines (#441), and the
-flag service's two error lines are driven with a distinctive user id. For each:
+reassignment, and a linked id's new and sticky answers (#449) -- the batch
+assignment route's two failure lines (#441), ``identity_aliases.link``
+storing and refusing a link (#449), and the flag service's two error lines
+are driven with a distinctive user id. For each:
 
 * no record, at any level, contains the user id;
 * the routine per-request lines are at DEBUG, not INFO;
@@ -34,6 +36,7 @@ from backend.app.models.experiment import Experiment, ExperimentStatus
 from backend.app.models.feature_flag import FeatureFlagStatus
 from backend.app.services import assignment_service as asvc
 from backend.app.services import feature_flag_service as ffs
+from backend.app.services import identity_aliases
 
 pytestmark = [pytest.mark.unit, pytest.mark.regression]
 
@@ -156,6 +159,84 @@ def test_sticky_assignment(logs, experiment):
     with patch.object(svc, "_assigned_result", return_value={}):
         svc.assign_user(USER, experiment.id)
     _assert_clean(logs, routine=True)
+
+
+#: The known id USER is linked to, in the linked-person cases (#449).
+KNOWN = "bob.known449@example.com"
+
+
+def _linked(monkeypatch, row=None):
+    """USER linked to KNOWN; the holder is KNOWN with no row, or USER with
+    *row*."""
+    person = identity_aliases.Person(KNOWN, (KNOWN, USER))
+    monkeypatch.setattr(asvc, "person_of", lambda db, user_id: person)
+    holder = (KNOWN, None) if row is None else (USER, row)
+    monkeypatch.setattr(asvc, "holder_of", lambda db, p, experiment_id: holder)
+
+
+def _assert_no_id(records) -> None:
+    assert records, "nothing was captured: the recorder is not wired in"
+    leaked = [r for r in records if USER in r[1] or KNOWN in r[1]]
+    assert leaked == [], leaked
+
+
+def test_linked_new_assignment(logs, experiment, monkeypatch):
+    """IA-P1: a linked id assigned under its known id."""
+    _linked(monkeypatch)
+    svc = _service(experiment)
+    with (
+        patch.object(svc, "_assigned_result", return_value={}),
+        patch.object(svc, "_hash_user_to_variant", return_value=uuid4()),
+    ):
+        svc.assign_user(USER, experiment.id)
+    _assert_no_id(logs.records)
+    _assert_clean(logs, routine=True)
+
+
+def test_linked_sticky_assignment(logs, experiment, monkeypatch):
+    """IA-P1: a linked id answered with the row its person holds."""
+    _linked(monkeypatch, row=MagicMock(variant_id=uuid4()))
+    svc = _service(experiment)
+    with patch.object(svc, "_assigned_result", return_value={}):
+        svc.assign_user(KNOWN, experiment.id)
+    _assert_no_id(logs.records)
+    _assert_clean(logs, routine=True)
+
+
+class _LinkSession:
+    """A session for ``identity_aliases.link``: the two hashes, then the
+    anonymous id's current link (``linked_to``), no other link, no count."""
+
+    def __init__(self, linked_to=None):
+        self.linked_to = linked_to
+
+    def execute(self, *args, **kwargs):
+        result = MagicMock()
+        result.one.return_value = (11, 7)
+        result.scalar_one_or_none.return_value = self.linked_to
+        result.first.return_value = None
+        result.scalar_one.return_value = 0
+        return result
+
+    def commit(self):
+        pass
+
+    def rollback(self):
+        pass
+
+
+def test_linking_logs_neither_id(monkeypatch):
+    """IA-P1: a link stored, and one refused (its rule's name at DEBUG)."""
+    recorder = Recorder()
+    monkeypatch.setattr(identity_aliases, "logger", recorder.bind())
+
+    assert identity_aliases.link(_LinkSession(), USER, KNOWN) is True
+    with pytest.raises(identity_aliases.AliasConflict) as refused:
+        identity_aliases.link(_LinkSession(linked_to="someone-else"), USER, KNOWN)
+
+    assert USER not in str(refused.value) and KNOWN not in str(refused.value)
+    _assert_no_id(recorder.records)
+    assert [r[0] for r in recorder.records] == ["debug"], recorder.records
 
 
 def test_ineligible_user(logs, experiment):

@@ -7,7 +7,7 @@
 "margin_properties": ["margin", "margin-block", "margin-block-end", "margin-block-start", "margin-bottom", "margin-inline", "margin-inline-end", "margin-inline-start", "margin-left", "margin-right", "margin-top"],
 "allowed_style_functions": ["calc", "clamp", "hsl", "hsla", "max", "min", "rgb", "rgba", "var"],
 "limits": {"alt": 500, "attribute_value": 2048, "bytes": 65536, "changes": 100, "selector": 512, "style_value": 200, "styles": 20, "text": 2000},
-"counts": {"accepted": 32, "changes": 124, "page_rules": 19},
+"counts": {"accepted": 32, "changes": 124, "page_rules": 20},
 "changes": [
   {"accepted": false, "document": {"changes": [{"name": "href", "op": "set_attribute", "selector": "a", "value": "javascript:alert(1)"}], "version": 1}, "error_type": "visual_changes", "field": "set_attribute.value", "id": "href-javascript"},
   {"accepted": false, "document": {"changes": [{"name": "href", "op": "set_attribute", "selector": "a", "value": " JaVaScRiPt:alert(1)"}], "version": 1}, "error_type": "visual_changes", "field": "set_attribute.value", "id": "href-javascript-case-space"},
@@ -153,6 +153,7 @@
   {"host": "shop.example.com", "id": "root-empty-path", "matches": true, "path": "", "rule": {"match": "prefix", "url": "https://shop.example.com/"}},
   {"host": "example.com", "id": "root-other-host", "matches": false, "path": "/", "rule": {"match": "prefix", "url": "https://shop.example.com/"}},
   {"host": "shop.example.com", "id": "encoded-kept", "matches": true, "path": "/a%20b", "rule": {"match": "exact", "url": "https://shop.example.com/a%20b"}},
-  {"host": "shop.example.com", "id": "encoded-not-decoded", "matches": false, "path": "/a b", "rule": {"match": "exact", "url": "https://shop.example.com/a%20b"}}
+  {"host": "shop.example.com", "id": "encoded-not-decoded", "matches": false, "path": "/a b", "rule": {"match": "exact", "url": "https://shop.example.com/a%20b"}},
+  {"host": "shop.example.com", "id": "hash-route", "matches": false, "path": "/#/cart", "rule": {"match": "exact", "url": "https://shop.example.com/cart"}}
 ]
 }

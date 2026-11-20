@@ -39,11 +39,13 @@ const SDK_DIR = path.join(REPO_ROOT, 'sdk');
 /**
  * Directories under `sdk/` that are not SDKs, so `SDKS` does not name them
  * and the pages do not count them: `mcp` is the MCP server, a program an AI
- * assistant starts, not a client library. The backend's front-door facts
- * test holds the same list (`NOT_SDKS` in test_front_door_facts.py). Each
- * must exist, so a stale entry fails rather than hiding a directory.
+ * assistant starts, not a client library; `visual` is the visual experiments'
+ * browser script (#1545), which a site loads with a script tag and which is
+ * not published. The backend's front-door facts test holds the same list
+ * (`NOT_SDKS` in test_front_door_facts.py). Each must exist, so a stale entry
+ * fails rather than hiding a directory.
  */
-const NOT_SDKS: readonly string[] = ['mcp'];
+const NOT_SDKS: readonly string[] = ['mcp', 'visual'];
 
 function sdkDirectories(): string[] {
   if (!fs.existsSync(SDK_DIR)) {

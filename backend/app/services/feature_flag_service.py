@@ -5,8 +5,8 @@ import hashlib
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple, Union
-from uuid import UUID
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from uuid import UUID, uuid4
 
 from pydantic_core import PydanticCustomError
 from sqlalchemy import delete, func
@@ -223,6 +223,25 @@ class FeatureFlagService:
         """Initialize with a database session."""
         self.db = db
 
+    def _commit(
+        self, flag: FeatureFlag, record: Optional[Callable[[FeatureFlag], None]]
+    ) -> None:
+        """Commit the change, together with its audit entries when ``record``
+        is given (#1042).
+
+        ``record(flag)`` adds the entries to this transaction; it flushes the
+        change first (``AuditService.audit_with_change``). If it raises, the
+        session is rolled back and the error re-raised: neither the change nor
+        an entry is saved. With ``None`` the change is committed alone.
+        """
+        if record is not None:
+            try:
+                record(flag)
+            except BaseException:
+                self.db.rollback()
+                raise
+        self.db.commit()
+
     def get_feature_flag(self, flag_id: Union[str, UUID]) -> Optional[FeatureFlagRead]:
         """
         Get a feature flag by ID.
@@ -280,7 +299,11 @@ class FeatureFlagService:
         return query.scalar() or 0
 
     def create_feature_flag(
-        self, flag_data: FeatureFlagCreate, owner_id: UUID
+        self,
+        flag_data: FeatureFlagCreate,
+        owner_id: UUID,
+        *,
+        record: Optional[Callable[[FeatureFlag], None]] = None,
     ) -> FeatureFlag:
         """Create a new feature flag owned by *owner_id*.
 
@@ -295,6 +318,9 @@ class FeatureFlagService:
 
         The values were checked by ``FeatureFlagCreate``; a boolean flag stores
         neither (its ``true``/``false``, when sent, are not written).
+
+        ``record``, when given, writes the audit entries in the same
+        transaction (see ``_commit``); the new flag has its id before then.
 
         Raises:
             FlagStatusReadOnly: a sent ``status`` differs from that status.
@@ -313,11 +339,13 @@ class FeatureFlagService:
             flag_dict["value_type"], flag_dict["on_value"], flag_dict["off_value"]
         )
         try:
-            flag = FeatureFlag(**flag_dict, status=status, owner_id=owner_id)
+            flag = FeatureFlag(
+                **flag_dict, id=uuid4(), status=status, owner_id=owner_id
+            )
 
             # Add and commit to DB
             self.db.add(flag)
-            self.db.commit()
+            self._commit(flag, record)
             self.db.refresh(flag)
 
             return flag
@@ -327,7 +355,11 @@ class FeatureFlagService:
             raise
 
     def update_feature_flag(
-        self, flag_id: Union[str, UUID, FeatureFlag], flag_data: FeatureFlagUpdate
+        self,
+        flag_id: Union[str, UUID, FeatureFlag],
+        flag_data: FeatureFlagUpdate,
+        *,
+        record: Optional[Callable[[FeatureFlag], None]] = None,
     ) -> Optional[FeatureFlag]:
         """Update an existing feature flag; returns the stored row, or None.
 
@@ -343,6 +375,9 @@ class FeatureFlagService:
         ``value_type`` is never written: sent, it must equal the stored type.
         The values are checked against the stored flag
         (:func:`_check_sent_values`), and a boolean flag's are not written.
+
+        ``record``, when given, writes the audit entries in the same
+        transaction (see ``_commit``).
 
         Raises:
             FlagStatusReadOnly: a sent ``status`` differs from the stored one.
@@ -379,7 +414,7 @@ class FeatureFlagService:
                 setattr(flag, field, value)
 
             # Commit changes
-            self.db.commit()
+            self._commit(flag, record)
             self.db.refresh(flag)
 
             return flag
@@ -407,12 +442,19 @@ class FeatureFlagService:
             self.db.rollback()
             raise
 
-    def delete_feature_flag(self, flag: FeatureFlag) -> None:
+    def delete_feature_flag(
+        self,
+        flag: FeatureFlag,
+        *,
+        record: Optional[Callable[[FeatureFlag], None]] = None,
+    ) -> None:
         """
         Delete a feature flag.
 
         Args:
             flag: Feature flag model object
+            record: writes the audit entries in the same transaction, when
+                given (see ``_commit``)
         """
         flag_id = str(flag.id)
         flag_name = flag.name
@@ -427,16 +469,23 @@ class FeatureFlagService:
             )
 
         self.db.delete(flag)
-        self.db.commit()
+        self._commit(flag, record)
 
         logger.info(f"Deleted feature flag {flag_id}: {flag_name}")
 
-    def activate_feature_flag(self, flag: FeatureFlag) -> FeatureFlagRead:
+    def activate_feature_flag(
+        self,
+        flag: FeatureFlag,
+        *,
+        record: Optional[Callable[[FeatureFlag], None]] = None,
+    ) -> FeatureFlagRead:
         """
         Activate a feature flag.
 
         Args:
             flag: Feature flag model object
+            record: writes the audit entries in the same transaction, when
+                given (see ``_commit``)
 
         Returns:
             The updated feature flag's response representation
@@ -447,18 +496,25 @@ class FeatureFlagService:
         flag.status = transition(flag.status, FlagVerb.ON).value
         flag.updated_at = datetime.now(timezone.utc)
 
-        self.db.commit()
+        self._commit(flag, record)
         self.db.refresh(flag)
 
         logger.info(f"Activated feature flag {flag.id}: {flag.name}")
         return flag_to_read(flag)
 
-    def deactivate_feature_flag(self, flag: FeatureFlag) -> FeatureFlagRead:
+    def deactivate_feature_flag(
+        self,
+        flag: FeatureFlag,
+        *,
+        record: Optional[Callable[[FeatureFlag], None]] = None,
+    ) -> FeatureFlagRead:
         """
         Deactivate a feature flag.
 
         Args:
             flag: Feature flag model object
+            record: writes the audit entries in the same transaction, when
+                given (see ``_commit``); not called when nothing changes
 
         Returns:
             The updated feature flag's response representation
@@ -470,7 +526,7 @@ class FeatureFlagService:
         flag.status = new_status.value
         flag.updated_at = datetime.now(timezone.utc)
 
-        self.db.commit()
+        self._commit(flag, record)
         self.db.refresh(flag)
 
         logger.info(f"Deactivated feature flag {flag.id}: {flag.name}")

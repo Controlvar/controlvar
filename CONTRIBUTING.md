@@ -8,6 +8,9 @@ need: how to sign your work, how to run the stack, and where code lives.
 - **Bugs and features**: open an issue first for anything non-trivial, so we can
   agree on the shape before you spend an evening on it. Small fixes — a typo, a
   wrong URL, a one-line bug — can go straight to a pull request.
+- **Where to start**: [ROADMAP.md](ROADMAP.md) says what is planned and how to
+  influence it. The issues labelled `good first issue` and `help wanted` are the
+  ones to look at first.
 - **Security problems**: do **not** open an issue. Follow
   [SECURITY.md](SECURITY.md). A public issue for a vulnerability is itself the
   disclosure.

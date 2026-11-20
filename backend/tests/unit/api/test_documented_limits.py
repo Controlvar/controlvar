@@ -582,6 +582,14 @@ SENDS = {
     ),
 }
 
+#: Every directory under sdk/ that evaluates no flag at all: its source
+#: directory, which must not name the evaluate route.
+EVALUATES_NO_FLAG = {
+    # #1545: the visual experiments' browser script asks which visual changes a
+    # visitor gets, never a flag.
+    "visual": "sdk/visual/src",
+}
+
 #: A whole-line ``#`` comment (Python, Ruby, Elixir). A ``#`` after code is
 #: kept: in Ruby and Elixir it is as often string interpolation, ``#{...}``.
 _HASH_COMMENT = re.compile(r"(?m)^[ \t]*#[^\n]*")
@@ -609,10 +617,12 @@ def _evaluation_code(rel: str, bounds) -> tuple[str, str | None]:
 
 
 def test_every_sdk_directory_is_classified_by_whether_flag_evaluation_sends_attributes():
-    """Every directory under sdk/ is in ``SENDS``: its flag evaluation sends the
+    """Every directory under sdk/ is in ``SENDS`` or ``EVALUATES_NO_FLAG``, and
+    in exactly one. One in ``SENDS`` has a flag evaluation that sends the
     user's attributes as ``context``, so that a flag rule on attributes can
     match from it. A new directory fails until it is listed, with the marker
-    that shows it does.
+    that shows it does. One that evaluates no flag is in ``EVALUATES_NO_FLAG``,
+    and fails the day its source names the evaluate route.
 
     An SDK in ``SENDS`` must still hand the attributes to its evaluate request:
     its marker, the code token that does so, is in its flag-evaluation code.
@@ -630,9 +640,14 @@ def test_every_sdk_directory_is_classified_by_whether_flag_evaluation_sends_attr
     assert len(directories) > 10, (
         f"the walk found too few SDK directories: {directories}"
     )
+    assert not set(SENDS) & set(EVALUATES_NO_FLAG), (
+        "an SDK is in both SENDS and EVALUATES_NO_FLAG"
+    )
+
+    classified = set(SENDS) | set(EVALUATES_NO_FLAG)
     failures = [
         f"classified SDK directory is gone: {name}"
-        for name in sorted(set(SENDS) - set(directories))
+        for name in sorted(classified - set(directories))
     ]
     for sdk in directories:
         if sdk in SENDS:
@@ -645,6 +660,17 @@ def test_every_sdk_directory_is_classified_by_whether_flag_evaluation_sends_attr
                     f"{sdk}: no context on flag evaluation ({marker!r} is not in"
                     f" its flag-evaluation code in {rel})"
                 )
+        elif sdk in EVALUATES_NO_FLAG:
+            source = ROOT / EVALUATES_NO_FLAG[sdk]
+            files = sorted(p for p in source.rglob("*") if p.is_file())
+            if not files:
+                failures.append(f"{sdk}: no source file under {EVALUATES_NO_FLAG[sdk]}")
+            for path in files:
+                if "feature-flags/evaluate" in path.read_text(encoding="utf-8"):
+                    failures.append(
+                        f"{sdk} evaluates a flag ({path.relative_to(ROOT)}): move it"
+                        " to SENDS"
+                    )
         else:
             failures.append(f"unclassified SDK directory: {sdk}")
     assert not failures, "\n".join(failures)

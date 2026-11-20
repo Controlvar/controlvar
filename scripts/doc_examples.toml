@@ -140,6 +140,7 @@ universe = [
     "docs/sdk/react-native.md",
     "docs/sdk/react.md",
     "docs/sdk/ruby.md",
+    "docs/sdk/visual.md",
     "docs/security/README.md",
     "docs/security/api-keys.md",
     "docs/security/hardening-changes.md",
@@ -179,6 +180,7 @@ universe = [
     "sdk/react-native/README.md",
     "sdk/react/README.md",
     "sdk/ruby/README.md",
+    "sdk/visual/README.md",
     "tests/sdk-contract/README.md",
 ]
 
@@ -629,7 +631,7 @@ expects = 33
 path = "docs/self-hosting/migrations.md"
 environment = "stack"
 exec = 7
-skip = 15
+skip = 16
 expects = 6
 
 # The beta AWS installer's page. One block runs: the installer's --help, which

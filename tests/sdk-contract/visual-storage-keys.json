@@ -1,0 +1,76 @@
+{
+  "description": "Every browser storage key the visual script (sdk/visual) may use: the closed list. The names are final. revokeConsent() deletes all of them. `written` says whether this version of the script writes the key; the others are reserved for the goal and visitor-detail features. No key ever holds a raw URL, a query string, a referrer, an editor link or a token.",
+  "prefix": "controlvar_",
+  "keys": [
+    {
+      "name": "controlvar_uid",
+      "storage": "cookie",
+      "written": true,
+      "holds": "The visitor's random id, when the page sets no data-user-id. Its name is data-cookie-name's default.",
+      "kept": "30 days (Max-Age=2592000, Path=/, SameSite=Lax, Secure on https)"
+    },
+    {
+      "name": "controlvar_visit",
+      "storage": "localStorage",
+      "written": false,
+      "holds": "The visit's start and last activity, and its cleaned campaign values and landing path.",
+      "kept": "30 minutes after the last activity"
+    },
+    {
+      "name": "controlvar_seen",
+      "storage": "localStorage",
+      "written": false,
+      "holds": "When this browser was first seen, to tell a new visitor from a returning one.",
+      "kept": "until deleted"
+    },
+    {
+      "name": "controlvar_assigned",
+      "storage": "localStorage",
+      "written": true,
+      "holds": "The keys of the experiments this visitor was assigned to, each with the time it was last seen, so track() can name them.",
+      "kept": "30 days per experiment"
+    },
+    {
+      "name": "controlvar_goals",
+      "storage": "localStorage",
+      "written": false,
+      "holds": "The goals already counted for this visitor.",
+      "kept": "30 days"
+    },
+    {
+      "name": "controlvar_outbox",
+      "storage": "localStorage",
+      "written": false,
+      "holds": "Goal events not yet delivered.",
+      "kept": "until delivered; at most 50 events, each at most 24 hours"
+    },
+    {
+      "name": "controlvar_pages",
+      "storage": "localStorage",
+      "written": true,
+      "holds": "The page rules of the running visual experiments on this site (match and path), so a page none of them covers makes no call.",
+      "kept": "60 seconds"
+    },
+    {
+      "name": "controlvar_backoff",
+      "storage": "sessionStorage",
+      "written": true,
+      "holds": "The time until which the script sends nothing, set after a refused or failed call.",
+      "kept": "5 minutes, in this tab"
+    },
+    {
+      "name": "controlvar_preview",
+      "storage": "sessionStorage",
+      "written": true,
+      "holds": "A preview link's token, so the preview lasts for the tab.",
+      "kept": "this tab"
+    },
+    {
+      "name": "controlvar_editor_open",
+      "storage": "sessionStorage",
+      "written": true,
+      "holds": "\"1\" once a visual editor link was opened in this tab.",
+      "kept": "this tab"
+    }
+  ]
+}
