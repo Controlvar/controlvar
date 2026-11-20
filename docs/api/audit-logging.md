@@ -280,7 +280,8 @@ says so and saves nothing.
 
 Every action below is written by the route or the part of the platform named. A route
 writes it with the signed-in user as the actor, after the change is saved, except a
-feature flag route, which writes it in the same transaction as the change; the
+feature flag or rollout schedule route, which writes it in the same transaction as the
+change; the
 [failure policy](#when-an-entry-can-be-missing) says what happens when an entry cannot be
 written. An update records only the fields that changed, as
 `old_value` and `new_value` JSON; a create records the new entity's identifying fields in
@@ -404,7 +405,7 @@ Whether a change is kept when its entry cannot be written depends on where it is
 | Where | If the entry cannot be written |
 |-------|--------------------------------|
 | A feature flag created, changed, deleted, activated, deactivated, unarchived, toggled, enabled or disabled, or a bulk toggle | Nothing is saved and the response is `500` with a request ID; a bulk toggle saves none of its flags. Resend it once the problem is fixed |
-| Rollout schedule and stage changes (recorded on the flag) | The change is kept and the response is `2xx`; there is no entry |
+| Rollout schedule and stage changes (recorded on the flag) | Nothing is saved and the response is `500`; resend it once the problem is fixed |
 | Any other route (the other route actions above) | The change is kept and the response is `2xx`; there is no entry |
 | A superuser's change to a user's role, superuser flag or active status | Nothing is saved and the response is `500`; resend it once the problem is fixed |
 | Two-step sign-in turned on or off, a recovery code used or renewed, or a reset by `python -m backend.app.db.two_factor_reset` | Nothing is saved: the change and its entry are kept or lost together. The reset command says `Nothing was changed.` and exits with status 2 |
@@ -438,13 +439,15 @@ later. The API also counts these failures in a Prometheus counter,
 `audit_write_failures_total`, but do not rely on it there: the AWS deployment does not
 collect it.
 
-A feature flag change refused because its entry cannot be written has no missing entry:
-it logs no `Failed to create audit log` line and does not count toward
-`experimentation-api-audit-write-failed-<env>` or `audit_write_failures_total`. The route
-logs `<operation> failed (AuditWriteFailed)` at ERROR instead, such as
+A feature flag or rollout schedule change refused because its entry cannot be written
+has no missing entry: it logs no `Failed to create audit log` line and does not count
+toward `experimentation-api-audit-write-failed-<env>` or `audit_write_failures_total`. The
+route logs `<operation> failed (AuditWriteFailed)` at ERROR instead, such as
 `Feature flag toggle failed (AuditWriteFailed)`, and a create or an update also logs
-`Error creating feature flag` or `Error updating feature flag` with the cause's type.
-`AuditWriteFailed` means only that the entry could not be written with the change: the
+`Error creating feature flag` or `Error updating feature flag` with the cause's type. A
+rollout schedule or stage route logs
+`Error <verb> rollout schedule: audit entry for feature_flag_update on feature_flag <flag id> could not be written (<cause type>)`
+at ERROR instead, with `rollout stage` for a stage. `AuditWriteFailed` means only that the entry could not be written with the change: the
 audit tables refused it, or the database stopped the request while it waited for a row
 that another change held. These lines count toward
 `experimentation-api-error-logs-<env>`, which goes into alarm at 10 error lines in 5

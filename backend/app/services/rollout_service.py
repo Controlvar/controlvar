@@ -65,6 +65,24 @@ def _end_transaction(db: Session) -> None:
         logger.exception("Rolling back a refused rollout change failed")
 
 
+def _commit(db: Session, record: Optional[Callable[[], None]]) -> None:
+    """Commit the change, together with its audit entry when ``record`` is
+    given (#1042).
+
+    ``record()`` adds the entry to this transaction; it flushes the change
+    first (``AuditService.audit_with_change``). If it raises, the transaction
+    is ended and the error re-raised: neither the change nor the entry is
+    saved. With ``None`` the change is committed alone.
+    """
+    if record is not None:
+        try:
+            record()
+        except BaseException:
+            _end_transaction(db)
+            raise
+    db.commit()
+
+
 def _ends_transaction_unless_done(method: _Method) -> _Method:
     """End the session's transaction, in the calling thread, when ``method``
     raises or finds nothing to change (returns ``None``).
@@ -255,7 +273,11 @@ class RolloutService:
 
     @staticmethod
     def create_rollout_schedule(
-        db: Session, data: RolloutScheduleCreate, owner_id: UUID
+        db: Session,
+        data: RolloutScheduleCreate,
+        owner_id: UUID,
+        *,
+        record: Optional[Callable[[], None]] = None,
     ) -> RolloutSchedule:
         """
         Create a new rollout schedule with the provided stages.
@@ -309,7 +331,7 @@ class RolloutService:
             db.add(stage)
 
         # Commit the transaction
-        db.commit()
+        _commit(db, record)
         db.refresh(schedule)
 
         return schedule
@@ -382,7 +404,11 @@ class RolloutService:
     @staticmethod
     @_ends_transaction_unless_done
     def update_rollout_schedule(
-        db: Session, schedule_id: UUID, data: RolloutScheduleUpdate
+        db: Session,
+        schedule_id: UUID,
+        data: RolloutScheduleUpdate,
+        *,
+        record: Optional[Callable[[], None]] = None,
     ) -> Optional[RolloutSchedule]:
         """
         Update an existing rollout schedule.
@@ -455,7 +481,7 @@ class RolloutService:
             setattr(schedule, key, value)
 
         db.add(schedule)
-        db.commit()
+        _commit(db, record)
         db.refresh(schedule)
 
         return schedule
@@ -463,7 +489,11 @@ class RolloutService:
     @staticmethod
     @_ends_transaction_unless_done
     def add_rollout_stage(
-        db: Session, schedule_id: UUID, data: RolloutStageCreate
+        db: Session,
+        schedule_id: UUID,
+        data: RolloutStageCreate,
+        *,
+        record: Optional[Callable[[], None]] = None,
     ) -> Optional[RolloutStage]:
         """
         Add a new stage to an existing rollout schedule.
@@ -529,7 +559,7 @@ class RolloutService:
         )
 
         db.add(stage)
-        db.commit()
+        _commit(db, record)
         db.refresh(stage)
 
         return stage
@@ -537,7 +567,11 @@ class RolloutService:
     @staticmethod
     @_ends_transaction_unless_done
     def update_rollout_stage(
-        db: Session, stage_id: UUID, data: RolloutStageUpdate
+        db: Session,
+        stage_id: UUID,
+        data: RolloutStageUpdate,
+        *,
+        record: Optional[Callable[[], None]] = None,
     ) -> Optional[RolloutStage]:
         """
         Update an existing rollout stage.
@@ -643,13 +677,18 @@ class RolloutService:
             setattr(stage, key, value)
 
         db.add(stage)
-        db.commit()
+        _commit(db, record)
         db.refresh(stage)
 
         return stage
 
     @staticmethod
-    def delete_rollout_stage(db: Session, stage_id: UUID) -> bool:
+    def delete_rollout_stage(
+        db: Session,
+        stage_id: UUID,
+        *,
+        record: Optional[Callable[[], None]] = None,
+    ) -> bool:
         """
         Delete a rollout stage.
 
@@ -701,14 +740,17 @@ class RolloutService:
 
         # Delete the stage
         db.delete(stage)
-        db.commit()
+        _commit(db, record)
 
         return True
 
     @staticmethod
     @_ends_transaction_unless_done
     def activate_rollout_schedule(
-        db: Session, schedule_id: UUID
+        db: Session,
+        schedule_id: UUID,
+        *,
+        record: Optional[Callable[[], None]] = None,
     ) -> Optional[RolloutSchedule]:
         """
         Activate a rollout schedule.
@@ -762,14 +804,17 @@ class RolloutService:
         # Update status
         schedule.status = RolloutScheduleStatus.ACTIVE
         db.add(schedule)
-        db.commit()
+        _commit(db, record)
         db.refresh(schedule)
 
         return schedule
 
     @staticmethod
     def pause_rollout_schedule(
-        db: Session, schedule_id: UUID
+        db: Session,
+        schedule_id: UUID,
+        *,
+        record: Optional[Callable[[], None]] = None,
     ) -> Optional[RolloutSchedule]:
         """
         Pause an active rollout schedule.
@@ -795,14 +840,17 @@ class RolloutService:
         # Update status
         schedule.status = RolloutScheduleStatus.PAUSED
         db.add(schedule)
-        db.commit()
+        _commit(db, record)
         db.refresh(schedule)
 
         return schedule
 
     @staticmethod
     def cancel_rollout_schedule(
-        db: Session, schedule_id: UUID
+        db: Session,
+        schedule_id: UUID,
+        *,
+        record: Optional[Callable[[], None]] = None,
     ) -> Optional[RolloutSchedule]:
         """
         Cancel a rollout schedule.
@@ -828,13 +876,18 @@ class RolloutService:
         # Update status
         schedule.status = RolloutScheduleStatus.CANCELLED
         db.add(schedule)
-        db.commit()
+        _commit(db, record)
         db.refresh(schedule)
 
         return schedule
 
     @staticmethod
-    def delete_rollout_schedule(db: Session, schedule_id: UUID) -> bool:
+    def delete_rollout_schedule(
+        db: Session,
+        schedule_id: UUID,
+        *,
+        record: Optional[Callable[[], None]] = None,
+    ) -> bool:
         """
         Delete a rollout schedule.
 
@@ -860,13 +913,18 @@ class RolloutService:
 
         # Delete the schedule (cascades to stages)
         db.delete(schedule)
-        db.commit()
+        _commit(db, record)
 
         return True
 
     @staticmethod
     @_ends_transaction_unless_done
-    def manually_advance_stage(db: Session, stage_id: UUID) -> Optional[RolloutStage]:
+    def manually_advance_stage(
+        db: Session,
+        stage_id: UUID,
+        *,
+        record: Optional[Callable[[], None]] = None,
+    ) -> Optional[RolloutStage]:
         """
         Manually advance a stage that has manual triggers.
 
@@ -980,7 +1038,7 @@ class RolloutService:
                 db.add(schedule)
 
         db.add(stage)
-        db.commit()
+        _commit(db, record)
         db.refresh(stage)
 
         return stage
