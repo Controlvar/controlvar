@@ -1,3 +1,8 @@
+---
+title: AWS CDK Deployment, install Controlvar on AWS
+description: "Deploy Controlvar's AWS infrastructure with CDK v2 in Python: prerequisites, bootstrap, environment variables, deploying stacks, blue/green updates, teardown."
+---
+
 # AWS CDK Deployment
 
 To have a script run this page's steps for you, see [Install on AWS with one command (beta)](aws-install.md).
