@@ -429,7 +429,7 @@ DESCRIPTION_FACTS: dict[str, dict[str, Any]] = {
         "description": (
             "A device rule, a kill switch, then the safety monitor rolls a staged "
             "rollout back by itself after simulated crashes. The demo uses the web "
-            "SDK; Android and Flutter send only the user id to flags."
+            "SDK; Flutter sends only the user id to flags."
         ),
         "seed": "demo",
         # The rule's page; the kill switch; Player v2's stage and its safety
@@ -803,11 +803,11 @@ def test_video_4s_native_sdk_sentence_is_the_documented_limitation():
         for e in MANIFEST_ENTRIES
         if e["slug"] == "04-streampulse-rollout"
     )
-    assert "; Android and Flutter send only the user id to flags" in description
+    assert "; Flutter sends only the user id to flags" in description
     assert "The demo uses the web SDK" in description
     limitations = LIMITATIONS.read_text(encoding="utf-8")
     assert (
-        "| Android and Flutter send only the user id on flag evaluation, so rules "
+        "| Flutter sends only the user id on flag evaluation, so rules "
         "on attributes do not match"
     ) in limitations
     assert "(web SDK)" in STREAMPULSE_README.read_text(encoding="utf-8").splitlines()[0]

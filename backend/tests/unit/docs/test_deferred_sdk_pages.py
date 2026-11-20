@@ -996,7 +996,6 @@ DELEGATES: Dict[str, Tuple[str, "re.Pattern[str]"]] = {
 #: The deferred SDKs whose flag evaluation sends no ``context`` today, as the
 #: source reads. When one starts sending it, change this set with its pages.
 SENDS_NO_CONTEXT = {
-    "android",
     "flutter",
 }
 
@@ -1198,11 +1197,24 @@ def test_the_claim_patterns_find_the_true_sentence_on_the_ios_pages():
         )
 
 
+def test_the_claim_patterns_find_the_true_sentence_on_the_android_pages():
+    # Android sends the context since its #438 change, and both its pages say
+    # so: android put back in SENDS_NO_CONTEXT fails
+    # test_a_page_claims_no_attribute_targeting_its_client_does_not_send on
+    # docs/sdk/android.md and sdk/android/README.md as well as here.
+    assert "android" not in SENDS_NO_CONTEXT
+    assert sends_context("android")
+    for page in ANDROID_PAGES:
+        assert "flag evaluation sends the attributes" in attribute_claims(text(page)), (
+            page
+        )
+
+
 def test_the_react_native_readme_says_the_attributes_are_sent_and_cites_no_438():
     # The README npm shows for React Native's first release is frozen with it:
     # it must say what the client does since #1520 (the attributes go as
     # `context` on flag evaluation), and carry none of the #438 limit that
-    # iOS, Android and Flutter keep.
+    # Flutter keeps.
     readme = text("sdk/react-native/README.md")
     assert "sent as context on flag evaluation" in attribute_claims(readme)
     assert "438" not in readme
@@ -2910,3 +2922,145 @@ def test_the_old_elixir_note_is_gone_from_both_pages():
         assert "accepted for symmetry and not sent" not in folded, page
         assert "accepted for symmetry" not in folded, page
         assert "against an empty context" not in folded, page
+
+
+# ---------------------------------------------------------------------------
+# 9. The Android SDK's targeting context (#438)
+# ---------------------------------------------------------------------------
+
+ANDROID_PAGE = "docs/sdk/android.md"
+ANDROID_README = "sdk/android/README.md"
+ANDROID_PAGES = (ANDROID_PAGE, ANDROID_README)
+#: The Android SDK's client tests: each Android test named below is one of its
+#: JUnit methods, whose name is its display name.
+ANDROID_TESTS = SDK_DIR / "android/sdk/src/test/kotlin/ExperimentationClientTest.kt"
+_ANDROID_SENDS = (
+    "regression 438 - evaluateFlag sends the attributes as context after user_id"
+)
+_ANDROID_MATCHES = "regression 438 - a targeting rule on attributes matches"
+_ANDROID_READS_BACK = (
+    "evaluateFlag - the context reads back as the attributes with the server's rules"
+)
+_ANDROID_NONE = "evaluateFlag - no attributes and an empty map send the user id alone"
+_ANDROID_CACHE = (
+    "cache - other attributes ask the server again",
+    "cache - one entry holds the latest answer, so A then B then A is three requests",
+    "cache - the same attributes are one request",
+)
+_ANDROID_SORTED = (
+    "evaluateFlag - the context is the attributes with the keys of every map sorted"
+)
+_ANDROID_OFFLINE = (
+    "evaluateFlag - the offline store key is user and flag as before",
+    "evaluateFlag - a 404 under other attributes removes the stored answer",
+    "evaluateFlag - a stored answer for other attributes is served when the server"
+    " cannot answer",
+)
+_ANDROID_NOT_JSON = (
+    "evaluateFlag - attributes that cannot be written as JSON throw and send nothing"
+)
+_ANDROID_BOTH_WRITERS = (
+    "evaluateFlag - the flag context and the assignment context decode to the same"
+    " object"
+)
+
+#: Each sentence the Android pages state about the targeting context (as
+#: written, folded to one line), the pages that state it, and the JUnit tests
+#: that fail when it stops being true. The pages are in ``CLAIMS_DEFERRED``, so
+#: no claims registry binds them; this does.
+ANDROID_CONTEXT_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], ...] = (
+    (
+        "**Flag evaluation sends the user's attributes.** `evaluateFlag(flagKey, user)`"
+        " sends `user.attributes` as `context` on"
+        " `GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=<URL-encoded JSON object>`,"
+        " so the flag's targeting rules are evaluated against them.",
+        ANDROID_PAGES,
+        (_ANDROID_SENDS, _ANDROID_READS_BACK, _ANDROID_MATCHES),
+    ),
+    (
+        "With no attributes, or an empty map, no `context` is sent and the request carries"
+        " the user id alone.",
+        ANDROID_PAGES,
+        (_ANDROID_NONE,),
+    ),
+    (
+        "The change is in this repository"
+        " ([#438](https://github.com/Controlvar/controlvar/issues/438)); it reaches a"
+        " registry at this SDK's first publish, so a build from a clone of `main` has it and"
+        " a copy installed earlier does not.",
+        ANDROID_PAGES,
+        (_ANDROID_SENDS,),
+    ),
+    (
+        "The SDK keeps one cached answer per user and flag, together with the attributes it"
+        " was asked with. A later call is answered from the cache only if its attributes are"
+        " exactly the same; otherwise the SDK asks the server, and the new answer replaces the"
+        " cached one. So two calls that differ only in attributes get two answers.",
+        ANDROID_PAGES,
+        _ANDROID_CACHE,
+    ),
+    (
+        "The attributes are written with their keys sorted, so the same attributes always"
+        " find the same cached answer.",
+        ANDROID_PAGES,
+        (_ANDROID_SORTED,),
+    ),
+    (
+        "stores the last answer the server gave for each user and flag, whatever attributes"
+        " it was asked with, and serves it only when the server cannot answer",
+        ANDROID_PAGES,
+        _ANDROID_OFFLINE,
+    ),
+    (
+        "If the attributes cannot be written as JSON (a NaN or an infinite number, at any"
+        " depth), `evaluateFlag` throws `IllegalArgumentException`"
+        ' ("user.attributes cannot be sent as JSON") and sends nothing.',
+        ANDROID_PAGES,
+        (_ANDROID_NOT_JSON,),
+    ),
+    (
+        "`context` is `user.attributes` as compact JSON, with the keys of every map sorted"
+        ' (`{"plan":"pro"}` travels as `context=%7B%22plan%22%3A%22pro%22%7D`), and is left'
+        " out when there are none.",
+        (ANDROID_PAGE,),
+        (_ANDROID_SENDS, _ANDROID_SORTED),
+    ),
+    (
+        "a value of another type is sent as its `toString()`, on both calls.",
+        (ANDROID_PAGE,),
+        (_ANDROID_BOTH_WRITERS,),
+    ),
+)
+#: What the pages said before Android sent the attributes: none of it may stay.
+ANDROID_OLD_NOTE = (
+    "Flag evaluation sends only the user id.",
+    "carries none of the user's attributes",
+    "To evaluate a flag with attributes, call the evaluate endpoint",
+    "Flag evaluation sends the user id only",
+)
+
+
+def _junit_methods() -> Set[str]:
+    return set(re.findall(r"\bfun `([^`]{1,300})`\(", ANDROID_TESTS.read_text("utf-8")))
+
+
+@pytest.mark.parametrize(
+    "sentence, pages, tests",
+    ANDROID_CONTEXT_SENTENCES,
+    ids=[s[:60] for s, _, _ in ANDROID_CONTEXT_SENTENCES],
+)
+def test_each_android_context_sentence_is_on_its_pages_and_held_by_a_test(
+    sentence, pages, tests
+):
+    unsaid = [page for page in pages if sentence not in fold(text(page))]
+    assert unsaid == [], f"no longer said on {unsaid}: {sentence}"
+    methods = _junit_methods()
+    missing = [name for name in tests if name not in methods]
+    assert missing == [], f"no JUnit test in {ANDROID_TESTS.name} has these names"
+
+
+def test_the_old_android_note_is_gone_from_both_pages():
+    for page in ANDROID_PAGES:
+        folded = fold(text(page))
+        kept = [old for old in ANDROID_OLD_NOTE if old in folded]
+        assert kept == [], f"{page} still says: {kept}"

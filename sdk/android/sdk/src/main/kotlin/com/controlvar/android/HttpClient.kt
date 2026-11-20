@@ -4,6 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Call
 import okhttp3.Callback
+import okhttp3.HttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -106,11 +107,50 @@ class HttpClient(
         } catch (e: ExperimentationException) {
             throw e
         } catch (e: IOException) {
+            // A flag evaluation's query holds the user's attributes: the message names the
+            // request without it, and the cause is kept only if no message in its chain repeats it.
+            val url = request.url
             throw ExperimentationException.NetworkException(
-                "Network error: ${e.message}",
-                e
+                "Network error: ${withoutQuery(e.message, url)}",
+                if (repeatsQuery(e, url)) null else e
             )
         }
+    }
+
+    /**
+     * What a message must not repeat of [url]: its query and its `context` value, each encoded
+     * and decoded, longest first. Empty strings are left out (they would match everything).
+     */
+    private fun queryForms(url: HttpUrl): List<String> {
+        val encoded = url.encodedQuery ?: return emptyList()
+        return listOfNotNull(
+            encoded,
+            url.query,
+            encoded.substringAfter("context=", ""),
+            url.queryParameter("context")
+        ).filter { it.isNotEmpty() }.distinct().sortedByDescending { it.length }
+    }
+
+    /** [message] with [url]'s query removed, wherever the message names it, in any form. */
+    private fun withoutQuery(message: String?, url: HttpUrl): String? {
+        val forms = queryForms(url)
+        if (message == null || forms.isEmpty()) return message
+        var cut = message.replace(url.toString(), url.newBuilder().query(null).build().toString())
+        for (form in forms) cut = cut.replace("?$form", "").replace(form, "")
+        return cut
+    }
+
+    /** True when a message in [error]'s cause chain contains [url]'s query or `context` value. */
+    private fun repeatsQuery(error: Throwable, url: HttpUrl): Boolean {
+        val queries = queryForms(url)
+        var cause: Throwable? = error
+        var depth = 0
+        while (cause != null && depth++ < 20) {
+            val text = cause.message
+            if (text != null && queries.any { text.contains(it) }) return true
+            cause = cause.cause
+        }
+        return false
     }
 
     /** Prefers the API's `detail` field, then the HTTP reason phrase, for error messages. */
