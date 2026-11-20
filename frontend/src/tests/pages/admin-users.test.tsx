@@ -147,6 +147,37 @@ let captured: Captured[];
 let listUrls: string[];
 /** The ids `DELETE /api/v1/admin/users/{id}/2fa` was sent for. */
 let resets: string[];
+/** Every `GET /api/v1/api-keys` the page sent, as the full URL. */
+let keyUrls: string[];
+
+/**
+ * What `GET /api/v1/api-keys` holds: bob's key and carol's. The route answers
+ * only the caller's own keys unless `all=true` is sent, as the real one does.
+ */
+const KEY_ROWS = [
+  {
+    id: 'k-bob',
+    name: 'Checkout server',
+    description: null,
+    scopes: ['sdk:ruleset'],
+    is_active: true,
+    user_id: 'u-2',
+    created_at: '2026-10-01T00:00:00',
+    expires_at: null,
+    last_used_at: '2026-11-18T10:00:00',
+  },
+  {
+    id: 'k-carol',
+    name: 'Carol personal key',
+    description: null,
+    scopes: [],
+    is_active: true,
+    user_id: 'me-1',
+    created_at: '2026-10-02T00:00:00',
+    expires_at: null,
+    last_used_at: null,
+  },
+];
 const mockFetch = jest.fn();
 
 function makeUsers(): AdminUser[] {
@@ -164,6 +195,13 @@ function route(url: string, init: RequestInit = {}): Promise<Response> {
     listUrls.push(url);
     return Promise.resolve(
       respond({ status: 200, body: { items: users, total: users.length, skip: 0, limit: 50 } }),
+    );
+  }
+  if (pathname === '/api/v1/api-keys' && method === 'GET') {
+    keyUrls.push(url);
+    const all = new URL(url, 'http://localhost').searchParams.get('all') === 'true';
+    return Promise.resolve(
+      respond({ status: 200, body: all ? KEY_ROWS : KEY_ROWS.filter((k) => k.user_id === ME.id) }),
     );
   }
   const reset = /^\/api\/v1\/admin\/users\/([^/]+)\/2fa$/.exec(pathname);
@@ -220,6 +258,7 @@ beforeEach(() => {
   captured = [];
   listUrls = [];
   resets = [];
+  keyUrls = [];
   mockFetch.mockReset();
   mockFetch.mockImplementation(route);
   global.fetch = mockFetch as unknown as typeof fetch;
@@ -435,5 +474,71 @@ describe('/admin/users editing a user', () => {
     expect(within(modal).getByTestId('edit-two-factor-self-note')).toHaveTextContent(
       'Ask another administrator to reset yours.',
     );
+  });
+});
+
+describe('/admin/users clearing Active lists the keys that stop working (#657)', () => {
+  it('sends exactly one GET /api/v1/api-keys?all=true, and lists bob\'s key and not carol\'s', async () => {
+    await renderPage();
+    fireEvent.click(screen.getByTestId('edit-user-u-2'));
+    const modal = await screen.findByTestId('edit-user-modal');
+    // Opening the dialog asks for nothing.
+    expect(keyUrls).toStrictEqual([]);
+
+    fireEvent.click(within(modal).getByTestId('edit-active-toggle'));
+    const list = await within(modal).findByTestId('deactivate-keys-list');
+    expect(keyUrls).toHaveLength(1);
+    const sent = new URL(keyUrls[0], 'http://localhost');
+    expect(sent.pathname).toBe('/api/v1/api-keys');
+    expect(sent.search).toBe('?all=true');
+
+    expect(within(list).getAllByTestId('deactivate-key')).toHaveLength(1);
+    expect(list).toHaveTextContent('Checkout server · sdk:ruleset · last used ');
+    expect(modal).not.toHaveTextContent('Carol personal key');
+    expect(within(modal).getByTestId('deactivate-keys-summary').textContent).toBe(
+      'The API key that stops working:',
+    );
+  });
+
+  it('Save still sends exactly {is_active: false}', async () => {
+    await renderPage();
+    fireEvent.click(screen.getByTestId('edit-user-u-2'));
+    const modal = await screen.findByTestId('edit-user-modal');
+    fireEvent.click(within(modal).getByTestId('edit-active-toggle'));
+    await within(modal).findByTestId('deactivate-keys-list');
+    await save();
+    expect(captured).toHaveLength(1);
+    expect(captured[0].body).toStrictEqual({ is_active: false });
+  });
+
+  it('a refused list request (403) shows the error and Save still works', async () => {
+    mockFetch.mockImplementation((url: string, init?: RequestInit) =>
+      new URL(url, 'http://localhost').pathname === '/api/v1/api-keys'
+        ? Promise.resolve(respond({ status: 403, body: { detail: "You don't have permission to list API keys" } }))
+        : route(url, init),
+    );
+    await renderPage();
+    fireEvent.click(screen.getByTestId('edit-user-u-2'));
+    const modal = await screen.findByTestId('edit-user-modal');
+    fireEvent.click(within(modal).getByTestId('edit-active-toggle'));
+    const summary = await within(modal).findByTestId('deactivate-keys-summary');
+    await waitFor(() => expect(summary.textContent).toMatch(/^Couldn't list this user's API keys: /));
+    expect(within(modal).getByTestId('deactivate-keys-retry')).toBeInTheDocument();
+    await save();
+    expect(captured[0].body).toStrictEqual({ is_active: false });
+  });
+
+  it('the stable snapshot reads `all` on that operation and returns the fields the dialog shows (C14)', () => {
+    const spec = JSON.parse(fs.readFileSync(STABLE_SNAPSHOT, 'utf8'));
+    const operation = spec.paths['/api/v1/api-keys'].get as { parameters: { name: string; in: string }[] };
+    expect(operation.parameters.map((p) => `${p.in}:${p.name}`)).toContain('query:all');
+    const item = spec.components.schemas.APIKeyRead as {
+      required: string[];
+      properties: Record<string, unknown>;
+    };
+    expect(item.required).toEqual(expect.arrayContaining(['user_id', 'name']));
+    for (const field of ['user_id', 'name', 'scopes', 'last_used_at', 'expires_at', 'is_active']) {
+      expect(Object.keys(item.properties)).toContain(field);
+    }
   });
 });
