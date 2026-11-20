@@ -39,7 +39,7 @@ Superusers (`is_superuser=True`) pass every permission check.
 
 | Permission | What a custom role or direct grant of it allows |
 |---|---|
-| `experiment (create)` | Create and clone experiments, including through the experiment wizard and LLM experiments. Also: read the global holdout, and manage exclusion groups (list, create, view, change other than their status, add and remove experiments). Create segments. |
+| `experiment (create)` | Create and clone experiments, including through LLM experiments. Also: read the global holdout, and manage exclusion groups (list, create, view, change other than their status, add and remove experiments). Create segments. |
 | `experiment (read)` | Every built-in role already has it. |
 | `experiment (update)` | Change, schedule, start, pause, complete, archive and annotate any experiment; trigger a bandit update; change LLM experiments; change segments and their members; in the full profile, write the real-time counters. |
 | `experiment (delete)` | Delete draft experiments, and archive segments. |

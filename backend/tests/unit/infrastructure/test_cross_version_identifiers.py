@@ -53,6 +53,18 @@ IDENTIFIERS: List[Tuple[str, str, int, str]] = [
         "the iss of every session token",
     ),
     (
+        "backend/app/core/security.py",
+        'PASSWORD_STAMP_CLAIM = "pwv"',
+        1,
+        "the claim of every session token that carries its password stamp",
+    ),
+    (
+        "backend/app/core/security.py",
+        'PASSWORD_STAMP_INFO = b"controlvar-access-token-pwv-v1"',
+        1,
+        "the info of the key every session's password stamp is computed with",
+    ),
+    (
         "backend/app/api/v1/endpoints/websocket_results.py",
         'WS_AUTH_SUBPROTOCOL = "experimently.bearer"',
         1,
