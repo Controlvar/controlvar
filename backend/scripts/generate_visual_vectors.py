@@ -357,6 +357,15 @@ PAGE_RULES: List[Tuple[str, Dict[str, str], str, str, bool]] = [
         "/a b",
         False,
     ),
+    # A hash-routed page: the route after # is not part of the path, so a
+    # /cart rule does not cover /#/cart (the script and the server agree).
+    (
+        "hash-route",
+        _rule("exact", "https://shop.example.com/cart"),
+        "shop.example.com",
+        "/#/cart",
+        False,
+    ),
 ]
 
 

@@ -1,7 +1,8 @@
-"""Five false stories the docs told, refused in every in-scope document (#1142).
+"""False stories the docs told, or must never tell, refused in every in-scope document (#1142).
 
-Each story was told on many pages at once, so it is swept everywhere rather
-than fixed page by page:
+Each of the first five was told on many pages at once, so it is swept
+everywhere rather than fixed page by page; the last two guard the visual
+script's install guide (#1545):
 
 1. **inactive-404.** A flag that exists but is not ACTIVE does not answer 404
    and is not an error: ``GET /api/v1/feature-flags/evaluate/{key}`` answers
@@ -29,6 +30,14 @@ than fixed page by page:
    examples, "77 core + 30 starter", or a table with a Tests or Unit tests
    column) goes stale with the next test anyone adds. A page names the suite
    and where it runs instead.
+6. **consent-compliant.** Whether the visual script's consent mode
+   (``data-require-consent``, ``consent()``, ``revokeConsent()``) meets a law
+   is for counsel, not the docs: no page says it is legally compliant, or
+   compliant with the GDPR, the CCPA or the ePrivacy rules.
+7. **ip-stored-anywhere.** Controlvar's database stores no visitor IP address,
+   but the API's and the dashboard's access logs, a proxy in front of them and
+   the rate limiter's Redis counters each see a request's address, so no page
+   says that no IP address is stored anywhere.
 
 Each rule is a pattern, why it is wrong, the path prefixes it is limited to
 (``None``: every in-scope document) and a sample of the removed text it must
@@ -105,6 +114,14 @@ _CONTEXT = (
     " POST: the body); say that the SDK does not send it"
 )
 _COUNT = "a hand-written test count goes stale; name the suite and where it runs"
+_CONSENT = (
+    "whether the consent model meets a law is for counsel; say what the script"
+    " does before and after consent() instead"
+)
+_IP = (
+    "the database stores no visitor IP address, but access logs, proxies and"
+    " the rate limiter's counters see each request's address"
+)
 
 RULES: Tuple[Rule, ...] = (
     # 1. inactive-404
@@ -280,6 +297,29 @@ RULES: Tuple[Rule, ...] = (
         None,
         "| SDK | Location | Unit tests | Verified live | Docs |",
     ),
+    # 6. consent-compliant
+    (
+        "consent-compliant",
+        r"(?i)\bconsent\b[^.|\n]{0,80}?\b(?:legally\s+)?(?:compliant|complies|compliance)\b",
+        _CONSENT,
+        None,
+        "With data-require-consent, the consent model is legally compliant.",
+    ),
+    (
+        "consent-compliant",
+        r"(?i)\b(?:GDPR|CCPA|ePrivacy)[- ](?:compliant|ready)\b",
+        _CONSENT,
+        None,
+        "The visual script is GDPR-compliant when the tag waits for consent.",
+    ),
+    # 7. ip-stored-anywhere
+    (
+        "ip-stored-anywhere",
+        r"(?i)\bno\s+IP\s+address(?:es)?\s+(?:is|are)\s+stored\s+anywhere\b",
+        _IP,
+        None,
+        "No IP address is stored anywhere.",
+    ),
 )
 
 #: (document, exact text, why the hit inside it stays for now).
@@ -385,6 +425,8 @@ def test_every_story_has_a_rule() -> None:
         "aws-path",
         "no-context",
         "test-counts",
+        "consent-compliant",
+        "ip-stored-anywhere",
     }
 
 
@@ -403,6 +445,8 @@ def test_every_story_has_a_rule() -> None:
         "`main` requires 20 checks to merge; `lint` is one of them.",
         "`./vendor/bin/phpunit` runs the PHPUnit 10 suite (client, cache, HTTP client and hash tests)",
         "the default (2 vCPU + 4 GB)",
+        "If your page waits for consent (data-require-consent), the script reads, stores and sends nothing about your visitors before consent().",
+        "Controlvar's database stores no visitor IP address.",
     ],
 )
 def test_a_true_sentence_is_not_a_hit(true_text: str) -> None:

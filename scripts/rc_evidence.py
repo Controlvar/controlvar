@@ -233,7 +233,8 @@ JEST_SUITE_JOB = "jest suites ({})"
 JUNIT_ARTIFACT = "rc-evidence-junit-{}"
 
 #: The SDK jobs of sdk-unit-tests.yml (its LINUX and HEAVY lists). `mcp` is
-#: the MCP server, which is not an SDK but has its job there like one.
+#: the MCP server, which is not an SDK but has its job there like one, and
+#: `visual` is the visual experiments' browser script, not published (#1545).
 SDK_JOBS: Tuple[str, ...] = (
     "js",
     "react",
@@ -248,6 +249,7 @@ SDK_JOBS: Tuple[str, ...] = (
     "php",
     "dotnet",
     "mcp",
+    "visual",
     "elixir",
     "flutter",
     "android",

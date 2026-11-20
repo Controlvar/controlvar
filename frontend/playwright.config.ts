@@ -29,6 +29,14 @@ import { launchOptions } from "./tests/e2e/launch";
  *     default launch turns both off). The other projects keep the default
  *     launch. Frontend Tests runs it right after the `site` step, over the
  *     same export; no other workflow step does.
+ *   - `page-runtime` — the visual experiments' browser script, sdk/visual
+ *     (`*.runtime.spec.ts`, #1545), under the same launch override as
+ *     `launch`. Its specs load the script from the packed package, so they
+ *     need VISUAL_PACKAGE_DIR: the `package/` directory of sdk/visual's
+ *     `npm pack` tarball, unpacked (see tests/e2e/runtime/runtime.fixture.ts),
+ *     and the framework sites under tests/e2e/runtime/fixtures built (`node
+ *     tests/e2e/runtime/fixtures/build.mjs`). Browser E2E runs it after the
+ *     journeys and checks its counts; no other workflow step does.
  *   - `extended` — everything else under tests/e2e (accessibility and the
  *     older specs); nightly territory, not a PR gate, but a failure there
  *     fails the night.
@@ -136,13 +144,15 @@ export default defineConfig({
       testMatch: /\.spec\.ts$/,
       // The visual spec has its own project below, until its baselines exist.
       // The site spec needs the marketing export, which nightly does not build.
-      // The launch specs run in `launch`, under its override, and only there.
+      // The launch specs run in `launch`, under its override, and only there;
+      // the page-runtime specs likewise in `page-runtime`.
       testIgnore: [
         /\.journey\.spec\.ts$/,
         /\.sso\.spec\.ts$/,
         /\.required-roles\.spec\.ts$/,
         /\.site\.spec\.ts$/,
         /\.launch\.spec\.ts$/,
+        /\.runtime\.spec\.ts$/,
         /visual-regression\.spec\.ts$/,
       ],
       use: { ...devices["Desktop Chrome"] },
@@ -163,6 +173,17 @@ export default defineConfig({
       // disables either feature.
       name: "launch",
       testMatch: /\.launch\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], launchOptions },
+    },
+    {
+      // #1545: sdk/visual, packed, in the browser users run. launchOptions is
+      // the `launch` project's object, unchanged: Chromium applies only the
+      // last --disable-features= argument, so a second one here would undo
+      // the override, and the launch fixture fails every test when it sees
+      // one. Each spec imports `test` from tests/e2e/runtime/runtime.fixture.ts,
+      // which extends the launch fixture (a backend unit test pins both).
+      name: "page-runtime",
+      testMatch: /\.runtime\.spec\.ts$/,
       use: { ...devices["Desktop Chrome"], launchOptions },
     },
     {
