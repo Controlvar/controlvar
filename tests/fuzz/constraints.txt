@@ -22,8 +22,8 @@ harfile==0.6.0
 hypothesis-graphql==0.13.6
 idna==3.20
 iniconfig==2.3.1
-jsonschema_rs==0.60.3
-markdown-it-py==4.2.0
+jsonschema_rs==0.61.2
+markdown-it-py==4.3.0
 MarkupSafe==3.0.4
 mdurl==0.1.2
 packaging==26.3
