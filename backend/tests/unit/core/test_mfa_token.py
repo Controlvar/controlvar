@@ -69,11 +69,26 @@ def test_its_claims_are_exactly_these():
         algorithms=["HS256"],
         issuer=MFA_TOKEN_ISSUER,
     )
-    assert set(claims) == {"sub", "iss", "purpose", "iat", "exp", "jti"}
+    assert set(claims) == {"sub", "iss", "purpose", "iat", "exp", "jti", "pwv"}
     assert claims["sub"] == str(user.id)
     assert claims["purpose"] == "verify"
     assert claims["exp"] - claims["iat"] == VERIFY_TTL_SECONDS == 300
     assert len(claims["jti"]) == 32
+    # The account's password stamp (#501), the same value an access token
+    # for the account carries.
+    assert claims["pwv"] == decode_local_token(create_local_access_token(user))["pwv"]
+
+
+def test_a_token_without_the_password_stamp_is_still_accepted():
+    """``pwv`` is not a required claim (#501): a token made before it existed
+    still names its account, and the routes accept it until it expires."""
+    user = _user()
+    token = jwt.encode(_claims(sub=str(user.id)), mfa_token_key(), algorithm="HS256")
+    assert "pwv" not in jwt.decode(
+        token, mfa_token_key(), algorithms=["HS256"], issuer=MFA_TOKEN_ISSUER
+    )
+    assert decode_mfa_token(token) == user.id
+    assert "pwv" not in mfa_token.decode_mfa_token_claims(token)
 
 
 def test_it_is_not_signed_with_the_secret_key():

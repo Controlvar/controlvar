@@ -16,9 +16,11 @@ import jwt
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from loguru import logger as loguru_logger
 from sqlalchemy import func, select
 
 from backend.app.api import deps
+from backend.app.api.v1.endpoints.auth import user_to_me
 from backend.app.core import security
 from backend.app.core.config import settings
 from backend.app.core.security import (
@@ -59,6 +61,37 @@ def _user(**overrides) -> User:
     }
     fields.update(overrides)
     return User(**fields)
+
+
+#: A token's ``pwv`` claim (#501) that is not a stamp: each is refused with
+#: 401, never a 500. The literal claim name, so this file still imports
+#: against a tree without the stamp.
+MALFORMED_STAMP_IDS = {
+    "int": 12345,
+    "empty": "",
+    "null": None,
+    "23-characters": "x" * 23,
+    "lone-surrogates": "\ud800" * 22,
+}
+MALFORMED_STAMPS = list(MALFORMED_STAMP_IDS.values())
+
+
+def _token_with_claims(user: User, **extra) -> str:
+    """A local access token made by hand and signed with SECRET_KEY: the
+    claims ``create_local_access_token`` writes, without ``pwv`` unless it is
+    given in *extra*."""
+    now = int(time.time())
+    claims = {
+        "sub": str(user.id),
+        "email": user.email,
+        "role": "DEVELOPER",
+        "iss": LOCAL_TOKEN_ISSUER,
+        "iat": now,
+        "exp": now + 600,
+        "jti": uuid.uuid4().hex,
+    }
+    claims.update(extra)
+    return jwt.encode(claims, settings.SECRET_KEY, algorithm="HS256")
 
 
 @pytest.fixture
@@ -569,6 +602,90 @@ class TestGetCurrentUserLocal:
         assert exc.value.status_code == 401
         cognito.get_user_with_groups.assert_called_once_with("opaque-cognito-token")
 
+    # -- A password change ends the account's sessions (#501) ---------------
+
+    @pytest.mark.regression
+    def test_a_token_from_before_the_password_changed_is_401(self, local_provider):
+        """The token's stamp is of the hash it was issued with; the row now
+        holds another one. The same 401 as any token that does not validate."""
+        user = _user()
+        token = create_local_access_token(user)
+        user.hashed_password = get_password_hash("Changed-Passw0rd-501")
+        with pytest.raises(HTTPException) as exc:
+            deps.get_current_user(token, self._db_with(user))
+        assert exc.value.status_code == 401
+        assert exc.value.detail == "Could not validate credentials"
+        assert exc.value.headers == {"WWW-Authenticate": "Bearer"}
+
+    def test_a_token_issued_after_the_change_works(self, local_provider):
+        user = _user()
+        user.hashed_password = get_password_hash("Changed-Passw0rd-501")
+        token = create_local_access_token(user)
+        assert deps.get_current_user(token, self._db_with(user)) is user
+
+    def test_an_inactive_account_with_a_stale_token_is_still_400(self, local_provider):
+        """The check comes last: "Inactive user" still answers first."""
+        user = _user()
+        token = create_local_access_token(user)
+        user.hashed_password = get_password_hash("Changed-Passw0rd-501")
+        user.is_active = False
+        with pytest.raises(HTTPException) as exc:
+            deps.get_current_user(token, self._db_with(user))
+        assert exc.value.status_code == 400
+        assert exc.value.detail == "Inactive user"
+
+    def test_a_token_without_a_stamp_is_accepted(self, local_provider):
+        """A token minted before the stamp existed, signed with SECRET_KEY:
+        accepted until it expires."""
+        user = _user()
+        token = _token_with_claims(user)
+        assert deps.get_current_user(token, self._db_with(user)) is user
+        assert "pwv" not in jwt.decode(token, options={"verify_signature": False})
+
+    @pytest.mark.parametrize("value", MALFORMED_STAMPS, ids=list(MALFORMED_STAMP_IDS))
+    def test_a_malformed_stamp_is_401_never_500(self, local_provider, value):
+        user = _user()
+        token = _token_with_claims(user, pwv=value)
+        with pytest.raises(HTTPException) as exc:
+            deps.get_current_user(token, self._db_with(user))
+        assert exc.value.status_code == 401
+        assert exc.value.headers == {"WWW-Authenticate": "Bearer"}
+
+    def test_the_check_adds_no_query(self, local_provider):
+        """The stamp is read from the row the lookup already loads."""
+        user = _user()
+        db = self._db_with(user)
+        assert deps.get_current_user(create_local_access_token(user), db) is user
+        assert db.query.call_count == 1
+
+    def test_a_refusal_logs_the_reason_and_the_account_never_the_token(
+        self, local_provider
+    ):
+        user = _user()
+        token = create_local_access_token(user)
+        stamp = decode_local_token(token).get("pwv")
+        user.hashed_password = get_password_hash("Changed-Passw0rd-501")
+        lines: list = []
+        sink = loguru_logger.add(lambda m: lines.append(str(m)), level="TRACE")
+        try:
+            with pytest.raises(HTTPException):
+                deps.get_current_user(token, self._db_with(user))
+        finally:
+            loguru_logger.remove(sink)
+        refused = [line for line in lines if "Local token refused" in line]
+        assert len(refused) == 1, lines
+        assert (
+            "Local token refused: the account's password changed after it was "
+            f"issued (user {user.id})"
+        ) in refused[0]
+        assert "INFO" in refused[0]
+        assert stamp
+        for line in lines:
+            assert token not in line
+            assert stamp not in line
+            for part in token.split("."):
+                assert part not in line
+
 
 # ---------------------------------------------------------------------------
 # UserMe schema
@@ -614,6 +731,32 @@ class TestUserMeSchema:
             "expires_in",
             "user",
         }
+
+    def test_the_profile_builds_for_a_row_with_only_its_address_and_name(self):
+        """``POST /users/me/password`` answers with this profile for an account
+        that has an email address and a username (#501): every other nullable
+        column may be NULL without the answer failing after the change."""
+        row = User(
+            id=uuid.uuid4(),
+            email="only@example.com",
+            username="only",
+            hashed_password=None,
+            is_active=None,
+            is_superuser=None,
+            role=None,
+            external_id=None,
+            first_name=None,
+            last_name=None,
+            settings=None,
+            preferences=None,
+        )
+        me = user_to_me(row)
+        assert me.email == "only@example.com"
+        assert me.username == "only"
+        assert me.full_name is None
+        assert me.role == "VIEWER"
+        assert me.is_superuser is False
+        assert me.is_active is False
 
 
 # ---------------------------------------------------------------------------
@@ -780,6 +923,26 @@ class TestMeAndLogoutEndpoints:
 
     def test_me_with_bad_token_401(self, http):
         resp = http.get("/api/v1/auth/me", headers={"Authorization": "Bearer nope"})
+        assert resp.status_code == 401
+
+    @pytest.mark.parametrize("value", MALFORMED_STAMPS, ids=list(MALFORMED_STAMP_IDS))
+    def test_me_with_a_malformed_stamp_401(self, http, value):
+        """Through the application: the same 401 as a token that does not
+        decode, never a 500 (#501)."""
+        user = _user()
+        http.state.user = user
+        token = _token_with_claims(user, pwv=value)
+        resp = http.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+        bad = http.get("/api/v1/auth/me", headers={"Authorization": "Bearer nope"})
+        assert (
+            resp.status_code,
+            resp.content,
+            resp.headers.get("www-authenticate"),
+        ) == (
+            bad.status_code,
+            bad.content,
+            bad.headers.get("www-authenticate"),
+        )
         assert resp.status_code == 401
 
     def test_me_with_bypass_returns_dev_admin(self, http, monkeypatch):
