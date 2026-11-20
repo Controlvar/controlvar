@@ -91,7 +91,8 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini history
 Output, for example:
 
 ```text
-4955571d232c -> t1812_user_totp (head), Two-step sign-in: each local account's authenticator secret and recovery codes
+t1812_user_totp -> t449_identity_aliases (head), Identity aliases: the table that links an anonymous id to a known id
+4955571d232c -> t1812_user_totp, Two-step sign-in: each local account's authenticator secret and recovery codes
 c448_balance_within -> 4955571d232c, Visual experiments: page changes, pages and goals, and the editor's tokens
 7b6b4b4fe246 -> c448_balance_within, Experiments: balance the split within groups as users arrive
 607c51a59bf5 -> 85dd4796bb8b, Events: an event_id is stored once per user, experiment, flag and event name
@@ -119,7 +120,7 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini current
 Output, for a full install (a core install prints the first line only):
 
 ```text
-t1812_user_totp (head)
+t449_identity_aliases (head)
 modules_0005_redshift (head)
 ```
 
@@ -452,10 +453,15 @@ table `visual_tokens` and the columns `experiments.visual_config` and
 `variants.visual_changes`: every visual experiment's pages, goals and page
 changes (see [`4955571d232c`](#4955571d232c-stores-visual-experiments)).
 
-Past `t1812_user_totp` it first runs that revision's downgrade, which drops the
+Past `t1812_user_totp` it also runs that revision's downgrade, which drops the
 table `user_totp`: every account's two-step sign-in secret, recovery codes and
 wrong-code count (see
 [`t1812_user_totp`](#t1812_user_totp-stores-two-step-sign-in-secrets)).
+
+Past `t449_identity_aliases` it first runs that revision's downgrade, which
+drops the table `identity_aliases`: every link between an anonymous id and a
+known id (see
+[`t449_identity_aliases`](#t449_identity_aliases-adds-the-identity-aliases-table)).
 
 ### `d29a479daafe` records who each global holdout covers
 
@@ -545,6 +551,10 @@ From a release that carries `t1812_user_totp`, it also runs that revision's
 downgrade, which drops the table `user_totp`, every account's two-step sign-in
 secret, recovery codes and wrong-code count (see
 [`t1812_user_totp`](#t1812_user_totp-stores-two-step-sign-in-secrets)).
+From a release that carries `t449_identity_aliases`, it also runs that
+revision's downgrade, which drops the table `identity_aliases`, every link
+between an anonymous id and a known id (see
+[`t449_identity_aliases`](#t449_identity_aliases-adds-the-identity-aliases-table)).
 
 ### `4c2c09a2b3e8` keeps rollback records without a safety configuration
 
@@ -614,10 +624,14 @@ From a release that carries `4955571d232c`, it also runs that revision's
 downgrade, which drops the table `visual_tokens` and the columns
 `experiments.visual_config` and `variants.visual_changes` (see
 [`4955571d232c`](#4955571d232c-stores-visual-experiments)).
-From a release that carries `t1812_user_totp`, it first runs that revision's
+From a release that carries `t1812_user_totp`, it also runs that revision's
 downgrade, which drops the table `user_totp`, every account's two-step sign-in
 secret, recovery codes and wrong-code count (see
 [`t1812_user_totp`](#t1812_user_totp-stores-two-step-sign-in-secrets)).
+From a release that carries `t449_identity_aliases`, it first runs that
+revision's downgrade, which drops the table `identity_aliases`, every link
+between an anonymous id and a known id (see
+[`t449_identity_aliases`](#t449_identity_aliases-adds-the-identity-aliases-table)).
 
 ### `85dd4796bb8b` stores an event sent again with its event_id once
 
@@ -684,10 +698,14 @@ From a release that carries `4955571d232c`, it also runs that revision's
 downgrade, which drops the table `visual_tokens` and the columns
 `experiments.visual_config` and `variants.visual_changes` (see
 [`4955571d232c`](#4955571d232c-stores-visual-experiments)).
-From a release that carries `t1812_user_totp`, it first runs that revision's
+From a release that carries `t1812_user_totp`, it also runs that revision's
 downgrade, which drops the table `user_totp`, every account's two-step sign-in
 secret, recovery codes and wrong-code count (see
 [`t1812_user_totp`](#t1812_user_totp-stores-two-step-sign-in-secrets)).
+From a release that carries `t449_identity_aliases`, it first runs that
+revision's downgrade, which drops the table `identity_aliases`, every link
+between an anonymous id and a known id (see
+[`t449_identity_aliases`](#t449_identity_aliases-adds-the-identity-aliases-table)).
 
 On Helm, run the same command in an API pod with `kubectl exec`. Once the
 database is at the previous release's heads, start the previous release. The
@@ -740,10 +758,14 @@ From a release that carries `4955571d232c`, it also runs that revision's
 downgrade, which drops the table `visual_tokens` and the columns
 `experiments.visual_config` and `variants.visual_changes` (see
 [`4955571d232c`](#4955571d232c-stores-visual-experiments)).
-From a release that carries `t1812_user_totp`, it first runs that revision's
+From a release that carries `t1812_user_totp`, it also runs that revision's
 downgrade, which drops the table `user_totp`, every account's two-step sign-in
 secret, recovery codes and wrong-code count (see
 [`t1812_user_totp`](#t1812_user_totp-stores-two-step-sign-in-secrets)).
+From a release that carries `t449_identity_aliases`, it first runs that
+revision's downgrade, which drops the table `identity_aliases`, every link
+between an anonymous id and a known id (see
+[`t449_identity_aliases`](#t449_identity_aliases-adds-the-identity-aliases-table)).
 
 On Helm, run the same command in an API pod with `kubectl exec`. The upgrade
 cannot be emitted as SQL (`--sql`).
@@ -772,10 +794,14 @@ undoes this revision alone:
 docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade c448_balance_within
 ```
 
-From a release that carries `t1812_user_totp`, it first runs that revision's
+From a release that carries `t1812_user_totp`, it also runs that revision's
 downgrade, which drops the table `user_totp`, every account's two-step sign-in
 secret, recovery codes and wrong-code count (see
 [`t1812_user_totp`](#t1812_user_totp-stores-two-step-sign-in-secrets)).
+From a release that carries `t449_identity_aliases`, it first runs that
+revision's downgrade, which drops the table `identity_aliases`, every link
+between an anonymous id and a known id (see
+[`t449_identity_aliases`](#t449_identity_aliases-adds-the-identity-aliases-table)).
 
 On Helm, run the same command in an API pod with `kubectl exec`.
 
@@ -795,10 +821,50 @@ downgrade drops the table `user_totp`: every account's two-step sign-in
 secret, recovery codes and wrong-code count. It does not refuse, and nothing
 can restore them: those accounts then sign in with the password alone and must
 set two-step sign-in up again. This revision's own `down_revision` is
-`4955571d232c`; this undoes this revision alone:
+`4955571d232c`; from a release that carries no later revision, this undoes
+this revision alone:
 
 ```{.bash skip reason="destructive: drops user_totp, every account's two-step sign-in"}
 docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade 4955571d232c
+```
+
+From a release that carries `t449_identity_aliases`, it first runs that
+revision's downgrade, which drops the table `identity_aliases`, every link
+between an anonymous id and a known id (see
+[`t449_identity_aliases`](#t449_identity_aliases-adds-the-identity-aliases-table)).
+
+On Helm, run the same command in an API pod with `kubectl exec`.
+
+### `t449_identity_aliases` adds the identity aliases table
+
+This revision adds the table `identity_aliases`: one row per anonymous id that
+has been linked to a known id, holding the anonymous id (its primary key, so
+an anonymous id is linked at most once), the known id and when the link was
+stored, with an index on the known id. It adds no foreign key and changes no
+other table, and the new table is empty after the upgrade.
+
+The previous release, 0.47.0, runs against this schema unchanged: it never
+reads or writes the table.
+
+From 0.47.0, this upgrade takes no lock on an existing table, so SDK requests
+do not wait for it. The upgrade itself waits at most 0.25 s, behind a
+concurrent creation of the same table; past that it stops with nothing applied
+and is simply run again. A lock timeout in any revision of an upgrade applies
+none of that run's revisions. An upgrade from 0.46.0 or earlier also runs
+0.47.0's revisions 4955571d232c, t1812_user_totp and modules_0005_redshift,
+which set no lock timeout; 4955571d232c alters experiments and variants, so
+SDK requests that read them wait until the upgrade has its locks and commits.
+
+**The downgrade drops every link.** `t449_identity_aliases`'s downgrade drops
+the table `identity_aliases`: every link between an anonymous id and a known
+id. Assignments and events are untouched. It does not refuse, and nothing can
+restore the links: an upgrade afterwards creates the table empty, and the
+links must be sent again. Neither its upgrade nor its downgrade can be emitted
+as SQL (`--sql`). This revision's own `down_revision` is `t1812_user_totp`;
+this undoes this revision alone:
+
+```{.bash skip reason="destructive: drops identity_aliases, every link between an anonymous id and a known id"}
+docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade t1812_user_totp
 ```
 
 On Helm, run the same command in an API pod with `kubectl exec`.
@@ -1045,6 +1111,10 @@ From a release that carries `t1812_user_totp`, whose own `down_revision` is
 `4955571d232c`, it includes that downgrade too, which drops every account's
 two-step sign-in secret, recovery codes and wrong-code count (see
 [`t1812_user_totp`](#t1812_user_totp-stores-two-step-sign-in-secrets)).
+From a release that carries `t449_identity_aliases`, whose own `down_revision`
+is `t1812_user_totp`, it includes that downgrade too, which drops every link
+between an anonymous id and a known id (see
+[`t449_identity_aliases`](#t449_identity_aliases-adds-the-identity-aliases-table)).
 
 Do not edit `alembic_version` to make the older image start.
 
@@ -1135,6 +1205,10 @@ What this means for you:
   is backward-compatible for a rollback too, and undoing it drops every
   account's two-step sign-in secret, recovery codes and wrong-code count:
   those accounts then sign in with the password alone.
+  [`t449_identity_aliases`](#t449_identity_aliases-adds-the-identity-aliases-table)
+  is backward-compatible for a rollback too, and undoing it drops every link
+  between an anonymous id and a known id and keeps every assignment and event;
+  an upgrade afterwards creates the table empty.
   [`modules_0003_lower_is_better`](#modules_0003_lower_is_better-gives-each-warehouse-metric-source-a-direction)
   is backward-compatible for a rollback, and undoing it drops every warehouse
   metric source's lower-is-better setting; an upgrade afterwards sets each back

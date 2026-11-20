@@ -102,6 +102,7 @@ routes = [
   "/api/v1/feature-flags/{flag_id}",
   "/api/v1/feature-flags/{flag_id}/activate",
   "/api/v1/feature-flags/{flag_id}/deactivate",
+  "/api/v1/feature-flags/{flag_id}/disable",
   "/api/v1/feature-flags/{flag_id}/enable",
   "/api/v1/feature-flags/{flag_id}/history",
   "/api/v1/feature-flags/{flag_id}/toggle",

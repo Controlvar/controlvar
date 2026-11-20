@@ -313,10 +313,10 @@ CORE_TAGS_METADATA = [
     {
         "name": "Compliance",
         "description": (
-            "Compliance audit trail: append-only events for every experiment and "
-            "feature-flag change, readable by ADMIN and ANALYST. HMAC signing, "
-            "SOC 2 / ISO 27001 reports and the audit export are the compliance "
-            "module's, on the same routes."
+            "Compliance audit trail: append-only events for experiment and "
+            "feature-flag creates, updates and deletes, readable by ADMIN and "
+            "ANALYST. HMAC signing, SOC 2 / ISO 27001 reports and the audit "
+            "export are the compliance module's, on the same routes."
         ),
     },
 ]
