@@ -49,8 +49,19 @@ by = [
 ]
 
 [[unit]]
-text = "Creating a split URL experiment is an API call, shown on this page."
+text = "You can create a split URL experiment in the dashboard: the new-experiment form offers Split URL and asks for each variant's page."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-split-url.test.tsx::the single-page form shows split-url-config, one address per variant, and says what sends visitors",
+    "test:frontend/src/tests/pages/experiment-new-split-url.test.tsx::guided setup shows split-url-config on the Variants step, not before",
+]
+
+[[unit]]
+text = "The API call is shown on this page."
 by = ["docex:docs/api/split-url.md#active"]
+
+[[unit]]
+text = "The dashboard sets the pages only when it creates the experiment; to change them later, send PUT /api/v1/experiments/{id}."
+by = ["test:frontend/src/tests/pages/experiment-detail-design.test.tsx::says the variants and split_url_config change together through the API, never the server text"]
 
 [[unit]]
 text = "Starting, pausing and ending it, and reading its results, are in the dashboard, as for any experiment."

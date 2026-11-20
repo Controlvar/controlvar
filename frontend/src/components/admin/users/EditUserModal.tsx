@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { AdminUser, AdminUserPatch, UserRole, USER_ROLE_LABELS } from '@/types/admin';
+import { AdminUser, AdminUserPatch, ApiKey, UserRole, USER_ROLE_LABELS } from '@/types/admin';
 import { isApiError } from '@/services/api';
 import { demoRefusalMessage } from '@/utils/demoMode';
 import { RequiresModule } from '@/contexts/ModulesContext';
 import { MODULES } from '@/services/modules';
 import { Dialog } from '@/components/ui/Dialog';
+import { keyState } from '@/components/admin/api-keys/ApiKeyTable';
+import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
 export interface EditUserCloseOptions {
   /** The list is out of date (the user was not found); reload it. */
@@ -28,7 +30,21 @@ interface EditUserModalProps {
    * offers no reset.
    */
   onResetTwoFactor?: (userId: string) => Promise<void>;
+  /**
+   * Every user's active API keys (#657), asked for when Active is cleared on
+   * someone else's account. The route has no owner filter, so the dialog keeps
+   * the rows whose `user_id` is this user's. Without it the dialog shows only
+   * the general warning.
+   */
+  listUserKeys?: (userId: string) => Promise<ApiKey[]>;
 }
+
+/** What the dialog knows of the user's active API keys while Active is cleared. */
+type KeysState =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'ok'; keys: ApiKey[] }
+  | { kind: 'error'; message: string; busy: boolean };
 
 const ROLES: UserRole[] = ['ADMIN', 'DEVELOPER', 'ANALYST', 'VIEWER'];
 
@@ -37,6 +53,12 @@ export const SELF_EDIT_NOTE =
 export const DEACTIVATE_WARNING =
   "This user won't be able to sign in. Requests with a token they already hold are refused, " +
   'and API keys they created stop working — including keys your applications use.';
+export const DEACTIVATE_KEYS_ADVICE =
+  'To keep an application running, cancel, switch it to a key created by an account that is staying, ' +
+  'then deactivate this user. Reactivating this user makes these keys work again, unless they ' +
+  'have expired.';
+export const KEYS_LOADING = 'Checking which API keys this user has…';
+export const KEYS_NONE = 'This user has no active API keys.';
 export const FORBIDDEN_MESSAGE =
   "You don't have permission to change users. Only a superuser can do this. If you were one a " +
   'moment ago, your access may have changed: sign in again to check.';
@@ -92,6 +114,30 @@ export function editErrorMessage(err: unknown): string {
   return (err as Error)?.message || "Couldn't save the changes.";
 }
 
+/** The line above the list of keys that stop working, and the sentence read out when it settles. */
+function keysSummary(state: KeysState): string {
+  switch (state.kind) {
+    case 'loading':
+      return KEYS_LOADING;
+    case 'ok':
+      if (state.keys.length === 0) return KEYS_NONE;
+      return state.keys.length === 1
+        ? 'The API key that stops working:'
+        : `The ${state.keys.length} API keys that stop working:`;
+    case 'error':
+      return `Couldn't list this user's API keys: ${state.message}`;
+    default:
+      return '';
+  }
+}
+
+/** `last used 11/19/2026, 3:04:05 PM`, or `never used`. */
+function keyLastUsed(key: ApiKey): string {
+  if (!key.last_used_at) return 'never used';
+  const when = parseApiTimestamp(key.last_used_at);
+  return `last used ${Number.isNaN(when.getTime()) ? key.last_used_at : when.toLocaleString()}`;
+}
+
 /**
  * Focus, the Tab trap, Escape, giving focus back and making the page inert are
  * the shared Dialog's (#369). Focus opens on Role, or on Cancel on the
@@ -104,6 +150,7 @@ export function EditUserModal({
   onClose,
   onSave,
   onResetTwoFactor,
+  listUserKeys,
 }: EditUserModalProps) {
   const [role, setRole] = useState<UserRole | null>(null);
   const [isActive, setIsActive] = useState(true);
@@ -116,6 +163,14 @@ export function EditUserModal({
   const cancelRef = useRef<HTMLButtonElement>(null);
   const keepRef = useRef<HTMLButtonElement>(null);
   const resetDoneRef = useRef<HTMLParagraphElement>(null);
+  // The user's active API keys (#657). Kept while the dialog stays open: a
+  // success is not asked for twice, a failure is asked for again.
+  const [keys, setKeys] = useState<KeysState>({ kind: 'idle' });
+  const summaryRef = useRef<HTMLParagraphElement>(null);
+  // Counts openings, so an answer that settles after the dialog was closed and
+  // opened again is not shown in the new one.
+  const openingRef = useRef(0);
+  const focusSummaryRef = useRef(false);
 
   const isSelf = !!user && !!currentUserId && user.id === currentUserId;
 
@@ -128,6 +183,9 @@ export function EditUserModal({
       setError(null);
       setNotFound(false);
       setReset('offered');
+      openingRef.current += 1;
+      focusSummaryRef.current = false;
+      setKeys({ kind: 'idle' });
     }
   }, [user, isOpen]);
 
@@ -135,6 +193,14 @@ export function EditUserModal({
     if (reset === 'confirming') keepRef.current?.focus();
     if (reset === 'done') resetDoneRef.current?.focus();
   }, [reset]);
+
+  // After "Try again" succeeds, focus moves to the line that now says what was found.
+  useEffect(() => {
+    if (keys.kind === 'ok' && focusSummaryRef.current) {
+      focusSummaryRef.current = false;
+      summaryRef.current?.focus();
+    }
+  }, [keys]);
 
   if (!isOpen || !user) return null;
 
@@ -162,6 +228,42 @@ export function EditUserModal({
       setReset('confirming');
       setError(resetErrorMessage(err));
       if (isApiError(err) && err.status === 404 && err.detail === 'User not found') setNotFound(true);
+    }
+  };
+
+  // Asks for the keys. Nothing the administrator does waits for it: Save is not
+  // blocked while it runs (an emergency deactivation must not queue behind it).
+  const requestKeys = async (retry: boolean) => {
+    if (!listUserKeys) return;
+    const opening = openingRef.current;
+    const userId = user.id;
+    if (retry) setKeys((s) => (s.kind === 'error' ? { ...s, busy: true } : s));
+    else setKeys({ kind: 'loading' });
+    try {
+      const rows = await listUserKeys(userId);
+      if (opening !== openingRef.current) return;
+      focusSummaryRef.current = retry;
+      setKeys({
+        kind: 'ok',
+        keys: rows.filter((k) => k.user_id === userId && keyState(k) === 'active'),
+      });
+    } catch (err) {
+      if (opening !== openingRef.current) return;
+      setKeys({
+        kind: 'error',
+        message: (err as Error)?.message || 'the request failed.',
+        busy: false,
+      });
+    }
+  };
+
+  const handleActiveChange = () => {
+    const next = !isActive;
+    setIsActive(next);
+    // Clearing Active on an active account: find out which keys that stops. A
+    // success is kept for this opening; a failure, or nothing yet, is asked for.
+    if (!next && user.is_active && listUserKeys && !isSelf) {
+      if (keys.kind === 'idle' || (keys.kind === 'error' && !keys.busy)) void requestKeys(false);
     }
   };
 
@@ -247,8 +349,10 @@ export function EditUserModal({
             type="checkbox"
             checked={isActive}
             disabled={isSelf}
-            aria-describedby={isSelf ? 'edit-self-note' : undefined}
-            onChange={() => setIsActive((v) => !v)}
+            aria-describedby={
+              isSelf ? 'edit-self-note' : showDeactivateWarning ? 'edit-deactivate-warning' : undefined
+            }
+            onChange={handleActiveChange}
             className="h-4 w-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
           />
           <label htmlFor="edit-active" className="text-sm font-medium text-slate-700">
@@ -262,12 +366,71 @@ export function EditUserModal({
           </p>
         )}
 
+        {/* Read out once, when the request settles; mounted empty with the dialog. */}
+        {listUserKeys && !isSelf && (
+          <div role="status" className="sr-only" data-testid="deactivate-keys-status">
+            {showDeactivateWarning && (keys.kind === 'ok' || keys.kind === 'error')
+              ? keysSummary(keys).replace(/:$/, '.')
+              : ''}
+          </div>
+        )}
+
         {showDeactivateWarning && (
           <div
             data-testid="deactivate-warning"
             className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-md text-sm text-amber-800"
           >
-            {DEACTIVATE_WARNING}
+            <p id="edit-deactivate-warning">{DEACTIVATE_WARNING}</p>
+            {listUserKeys && keys.kind !== 'idle' && (
+              <div data-testid="deactivate-keys" className="mt-2">
+                <p
+                  id="edit-deactivate-keys-summary"
+                  ref={summaryRef}
+                  tabIndex={-1}
+                  data-testid="deactivate-keys-summary"
+                  className="font-medium text-amber-900 focus:outline-none"
+                >
+                  {keysSummary(keys)}
+                </p>
+                {keys.kind === 'error' && (
+                  <button
+                    type="button"
+                    data-testid="deactivate-keys-retry"
+                    aria-disabled={keys.busy}
+                    onClick={() => {
+                      if (!keys.busy) void requestKeys(true);
+                    }}
+                    className="mt-2 px-3 py-1.5 text-sm font-medium text-amber-900 bg-white border border-amber-200 rounded-md hover:bg-amber-50"
+                  >
+                    {keys.busy ? 'Checking…' : 'Try again'}
+                  </button>
+                )}
+                {keys.kind === 'ok' && keys.keys.length > 0 && (
+                  <>
+                    <ul
+                      aria-labelledby="edit-deactivate-keys-summary"
+                      data-testid="deactivate-keys-list"
+                      className="mt-1 list-disc pl-5"
+                    >
+                      {keys.keys.map((k) => (
+                        <li key={k.id} data-testid="deactivate-key">
+                          <span className="font-medium break-words">{k.name}</span>
+                          {' · '}
+                          <span className="font-mono text-xs">
+                            {k.scopes.length > 0 ? k.scopes.join(', ') : 'no scopes'}
+                          </span>
+                          {' · '}
+                          <span>{keyLastUsed(k)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="mt-2" data-testid="deactivate-keys-advice">
+                      {DEACTIVATE_KEYS_ADVICE}
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -369,6 +532,13 @@ export function EditUserModal({
           onClick={handleSave}
           disabled={!hasChanges || saving}
           aria-busy={saving}
+          aria-describedby={
+            showDeactivateWarning
+              ? listUserKeys && keys.kind !== 'idle'
+                ? 'edit-deactivate-warning edit-deactivate-keys-summary'
+                : 'edit-deactivate-warning'
+              : undefined
+          }
           className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {saving ? 'Saving…' : 'Save changes'}

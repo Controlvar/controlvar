@@ -336,6 +336,8 @@ VIDEOS: Dict[str, str] = {
     "02-first-experiment": "storyboards/02-first-experiment.yaml",
     "03-flag-rollout": "storyboards/03-flag-rollout.yaml",
     "05-plan-and-team": "storyboards/05-plan-and-team.yaml",
+    "12-balance-within": "storyboards/12-balance-within.yaml",
+    "11-stale-flags": "storyboards/11-stale-flags.yaml",
     "06-shoplab-ab-test": "storyboards/06-shoplab-ab-test.yaml",
     "10-serve-a-value": "storyboards/10-serve-a-value.yaml",
     "09-design-in-depth": "storyboards/09-design-in-depth.yaml",

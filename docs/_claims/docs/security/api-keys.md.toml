@@ -563,10 +563,11 @@ by = [
 ]
 
 [[unit]]
-text = "An ADMIN can add ?all=true to list every user's keys."
+text = "An ADMIN, or any superuser, can add ?all=true to list every user's keys."
 by = [
     "test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_lists_only_own_keys_without_secret",
     "test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_admin_all_sees_everyone",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_a_superuser_who_is_not_an_admin_sees_everyone_too",
     "test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_all_requires_admin",
 ]
 
@@ -779,8 +780,12 @@ text = "A key authenticates as the user who created it."
 by = ["test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestScope::test_an_inactive_owner_is_401"]
 
 [[unit]]
-text = "Create keys from an account whose role is no broader than the services need, and delete the keys of a user who leaves."
-by = ["test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestScope::test_an_inactive_owner_is_401"]
+text = "Create keys from an account whose role is no broader than the services need."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "When a user leaves, first switch every application that uses one of their keys to a key created by an account that is staying, then deactivate the user or delete their keys."
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Removing a user from the identity provider does not revoke their API keys: deactivate the Controlvar user or delete the keys."

@@ -6,7 +6,11 @@ class _CacheEntry<T> {
   final T value;
   final DateTime expiresAt;
 
-  _CacheEntry(this.value, this.expiresAt);
+  /// The attributes the answer was given for, as the JSON text that was sent
+  /// (`''` when none were sent).
+  final String context;
+
+  _CacheEntry(this.value, this.expiresAt, this.context);
 
   bool get isExpired => DateTime.now().isAfter(expiresAt);
 }
@@ -23,7 +27,11 @@ class EvaluationCache<T> {
   EvaluationCache({required this.ttl});
 
   /// Returns the cached value for [userId] + [key], or `null` if absent or expired.
-  T? get(String userId, String key) {
+  ///
+  /// With a [context] (the attributes' JSON text, `''` for none) the entry is
+  /// a hit only if it was stored for exactly that context; without one there
+  /// is no such check, which is what assignments and the listings use.
+  T? get(String userId, String key, {String? context}) {
     final byKey = _users[userId];
     final entry = byKey?[key];
     if (entry == null) return null;
@@ -31,13 +39,15 @@ class EvaluationCache<T> {
       byKey!.remove(key);
       return null;
     }
+    if (context != null && entry.context != context) return null;
     return entry.value;
   }
 
-  /// Stores [value] for [userId] + [key] with the configured [ttl].
-  void set(String userId, String key, T value) {
+  /// Stores [value] for [userId] + [key] with the configured [ttl]. There is
+  /// one entry per user + key: it replaces whatever [context] the old one had.
+  void set(String userId, String key, T value, {String context = ''}) {
     final byKey = _users.putIfAbsent(userId, () => {});
-    byKey[key] = _CacheEntry(value, DateTime.now().add(ttl));
+    byKey[key] = _CacheEntry(value, DateTime.now().add(ttl), context);
   }
 
   /// All live (non-expired) entries for [userId], in insertion order.

@@ -138,6 +138,33 @@ text = "Under Jest, a Dialog rendered without it throws."
 by = ["test:frontend/src/tests/components/Dialog.test.tsx::throws under Jest, naming the helper, and leaves nothing behind"]
 
 [[unit]]
+text = "An in-page confirmation, a question shown beside the button that opened it rather than over the page, is InlineConfirm, from frontend/src/components/ui/InlineConfirm.tsx."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Mark its Cancel button data-autofocus: focus opens there, Escape cancels, and on close focus goes back to the button that opened it, or to fallbackFocus when that button is gone."
+by = [
+    "test:frontend/src/tests/components/InlineConfirm.test.tsx::opens on the [data-autofocus] child: the Cancel a caller marks",
+    "test:frontend/src/tests/components/InlineConfirm.test.tsx::Escape from the focused Cancel calls onCancel once and sends nothing",
+    "test:frontend/src/tests/components/InlineConfirm.test.tsx::gives focus back to the opener after Cancel and after Escape",
+    "test:frontend/src/tests/components/InlineConfirm.test.tsx::falls back to fallbackFocus when the opener has left the page",
+]
+
+[[unit]]
+text = "It traps no focus and leaves the page behind it usable."
+by = [
+    "test:frontend/src/tests/components/InlineConfirm.test.tsx::traps no focus: Tab from its last button reaches the next control after it",
+    "test:frontend/src/tests/components/InlineConfirm.test.tsx::leaves the page usable: #__next is neither inert nor aria-hidden while it is open",
+]
+
+[[unit]]
+text = "frontend/src/tests/a11y/dialog-sweep.test.ts refuses a string literal equal to dialog or alertdialog outside Dialog.tsx and InlineConfirm.tsx."
+by = [
+    "test:frontend/src/tests/a11y/dialog-sweep.test.ts::writes no dialog role by hand outside Dialog.tsx and InlineConfirm.tsx",
+    "test:frontend/src/tests/a11y/dialog-sweep.test.ts::refuses a dialog role written as %s",
+]
+
+[[unit]]
 text = "Pull requests"
 by = ["exempt:label"]
 

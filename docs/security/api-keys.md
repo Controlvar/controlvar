@@ -261,7 +261,7 @@ It prints each of your keys, including the one created above:
 ```
 
 Each key also carries its `id`, `description`, `user_id`, `created_at`, `expires_at` and
-`last_used_at`. The list holds only your own keys. An ADMIN can add `?all=true` to list
+`last_used_at`. The list holds only your own keys. An ADMIN, or any superuser, can add `?all=true` to list
 every user's keys. The list leaves out inactive keys unless you add
 `?include_inactive=true`.
 
@@ -375,6 +375,8 @@ Where that matters, use user ids that do not identify a person (not email addres
 ### Remember that a key acts as its owner
 
 A key authenticates as the user who created it. Create keys from an account whose role is
-no broader than the services need, and delete the keys of a user who leaves.
+no broader than the services need. When a user leaves, first switch every application that
+uses one of their keys to a key created by an account that is staying, then deactivate the
+user or delete their keys.
 Removing a user from the identity provider does not revoke their API keys: deactivate the
 Controlvar user or delete the keys.

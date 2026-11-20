@@ -8,7 +8,7 @@
  * users here are RESOLVED, and only the cells that say so are superusers.
  */
 import React from 'react';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import axe from 'axe-core';
 import ExclusionGroupPage from '@/pages/experiments/exclusion-groups/[id]';
 import { ApiError, ApiFetchOptions, apiFetch } from '@/services/api';
@@ -442,7 +442,9 @@ describe('removing an experiment', () => {
     expect(dialog).toHaveTextContent(
       "Remove “Button colour” from this group? New users can then be in it and in the group's other experiments.",
     );
-    expect(document.activeElement).toBe(dialog);
+    // Focus lands on Cancel, not on the region (#1797); the sentence is the description.
+    expect(document.activeElement).toBe(screen.getByTestId('exclusion-group-remove-cancel'));
+    expect(dialog).toHaveAccessibleDescription(/^Remove “Button colour” from this group\?/);
     expect(writes()).toEqual([]);
     fireEvent.click(screen.getByTestId('exclusion-group-remove-yes'));
     await waitFor(() => expect(screen.getAllByTestId('exclusion-group-member')).toHaveLength(1));
@@ -452,19 +454,83 @@ describe('removing an experiment', () => {
     );
   });
 
-  it('Cancel and Escape send nothing', async () => {
+  it('Cancel and Escape send nothing, and return focus to that member\'s Remove button', async () => {
     serve();
     await open();
     fireEvent.click(screen.getByRole('button', { name: 'Remove Copy' }));
     fireEvent.click(screen.getByTestId('exclusion-group-remove-cancel'));
     expect(screen.queryByTestId('exclusion-group-remove-confirm')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Remove Copy' })).toHaveFocus();
     fireEvent.click(screen.getByRole('button', { name: 'Remove Copy' }));
     fireEvent.keyDown(screen.getByTestId('exclusion-group-remove-confirm'), { key: 'Escape' });
     expect(screen.queryByTestId('exclusion-group-remove-confirm')).toBeNull();
+    // The member is still there, so its button, not the heading, takes focus back.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Remove Copy' })).toHaveFocus());
+    expect(document.activeElement).not.toBe(screen.getByRole('heading', { level: 2, name: 'Experiments' }));
+    expect(writes()).toEqual([]);
+  });
+
+  it('Escape from the focused Cancel closes it, sends nothing, and returns to the member\'s Remove button', async () => {
+    serve();
+    await open();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Button colour' }));
+    const cancel = screen.getByTestId('exclusion-group-remove-cancel');
+    expect(cancel).toHaveFocus();
+    fireEvent.keyDown(cancel, { key: 'Escape' });
+    expect(screen.queryByTestId('exclusion-group-remove-confirm')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Remove Button colour' })).toHaveFocus();
+    expect(writes()).toEqual([]);
+  });
+
+  it('opener gone: when a re-read drops the member under the open question, Escape lands on the Experiments heading', async () => {
+    serve({
+      add: () => {
+        // Another session removed Copy before this Add; the re-read shows it gone.
+        current = {
+          ...current,
+          experiments: [
+            ...current.experiments.filter((e) => e.id !== 'exp-2'),
+            { id: 'exp-10', name: 'New draft', status: 'draft' },
+          ],
+        };
+        return { status: 'ok', experiment_id: 'exp-10', group_id: 'grp-1' };
+      },
+    });
+    await open();
+    await candidatesLoaded();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Copy' }));
+    const cancel = screen.getByTestId('exclusion-group-remove-cancel');
+    fireEvent.click(screen.getByTestId('exclusion-group-add'));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Remove Copy' })).toBeNull());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Remove New draft' })).not.toBeDisabled());
+    expect(screen.getByTestId('exclusion-group-remove-confirm')).toBeInTheDocument();
+    cancel.focus();
+    fireEvent.keyDown(cancel, { key: 'Escape' });
+    expect(screen.queryByTestId('exclusion-group-remove-confirm')).toBeNull();
+    expect(screen.getByRole('heading', { level: 2, name: 'Experiments' })).toHaveFocus();
+  });
+
+  it('fallback: while a confirmed Remove runs nothing takes focus', async () => {
+    let release: () => void = () => undefined;
+    serve({
+      remove: () =>
+        new Promise((resolve) => {
+          release = () => {
+            current = { ...current, experiments: current.experiments.filter((e) => e.id !== 'exp-2') };
+            resolve({ status: 'ok' });
+          };
+        }),
+    });
+    await open();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Copy' }));
+    fireEvent.click(screen.getByTestId('exclusion-group-remove-yes'));
+    await waitFor(() => expect(writes()).toHaveLength(1));
+    expect(screen.queryByTestId('exclusion-group-remove-confirm')).toBeNull();
+    expect(document.activeElement).toBe(document.body);
+    await act(async () => release());
     await waitFor(() =>
       expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2, name: 'Experiments' })),
     );
-    expect(writes()).toEqual([]);
   });
 
   it('a failed remove shows fixed copy, never the detail', async () => {
@@ -574,7 +640,8 @@ describe('archiving', () => {
       'Archive “Checkout”? Its experiments are no longer kept apart: new users can join more than one. They stay listed here, and an ADMIN can unarchive it.',
     );
     expect(dialog).toHaveAttribute('role', 'dialog');
-    expect(document.activeElement).toBe(dialog);
+    expect(document.activeElement).toBe(screen.getByTestId('exclusion-group-archive-cancel'));
+    expect(dialog).toHaveAccessibleDescription(/^Archive “Checkout”\?/);
     expect(writes()).toEqual([]);
     fireEvent.click(screen.getByTestId('exclusion-group-archive-yes'));
     await waitFor(() => expect(screen.getByTestId('exclusion-group-status')).toHaveTextContent(/^Archived$/));
@@ -619,6 +686,39 @@ describe('archiving', () => {
     fireEvent.click(screen.getByTestId('exclusion-group-archive'));
     fireEvent.click(screen.getByTestId('exclusion-group-archive-cancel'));
     await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('exclusion-group-archive')));
+    expect(writes()).toEqual([]);
+  });
+
+  it('Escape closes the question, sends nothing, and returns focus to Archive group (on the panel and from Cancel)', async () => {
+    signIn('ADMIN');
+    serve();
+    await open();
+    fireEvent.click(screen.getByTestId('exclusion-group-archive'));
+    fireEvent.keyDown(screen.getByTestId('exclusion-group-archive-confirm'), { key: 'Escape' });
+    expect(screen.queryByTestId('exclusion-group-archive-confirm')).toBeNull();
+    expect(screen.getByTestId('exclusion-group-archive')).toHaveFocus();
+
+    fireEvent.click(screen.getByTestId('exclusion-group-archive'));
+    const cancel = screen.getByTestId('exclusion-group-archive-cancel');
+    expect(cancel).toHaveFocus();
+    fireEvent.keyDown(cancel, { key: 'Escape' });
+    expect(screen.queryByTestId('exclusion-group-archive-confirm')).toBeNull();
+    expect(screen.getByTestId('exclusion-group-archive')).toHaveFocus();
+    expect(writes()).toEqual([]);
+  });
+
+  it('opener gone: if the user loses the right to archive under the open question, focus lands on the Experiments heading', async () => {
+    signIn('ADMIN');
+    serve();
+    const view = render(<ExclusionGroupPage />);
+    await screen.findByTestId('exclusion-group-detail');
+    fireEvent.click(screen.getByTestId('exclusion-group-archive'));
+    expect(screen.getByTestId('exclusion-group-archive-cancel')).toHaveFocus();
+    signIn('DEVELOPER');
+    view.rerender(<ExclusionGroupPage />);
+    expect(screen.queryByTestId('exclusion-group-archive-confirm')).toBeNull();
+    expect(screen.queryByTestId('exclusion-group-archive')).toBeNull();
+    expect(screen.getByRole('heading', { level: 2, name: 'Experiments' })).toHaveFocus();
     expect(writes()).toEqual([]);
   });
 

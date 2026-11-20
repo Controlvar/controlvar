@@ -170,8 +170,11 @@ by = [
 ]
 
 [[unit]]
-text = "Create a split URL experiment through the API (POST /api/v1/experiments/)."
-by = ["exempt:instruction"]
+text = "In the full profile, Split URL is offered last, and asks for each variant's page on the Variants step."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-split-url.test.tsx::guided setup (full): four radios, Split URL last, with its description",
+    "test:frontend/src/tests/pages/experiment-new-split-url.test.tsx::guided setup shows split-url-config on the Variants step, not before",
+]
 
 [[unit]]
 text = "Step 2: Details"
@@ -1070,6 +1073,52 @@ by = ["journey:experiment-results#guardrail-listing"]
 [[unit]]
 text = "No guardrail verdict is produced: the recommendation follows the primary metric alone, so a significant rise in a lower-is-better secondary metric does not change it."
 by = ["journey:experiment-results#guardrail-listing"]
+
+[[unit]]
+text = "Results for one saved segment"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Show results for, above the summary card, narrows the summary card and the Overview tab to the members of one saved ID-list segment (beta)."
+by = [
+    "test:frontend/src/tests/pages/results-saved-segment.test.tsx::F2, F8: choosing a segment makes one call, with the stored settings, and nothing else is fetched",
+    "test:frontend/src/tests/pages/results-saved-segment.test.tsx::F7: each tab but the Overview says it shows all users, only under a segment",
+]
+
+[[unit]]
+text = "It lists ID-list segments only; inactive and archived ones are named so."
+by = ["test:frontend/src/tests/pages/results-saved-segment.test.tsx::F10: ID-list segments of every status, active by name first, then the others labelled"]
+
+[[unit]]
+text = "The choice is not saved: a reload shows all users again."
+by = ["test:frontend/src/tests/pages/results-saved-segment.test.tsx::the choice is not saved: the page opened again shows all users"]
+
+[[unit]]
+text = "The results for a segment are exploratory."
+by = ["test:frontend/src/tests/pages/results-saved-segment.test.tsx::F5: the card is exploratory, with no recommendation, winner or leading variant"]
+
+[[unit]]
+text = "The card shows Exploratory in place of the recommendation, with no winner and no leading variant: decide on the results for all users."
+by = ["test:frontend/src/tests/pages/results-saved-segment.test.tsx::F5: the card is exploratory, with no recommendation, winner or leading variant"]
+
+[[unit]]
+text = "The sample ratio check runs twice, once for all users and once inside the segment."
+by = ["test:frontend/src/tests/pages/results-saved-segment.test.tsx::F6: the inside check comes from the segment answer, the all-users line from the page"]
+
+[[unit]]
+text = "The other tabs and the CSV download always show all users, and each says so while a segment is chosen."
+by = [
+    "test:frontend/src/tests/pages/results-saved-segment.test.tsx::F7: each tab but the Overview says it shows all users, only under a segment",
+    "test:frontend/src/tests/pages/results-saved-segment.test.tsx::F15: the CSV note appears under a segment and the download is the one for all users",
+]
+
+[[unit]]
+text = "The Bayesian analysis is not computed for a segment."
+by = ["test:frontend/src/tests/pages/results-saved-segment.test.tsx::F9: the Overview under a segment says the Bayesian analysis is not computed for it"]
+
+[[unit]]
+text = "How the numbers are counted is in Results for one saved segment."
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Trend Chart"

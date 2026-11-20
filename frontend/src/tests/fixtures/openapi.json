@@ -1053,12 +1053,6 @@
         "summary": "Invalidate Results Cache"
       }
     },
-    "/api/v1/results/{experiment_id}/post-stratification": {
-      "post": {
-        "operationId": "compute_post_stratification_api_v1_results__experiment_id__post_stratification_post",
-        "summary": "Post-stratification variance reduction, not available yet (deprecated)"
-      }
-    },
     "/api/v1/results/{experiment_id}/sample-size": {
       "get": {
         "operationId": "get_sample_size_status_api_v1_results__experiment_id__sample_size_get",
