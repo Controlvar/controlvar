@@ -6,8 +6,9 @@ name: SDK Unit Tests
 # toolchain, in two tiers:
 #
 #   Linux tier (required on PRs) — js, react, react-native, edge, openfeature,
-#     python, openfeature-python, go, java, ruby, php, dotnet, and mcp (the
-#     MCP server: not an SDK, but its suite runs here like one). All install
+#     python, openfeature-python, go, java, ruby, php, dotnet, mcp (the
+#     MCP server: not an SDK, but its suite runs here like one), and visual
+#     (the visual experiments' browser script, not published). All install
 #     and run in well under a minute on ubuntu-latest. A pull request runs the SDKs
 #     it touches plus the always-on core three (js, python, react: the dashboard,
 #     the demos and the backend's own examples depend on them), so an unrelated
@@ -117,6 +118,9 @@ jobs:
             mcp:
               - *all
               - 'sdk/mcp/**'
+            visual:
+              - *all
+              - 'sdk/visual/**'
             elixir:
               - *all
               - 'sdk/elixir/**'
@@ -155,6 +159,7 @@ jobs:
               "php": "php",
               "dotnet": "dotnet",
               "mcp": "node",
+              "visual": "node",
           }
           HEAVY = ["elixir", "flutter", "android", "ios"]
 
@@ -289,6 +294,15 @@ jobs:
               # on 127.0.0.1, and packs and installs the package from npm.
               cd sdk/mcp
               npm ci --no-audit --no-fund
+              npm test -- --ci
+              ;;
+            visual)
+              # The visual experiments' browser script. Its tests run the build
+              # (both outputs); the browser tests are Browser E2E's page-runtime
+              # project in pr-qa-gate.yml.
+              cd sdk/visual
+              npm ci --no-audit --no-fund
+              npm run typecheck
               npm test -- --ci
               ;;
             python)

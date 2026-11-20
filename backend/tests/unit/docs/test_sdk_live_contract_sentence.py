@@ -55,6 +55,7 @@ JOB = "sdk-live-contract"
 NOT_AN_SDK_PAGE: Dict[str, str] = {
     "local-evaluation.md": "server-side local evaluation, shared by the Python and JS SDKs",
     "exposure-hook.md": "the exposure hook of seven SDKs, sent to analytics tools; each SDK's page has its own sentence",
+    "visual.md": "the visual editor's browser script, not yet available and not on the live runner; its browser tests are the page-runtime project",
 }
 
 LINK = (

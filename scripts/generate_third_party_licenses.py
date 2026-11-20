@@ -100,6 +100,7 @@ def _node_packages() -> list[tuple[str, str]]:
         "sdk/openfeature": "OpenFeature provider (JavaScript)",
         "sdk/edge": "Edge SDK",
         "sdk/mcp": "MCP server",
+        "sdk/visual": "Visual experiments browser script",
     }
     sdk_root = ROOT / "sdk"
     sdks = sorted(
