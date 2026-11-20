@@ -217,9 +217,11 @@ INVENTORY = {
     ("POST", f"{V1}/segments/{{segment_id}}/preview"): READ_ONLY,
     # --- users ---------------------------------------------------------------
     ("POST", f"{V1}/users/"): Audited(A.USER_CREATE),
-    ("POST", f"{V1}/users/me/password"): NotAudited(
-        "a user changing their own password is not on the audited event list"
-    ),
+    # A change answers a new access token for an account that signs in with
+    # its password alone (#501): that answer is a sign-in and writes
+    # user_login. The entry is written only when the answer carries a token;
+    # the 204 answer (two-step sign-in on or required) writes none.
+    ("POST", f"{V1}/users/me/password"): Audited(A.USER_LOGIN),
     # Your own two-step sign-in (#1812). A wrong code writes a log line, never
     # an entry.
     ("POST", f"{V1}/users/me/2fa/enroll"): NotAudited(
