@@ -359,6 +359,20 @@ metric, with its users and conversions. No guardrail verdict is produced: the re
 the primary metric alone, so a significant rise in a lower-is-better secondary metric does not
 change it.
 
+#### Results for one saved segment
+
+**Show results for**, above the summary card, narrows the summary card and the **Overview** tab
+to the members of one saved ID-list segment (beta). It lists ID-list segments only; inactive and
+archived ones are named so. The choice is not saved: a reload shows all users again.
+
+The results for a segment are exploratory. The card shows **Exploratory** in place of the
+recommendation, with no winner and no leading variant: decide on the results for all users. The
+sample ratio check runs twice, once for all users and once inside the segment.
+
+The other tabs and the CSV download always show all users, and each says so while a segment is
+chosen. The Bayesian analysis is not computed for a segment. How the numbers are counted is in
+[Results for one saved segment](../api/dimensional-analysis.md#results-for-one-saved-segment).
+
 #### Trend Chart
 
 Shows conversion rate over time for each variant. Two modes:
