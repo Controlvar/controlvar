@@ -1,3 +1,8 @@
+---
+title: SDK Integration Guide, experiments, flags and events
+description: "How the Controlvar SDKs assign users to experiments, evaluate feature flags and track events with an API key: the endpoint contract and each SDK's status."
+---
+
 # SDK Integration Guide
 
 SDKs integrate experiment assignment, feature-flag evaluation and event tracking into your application.

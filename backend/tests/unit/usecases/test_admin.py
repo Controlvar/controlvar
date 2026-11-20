@@ -317,3 +317,28 @@ def test_each_request_carries_its_one_credential_and_its_body(helper, server):
         admin.RULESET: 1,
     }
     assert helper.secrets == (TOKEN, KEY)
+
+
+def test_an_evaluation_without_a_context_is_the_request_it_always_was(helper, server):
+    """The argument is new (G5): called as before, the request is the same
+    bytes, a query of the user and nothing else; a ``None`` context is the
+    same as none."""
+    helper.evaluate("uc-flag", USER)
+    helper.evaluate("uc-flag", USER, None)
+    helper.evaluate("uc-flag", USER, context=None)
+    queries = [request.url.query for _, request in server.sent]
+    assert queries == [f"user_id={USER}".encode()] * 3
+
+
+def test_an_evaluation_with_a_context_sends_it_as_compact_json(helper, server):
+    context = {"plan": "enterprise", "employee": True, "user": {"country": "US"}}
+    helper.evaluate("uc-flag", USER, context)
+    ((_, request),) = server.sent
+    params = dict(request.url.params)
+    assert set(params) == {"user_id", "context"}
+    assert params["user_id"] == USER
+    assert params["context"] == (
+        '{"plan":"enterprise","employee":true,"user":{"country":"US"}}'
+    )
+    assert json.loads(params["context"]) == context
+    assert request.headers["X-API-Key"] == KEY

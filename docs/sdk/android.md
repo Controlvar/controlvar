@@ -171,12 +171,15 @@ if (result.enabled) {
 }
 ```
 
-Resolution order: the in-memory cache for this user + flag, then the API, then (on failure) the
-offline store's last successful evaluation for this user + flag. Failures are never cached; an
-offline fallback is returned without being re-cached, so the next call retries the server. With
-no offline value the call **throws** — `FlagNotFoundException` on 404 (an unknown flag key; a
-flag that is not ACTIVE is not an error, it answers `enabled: false`), `ServerException` on another non-2xx status, `NetworkException` on IO errors — which is
-what the SDK did before the rewire.
+Resolution order: the in-memory cache for this user + flag, then the API, then (on a failure
+other than a 404) the offline store's last successful evaluation for this user + flag. The SDK
+stores the last answer the server gave for each user and flag, and serves it only when the server
+cannot answer. A 404 removes the stored answer, and the call throws `FlagNotFoundException`.
+Failures are never cached; an offline fallback is returned without being re-cached, so the next
+call retries the server. With no offline value the call **throws** — `FlagNotFoundException` on
+404 (an unknown flag key; a flag that is not ACTIVE is not an error, it answers `enabled: false`),
+`ServerException` on another non-2xx status, `NetworkException` on IO errors — which is what the
+SDK did before the rewire.
 
 ---
 
@@ -305,14 +308,14 @@ fails and no offline value exists; `track`/`trackBatch` never throw.
 |-------|------|
 | `ExperimentationException.NetworkException(message, cause)` | OkHttp IO failure or timeout |
 | `ExperimentationException.ServerException(statusCode, message)` | Non-2xx response: 401 bad key, 404 on an assignment (no experiment has the key, or a draft with no control variant), 422 invalid event, 429 rate limited; `message` carries the API's `detail` |
-| `ExperimentationException.FlagNotFoundException(flagKey)` | `evaluateFlag` got a 404 and nothing is stored offline |
+| `ExperimentationException.FlagNotFoundException(flagKey)` | `evaluateFlag` got a 404; the stored offline answer, if any, is removed and not served |
 | `ExperimentationException.InvalidConfigException(message)` | Reserved for configuration errors |
 
 ```kotlin
 try {
     val result = client.evaluateFlag("my-flag", user)
 } catch (e: ExperimentationException.FlagNotFoundException) {
-    // unknown flag key → treat as off
+    // unknown flag key (the stored answer, if any, was removed) → treat as off
 } catch (e: ExperimentationException.NetworkException) {
     // offline and nothing stored → treat as off
 } catch (e: ExperimentationException.ServerException) {

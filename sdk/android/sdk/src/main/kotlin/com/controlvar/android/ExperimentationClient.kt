@@ -56,14 +56,14 @@ class ExperimentationClient(
      * Resolution order:
      *   1. In-memory cache for this user + flag (fast path, ~O(1))
      *   2. API call; the result is cached and persisted to the offline store
-     *   3. On failure: the offline store's last successful evaluation, if any
+     *   3. On failure other than a 404: the offline store's last successful evaluation, if any
      *
      * @param flagKey the feature flag's unique key
      * @param user    the user to evaluate the flag for
      * @return EvalResult with the flag key, enabled state and config
      * @throws ExperimentationException.FlagNotFoundException if the flag key is unknown
-     *         (HTTP 404; a flag that is not ACTIVE answers 200 with `enabled: false`) and no
-     *         offline value exists
+     *         (HTTP 404; a flag that is not ACTIVE answers 200 with `enabled: false`), whatever
+     *         is stored offline
      * @throws ExperimentationException.ServerException on another non-2xx response with no offline value
      * @throws ExperimentationException.NetworkException on network failure with no offline value
      */
@@ -77,12 +77,16 @@ class ExperimentationClient(
         val response = try {
             httpClient.get(evaluateFlagPath(flagKey, user.id))
         } catch (e: ExperimentationException) {
-            // Offline fallback: the last successful evaluation, if any. Not re-cached in
-            // memory so the next call retries the server.
+            // A 404 means the server has no such flag, so the stored answer is stale: remove
+            // it and report not-found without reading it.
+            if (e is ExperimentationException.ServerException && e.statusCode == 404) {
+                offlineStore.removeFlag(user.id, flagKey)
+                throw ExperimentationException.FlagNotFoundException(flagKey)
+            }
+            // Offline fallback for every other failure: the last successful evaluation, if
+            // any. Not re-cached in memory so the next call retries the server.
             offlineStore.loadFlag(user.id, flagKey)?.let { return it }
             throw when {
-                e is ExperimentationException.ServerException && e.statusCode == 404 ->
-                    ExperimentationException.FlagNotFoundException(flagKey)
                 e is ExperimentationException.NetworkException ->
                     ExperimentationException.NetworkException(
                         "Failed to evaluate flag '$flagKey' and no offline data available", e
