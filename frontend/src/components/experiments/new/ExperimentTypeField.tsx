@@ -1,17 +1,12 @@
 import React from 'react';
-import { docsUrl } from '@/services/docs';
 import { ExperimentType, EXPERIMENT_TYPE_LABELS, OPTIMIZATION_TYPE_LABELS } from '@/types/experiments';
 import {
   BANDIT_OPTIMIZATION_TYPES,
   BanditOptimizationType,
   ExperimentFormAction,
-  FORM_EXPERIMENT_TYPES,
+  formExperimentTypes,
 } from './formState';
 import { inputClass } from './fieldStyles';
-
-const EXPERIMENT_TYPES: Array<{ value: ExperimentType; label: string }> = FORM_EXPERIMENT_TYPES.map(
-  (value) => ({ value, label: EXPERIMENT_TYPE_LABELS[value] }),
-);
 
 // --- a bandit's words (#1956), shared by guided setup and the single-page form ---
 
@@ -98,10 +93,12 @@ interface ExperimentTypeFieldProps {
   value: ExperimentType;
   optimizationType: BanditOptimizationType;
   dispatch: React.Dispatch<ExperimentFormAction>;
+  /** True when the API lists the split_url module (`useModule(MODULES.SPLIT_URL)`): Split URL is then offered. */
+  splitUrl: boolean;
 }
 
-/** The experiment-type select, a bandit's algorithm, and the note on the type this form cannot set up. */
-export function ExperimentTypeField({ value, optimizationType, dispatch }: ExperimentTypeFieldProps) {
+/** The experiment-type select and a bandit's algorithm. */
+export function ExperimentTypeField({ value, optimizationType, dispatch, splitUrl }: ExperimentTypeFieldProps) {
   return (
     <div>
       <label htmlFor="experiment-type" className="block text-sm font-medium text-slate-700 mb-1">
@@ -115,19 +112,13 @@ export function ExperimentTypeField({ value, optimizationType, dispatch }: Exper
         className={inputClass}
         data-testid="experiment-type"
       >
-        {EXPERIMENT_TYPES.map((t) => (
-          <option key={t.value} value={t.value}>
-            {t.label}
+        {formExperimentTypes(splitUrl).map((t) => (
+          <option key={t} value={t}>
+            {EXPERIMENT_TYPE_LABELS[t]}
           </option>
         ))}
       </select>
       {value === 'bandit' && <OptimizationTypeField value={optimizationType} dispatch={dispatch} />}
-      <p className="text-xs text-slate-600 mt-1" data-testid="experiment-type-note">
-        <a href={docsUrl('api/split-url')} className="text-blue-600 hover:text-blue-800 hover:underline">
-          Split URL
-        </a>{' '}
-        experiments need a URL configuration, which this form cannot set up yet, so create them through the API.
-      </p>
     </div>
   );
 }

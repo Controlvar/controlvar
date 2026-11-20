@@ -49,6 +49,10 @@
 
 10-serve-a-value: {}
 
+11-stale-flags: {}
+
+12-balance-within: {}
+
 90-app-probe:
   CORS_ORIGINS:
     value: "{dashboard},{shoplab},{streampulse}"

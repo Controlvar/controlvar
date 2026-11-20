@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -19,8 +20,9 @@ from sqlalchemy.orm import sessionmaker
 
 from backend.app.api import deps
 from backend.app.core.config import settings
-from backend.app.core.security import get_password_hash
+from backend.app.core.security import create_local_access_token, get_password_hash
 from backend.app.main import app
+from backend.app.models.api_key import APIKey
 from backend.app.models.audit_log import AuditLog
 from backend.app.models.user import User, UserRole
 from backend.app.services.local_auth_service import login_attempt_tracker
@@ -656,6 +658,83 @@ class TestPatchThroughRealSignIn:
         # Still signed in: the same token still opens the admin area.
         listed = plain_db_client.get("/api/v1/admin/users", headers=headers)
         assert listed.status_code == 200, listed.text
+
+
+class TestDeactivatingAnOwnerStopsTheirKeys:
+    """What the Edit user dialog tells an administrator before they save (#657).
+
+    The dialog says the user's keys stop working, and that reactivating the user
+    makes them work again unless they have expired. Real keys, real tokens, no
+    auth override: only ``deps.get_db`` is replaced. The key rows are read back
+    to show it is the owner, not the key, that a deactivation changes.
+    """
+
+    PROBE = "/api/v1/feature-flags/user/probe-user"
+
+    @pytest.fixture(autouse=True)
+    def _local_provider(self, monkeypatch):
+        monkeypatch.setattr(settings, "AUTH_PROVIDER", "local")
+        monkeypatch.setattr(settings, "DEV_AUTH_BYPASS", False)
+        monkeypatch.setattr(settings, "ENVIRONMENT", "test")
+
+    @staticmethod
+    def _bearer(user) -> dict:
+        return {"Authorization": f"Bearer {create_local_access_token(user)}"}
+
+    def _probe(self, client, key: str):
+        return client.get(self.PROBE, headers={"X-API-Key": key})
+
+    def _set_active(self, client, actor, target, value: bool) -> None:
+        response = client.patch(
+            PATCH_URL.format(target.id),
+            json={"is_active": value},
+            headers=self._bearer(actor),
+        )
+        assert response.status_code == 200, response.text
+
+    def test_the_owners_key_is_401_while_they_are_inactive_and_works_again(
+        self, db_session, plain_db_client
+    ):
+        owner = _account(db_session, role=UserRole.DEVELOPER)
+        actor = _account(db_session, role=UserRole.ADMIN, is_superuser=True)
+        row, key = APIKey.create_for_user(
+            db_session, user_id=owner.id, name="Checkout server", scopes="read"
+        )
+        assert self._probe(plain_db_client, key).status_code == 200
+
+        self._set_active(plain_db_client, actor, owner, False)
+        refused = self._probe(plain_db_client, key)
+        assert refused.status_code == 401, refused.text
+        assert refused.json()["detail"] == "Invalid API Key"
+        db_session.expire_all()
+        assert db_session.get(APIKey, row.id).is_active is True
+
+        self._set_active(plain_db_client, actor, owner, True)
+        assert self._probe(plain_db_client, key).status_code == 200
+
+    def test_a_key_that_expired_meanwhile_stays_401_after_reactivation(
+        self, db_session, plain_db_client
+    ):
+        owner = _account(db_session, role=UserRole.DEVELOPER)
+        actor = _account(db_session, role=UserRole.ADMIN, is_superuser=True)
+        row, key = APIKey.create_for_user(
+            db_session,
+            user_id=owner.id,
+            name="Short lived",
+            scopes="read",
+            expires_at=datetime.utcnow() + timedelta(days=1),
+        )
+        assert self._probe(plain_db_client, key).status_code == 200
+
+        self._set_active(plain_db_client, actor, owner, False)
+        # The expiry passes while the owner is inactive.
+        row.expires_at = datetime.utcnow() - timedelta(minutes=1)
+        db_session.commit()
+
+        self._set_active(plain_db_client, actor, owner, True)
+        refused = self._probe(plain_db_client, key)
+        assert refused.status_code == 401, refused.text
+        assert refused.json()["detail"] == "Invalid API Key"
 
 
 class TestPatchContract:

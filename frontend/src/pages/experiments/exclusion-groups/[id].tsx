@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { PageTitle } from '@/components/PageTitle';
 import { ExclusionGroupForm } from '@/components/experiments/ExclusionGroupForm';
+import { InlineConfirm } from '@/components/ui/InlineConfirm';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
 import { ExclusionGroupsService } from '@/services/exclusionGroups';
@@ -97,21 +98,30 @@ export default function ExclusionGroupPage() {
   const [confirmArchive, setConfirmArchive] = useState(false);
   // Where focus goes once a form or a confirmation closes, applied after the
   // render that brings the control back.
-  const [returnFocus, setReturnFocus] = useState<'edit' | 'archive' | 'members' | null>(null);
+  const [returnFocus, setReturnFocus] = useState<'edit' | 'members' | null>(null);
 
   const editButton = useRef<HTMLButtonElement>(null);
   const membersHeading = useRef<HTMLHeadingElement>(null);
   const archiveButton = useRef<HTMLButtonElement>(null);
-  const removeRegion = useRef<HTMLDivElement>(null);
-  const archiveRegion = useRef<HTMLDivElement>(null);
   const errorRef = useRef<HTMLDivElement>(null);
+  // Each member's Remove button, where Cancel and Escape on the remove
+  // question return (the question's `returnFocus`).
+  const removeButtons = useRef(new Map<string, HTMLButtonElement>());
+  const removeTextId = useId();
+  const archiveTextId = useId();
+  // The fallback of both questions when the button that asked is gone: the
+  // members heading, but only while no change is running, so that after a
+  // confirm nothing takes focus until the answer (the effect above places it).
+  const busyNow = useRef(busy);
+  busyNow.current = busy;
+  const headingWhenIdle = () => (busyNow.current === null ? membersHeading.current : null);
 
   useEffect(() => {
     if (returnFocus === null || busy !== null) return;
-    const target = { edit: editButton, archive: archiveButton, members: membersHeading }[returnFocus];
+    const target = { edit: editButton, members: membersHeading }[returnFocus];
     target.current?.focus();
     setReturnFocus(null);
-  }, [returnFocus, busy, editing, confirmArchive]);
+  }, [returnFocus, busy, editing]);
 
   const readGroup = useCallback(async (groupId: string) => {
     try {
@@ -156,14 +166,6 @@ export default function ExclusionGroupPage() {
       current = false;
     };
   }, [mayManage, id, readGroup, readCandidates]);
-
-  useEffect(() => {
-    if (confirmRemove) removeRegion.current?.focus();
-  }, [confirmRemove]);
-
-  useEffect(() => {
-    if (confirmArchive) archiveRegion.current?.focus();
-  }, [confirmArchive]);
 
   useEffect(() => {
     if (error) errorRef.current?.focus();
@@ -378,6 +380,10 @@ export default function ExclusionGroupPage() {
                         </span>
                       </span>
                       <button
+                        ref={(el) => {
+                          if (el) removeButtons.current.set(member.id, el);
+                          else removeButtons.current.delete(member.id);
+                        }}
                         type="button"
                         className={SECONDARY}
                         disabled={busy !== null}
@@ -396,29 +402,25 @@ export default function ExclusionGroupPage() {
               )}
 
               {confirmRemove && (
-                <div
-                  ref={removeRegion}
-                  role="dialog"
-                  aria-label={`Confirm Remove ${confirmRemove.name}`}
-                  tabIndex={-1}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Escape') {
-                      setConfirmRemove(null);
-                      setReturnFocus('members');
-                    }
-                  }}
-                  className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-3 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                  data-testid="exclusion-group-remove-confirm"
+                <InlineConfirm
+                  label={`Confirm Remove ${confirmRemove.name}`}
+                  describedBy={removeTextId}
+                  onCancel={() => setConfirmRemove(null)}
+                  returnFocus={() => removeButtons.current.get(confirmRemove.id)}
+                  fallbackFocus={headingWhenIdle}
+                  tone="warning"
+                  className="rounded-lg border p-3 space-y-3"
+                  testId="exclusion-group-remove-confirm"
                 >
-                  <p className="text-sm text-amber-900">{removeConfirm(confirmRemove.name)}</p>
+                  <p id={removeTextId} className="text-sm text-amber-900">
+                    {removeConfirm(confirmRemove.name)}
+                  </p>
                   <div className="flex gap-2">
                     <button
                       type="button"
+                      data-autofocus
                       className={SECONDARY}
-                      onClick={() => {
-                        setConfirmRemove(null);
-                        setReturnFocus('members');
-                      }}
+                      onClick={() => setConfirmRemove(null)}
                       data-testid="exclusion-group-remove-cancel"
                     >
                       Cancel
@@ -432,7 +434,7 @@ export default function ExclusionGroupPage() {
                       Remove
                     </button>
                   </div>
-                </div>
+                </InlineConfirm>
               )}
 
               {!archived && (
@@ -527,29 +529,27 @@ export default function ExclusionGroupPage() {
                 </button>
               )}
               {mayAdminister && !archived && confirmArchive && (
-                <div
-                  ref={archiveRegion}
-                  role="dialog"
-                  aria-label="Confirm Archive group"
-                  tabIndex={-1}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Escape') {
-                      setConfirmArchive(false);
-                      setReturnFocus('archive');
-                    }
-                  }}
-                  className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-3 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                  data-testid="exclusion-group-archive-confirm"
+                // The Archive button comes back when this closes, so Cancel and
+                // Escape return to it through its ref.
+                <InlineConfirm
+                  label="Confirm Archive group"
+                  describedBy={archiveTextId}
+                  onCancel={() => setConfirmArchive(false)}
+                  returnFocus={archiveButton}
+                  fallbackFocus={headingWhenIdle}
+                  tone="warning"
+                  className="rounded-lg border p-3 space-y-3"
+                  testId="exclusion-group-archive-confirm"
                 >
-                  <p className="text-sm text-amber-900">{archiveConfirm(group.name)}</p>
+                  <p id={archiveTextId} className="text-sm text-amber-900">
+                    {archiveConfirm(group.name)}
+                  </p>
                   <div className="flex gap-2">
                     <button
                       type="button"
+                      data-autofocus
                       className={SECONDARY}
-                      onClick={() => {
-                        setConfirmArchive(false);
-                        setReturnFocus('archive');
-                      }}
+                      onClick={() => setConfirmArchive(false)}
                       data-testid="exclusion-group-archive-cancel"
                     >
                       Cancel
@@ -563,7 +563,7 @@ export default function ExclusionGroupPage() {
                       Archive
                     </button>
                   </div>
-                </div>
+                </InlineConfirm>
               )}
             </section>
 

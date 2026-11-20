@@ -17,7 +17,8 @@ import {
 } from '@/components/admin/users/EditUserModal';
 import { ModulesProvider } from '@/contexts/ModulesContext';
 import { ApiError } from '@/services/api';
-import { AdminUser } from '@/types/admin';
+import { AdminUser, ApiKey } from '@/types/admin';
+import { parseApiTimestamp } from '@/utils/apiTimestamp';
 // The dialog makes `#__next` inert and portals beside it, so every render is
 // mounted the way Next mounts the page (#369).
 import { APP_ROOT_ID, renderInAppRoot as render } from '@/tests/helpers/renderInAppRoot';
@@ -556,5 +557,421 @@ describe('EditUserModal: Reset two-step sign-in (#1812)', () => {
     expect(screen.getByTestId('edit-error-message')).toHaveTextContent(expected);
     expect(screen.queryByTestId('edit-two-factor-reset-done')).not.toBeInTheDocument();
     expect(resetErrorMessage(err)).toBe(expected);
+  });
+});
+
+describe('EditUserModal: the API keys that stop working when Active is cleared (#657)', () => {
+  const LAST_USED = '2026-11-18T10:00:00';
+  const lastUsedText = `last used ${parseApiTimestamp(LAST_USED).toLocaleString()}`;
+
+  function makeKey(over: Partial<ApiKey> = {}): ApiKey {
+    return {
+      id: 'k-1',
+      name: 'Checkout server',
+      scopes: ['sdk:ruleset'],
+      is_active: true,
+      user_id: 'user-1',
+      created_at: '2026-01-01T00:00:00',
+      expires_at: null,
+      last_used_at: LAST_USED,
+      ...over,
+    };
+  }
+
+  /** The three rows `?all=true` returns for this user's neighbours: one listed, two not. */
+  const MIXED_KEYS: ApiKey[] = [
+    makeKey({ id: 'k-1' }),
+    makeKey({ id: 'k-2', name: 'Expired one', expires_at: '2020-01-01T00:00:00' }),
+    makeKey({ id: 'k-3', name: "Someone else's", user_id: 'user-3' }),
+  ];
+
+  function deferredKeys() {
+    let resolve!: (keys: ApiKey[]) => void;
+    let reject!: (err: unknown) => void;
+    const promise = new Promise<ApiKey[]>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+
+  const baseProps = {
+    isOpen: true,
+    user: mockUser,
+    currentUserId: 'admin-1',
+    onClose: jest.fn(),
+    onSave: jest.fn(() => Promise.resolve()),
+  };
+
+  const clearActive = () => fireEvent.click(screen.getByTestId('edit-active-toggle'));
+  const summary = () => screen.getByTestId('deactivate-keys-summary');
+  const status = () => screen.getByTestId('deactivate-keys-status');
+
+  /** Clear Active and let the request settle. */
+  async function clearActiveAndSettle() {
+    await act(async () => {
+      clearActive();
+    });
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('when it asks (C1)', () => {
+    it('does not ask on open or for a role-only change', () => {
+      const listUserKeys = jest.fn(() => Promise.resolve([]));
+      render(<EditUserModal {...baseProps} listUserKeys={listUserKeys} />);
+      fireEvent.change(screen.getByTestId('edit-role-select'), { target: { value: 'ANALYST' } });
+      expect(listUserKeys).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('deactivate-keys')).not.toBeInTheDocument();
+    });
+
+    it('asks once on clearing Active, keeps a success, and asks again after a failure', async () => {
+      const listUserKeys = jest
+        .fn<Promise<ApiKey[]>, [string]>()
+        .mockResolvedValue([makeKey()]);
+      render(<EditUserModal {...baseProps} listUserKeys={listUserKeys} />);
+      await clearActiveAndSettle();
+      expect(listUserKeys).toHaveBeenCalledTimes(1);
+      expect(listUserKeys).toHaveBeenCalledWith('user-1');
+
+      // Clear, tick, clear: the success is kept, so there is no second request.
+      clearActive();
+      await act(async () => {
+        clearActive();
+      });
+      expect(listUserKeys).toHaveBeenCalledTimes(1);
+      expect(summary()).toHaveTextContent('The API key that stops working:');
+    });
+
+    it('does not keep a failure: clearing Active again asks again', async () => {
+      const listUserKeys = jest
+        .fn<Promise<ApiKey[]>, [string]>()
+        .mockRejectedValueOnce(new Error('boom'))
+        .mockResolvedValueOnce([makeKey()]);
+      render(<EditUserModal {...baseProps} listUserKeys={listUserKeys} />);
+      await clearActiveAndSettle();
+      expect(summary()).toHaveTextContent("Couldn't list this user's API keys: boom");
+      clearActive();
+      await act(async () => {
+        clearActive();
+      });
+      expect(listUserKeys).toHaveBeenCalledTimes(2);
+      expect(summary()).toHaveTextContent('The API key that stops working:');
+    });
+
+    it('asks again after the dialog was closed and opened again', async () => {
+      const listUserKeys = jest.fn(() => Promise.resolve([makeKey()]));
+      const { rerender } = render(<EditUserModal {...baseProps} listUserKeys={listUserKeys} />);
+      await clearActiveAndSettle();
+      expect(listUserKeys).toHaveBeenCalledTimes(1);
+      rerender(<EditUserModal {...baseProps} isOpen={false} listUserKeys={listUserKeys} />);
+      rerender(<EditUserModal {...baseProps} listUserKeys={listUserKeys} />);
+      expect(screen.queryByTestId('deactivate-keys')).not.toBeInTheDocument();
+      await clearActiveAndSettle();
+      expect(listUserKeys).toHaveBeenCalledTimes(2);
+    });
+
+    it('ignores an answer that settles after the dialog was closed and opened again', async () => {
+      const first = deferredKeys();
+      const second = deferredKeys();
+      const listUserKeys = jest
+        .fn<Promise<ApiKey[]>, [string]>()
+        .mockReturnValueOnce(first.promise)
+        .mockReturnValueOnce(second.promise);
+      const { rerender } = render(<EditUserModal {...baseProps} listUserKeys={listUserKeys} />);
+      clearActive();
+      rerender(<EditUserModal {...baseProps} isOpen={false} listUserKeys={listUserKeys} />);
+      rerender(<EditUserModal {...baseProps} listUserKeys={listUserKeys} />);
+      clearActive();
+      expect(listUserKeys).toHaveBeenCalledTimes(2);
+
+      await act(async () => {
+        first.resolve([makeKey({ id: 'old', name: 'From the first opening' })]);
+      });
+      expect(summary()).toHaveTextContent('Checking which API keys this user has…');
+      expect(screen.queryByText('From the first opening')).not.toBeInTheDocument();
+
+      await act(async () => {
+        second.resolve([makeKey({ id: 'new', name: 'From the second opening' })]);
+      });
+      expect(screen.getByText('From the second opening')).toBeInTheDocument();
+    });
+
+    it('does not ask when an inactive account is reactivated and cleared again', async () => {
+      const listUserKeys = jest.fn(() => Promise.resolve([]));
+      render(
+        <EditUserModal {...baseProps} user={{ ...mockUser, is_active: false }} listUserKeys={listUserKeys} />,
+      );
+      clearActive();
+      expect(listUserKeys).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('deactivate-warning')).not.toBeInTheDocument();
+    });
+
+    it('without listUserKeys the dialog shows only the general warning', () => {
+      render(<EditUserModal {...baseProps} />);
+      clearActive();
+      expect(screen.getByTestId('deactivate-warning')).toHaveTextContent(DEACTIVATE_WARNING);
+      expect(screen.queryByTestId('deactivate-keys')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('deactivate-keys-status')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('what it lists (C2, C3, C4)', () => {
+    it('lists only the keys of this user that are active, not those of another user or an expired one', async () => {
+      render(<EditUserModal {...baseProps} listUserKeys={() => Promise.resolve(MIXED_KEYS)} />);
+      await clearActiveAndSettle();
+      const items = screen.getAllByTestId('deactivate-key');
+      expect(items).toHaveLength(1);
+      expect(items[0].textContent).toBe(`Checkout server · sdk:ruleset · ${lastUsedText}`);
+    });
+
+    it('says one key and N keys in words, joins scopes, and says no scopes and never used', async () => {
+      const keys = [
+        makeKey({ id: 'a', name: 'Two scopes', scopes: ['read', 'track'] }),
+        makeKey({ id: 'b', name: 'Bare', scopes: [], last_used_at: null }),
+      ];
+      render(<EditUserModal {...baseProps} listUserKeys={() => Promise.resolve(keys)} />);
+      await clearActiveAndSettle();
+      expect(summary().textContent).toBe('The 2 API keys that stop working:');
+      const items = screen.getAllByTestId('deactivate-key').map((li) => li.textContent);
+      expect(items).toStrictEqual([
+        `Two scopes · read, track · ${lastUsedText}`,
+        'Bare · no scopes · never used',
+      ]);
+      expect(screen.getByTestId('deactivate-keys-advice').textContent).toBe(
+        'To keep an application running, cancel, switch it to a key created by an account that is staying, ' +
+          'then deactivate this user. Reactivating this user makes these keys work again, unless ' +
+          'they have expired.',
+      );
+    });
+
+    it('says "The API key that stops working:" for one key', async () => {
+      render(<EditUserModal {...baseProps} listUserKeys={() => Promise.resolve([makeKey()])} />);
+      await clearActiveAndSettle();
+      expect(summary().textContent).toBe('The API key that stops working:');
+    });
+
+    it('a user with no active keys: says so, with no list and no advice', async () => {
+      render(
+        <EditUserModal
+          {...baseProps}
+          listUserKeys={() => Promise.resolve(MIXED_KEYS.filter((k) => k.user_id !== 'user-1'))}
+        />,
+      );
+      await clearActiveAndSettle();
+      expect(summary().textContent).toBe('This user has no active API keys.');
+      expect(screen.queryByTestId('deactivate-keys-list')).not.toBeInTheDocument();
+      expect(screen.queryByRole('list')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('deactivate-keys-advice')).not.toBeInTheDocument();
+    });
+
+    it('the general warning stays above the list', async () => {
+      render(<EditUserModal {...baseProps} listUserKeys={() => Promise.resolve([makeKey()])} />);
+      await clearActiveAndSettle();
+      const block = screen.getByTestId('deactivate-warning');
+      expect(block.firstElementChild).toHaveTextContent(DEACTIVATE_WARNING);
+      expect(block.firstElementChild).toHaveAttribute('id', 'edit-deactivate-warning');
+    });
+  });
+
+  describe('Save is never held up by the list (C5)', () => {
+    it('while the request is pending, Save is enabled and sends exactly {is_active: false}', async () => {
+      const pending = deferredKeys();
+      const onSave = jest.fn(() => Promise.resolve());
+      render(
+        <EditUserModal {...baseProps} onSave={onSave} listUserKeys={() => pending.promise} />,
+      );
+      clearActive();
+      expect(summary().textContent).toBe('Checking which API keys this user has…');
+      expect(screen.getByTestId('deactivate-warning')).toHaveTextContent(DEACTIVATE_WARNING);
+      const save = screen.getByTestId('edit-save-button');
+      expect(save).toBeEnabled();
+      await act(async () => {
+        fireEvent.click(save);
+      });
+      expect(onSave).toHaveBeenCalledTimes(1);
+      expect((onSave.mock.calls[0] as unknown[])[1]).toStrictEqual({ is_active: false });
+    });
+
+    it('after a failed request, Save is enabled and sends exactly {is_active: false}', async () => {
+      const onSave = jest.fn(() => Promise.resolve());
+      render(
+        <EditUserModal
+          {...baseProps}
+          onSave={onSave}
+          listUserKeys={() => Promise.reject(new Error('nope'))}
+        />,
+      );
+      await clearActiveAndSettle();
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('edit-save-button'));
+      });
+      expect((onSave.mock.calls[0] as unknown[])[1]).toStrictEqual({ is_active: false });
+    });
+  });
+
+  describe('when the request fails (C6)', () => {
+    it('shows the message and the general warning, and Try again asks again', async () => {
+      const listUserKeys = jest
+        .fn<Promise<ApiKey[]>, [string]>()
+        .mockRejectedValueOnce(new Error('The API did not answer.'))
+        .mockResolvedValueOnce([makeKey(), makeKey({ id: 'k-9', name: 'Second' })]);
+      render(<EditUserModal {...baseProps} listUserKeys={listUserKeys} />);
+      await clearActiveAndSettle();
+      expect(summary().textContent).toBe("Couldn't list this user's API keys: The API did not answer.");
+      expect(screen.getByTestId('deactivate-warning')).toHaveTextContent(DEACTIVATE_WARNING);
+      expect(screen.getByTestId('deactivate-keys-retry')).toHaveTextContent('Try again');
+
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('deactivate-keys-retry'));
+      });
+      expect(listUserKeys).toHaveBeenCalledTimes(2);
+      expect(summary().textContent).toBe('The 2 API keys that stop working:');
+      expect(screen.queryByTestId('deactivate-keys-retry')).not.toBeInTheDocument();
+      // On success, focus moves to the line that now says what was found.
+      expect(summary()).toHaveFocus();
+    });
+
+    it('while Try again is busy it reads Checking…, is aria-disabled, ignores a click and keeps focus; on failure focus stays', async () => {
+      const retry = deferredKeys();
+      const listUserKeys = jest
+        .fn<Promise<ApiKey[]>, [string]>()
+        .mockRejectedValueOnce(new Error('first'))
+        .mockReturnValueOnce(retry.promise);
+      render(<EditUserModal {...baseProps} listUserKeys={listUserKeys} />);
+      await clearActiveAndSettle();
+      const button = screen.getByTestId('deactivate-keys-retry');
+      button.focus();
+      fireEvent.click(button);
+      expect(screen.getByTestId('deactivate-keys-retry')).toHaveTextContent('Checking…');
+      expect(screen.getByTestId('deactivate-keys-retry')).toHaveAttribute('aria-disabled', 'true');
+      fireEvent.click(screen.getByTestId('deactivate-keys-retry'));
+      expect(listUserKeys).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId('deactivate-keys-retry')).toHaveFocus();
+
+      await act(async () => {
+        retry.reject(new Error('second'));
+      });
+      expect(summary().textContent).toBe("Couldn't list this user's API keys: second");
+      const again = screen.getByTestId('deactivate-keys-retry');
+      expect(again).toHaveTextContent('Try again');
+      expect(again).not.toHaveAttribute('aria-disabled', 'true');
+      expect(again).toHaveFocus();
+    });
+  });
+
+  describe('what a screen reader is given (C7, C8, C9)', () => {
+    it('Save is described by the general warning and the summary, not the list', async () => {
+      const keys = [makeKey(), makeKey({ id: 'k-9', name: 'Second' })];
+      render(<EditUserModal {...baseProps} listUserKeys={() => Promise.resolve(keys)} />);
+      const save = screen.getByTestId('edit-save-button');
+      expect(save).not.toHaveAttribute('aria-describedby');
+      await clearActiveAndSettle();
+      expect(save).toHaveAccessibleDescription(`${DEACTIVATE_WARNING} The 2 API keys that stop working:`);
+      expect(save).toHaveAccessibleDescription(/The 2 API keys that stop working/);
+      expect(save).not.toHaveAccessibleDescription(/Checkout server/);
+      expect(screen.getByTestId('edit-active-toggle')).toHaveAccessibleDescription(DEACTIVATE_WARNING);
+    });
+
+    it('one polite status region is empty until the request settles, then holds the summary', async () => {
+      const pending = deferredKeys();
+      render(<EditUserModal {...baseProps} listUserKeys={() => pending.promise} />);
+      expect(status()).toHaveAttribute('role', 'status');
+      expect(status().textContent).toBe('');
+      clearActive();
+      // Loading is not announced: the region stays empty.
+      expect(status().textContent).toBe('');
+      await act(async () => {
+        pending.resolve([makeKey(), makeKey({ id: 'k-9', name: 'Second' })]);
+      });
+      // Read out as a sentence: the visible line ends in a colon, this one in a full stop.
+      expect(status().textContent).toBe('The 2 API keys that stop working.');
+      expect(summary().textContent).toBe('The 2 API keys that stop working:');
+    });
+
+    it('the status region says it too when the request fails', async () => {
+      render(<EditUserModal {...baseProps} listUserKeys={() => Promise.reject(new Error('down'))} />);
+      await clearActiveAndSettle();
+      expect(status().textContent).toBe("Couldn't list this user's API keys: down");
+    });
+
+    it('focus stays on Active when the list arrives', async () => {
+      const pending = deferredKeys();
+      render(<EditUserModal {...baseProps} listUserKeys={() => pending.promise} />);
+      const toggle = screen.getByTestId('edit-active-toggle');
+      toggle.focus();
+      fireEvent.click(toggle);
+      expect(toggle).toHaveFocus();
+      await act(async () => {
+        pending.resolve([makeKey()]);
+      });
+      expect(toggle).toHaveFocus();
+    });
+  });
+
+  describe('your own row, and ticking Active again (C10, C11)', () => {
+    it('your own row: Active is disabled, nothing is asked, there is no block and no status region', async () => {
+      const listUserKeys = jest.fn(() => Promise.resolve([makeKey()]));
+      render(<EditUserModal {...baseProps} currentUserId="user-1" listUserKeys={listUserKeys} />);
+      const toggle = screen.getByTestId('edit-active-toggle');
+      expect(toggle).toBeDisabled();
+      // userEvent does what a browser does with a disabled box: nothing.
+      await userEvent.setup().click(toggle);
+      expect(listUserKeys).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('deactivate-warning')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('deactivate-keys-status')).not.toBeInTheDocument();
+    });
+
+    it('ticking Active again removes the block and empties the status region; Save is off again', async () => {
+      render(<EditUserModal {...baseProps} listUserKeys={() => Promise.resolve([makeKey()])} />);
+      await clearActiveAndSettle();
+      expect(screen.getByTestId('deactivate-warning')).toBeInTheDocument();
+      clearActive();
+      expect(screen.queryByTestId('deactivate-warning')).not.toBeInTheDocument();
+      expect(status().textContent).toBe('');
+      expect(screen.getByTestId('edit-save-button')).toBeDisabled();
+      expect(screen.getByTestId('edit-save-button')).not.toHaveAttribute('aria-describedby');
+    });
+  });
+
+  describe('axe finds nothing in the dialog (C12; colour contrast is not computable in jsdom)', () => {
+    const axeOptions: axe.RunOptions = { rules: { 'color-contrast': { enabled: false } } };
+
+    async function dialogViolations() {
+      const dialog = screen.getByRole('dialog');
+      const result = await axe.run(dialog, axeOptions);
+      return result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(', ')}`);
+    }
+
+    it('while loading', async () => {
+      render(<EditUserModal {...baseProps} listUserKeys={() => new Promise<ApiKey[]>(() => {})} />);
+      clearActive();
+      expect(summary()).toBeInTheDocument();
+      expect(await dialogViolations()).toStrictEqual([]);
+    });
+
+    it('with two keys listed', async () => {
+      const keys = [makeKey(), makeKey({ id: 'k-9', name: 'Second', scopes: [] })];
+      render(<EditUserModal {...baseProps} listUserKeys={() => Promise.resolve(keys)} />);
+      await clearActiveAndSettle();
+      expect(screen.getAllByTestId('deactivate-key')).toHaveLength(2);
+      expect(await dialogViolations()).toStrictEqual([]);
+    });
+
+    it('with no keys', async () => {
+      render(<EditUserModal {...baseProps} listUserKeys={() => Promise.resolve([])} />);
+      await clearActiveAndSettle();
+      expect(summary().textContent).toBe('This user has no active API keys.');
+      expect(await dialogViolations()).toStrictEqual([]);
+    });
+
+    it('after a failure', async () => {
+      render(<EditUserModal {...baseProps} listUserKeys={() => Promise.reject(new Error('down'))} />);
+      await clearActiveAndSettle();
+      expect(screen.getByTestId('deactivate-keys-retry')).toBeInTheDocument();
+      expect(await dialogViolations()).toStrictEqual([]);
+    });
   });
 });

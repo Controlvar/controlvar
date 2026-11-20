@@ -4,10 +4,16 @@ import kotlinx.coroutines.test.runTest
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.Interceptor
+import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.RecordedRequest
+import okhttp3.mockwebserver.SocketPolicy
 import org.json.JSONObject
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
+import java.io.IOException
+import java.net.URLDecoder
+import java.util.Date
 import java.util.concurrent.TimeUnit
 
 /**
@@ -356,6 +362,64 @@ class ExperimentationClientTest {
     }
 
     @Test
+    fun `evaluateFlag removes the stored answer on 404 and reports not found`() = runTest {
+        val user = User("user-1")
+        // 1. A 200 with enabled:true is stored.
+        server.enqueue(json(200, flagJson("f", true)))
+        assertTrue(client.evaluateFlag("f", user).enabled)
+        assertNotNull(offlineStore.loadFlag("user-1", "f"))
+
+        // 2. After the memory cache is gone, a 404 throws and does not serve the stored answer.
+        client.clearCache()
+        server.enqueue(json(404, """{"detail":"Feature flag not found"}"""))
+        assertThrows<ExperimentationException.FlagNotFoundException> {
+            client.evaluateFlag("f", user)
+        }
+    }
+
+    @Test
+    fun `evaluateFlag 404 leaves nothing stored, so a later disconnect is a NetworkException`() = runTest {
+        val user = User("user-1")
+        server.enqueue(json(200, flagJson("f", true)))
+        client.evaluateFlag("f", user)
+        client.clearCache()
+        server.enqueue(json(404, """{"detail":"Feature flag not found"}"""))
+        runCatching { client.evaluateFlag("f", user) }
+
+        // 3. The stored answer is gone.
+        assertNull(offlineStore.loadFlag("user-1", "f"))
+
+        // 4. A disconnect afterwards gives NetworkException, not the removed answer.
+        val offline = ExperimentationClient(
+            SdkConfig(baseUrl = "http://127.0.0.1:1", apiKey = "k", timeoutMs = 500L),
+            HttpClient("http://127.0.0.1:1", "k", 500L),
+            ResultCache(maxSize = 100, ttlMs = 300_000L),
+            ResultCache(maxSize = 100, ttlMs = 300_000L),
+            offlineStore,
+        )
+        try {
+            assertThrows<ExperimentationException.NetworkException> {
+                offline.evaluateFlag("f", user)
+            }
+        } finally {
+            offline.close()
+        }
+    }
+
+    @Test
+    fun `evaluateFlag still serves the stored answer after a 500`() = runTest {
+        val user = User("user-1")
+        server.enqueue(json(200, flagJson("f", true)))
+        assertTrue(client.evaluateFlag("f", user).enabled)
+
+        client.clearCache()
+        server.enqueue(json(500, """{"detail":"boom"}"""))
+        val result = client.evaluateFlag("f", user)
+        assertTrue(result.enabled, "A 500 keeps serving the stored answer")
+        assertNotNull(offlineStore.loadFlag("user-1", "f"))
+    }
+
+    @Test
     fun `evaluateFlag persists successful results to the offline store`() = runTest {
         server.enqueue(json(200, flagJson("persist-flag", true, """{"x":1}""")))
         client.evaluateFlag("persist-flag", User("user-1"))
@@ -370,6 +434,542 @@ class ExperimentationClientTest {
     fun `evaluateFlag rejects empty key or user id`() = runTest {
         assertThrows<IllegalArgumentException> { client.evaluateFlag("", User("u")) }
         assertThrows<IllegalArgumentException> { client.evaluateFlag("f", User("")) }
+    }
+
+    // ============================
+    // Flag evaluation sends the user's attributes (#438)
+    // ============================
+
+    /** Alphanumeric on purpose: a non-ASCII canary would hide inside `%C3%A9`. */
+    private val canary = "attrcanary7f3"
+
+    /**
+     * The server's reading of a request line's query: split on `&`, `+` is a space, then
+     * percent-decode as UTF-8 (what the server's query parser does). It is deliberately not
+     * `HttpUrl.queryParameter`, so these checks do not share the SDK's own library.
+     */
+    private fun serverQuery(path: String): List<Pair<String, String>> =
+        path.substringAfter('?', "").split('&').filter { it.isNotEmpty() }.map { part ->
+            URLDecoder.decode(part.substringBefore('='), Charsets.UTF_8) to
+                URLDecoder.decode(part.substringAfter('=', ""), Charsets.UTF_8)
+        }
+
+    /** The JSON object in `context`, read with [serverQuery]; null when there is no `context`. */
+    private fun serverContext(path: String): JSONObject? =
+        serverQuery(path).firstOrNull { it.first == "context" }?.let { JSONObject(it.second) }
+
+    /** Answers `enabled` when [rule] holds for the decoded context, and reports the rule's reason. */
+    private fun answerWhen(rule: (JSONObject?) -> Boolean) {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val matched = rule(request.path?.let { serverContext(it) })
+                val reason = if (matched) "targeting_rule" else "rollout"
+                return json(200, """{"key":"f","enabled":$matched,"reason":"$reason","config":null}""")
+            }
+        }
+    }
+
+    /** The live check's rule: `plan == "pro"`. */
+    private fun targetingServer() = answerWhen { it?.optString("plan") == "pro" }
+
+    private val pro = User("u1", mapOf("plan" to "pro"))
+    private val free = User("u1", mapOf("plan" to "free"))
+    private val bare = User("u1")
+
+    private val v3 = mapOf("q" to "a+b&c=d#e f/é😀!'()*~")
+    private val v3a = mapOf("q" to "a+b&c=d#e fé")
+    private val v4 = mapOf(
+        "age" to 30,
+        "beta" to true,
+        "device" to mapOf("os" to "ios", "version" to "17.4.0"),
+        "tags" to listOf("a", "b")
+    )
+
+    private suspend fun enabled(user: User): Boolean = client.evaluateFlag("f", user).enabled
+
+    @Test
+    @Tag("regression")
+    fun `regression 438 - evaluateFlag sends the attributes as context after user_id`() = runTest {
+        server.enqueue(json(200, flagJson("f", true)))
+
+        client.evaluateFlag("f", pro)
+
+        assertEquals(
+            "/api/v1/feature-flags/evaluate/f?user_id=u1&context=%7B%22plan%22%3A%22pro%22%7D",
+            takeRequest().path
+        )
+    }
+
+    @Test
+    @Tag("regression")
+    fun `regression 438 - a targeting rule on attributes matches`() = runTest {
+        targetingServer()
+
+        assertTrue(enabled(pro), "the rule plan == pro must match")
+        // A user the rule does not match is answered by the rollout.
+        assertFalse(client.evaluateFlag("f", User("u2", mapOf("plan" to "free"))).enabled)
+    }
+
+    @Test
+    fun `evaluateFlag - no attributes and an empty map send the user id alone`() = runTest {
+        server.enqueue(json(200, flagJson("f", true)))
+        client.evaluateFlag("f", bare)
+        assertEquals("/api/v1/feature-flags/evaluate/f?user_id=u1", takeRequest().path)
+
+        client.clearCache()
+        server.enqueue(json(200, flagJson("f", true)))
+        client.evaluateFlag("f", User("u1", emptyMap()))
+        assertEquals("/api/v1/feature-flags/evaluate/f?user_id=u1", takeRequest().path)
+    }
+
+    @Test
+    fun `evaluateFlag - the context reads back as the attributes with the server's rules`() = runTest {
+        val vectors = listOf(
+            v3 to JSONObject().put("q", "a+b&c=d#e f/é😀!'()*~"),
+            v3a to JSONObject().put("q", "a+b&c=d#e fé"),
+            v4 to JSONObject(
+                """{"age":30,"beta":true,"device":{"os":"ios","version":"17.4.0"},"tags":["a","b"]}"""
+            )
+        )
+        for ((attributes, expected) in vectors) {
+            client.clearCache()
+            server.enqueue(json(200, flagJson("f", true)))
+            client.evaluateFlag("f", User("u1", attributes))
+
+            val request = takeRequest()
+            val query = serverQuery(request.path!!)
+            assertEquals(listOf("user_id", "context"), query.map { it.first }, "no other parameter")
+            assertEquals("u1", query[0].second)
+            val actual = serverContext(request.path!!)!!
+            assertTrue(expected.similar(actual), "context decoded to $actual, expected $expected")
+            // HttpUrl reads the same object, so the two decoders agree on every vector.
+            assertTrue(expected.similar(JSONObject(request.requestUrl!!.queryParameter("context")!!)))
+        }
+    }
+
+    @Test
+    fun `serverQuery reads a plus as a space and a raw ampersand as a new parameter`() {
+        val plus = serverContext("/p?user_id=u1&context=%7B%22q%22%3A%22a+b%22%7D")!!
+        assertEquals("a b", plus.getString("q"))
+        // The context left unencoded: the value is cut at the `&`, so it is no JSON object.
+        assertThrows<org.json.JSONException> {
+            serverContext("/p?user_id=u1&context={\"q\":\"a&b\"}")
+        }
+        // A raw `+` in the value reads back as a space: not the attribute that was sent.
+        assertEquals("a b", serverContext("/p?user_id=u1&context={\"q\":\"a+b\"}")!!.getString("q"))
+    }
+
+    @Test
+    fun `evaluateFlag - the exact request for each pinned vector`() = runTest {
+        // V2 is pinned byte for byte. V3 and V3a are measured at this head (OkHttp's encoder
+        // writes `!'()*~` as %21%27%28%29*%7E); what makes them right is the decode test above.
+        val expected = mapOf(
+            mapOf("plan" to "pro") to
+                "/api/v1/feature-flags/evaluate/f?user_id=u1&context=%7B%22plan%22%3A%22pro%22%7D",
+            v3a to
+                "/api/v1/feature-flags/evaluate/f?user_id=u1" +
+                "&context=%7B%22q%22%3A%22a%2Bb%26c%3Dd%23e%20f%C3%A9%22%7D",
+            v3 to
+                "/api/v1/feature-flags/evaluate/f?user_id=u1" +
+                "&context=%7B%22q%22%3A%22a%2Bb%26c%3Dd%23e%20f%2F%C3%A9%F0%9F%98%80%21%27%28%29*%7E%22%7D"
+        )
+        for ((attributes, path) in expected) {
+            client.clearCache()
+            server.enqueue(json(200, flagJson("f", true)))
+            client.evaluateFlag("f", User("u1", attributes))
+            assertEquals(path, takeRequest().path)
+        }
+    }
+
+    @Test
+    fun `evaluateFlag - the context is the attributes with the keys of every map sorted`() = runTest {
+        val keys = (1..20).map { "k%02d".format(it) }
+        val forward = LinkedHashMap<String, Any?>()
+        keys.forEach { forward[it] = mapOf("b" to 1, "a" to 2) }
+        val backward = LinkedHashMap<String, Any?>()
+        keys.reversed().forEach { backward[it] = mapOf("a" to 2, "b" to 1) }
+
+        server.enqueue(json(200, flagJson("f", true)))
+        client.evaluateFlag("f", User("u1", forward))
+        // The same attributes, written in another order, are the same context: one request.
+        client.evaluateFlag("f", User("u1", backward))
+
+        assertEquals(1, server.requestCount)
+        val context = serverQuery(takeRequest().path!!)[1].second
+        assertEquals(keys.joinToString(",", "{", "}") { "\"$it\":{\"a\":2,\"b\":1}" }, context)
+    }
+
+    // ---- The cache: one slot per user + flag, remembering the context it answered ----
+
+    @Test
+    fun `cache - other attributes ask the server again`() = runTest {
+        targetingServer()
+        assertTrue(enabled(pro))
+        assertFalse(enabled(free))
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun `cache - minimal pairs of attributes are different contexts`() = runTest {
+        targetingServer()
+        assertTrue(enabled(pro))
+        assertFalse(enabled(User("u1", mapOf("tier" to "pro"))))
+        assertEquals(2, server.requestCount)
+
+        // {n: 1} and {n: "1"}: a number and a string are different attributes.
+        answerWhen { it?.opt("n") is Int }
+        assertTrue(enabled(User("u2", mapOf("n" to 1))))
+        assertFalse(enabled(User("u2", mapOf("n" to "1"))))
+        assertEquals(4, server.requestCount)
+    }
+
+    @Test
+    fun `cache - one entry holds the latest answer, so A then B then A is three requests`() = runTest {
+        targetingServer()
+        assertEquals(listOf(true, false, true), listOf(enabled(pro), enabled(free), enabled(pro)))
+        assertEquals(3, server.requestCount)
+        assertEquals(1, client.getCacheSize(), "still one entry per user and flag")
+    }
+
+    @Test
+    fun `cache - attributes then none is two requests, and none gets the no-attribute answer`() = runTest {
+        targetingServer()
+        assertTrue(enabled(pro))
+        assertFalse(enabled(bare), "a stored attribute answer must not be served to a call without any")
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun `cache - an empty map is the same context as none`() = runTest {
+        targetingServer()
+        enabled(User("u1", emptyMap()))
+        enabled(bare)
+        enabled(User("u1", emptyMap()))
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun `cache - the same attributes are one request`() = runTest {
+        targetingServer()
+        assertTrue(enabled(pro))
+        assertTrue(enabled(User("u1", mapOf("plan" to "pro"))))
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun `resultCache get with a context returns only an entry stored with it`() {
+        val cache = ResultCache<String>(maxSize = 10, ttlMs = 300_000L)
+        val key = ResultCache.key("u1", "f")
+        cache.set(key, "answer", "ctx-a")
+
+        assertEquals("answer", cache.get(key, "ctx-a"))
+        assertNull(cache.get(key, "ctx-b"))
+        assertNull(cache.get(key, ""), "no attributes is its own context")
+        assertEquals("answer", cache.get(key), "no context given means no check")
+        assertEquals("answer", cache.get(key, null))
+        assertEquals(1, cache.size(), "a mismatch keeps the entry until the new answer replaces it")
+
+        cache.set(key, "newer", "ctx-b")
+        assertEquals("newer", cache.get(key, "ctx-b"))
+        assertNull(cache.get(key, "ctx-a"))
+        cache.set(key, "plain")
+        assertEquals("plain", cache.get(key, ""))
+    }
+
+    @Test
+    fun `evaluateFlag - the keyless track fan-out lists one flag, with the latest answer`() = runTest {
+        targetingServer()
+        enabled(pro)
+        enabled(free)
+        assertEquals(listOf("f"), client.getCachedFlagKeys("u1"))
+        takeRequest()
+        takeRequest()
+
+        client.track(TrackEvent("u1", "purchase"))
+
+        val batch = takeRequest()
+        assertEquals("/api/v1/tracking/batch", batch.path)
+        val events = bodyOf(batch).getJSONArray("events")
+        assertEquals(1, events.length(), "one entry per flag, not per attribute set")
+        assertEquals("f", events.getJSONObject(0).getString("feature_flag_key"))
+        assertNull(server.takeRequest(300, TimeUnit.MILLISECONDS))
+    }
+
+    // ---- The offline store: the key is user + flag, as before ----
+
+    private class FakePrefs : OfflineStore.PrefsAdapter {
+        val map = linkedMapOf<String, String>()
+        override fun getString(key: String): String? = map[key]
+        override fun putString(key: String, value: String) { map[key] = value }
+        override fun remove(key: String) { map.remove(key) }
+        override fun allKeys(): Set<String> = map.keys.toSet()
+        override fun clear() = map.clear()
+    }
+
+    @Test
+    fun `evaluateFlag - the offline store key is user and flag as before`() = runTest {
+        val prefs = FakePrefs()
+        val store = OfflineStore(prefs)
+        val withStore = ExperimentationClient(
+            SdkConfig(baseUrl = server.url("/").toString().trimEnd('/'), apiKey = "k"),
+            HttpClient(server.url("/").toString().trimEnd('/'), "k", 5_000L),
+            ResultCache(maxSize = 100, ttlMs = 300_000L),
+            ResultCache(maxSize = 100, ttlMs = 300_000L),
+            store
+        )
+        targetingServer()
+
+        withStore.evaluateFlag("f", pro)
+        withStore.evaluateFlag("f", free)
+
+        // A write under A and then under B lands in one key, holding B's answer.
+        assertEquals(setOf("ep_flag_2_u1_f"), prefs.map.keys)
+        assertFalse(store.loadFlag("u1", "f")!!.enabled)
+        // invalidateCache removes it; clearAll leaves the backing store empty.
+        withStore.invalidateCache("u1", "f")
+        assertTrue(prefs.map.isEmpty())
+        withStore.evaluateFlag("f", pro)
+        assertEquals(1, prefs.map.size)
+        store.clearAll()
+        assertTrue(prefs.map.isEmpty(), "the raw backing store, not size()")
+        withStore.close()
+    }
+
+    @Test
+    fun `evaluateFlag - a 404 under other attributes removes the stored answer`() = runTest {
+        // A is stored; a 404 arrives under B; then the network fails under A.
+        server.enqueue(json(200, flagJson("f", true)))
+        server.enqueue(json(404, """{"detail":"Feature flag not found"}"""))
+        assertTrue(client.evaluateFlag("f", pro).enabled)
+        assertNotNull(offlineStore.loadFlag("u1", "f"))
+
+        assertThrows<ExperimentationException.FlagNotFoundException> {
+            client.evaluateFlag("f", free)
+        }
+        assertNull(offlineStore.loadFlag("u1", "f"))
+
+        val offline = ExperimentationClient(
+            SdkConfig(baseUrl = "http://127.0.0.1:1", apiKey = "k", timeoutMs = 500L),
+            HttpClient("http://127.0.0.1:1", "k", 500L),
+            ResultCache(maxSize = 100, ttlMs = 300_000L),
+            ResultCache(maxSize = 100, ttlMs = 300_000L),
+            offlineStore
+        )
+        try {
+            assertThrows<ExperimentationException.NetworkException> { offline.evaluateFlag("f", pro) }
+        } finally {
+            offline.close()
+        }
+    }
+
+    @Test
+    fun `evaluateFlag - a stored answer for other attributes is served when the server cannot answer`() = runTest {
+        server.enqueue(json(200, flagJson("f", true)))
+        server.enqueue(json(503, "{}"))
+        assertTrue(client.evaluateFlag("f", pro).enabled)
+
+        // By design: the last answer for this user and flag, whatever attributes it was asked with.
+        assertTrue(client.evaluateFlag("f", free).enabled)
+    }
+
+    // ---- Errors and logs carry no query (the canary is in the attributes) ----
+
+    private val canaryUser = User("u1", mapOf("c" to "attrcanary7f3", "plan" to "pro"))
+
+    /** Every message in the chain, as `toString()` shows it, holds neither the canary nor the query. */
+    private fun assertNoCanary(error: Throwable) {
+        var cause: Throwable? = error
+        var depth = 0
+        while (cause != null && depth++ < 20) {
+            val text = cause.toString()
+            assertFalse(text.contains(canary), "the canary is in: $text")
+            assertFalse(text.contains("context="), "the query is in: $text")
+            assertFalse(text.contains("user_id="), "the query is in: $text")
+            cause = cause.cause
+        }
+    }
+
+    private fun chainText(error: Throwable): String =
+        generateSequence(error) { it.cause }.take(20).joinToString(" <- ") { it.toString() }
+
+    private fun clientFor(baseUrl: String, timeoutMs: Long = 2_000L) = ExperimentationClient(
+        SdkConfig(baseUrl = baseUrl, apiKey = "k", timeoutMs = timeoutMs),
+        HttpClient(baseUrl, "k", timeoutMs),
+        ResultCache(maxSize = 100, ttlMs = 300_000L),
+        ResultCache(maxSize = 100, ttlMs = 300_000L),
+        OfflineStore()
+    )
+
+    @Test
+    fun `errors - the canary check sees a canary anywhere in a cause chain`() {
+        assertThrows<AssertionError> { assertNoCanary(RuntimeException("x", IOException("c=attrcanary7f3"))) }
+        assertThrows<AssertionError> { assertNoCanary(RuntimeException("GET /f?user_id=u1&context=%7B%7D")) }
+        assertNoCanary(RuntimeException("x", IOException("Failed to connect to localhost/127.0.0.1:1")))
+    }
+
+    @Test
+    fun `errors - connection refused names no query anywhere in the cause chain`() = runTest {
+        val error = assertThrows<ExperimentationException.NetworkException> {
+            clientFor("http://127.0.0.1:1").evaluateFlag("f", canaryUser)
+        }
+        assertNoCanary(error)
+        assertNotNull(error.cause, "the cause is kept when it is clean")
+    }
+
+    @Test
+    fun `errors - a dropped connection names no query anywhere in the cause chain`() = runTest {
+        // OkHttp retries a GET once on a new connection, so the server drops two.
+        server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST))
+        server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST))
+        val error = assertThrows<ExperimentationException.NetworkException> {
+            clientFor("http://127.0.0.1:${server.port}").evaluateFlag("f", canaryUser)
+        }
+        assertNoCanary(error)
+        assertTrue(chainText(error).contains("unexpected end of stream"), chainText(error))
+    }
+
+    @Test
+    fun `errors - an unknown host names no query anywhere in the cause chain`() = runTest {
+        val error = assertThrows<ExperimentationException> {
+            clientFor("http://nohost.invalid").evaluateFlag("f", canaryUser)
+        }
+        assertNoCanary(error)
+    }
+
+    @Test
+    fun `errors - a read timeout names no query anywhere in the cause chain`() = runTest {
+        server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE))
+        server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE))
+        val error = assertThrows<ExperimentationException.NetworkException> {
+            clientFor("http://127.0.0.1:${server.port}", timeoutMs = 300L).evaluateFlag("f", canaryUser)
+        }
+        assertNoCanary(error)
+        assertTrue(chainText(error).contains("SocketTimeoutException"), chainText(error))
+    }
+
+    @Test
+    fun `errors - an invalid base URL names no query`() = runTest {
+        val error = assertThrows<IllegalArgumentException> {
+            clientFor("http://local host:8000").evaluateFlag("f", canaryUser)
+        }
+        assertNoCanary(error)
+    }
+
+    @Test
+    fun `errors - a transport message that repeats the URL is cut at its query and its cause dropped`() = runTest {
+        val path = "/api/v1/feature-flags/evaluate/f?user_id=u1&context=%7B%22c%22%3A%22$canary%22%7D"
+        fun clientThrowing(error: (okhttp3.Request) -> IOException) = HttpClient(
+            "http://localhost:1", "k", 500L,
+            OkHttpClient.Builder().addInterceptor(Interceptor { chain -> throw error(chain.request()) }).build()
+        )
+
+        // The IOExceptions in a chain (coroutine stack-trace recovery adds copies of the
+        // NetworkException itself, which are not IOExceptions).
+        fun transport(error: Throwable): List<Throwable> =
+            generateSequence(error) { it.cause }.take(20).filter { it is IOException }.toList()
+
+        // The message and the URL's query in a nested cause: the SDK's text is cut, the cause dropped.
+        val repeated = assertThrows<ExperimentationException.NetworkException> {
+            clientThrowing { IOException("failed: ${it.url}", IOException("inner ${it.url.query}")) }.get(path)
+        }
+        assertNoCanary(repeated)
+        assertEquals(emptyList<Throwable>(), transport(repeated), "the cause that repeats the query is dropped")
+        assertTrue(repeated.message!!.startsWith("Network error: failed: http://localhost:1/"), repeated.message)
+
+        // Control: a clean message and cause are kept.
+        val clean = assertThrows<ExperimentationException.NetworkException> {
+            clientThrowing { IOException("socket closed", IOException("reset")) }.get(path)
+        }
+        assertEquals("Network error: socket closed", clean.message)
+        assertEquals(listOf("socket closed", "reset"), transport(clean).map { it.message })
+
+        // Control: a request with no query is as before.
+        val noQuery = assertThrows<ExperimentationException.NetworkException> {
+            clientThrowing { IOException("failed: ${it.url}") }.get("/health")
+        }
+        assertEquals("Network error: failed: http://localhost:1/health", noQuery.message)
+        assertEquals(1, transport(noQuery).size)
+    }
+
+    @Test
+    fun `errors - a transport message with the decoded query or the context value alone is cut and its cause dropped`() = runTest {
+        // The context is {"plan":"a b+c","c":"attrcanary7f3"}, so each form below is the one
+        // an exception message could carry.
+        val path = "/api/v1/feature-flags/evaluate/f?user_id=u1&context=" +
+            "%7B%22c%22%3A%22$canary%22%2C%22plan%22%3A%22a%20b%2Bc%22%7D"
+        val forms = mapOf<String, (okhttp3.HttpUrl) -> String>(
+            "the decoded query" to { it.query!! },
+            "the decoded context value" to { it.queryParameter("context")!! },
+            "the encoded context value alone" to { it.encodedQuery!!.substringAfter("context=") }
+        )
+        for ((name, form) in forms) {
+            val client = HttpClient(
+                "http://localhost:1", "k", 500L,
+                OkHttpClient.Builder().addInterceptor(Interceptor { chain ->
+                    throw IOException("x ${form(chain.request().url)} y", IOException("inner ${form(chain.request().url)}"))
+                }).build()
+            )
+            val error = assertThrows<ExperimentationException.NetworkException> { client.get(path) }
+            assertNoCanary(error)
+            val text = chainText(error)
+            assertFalse(text.contains("%7B"), "$name: $text")
+            assertFalse(text.contains("{\"c\""), "$name: $text")
+            assertTrue(error.message!!.startsWith("Network error: x "), "$name: ${error.message}")
+            val transport = generateSequence(error as Throwable) { it.cause }.take(20).filter { it is IOException }.toList()
+            assertEquals(emptyList<Throwable>(), transport, "$name: the cause that repeats the value is dropped")
+        }
+    }
+
+    // ---- The two writers agree, and what cannot be written as JSON ----
+
+    @Test
+    fun `evaluateFlag - the flag context and the assignment context decode to the same object`() = runTest {
+        val attributes = mapOf(
+            "n" to 1,
+            "big" to 12345678901L,
+            "ratio" to 1.5f,
+            "when" to Date(0),
+            "nested" to mapOf("z" to 1, "a" to listOf(1, "two", mapOf("k" to null))),
+            "nothing" to null,
+            "on" to true,
+            "text" to "x/y é + & ="
+        )
+        server.enqueue(json(200, flagJson("f", true)))
+        server.enqueue(json(200, assignJson))
+
+        client.evaluateFlag("f", User("u1", attributes))
+        client.getAssignment("checkout_flow", User("u1", attributes))
+
+        val flagContext = serverContext(takeRequest().path!!)!!
+        val assignContext = bodyOf(takeRequest()).getJSONObject("context")
+        assertTrue(assignContext.similar(flagContext), "flag $flagContext, assignment $assignContext")
+        // A value that is not a JSON type goes as its toString(), the same on both calls.
+        assertEquals(Date(0).toString(), flagContext.getString("when"))
+    }
+
+    @Test
+    fun `evaluateFlag - attributes that cannot be written as JSON throw and send nothing`() = runTest {
+        offlineStore.saveFlag("u1", EvalResult("f", true))
+        val unencodable = listOf<Any?>(
+            Double.NaN,
+            Double.POSITIVE_INFINITY,
+            Double.NEGATIVE_INFINITY,
+            Float.NaN,
+            mapOf("deep" to mapOf("x" to Double.NaN)),
+            listOf(1, Double.POSITIVE_INFINITY)
+        )
+        for (bad in unencodable) {
+            val error = assertThrows<IllegalArgumentException> {
+                client.evaluateFlag("f", User("u1", mapOf("c" to canary, "bad" to bad)))
+            }
+            assertEquals("user.attributes cannot be sent as JSON", error.message)
+            assertNull(error.cause)
+        }
+
+        assertEquals(0, server.requestCount, "no request is made")
+        assertEquals(0, client.getCacheSize(), "nothing is cached")
+        // The offline store was not consulted: the stored answer is not served, and not removed.
+        assertNotNull(offlineStore.loadFlag("u1", "f"))
     }
 
     // ============================

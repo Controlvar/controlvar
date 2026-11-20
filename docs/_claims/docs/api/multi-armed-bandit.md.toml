@@ -375,12 +375,27 @@ text = "Sources are tried in order:"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "DynamoDB real-time counters (get_experiment_counters), when the counters stack is deployed and every variant has at least as many pulls and successes there as in PostgreSQL."
-by = ["test:backend/tests/unit/services/test_bandit_scheduler.py::TestDynamoDBCompleteness"]
+text = "It is used whenever any variant has an assignment there, and its pulls and successes are used whole: a DynamoDB count that is larger, or ahead, never replaces or mixes into them."
+by = [
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestDynamoDBCompleteness::test_postgres_wins_when_dynamodb_is_ahead_of_postgres",
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestDynamoDBCompleteness::test_postgres_wins_when_dynamodb_equal_or_larger_on_everything",
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestDynamoDBCompleteness::test_arm_with_dynamodb_only_pulls_is_not_starved",
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestDynamoDBCompleteness::test_uneven_dynamodb_lead_does_not_flip_the_ranking",
+]
 
 [[unit]]
-text = "A partial DynamoDB count (a counter that started late, or a manual increment) is ignored in favour of PostgreSQL's complete one."
-by = ["exempt:baseline"]
+text = "DynamoDB real-time counters (get_experiment_counters), when the counters stack is deployed, only when PostgreSQL has no assignments for the experiment or cannot be read."
+by = [
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestDynamoDBCompleteness::test_dynamodb_used_when_postgres_has_no_pulls",
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestDynamoDBCompleteness::test_dynamodb_used_when_postgres_is_unavailable",
+]
+
+[[unit]]
+text = "Its conversion counter counts conversion events, not users, so a user who converts three times counts three there; the scheduler caps its successes at its pulls and cannot turn them into users."
+by = [
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestDynamoDBCompleteness::test_dynamodb_successes_capped_at_pulls_without_postgres_data",
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestDynamoDBCompleteness::test_user_converting_three_times_counts_once",
+]
 
 [[unit]]
 text = "PostgreSQL: pulls = assignments rows per variant; successes = converting users, counted exactly as /results counts them: users assigned to the variant with at least one event, tagged with that variant, whose event_name matches the experiment's primary metric (see the event-matching rule in the tracking API docs)."

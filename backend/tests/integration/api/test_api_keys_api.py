@@ -335,6 +335,22 @@ class TestList:
         ids = {item["id"] for item in client.get(URL, headers=_auth(admin)).json()}
         assert own in ids and a not in ids
 
+    @pytest.mark.parametrize("role", [UserRole.VIEWER, UserRole.ANALYST])
+    def test_a_superuser_who_is_not_an_admin_sees_everyone_too(
+        self, client, db_session, developer, role
+    ):
+        # The Edit user dialog (#657) lists a user's keys with ?all=true, and the
+        # admin area opens for any superuser, whatever role the account holds.
+        # The route must therefore answer them too: a role-only check would
+        # leave the dialog with an error for exactly these accounts.
+        superuser = _make_user(db_session, role, is_superuser=True)
+        owned = _create(client, developer).json()
+        resp = client.get(f"{URL}?all=true", headers=_auth(superuser))
+        assert resp.status_code == 200, resp.text
+        item = next(i for i in resp.json() if i["id"] == owned["id"])
+        assert item["user_id"] == str(developer.id)
+        assert {"name", "scopes", "last_used_at", "expires_at"} <= set(item)
+
     def test_inactive_keys_hidden_by_default(self, client, db_session, developer):
         created = _create(client, developer).json()
         row = (
