@@ -2376,8 +2376,13 @@ by = [
 ]
 
 [[unit]]
-text = "Check which keys a user created before deactivating them."
-by = ["exempt:advice"]
+text = "To see which, list every user's keys with GET /api/v1/api-keys?all=true and keep those whose user_id is this user's id; the dashboard's Edit user dialog does this when you clear Active."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_admin_all_sees_everyone",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_a_superuser_who_is_not_an_admin_sees_everyone_too",
+    "test:frontend/src/tests/admin/EditUserModal.test.tsx::lists only the keys of this user that are active, not those of another user or an expired one",
+    "test:frontend/tests/e2e/dialog-focus.journey.spec.ts::the edit-user dialog: focus in, Tab trapped, page inert, focus back, announced after close",
+]
 
 [[unit]]
 text = "During a concurrent change: deactivating an account that is a superuser first waits for any change in progress to an active superuser's account, then checks that you are still an active superuser."

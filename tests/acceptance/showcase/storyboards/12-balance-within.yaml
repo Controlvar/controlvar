@@ -1,0 +1,217 @@
+# Video 12, Balance the split within groups (#1890): a draft experiment made
+# in guided setup with "Balance the split within groups" turned on at the
+# Variants step, grouping users by an attribute typed under "Another
+# attribute…" (`tier`) and three values to keep apart (the guide's own
+# example), read back on the Review step and on the experiment page; then the
+# guide's "Assign users" line, which sends that attribute. On the `demo` seed;
+# the experiment is left a draft, so no traffic is sent and nothing is set up.
+#
+# * The one departure from a new user's path is the sign-in, done off camera
+#   and said in the first caption.
+# * It shows the setup only. The dashboard has no per-group results view in
+#   the release this is recorded at (#448's last part), so no line says
+#   anything about results.
+# * The words are the dashboard's: the switch is "Balance the split within
+#   groups", said as it is drawn. No line says "even" or "evenly", says the
+#   setting's field name, or says "every group" (small groups can be merged in
+#   the results by group). test_showcase_balance_within.py holds all of that.
+# * The key the form fills in from the name is `pricing_test`; the guide's and
+#   the card's is `pricing-test`. So the key is cleared and typed on camera,
+#   and the caption and the narration of that beat say it is changed (video
+#   10's precedent, EM1512-3).
+# * The split stays at the form's 50/50: a balanced split's shares are
+#   multiples of 5, and the API refuses anything else. "50" is drawn while it
+#   is said (G2): the two share boxes hold it.
+# * The values are typed one at a time and added with "Add value"; the
+#   narration does not name them (narration review, round 1): values match
+#   exactly, so "high value" is not the value high_value, and a caption is
+#   plain text, so it cannot say high_value. test_showcase_balance_within.py
+#   holds the attribute said, typed and declared equal, and the values typed
+#   and the end state's equal.
+# * The Estimate step is passed in the values beat's exit, on camera with the
+#   caption still up, as video 9's first beat passes the Type step: this
+#   video leaves its settings as they are.
+# * Gate 10 ("design") reads the experiment back through the API: one draft
+#   with this name and key, its variants, its one metric, everyone may join,
+#   the analysis defaults, nothing guided setup cannot set, and
+#   `balance_within` exactly as the API echoes it (absent or null refuses: a
+#   server without the feature drops the field and still answers 200). The
+#   Review row (`review_balance`, "Balance: within tier (...)") and the
+#   experiment page's row (`detail_balance`, "within tier (...)": the test id
+#   is on the value only, its "Balance" term is a sibling) are each held to
+#   their own string, in the product's words.
+# * The card quotes docs/guides/balance-within-groups.md's "Assign users"
+#   block, checked against the recorded release's docs (C10) and against this
+#   tree's (test_showcase_quoted_docs.py).
+# * Every sentence has its row of CLAIMS_12 in test_showcase_quoted_docs.py:
+#   what is drawn while it is said, and the pages that state it.
+# * Length cuts, in order, if the voiced length runs over 87.3 s. Each drops
+#   whole sentences, so none needs a new clip: (1) the metric beat and its
+#   sentence ("Make purchases the primary metric: the one you decide on."):
+#   the draft then keeps the form's own metric, and the end state's metric is
+#   changed to it (Conversion, conversion) in the same edit; (2) the helper
+#   ("Each group gets the same split as the whole experiment.").
+slug: 12-balance-within
+title: Balance the split within groups
+seed: demo
+seed_counts: {experiments: 3, feature_flags: 2, users: 4}
+end_state:
+  signed_in_as: admin@demo.com
+  design:
+    name: Pricing test
+    key: pricing-test
+    status: draft
+    type: a_b
+    variants:
+      - {name: Control, allocation: 50, control: true}
+      - {name: Treatment, allocation: 50}
+    metrics:
+      - {name: Purchase, event: purchase, type: conversion, primary: true}
+    analysis: {confidence: 0.95, correction: benjamini_hochberg, bayesian: false}
+    balance_within: {attribute: tier, values: [high_value, churn_risk, new]}
+    shown:
+      review_variants: review-variants
+      review_metrics: review-metrics
+      review_balance: review-balance
+      detail_balance: detail-balance
+
+scenes:
+  - id: design
+    open: /experiments
+    signed_in: true
+    departures:
+      - kind: off-camera setup
+        says: Signed in off camera
+    beats:
+      - cue: Signed in off camera. Balance a split within groups.
+        focus: {testid: new-experiment-btn}
+        say:
+          - An experiment can balance its split within groups of users.
+          - Choose New Experiment.
+        steps:
+          - move: {testid: new-experiment-btn}
+        exit:
+          - click: {testid: new-experiment-btn}
+          - wait_for: {testid: wizard-step-heading}
+          - click: {testid: wizard-next}
+
+      - before:
+          - wait_for: {role: heading, name: Name it and choose what to measure}
+        cue: Name it. The key fills in, and you can change it.
+        focus: {testid: experiment-key}
+        say:
+          - Name it, and the key your code uses fills itself in.
+          - "You can change it: here, to the key the docs use."
+        steps:
+          - type: {testid: experiment-name}
+            text: Pricing test
+          - look: {testid: experiment-key}
+            ms: 1200
+          - type: {testid: experiment-key}
+            text: pricing-test
+            clear: true
+
+      - before:
+          - scroll_to: {testid: metric-row-0}
+        cue: "The primary metric: the one you decide on."
+        focus: {testid: metric-row-0}
+        say:
+          - "Make purchases the primary metric: the one you decide on."
+        steps:
+          - type: {testid: metric-name-0}
+            text: Purchase
+            clear: true
+          - type: {testid: metric-event-0}
+            text: purchase
+            clear: true
+        exit:
+          - click: {testid: wizard-next}
+
+      - before:
+          - wait_for: {role: heading, name: Set up the versions users will see}
+        cue: Turn on Balance the split within groups.
+        focus: {css: "label:has(> [data-testid=balance-switch])"}
+        say:
+          - At 50/50, turn on Balance the split within groups.
+          - Each group gets the same split as the whole experiment.
+        steps:
+          - click: {testid: balance-switch}
+          - look: {text: Each group gets the same split as the whole experiment., exact: true}
+            ms: 1500
+
+      - before:
+          - scroll_to: {testid: balance-within}
+        cue: Group users by an attribute, tier, and its values.
+        focus: {testid: balance-within}
+        say:
+          - "Group users by another attribute: tier."
+          - Then add the values to keep apart, one at a time.
+        steps:
+          - choose: {testid: balance-group-by}
+            option: Another attribute…
+          - type: {testid: balance-custom-key}
+            text: tier
+          - type: {testid: balance-value-input}
+            text: high_value
+          - click: {testid: balance-value-add}
+          - type: {testid: balance-value-input}
+            text: churn_risk
+          - click: {testid: balance-value-add}
+          - type: {testid: balance-value-input}
+            text: new
+          - click: {testid: balance-value-add}
+          - look: {testid: balance-values}
+            ms: 1200
+        exit:
+          - click: {testid: wizard-next}
+          - wait_for: {testid: analysis-settings}
+          - click: {testid: wizard-next}
+
+      - before:
+          - wait_for: {testid: wizard-review}
+        cue: Review shows the balance. Then create it.
+        focus: {css: "div.py-3:has([data-testid=review-balance])"}
+        say:
+          - Review shows what the split is balanced within, then create it.
+        record:
+          review-variants: {testid: review-variants}
+          review-metrics: {testid: review-metrics}
+          review-balance: {testid: review-balance}
+        steps:
+          - look: {testid: review-variants}
+            ms: 1000
+          - look: {testid: review-balance}
+            ms: 1500
+        exit:
+          - click: {testid: wizard-create}
+
+      - before:
+          - wait_for: {testid: experiment-balance}
+        cue: Saved as a draft, balanced within tier.
+        focus: {css: "dl:has([data-testid=experiment-balance])"}
+        payoff: true
+        say:
+          - It's saved as a draft, balanced within tier and its values.
+        record:
+          detail-balance: {testid: experiment-balance}
+        steps:
+          - look: {testid: experiment-status}
+            ms: 800
+          - look: {css: "div:has(> [data-testid=experiment-balance])"}
+            ms: 2000
+
+  - id: assign
+    card:
+      label: From the guide
+      code:
+        doc: docs/guides/balance-within-groups.md
+        section: Assign users
+        lines:
+          - '{"experiment_key": "pricing-test", "user_id": "u-123", "context": {"tier": "high_value"}}'
+      note: As the guide gives it, for the experiment made above.
+    beats:
+      - cue: Send each user's tier, or they are balanced as unknown.
+        focus: {css: "#code"}
+        say:
+          - In your app, send tier at the top level of the context.
+          - A user without it is balanced as unknown.

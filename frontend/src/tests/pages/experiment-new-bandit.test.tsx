@@ -223,8 +223,10 @@ describe('the Optimization algorithm', () => {
     expect(radio).toHaveFocus();
     const select = screen.getByTestId('optimization-type');
     expect(radio.compareDocumentPosition(select) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // Under the radios, before the note on split URL experiments.
-    expect(select.compareDocumentPosition(screen.getByTestId('wizard-type-note')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Core profile (no ModulesProvider): the radios are exactly these three, in this order, and the
+    // note on split URL experiments is gone (#1961), so nothing about Split URL follows the select.
+    expect(screen.getAllByRole('radio').map((r) => (r as HTMLInputElement).value)).toEqual(['a_b', 'mv', 'bandit']);
+    expect(screen.queryByTestId('wizard-type-note')).toBeNull();
   });
 
   it('the review names the type and the algorithm', () => {

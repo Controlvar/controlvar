@@ -68,7 +68,7 @@ Several background tasks run on a configurable cycle alongside the API process:
 | Experiment scheduler | 15 minutes (`EXPERIMENT_SCHEDULER_INTERVAL_MINUTES`) | Auto-starts draft experiments at `start_date`, resumes a paused experiment only at a `resume_at` scheduled after the pause, auto-stops at `end_date` |
 | Rollout scheduler | 15 minutes | Advances rollout schedule stages based on time-based triggers |
 | Safety monitor | 5 minutes | Checks error rate and latency thresholds; triggers auto-rollback if breached |
-| Bandit scheduler | 5 minutes (`BANDIT_UPDATE_INTERVAL_MINUTES`) | Recomputes variant weights for active multi-armed bandit experiments from DynamoDB counters when every variant has at least PostgreSQL's pulls and successes there, otherwise from PostgreSQL assignments + converting users (counted as `/results` counts them); `/tracking/assign` routes new users by these weights |
+| Bandit scheduler | 5 minutes (`BANDIT_UPDATE_INTERVAL_MINUTES`) | Recomputes variant weights for active multi-armed bandit experiments from PostgreSQL assignments + converting users (counted as `/results` counts them), or from the DynamoDB counters only when PostgreSQL has no assignments for the experiment or cannot be read; `/tracking/assign` routes new users by these weights |
 
 ---
 

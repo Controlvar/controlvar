@@ -1,3 +1,8 @@
+---
+title: Controlvar documentation, open-source A/B testing
+description: "Documentation for Controlvar, open-source A/B testing and feature flags you run yourself: quick start, SDKs, statistics, self-hosting and API reference."
+---
+
 # Controlvar Documentation
 
 Open-source A/B testing and feature flags that you run yourself. The core, the optional modules

@@ -1357,8 +1357,10 @@ A 422 names positions and fields, never the ids that were sent.
   changes nothing and still answers 200.
 - **Deactivating a user**: they can no longer sign in, requests with a token
   they already hold are refused, and **the API keys they created stop
-  working, including keys your applications use**. Check which keys a user
-  created before deactivating them.
+  working, including keys your applications use**. To see which, list every
+  user's keys with `GET /api/v1/api-keys?all=true` and keep those whose
+  `user_id` is this user's `id`; the dashboard's Edit user dialog does this when
+  you clear **Active**.
 - **During a concurrent change**: deactivating an account that is a superuser
   first waits for any change in progress to an active superuser's account,
   then checks that you are still an active superuser. If another administrator

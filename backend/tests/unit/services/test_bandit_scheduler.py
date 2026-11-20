@@ -888,8 +888,9 @@ def _fake_counter_provider(per_variant: Optional[Dict[str, tuple]], raises=None)
 
 
 class TestDynamoDBCompleteness:
-    """DynamoDB is used only when every variant has >= PostgreSQL's pulls
-    and successes."""
+    """PostgreSQL's stats are returned whole whenever any variant has a pull
+    there; DynamoDB (successes capped at pulls) is used only when PostgreSQL
+    has no pulls or cannot be read (#426, #581)."""
 
     def _setup(self):
         db = MagicMock()
@@ -957,8 +958,9 @@ class TestDynamoDBCompleteness:
 
     @pytest.mark.regression
     def test_complete_pulls_but_partial_dynamodb_successes_uses_postgres(self):
-        """Equal pulls are not enough: DynamoDB with 1 conversion per variant
-        against PostgreSQL's 30 and 10 would understate the conversion rate."""
+        """DynamoDB with equal pulls but 1 conversion per variant against
+        PostgreSQL's 30 and 10 must not understate the conversion rate:
+        PostgreSQL has data, so its stats are returned whole."""
         scheduler, exp, vid1, vid2 = self._setup()
         stats = self._stats(
             scheduler,
@@ -1003,8 +1005,10 @@ class TestDynamoDBCompleteness:
         assert stats[vid2].pulls == 3
 
     @pytest.mark.regression
-    def test_dynamodb_used_when_equal_to_postgres(self):
-        """Equal pulls: DynamoDB keeps its documented first place."""
+    def test_postgres_wins_when_dynamodb_equal_or_larger_on_everything(self):
+        """#581: DynamoDB at or above PostgreSQL on pulls AND successes used
+        to win and its event counts were weighed.  PostgreSQL has data, so
+        PostgreSQL's stats are returned whole (red on main)."""
         scheduler, exp, vid1, vid2 = self._setup()
         stats = self._stats(
             scheduler,
@@ -1014,13 +1018,14 @@ class TestDynamoDBCompleteness:
             pg_pulls={vid1: 100, vid2: 100},
             pg_conv={vid1: 30, vid2: 10},
         )
-        # The successes tell the sources apart: 41/11 are DynamoDB's.
-        assert stats[vid1].successes == 41
-        assert stats[vid2].successes == 11
+        assert (stats[vid1].pulls, stats[vid1].successes) == (100, 30)
+        assert (stats[vid2].pulls, stats[vid2].successes) == (100, 10)
 
     @pytest.mark.regression
-    def test_dynamodb_used_when_ahead_of_postgres(self):
-        """Real-time counters ahead of PostgreSQL are the fresher source."""
+    def test_postgres_wins_when_dynamodb_is_ahead_of_postgres(self):
+        """DynamoDB ahead on pulls AND successes (the pulls-only rule of an
+        earlier revision, and main, would pick it): PostgreSQL's stats whole,
+        pulls included.  Red on main and on the pulls-only revision."""
         scheduler, exp, vid1, vid2 = self._setup()
         stats = self._stats(
             scheduler,
@@ -1030,9 +1035,128 @@ class TestDynamoDBCompleteness:
             pg_pulls={vid1: 100, vid2: 100},
             pg_conv={vid1: 30, vid2: 10},
         )
-        assert stats[vid1].pulls == 105
-        assert stats[vid1].successes == 33
-        assert stats[vid2].pulls == 102
+        assert (stats[vid1].pulls, stats[vid1].successes) == (100, 30)
+        assert stats[vid1].failures == 70
+        assert (stats[vid2].pulls, stats[vid2].successes) == (100, 10)
+
+    @pytest.mark.regression
+    def test_postgres_pulls_win_even_when_dynamodb_successes_are_lower(self):
+        """Distinguishes pulls-only from pulls-and-successes completeness:
+        DynamoDB ahead on pulls but behind on successes is still ignored."""
+        scheduler, exp, vid1, vid2 = self._setup()
+        stats = self._stats(
+            scheduler,
+            exp,
+            (vid1, vid2),
+            dynamo=_fake_counter_provider({vid1: (105, 5), vid2: (102, 0)}),
+            pg_pulls={vid1: 100, vid2: 100},
+            pg_conv={vid1: 30, vid2: 10},
+        )
+        assert (stats[vid1].pulls, stats[vid1].successes) == (100, 30)
+        assert (stats[vid2].pulls, stats[vid2].successes) == (100, 10)
+
+    @pytest.mark.regression
+    def test_arm_with_dynamodb_only_pulls_is_not_starved(self):
+        """S1: PostgreSQL has no assignment for B (DynamoDB has 100).  Mixing
+        DynamoDB pulls with PostgreSQL successes gave B (100 pulls, 0
+        successes) and weight 0.  PostgreSQL whole gives B no pulls, the
+        prior.  Red on main (B = 100 pulls) and on the pulls-only revision."""
+        scheduler, exp, vid1, vid2 = self._setup()
+        stats = self._stats(
+            scheduler,
+            exp,
+            (vid1, vid2),
+            dynamo=_fake_counter_provider({vid1: (100, 30), vid2: (100, 30)}),
+            pg_pulls={vid1: 100},
+            pg_conv={vid1: 30},
+        )
+        assert (stats[vid1].pulls, stats[vid1].successes) == (100, 30)
+        assert (stats[vid2].pulls, stats[vid2].successes) == (0, 0)
+
+    @pytest.mark.regression
+    def test_uneven_dynamodb_lead_does_not_flip_the_ranking(self):
+        """S2: DynamoDB has 200 users in A where PostgreSQL has 100.  The
+        extra 100 cannot convert in PostgreSQL's count, so mixing halved A's
+        rate (0.15 < B's 0.2).  PostgreSQL whole keeps A at 0.3 vs 0.2."""
+        scheduler, exp, vid1, vid2 = self._setup()
+        stats = self._stats(
+            scheduler,
+            exp,
+            (vid1, vid2),
+            dynamo=_fake_counter_provider({vid1: (200, 60), vid2: (100, 20)}),
+            pg_pulls={vid1: 100, vid2: 100},
+            pg_conv={vid1: 30, vid2: 20},
+        )
+        assert (stats[vid1].pulls, stats[vid1].successes) == (100, 30)
+        assert (stats[vid2].pulls, stats[vid2].successes) == (100, 20)
+
+    @pytest.mark.regression
+    def test_user_converting_three_times_counts_once(self):
+        """#581: one user, three conversion events.  DynamoDB's counter says 3
+        (an event counter); PostgreSQL's converting users say 1.  PostgreSQL
+        has data, so its converting users (1) are returned."""
+        scheduler, exp, vid1, vid2 = self._setup()
+        stats = self._stats(
+            scheduler,
+            exp,
+            (vid1, vid2),
+            dynamo=_fake_counter_provider({vid1: (1, 3), vid2: (1, 0)}),
+            pg_pulls={vid1: 1, vid2: 1},
+            pg_conv={vid1: 1},
+        )
+        assert stats[vid1].pulls == 1
+        assert stats[vid1].successes == 1
+        assert stats[vid1].failures == 0
+        assert stats[vid2].successes == 0
+
+    @pytest.mark.regression
+    def test_mixed_users_one_converting_twice(self):
+        """#581: two users in a variant, one converts twice, one never.
+        DynamoDB: 2 events; users: 1."""
+        scheduler, exp, vid1, vid2 = self._setup()
+        stats = self._stats(
+            scheduler,
+            exp,
+            (vid1, vid2),
+            dynamo=_fake_counter_provider({vid1: (2, 2), vid2: (2, 1)}),
+            pg_pulls={vid1: 2, vid2: 2},
+            pg_conv={vid1: 1, vid2: 1},
+        )
+        assert (stats[vid1].pulls, stats[vid1].successes) == (2, 1)
+        assert stats[vid1].failures == 1
+        assert (stats[vid2].pulls, stats[vid2].successes) == (2, 1)
+
+    @pytest.mark.regression
+    def test_event_inflated_dynamodb_successes_never_win(self):
+        """#581: DynamoDB successes at or above PostgreSQL's used to pass the
+        completeness check and be weighed.  They must not be, however large."""
+        scheduler, exp, vid1, vid2 = self._setup()
+        stats = self._stats(
+            scheduler,
+            exp,
+            (vid1, vid2),
+            dynamo=_fake_counter_provider({vid1: (100, 400), vid2: (100, 90)}),
+            pg_pulls={vid1: 100, vid2: 100},
+            pg_conv={vid1: 30, vid2: 10},
+        )
+        assert stats[vid1].successes == 30
+        assert stats[vid2].successes == 10
+
+    @pytest.mark.regression
+    def test_dynamodb_successes_capped_at_pulls_without_postgres_data(self):
+        """With no PostgreSQL data DynamoDB's counts are all there is, but
+        more successes than pulls is impossible for users: capped."""
+        scheduler, exp, vid1, vid2 = self._setup()
+        stats = self._stats(
+            scheduler,
+            exp,
+            (vid1, vid2),
+            dynamo=_fake_counter_provider({vid1: (2, 9), vid2: (3, 1)}),
+            pg_pulls={},
+            pg_conv={},
+        )
+        assert stats[vid1].successes == 2
+        assert stats[vid1].failures == 0
 
     @pytest.mark.regression
     def test_dynamodb_unavailable_falls_through_to_postgres(self):

@@ -485,8 +485,8 @@ by = [
 ]
 
 [[unit]]
-text = "Bandit scheduler | BANDIT_UPDATE_INTERVAL_MINUTES (5) | Recomputes multi-armed bandit weights (DynamoDB counters when their pulls and successes are at least PostgreSQL's, else PostgreSQL)"
-by = ["test:backend/tests/unit/services/test_bandit_scheduler.py"]
+text = "Bandit scheduler | BANDIT_UPDATE_INTERVAL_MINUTES (5) | Recomputes multi-armed bandit weights (PostgreSQL assignments + converting users; DynamoDB counters only when PostgreSQL has no assignments or cannot be read)"
+by = ["test:backend/tests/unit/services/test_bandit_scheduler.py::TestDynamoDBCompleteness::test_postgres_wins_when_dynamodb_is_ahead_of_postgres", "test:backend/tests/unit/services/test_bandit_scheduler.py::TestDynamoDBCompleteness::test_dynamodb_used_when_postgres_has_no_pulls"]
 
 [[unit]]
 text = "Experiment Scheduler (every EXPERIMENT_SCHEDULER_INTERVAL_MINUTES, default 15)"

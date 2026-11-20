@@ -69,9 +69,8 @@
 # answers 422, so the entries of GET /api/v1/users/ (superuser) and
 # GET /api/v1/audit-logs/ (viewer) were removed.
 # #963 is not fixed: POST /api/v1/results/{experiment_id}/post-stratification
-# is deprecated and answers 501 for every existing experiment, so it is
-# excluded from every pass by name (exclusions.toml) and its two entries
-# (superuser and viewer) were removed.
+# answers 501 for every existing experiment and is not in the API document, so
+# no pass fuzzes it and its two entries (superuser and viewer) were removed.
 # #957 is fixed: a body value of the wrong type on POST /api/v1/api-keys,
 # POST and PUT /api/v1/mutual-exclusion-groups and POST and PUT
 # /api/v1/holdout answers 422, so their ten entries (superuser and viewer)
