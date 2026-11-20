@@ -64,7 +64,8 @@ your answers carry over.
 **Step 1: Type**
 
 Choose **A/B Test**, **Multivariate** or **Bandit**; a bandit also asks for its **Optimization
-algorithm**. Create a split URL experiment through the API (`POST /api/v1/experiments/`).
+algorithm**. In the full profile, **Split URL** is offered last, and asks for each variant's
+page on the Variants step.
 
 **Step 2: Details**
 

@@ -1,8 +1,7 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import NewExperimentPage, { generateKey, validateForm } from '@/pages/experiments/new';
 import { apiFetch } from '@/services/api';
-import { docsUrl } from '@/services/docs';
 import { apiError, makeRouter, routedApi } from './helpers/apiMock';
 
 jest.mock('@/services/api', () => ({
@@ -69,12 +68,14 @@ describe('NewExperimentPage', () => {
   });
 
   it('offers only the experiment types this form can fully configure, Bandit last', () => {
+    // No ModulesProvider: the core profile, where the API answers a split_url
+    // create with 501, so Split URL is not offered (#1961; the full profile's
+    // order is pinned in experiment-new-split-url.test.tsx). Bandit (#1956)
+    // asks for its algorithm and is last of these, so the docs journeys'
+    // partial templates of the first two still match.
     render(<NewExperimentPage />);
     const select = screen.getByTestId('experiment-type') as HTMLSelectElement;
     const options = Array.from(select.options).map((o) => ({ value: o.value, label: o.textContent }));
-    // `split_url` needs `split_url_config`, which this form does not send, so
-    // it is not offered. Bandit (#1956) asks for its algorithm and is last, so
-    // the docs journeys' partial templates of the first two still match.
     expect(options).toEqual([
       { value: 'a_b', label: 'A/B Test' },
       { value: 'mv', label: 'Multivariate' },
@@ -83,18 +84,12 @@ describe('NewExperimentPage', () => {
     expect(select.value).toBe('a_b');
   });
 
-  it('explains where split URL experiments come from, and no longer sends bandits to the API', () => {
+  it('shows nothing about Split URL on the core profile: no option, no Pages block, no note', () => {
+    // The old note sent people to an API that answers 501 on core (#1961).
     render(<NewExperimentPage />);
-    const note = screen.getByTestId('experiment-type-note');
-    expect(note).toHaveTextContent(
-      'Split URL experiments need a URL configuration, which this form cannot set up yet, so create them through the API.',
-    );
-    expect(within(note).getByRole('link', { name: 'Split URL' })).toHaveAttribute('href', docsUrl('api/split-url'));
-    expect(within(note).getAllByRole('link')).toHaveLength(1);
-    expect(note.textContent).not.toMatch(/bandit/i);
-    // No SDK creates an experiment: they are created through the API (#393).
-    expect(note).toHaveTextContent(/create them through the API\.$/);
-    expect(note.textContent).not.toMatch(/sdk/i);
+    expect(screen.queryByTestId('experiment-type-note')).toBeNull();
+    expect(screen.queryByTestId('split-url-config')).toBeNull();
+    expect(screen.getByTestId('experiment-type').parentElement?.textContent ?? '').not.toMatch(/split url/i);
   });
 
   it('auto-generates the key from the name until the key is edited', () => {

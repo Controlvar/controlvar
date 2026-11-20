@@ -170,8 +170,11 @@ by = [
 ]
 
 [[unit]]
-text = "Create a split URL experiment through the API (POST /api/v1/experiments/)."
-by = ["exempt:instruction"]
+text = "In the full profile, Split URL is offered last, and asks for each variant's page on the Variants step."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-split-url.test.tsx::guided setup (full): four radios, Split URL last, with its description",
+    "test:frontend/src/tests/pages/experiment-new-split-url.test.tsx::guided setup shows split-url-config on the Variants step, not before",
+]
 
 [[unit]]
 text = "Step 2: Details"
