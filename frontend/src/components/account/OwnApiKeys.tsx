@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { InlineConfirm } from '@/components/ui/InlineConfirm';
 import { apiFetch } from '@/services/api';
 import { ApiKey } from '@/types/admin';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
@@ -56,7 +57,7 @@ const STATE_CLASSES: Record<KeyState, string> = {
 const FOCUS_RING = 'focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2';
 const PRIMARY_BUTTON = `px-4 py-2 rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 ${FOCUS_RING}`;
 const SECONDARY_BUTTON = `px-3 py-1.5 rounded-md text-sm font-medium text-slate-700 border border-slate-300 bg-white hover:bg-slate-50 ${FOCUS_RING}`;
-const DANGER_BUTTON = `px-3 py-1.5 rounded-md text-sm font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-60 ${FOCUS_RING}`;
+const DANGER_BUTTON = `px-3 py-1.5 rounded-md text-sm font-medium bg-red-600 text-white hover:bg-red-700 aria-disabled:opacity-60 aria-disabled:hover:bg-red-600 ${FOCUS_RING}`;
 // slate-500 borders: 4.76:1 on white, so the field's edge meets the 3:1 that
 // WCAG 1.4.11 asks of a control's boundary.
 const INPUT =
@@ -115,7 +116,6 @@ export function OwnApiKeys() {
   const nameInput = useRef<HTMLInputElement>(null);
   const revealHeading = useRef<HTMLHeadingElement>(null);
   const keysHeading = useRef<HTMLHeadingElement>(null);
-  const confirmRegion = useRef<HTMLDivElement>(null);
   const revokeButtons = useRef(new Map<string, HTMLButtonElement>());
 
   const load = useCallback(async () => {
@@ -136,10 +136,6 @@ export function OwnApiKeys() {
   useEffect(() => {
     if (revealed) revealHeading.current?.focus();
   }, [revealed]);
-
-  useEffect(() => {
-    if (pendingRevoke) confirmRegion.current?.focus();
-  }, [pendingRevoke]);
 
   useEffect(() => {
     if (revoked) keysHeading.current?.focus();
@@ -202,11 +198,14 @@ export function OwnApiKeys() {
     setPendingRevoke(key);
   };
 
+  /**
+   * Cancel and Escape. Neither does anything while the revoke is in flight, and
+   * focus goes back to the key's button through the question's `returnFocus`.
+   */
   const cancelRevoke = () => {
-    const id = pendingRevoke?.id;
+    if (revoking) return;
     setPendingRevoke(null);
     setRevokeError(null);
-    if (id) revokeButtons.current.get(id)?.focus();
   };
 
   const runRevoke = async () => {
@@ -382,17 +381,19 @@ export function OwnApiKeys() {
         </div>
 
         {pendingRevoke && (
-          <div
-            ref={confirmRegion}
-            role="dialog"
-            aria-labelledby={confirmHeadingId}
-            aria-describedby={confirmTextId}
-            tabIndex={-1}
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') cancelRevoke();
-            }}
-            className="m-4 rounded-lg border border-red-200 bg-red-50 p-3 flex flex-col gap-3 focus:outline-none focus:ring-2 focus:ring-blue-600"
-            data-testid="own-key-revoke-confirm"
+          // While the DELETE runs the panel stays, Revoke key is `aria-disabled`
+          // (so it keeps focus, and Escape still reaches the panel), and Cancel
+          // and Escape wait for the answer.
+          <InlineConfirm
+            labelledBy={confirmHeadingId}
+            describedBy={confirmTextId}
+            onCancel={cancelRevoke}
+            busy={revoking}
+            returnFocus={() => revokeButtons.current.get(pendingRevoke.id)}
+            fallbackFocus={() => keys?.map((key) => revokeButtons.current.get(key.id)).find(Boolean)}
+            tone="danger"
+            className="m-4 rounded-lg border p-3 flex flex-col gap-3"
+            testId="own-key-revoke-confirm"
           >
             <h3 id={confirmHeadingId} className="text-sm font-semibold text-slate-900">
               Revoke {pendingRevoke.name}?
@@ -406,20 +407,26 @@ export function OwnApiKeys() {
               </p>
             )}
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={cancelRevoke} className={SECONDARY_BUTTON} data-testid="own-key-revoke-cancel">
+              <button
+                type="button"
+                data-autofocus
+                onClick={cancelRevoke}
+                className={SECONDARY_BUTTON}
+                data-testid="own-key-revoke-cancel"
+              >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => void runRevoke()}
-                disabled={revoking}
+                aria-disabled={revoking ? true : undefined}
                 className={DANGER_BUTTON}
                 data-testid="own-key-revoke-yes"
               >
                 {revoking ? 'Revoking…' : 'Revoke key'}
               </button>
             </div>
-          </div>
+          </InlineConfirm>
         )}
 
         {keys === null && !loadError && (

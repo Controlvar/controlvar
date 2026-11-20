@@ -11,6 +11,9 @@ hint and notice are new ids, its ``count`` selectors among them, and video
 values, and Review and experiment-page balance rows are new ids:
 
 * a quoted id is itself;
+* a quoted ``testId`` prop (``testId="x"`` or ``testId={'x'}``) is an id the
+  component it is passed to writes; a template or a name in ``testId`` is not
+  read;
 * an id written as a template literal, or held in a ``const`` such a literal
   or a quoted string sets, has each ``${name}`` resolved in its own file: a
   ``const`` it names is expanded; a parameter typed with a string-literal union
@@ -20,6 +23,11 @@ values, and Review and experiment-page balance rows are new ids:
 So ``schedule-${which}`` and ``${id}-readback`` give exactly
 ``schedule-start-readback`` and ``schedule-end-readback``, and the board's
 ``schedule-bogus-readback`` is refused (EM-9). No browser, network or build.
+
+The ``testId`` rule holds only if a component that takes the prop writes it,
+so a test pins that every ``.tsx`` file declaring a ``testId`` field writes
+``data-testid={testId}`` or ``data-testid={row.testId}``. It does not catch a
+component that declares ``testId`` but writes a different object's ``.testId``.
 """
 
 from __future__ import annotations
@@ -41,6 +49,9 @@ SLUG = "09-design-in-depth"
 
 QUOTED = re.compile(r"""data-testid=(?:"([^"]+)"|\{\s*['"]([^'"]+)['"]\s*\})""")
 TEMPLATE = re.compile(r"data-testid=\{\s*`([^`]+)`\s*\}")
+PROP = re.compile(r"""\btestId=(?:"([^"]+)"|\{\s*['"]([^'"]+)['"]\s*\})""")
+DECLARES = re.compile(r"\btestId\??:")
+FORWARDS = re.compile(r"data-testid=\{\s*(?:testId|[A-Za-z_]\w*\.testId)\s*\}")
 NAMED = re.compile(r"data-testid=\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}")
 CONST = re.compile(
     r"""const\s+([A-Za-z_]\w*)\s*=\s*(?:`([^`]*)`|'([^']*)'|"([^"]*)")\s*;"""
@@ -103,6 +114,8 @@ def product_ids(sources: Dict[str, str]) -> List[str]:
     for text in sources.values():
         for double, single in QUOTED.findall(text):
             found.add(re.escape(double or single))
+        for double, single in PROP.findall(text):
+            found.add(re.escape(double or single))
         for template in TEMPLATE.findall(text):
             found.update(expand(template, text, types))
         consts = {m[0]: m for m in CONST.findall(text)}
@@ -154,6 +167,18 @@ def test_every_test_id_the_board_names_is_one_the_dashboard_draws(slug, count):
     ids = board_ids(board(slug))
     assert len(ids) == count, ids
     assert missing(ids, product_ids(frontend_sources())) == []
+
+
+def test_every_component_declaring_a_test_id_field_writes_it():
+    """The ``testId`` prop rule is true only if each .tsx file that declares a
+    ``testId`` field writes it to ``data-testid``."""
+    declaring = {
+        name: text
+        for name, text in frontend_sources().items()
+        if name.endswith(".tsx") and DECLARES.search(text)
+    }
+    assert declaring
+    assert [n for n, t in declaring.items() if not FORWARDS.search(t)] == []
 
 
 def test_the_schedule_fields_computed_ids_resolve_to_start_and_end_only():

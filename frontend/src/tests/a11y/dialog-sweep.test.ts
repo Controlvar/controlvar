@@ -89,17 +89,13 @@ export const INLINE_CONFIRM_FILE = 'frontend/src/components/ui/InlineConfirm.tsx
 
 /**
  * The in-page confirmations not yet on InlineConfirm (#1797), with their exact
- * number of `dialog` / `alertdialog` string literals. The list only shrinks:
+ * number of `dialog` / `alertdialog` string literals: none. Every panel has
+ * moved, so a hand-written dialog role anywhere but Dialog.tsx and
+ * InlineConfirm.tsx is a new one and fails. The list stays, empty, as the place
+ * a deliberate exception would have to be written down with its exact count;
  * a count that moves, or a listed file that is gone, fails.
  */
-export const RAW_PANELS: Record<string, number> = {
-  'frontend/src/components/experiments/ExperimentManageSection.tsx': 1,
-  'frontend/src/components/feature-flags/RolloutScheduleManager.tsx': 1,
-  'frontend/src/pages/experiments/holdouts.tsx': 1,
-  'frontend/src/components/account/OwnApiKeys.tsx': 1,
-  // Two panels: remove a member, and archive the group.
-  'frontend/src/pages/experiments/exclusion-groups/[id].tsx': 2,
-};
+export const RAW_PANELS: Record<string, number> = {};
 
 /** Fewer files than this means the roots are wrong, not that the tree is clean. */
 export const FLOORS = { core: 150, modules: 26 };
@@ -431,7 +427,7 @@ describe('dialog sweep: the patterns', () => {
 describe('dialog sweep: in-page confirmations (#1797)', () => {
   const result = sweep(REAL_ROOTS, RULES);
 
-  it('writes no dialog role by hand outside Dialog.tsx, InlineConfirm.tsx and RAW_PANELS, and every count matches', () => {
+  it('writes no dialog role by hand outside Dialog.tsx and InlineConfirm.tsx', () => {
     expect(result.roleProblems).toEqual([]);
   });
 
@@ -445,10 +441,8 @@ describe('dialog sweep: in-page confirmations (#1797)', () => {
     expect(roleLiteralLines(source).length).toBe(2);
   });
 
-  it('lists only panels still to move: every RAW_PANELS entry counts at least one role', () => {
-    for (const [rel, count] of Object.entries(RAW_PANELS)) {
-      expect(`${rel} ${count >= 1}`).toBe(`${rel} true`);
-    }
+  it('has no panel left to move: RAW_PANELS is empty', () => {
+    expect(RAW_PANELS).toEqual({});
   });
 });
 
@@ -569,12 +563,15 @@ describe('dialog sweep: the role rule on scratch trees', () => {
       coreRoot: path.join(REPO_ROOT, 'frontend', 'source'),
       modulesRoot: path.join(REPO_ROOT, 'modules', 'frontend', 'source'),
     };
-    const result = sweep(wrong, RULES);
+    // The real list is empty now, so the entries are the ones a deliberate
+    // exception would add.
+    const listed = ['frontend/src/pages/experiments/holdouts.tsx', 'frontend/src/components/Panel.tsx'];
+    const result = sweep(wrong, { ...RULES, panels: Object.fromEntries(listed.map((rel) => [rel, 1])) });
     expect(result.problems).toEqual(
       expect.arrayContaining([expect.stringMatching(/^scanned 0 core files under .*: the root is wrong$/)]),
     );
     expect(result.roleProblems).toEqual(
-      Object.keys(RAW_PANELS).map(
+      listed.map(
         (rel) => `${rel}: in RAW_PANELS, but not found (a file leaves the list when it moves; the list only shrinks)`,
       ),
     );
