@@ -261,6 +261,46 @@ export interface ExperimentResultsResponse {
   srm?: SrmResult | null;
 }
 
+/** The segment `GET /results/{id}/segments/{segment_id}` counted for (#1933). */
+export interface ResultsSegment {
+  id: string;
+  name: string;
+  /** Always `id_list`: a rules segment is refused. */
+  kind: 'id_list' | 'rules';
+  status: 'active' | 'inactive' | 'archived';
+  /** Always `current`: the list when the results were computed. */
+  membership: 'current';
+  /** How many user ids the list held, members never assigned included. */
+  member_count: number;
+  /** Users assigned to the experiment, members or not. */
+  experiment_users: number;
+  /** The whole experiment's sample ratio warning; null when that check is undefined. */
+  experiment_srm_warning: boolean | null;
+}
+
+/**
+ * One experiment's results for one ID-list segment's members (#1933, beta).
+ * The fields it shares with `ExperimentResultsResponse` are counted for the
+ * members only; it has no sequential, Bayesian or breakdown block.
+ */
+export interface SegmentResultsResponse {
+  experiment_id: string;
+  experiment_name: string;
+  status: string;
+  start_date: string | null;
+  end_date: string | null;
+  confidence_level: number;
+  correction_method: CorrectionMethod;
+  sample_size_adequate: boolean;
+  computed_at: string;
+  summary: ExperimentSummaryData;
+  metrics: MetricResult[];
+  /** The members' own sample ratio check; null when it is undefined. */
+  srm?: SrmResult | null;
+  segment: ResultsSegment;
+  is_exploratory: boolean;
+}
+
 export interface DailyDataPoint {
   date: string;
   sample_size: number;

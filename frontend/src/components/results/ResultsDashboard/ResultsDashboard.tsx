@@ -11,7 +11,25 @@ import {
   DimensionalBreakdownResponse,
   MetricAnalysis,
   MetricResult,
+  SegmentResultsResponse,
 } from '@/types/results';
+import { useSegmentList } from '@/hooks/useSegmentList';
+import { useOptionalAuth } from '@/contexts/AuthContext';
+import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
+import { canCreateSegments } from '@/utils/segmentPermissions';
+import {
+  BAYESIAN_SEGMENT_NOTE,
+  CSV_NOTE,
+  PICKER_ID,
+  ResultsSegmentPicker,
+  SegmentBanner,
+  SegmentSrmNotices,
+  segmentResultsErrorMessage,
+  segmentStatusText,
+  tabNote,
+  withoutEmptyArmChanges,
+  zeroStateText,
+} from './SavedSegment';
 import { BalanceWithin } from '@/types/experiments';
 import {
   analysedAsMean,
@@ -260,6 +278,45 @@ function analysisOf(
   return analysedAsMean(metric) ? 'mean' : 'proportion';
 }
 
+/** The Overview's chart and table for a saved segment's results (#1933). */
+function SegmentOverview({
+  results,
+  eventNames,
+}: {
+  results: ExperimentResultsResponse;
+  eventNames: Record<string, string>;
+}) {
+  const primary = results.metrics.find((m) => m.is_primary) ?? results.metrics[0];
+  return (
+    <>
+      {primary && (
+        <section aria-labelledby="segment-primary-metric-heading">
+          <h3
+            id="segment-primary-metric-heading"
+            className="text-base font-semibold text-slate-800 mb-4"
+          >
+            {primaryMetricHeading(primary)}
+          </h3>
+          <ConversionChart
+            variants={primary.variants}
+            analysis={analysedAsMean(primary) ? 'mean' : 'proportion'}
+            metricType={primary.metric_type}
+          />
+        </section>
+      )}
+      <section aria-label="Metric comparison">
+        <h3 className="text-base font-semibold text-slate-800 mb-4">All Metrics</h3>
+        <MetricComparisonTable
+          metrics={results.metrics}
+          confidenceLevel={results.confidence_level}
+          correctionMethod={results.correction_method}
+          eventNames={eventNames}
+        />
+      </section>
+    </>
+  );
+}
+
 function LoadingSkeleton() {
   return (
     <div className="space-y-6 animate-pulse" data-testid="loading-skeleton">
@@ -317,6 +374,24 @@ export function ResultsDashboard({ experimentId, initialTab }: ResultsDashboardP
   const [stored, setStored] = useState<StoredAnalysisSettings | null>(null);
   const [bayesianEnabled, setBayesianEnabled] = useState<boolean | undefined>(undefined);
   const [eventNames, setEventNames] = useState<Record<string, string>>({});
+  // #1933: one saved ID-list segment's results, in their own state. The
+  // unfiltered results, daily series, sequential block and sample size are
+  // never refetched or overwritten for it. Only the latest choice may write
+  // state (a counter of its own, not the breakdown's).
+  // The list is asked for when the picker is about to be used (a pointer over
+  // it, focus, a key or a touch), not on every results load: a page that is
+  // only read makes no extra request, and a list that fails never puts an
+  // alert on it.
+  const [segmentListWanted, setSegmentListWanted] = useState(false);
+  const segmentList = useSegmentList(segmentListWanted);
+  const auth = useOptionalAuth();
+  const { effective } = useEffectivePermissions();
+  const canCreateSegment = canCreateSegments(auth?.user, effective);
+  const [segmentId, setSegmentId] = useState('');
+  const [segmentResults, setSegmentResults] = useState<SegmentResultsResponse | null>(null);
+  const [segmentLoading, setSegmentLoading] = useState(false);
+  const [segmentError, setSegmentError] = useState<string | null>(null);
+  const segmentRequest = useRef(0);
   // The CUPED tab exists only for an experiment whose stored method is cuped
   // or cuped_plus, and asks for nothing until it is first opened.
   const [cupedMethod, setCupedMethod] = useState<'cuped' | 'cuped_plus' | null>(null);
@@ -471,6 +546,50 @@ export function ResultsDashboard({ experimentId, initialTab }: ResultsDashboardP
     setSelectedBreakdown(dim);
   }, []);
 
+  const segmentName = useCallback(
+    (id: string) => segmentList.segments.find((s) => s.id === id)?.name ?? 'this segment',
+    [segmentList.segments],
+  );
+
+  // #1933: one request for the chosen segment, with the stored settings. "All
+  // users" sends nothing: the unfiltered results are still in state.
+  const fetchSegment = useCallback(
+    async (id: string) => {
+      const request = ++segmentRequest.current;
+      setSegmentResults(null);
+      setSegmentError(null);
+      if (!id) {
+        setSegmentLoading(false);
+        return;
+      }
+      setSegmentLoading(true);
+      try {
+        const r = stored
+          ? await ResultsService.getSegmentResults(experimentId, id, stored)
+          : await ResultsService.getSegmentResults(experimentId, id);
+        if (request !== segmentRequest.current) return;
+        setSegmentResults(r);
+      } catch (e) {
+        if (request !== segmentRequest.current) return;
+        setSegmentError(segmentResultsErrorMessage(e, segmentName(id)));
+      } finally {
+        if (request === segmentRequest.current) setSegmentLoading(false);
+      }
+    },
+    [experimentId, stored, segmentName],
+  );
+
+  const chooseSegment = useCallback(
+    (id: string) => {
+      setSegmentId(id);
+      void fetchSegment(id);
+    },
+    [fetchSegment],
+  );
+
+  // The request-state buttons unmount; focus goes to the picker, never the page.
+  const focusPicker = () => document.getElementById(PICKER_ID)?.focus();
+
   if (loading) return <LoadingSkeleton />;
 
   if (error) {
@@ -510,15 +629,139 @@ export function ResultsDashboard({ experimentId, initialTab }: ResultsDashboardP
     { id: 'breakdowns', label: 'Breakdowns' },
   ];
 
+  // #1933: what a chosen segment shows. Its results replace the summary card
+  // and the Overview only once they arrived and count someone; while they
+  // load, fail or count nobody, a state replaces them, and never the
+  // unfiltered numbers under the segment's label.
+  const chosenName = segmentId ? segmentName(segmentId) : null;
+  const segmentShown = segmentId && segmentResults && !segmentLoading ? segmentResults : null;
+  const zeroState = segmentShown ? zeroStateText(segmentShown) : null;
+  const segmentCounted = segmentShown && !zeroState ? segmentShown : null;
+  const segmentAsResults: ExperimentResultsResponse | null = segmentCounted
+    ? {
+        ...segmentCounted,
+        metrics: withoutEmptyArmChanges(segmentCounted.metrics),
+        sequential_testing: null,
+        bayesian_results: null,
+        breakdown: null,
+      }
+    : null;
+  const segmentSrmWarning =
+    segmentCounted !== null &&
+    (segmentCounted.srm?.warning === true ||
+      results.srm?.warning === true ||
+      segmentCounted.segment.experiment_srm_warning === true);
+  const statusText = segmentStatusText(
+    chosenName,
+    segmentLoading ? 'loading' : segmentShown ? 'ready' : 'other',
+    segmentShown?.summary.total_users,
+  );
+  // The "all users" note at the top of every tab but the Overview.
+  const allUsersNote = chosenName ? (
+    <p className="mb-4 text-sm text-slate-700" data-testid="segment-tab-note">
+      {tabNote(chosenName)}
+    </p>
+  ) : null;
+
   return (
     <div className="space-y-6" data-testid="results-dashboard">
-      <ExperimentSummary
-        experiment={results}
-        stored={stored}
-        onOpenSampleSize={() => setActiveTab('sample-size')}
-        plannedSample={plannedSample}
-      />
-      <SrmNotice srm={results.srm} metrics={results.metrics} />
+      <div className="space-y-2">
+        <ResultsSegmentPicker
+          value={segmentId}
+          onChange={chooseSegment}
+          state={segmentList.state}
+          segments={segmentList.segments}
+          onRetry={segmentList.retry}
+          canCreate={canCreateSegment}
+          onEngage={() => setSegmentListWanted(true)}
+        />
+        <p role="status" aria-live="polite" className="sr-only" data-testid="segment-status">
+          {statusText}
+        </p>
+        {chosenName && (
+          <p className="text-sm text-slate-700" data-testid="segment-csv-note">
+            {CSV_NOTE}
+          </p>
+        )}
+      </div>
+
+      {!segmentId && (
+        <>
+          <ExperimentSummary
+            experiment={results}
+            stored={stored}
+            onOpenSampleSize={() => setActiveTab('sample-size')}
+            plannedSample={plannedSample}
+          />
+          <SrmNotice srm={results.srm} metrics={results.metrics} />
+        </>
+      )}
+
+      {segmentId && segmentLoading && (
+        <div
+          className="h-36 bg-slate-200 rounded-xl animate-pulse"
+          data-testid="segment-loading"
+          aria-hidden="true"
+        />
+      )}
+
+      {segmentId && !segmentLoading && segmentError && (
+        <div className="space-y-3" data-testid="segment-error">
+          <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+            <p className="text-sm text-red-700">{segmentError}</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                focusPicker();
+                void fetchSegment(segmentId);
+              }}
+              className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-50"
+            >
+              Try again
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                focusPicker();
+                chooseSegment('');
+              }}
+              className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-50"
+            >
+              Show all users
+            </button>
+          </div>
+        </div>
+      )}
+
+      {zeroState && (
+        <p className="text-sm text-slate-700" data-testid="segment-zero">
+          {zeroState}
+        </p>
+      )}
+
+      {segmentCounted && segmentAsResults && (
+        <>
+          <SegmentBanner
+            name={segmentCounted.segment.name}
+            users={segmentCounted.summary.total_users}
+            archived={segmentCounted.segment.status === 'archived'}
+          />
+          <ExperimentSummary
+            experiment={segmentAsResults}
+            stored={stored}
+            onOpenSampleSize={() => setActiveTab('sample-size')}
+            plannedSample={plannedSample}
+            segment={{ name: segmentCounted.segment.name, srmWarning: segmentSrmWarning }}
+          />
+          <SegmentSrmNotices
+            allUsers={results.srm}
+            allUsersMetrics={results.metrics}
+            segment={segmentCounted}
+          />
+        </>
+      )}
 
       {/* Tab navigation. On a phone the tabs are wider than the screen, so
           the row scrolls inside itself rather than widening the page. */}
@@ -550,11 +793,27 @@ export function ResultsDashboard({ experimentId, initialTab }: ResultsDashboardP
         {/* EP-058: Live streaming results panel */}
         {activeTab === 'live' && live && (
           <section aria-label="Live streaming results" data-testid="live-tab-panel">
+            {allUsersNote}
             <LiveResultsPanel experimentId={experimentId} />
           </section>
         )}
 
-        {activeTab === 'overview' && (
+        {/* #1933: the Overview of a saved segment's results. The Bayesian
+            analysis is not computed for it. */}
+        {activeTab === 'overview' && segmentAsResults && (
+          <div className="space-y-8" data-testid="segment-overview">
+            {!segmentAsResults.metrics.length ? (
+              <p className="text-slate-500 text-sm">No metrics available</p>
+            ) : (
+              <SegmentOverview results={segmentAsResults} eventNames={eventNames} />
+            )}
+            <p className="text-sm text-slate-700" data-testid="segment-bayesian-note">
+              {BAYESIAN_SEGMENT_NOTE}
+            </p>
+          </div>
+        )}
+
+        {activeTab === 'overview' && !segmentId && (
           <div className="space-y-8">
             {/* No data guard */}
             {!results.metrics.length ? (
@@ -604,6 +863,7 @@ export function ResultsDashboard({ experimentId, initialTab }: ResultsDashboardP
 
         {activeTab === 'trends' && (
           <section aria-label="Trends over time">
+            {allUsersNote}
             <h3 className="text-base font-semibold text-slate-800 mb-4">
               Daily Trends
             </h3>
@@ -616,6 +876,7 @@ export function ResultsDashboard({ experimentId, initialTab }: ResultsDashboardP
             className="max-w-lg"
             aria-label="Sample size adequacy"
           >
+            {allUsersNote}
             <h3 className="text-base font-semibold text-slate-800 mb-4">
               Sample Size Analysis
             </h3>
@@ -660,6 +921,7 @@ export function ResultsDashboard({ experimentId, initialTab }: ResultsDashboardP
 
         {activeTab === 'sequential' && sequential && (
           <section aria-label="Sequential testing">
+            {allUsersNote}
             <h3 className="text-base font-semibold text-slate-800 mb-4">
               Sequential Testing Monitor
             </h3>
@@ -672,16 +934,20 @@ export function ResultsDashboard({ experimentId, initialTab }: ResultsDashboardP
         )}
 
         {activeTab === 'cuped' && cupedMethod && (
-          <CupedResultsPanel
-            state={cuped.state}
-            onRetry={() => void cuped.retry()}
-            controlNames={variantNames}
-          />
+          <>
+            {allUsersNote}
+            <CupedResultsPanel
+              state={cuped.state}
+              onRetry={() => void cuped.retry()}
+              controlNames={variantNames}
+            />
+          </>
         )}
 
         {/* Issue #28: Breakdowns tab */}
         {activeTab === 'breakdowns' && (
           <section aria-label="Segment breakdowns">
+            {allUsersNote}
             <div className="space-y-6">
               <div>
                 <h3 className="text-base font-semibold text-slate-800 mb-4">

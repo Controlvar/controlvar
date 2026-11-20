@@ -904,8 +904,6 @@ EXCLUDED = {
     "POST /api/v1/auth/sso/configs": ALL_PASSES,
     "PUT /api/v1/auth/sso/configs/{config_id}": ALL_PASSES,
     "GET /api/v1/auth/sso/oidc/{provider}/callback": ALL_PASSES,
-    # deprecated and unimplemented (#963): excluded by name, never as a class
-    POST_STRAT: ALL_PASSES,
 }
 
 
@@ -1006,9 +1004,9 @@ def test_no_known_entry_cites_958_or_959():
 
 @pytest.mark.regression
 def test_no_known_entry_cites_963():
-    """#963 is not fixed, but the route is deprecated and excluded by name
-    (exclusions.toml), so no known-5xx waiver may stand for it in any pass: a
-    leftover entry is quiet (it answers no 5xx) and turns the run red."""
+    """#963 is not fixed, but the route is not in the API document, so no
+    known-5xx waiver may stand for it in any pass: a leftover entry is quiet
+    (it answers no 5xx) and turns the run red."""
     import tomllib
 
     data = tomllib.loads(fuzz_check.KNOWN_5XX.read_text(encoding="utf-8"))
@@ -1019,9 +1017,9 @@ def test_no_known_entry_cites_963():
 
 
 def test_deprecated_operations_stay_fuzzed():
-    """Only the post-stratification route is excluded for being deprecated.
-    Every other deprecated operation (the live wizard routes) is still
-    selected in the superuser and viewer passes."""
+    """No deprecated operation is excluded for being deprecated: every
+    deprecated operation in the full API document is still selected in the
+    superuser and viewer passes."""
     assert FULL_SNAPSHOT.is_file(), "the full API snapshot is missing"
     document = json.loads(FULL_SNAPSHOT.read_text())
     deprecated = {
@@ -1030,20 +1028,16 @@ def test_deprecated_operations_stay_fuzzed():
         for method, op in item.items()
         if isinstance(op, dict) and op.get("deprecated") is True
     }
-    assert POST_STRAT in deprecated, "the excluded route is no longer deprecated"
-    others = deprecated - {POST_STRAT}
-    assert others, "no other deprecated operation to protect"
+    assert deprecated, "no deprecated operation to protect"
     operations = fuzz_check.load_operations(document)
     excluded = fuzz_check.load_exclusions(fuzz_check.EXCLUSIONS, operations)
     for pass_name in ("superuser", "viewer"):
         selected = fuzz_check.selection(pass_name, operations, excluded)
-        assert POST_STRAT not in selected, pass_name
-        assert [(o, pass_name) for o in sorted(others) if o not in selected] == []
+        assert [(o, pass_name) for o in sorted(deprecated) if o not in selected] == []
 
 
 def test_the_fuzz_commands_do_not_exclude_deprecated():
-    """No fuzz command skips deprecated operations as a class: the one
-    deprecated route that is excluded is excluded by name."""
+    """No fuzz command skips deprecated operations as a class."""
     texts = {
         "_platform.yml": _arm(),
         "fuzz_local.sh": _local(),

@@ -30,6 +30,7 @@ site_dir: site
 exclude_docs: |
   planning/
   _claims/
+  overrides/
 strict: true
 # A link to an anchor a page does not have is logged at INFO by default, which
 # strict does not fail on; at "warn" it does.
@@ -37,6 +38,11 @@ validation:
   anchors: warn
 theme:
   name: material
+  # main.html here adds the Open Graph and Twitter tags; the folder is not
+  # published (exclude_docs above).
+  custom_dir: docs/overrides
+  logo: assets/brand/controlvar-mark-small.svg
+  favicon: assets/brand/favicon.svg
   features:
   - navigation.tabs
   - navigation.sections

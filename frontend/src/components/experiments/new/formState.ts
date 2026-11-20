@@ -57,6 +57,13 @@ export interface VariantFormData {
    * is left out of the request.
    */
   configuration_text?: string;
+  /**
+   * The variant's page as typed (#1961): sent as this variant's entry in
+   * `split_url_config`, only while the type is `split_url`. Absent means none
+   * has been typed. It lives on the row, so it moves with the row when a
+   * variant is renamed, removed, added or made the control.
+   */
+  url?: string;
 }
 
 export interface MetricFormData {
@@ -308,16 +315,26 @@ export function createInitialFormState(): ExperimentFormState {
 export const INITIAL_FORM_STATE: ExperimentFormState = createInitialFormState();
 
 /**
- * Types this form can fully configure, in the order both views offer them.
- *
- * `split_url` needs a `split_url_config` (without it the split-URL path has no
- * URLs to route to), which this form does not ask for, so it is not offered —
- * see `backend/app/schemas/experiment.py::ExperimentCreate`. `bandit` (#1956)
- * is offered last: the form asks for its algorithm and always sends one,
- * because with the API's default `optimization_type` of `fixed` the bandit
- * scheduler skips the experiment for ever and traffic never adapts.
+ * The types every install offers, in the order both views offer them: the core
+ * list. `bandit` (#1956) is offered last of these: the form asks for its
+ * algorithm and always sends one, because with the API's default
+ * `optimization_type` of `fixed` the bandit scheduler skips the experiment for
+ * ever and traffic never adapts. Use `formExperimentTypes` for what a view
+ * offers: it adds `split_url` where the API has that module.
  */
 export const FORM_EXPERIMENT_TYPES: ExperimentType[] = ['a_b', 'mv', 'bandit'];
+
+/**
+ * The types a view offers (#1961): the core list, plus `split_url` last when
+ * the API's `/modules` lists it (`useModule(MODULES.SPLIT_URL)`). On core the
+ * API answers a split_url create with 501, so the type is not offered there.
+ * A split_url create always carries a `split_url_config`, which the Pages block
+ * (`SplitUrlFields`) asks for; without one the API accepts the create and the
+ * experiment cannot start.
+ */
+export function formExperimentTypes(splitUrl: boolean): ExperimentType[] {
+  return splitUrl ? [...FORM_EXPERIMENT_TYPES, 'split_url'] : [...FORM_EXPERIMENT_TYPES];
+}
 
 /** Sum of the variants' traffic allocations, counting a blank or invalid entry as 0. */
 export function allocationTotalOf(variants: VariantFormData[]): number {
@@ -466,15 +483,64 @@ export function validateForm(
 /**
  * The API's refusal of the split for a balanced experiment (every share must
  * be a multiple of 5), or null: nothing while the switch is off, nothing
- * until the shares add up to 100, and nothing for a bandit, which sends no
- * balance setting (#1956). A state without `type` (the design edit's
- * callers) is read as before.
+ * until the shares add up to 100, and nothing for a bandit (#1956) or a split
+ * URL experiment (#1961), which send no balance setting. A state without
+ * `type` (the design edit's callers) is read as before.
  */
 export function balanceSplitProblem(
   state: Pick<ExperimentFormState, 'balance' | 'variants'> & Partial<Pick<ExperimentFormState, 'type'>>,
 ): string | null {
-  if (!state.balance.on || state.type === 'bandit') return null;
+  if (!state.balance.on || state.type === 'bandit' || state.type === 'split_url') return null;
   return splitProblem(state.variants.map((v) => Number(v.traffic_allocation) || 0));
+}
+
+// --- split URL pages (#1961) ---------------------------------------------------
+
+export const SPLIT_URL_NEEDS_TWO = 'A split URL experiment needs at least two variants, one page each.';
+
+export function splitUrlDuplicateName(name: string): string {
+  return `Each variant of a split URL experiment needs its own name, because each page is matched to its variant by name: “${name}” is used more than once.`;
+}
+
+export function splitUrlBlank(name: string): string {
+  return `Enter the page for “${name}”.`;
+}
+
+export function splitUrlNotAddress(name: string): string {
+  return `The page for “${name}” must be a full address that starts with http:// or https://.`;
+}
+
+/** What every address the API accepts starts with: an http or https scheme, in any case. */
+const SPLIT_URL_PREFIX = /^https?:\/\//i;
+
+/**
+ * The first problem with the pages of a split URL experiment, or null (also
+ * null for any other type). First match wins, in this order: fewer than two
+ * variants; a repeated variant name; a blank page; a page that does not start
+ * with http:// or https://. Everything else is the API's to refuse
+ * (`url_problem`, `split_url_config.py`), and its answer names the variant.
+ *
+ * The last rule is a prefix check on the trimmed value and nothing more: no
+ * `new URL()` and no hostname test, because a WHATWG parser refuses addresses
+ * the API accepts (`https://a<b.example/x`, `https://1.2.3.256/x`), and this
+ * check must never refuse one the API accepts
+ * (`tests/fixtures/split-url-create.json`, `accepted_urls`).
+ */
+export function splitUrlProblem(state: Pick<ExperimentFormState, 'type' | 'variants'>): string | null {
+  if (state.type !== 'split_url') return null;
+  const { variants } = state;
+  if (variants.length < 2) return SPLIT_URL_NEEDS_TWO;
+  const seen = new Set<string>();
+  for (const v of variants) {
+    const name = v.name.trim();
+    if (seen.has(name)) return splitUrlDuplicateName(name);
+    seen.add(name);
+  }
+  const blank = variants.find((v) => (v.url ?? '').trim() === '');
+  if (blank) return splitUrlBlank(blank.name.trim());
+  const bad = variants.find((v) => !SPLIT_URL_PREFIX.test((v.url ?? '').trim()));
+  if (bad) return splitUrlNotAddress(bad.name.trim());
+  return null;
 }
 
 /**
@@ -517,12 +583,13 @@ export function validateStep(step: FormStep, state: ExperimentFormState): string
     case 'details':
       return checkName(state.name) ?? checkMetrics(state.metrics);
     case 'variants':
-      return checkVariants(state.variants) ?? balanceSplitProblem(state);
+      return checkVariants(state.variants) ?? splitUrlProblem(state) ?? balanceSplitProblem(state);
     case 'estimate':
       return bayesianConfigProblem(state) ?? plannedEffectProblem(state.plannedEffectPct);
     case 'review':
       return (
         validateForm(state.name, state.variants, state.metrics) ??
+        splitUrlProblem(state) ??
         balanceSplitProblem(state) ??
         bayesianConfigProblem(state)
       );
@@ -552,7 +619,9 @@ export function maxReachableStep(state: ExperimentFormState): number {
  *
  * A bandit (#1956) is the same body with `experiment_type: "bandit"`, no
  * `balance_within` (the API refuses balancing for a bandit, whatever the
- * switch says) and its algorithm appended as `optimization_type`. No other
+ * switch says) and its algorithm appended as `optimization_type`. A split URL
+ * experiment (#1961) is the same body with `experiment_type: "split_url"`, no
+ * `balance_within`, no `optimization_type`, and `split_url_config` last. No other
  * type carries `optimization_type`, not even "fixed": the A/B and
  * multivariate bodies are byte for byte the ones sent before
  * (experiment-new-ab-body.test.tsx).
@@ -605,6 +674,21 @@ export function buildCreatePayload(state: ExperimentFormState): CreateExperiment
   if (state.sequentialEnabled) payload.sequential_testing_enabled = true;
   if (type === 'bandit') {
     payload.optimization_type = state.optimizationType;
+    return payload;
+  }
+  if (type === 'split_url') {
+    // Always sent, one entry per variant in variant order: the API accepts a
+    // split_url create without it, and that experiment cannot start. Name and
+    // allocation are the values sent in `variants` above, so the API's
+    // cross-field rules hold by construction; the address is trimmed and
+    // otherwise exactly as typed (never `new URL().href`, which changes it).
+    payload.split_url_config = {
+      variants: payload.variants.map((v, i) => ({
+        name: v.name,
+        url: (variants[i].url ?? '').trim(),
+        traffic_allocation: v.traffic_allocation,
+      })),
+    };
     return payload;
   }
   // Sent only when on: a draft that does not balance is created as before.

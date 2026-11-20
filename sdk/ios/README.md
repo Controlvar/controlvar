@@ -8,11 +8,13 @@ Flag evaluation and experiment assignment are decided **by the server**: every c
 public API with your `X-API-Key`, the server buckets the user (sticky per user + experiment), and
 the SDK caches the answer per user + key for a TTL. Nothing is bucketed on device.
 
-> **Flag evaluation sends only the user id.** `GET /api/v1/feature-flags/evaluate/{key}?user_id=…`
-> carries none of the user's attributes, so the server evaluates a flag's targeting rules against
-> an empty context. Experiment assignment sends them: `getAssignment`, with `user.attributes`, sends the attributes as
-> `context`. To evaluate a flag with attributes, call the evaluate endpoint with a `context`
-> query parameter (a URL-encoded JSON object of the attributes).
+> **Flag evaluation sends the user's attributes.** `evaluateFlag(_:user:)` sends `user.attributes`
+> as `context` on `GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=<URL-encoded JSON object>`,
+> so the flag's targeting rules are evaluated against them. With no attributes, or an empty map,
+> no `context` is sent and the request carries the user id alone. The change is in this
+> repository ([#438](https://github.com/Controlvar/controlvar/issues/438)); it reaches a registry
+> at this SDK's first publish, so a build from a clone of `main` has it and a copy installed
+> earlier does not.
 
 Full reference: [`docs/sdk/ios.md`](../../docs/sdk/ios.md).
 
@@ -55,7 +57,7 @@ do {
     // network / server error with nothing cached
 }
 
-// Feature flag — GET /api/v1/feature-flags/evaluate/new_search?user_id=user-123
+// Feature flag — GET /api/v1/feature-flags/evaluate/new_search?user_id=user-123&context=%7B%22country%22%3A%22US%22%2C%22plan%22%3A%22pro%22%7D
 let enabled = (try? await client.evaluateFlag("new_search", user: user))?.enabled ?? false
 
 // Track with a key — one POST /api/v1/tracking/track (never throws)
@@ -97,7 +99,8 @@ let delivered = await client.trackWithStatus(TrackEvent(userId: user.id, eventNa
 | `refreshFlags() async throws` | `Void` | deprecated no-op |
 | `FeatureFlagEvaluator.hashUser(_:flagKey:)` | `Double` in `[0, 1)` | pure (parity utility) |
 
-Types: `User(id:attributes:)` (attributes → assignment `context`); `EvalResult` → `key: String`,
+Types: `User(id:attributes:)` (`attributes` is sent as `context` on assignment and on flag
+evaluation); `EvalResult` → `key: String`,
 `enabled: Bool`, `config: [String: Any]?`; `Assignment` → `experimentKey`, `userId`,
 `variantId: String?`, `variantName`, `isControl: Bool`, `configuration: [String: Any]?`;
 `TrackEvent(userId:eventName:properties:experimentKey:featureFlagKey:value:eventType:timestamp:)`
@@ -106,8 +109,16 @@ Types: `User(id:attributes:)` (attributes → assignment `context`); `EvalResult
 ## Caching and failure behaviour
 
 - Successful results are cached in memory per **user + key** for `cacheTTL`; a hit makes no
-  request, and concurrent calls for the same user + key share one in-flight request.
-  **Failures are never cached.**
+  request, and concurrent calls for the same user + key (for a flag, with the same attributes)
+  share one in-flight request. **Failures are never cached.**
+- The SDK keeps one cached answer per user and flag, together with the attributes it was asked
+  with. A later call is answered from the cache only if its attributes are exactly the same;
+  otherwise the SDK asks the server, and the new answer replaces the cached one. So two calls
+  that differ only in attributes get two answers. The attributes are written with their keys
+  sorted, so the same attributes always find the same cached answer.
+- With `enableOfflineFallback` the SDK stores the last answer the server gave for each user and
+  flag, whatever attributes it was asked with, and serves it only when the server cannot answer
+  (below).
 - **404** (an unknown experiment or flag key, or a draft experiment with no control variant) throws
   `.flagNotFound(key)` / `.experimentNotFound(key)` and never falls back to a persisted value (it is
   removed). An experiment that is not ACTIVE is not an error: it answers its control variant.
@@ -115,6 +126,8 @@ Types: `User(id:attributes:)` (attributes → assignment `context`); `EvalResult
   last persisted value for that user + key is returned if one exists; otherwise the call throws
   `.networkError(Error)`, `.serverError(Int, String)`, `.decodingError(Error)` or `.cancelled`.
   Wrap calls with `try?` to degrade to "off" / control.
+- If the attributes cannot be written as JSON (a `Date`, say, or a NaN), `evaluateFlag` throws
+  `invalidConfig` ("user.attributes cannot be sent as JSON") and sends nothing.
 - `track`, `trackWithStatus` and `trackBatch` never throw.
 
 ## Tracking fan-out
@@ -143,7 +156,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
-| `evaluateFlag` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
+| `evaluateFlag` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=…` | `context`: the user's attributes as JSON, left out when there are none | `{key, enabled, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
 | `getAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
 | `track` without keys, `trackBatch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored |

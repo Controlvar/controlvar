@@ -188,7 +188,7 @@ text = "Mutual exclusion groups | Dashboard | Mutual exclusion groups and global
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Split-URL experiments (full profile) | API only | Split URL testing"
+text = "Split-URL experiments (full profile) | Dashboard | Split URL testing"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]

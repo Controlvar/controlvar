@@ -379,8 +379,10 @@ describe('the CUPED tab', () => {
     let release: (value: unknown) => void = () => undefined;
     install({ answer: () => new Promise((resolve) => (release = resolve)) });
     await openTab();
-    const status = await screen.findByRole('status');
-    expect(status).toHaveTextContent('Loading the CUPED results…');
+    // The page also has its own always-present status line (a saved
+    // segment's, #1933), so this finds the CUPED one by its words.
+    const status = await screen.findByText('Loading the CUPED results…');
+    expect(status).toHaveAttribute('role', 'status');
     expect(screen.queryByTestId('cuped-results')).toBeNull();
     await act(async () => release(cuped()));
     await screen.findByTestId('cuped-results');

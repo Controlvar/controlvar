@@ -275,6 +275,19 @@
 # a prediction for the merged head, which also carries #1997's shifted ids,
 # until its own fuzz.yml run.
 
+# Then #2053 enabled Amazon Redshift. A Redshift warehouse source takes a role,
+# not a secret, so the superuser pass's POST to the warehouse analysis route
+# now saves one (201) where it answered 422 (connector_disabled), and the ids
+# Schemathesis reuses from those answers name stored sources: it reaches the
+# GET, PUT and DELETE of one stored source (200, 200 and 204), so those three
+# are no longer listed and its list is 117. The viewer may not create one
+# (403), so the viewer and sdk lists do not change. #2010's fuzz.yml run 44438135568 on its head 87f87ace, with main at
+# 0b7e3cc5 (before #2053), gave the 120, 191 and 9 above; the scheduled run
+# 44544139061 on main at 373744b3 counted these three listed but reached and no
+# other change, and so did fuzz_check's evaluation of a local run of the
+# superuser pass at this seed on that commit, which named them. The lists are
+# 117 for superuser, 191 for viewer and 9 for sdk.
+
 # --- superuser: the seeded demo administrator's bearer token ----------------
 
 [[unreached]]
@@ -705,21 +718,6 @@ reason = "Generated ids never name a stored row (404); the other requests fail v
 [[unreached]]
 pass = "superuser"
 operation = "POST /api/v1/etl/partitions/add"
-reason = "Generated ids never name a stored row (404); the other requests fail validation (422)."
-
-[[unreached]]
-pass = "superuser"
-operation = "GET /api/v1/warehouse/analysis/connections/{connection_id}"
-reason = "Generated ids never name a stored row (404); the other requests fail validation (422)."
-
-[[unreached]]
-pass = "superuser"
-operation = "PUT /api/v1/warehouse/analysis/connections/{connection_id}"
-reason = "The handler refuses the generated values (400); ids that name no stored row answer 404 and invalid requests answer 422."
-
-[[unreached]]
-pass = "superuser"
-operation = "DELETE /api/v1/warehouse/analysis/connections/{connection_id}"
 reason = "Generated ids never name a stored row (404); the other requests fail validation (422)."
 
 [[unreached]]

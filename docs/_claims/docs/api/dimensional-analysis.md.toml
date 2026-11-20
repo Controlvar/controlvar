@@ -561,6 +561,10 @@ by = [
 ]
 
 [[unit]]
+text = "The dashboard does not show it."
+by = ["test:frontend/src/tests/pages/results-saved-segment.test.tsx::F5: the card is exploratory, with no recommendation, winner or leading variant"]
+
+[[unit]]
 text = "Do not automate a decision from it;"
 by = ["exempt:advice"]
 

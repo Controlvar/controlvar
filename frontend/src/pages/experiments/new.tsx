@@ -14,8 +14,11 @@ import {
   configurationProblems,
   createInitialFormState,
   experimentFormReducer,
+  splitUrlProblem,
   validateForm,
 } from '@/components/experiments/new/formState';
+import { useModule } from '@/contexts/ModulesContext';
+import { MODULES } from '@/services/modules';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
 import { useDemoMode } from '@/contexts/AuthConfigContext';
@@ -49,6 +52,8 @@ export default function NewExperimentPage() {
   const { effective, loading: permissionsLoading } = useEffectivePermissions();
   // A read-only demo shows the demo note instead of the form, whatever the role.
   const demo = useDemoMode();
+  // Split URL is offered only where the API has that module (#1961): the full profile.
+  const splitUrl = useModule(MODULES.SPLIT_URL);
   const [state, dispatch] = useReducer(experimentFormReducer, undefined, createInitialFormState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<CreateError | null>(null);
@@ -82,7 +87,7 @@ export default function NewExperimentPage() {
     if (submittingRef.current) return;
     setError(null);
 
-    const problem = validateForm(state.name, state.variants, state.metrics);
+    const problem = validateForm(state.name, state.variants, state.metrics) ?? splitUrlProblem(state);
     if (problem) {
       setError({ message: problem });
       if (configurationProblems(state.variants).some((p) => p !== null)) {
@@ -223,6 +228,7 @@ export default function NewExperimentPage() {
               onSubmit={handleAdvancedSubmit}
               revealProblems={revealProblems}
               revealBayesianProblems={revealBayesian}
+              splitUrl={splitUrl}
             />
           </>
         ) : (
@@ -246,6 +252,7 @@ export default function NewExperimentPage() {
               onCreate={() => void submit('guided')}
               onClearError={() => setError(null)}
               freshLoad={freshLoad}
+              splitUrl={splitUrl}
             />
           </>
         )}

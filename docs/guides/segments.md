@@ -201,7 +201,8 @@ The full rule is in the
 
 `GET /api/v1/results/{experiment_id}/segments/{segment_id}` (beta) computes an experiment's
 results for the users in an ID-list segment and nobody else. See
-[Results for one saved segment](../api/dimensional-analysis.md#results-for-one-saved-segment).
+[Results for one saved segment](../api/dimensional-analysis.md#results-for-one-saved-segment). On
+the results page, **Show results for** does the same.
 
 ## Archive a segment
 
