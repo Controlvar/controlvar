@@ -48,9 +48,10 @@ pytestmark = [pytest.mark.unit]
 #: /auth/mfa/enroll/confirm (MfaEnrolConfirmRequest). Then 1 more to both: the
 #: current password at /users/me/2fa/enroll (TwoFactorEnrolRequest). #537
 #: removed 3 from both with the wizard routes: WizardDraftCreate,
-#: WizardStepUpdate and WizardValidationRequest.
-CORE_MODEL_COUNT = 96
-FULL_MODEL_COUNT = 140
+#: WizardStepUpdate and WizardValidationRequest. #449 added 1 to both: the
+#: body of /tracking/alias (AliasRequest).
+CORE_MODEL_COUNT = 97
+FULL_MODEL_COUNT = 141
 
 #: ``(model, field)`` pairs that a ``mode="before"`` field validator covers.
 CORE_BEFORE_COUNT = 46

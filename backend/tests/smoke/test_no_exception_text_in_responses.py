@@ -446,6 +446,12 @@ SEGMENT_CHANGE_REFUSED = (
     "which the caller may read); never a request value"
 )
 
+ALIAS_CONFLICT = (
+    "AliasConflict (#449): only its reason name is read, to pick one of the "
+    "route's four fixed 409 texts (ALIAS_CONFLICT_DETAILS); the reason names a "
+    "rule, never an id"
+)
+
 ROLLOUT_RULE_CONFLICT = (
     "RolloutRuleConflict (#1460): the rollout service's fixed sentence, its "
     "values stage orders, percentages, stage statuses and a schedule id read "
@@ -643,6 +649,7 @@ ALLOWED: Dict[Tuple[str, str, str], Tuple[int, str]] = {
         1,
         SERVICE_VALUEERROR,
     ),
+    (f"{E}/tracking.py", "link_anonymous_id", "AliasConflict"): (1, ALIAS_CONFLICT),
     (f"{E}/tracking.py", "track_event", "ValidationError"): (1, FIELD_NAMES),
     (f"{E}/tracking.py", "track_event", "ValueError"): (1, SERVICE_VALUEERROR),
     (f"{E}/tracking.py", "track_event_by_ids", "ValidationError"): (1, FIELD_NAMES),

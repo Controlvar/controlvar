@@ -273,7 +273,7 @@ CLASS_B: Dict[Tuple[str, str], str] = {
     ): "only names the four roles",
     (
         "docs/security/api-keys.md",
-        "Using such a key follows the same rule: the three routes above accept a "
+        "Using such a key follows the same rule: the four routes above accept a "
         "key with `sdk:ruleset` only while its owner can change feature flags, "
         "checked on every request, so a key whose owner loses that (moved to "
         "ANALYST or VIEWER, or a grant revoked or expired) is refused with `403` "
