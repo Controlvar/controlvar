@@ -1646,6 +1646,35 @@ API_SETTINGS_NOTE = (
 )
 
 
+#: The dashboard's breakdown keys and their labels, as the balance setting's
+#: "Group users by" offers them (frontend/src/components/experiments/new/
+#: balanceWithin.ts ``BALANCE_KEY_OPTIONS``; a unit test keeps them equal).
+BALANCE_KEY_LABELS: Dict[str, str] = {
+    "platform": "Platform",
+    "country": "Country",
+    "user_tier": "User Tier",
+}
+#: The Review step's balance row starts with this (Wizard.tsx, #448); the
+#: experiment page's row draws its "Balance" term apart from the value.
+REVIEW_BALANCE_TERM = "Balance:"
+
+
+def balance_words(setting: Any) -> str:
+    """``balanceSummary`` (balanceWithin.ts) for an attribute setting: "within
+    tier (high_value, churn_risk, new)", a breakdown key by its label, "within
+    tier" with no values, and "off" for none. A setting of saved segments is
+    named by the segments' names, which no design end state declares, so it
+    never reaches this: the echo is held to the declared attribute first."""
+    if not setting:
+        return "off"
+    attribute = str(setting.get("attribute") or "")
+    if attribute == "":
+        return "within an attribute not named yet"
+    label = BALANCE_KEY_LABELS.get(attribute, attribute)
+    values = [str(v) for v in setting.get("values") or []]
+    return f"within {label} ({', '.join(values)})" if values else f"within {label}"
+
+
 def holdout_label(name: str, percentage: Any) -> str:
     """``holdoutLabel`` (frontend/src/utils/holdouts.ts; a unit test keeps the two
     equal): the active holdout as the experiment page and the holdouts page draw it."""
@@ -1855,7 +1884,13 @@ def design_mirrors(
     its own source, never formatted here: ``start_shown`` (how the page itself
     drew the start at the ``date`` step), ``group_name`` (the group's name, read
     from the group) and ``holdout`` (the active holdout, read from the API). A
-    reading whose source is not given has no mirror, and is refused."""
+    reading whose source is not given has no mirror, and is refused.
+
+    The balance setting's two readings (#448) have mirrors only when the end
+    state declares ``balance_within``, each its own string from the API's
+    echo (PE 1): the Review row "Balance: within tier (...)", and the
+    experiment page's value "within tier (...)", whose "Balance" term is a
+    sibling element. Undeclared, the echo is not read here."""
     extra = extra or {}
     variants = {v["name"]: v for v in saved["variants"]}
     metrics = {m["name"]: m for m in saved["metrics"]}
@@ -1905,6 +1940,10 @@ def design_mirrors(
         mirrors["detail_holdout"] = holdout_label(
             str(holdout["name"]), holdout.get("holdout_percentage")
         )
+    if getattr(end, "balance_within", None) is not None:
+        words = balance_words(saved.get("balance_within"))
+        mirrors["review_balance"] = f"{REVIEW_BALANCE_TERM} {words}"
+        mirrors["detail_balance"] = words
     return mirrors
 
 
@@ -1942,9 +1981,13 @@ def design_end(
        primary's mde, null on the others) and lower_is_better;
     6. its targeting rule, as declared, less the builder's ids;
     7. its confidence level, correction and Bayesian setting;
-    8. nothing guided setup cannot set (``UNTOUCHED``);
-    9. each reading named in ``shown`` said what was saved, in the product's
-       words (``design_mirrors``).
+    8. when the end state declares ``balance_within`` (#448), the API's echo of
+       it, exactly: absent or null refuses (a server without the feature drops
+       the field and still answers 200). Undeclared, it is not read, and adds
+       nothing to the numbers (PE 2);
+    9. nothing guided setup cannot set (``UNTOUCHED``);
+    10. each reading named in ``shown`` said what was saved, in the product's
+        words (``design_mirrors``).
 
     A key absent from the API's answer refuses: no check passes on a default.
     """
@@ -2130,6 +2173,25 @@ def design_end(
             f"bayesian_enabled is {analysis[2]!r}; the storyboard turns it"
             f" {'on' if end.analysis.bayesian else 'off'}",
         )
+    balance = getattr(end, "balance_within", None)
+    if balance is not None:
+        if "balance_within" not in saved:
+            return (
+                False,
+                numbers,
+                f"the API's answer for {end.name!r} has no 'balance_within': a server"
+                " without it drops the setting and still answers 200",
+            )
+        echoed = saved["balance_within"]
+        numbers["balance_within"] = echoed
+        wanted = balance.model_dump()
+        if echoed != wanted:
+            return (
+                False,
+                numbers,
+                f"balance_within is {echoed!r}; the storyboard balances within"
+                f" {wanted!r}",
+            )
     moved = dict(moved or {})
     for key, value in UNTOUCHED:
         if key in moved:
@@ -2387,3 +2449,244 @@ def dates_in_zone(
                 f" {reading.get('value')!r}",
             )
     return True, numbers, ""
+
+
+# ---------------------------------------------------------------------------
+# Stale flags (#1808; video 11, S1 and S2 of the V11-V13 plan)
+# ---------------------------------------------------------------------------
+
+#: The flag list's words (frontend/src/pages/feature-flags/index.tsx; a unit
+#: test keeps them equal): the pill, each reason with N the API's
+#: ``stale_days`` (``staleReasonText``), and the hint shown while Stale is
+#: pressed.
+STALE_PILL = "Stale"
+STALE_REASON_WORDS: Dict[str, str] = {
+    "not_evaluated": "Not evaluated in {days} days",
+    "on_for_everyone": "On for everyone, unchanged for {days} days",
+    "off_for_everyone": "Off for everyone, unchanged for {days} days",
+}
+STALE_HINT = (
+    "Stale is a suggestion: nothing is changed or archived for you. A flag tagged"
+    " permanent is never stale; tags are set through the API."
+)
+_STALE_WORD = re.compile(r"\bStale\b")
+
+
+def stale_reason_text(reason: str, days: int) -> str:
+    """One reason as the list draws it (``staleReasonText``)."""
+    return STALE_REASON_WORDS[reason].format(days=days)
+
+
+def _squeezed(text: Any) -> str:
+    return " ".join(str(text or "").split())
+
+
+def _listing(name: str, answer: Any, end: Any) -> Tuple[Optional[str], List[Any]]:
+    """Why the list's *answer* cannot be judged, or None, and its items."""
+    if not isinstance(answer, Mapping) or not isinstance(answer.get("items"), list):
+        return f"the {name} answer holds no items", []
+    absent = _missing(answer, ("total", "stale_days", "evaluations_seen"))
+    if absent is not None:
+        return (
+            f"the {name} answer has no {absent!r}: a server without it is refused",
+            [],
+        )
+    items = answer["items"]
+    if answer["stale_days"] != end.days:
+        return (
+            f"the API classifies at stale_days {answer['stale_days']!r}; the"
+            f" storyboard is recorded at {end.days} (STALE_FLAG_DAYS is not the"
+            " default)",
+            items,
+        )
+    if answer["evaluations_seen"] is not end.evaluations_seen:
+        return (
+            f"the {name} answer says evaluations_seen {answer['evaluations_seen']!r};"
+            f" the storyboard says {end.evaluations_seen}",
+            items,
+        )
+    if answer["total"] != len(items):
+        return f"the {name} answer lists {len(items)} of its {answer['total']!r}", items
+    for item in items:
+        absent = (
+            _missing(item, ("key", "stale", "stale_reasons", "updated_at"))
+            if isinstance(item, Mapping)
+            else "key"
+        )
+        if absent is not None:
+            return f"an item of the {name} answer has no {absent!r}", items
+    return None, items
+
+
+def stale_api(
+    end: Any,
+    *,
+    listed: Any,
+    filtered: Any,
+    after_setup: Optional[Mapping[str, Any]] = None,
+) -> Verdict:
+    """S2's API half, and S1's before the first frame: the list without the
+    filter (*listed*) and with ``?stale=true`` (*filtered*), against the end
+    state (``storyboard.StaleEnd``).
+
+    Both classify at the storyboard's ``days`` and say its
+    ``evaluations_seen``, and list every item they total. ``?stale=true`` is
+    exactly the declared map: its keys, and each one's reasons in order. In
+    the list, every flag is stale exactly when the map names it, with its
+    reasons (the seed's flags and ``not_stale`` among them, each setup flag
+    once). With *after_setup* (each setup flag's ``updated_at`` as read just
+    after the setup), each is unchanged: no listing wrote a flag."""
+    numbers: Dict[str, Any] = {"days": end.days}
+    why, items = _listing("filtered", filtered, end)
+    if why is None:
+        why, everything = _listing("listed", listed, end)
+    if why is not None:
+        return False, numbers, why
+    got = {str(item["key"]): list(item["stale_reasons"]) for item in items}
+    wanted = {key: list(reasons) for key, reasons in end.stale.items()}
+    setup_keys = set(wanted) | set(end.not_stale)
+    numbers.update(
+        stale=got,
+        filtered_total=filtered["total"],
+        listed_total=listed["total"],
+        evaluations_seen=filtered["evaluations_seen"],
+    )
+    by_key: Dict[str, List[Any]] = {}
+    for item in everything:
+        by_key.setdefault(str(item["key"]), []).append(item)
+    for key in sorted(setup_keys):
+        if len(by_key.get(key, [])) != 1:
+            return (
+                False,
+                numbers,
+                f"the list holds {len(by_key.get(key, []))} flags with the key {key}",
+            )
+    # The cause before its effects: a flag written since the setup is named
+    # here, before the map it would change is compared.
+    if after_setup is not None:
+        if set(after_setup) != setup_keys:
+            return (
+                False,
+                numbers,
+                f"the setup read back {sorted(after_setup)}; its flags are"
+                f" {sorted(setup_keys)}",
+            )
+        read = {key: by_key[key][0].get("updated_at") for key in sorted(after_setup)}
+        numbers["updated_at"] = read
+        for key in sorted(after_setup):
+            if read[key] != after_setup[key]:
+                return (
+                    False,
+                    numbers,
+                    f"{key}'s updated_at is {read[key]!r}, not {after_setup[key]!r} as"
+                    " the setup left it: something changed the flag",
+                )
+    if len(got) != len(items) or any(item["stale"] is not True for item in items):
+        return False, numbers, "?stale=true lists a flag twice, or one not stale"
+    if got != wanted:
+        return (
+            False,
+            numbers,
+            f"?stale=true lists {got}; the storyboard expects {wanted}",
+        )
+    for key, found in by_key.items():
+        item = found[0]
+        expected = wanted.get(key, [])
+        if (
+            item["stale"] is not bool(expected)
+            or list(item["stale_reasons"]) != expected
+        ):
+            return (
+                False,
+                numbers,
+                f"the list marks {key} stale {item['stale']!r} for"
+                f" {item['stale_reasons']!r}; the storyboard expects {expected}",
+            )
+    return True, numbers, ""
+
+
+def stale_screen(
+    end: Any,
+    *,
+    readings: Mapping[str, str],
+    counts: Mapping[str, int],
+    listed_total: int,
+    filtered_total: int,
+) -> Verdict:
+    """S2's screen half: what the page said, in its words, against the API.
+
+    Each row read before Stale is pressed (``listed``), and each read with it
+    pressed (``filtered``), shows the word Stale and the reason lines, in the
+    API's order, exactly when the API marks the flag stale; the hint is the
+    page's; the pills counted are as many as the stale flags at both
+    readings, the rows as many as the API's ``total`` for each, and the
+    notice (no evaluations seen) is drawn only if the end state says none
+    were seen."""
+    numbers: Dict[str, Any] = {"counts": dict(counts)}
+    every = [stale_reason_text(reason, end.days) for reason in STALE_REASON_WORDS]
+    for when, rows in (
+        ("before Stale is pressed", end.listed),
+        ("with Stale pressed", end.filtered),
+    ):
+        for key, name in rows.items():
+            text = readings.get(name)
+            if text is None:
+                return False, numbers, f"no reading {name!r} of {key}'s row {when}"
+            row = _squeezed(text)
+            expected = [stale_reason_text(r, end.days) for r in end.stale.get(key, [])]
+            shown = sorted((row.index(words), words) for words in every if words in row)
+            drawn = [words for _at, words in shown]
+            pill = bool(_STALE_WORD.search(row))
+            if pill is not bool(expected) or drawn != expected:
+                return (
+                    False,
+                    numbers,
+                    f"{key}'s row {when} shows {'the' if pill else 'no'} Stale pill and"
+                    f" {drawn}; the API says {expected}",
+                )
+    hint = _squeezed(readings.get(end.hint))
+    if hint != STALE_HINT:
+        return False, numbers, f"the hint reads {hint!r}, not the page's {STALE_HINT!r}"
+    for name, wanted in (
+        (end.pills_listed, len(end.stale)),
+        (end.pills_filtered, len(end.stale)),
+        (end.rows_listed, listed_total),
+        (end.rows_filtered, filtered_total),
+        *((notice, 0 if end.evaluations_seen else 1) for notice in end.notices),
+    ):
+        if counts.get(name) != wanted:
+            return (
+                False,
+                numbers,
+                f"the page drew {counts.get(name)!r} for {name!r}; the API's answer"
+                f" makes it {wanted}",
+            )
+    return True, numbers, ""
+
+
+def stale_end(
+    end: Any,
+    *,
+    listed: Any,
+    filtered: Any,
+    after_setup: Mapping[str, Any],
+    readings: Mapping[str, str],
+    counts: Mapping[str, int],
+) -> Verdict:
+    """Gate 10 for the stale flags (S2), after the last frame: the API half
+    with the setup's ``updated_at`` (``stale_api``), then the screen half
+    against the API's totals (``stale_screen``)."""
+    ok, numbers, why = stale_api(
+        end, listed=listed, filtered=filtered, after_setup=after_setup
+    )
+    if not ok:
+        return False, numbers, why
+    ok, screen, why = stale_screen(
+        end,
+        readings=readings,
+        counts=counts,
+        listed_total=int(listed["total"]),
+        filtered_total=int(filtered["total"]),
+    )
+    numbers.update(screen)
+    return ok, numbers, why

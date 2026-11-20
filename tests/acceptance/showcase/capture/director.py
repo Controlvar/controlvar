@@ -309,6 +309,8 @@ BROKEN_JS = """() => {
 
 #: C9: the text a closed <select> shows (its selected option's).
 SELECTED_TEXT_JS = "el => el.selectedIndex < 0 ? '' : el.options[el.selectedIndex].text"
+#: A beat's ``count``: how many elements its CSS selector matches (gate 10).
+COUNT_JS = "(css) => document.querySelectorAll(css).length"
 #: Where a closed <select>'s arrow is, from its right edge (frame px).
 SELECT_ARROW_PX = 22
 #: A range input's kind and numbers, for ``slide``: its step as written ("" when
@@ -695,6 +697,9 @@ class Director:
         self.resolve = resolve
         #: Texts a beat's ``record`` kept at its cue's start, by name (gate 10).
         self.readings: Dict[str, str] = {}
+        #: How many elements each of a beat's ``count`` selectors matched at its
+        #: cue's start, by name (gate 10; video 11).
+        self.counts: Dict[str, int] = {}
         #: Each ``date`` step's reading, by its ``record`` name: the value set,
         #: the instant it names, and how the page draws it.
         self.dates: Dict[str, Dict[str, str]] = {}
@@ -1830,6 +1835,12 @@ class Director:
 
     # -- a beat, a scene -----------------------------------------------------------
 
+    def count_beat(self, beat: Beat) -> None:
+        """At a cue's start, after its readings: how many elements each of the
+        beat's ``count`` selectors matches, by name (gate 10; video 11)."""
+        for name, css in beat.count.items():
+            self.counts[name] = int(self.page.evaluate(COUNT_JS, css))
+
     def beat(self, scene: Scene, index: int, beat: Beat) -> None:
         self.where = f"scene {scene.id} beat {index}"
         self.beat_alerts = list(beat.alerts)
@@ -1853,6 +1864,7 @@ class Director:
         self.check_events()
         for name, spec in beat.record.items():
             self.readings[name] = self.locate(spec).inner_text()
+        self.count_beat(beat)
         if self.at_cue is not None:
             self.at_cue(scene.id, index)
         if urlparse(self.page.url).path.rstrip("/") == "/experiments":

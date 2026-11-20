@@ -462,7 +462,9 @@ as part of signing in. From then on the account signs in with a code, and
 the next sign-in asks for set-up again.
 
 The Docker Compose file passes it from `.env`, and the Helm chart takes it in `api.extraEnv`
-(the chart's `values.yaml` shows how). The AWS CDK app cannot set it yet. Signing in with SSO
+(the chart's `values.yaml` shows how). The AWS CDK app takes it as the context
+`-c local_auth_2fa_required_roles=ADMIN,DEVELOPER` on `cdk deploy`, and refuses it together
+with `-c cognito_hosted_ui=true`. Signing in with SSO
 (the `sso` module) asks for no code, for these roles too.
 
 #### Password sign-ins in this repository

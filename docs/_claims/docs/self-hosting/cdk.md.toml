@@ -1247,7 +1247,11 @@ text = "In a script, add --force, which deletes without asking."
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "If deleting a stack fails with a target group \"in use by a listener\" (#1618), run the teardown again."
+text = "One cdk destroy run deletes the Fargate stack whatever target group is live: every listener rule and the test listener depend on both target groups (#1618)."
+by = ["test:infrastructure/tests/test_listeners_depend_on_both_target_groups.py::test_every_listener_rule_and_the_test_listener_depend_on_both_groups"]
+
+[[unit]]
+text = "A stack last deployed before that change still has the old order, and its deletion can fail with a target group \"in use by a listener\"; run the teardown again."
 by = ["exempt:instruction"]
 
 [[unit]]

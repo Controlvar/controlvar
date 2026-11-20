@@ -1,3 +1,8 @@
+---
+title: AWS CDK Deployment, install Controlvar on AWS
+description: "Deploy Controlvar's AWS infrastructure with CDK v2 in Python: prerequisites, bootstrap, environment variables, deploying stacks, blue/green updates, teardown."
+---
+
 # AWS CDK Deployment
 
 To have a script run this page's steps for you, see [Install on AWS with one command (beta)](aws-install.md).
@@ -742,9 +747,12 @@ The glue, analytics and counters stacks exist only in a full deployment; skip
 their lines in a core one, a full checkout deployed with the core profile
 included.
 
-If deleting a stack fails with a target group "in use by a listener"
-([#1618](https://github.com/Controlvar/controlvar/issues/1618)), run the
-teardown again. The installer's message says "run uninstall again; it continues
+One `cdk destroy` run deletes the Fargate stack whatever target group is live:
+every listener rule and the test listener depend on both target groups
+([#1618](https://github.com/Controlvar/controlvar/issues/1618)). A stack last
+deployed before that change still has the old order, and its deletion can fail
+with a target group "in use by a listener"; run the teardown again. The
+installer's message says "run uninstall again; it continues
 where it stopped", and a second run completes.
 
 The buckets outside `prod` are emptied before they are deleted:

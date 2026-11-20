@@ -48,6 +48,12 @@ from ``Record.fault``):
 * ``deferral_findings``: evaluate requests per flag key are the distinct users
   asked, for a flag the server evaluates, and 0 for a local one (the proxy
   keeps no query string, so per key over chosen users stands in for per pair).
+* ``table_findings``, ``source_findings`` and ``evaluate_count_findings``
+  (targeting, G5): every row of a table of documented answers is answered as
+  the table says on a leg; a local-mode driver answers ``local`` on the rows
+  the table says an SDK can evaluate and ``server`` on the others (never read
+  on a server-mode leg: it reports ``server`` whatever it did); and the
+  evaluate requests a proxy saw are exactly the counts given per flag key.
 * ``kept_etag_findings``: the first unfaulted ruleset request after the
   faulted ones is a 304 sent with ``If-None-Match``: the SDK kept the last
   good ruleset's ETag. A failing gate, never a report.
@@ -633,6 +639,106 @@ def deferral_findings(
                 f" {key!r}, expected 0"
             )
     unnamed = sorted(set(counts) - set(remote) - set(local))
+    if unnamed:
+        found.append(
+            f"{label}: evaluate requests for flags the case did not name: {unnamed}"
+        )
+    return found
+
+
+#: One row of a table of expected answers: (row id, enabled, reason).
+TableRow = tuple[str, bool, str]
+
+
+def table_findings(
+    label: str, table: Sequence[TableRow], answers: Mapping[str, Poll]
+) -> list[str]:
+    """Every row of *table* was answered once, with no error, and the answer's
+    ``(enabled, reason)`` is the row's; and nothing was answered that is not a
+    row. One finding per wrong row, naming it, what the leg answered and what
+    the table says."""
+    if not table:
+        return [f"void: {label}: no row to compare the answers with"]
+    found = []
+    for row_id, enabled, reason in table:
+        poll = answers.get(row_id)
+        if poll is None:
+            found.append(
+                f"{label} {row_id}: no answer, the table says ({enabled}, {reason})"
+            )
+            continue
+        if poll.error is not None:
+            found.append(
+                f"{label} {row_id}: answered with an error {poll.error!r}, the table"
+                f" says ({enabled}, {reason})"
+            )
+            continue
+        if poll.enabled is not enabled or poll.reason != reason:
+            found.append(
+                f"{label} {row_id}: answered ({poll.enabled}, {poll.reason}), the table"
+                f" says ({enabled}, {reason})"
+            )
+    unknown = sorted(set(answers) - {row_id for row_id, _, _ in table})
+    if unknown:
+        found.append(f"{label}: answers for rows the table does not have: {unknown}")
+    return found
+
+
+def source_findings(
+    label: str, answers: Mapping[str, Poll], local_rows: Collection[str]
+) -> list[str]:
+    """A local-mode driver's answers by source: ``local`` on each row of
+    *local_rows*, ``server`` on every other row (the SDK deferred it). A leg
+    that is not a local one has no such gate: a server-mode driver reports
+    ``server`` whatever it did, so it could not fail."""
+    if not answers:
+        return [f"void: {label}: no answer to read a source from"]
+    wrong = [
+        (row_id, poll.source)
+        for row_id, poll in answers.items()
+        if poll.source != ("local" if row_id in local_rows else "server")
+    ]
+    return [
+        f"{label} {row_id}: answered from {source!r}, expected"
+        f" {'local' if row_id in local_rows else 'server'!r}"
+        for row_id, source in wrong
+    ]
+
+
+def evaluate_count_findings(
+    records: Sequence[Record],
+    label: str,
+    *,
+    expected: Mapping[str, int],
+    require_ruleset: bool = False,
+) -> list[str]:
+    """Evaluate requests per flag key, exactly as many as *expected* gives for
+    each key, and none for a key it does not name. With *require_ruleset*
+    (a local-mode driver), at least one relayed ruleset 200 went through the
+    proxy too: else the SDK is not behind it and nothing it did was seen.
+    Keys are compared as the path carries them (the cases' keys need no
+    encoding)."""
+    if not expected:
+        return [f"void: {label}: no flag to count evaluate requests for"]
+    found = []
+    if require_ruleset and not any(
+        r.path == RULESET_PATH and r.status == 200 and r.fault is None for r in records
+    ):
+        found.append(
+            f"void: {label} is not behind its proxy (no ruleset 200 went through it)"
+        )
+    counts = Counter(
+        r.path[len(EVALUATE_PREFIX) :]
+        for r in records
+        if r.path.startswith(EVALUATE_PREFIX)
+    )
+    for key, want in sorted(expected.items()):
+        if counts.get(key, 0) != want:
+            found.append(
+                f"{label}: {counts.get(key, 0)} evaluate requests for {key!r},"
+                f" expected {want}"
+            )
+    unnamed = sorted(set(counts) - set(expected))
     if unnamed:
         found.append(
             f"{label}: evaluate requests for flags the case did not name: {unnamed}"
