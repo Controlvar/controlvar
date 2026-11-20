@@ -12,13 +12,16 @@ from ``create_local_access_token``, and no dependency override except
 ``deps.get_db`` (see #470 for why ``make_client_for_user`` is not used).
 
 The second half breaks the audit write, once as a failed flush inside
-``log()`` and once as a failed commit, and asserts that the answer and the
-change are what they would have been, and that the request's session was
-left usable afterwards.
+``log()`` and once as a failed commit. For an experiment it asserts that the
+answer and the change are what they would have been. A flag's record is
+written in the change's own transaction (#1042), so for a flag it asserts the
+opposite: the route answers 500 and the change is not saved. Either way the
+request's session is left usable afterwards.
 """
 
 from __future__ import annotations
 
+import logging
 import uuid
 
 import pytest
@@ -424,7 +427,10 @@ def _failing_log(failure):
     return log
 
 
-CASES = [(route, failure) for route in ROUTES for failure in FAILURES]
+EXPERIMENT_ROUTES = [route for route in ROUTES if route.startswith("experiment")]
+FLAG_ROUTES = [route for route in ROUTES if route.startswith("flag")]
+CASES = [(route, failure) for route in EXPERIMENT_ROUTES for failure in FAILURES]
+FLAG_CASES = [(route, failure) for route in FLAG_ROUTES for failure in FAILURES]
 
 
 @pytest.mark.parametrize(
@@ -447,12 +453,55 @@ def test_failed_audit_write_keeps_the_answer_and_the_change(
     )
 
 
+def _assert_change_not_kept(fresh, route, resource_id, sent, created):
+    session = fresh()
+    try:
+        if route == "flag_create":
+            stored = (
+                session.query(FeatureFlag)
+                .filter(FeatureFlag.key == sent["key"])
+                .one_or_none()
+            )
+            assert stored is None, f"{route}: the flag was saved"
+            return
+        stored = session.get(FeatureFlag, uuid.UUID(str(resource_id)))
+        assert stored is not None, f"{route}: the flag is gone"
+        assert stored.name == created["name"], f"{route}: the change was saved"
+    finally:
+        session.close()
+
+
+@pytest.mark.parametrize(
+    ("route", "failure"), FLAG_CASES, ids=[f"{r}-{f}" for r, f in FLAG_CASES]
+)
+def test_failed_flag_audit_write_keeps_neither(
+    client, fresh, developer, after_request, monkeypatch, route, failure
+):
+    """A flag's record is written in the change's transaction (#1042): when it
+    cannot be written the route answers 500 and the change is not saved. These
+    cases were part of ``test_failed_audit_write_keeps_the_answer_and_the_change``,
+    which asserted the opposite."""
+    resource_id, created = _setup(client, developer, route)
+    monkeypatch.setattr(AuditLogService, "log", _failing_log(failure))
+
+    response, resource_id, sent = _call(client, developer, route, resource_id)
+
+    assert response.status_code == 500, response.text
+    _assert_change_not_kept(fresh, route, resource_id, sent, created)
+    if resource_id is not None:
+        assert _audit_rows(fresh, route, resource_id) == []
+    assert after_request[-1] is None, (
+        f"{route}: the request's session was left unusable after the audit "
+        f"write failed: {type(after_request[-1]).__name__}"
+    )
+
+
 # --- the warning names the error's type, not its text --------------------------
 
 MARKER = "marker-not-for-logs"
 
 
-@pytest.mark.parametrize("route", list(ROUTES))
+@pytest.mark.parametrize("route", EXPERIMENT_ROUTES)
 def test_failed_audit_write_logs_the_error_type_only(
     client, fresh, developer, monkeypatch, caplog, route
 ):
@@ -475,3 +524,39 @@ def test_failed_audit_write_logs_the_error_type_only(
     assert "RuntimeError" in record.getMessage()
     assert MARKER not in record.getMessage()
     assert record.exc_info is None and MARKER not in (record.exc_text or "")
+
+
+@pytest.mark.parametrize("route", FLAG_ROUTES)
+def test_failed_flag_audit_write_logs_the_error_type_only(
+    client, fresh, developer, monkeypatch, caplog, route
+):
+    """For a flag the refusal is the route's ERROR line, naming
+    ``AuditWriteFailed``; its traceback does not carry the error's text. These
+    cases were part of ``test_failed_audit_write_logs_the_error_type_only``,
+    which looked for the warning a kept change logged."""
+
+    def log(self, **kwargs):
+        raise RuntimeError(MARKER)
+
+    resource_id, _ = _setup(client, developer, route)
+    monkeypatch.setattr(AuditLogService, "log", log)
+
+    with caplog.at_level("WARNING"):
+        response, _, _ = _call(client, developer, route, resource_id)
+
+    assert response.status_code == 500, response.text
+    verb = route.split("_", 1)[1]
+    records = [
+        r
+        for r in caplog.records
+        if r.name == "backend.app.api.v1.endpoints.feature_flags"
+        and r.levelno >= logging.ERROR
+    ]
+    assert [r.getMessage() for r in records] == [
+        f"Feature flag {verb} failed (AuditWriteFailed)"
+    ], [r.getMessage() for r in caplog.records]
+    for record in caplog.records:
+        assert MARKER not in record.getMessage(), record.getMessage()
+        if record.exc_info:
+            formatted = logging.Formatter().formatException(record.exc_info)
+            assert MARKER not in formatted, record.getMessage()
