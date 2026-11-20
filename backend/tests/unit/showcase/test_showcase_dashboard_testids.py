@@ -1,9 +1,12 @@
-"""Every test id video 9's board names is one the dashboard draws (PE 4, EM-9).
+"""Every test id a dashboard board names is one the dashboard draws (PE 4,
+EM-9; video 11's PE 8).
 
-The board finds its elements by ``data-testid``; a renamed id fails the take
+A board finds its elements by ``data-testid``; a renamed id fails the take
 only when it is reached, minutes into a capture. This reads frontend/src
 (tests aside) and resolves each id the product writes, by rule and with no
-list of exceptions:
+list of exceptions. The boards it holds are ``BOARDS``: video 9's, and video
+11's (#1889), whose flag list rows, Stale pills, reason lines, Stale filter,
+hint and notice are new ids, its ``count`` selectors among them:
 
 * a quoted id is itself;
 * an id written as a template literal, or held in a ``const`` such a literal
@@ -109,7 +112,8 @@ def product_ids(sources: Dict[str, str]) -> List[str]:
 
 
 def board_ids(made: storyboard.Storyboard) -> List[str]:
-    """Every test id the board names: by ``testid``, or inside a CSS selector."""
+    """Every test id the board names: by ``testid``, or inside a CSS selector,
+    a beat's ``count`` selectors included."""
     found: Set[str] = set()
     for scene in made.scenes:
         for beat in scene.beats:
@@ -120,6 +124,8 @@ def board_ids(made: storyboard.Storyboard) -> List[str]:
                 if locator.testid:
                     found.add(locator.testid)
                 found.update(CSS_TESTID.findall(locator.css or ""))
+            for css in beat.count.values():
+                found.update(CSS_TESTID.findall(css))
     return sorted(found)
 
 
@@ -128,17 +134,23 @@ def missing(ids: List[str], patterns: List[str]) -> List[str]:
     return [i for i in ids if not any(p.fullmatch(i) for p in compiled)]
 
 
-def board() -> storyboard.Storyboard:
-    return storyboard.load(SHOWCASE / config.VIDEOS[SLUG])
+def board(slug: str = SLUG) -> storyboard.Storyboard:
+    return storyboard.load(SHOWCASE / config.VIDEOS[slug])
 
 
-def raw() -> dict:
-    return yaml.safe_load((SHOWCASE / config.VIDEOS[SLUG]).read_text(encoding="utf-8"))
+def raw(slug: str = SLUG) -> dict:
+    return yaml.safe_load((SHOWCASE / config.VIDEOS[slug]).read_text(encoding="utf-8"))
 
 
-def test_every_test_id_video_9_names_is_one_the_dashboard_draws():
-    ids = board_ids(board())
-    assert len(ids) == 65
+#: The boards this file ties to frontend/src, each with the number of test ids
+#: it names: a board that names fewer or more is read again, not passed.
+BOARDS = {SLUG: 65, "11-stale-flags": 7}
+
+
+@pytest.mark.parametrize("slug, count", sorted(BOARDS.items()))
+def test_every_test_id_the_board_names_is_one_the_dashboard_draws(slug, count):
+    ids = board_ids(board(slug))
+    assert len(ids) == count, ids
     assert missing(ids, product_ids(frontend_sources())) == []
 
 
@@ -179,3 +191,63 @@ def test_a_renamed_product_id_is_refused():
     assert missing(board_ids(board()), product_ids(sources)) == [
         "schedule-start-readback"
     ]
+
+
+# ---------------------------------------------------------------------------
+# Video 11 (PE 8): the flag list's stale ids, tied to frontend/src
+# ---------------------------------------------------------------------------
+
+V11 = "11-stale-flags"
+#: Every id video 11 names: the list's table and rows, the Stale pill, the
+#: reason lines, the Stale filter's group, its hint and the notice.
+V11_IDS = [
+    "flag-row",
+    "flag-stale-filter",
+    "flag-stale-hint",
+    "flag-stale-notice",
+    "flag-stale-pill",
+    "flag-stale-reasons",
+    "flags-table",
+]
+LIST_PAGE = "pages/feature-flags/index.tsx"
+
+
+def test_video_11_names_the_lists_stale_ids_its_counts_among_them():
+    assert board_ids(board(V11)) == V11_IDS
+    counted = {css for b in board(V11).scenes[0].beats for css in b.count.values()}
+    assert {i for css in counted for i in CSS_TESTID.findall(css)} == {
+        "flag-row",
+        "flag-stale-notice",
+        "flag-stale-pill",
+    }
+
+
+@pytest.mark.parametrize(
+    "drawn, renamed",
+    [
+        ('data-testid="flag-stale-pill"', 'data-testid="flag-stale-badge"'),
+        ('data-testid="flag-stale-reasons"', 'data-testid="flag-stale-why"'),
+        ('data-testid="flag-stale-hint"', 'data-testid="flag-stale-help"'),
+        ('data-testid="flag-row"', 'data-testid="flag-list-row"'),
+    ],
+    ids=["pill", "reasons", "hint", "row"],
+)
+def test_a_stale_id_renamed_in_the_tree_is_refused_by_name(drawn, renamed):
+    """PE 8's plant on the product side: one id renamed in the flag list (in
+    memory) leaves exactly that id of video 11's board unmatched; the pill's
+    is a ``count`` selector only, so the count's ids are read too."""
+    sources = frontend_sources()
+    assert sources[LIST_PAGE].count(drawn) == 1, drawn
+    sources[LIST_PAGE] = sources[LIST_PAGE].replace(drawn, renamed)
+    assert missing(board_ids(board(V11)), product_ids(sources)) == [drawn.split('"')[1]]
+
+
+def test_a_video_11_count_id_the_dashboard_does_not_draw_is_refused():
+    """PE 8's plant on the board side: the pills counted by an id the
+    dashboard does not draw."""
+    data = raw(V11)
+    data["scenes"][0]["beats"][0]["count"]["pills-listed"] = (
+        "[data-testid=flag-stale-badge]"
+    )
+    patterns = product_ids(frontend_sources())
+    assert missing(board_ids(storyboard.parse(data)), patterns) == ["flag-stale-badge"]

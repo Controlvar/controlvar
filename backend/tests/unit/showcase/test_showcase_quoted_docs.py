@@ -16,6 +16,11 @@ Video 10 (#1512) has the same: every sentence it says has a row of
 ``CLAIMS_10``, and its card's note says what docs/sdk/go.md says about
 installing the Go SDK. Its other checks are in test_showcase_flag_values.py;
 these are here because they read docs/, so they run on a docs-only change too.
+
+Video 11 (#1889) too: ``CLAIMS_11``, each sentence held to the flag list's
+own words in frontend/src and to docs/feature-flags/stale-flags.md, whose
+reasons table is the one the board's end state is derived from. Its other
+checks are in test_showcase_stale_flags.py.
 """
 
 from __future__ import annotations
@@ -946,3 +951,310 @@ def test_an_untagged_go_module_makes_the_note_false():
     )
     assert page != read_page(GO)
     assert squeezed(GO_INSTALL[1]) not in squeezed(page)
+
+
+# ---------------------------------------------------------------------------
+# Video 11: CLAIMS_11
+# ---------------------------------------------------------------------------
+
+STALE_SLUG = "11-stale-flags"
+STALE_DOC = "docs/feature-flags/stale-flags.md"
+CAPABILITIES = "docs/capabilities.md"
+QUICK_START = "docs/getting-started/quick-start.md"
+FLAG_LIST = "pages/feature-flags/index.tsx"
+FL = "flags"
+#: The list draws N as the API's stale_days, never a constant of its own.
+N_FROM_THE_API = Drawn("copy", "setStaleDays(data.stale_days);", FLAG_LIST)
+
+CLAIMS_11: Dict[str, Claim] = {
+    "The flag list marks flags that look ready to remove.": Claim(
+        FL,
+        1,
+        (
+            Drawn("testid", "flags-table"),
+            Drawn("copy", 'data-testid="flag-stale-pill"', FLAG_LIST),
+            Drawn("copy", "{flag.stale === true && (", FLAG_LIST),
+        ),
+        (
+            (
+                CAPABILITIES,
+                "the flag list marks a flag that looks ready to remove, and says why",
+            ),
+        ),
+    ),
+    "A flag must be at least 30 days old to be stale.": Claim(
+        FL,
+        1,
+        (Drawn("testid", "flags-table"), N_FROM_THE_API),
+        (
+            (STALE_DOC, "A flag is stale when it was created at least N days ago"),
+            (STALE_DOC, "N is 30 days by default"),
+        ),
+    ),
+    "The demo's own flags are new, so they are not stale.": Claim(
+        FL,
+        1,
+        (Drawn("testid", "flags-table"), Drawn("testid", "flag-row")),
+        (
+            (QUICK_START, "applies the `demo` seed (three experiments, two flags)"),
+            (STALE_DOC, "A flag is stale when it was created at least N days ago"),
+        ),
+    ),
+    "Each stale flag says why, under its Stale pill.": Claim(
+        FL,
+        1,
+        (
+            Drawn("copy", 'data-testid="flag-stale-reasons"', FLAG_LIST),
+            Drawn("copy", "staleReasonText(reason, staleDays)", FLAG_LIST),
+        ),
+        ((STALE_DOC, "The flag list marks such a flag as stale and says why."),),
+    ),
+    "Legacy signup form is on for everyone, unchanged for 30 days.": Claim(
+        FL,
+        2,
+        (
+            Drawn("testid", "flag-stale-reasons"),
+            Drawn("cue", "on for everyone, unchanged for 30 days"),
+            Drawn(
+                "copy", "return `On for everyone, unchanged for ${n} days`;", FLAG_LIST
+            ),
+            N_FROM_THE_API,
+        ),
+        (
+            (
+                STALE_DOC,
+                "| `on_for_everyone` | The flag is on at 100% with no targeting rules,"
+                " and unchanged for N days. |",
+            ),
+        ),
+    ),
+    "Everyone gets one answer, so it's usually ready to come out.": Claim(
+        FL,
+        2,
+        (Drawn("testid", "flag-row"),),
+        (
+            (
+                STALE_DOC,
+                "A flag that has served everyone the same answer for weeks, or that"
+                " nothing has asked about, is usually ready to come out of your code.",
+            ),
+        ),
+    ),
+    "Holiday banner is off for everyone, unchanged for 30 days.": Claim(
+        FL,
+        3,
+        (
+            Drawn("testid", "flag-stale-reasons"),
+            Drawn("cue", "left unchanged"),
+            Drawn(
+                "copy", "return `Off for everyone, unchanged for ${n} days`;", FLAG_LIST
+            ),
+            N_FROM_THE_API,
+        ),
+        (
+            (
+                STALE_DOC,
+                "| `off_for_everyone` | The flag is off, or on at 0% with no targeting"
+                " rules, and unchanged for N days. |",
+            ),
+        ),
+    ),
+    "The count starts at its last change, its Updated date.": Claim(
+        FL,
+        3,
+        (
+            Drawn("testid", "flag-row"),
+            Drawn("copy", ">Updated</th>", FLAG_LIST),
+            Drawn("copy", "{formatDate(flag.updated_at)}", FLAG_LIST),
+        ),
+        (
+            (STALE_DOC, "The count starts from the flag's `updated_at`."),
+            (STALE_DOC, "every change to a flag sets it"),
+        ),
+    ),
+    "Old search ranking: not evaluated in 30 days, while others were.": Claim(
+        FL,
+        4,
+        (
+            Drawn("testid", "flag-stale-reasons"),
+            Drawn("cue", "not evaluated in 30 days"),
+            Drawn("copy", "return `Not evaluated in ${n} days`;", FLAG_LIST),
+            N_FROM_THE_API,
+        ),
+        (
+            (
+                STALE_DOC,
+                "| `not_evaluated` | No evaluation of the flag was recorded in the last N"
+                " days, while evaluations of other flags were. |",
+            ),
+        ),
+    ),
+    "That means no evaluation was recorded, not that no code uses it.": Claim(
+        FL,
+        4,
+        (Drawn("testid", "flag-stale-reasons"),),
+        (
+            (
+                STALE_DOC,
+                "Not evaluated means no evaluation was recorded, not that no code uses"
+                " the flag.",
+            ),
+        ),
+    ),
+    "Press Stale to list only the flags marked stale.": Claim(
+        FL,
+        5,
+        (
+            Drawn("testid", "flag-stale-filter"),
+            Drawn("copy", "{ label: 'Stale', value: 'stale' },", FLAG_LIST),
+            Drawn(
+                "copy",
+                "...(staleFilter === 'stale' ? { stale: true } : {}),",
+                FLAG_LIST,
+            ),
+        ),
+        (
+            (
+                STALE_DOC,
+                "`GET /api/v1/feature-flags/?stale=true` lists only the stale flags",
+            ),
+        ),
+    ),
+    "Stale is a suggestion: nothing is changed or archived for you.": Claim(
+        FL,
+        6,
+        (
+            Drawn("testid", "flag-stale-hint"),
+            Drawn("cue", "nothing is changed or archived for you"),
+            Drawn(
+                "copy",
+                "Stale is a suggestion: nothing is changed or archived for you.",
+                FLAG_LIST,
+            ),
+        ),
+        (
+            (
+                STALE_DOC,
+                "It is a suggestion: listing changes no flag, and nothing is archived or"
+                " turned off for you.",
+            ),
+        ),
+    ),
+    "A flag tagged permanent is never stale.": Claim(
+        FL,
+        6,
+        (
+            Drawn("testid", "flag-stale-hint"),
+            Drawn("copy", "A flag tagged permanent is never stale;", FLAG_LIST),
+        ),
+        ((STALE_DOC, "A flag tagged `permanent` is never stale."),),
+    ),
+    "Tags are set through the API.": Claim(
+        FL,
+        6,
+        (
+            Drawn("testid", "flag-stale-hint"),
+            Drawn("copy", "tags are set through the API.", FLAG_LIST),
+        ),
+        ((STALE_DOC, "Tags are set through the API"),),
+    ),
+    "Listing the stale flags changes none of them.": Claim(
+        FL,
+        6,
+        (
+            Drawn("testid", "flags-table"),
+            Drawn("copy", "nothing is changed or archived for you", FLAG_LIST),
+        ),
+        (
+            (STALE_DOC, "Listing changes no flag."),
+            (CAPABILITIES, "listing changes no flag"),
+        ),
+    ),
+}
+
+
+def stale_board() -> storyboard.Storyboard:
+    return storyboard.load(STORYBOARDS / config.VIDEOS[STALE_SLUG])
+
+
+def stale_raw():
+    return yaml.safe_load(
+        (STORYBOARDS / config.VIDEOS[STALE_SLUG]).read_text(encoding="utf-8")
+    )
+
+
+def test_every_sentence_of_video_11_has_its_claims_row_and_it_holds():
+    made = stale_board()
+    sentences = [text for _s, _b, _l, text in storyboard.narration_lines(made)]
+    assert len(CLAIMS_11) == len(sentences) == 15
+    assert sorted(CLAIMS_11) == sorted(sentences)
+    assert claims_problems(made, CLAIMS_11) == []
+
+
+def test_a_video_11_sentence_with_no_claims_row_is_refused():
+    raw = stale_raw()
+    raw["scenes"][0]["beats"][3]["say"].append("Nothing will ever ask for it again.")
+    assert claims_problems(storyboard.parse(raw), CLAIMS_11) == [
+        "scene flags beat 4 says 'Nothing will ever ask for it again.', which has no"
+        " CLAIMS row"
+    ]
+
+
+def test_a_video_11_claim_whose_drawing_is_gone_is_refused():
+    raw = stale_raw()
+    raw["scenes"][0]["beats"][4]["focus"] = {
+        "role": "button",
+        "name": "Stale",
+        "exact": True,
+    }
+    assert claims_problems(storyboard.parse(raw), CLAIMS_11) == [
+        "scene flags beat 5 does not draw testid 'flag-stale-filter' while it says"
+        " 'Press Stale to list only the flags marked stale.'"
+    ]
+
+
+def test_a_video_11_claim_whose_page_no_longer_says_it_is_refused():
+    def changed(relative: str) -> str:
+        text = read_page(relative)
+        if relative == STALE_DOC:
+            return text.replace("`permanent` is never stale.", "`keep` is never stale.")
+        return text
+
+    assert claims_problems(stale_board(), CLAIMS_11, read=changed) == [
+        f"{STALE_DOC} no longer says 'A flag tagged `permanent` is never stale.'"
+        " ('A flag tagged permanent is never stale.')"
+    ]
+
+
+def test_a_video_11_claim_whose_product_copy_is_gone_is_refused():
+    def changed(relative: str) -> str:
+        text = read_page(relative)
+        if relative == f"frontend/src/{FLAG_LIST}":
+            return text.replace(
+                "return `Not evaluated in ${n} days`;", "return `Unused for ${n} days`;"
+            )
+        return text
+
+    assert claims_problems(stale_board(), CLAIMS_11, read=changed) == [
+        "scene flags beat 4 does not draw copy 'return `Not evaluated in ${n} days`;'"
+        " while it says 'Old search ranking: not evaluated in 30 days, while others"
+        " were.'"
+    ]
+
+
+def test_the_stale_guides_reasons_table_is_the_one_the_board_derives_from():
+    """``storyboard.derived_stale`` applies the guide's table; each row is
+    here, word for word, with the order the reasons are listed in and the
+    permanent tag's rule, so a docs-only change to the table meets the board
+    (test_showcase_stale_flags.py holds the derivation to the server's)."""
+    page = squeezed(read_page(STALE_DOC))
+    for words in (
+        "| Reason | When |",
+        "`stale_reasons` lists every reason that applies, in that order.",
+        "A flag tagged `permanent` is never stale. The tag must be exactly"
+        " permanent; case and surrounding spaces are ignored.",
+        "N is 30 days by default; `STALE_FLAG_DAYS` sets it",
+    ):
+        assert squeezed(words) in page, words
+    order = re.findall(r"^\| `([a-z_]+)` \|", read_page(STALE_DOC), re.MULTILINE)
+    assert tuple(order) == storyboard.STALE_REASONS

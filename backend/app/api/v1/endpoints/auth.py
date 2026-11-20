@@ -98,6 +98,7 @@ from backend.app.services.audit_service import AuditService
 from backend.app.services.auth_service import (
     CognitoAuthService,
     CognitoTokenRefused,
+    CognitoUnavailable,
     configured_pool_and_client,
     log_token_refused,
     sign_in_logger,
@@ -404,6 +405,9 @@ def _sign_out_of_cognito(token: Optional[str]) -> None:
     except CognitoTokenRefused as refusal:
         log_token_refused(refusal, "/auth/logout")
         raise _credentials_refused()
+    except CognitoUnavailable:
+        # Cognito did not answer: not a refused token (auth_service logged why).
+        raise deps.cognito_unavailable_exception()
     except ValueError:
         raise _credentials_refused()
     try:
@@ -915,6 +919,9 @@ def get_user_info(
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    except CognitoUnavailable:
+        # Cognito did not answer: not a refused token (auth_service logged why).
+        raise deps.cognito_unavailable_exception()
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
