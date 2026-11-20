@@ -111,6 +111,7 @@ every experiment the user is in.
 | `track_batch(events)` | `BatchResult(success_count, failure_count, errors)`, `.ok` | never raises; sends chunks of 100, a failed chunk counts all its events as failures |
 | `report_error(error_type, message, *, feature_flag_key=None, experiment_key=None, user_id=None, stack_trace=None, metadata=None, timestamp=None)` | `bool` — `True` when the server stored the report (201); see [Reporting errors](#reporting-errors) | never raises; `False` and a logged warning otherwise |
 | `get_assignments(user_id, active_only=True)` | `list[dict]` — the user's assignments from the server (not cached) | raises `ExperimentationError` |
+| `alias(anonymous_id, user_id)` | `bool` — `True` when this call stored the link, `False` when it was already stored; in the source tree only, see [Linking an anonymous id to a known user id](#linking-an-anonymous-id-to-a-known-user-id-alias) | raises `ExperimentationError`, with the server's `status` and `body` |
 | `cached_assignments(user_id)` / `cached_flags(user_id)` | cached, unexpired entries for the user | — |
 | `clear_cache()` | — (keeps the keys a key-less `track` is sent to) | — |
 | `ready(timeout_seconds=None)` | `ReadyResult(ok, ruleset_version, error)`, truthy when ready; `ReadyResult(ok=True)` at once in server mode | never raises |
@@ -246,6 +247,46 @@ SDK sends the report without checking it.
 - The error rate divides the counted errors by the flag's evaluations in the check's 15-minute
   window. With no evaluations in the window it reads 0, so an error-rate threshold cannot fire: in
   local mode the counts reach the server every 60 seconds and on `close()`.
+
+### Linking an anonymous id to a known user id: `alias`
+
+`alias` is in the source tree only: it is not in the published `controlvar` 0.3.0, and arrives
+with the package's next release. Until then, call `POST /api/v1/tracking/alias` from your
+backend, or install the SDK from a clone of this repository (see [Installation](#installation)).
+
+`alias(anonymous_id, user_id)` sends one `POST /api/v1/tracking/alias` (beta): the anonymous id a
+visitor was assigned under and the user id they signed in with are one person. From then on, in
+each experiment, the assignment stored first among the two ids answers for both, so a user id with
+no assignment of its own is answered the variant the anonymous id holds, and its events for that
+experiment count toward it. The rules and every answer are in
+[Link an anonymous id to a known user id](../api/endpoints.md#link-an-anonymous-id-to-a-known-user-id-beta).
+
+```python
+# In your backend, when the visitor signs in:
+server = ExperimentationClient(api_url, server_key)  # a key with the sdk:ruleset scope
+created = server.alias(visitor_id, customer_id)  # False: the link was already stored
+```
+
+- It needs a server-side key: one with the `sdk:ruleset` scope, created by a user who can change
+  feature flags. Call it from your backend.
+- It returns `True` when this call stored the link and `False` when the link was already stored.
+- Any other answer raises `ExperimentationError`, as `get_assignment` does, with the server's
+  `status` and `body`: `404` from a server without the route, `403` for a key that is not a
+  server-side key, `409` when a rule refuses the link (the anonymous id is already linked to
+  another user id, for one), and `422` for an id the server refuses (the two ids equal, for one).
+  A network failure or a timeout raises it with `status` `None`. A `429` is retried once, as for
+  every call.
+- A failed alias is yours to call again: the client keeps nothing of it. Until it succeeds, the
+  server may give the user id an assignment of its own.
+- On success the client sends a key-less `track(user_id, ...)` to each experiment a key-less
+  `track(anonymous_id, ...)` would reach (see [the fan-out rule](#tracking-fan-out-rule)), for 24
+  hours from the alias, and not to the anonymous id's flags: flags are not linked. It also drops
+  the user id's cached assignments, so its next `get_assignment` asks the server.
+- The anonymous id's own events keep the anonymous id: nothing already sent, or sent later under
+  it, is changed.
+- The copy helps only on the client that assigned the anonymous id. After a browser assigned it
+  and your backend called `alias`, the backend's client holds nothing for the anonymous id: call
+  `get_assignment(experiment_key, user_id)` there before a key-less `track(user_id, ...)`.
 
 ---
 
@@ -402,6 +443,7 @@ Every request carries `X-API-Key: <key>`, `Content-Type: application/json` and
 | `track` without keys | `POST /api/v1/tracking/batch`, one entry per experiment and flag it reaches; with none, `POST /api/v1/tracking/track` | `{events: [<track body>, …]}` (max 100 per request); with none, the track body with no key | ignored |
 | `track_batch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | `{success_count, failure_count, errors}` |
 | `get_assignments` | `GET /api/v1/tracking/assignments/{user_id}?active_only=true` | — | list of dicts |
+| `alias` | `POST /api/v1/tracking/alias` (beta; a server-side key) | `{anonymous_id, user_id}` | `{anonymous_id, user_id, created}` |
 | local mode: ruleset refresh | `GET /api/v1/sdk/ruleset` (beta) | `If-None-Match: "<version>"` | the ruleset and `ETag`; `304` when unchanged |
 | local mode: evaluation counts | `POST /api/v1/tracking/evaluations` (beta) | `{evaluations: [{flag_key, count, enabled_count, window_start, window_end}]}` | `{accepted, errors}` |
 | `report_error` | `POST /api/v1/tracking/errors` | `{error_type, message, feature_flag_key?, experiment_key?, user_id?, stack_trace?, metadata?, timestamp?}` | 201 and the stored report (only the status is read) |
@@ -498,6 +540,12 @@ CI runs this SDK's contract smoke against a real API: `python` is in the `sdks:`
 SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml).
 Fixtures: `backend/scripts/seed_sdk_contract.py`; the live
 runner: `python tests/sdk-contract/live/run_live_contract.py --sdk python --strict`.
+
+The runner gives the smoke the seed's `sdk:ruleset` key as `CONTROLVAR_LOCAL_API_KEY`. With it the
+smoke also links a new anonymous id to a new known id with `alias` and reports them as `alias`,
+and the runner checks in the database that the two ids hold one assignment row, the anonymous
+id's, and that the key-less event the smoke sent under the known id is stored under the anonymous
+id with the experiment and its variant.
 
 ---
 

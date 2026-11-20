@@ -71,6 +71,24 @@ EVENT_ID = {
 #: number and json getters returned for the seed's three value flags, each on
 #: at 100%, so each is its on value.
 VALUES = {"string": "on-copy", "number": 10, "json": {"color": "blue"}}
+#: What the smoke of an SDK in ALIAS_SDKS adds (#449): the two ids it linked,
+#: the two answers to the same link, the variant before and after, and the
+#: key-less event it sent under the known id.
+ALIAS = {
+    "anonymous_id": "smoke-anon-1",
+    "user_id": "smoke-known-1",
+    "created": [True, False],
+    "variant_before": "control",
+    "variant_after": "control",
+    "event_name": "contract_alias_1",
+}
+#: What the database holds after a passing alias step: one assignment row
+#: among the two ids, the anonymous id's, and the event stored under it,
+#: tagged with the experiment and that row's variant.
+ALIAS_STORED = {
+    "assignments": ["smoke-anon-1"],
+    "events": [{"user_id": "smoke-anon-1", "tagged": True, "variant": "control"}],
+}
 PR_QA_GATE = REPO_ROOT / ".github" / "workflows" / "pr-qa-gate.yml"
 PLATFORM = REPO_ROOT / ".github" / "workflows" / "_platform.yml"
 
@@ -78,8 +96,9 @@ PLATFORM = REPO_ROOT / ".github" / "workflows" / "_platform.yml"
 def good(runner, sdk: str, experiment_key: str = "sdk_contract_ab") -> dict:
     """A passing report from *sdk*'s smoke: GOOD, with EXPOSURE only if the
     runner lists *sdk* in EXPOSURE_SDKS, TARGETED only if it lists *sdk* in
-    ATTRIBUTE_SDKS, EVENT_ID only if in EVENT_ID_SDKS and VALUES only if in
-    VALUE_SDKS (an unlisted SDK may report none of them)."""
+    ATTRIBUTE_SDKS, EVENT_ID only if in EVENT_ID_SDKS, VALUES only if in
+    VALUE_SDKS and ALIAS only if in ALIAS_SDKS (an unlisted SDK may report none
+    of them)."""
     report = {"sdk": sdk, **GOOD}
     if sdk in runner.EXPOSURE_SDKS:
         hook = {**EXPOSURE["payload"], "experiment_key": experiment_key}
@@ -90,6 +109,8 @@ def good(runner, sdk: str, experiment_key: str = "sdk_contract_ab") -> dict:
         report["event_id"] = dict(EVENT_ID)
     if sdk in runner.VALUE_SDKS:
         report["values"] = json.loads(json.dumps(VALUES))
+    if sdk in runner.ALIAS_SDKS:
+        report["alias"] = json.loads(json.dumps(ALIAS))
     return report
 
 
@@ -115,6 +136,14 @@ def runner(monkeypatch, tmp_path):
     # No database here: the one event sent twice is one stored row, unless a
     # test says otherwise.
     monkeypatch.setattr(module, "_event_rows", lambda user_id, event_name: 1)
+    # Nor here: the alias step stored what it should, unless a test says otherwise.
+    monkeypatch.setattr(
+        module,
+        "_alias_rows",
+        lambda anonymous_id, user_id, event_name, experiment_key: json.loads(
+            json.dumps(ALIAS_STORED)
+        ),
+    )
     return module
 
 
@@ -268,6 +297,7 @@ def test_each_wrong_exposure_report_gives_exactly_its_problem(
     monkeypatch.setattr(runner, "ATTRIBUTE_SDKS", frozenset())  # exposure alone here
     monkeypatch.setattr(runner, "EVENT_ID_SDKS", frozenset())  # exposure alone here
     monkeypatch.setattr(runner, "VALUE_SDKS", frozenset())  # exposure alone here
+    monkeypatch.setattr(runner, "ALIAS_SDKS", frozenset())  # exposure alone here
     report = {"sdk": sdk, **GOOD}
     if exposure is not None:
         report["exposure"] = exposure
@@ -383,6 +413,261 @@ def test_an_sdk_that_is_not_listed_is_not_asked_of_the_database(monkeypatch, run
     )
     env = {"CONTRACT_EXPERIMENT_KEY": "sdk_contract_ab"}
     assert runner.run_one("go", "cmd", env, 5)[0] == "PASS"
+
+
+# ---------------------------------------------------------------------------
+# Two ids of one person linked with alias (#449)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.regression
+def test_js_and_python_are_the_sdks_whose_smokes_link_two_ids(runner):
+    assert runner.ALIAS_SDKS == frozenset({"js", "python"})
+    for sdk in sorted(runner.ALIAS_SDKS):
+        assert good(runner, sdk)["alias"] == ALIAS
+        assert runner.validate(sdk, good(runner, sdk)) == [], sdk
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    ("sdk", "report", "problems"),
+    [
+        pytest.param(
+            "js", None, ["alias missing (js is in ALIAS_SDKS)"], id="listed-but-silent"
+        ),
+        pytest.param(
+            "go",
+            ALIAS,
+            ["alias reported but go is not in ALIAS_SDKS"],
+            id="unlisted-but-reporting",
+        ),
+        pytest.param(
+            "python",
+            {**ALIAS, "created": [True, True]},
+            [
+                "alias.created=[True, True] (expected [true, false]: stored, then "
+                "already stored)"
+            ],
+            id="stored-twice",
+        ),
+        pytest.param(
+            "python",
+            {**ALIAS, "created": [1, 0]},
+            [
+                "alias.created=[1, 0] (expected [true, false]: stored, then already "
+                "stored)"
+            ],
+            id="created-not-booleans",
+        ),
+        pytest.param(
+            "js",
+            {**ALIAS, "user_id": "smoke-anon-1"},
+            [
+                "alias.user_id is alias.anonymous_id (two different ids are to be linked)"
+            ],
+            id="one-id",
+        ),
+        pytest.param(
+            "js",
+            {**ALIAS, "event_name": ""},
+            ["alias.event_name='' (expected a non-empty string)"],
+            id="no-event",
+        ),
+        pytest.param(
+            "js",
+            {**ALIAS, "variant_before": "blue", "variant_after": "blue"},
+            ["alias.variant_before='blue' (expected control or treatment)"],
+            id="unknown-variant",
+        ),
+        pytest.param(
+            "python",
+            {**ALIAS, "variant_after": "treatment"},
+            [
+                "alias.variant_after='treatment' != alias.variant_before='control' "
+                "(the known id is to be answered the anonymous id's variant)"
+            ],
+            id="known-id-reassigned",
+        ),
+    ],
+)
+def test_each_wrong_alias_report_gives_exactly_its_problems(
+    runner, sdk, report, problems
+):
+    """The gate's own planted reports, checked both ways: js and python listed, go not."""
+    payload = good(runner, sdk)
+    payload.pop("alias", None)
+    if report is not None:
+        payload["alias"] = report
+    assert runner.validate(sdk, payload) == problems
+
+
+@pytest.mark.regression
+def test_the_alias_step_is_judged_by_what_the_database_holds(monkeypatch, runner):
+    asked = []
+
+    def rows(anonymous_id, user_id, event_name, experiment_key):
+        asked.append((anonymous_id, user_id, event_name, experiment_key))
+        return json.loads(json.dumps(ALIAS_STORED))
+
+    monkeypatch.setattr(runner, "_alias_rows", rows)
+    monkeypatch.setattr(
+        runner,
+        "_run_command",
+        lambda c, e, t: ("PASS", "0.1s", good(runner, "js", "another_ab")),
+    )
+    env = {"CONTRACT_EXPERIMENT_KEY": "another_ab"}
+    assert runner.run_one("js", "cmd", env, 5) == ("PASS", "control in 0.1s")
+    assert asked == [
+        ("smoke-anon-1", "smoke-known-1", "contract_alias_1", "another_ab")
+    ]
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    ("stored", "problems"),
+    [
+        pytest.param(
+            {**ALIAS_STORED, "assignments": ["smoke-anon-1", "smoke-known-1"]},
+            [
+                "alias: the assignment rows among the two ids are held by "
+                "['smoke-anon-1', 'smoke-known-1'], expected one, held by the "
+                "anonymous id"
+            ],
+            id="the-known-id-got-a-second-row",
+        ),
+        pytest.param(
+            {**ALIAS_STORED, "assignments": []},
+            [
+                "alias: the assignment rows among the two ids are held by [], "
+                "expected one, held by the anonymous id"
+            ],
+            id="no-row",
+        ),
+        pytest.param(
+            {
+                **ALIAS_STORED,
+                "events": [
+                    {"user_id": "smoke-known-1", "tagged": False, "variant": None}
+                ],
+            },
+            ["alias: 0 tagged events (experiment_id NULL)"],
+            id="the-sdk-skipped-the-copy",
+        ),
+        pytest.param(
+            {
+                **ALIAS_STORED,
+                "events": [
+                    {"user_id": "smoke-known-1", "tagged": True, "variant": None}
+                ],
+            },
+            [
+                "alias: event variant NULL",
+                "alias: the event is stored under the known id, expected under the "
+                "anonymous id that holds the assignment",
+            ],
+            id="the-server-skipped-resolution-at-receipt",
+        ),
+        pytest.param(
+            {
+                **ALIAS_STORED,
+                "events": [
+                    {"user_id": "smoke-anon-1", "tagged": True, "variant": "treatment"}
+                ],
+            },
+            [
+                "alias: the event counts for 'treatment', the anonymous id holds "
+                "'control'"
+            ],
+            id="another-variant",
+        ),
+        pytest.param(
+            {**ALIAS_STORED, "events": ALIAS_STORED["events"] * 2},
+            ["alias: 2 stored row(s) for the key-less event, expected 1"],
+            id="stored-twice",
+        ),
+        pytest.param(
+            {**ALIAS_STORED, "events": []},
+            ["alias: 0 stored row(s) for the key-less event, expected 1"],
+            id="not-stored",
+        ),
+    ],
+)
+def test_each_wrong_stored_alias_state_fails_the_sdk_with_its_problem(
+    monkeypatch, runner, stored, problems
+):
+    monkeypatch.setattr(
+        runner, "_alias_rows", lambda *args: json.loads(json.dumps(stored))
+    )
+    monkeypatch.setattr(
+        runner, "_run_command", lambda c, e, t: ("PASS", "0.1s", good(runner, "python"))
+    )
+    env = {"CONTRACT_EXPERIMENT_KEY": "sdk_contract_ab"}
+    assert runner.run_one("python", "cmd", env, 5) == ("FAIL", "; ".join(problems))
+
+
+@pytest.mark.regression
+def test_no_database_fails_an_sdk_that_links_two_ids(monkeypatch, runner):
+    def unreachable(*args):
+        raise RuntimeError("no database")
+
+    monkeypatch.setattr(runner, "_alias_rows", unreachable)
+    monkeypatch.setattr(
+        runner, "_run_command", lambda c, e, t: ("PASS", "0.1s", good(runner, "js"))
+    )
+    env = {"CONTRACT_EXPERIMENT_KEY": "sdk_contract_ab"}
+    assert runner.run_one("js", "cmd", env, 5) == (
+        "FAIL",
+        "cannot read the stored alias rows: no database",
+    )
+
+
+@pytest.mark.regression
+def test_an_sdk_that_links_no_ids_is_not_asked_of_the_alias_rows(monkeypatch, runner):
+    def never(*args):
+        raise AssertionError("the alias rows were read for an unlisted SDK")
+
+    monkeypatch.setattr(runner, "_alias_rows", never)
+    monkeypatch.setattr(
+        runner, "_run_command", lambda c, e, t: ("PASS", "0.1s", good(runner, "java"))
+    )
+    env = {"CONTRACT_EXPERIMENT_KEY": "sdk_contract_ab"}
+    assert runner.run_one("java", "cmd", env, 5)[0] == "PASS"
+
+
+@pytest.mark.regression
+def test_the_smokes_are_given_the_sdk_ruleset_key_and_a_decoy_under_its_former_name(
+    monkeypatch, runner
+):
+    """The alias step needs a server-side key, so every smoke row gets the seed's
+    sdk:ruleset key as CONTROLVAR_LOCAL_API_KEY (and the decoy under the former
+    name): a smoke that links ids without being listed then reports it, and fails."""
+    monkeypatch.setenv("CONTROLVAR_LOCAL_API_KEY", "scoped")
+    monkeypatch.setattr(runner.shutil, "which", lambda tool: f"/usr/bin/{tool}")
+    monkeypatch.setattr(runner, "check_ruleset", lambda *args: ("PASS", "ok"))
+    monkeypatch.setattr(runner, "run_local", lambda *args: ("PASS", "ok"))
+    monkeypatch.setattr(runner, "run_published_local", lambda *args: ("PASS", "ok"))
+    status, ran = run_main(monkeypatch, runner, "--sdk", "js", "--sdk", "go")
+    assert status == 0
+    assert [command for command, _ in ran] == [
+        runner.MANIFEST["js"][0],
+        runner.MANIFEST["go"][0],
+    ]
+    for _, env in ran:
+        assert env["CONTROLVAR_LOCAL_API_KEY"] == "scoped"
+        assert env["EXPERIMENTLY_LOCAL_API_KEY"] == runner.DECOY_KEY != "scoped"
+        assert env["CONTROLVAR_API_KEY"] == "contract-key"
+
+
+@pytest.mark.regression
+def test_every_alias_sdk_runs_in_the_sdk_live_contract_job(runner):
+    """CI runs every SDK in ALIAS_SDKS with --strict (the attribute test above
+    pins --strict), so an SDK that links ids cannot pass as SKIP."""
+    import yaml
+
+    job = yaml.safe_load(PR_QA_GATE.read_text(encoding="utf-8"))["jobs"][
+        "sdk-live-contract"
+    ]
+    assert set(runner.ALIAS_SDKS) <= set(job["with"]["sdks"].split())
 
 
 def test_js_react_native_java_and_dotnet_must_show_their_attributes_reach_flag_evaluation(

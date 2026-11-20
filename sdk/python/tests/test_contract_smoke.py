@@ -17,7 +17,7 @@ from unittest import mock
 import pytest
 
 import controlvar.client as client_module
-from controlvar.testing import FakeTransport
+from controlvar.testing import FakeTransport, make_response
 
 SDK_ROOT = Path(__file__).resolve().parents[1]
 SMOKE = SDK_ROOT / "examples" / "contract_smoke.py"
@@ -29,6 +29,9 @@ VARIABLES = (
     "CONTRACT_EXPERIMENT_KEY",
     "CONTRACT_FLAG_KEY",
     "CONTRACT_USER_ID",
+    # The sdk:ruleset key the alias step uses (#449), under both names.
+    "CONTROLVAR_LOCAL_API_KEY",
+    "EXPERIMENTLY_LOCAL_API_KEY",
 )
 
 
@@ -256,6 +259,112 @@ def test_it_stops_without_a_key(environment, capsys):
     assert stopped.value.code == 1
     assert "CONTROLVAR_API_KEY is required" in capsys.readouterr().err
     assert transport.requests == []
+
+
+# #449: with the seed's sdk:ruleset key the smoke also links two ids. The runner gives that key
+# to every smoke as CONTROLVAR_LOCAL_API_KEY and reads the database for what the step stored.
+
+
+class LinkingApi(FakeTransport):
+    """``fake_api``'s answers, and the alias route: ``created`` for a new link, not for one
+    already stored. With ``ignore_links`` the known id is assigned a variant of its own, as a
+    server that does not follow the link would."""
+
+    def __init__(self, experiment_key: str, flag_key: str, ignore_links: bool = False) -> None:
+        super().__init__()
+        source = fake_api(experiment_key, flag_key)
+        self._routes = dict(source._routes)
+        self.links = set()
+        self.ignore_links = ignore_links
+
+    def send(self, method, url, headers, body, timeout):
+        response = super().send(method, url, headers, body, timeout)
+        request = self.requests[-1]
+        if request.path == "/api/v1/tracking/alias":
+            sent = request.json()
+            link = (sent["anonymous_id"], sent["user_id"])
+            created = link not in self.links
+            self.links.add(link)
+            return make_response(json={**sent, "created": created})
+        if (
+            self.ignore_links
+            and request.path == "/api/v1/tracking/assign"
+            and request.json()["user_id"].startswith("smoke-known-")
+        ):
+            return make_response(json={**response.json(), "variant_id": "var-2", "variant_name": "treatment"})
+        return response
+
+
+def test_with_the_sdk_ruleset_key_it_links_two_new_ids_on_one_new_client_and_reports_them(environment, capsys):
+    environment.setenv("CONTROLVAR_API_URL", "http://api.test")
+    environment.setenv("CONTROLVAR_LOCAL_API_KEY", "scoped")
+    environment.setenv("CONTRACT_EXPERIMENT_KEY", "exp_a")
+    environment.setenv("CONTRACT_FLAG_KEY", "flag_a")
+    environment.setenv("CONTRACT_USER_ID", "user-a")
+    transport = LinkingApi("exp_a", "flag_a")
+    environment.setattr(client_module, "UrllibTransport", lambda: transport)
+
+    load_smoke(environment).main()
+
+    report = json.loads(capsys.readouterr().out.strip())
+    alias = report["alias"]
+    assert alias == {
+        "anonymous_id": mock.ANY,
+        "user_id": mock.ANY,
+        "created": [True, False],
+        "variant_before": "control",
+        "variant_after": "control",
+        "event_name": mock.ANY,
+    }
+    assert alias["anonymous_id"].startswith("smoke-anon-") and alias["user_id"].startswith("smoke-known-")
+    assert alias["event_name"].startswith("contract_alias_")
+    # Every step before it is unchanged and uses the plain key; the alias step alone uses the
+    # sdk:ruleset key: assign the anonymous id, link it twice, a key-less event under the known
+    # id (fanned out to the experiment the anonymous id was answered for), then assign the known id.
+    assert {r.headers["X-API-Key"] for r in transport.requests[:10]} == {"smoke-key"}
+    step = transport.requests[10:]
+    assert [f"{r.headers['X-API-Key']} {r.method} {r.path}" for r in step] == [
+        "scoped POST /api/v1/tracking/assign",
+        "scoped POST /api/v1/tracking/alias",
+        "scoped POST /api/v1/tracking/alias",
+        "scoped POST /api/v1/tracking/batch",
+        "scoped POST /api/v1/tracking/assign",
+    ]
+    assert step[0].json() == {"experiment_key": "exp_a", "user_id": alias["anonymous_id"]}
+    assert step[1].json() == {"anonymous_id": alias["anonymous_id"], "user_id": alias["user_id"]}
+    assert step[3].json() == {
+        "events": [
+            {
+                "event_type": alias["event_name"],
+                "event_name": alias["event_name"],
+                "user_id": alias["user_id"],
+                "value": 1.0,
+                "experiment_key": "exp_a",
+            }
+        ]
+    }
+    assert step[4].json() == {"experiment_key": "exp_a", "user_id": alias["user_id"]}
+    assert sorted(report) == ["alias", "assign", "event_id", "exposure", "fanout", "flag", "sdk", "track"]
+
+
+def test_it_fails_when_the_server_answers_the_known_id_another_variant(environment, capsys):
+    environment.setenv("CONTROLVAR_LOCAL_API_KEY", "scoped")
+    transport = LinkingApi("sdk_contract_ab", "sdk_contract_flag", ignore_links=True)
+    environment.setattr(client_module, "UrllibTransport", lambda: transport)
+    with pytest.raises(SystemExit) as stopped:
+        load_smoke(environment).main()
+    assert stopped.value.code == 1
+    out, err = capsys.readouterr()
+    assert out == ""
+    assert err == "alias: the known id was answered treatment, the anonymous id control\n"
+
+
+def test_without_the_sdk_ruleset_key_it_links_nothing_and_reports_no_alias(environment, capsys):
+    transport = LinkingApi("sdk_contract_ab", "sdk_contract_flag")
+    environment.setattr(client_module, "UrllibTransport", lambda: transport)
+    load_smoke(environment).main()
+    assert "/api/v1/tracking/alias" not in [r.path for r in transport.requests]
+    assert "alias" not in json.loads(capsys.readouterr().out.strip())
 
 
 #: Three distinct values per setting, none of them the default or what CI sets.

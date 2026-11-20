@@ -12,7 +12,7 @@
   ``cache_ttl_seconds``; failures are never cached. Every successful answer also
   records its key for the key-less ``track()`` fan-out, for 24 hours
   (:mod:`controlvar.attribution`); ``clear_cache()`` keeps that record.
-* ``get_assignment``/``get_feature_flag``/``get_all_flags``/``get_assignments``
+* ``get_assignment``/``get_feature_flag``/``get_all_flags``/``get_assignments``/``alias``
   raise :class:`~controlvar.ExperimentationError`; the convenience
   wrappers ``get_variant``/``is_feature_enabled`` swallow it and return a
   default; ``get_string_value``/``get_number_value``/``get_json_value`` return
@@ -504,6 +504,40 @@ class ExperimentationClient:
             query={"active_only": "true" if active_only else "false"},
         )
         return list(data) if isinstance(data, list) else []
+
+    # ------------------------------------------------------- linking two ids
+
+    def alias(self, anonymous_id: str, user_id: str) -> bool:
+        """Link an anonymous id to the known user id of the same person (#449, beta) with one
+        ``POST /api/v1/tracking/alias``. Returns ``created``: ``True`` when this call stored the
+        link, ``False`` when it was already stored. Needs a server-side key (the ``sdk:ruleset``
+        scope, created by a user who can change feature flags): call it from your backend.
+
+        Raises :class:`ExperimentationError` on any other answer, as :meth:`get_assignment`
+        does: ``status`` and ``body`` are the server's (404 from a server without the route,
+        403, 409, 422, a 429 after its one retry); a network failure or a timeout has
+        ``status`` ``None``. Nothing is kept of a failure: call it again.
+
+        On success this client also sends a key-less ``track(user_id, ...)`` to the
+        experiments it answered for ``anonymous_id`` (as ``keys()`` gives them, never its
+        flags: flags are not linked), for 24 hours from now, and drops ``user_id``'s cached
+        assignments, so its next :meth:`get_assignment` asks the server. Events are not
+        changed: the anonymous id's own events keep the anonymous id.
+        """
+        data = self._request(
+            "POST",
+            "/api/v1/tracking/alias",
+            body={"anonymous_id": anonymous_id, "user_id": user_id},
+        )
+        if not isinstance(data, dict) or not isinstance(data.get("created"), bool):
+            raise ExperimentationError(
+                "POST /api/v1/tracking/alias returned an unexpected body",
+                status=200,
+                body=json.dumps(data),
+            )
+        self._attributed.copy_experiments(anonymous_id, user_id)
+        self._assignments.forget(user_id)
+        return data["created"]
 
     # ---------------------------------------------------------- feature flags
 
