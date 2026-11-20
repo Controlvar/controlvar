@@ -880,12 +880,6 @@ def test_a_packaged_readme_installs_nothing_from_a_registry(page):
     assert registry_installs(text(page), published=frozenset()) == []
 
 
-@pytest.mark.parametrize("page", sorted(PACKAGED))
-def test_a_packaged_readme_claims_no_attribute_targeting_its_client_does_not_send(page):
-    if PACKAGED[page] in SENDS_NO_CONTEXT:
-        assert attribute_claims(text(page)) == []
-
-
 def test_every_packaged_readme_has_a_plant():
     assert set(PLANTS) == set(PACKAGED)
 
@@ -993,11 +987,6 @@ DELEGATES: Dict[str, Tuple[str, "re.Pattern[str]"]] = {
         re.compile(r"\.get_feature_flag\((?P<args>[^()]{0,160})\)"),
     ),
 }
-#: The deferred SDKs whose flag evaluation sends no ``context`` today, as the
-#: source reads. When one starts sending it, change this set with its pages.
-SENDS_NO_CONTEXT = {
-    "flutter",
-}
 
 
 def evaluate_requests(sdk: str) -> List[str]:
@@ -1104,9 +1093,9 @@ def test_no_claim_pattern_matches_a_true_sentence(sentence):
 def test_what_each_deferred_sdk_sends_is_read_from_its_source():
     sdks = sorted({sdk for page in DEFERRED for sdk in sdks_of(page)})
     no_context = {sdk for sdk in sdks if not sends_context(sdk)}
-    assert no_context == SENDS_NO_CONTEXT, (
-        "an SDK changed what its flag evaluation sends: update SENDS_NO_CONTEXT"
-        " and that SDK's pages together"
+    assert no_context == set(), (
+        f"{sorted(no_context)} no longer sends the user's attributes on flag"
+        " evaluation: say so on its pages, and add its limit back here with them"
     )
     assert sends_context("react")
 
@@ -1120,10 +1109,7 @@ def test_the_claim_patterns_find_the_true_sentence_on_the_react_page():
 
 def test_the_claim_patterns_find_the_true_sentence_on_the_react_native_page():
     # React Native sends the context since #1520, and its page says so: the
-    # patterns must see it, so that react-native put back in SENDS_NO_CONTEXT
-    # fails test_a_page_claims_no_attribute_targeting_its_client_does_not_send
-    # on docs/sdk/react-native.md as well as here.
-    assert "react-native" not in SENDS_NO_CONTEXT
+    # patterns must see it.
     assert sends_context("react-native")
     assert "sent as context on flag evaluation" in attribute_claims(
         text("docs/sdk/react-native.md")
@@ -1131,11 +1117,7 @@ def test_the_claim_patterns_find_the_true_sentence_on_the_react_native_page():
 
 
 def test_the_claim_patterns_find_the_true_sentences_on_the_java_pages():
-    # The Java SDK sends the context since #1718, and both its pages say so:
-    # java put back in SENDS_NO_CONTEXT fails
-    # test_a_page_claims_no_attribute_targeting_its_client_does_not_send on
-    # them as well as here.
-    assert "java" not in SENDS_NO_CONTEXT
+    # The Java SDK sends the context since #1718, and both its pages say so.
     assert sends_context("java")
     assert "flag evaluation sends the attributes" in attribute_claims(
         text("docs/sdk/java.md")
@@ -1147,10 +1129,7 @@ def test_the_claim_patterns_find_the_true_sentences_on_the_java_pages():
 
 def test_the_claim_patterns_find_the_true_sentence_on_the_dotnet_pages():
     # .NET sends the context since #1719, and both its pages say so: the
-    # patterns must see it, so that dotnet put back in SENDS_NO_CONTEXT fails
-    # test_a_page_claims_no_attribute_targeting_its_client_does_not_send on
-    # docs/sdk/dotnet.md and sdk/dotnet/README.md as well as here.
-    assert "dotnet" not in SENDS_NO_CONTEXT
+    # patterns must see it.
     assert sends_context("dotnet")
     for page in ("docs/sdk/dotnet.md", "sdk/dotnet/README.md"):
         assert "sent as context on flag evaluation" in attribute_claims(text(page)), (
@@ -1158,12 +1137,18 @@ def test_the_claim_patterns_find_the_true_sentence_on_the_dotnet_pages():
         )
 
 
+def test_the_claim_patterns_find_the_true_sentence_on_the_flutter_pages():
+    # Flutter sends the context since its #438 change, and both its pages say so.
+    assert sends_context("flutter")
+    for page in FLUTTER_PAGES:
+        assert "flag evaluation sends the attributes" in attribute_claims(text(page)), (
+            page
+        )
+
+
 def test_the_claim_patterns_find_the_true_sentences_on_the_ruby_pages():
     # Ruby sends the context (part of #1720), and both its pages say so: the
-    # patterns must see it, so that ruby put back in SENDS_NO_CONTEXT fails
-    # test_a_page_claims_no_attribute_targeting_its_client_does_not_send on
-    # docs/sdk/ruby.md and sdk/ruby/README.md as well as here.
-    assert "ruby" not in SENDS_NO_CONTEXT
+    # patterns must see it.
     assert sends_context("ruby")
     for page in RUBY_PAGES:
         assert "flag evaluation sends the attributes" in attribute_claims(text(page)), (
@@ -1173,10 +1158,7 @@ def test_the_claim_patterns_find_the_true_sentences_on_the_ruby_pages():
 
 def test_the_claim_patterns_find_the_true_sentences_on_the_php_pages():
     # PHP sends the context (part of #1720), and both its pages say so: the
-    # patterns must see it, so that php put back in SENDS_NO_CONTEXT fails
-    # test_a_page_claims_no_attribute_targeting_its_client_does_not_send on
-    # docs/sdk/php.md and sdk/php/README.md as well as here.
-    assert "php" not in SENDS_NO_CONTEXT
+    # patterns must see it.
     assert sends_context("php")
     for page in PHP_PAGES:
         assert "flag evaluation sends the attributes" in attribute_claims(text(page)), (
@@ -1185,11 +1167,7 @@ def test_the_claim_patterns_find_the_true_sentences_on_the_php_pages():
 
 
 def test_the_claim_patterns_find_the_true_sentence_on_the_ios_pages():
-    # iOS sends the context since its #438 change, and both its pages say so:
-    # ios put back in SENDS_NO_CONTEXT fails
-    # test_a_page_claims_no_attribute_targeting_its_client_does_not_send on
-    # docs/sdk/ios.md and sdk/ios/README.md as well as here.
-    assert "ios" not in SENDS_NO_CONTEXT
+    # iOS sends the context since its #438 change, and both its pages say so.
     assert sends_context("ios")
     for page in IOS_PAGES:
         assert "flag evaluation sends the attributes" in attribute_claims(text(page)), (
@@ -1198,11 +1176,7 @@ def test_the_claim_patterns_find_the_true_sentence_on_the_ios_pages():
 
 
 def test_the_claim_patterns_find_the_true_sentence_on_the_android_pages():
-    # Android sends the context since its #438 change, and both its pages say
-    # so: android put back in SENDS_NO_CONTEXT fails
-    # test_a_page_claims_no_attribute_targeting_its_client_does_not_send on
-    # docs/sdk/android.md and sdk/android/README.md as well as here.
-    assert "android" not in SENDS_NO_CONTEXT
+    # Android sends the context since its #438 change, and both its pages say so.
     assert sends_context("android")
     for page in ANDROID_PAGES:
         assert "flag evaluation sends the attributes" in attribute_claims(text(page)), (
@@ -1213,24 +1187,12 @@ def test_the_claim_patterns_find_the_true_sentence_on_the_android_pages():
 def test_the_react_native_readme_says_the_attributes_are_sent_and_cites_no_438():
     # The README npm shows for React Native's first release is frozen with it:
     # it must say what the client does since #1520 (the attributes go as
-    # `context` on flag evaluation), and carry none of the #438 limit that
-    # Flutter keeps.
+    # `context` on flag evaluation), and carry none of the #438 limit (no SDK
+    # keeps it now).
     readme = text("sdk/react-native/README.md")
     assert "sent as context on flag evaluation" in attribute_claims(readme)
     assert "438" not in readme
     assert "sends only the user id" not in fold(readme).lower()
-
-
-@pytest.mark.parametrize("page", DEFERRED)
-def test_a_page_claims_no_attribute_targeting_its_client_does_not_send(page):
-    silent = [sdk for sdk in sdks_of(page) if sdk in SENDS_NO_CONTEXT]
-    if not silent:
-        return
-    claims = attribute_claims(text(page))
-    assert not claims, (
-        f"{page}: {', '.join(silent)} sends the user id alone on flag evaluation,"
-        f" but the page says attributes reach it ({claims}); say what it sends"
-    )
 
 
 def test_the_react_page_names_the_ssr_entry_the_package_ships():
@@ -2749,10 +2711,7 @@ EDGE_CONTEXT_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], ...]
 
 def test_the_claim_patterns_find_the_true_sentences_on_the_edge_pages():
     # Edge sends the context (part of #1720), and both its pages say so: the
-    # patterns must see it, so that edge put back in SENDS_NO_CONTEXT fails
-    # test_a_page_claims_no_attribute_targeting_its_client_does_not_send on
-    # docs/sdk/edge.md and sdk/edge/README.md as well as here.
-    assert "edge" not in SENDS_NO_CONTEXT
+    # patterns must see it.
     assert sends_context("edge")
     for page in EDGE_PAGES:
         assert "flag evaluation sends the attributes" in attribute_claims(text(page)), (
@@ -2870,10 +2829,7 @@ ELIXIR_CONTEXT_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], ..
 
 def test_the_claim_patterns_find_the_true_sentences_on_the_elixir_pages():
     # Elixir sends the context (part of #1720), and both its pages say so: the
-    # patterns must see it, so that elixir put back in SENDS_NO_CONTEXT fails
-    # test_a_page_claims_no_attribute_targeting_its_client_does_not_send on
-    # docs/sdk/elixir.md and sdk/elixir/README.md as well as here.
-    assert "elixir" not in SENDS_NO_CONTEXT
+    # patterns must see it.
     assert sends_context("elixir")
     for page in ELIXIR_PAGES:
         assert "flag evaluation sends the attributes" in attribute_claims(text(page)), (
@@ -2922,6 +2878,129 @@ def test_the_old_elixir_note_is_gone_from_both_pages():
         assert "accepted for symmetry and not sent" not in folded, page
         assert "accepted for symmetry" not in folded, page
         assert "against an empty context" not in folded, page
+
+
+# ---------------------------------------------------------------------------
+# 10. The Flutter SDK's targeting context (#438)
+# ---------------------------------------------------------------------------
+
+FLUTTER_PAGES = ("docs/sdk/flutter.md", "sdk/flutter/README.md")
+#: The Flutter SDK's client tests: each Flutter test named below is one of its
+#: ``test('...')`` calls (a name with no quote or backslash in it).
+FLUTTER_TESTS = SDK_DIR / "flutter/test/client_test.dart"
+_FLUTTER_SENDS = (
+    "regression #438: evaluateFlag sends the attributes as context after user_id"
+)
+_FLUTTER_MATCHES = "regression #438: a targeting rule on attributes matches"
+_FLUTTER_READS_BACK = "the context reads back as the attributes with the servers rules"
+_FLUTTER_NONE = "no attributes, or an empty map, send the user id alone"
+_FLUTTER_CACHE = (
+    "cache: other attributes ask the server again",
+    "cache: one entry per user and flag, the last answer wins",
+    "cache: the same attributes twice are one request",
+)
+_FLUTTER_SORTED = (
+    "cache: the same attributes in another order are one request, written with"
+    " sorted keys"
+)
+_FLUTTER_OFFLINE = (
+    "the offline store keeps one answer per user and flag, whatever the attributes",
+    "the persisted key is the user and the flag, as before the attributes",
+    "a 404 under other attributes removes the stored answer and it is not served later",
+)
+_FLUTTER_NOT_JSON = (
+    "a DateTime in the attributes: nothing is sent, cached or read from the offline"
+    " store"
+)
+
+#: Each sentence both Flutter pages state about the targeting context (as
+#: written, folded to one line) and the Flutter tests that fail when it stops
+#: being true. The pages are in ``CLAIMS_DEFERRED``, so no claims registry binds
+#: them; this does.
+FLUTTER_CONTEXT_SENTENCES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
+    (
+        "**Flag evaluation sends the user's attributes.** `evaluateFlag(flagKey,"
+        " userId, {attributes})` sends `attributes:` as `context` on"
+        " `GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=<URL-encoded JSON object>`,"
+        " so the flag's targeting rules are evaluated against them.",
+        (_FLUTTER_SENDS, _FLUTTER_READS_BACK, _FLUTTER_MATCHES),
+    ),
+    (
+        "With no attributes, or an empty map, no `context` is sent and the request"
+        " carries the user id alone.",
+        (_FLUTTER_NONE,),
+    ),
+    (
+        "The change is in this repository"
+        " ([#438](https://github.com/Controlvar/controlvar/issues/438)); it reaches a"
+        " registry at this SDK's first publish, so a build from a clone of `main` has it"
+        " and a copy installed earlier does not.",
+        (_FLUTTER_SENDS,),
+    ),
+    (
+        "The SDK keeps one cached answer per user and flag, together with the attributes"
+        " it was asked with. A later call is answered from the cache only if its"
+        " attributes are exactly the same; otherwise the SDK asks the server, and the new"
+        " answer replaces the cached one. So two calls that differ only in attributes get"
+        " two answers.",
+        _FLUTTER_CACHE,
+    ),
+    (
+        "The attributes are written with their keys sorted, so the same attributes always"
+        " find the same cached answer.",
+        (_FLUTTER_SORTED,),
+    ),
+    (
+        "With `offlineFallback` the SDK stores the last answer the server gave for each"
+        " user and flag, whatever attributes it was asked with, and serves it only when"
+        " the server cannot answer. A 404 removes the stored answer, and the call returns"
+        " the disabled answer.",
+        _FLUTTER_OFFLINE,
+    ),
+    (
+        "If the attributes cannot be written as JSON (a `DateTime`, say, or a NaN),"
+        " `evaluateFlag` returns the disabled answer and sends nothing, and logs nothing,"
+        " so the disabled answer is the only sign.",
+        (_FLUTTER_NOT_JSON,),
+    ),
+)
+#: What the pages said before Flutter sent the attributes: none of it may stay.
+FLUTTER_OLD_NOTE = (
+    "Flag evaluation sends only the user id.",
+    "carries none of the user's attributes",
+    "To evaluate a flag with attributes, call the evaluate endpoint",
+    "is accepted and not sent",
+)
+
+
+def _flutter_test_names() -> Set[str]:
+    return set(
+        re.findall(
+            r"\btest\(\s{0,20}'([^'\\\n]{1,200})'", FLUTTER_TESTS.read_text("utf-8")
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    "sentence, tests",
+    FLUTTER_CONTEXT_SENTENCES,
+    ids=[s[:60] for s, _ in FLUTTER_CONTEXT_SENTENCES],
+)
+def test_each_flutter_context_sentence_is_on_both_pages_and_held_by_a_test(
+    sentence, tests
+):
+    unsaid = [page for page in FLUTTER_PAGES if sentence not in fold(text(page))]
+    assert unsaid == [], f"no longer said on {unsaid}: {sentence}"
+    names = _flutter_test_names()
+    missing = [name for name in tests if name not in names]
+    assert missing == [], f"no test in {FLUTTER_TESTS.name} has these names: {missing}"
+
+
+def test_the_old_flutter_note_is_gone_from_both_pages():
+    for page in FLUTTER_PAGES:
+        folded = fold(text(page))
+        kept = [old for old in FLUTTER_OLD_NOTE if old in folded]
+        assert kept == [], f"{page} still says: {kept}"
 
 
 # ---------------------------------------------------------------------------

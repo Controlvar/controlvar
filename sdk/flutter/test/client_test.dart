@@ -6,12 +6,15 @@
 ///
 /// Run with:
 ///   flutter test test/client_test.dart
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:controlvar/controlvar.dart' show SharedPreferencesOfflineStore;
 import 'package:controlvar/controlvar_core.dart';
 
 // ---------------------------------------------------------------------------
@@ -66,6 +69,48 @@ class _Server {
   List<Map<String, dynamic>> get lastEvents =>
       (lastBody['events'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
 }
+
+/// The server's reading of a recorded URL, as Starlette reads the query: the
+/// part after `?` and before `#`, split on `&`, each pair at its first `=`,
+/// `+` read as a space, then percent-decoded as UTF-8
+/// (`Uri.decodeQueryComponent` does both; `Uri.decodeComponent` leaves `+`).
+/// Not `Uri.queryParameters`, so that the order and the number of parameters
+/// can be asserted.
+List<MapEntry<String, String>> _serverQuery(Uri url) {
+  final text = url.toString().split('#').first;
+  final at = text.indexOf('?');
+  if (at < 0) return [];
+  return [
+    for (final pair in text.substring(at + 1).split('&'))
+      if (pair.isNotEmpty)
+        MapEntry(
+          Uri.decodeQueryComponent(pair.split('=').first),
+          Uri.decodeQueryComponent(pair.contains('=') ? pair.substring(pair.indexOf('=') + 1) : ''),
+        ),
+  ];
+}
+
+/// The `context` parameter of a recorded URL read back as JSON, or `null`
+/// when there is none.
+Object? _serverContext(Uri url) {
+  final values = [
+    for (final pair in _serverQuery(url))
+      if (pair.key == 'context') pair.value,
+  ];
+  return values.isEmpty ? null : json.decode(values.first);
+}
+
+/// A flag server whose answer depends on the context it decodes: `enabled`
+/// only for a user whose attributes say `plan == pro`.
+http.Response _ruleServer(http.Request request) {
+  final context = _serverContext(request.url);
+  final matches = context is Map && context['plan'] == 'pro';
+  return _Server._json(200, {'key': 'f', 'enabled': matches, 'config': null});
+}
+
+/// Alphanumeric on purpose: a non-ASCII canary would hide in a percent escape.
+const _canary = 'attrcanary7f3';
+const _evaluateUrl = 'https://api.example.com/api/v1/feature-flags/evaluate/f';
 
 SdkConfig _config({
   bool offlineFallback = false,
@@ -284,6 +329,402 @@ void main() {
       server.reply(200, 'not json');
       final client = await _client(server);
       expect((await client.evaluateFlag('flag', 'user-1')).enabled, isFalse);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // evaluateFlag sends the user's attributes (#438)
+  // -------------------------------------------------------------------------
+  group('evaluateFlag sends the attributes', () {
+    setUp(() {
+      server.respond = _ruleServer;
+    });
+
+    test('regression #438: evaluateFlag sends the attributes as context after user_id', () async {
+      final client = await _client(server);
+
+      await client.evaluateFlag('f', 'u1', attributes: {'plan': 'pro'});
+
+      expect(server.requests, hasLength(1));
+      expect(server.last.url.toString(),
+          '$_evaluateUrl?user_id=u1&context=%7B%22plan%22%3A%22pro%22%7D');
+    });
+
+    test('regression #438: a targeting rule on attributes matches', () async {
+      final client = await _client(server);
+
+      final pro = await client.evaluateFlag('f', 'u1', attributes: {'plan': 'pro'});
+      final none = await client.evaluateFlag('f', 'u2');
+
+      expect(pro.enabled, isTrue, reason: 'the rule plan == pro must match from the attributes');
+      expect(none.enabled, isFalse);
+    });
+
+    test('regression #438: isEnabled passes the attributes on', () async {
+      final client = await _client(server);
+
+      expect(await client.isEnabled('f', 'u1', attributes: {'plan': 'pro'}), isTrue);
+      expect(server.last.url.toString(),
+          '$_evaluateUrl?user_id=u1&context=%7B%22plan%22%3A%22pro%22%7D');
+    });
+
+    test('no attributes, or an empty map, send the user id alone', () async {
+      final client = await _client(server);
+
+      await client.evaluateFlag('f', 'u1');
+      expect(server.last.url.toString(), '$_evaluateUrl?user_id=u1');
+      client.clearCache();
+      await client.evaluateFlag('f', 'u1', attributes: {});
+      expect(server.last.url.toString(), '$_evaluateUrl?user_id=u1');
+      expect(server.requests, hasLength(2));
+    });
+
+    test('no attributes and an empty map are one cache slot', () async {
+      final client = await _client(server);
+
+      await client.evaluateFlag('f', 'u1');
+      await client.evaluateFlag('f', 'u1', attributes: {});
+
+      expect(server.requests, hasLength(1));
+    });
+
+    test('the context reads back as the attributes with the servers rules', () async {
+      final vectors = <Map<String, dynamic>>[
+        {'q': "a+b&c=d#e f/é😀!'()*~"},
+        {'q': 'a+b&c=d#e fé'},
+        {
+          'age': 30,
+          'beta': true,
+          'device': {'os': 'ios', 'version': '17.4.0'},
+          'tags': ['a', 'b'],
+        },
+      ];
+      for (final attributes in vectors) {
+        server.requests.clear();
+        final client = await _client(server);
+
+        await client.evaluateFlag('f', 'u1', attributes: attributes);
+
+        expect(server.requests, hasLength(1));
+        final url = server.last.url;
+        expect([for (final pair in _serverQuery(url)) pair.key], ['user_id', 'context'],
+            reason: 'no other parameter, user_id first: $url');
+        expect(_serverQuery(url).first.value, 'u1');
+        expect(_serverContext(url), attributes);
+      }
+    });
+
+    test('exact URL for plus, ampersand, equals, hash, space and accent', () async {
+      final client = await _client(server);
+
+      await client.evaluateFlag('f', 'u1', attributes: {'q': 'a+b&c=d#e fé'});
+
+      // Written from encodeQueryComponent (everything but letters, digits and
+      // -._~ is escaped, a space is +); not measured on a device. The
+      // correctness check is the decode test above.
+      expect(server.last.url.toString(),
+          '$_evaluateUrl?user_id=u1&context=%7B%22q%22%3A%22a%2Bb%26c%3Dd%23e+f%C3%A9%22%7D');
+    });
+
+    test('cache: other attributes ask the server again', () async {
+      final client = await _client(server);
+
+      final pro = await client.evaluateFlag('f', 'u1', attributes: {'plan': 'pro'});
+      final free = await client.evaluateFlag('f', 'u1', attributes: {'plan': 'free'});
+
+      expect([pro.enabled, free.enabled], [true, false]);
+      expect(server.requests, hasLength(2));
+    });
+
+    test('cache: attributes that differ by a key or by a type are two requests', () async {
+      final client = await _client(server);
+
+      await client.evaluateFlag('f', 'u1', attributes: {'plan': 'pro'});
+      await client.evaluateFlag('f', 'u1', attributes: {'tier': 'pro'});
+      expect(server.requests, hasLength(2));
+
+      await client.evaluateFlag('f', 'u2', attributes: {'n': 1});
+      await client.evaluateFlag('f', 'u2', attributes: {'n': '1'});
+      expect(server.requests, hasLength(4));
+    });
+
+    test('cache: one entry per user and flag, the last answer wins', () async {
+      final client = await _client(server);
+
+      final first = await client.evaluateFlag('f', 'u1', attributes: {'plan': 'pro'});
+      final other = await client.evaluateFlag('f', 'u1', attributes: {'plan': 'free'});
+      final again = await client.evaluateFlag('f', 'u1', attributes: {'plan': 'pro'});
+
+      expect([first.enabled, other.enabled, again.enabled], [true, false, true]);
+      expect(server.requests, hasLength(3));
+    });
+
+    test('cache: the same attributes twice are one request', () async {
+      final client = await _client(server);
+
+      await client.evaluateFlag('f', 'u1', attributes: {'plan': 'pro'});
+      await client.evaluateFlag('f', 'u1', attributes: {'plan': 'pro'});
+
+      expect(server.requests, hasLength(1));
+    });
+
+    test('cache: attributes, then none, are two requests and the second is the answer for none', () async {
+      final client = await _client(server);
+
+      final pro = await client.evaluateFlag('f', 'u1', attributes: {'plan': 'pro'});
+      final none = await client.evaluateFlag('f', 'u1');
+
+      expect([pro.enabled, none.enabled], [true, false]);
+      expect(server.requests, hasLength(2));
+    });
+
+    test('cache: the same attributes in another order are one request, written with sorted keys', () async {
+      final client = await _client(server);
+
+      await client.evaluateFlag('f', 'u1', attributes: {
+        'plan': 'pro',
+        'device': {'os': 'ios', 'v': '1'},
+      });
+      await client.evaluateFlag('f', 'u1', attributes: {
+        'device': {'v': '1', 'os': 'ios'},
+        'plan': 'pro',
+      });
+
+      expect(server.requests, hasLength(1));
+      expect(
+          server.last.url.toString(),
+          '$_evaluateUrl?user_id=u1&context='
+          '%7B%22device%22%3A%7B%22os%22%3A%22ios%22%2C%22v%22%3A%221%22%7D%2C%22plan%22%3A%22pro%22%7D');
+    });
+
+    test('in flight: concurrent calls with other attributes are two requests, with the same attributes one',
+        () async {
+      final client = await _client(server);
+
+      final others = await Future.wait([
+        client.evaluateFlag('f', 'u1', attributes: {'plan': 'pro'}),
+        client.evaluateFlag('f', 'u1', attributes: {'plan': 'free'}),
+      ]);
+      expect(others.map((r) => r.enabled), [true, false]);
+      expect(server.requests, hasLength(2));
+
+      server.requests.clear();
+      final same = await _client(server);
+      final results = await Future.wait([
+        same.evaluateFlag('f', 'u1', attributes: {'plan': 'pro'}),
+        same.evaluateFlag('f', 'u1', attributes: {'plan': 'pro'}),
+      ]);
+      expect(results.map((r) => r.enabled), [true, true]);
+      expect(server.requests, hasLength(1));
+    });
+
+    test('the keyless track fan-out lists the flag once, whatever attributes it was asked with', () async {
+      final client = await _client(server);
+      await client.evaluateFlag('f', 'u1', attributes: {'plan': 'pro'});
+      await client.evaluateFlag('f', 'u1', attributes: {'plan': 'free'});
+      expect(client.getEvaluatedFlags('u1'), ['f']);
+      server.requests.clear();
+      server.reply(200, {'success_count': 1, 'failure_count': 0, 'errors': null});
+
+      await client.track('page_view', 'u1');
+
+      expect(server.requests, hasLength(1));
+      expect(server.lastEvents, hasLength(1));
+      expect(server.lastEvents.single['feature_flag_key'], 'f');
+    });
+
+    test('flag evaluation and assignment write the attributes alike', () async {
+      final attributes = {
+        'plan': 'pro',
+        'tags': ['a', 'b'],
+        'device': {'os': 'ios'},
+      };
+      server.respond = (request) =>
+          request.method == 'POST' ? _Server._json(200, _assignJson) : _ruleServer(request);
+      final client = await _client(server);
+
+      await client.evaluateFlag('f', 'u1', attributes: attributes);
+      await client.getAssignment('exp-1', 'u1', attributes: attributes);
+
+      final assigned = (json.decode(server.last.body) as Map)['context'];
+      expect(_serverContext(server.requests.first.url), assigned);
+    });
+
+    test('the offline store keeps one answer per user and flag, whatever the attributes', () async {
+      final store = InMemoryOfflineStore();
+      final client = await _client(server, offlineFallback: true, store: store);
+
+      await client.evaluateFlag('f', 'u1', attributes: {'plan': 'pro'});
+      await client.evaluateFlag('f', 'u1', attributes: {'plan': 'free'});
+      expect(store.getFlag('u1', 'f')?.enabled, isFalse, reason: 'the last answer, whatever it was asked with');
+
+      client.clearCache();
+      server.fail(Exception('offline'));
+      final offline = await client.evaluateFlag('f', 'u1', attributes: {'plan': 'pro'});
+      expect(offline.enabled, isFalse, reason: 'served when the server cannot answer, for any attributes');
+    });
+
+    test('the persisted key is the user and the flag, as before the attributes', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      SharedPreferences.setMockInitialValues({});
+      final client = await _client(server, offlineFallback: true, store: SharedPreferencesOfflineStore());
+
+      await client.evaluateFlag('f', 'u1', attributes: {'plan': 'pro'});
+      await client.evaluateFlag('f', 'u1', attributes: {'plan': 'free'});
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getKeys(), {'ep_sdk_flag_2:u1:f'});
+      await client.clearOfflineCache();
+      expect(prefs.getKeys(), isEmpty);
+    });
+
+    test('a 404 under other attributes removes the stored answer and it is not served later', () async {
+      final store = InMemoryOfflineStore();
+      final client = await _client(server, offlineFallback: true, store: store);
+      await client.evaluateFlag('f', 'u1', attributes: {'plan': 'pro'});
+      expect(store.getFlag('u1', 'f')?.enabled, isTrue);
+      client.clearCache();
+
+      server.reply(404, {'detail': "Feature flag with key 'f' not found"});
+      final gone = await client.evaluateFlag('f', 'u1', attributes: {'plan': 'free'});
+      expect(gone.enabled, isFalse);
+      expect(store.getFlag('u1', 'f'), isNull);
+
+      server.fail(Exception('offline'));
+      final offline = await client.evaluateFlag('f', 'u1', attributes: {'plan': 'pro'});
+      expect(offline.enabled, isFalse, reason: 'the stored answer must not come back');
+    });
+
+    group('attributes that cannot be written as JSON', () {
+      // Nothing is sent, cached or read from the offline store (which holds an
+      // enabled answer for the flag), and nothing is printed.
+      Future<void> expectNothingSent(Map<String, dynamic> attributes) async {
+        final store = InMemoryOfflineStore();
+        await store.setFlag('u1', const EvalResult(key: 'f', enabled: true));
+        final client = await _client(server, offlineFallback: true, store: store);
+        final printed = <String>[];
+
+        final result = await runZoned(
+          () => client.evaluateFlag('f', 'u1', attributes: attributes),
+          zoneSpecification: ZoneSpecification(print: (self, parent, zone, line) => printed.add(line)),
+        );
+
+        expect(result.enabled, isFalse, reason: 'the stored answer must not be served');
+        expect(result.key, 'f');
+        expect(server.requests, isEmpty);
+        expect(client.getEvaluatedFlags('u1'), isEmpty);
+        expect(printed.join('\n'), isNot(contains(_canary)));
+      }
+
+      test('a DateTime in the attributes: nothing is sent, cached or read from the offline store', () async {
+        await expectNothingSent({'when': DateTime(2026, 1, 1), 'note': _canary});
+      });
+
+      test('a NaN in the attributes: nothing is sent, cached or read from the offline store', () async {
+        await expectNothingSent({'n': double.nan, 'note': _canary});
+      });
+
+      test('a cycle in the attributes: nothing is sent, cached or read from the offline store', () async {
+        final cycle = <String, dynamic>{'note': _canary};
+        cycle['self'] = cycle;
+        await expectNothingSent(cycle);
+      });
+
+      test('an answer already cached for other attributes is not served either', () async {
+        final client = await _client(server);
+        await client.evaluateFlag('f', 'u1', attributes: {'plan': 'pro'});
+
+        final result = await client.evaluateFlag('f', 'u1', attributes: {'n': double.nan});
+
+        expect(result.enabled, isFalse);
+        expect(server.requests, hasLength(1));
+      });
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Errors carry no query
+  // -------------------------------------------------------------------------
+  group('request errors name no query', () {
+    final uri = Uri.parse('$_evaluateUrl?user_id=u1&context=$_canary');
+
+    ApiHttpClient api({String baseUrl = 'https://api.example.com'}) => ApiHttpClient(
+          apiKey: 'test-key',
+          baseUrl: baseUrl,
+          timeout: const Duration(seconds: 2),
+          httpClient: server.client,
+        );
+
+    Future<Object?> failure(Future<Object?> call) =>
+        call.then<Object?>((_) => null, onError: (Object error) => error);
+
+    void expectNoQuery(Object? error) {
+      expect(error, isA<ApiException>());
+      final text = '${(error as ApiException).message} $error';
+      expect(error.statusCode, 0);
+      expect(text, isNot(contains(_canary)));
+      expect(text, isNot(contains('?')));
+      expect(text, isNot(contains('context=')));
+    }
+
+    test('a ClientException that names the request URI leaves no query in the ApiException', () async {
+      server.fail(http.ClientException('Connection closed before full header was received', uri));
+
+      final error = await failure(api().get(uri.path, query: {'user_id': 'u1', 'context': _canary}));
+
+      expectNoQuery(error);
+      expect((error as ApiException).message, 'Network error: the request failed');
+    });
+
+    test('any other error text is dropped too', () async {
+      server.fail(Exception('GET $uri failed'));
+
+      final error = await failure(api().get(uri.path, query: {'user_id': 'u1', 'context': _canary}));
+
+      expectNoQuery(error);
+      expect((error as ApiException).message, 'Network error: the request failed');
+    });
+
+    test('a timeout is reported as one, without its text', () async {
+      server.fail(TimeoutException('GET $uri timed out'));
+
+      final error = await failure(api().get(uri.path, query: {'user_id': 'u1', 'context': _canary}));
+
+      expectNoQuery(error);
+      expect((error as ApiException).message, 'Network error: the request timed out');
+    });
+
+    test('a POST error is rebuilt the same way', () async {
+      server.fail(http.ClientException('failed', uri));
+
+      final error = await failure(api().post('/api/v1/tracking/track', {'note': _canary}));
+
+      expectNoQuery(error);
+    });
+
+    test('a URL that does not parse is an ApiException, not the FormatException that names it', () async {
+      final error = await failure(
+        api(baseUrl: 'https://api.example.com:$_canary')
+            .get(uri.path, query: {'user_id': 'u1', 'context': _canary}),
+      );
+
+      expectNoQuery(error);
+      expect(server.requests, isEmpty);
+    });
+
+    test('evaluateFlag returns the disabled answer and prints nothing when the error names the attributes',
+        () async {
+      server.fail(http.ClientException('failed', uri));
+      final client = await _client(server);
+      final printed = <String>[];
+
+      final result = await runZoned(
+        () => client.evaluateFlag('f', 'u1', attributes: {'note': _canary}),
+        zoneSpecification: ZoneSpecification(print: (self, parent, zone, line) => printed.add(line)),
+      );
+
+      expect(result.enabled, isFalse);
+      expect(printed.join('\n'), isNot(contains(_canary)));
     });
   });
 
@@ -690,6 +1131,29 @@ void main() {
       expect(cache.containsKey('u1', 'a'), isFalse);
       cache.clear();
       expect(cache.size, 0);
+    });
+
+    test('a context given to get must equal the one stored; none means no check', () {
+      final cache = EvaluationCache<int>(ttl: const Duration(minutes: 1));
+      cache.set('u', 'k', 1, context: '{"a":1}');
+
+      expect(cache.get('u', 'k', context: '{"a":1}'), 1);
+      expect(cache.get('u', 'k', context: '{"a":2}'), isNull);
+      expect(cache.get('u', 'k', context: ''), isNull);
+      expect(cache.get('u', 'k'), 1, reason: 'assignments and the listings ask without a context');
+      expect(cache.entries('u').map((e) => e.key), ['k']);
+    });
+
+    test('a set without a context stores the empty one, and a later set replaces it', () {
+      final cache = EvaluationCache<int>(ttl: const Duration(minutes: 1));
+      cache.set('u', 'k', 1);
+
+      expect(cache.get('u', 'k', context: ''), 1);
+      expect(cache.get('u', 'k', context: '{"a":1}'), isNull);
+      cache.set('u', 'k', 2, context: '{"a":1}');
+      expect(cache.get('u', 'k', context: ''), isNull);
+      expect(cache.get('u', 'k', context: '{"a":1}'), 2);
+      expect(cache.size, 1);
     });
 
     test('entries expire', () async {
