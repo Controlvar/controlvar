@@ -11,7 +11,10 @@ in a session of the test's own:
 * an entry holds no request text it is not allowed to (descriptions, rules,
   passwords, the API key or its hash);
 * route sites write after the change commits and fail open: with every audit
-  insert refused, the change is kept and one ERROR without values is logged;
+  insert refused, the change is kept and one ERROR without values is logged.
+  The feature flag routes are the exception (#1042): their entries are written
+  with the change, so bulk toggle keeps nothing and answers 500
+  (``test_flag_change_audit_strict.py`` covers each of them);
 * a superuser's change to a user's role, superuser flag or active status is
   written together with its entry or not at all; user changes record the
   superuser flag;
@@ -1687,19 +1690,22 @@ def test_route_site_keeps_the_change_when_the_audit_write_fails(
 
 
 @pytest.mark.regression
-def test_bulk_toggle_keeps_the_change_when_the_audit_write_fails(
+def test_bulk_toggle_keeps_nothing_when_the_audit_write_fails(
     client, fresh, db_session, developer, audit_insert_refused, caplog
 ):
+    """Bulk toggle writes its entries with its changes (#1042): with every
+    audit insert refused it answers 500 and no flag changes. It used to keep
+    the change and answer 200 with no entry."""
     caplog.set_level(logging.INFO)
     flag = _flag(db_session)
+    failures = audit_write_failures_total._value.get()
     response = client.post(
         f"{V1}/feature-flags/bulk-toggle",
         json={"flag_ids": [str(flag.id)], "action": "enable"},
         headers=_auth(developer),
     )
-    assert response.status_code == 200, response.text
-    assert response.json()["succeeded"] == 1
-    assert response.json()["audit_log_ids"] == []
+    assert response.status_code == 500, response.text
+    assert "audit_log_ids" not in response.json()
     session = fresh()
     try:
         stored = (
@@ -1707,8 +1713,10 @@ def test_bulk_toggle_keeps_the_change_when_the_audit_write_fails(
         )
     finally:
         session.close()
-    assert FeatureFlagStatus(stored) == FeatureFlagStatus.ACTIVE
-    assert len(_audit_errors(caplog)) == 1
+    assert FeatureFlagStatus(stored) == FeatureFlagStatus.INACTIVE
+    # Nothing is missing, so nothing is counted as a lost entry.
+    assert _audit_errors(caplog) == []
+    assert audit_write_failures_total._value.get() == failures
     _assert_no_values_logged(caplog, "ae221 refused")
 
 
