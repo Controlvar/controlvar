@@ -904,8 +904,6 @@ EXCLUDED = {
     "POST /api/v1/auth/sso/configs": ALL_PASSES,
     "PUT /api/v1/auth/sso/configs/{config_id}": ALL_PASSES,
     "GET /api/v1/auth/sso/oidc/{provider}/callback": ALL_PASSES,
-    # deprecated and unimplemented (#963): excluded by name, never as a class
-    POST_STRAT: ALL_PASSES,
 }
 
 
@@ -1006,9 +1004,9 @@ def test_no_known_entry_cites_958_or_959():
 
 @pytest.mark.regression
 def test_no_known_entry_cites_963():
-    """#963 is not fixed, but the route is deprecated and excluded by name
-    (exclusions.toml), so no known-5xx waiver may stand for it in any pass: a
-    leftover entry is quiet (it answers no 5xx) and turns the run red."""
+    """#963 is not fixed, but the route is not in the API document, so no
+    known-5xx waiver may stand for it in any pass: a leftover entry is quiet
+    (it answers no 5xx) and turns the run red."""
     import tomllib
 
     data = tomllib.loads(fuzz_check.KNOWN_5XX.read_text(encoding="utf-8"))
@@ -1019,8 +1017,7 @@ def test_no_known_entry_cites_963():
 
 
 def test_the_fuzz_commands_do_not_exclude_deprecated():
-    """No fuzz command skips deprecated operations as a class: the one
-    deprecated route that is excluded is excluded by name."""
+    """No fuzz command skips deprecated operations as a class."""
     texts = {
         "_platform.yml": _arm(),
         "fuzz_local.sh": _local(),

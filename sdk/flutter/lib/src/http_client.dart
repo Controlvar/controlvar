@@ -1,6 +1,7 @@
 /// Lightweight HTTP client wrapper around the `http` package.
 library controlvar_http_client;
 
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
@@ -45,17 +46,18 @@ class ApiHttpClient {
   /// Performs a GET request and decodes the JSON response body.
   ///
   /// [path] must already have its segments percent-encoded
-  /// (`Uri.encodeComponent`); [query] values are encoded here.
+  /// (`Uri.encodeComponent`); [query] values are encoded here, in the order
+  /// the map iterates.
   /// Throws [ApiException] on non-2xx responses or network errors.
   Future<Map<String, dynamic>> get(String path, {Map<String, String>? query}) async {
-    final uri = _uri(path, query);
     try {
+      final uri = _uri(path, query);
       final response = await _client.get(uri, headers: _headers).timeout(timeout);
       return _decode(response);
     } on ApiException {
       rethrow;
     } catch (e) {
-      throw ApiException(statusCode: 0, message: 'Network error: $e');
+      throw ApiException(statusCode: 0, message: _networkMessage(e));
     }
   }
 
@@ -64,17 +66,26 @@ class ApiHttpClient {
   /// Returns the decoded response body (an empty map for an empty body).
   /// Throws [ApiException] on non-2xx responses or network errors.
   Future<Map<String, dynamic>> post(String path, Map<String, dynamic> body) async {
-    final uri = _uri(path);
     try {
+      final uri = _uri(path);
       final response =
           await _client.post(uri, headers: _headers, body: json.encode(body)).timeout(timeout);
       return _decode(response);
     } on ApiException {
       rethrow;
     } catch (e) {
-      throw ApiException(statusCode: 0, message: 'Network error: $e');
+      throw ApiException(statusCode: 0, message: _networkMessage(e));
     }
   }
+
+  /// The message of a network error: fixed text, never the error's own.
+  ///
+  /// The text of a transport error is the platform's, or an injected client's,
+  /// and a `ClientException`'s names the request's URI, query included, which
+  /// holds the user's attributes. So nothing of [error] is kept.
+  static String _networkMessage(Object error) => error is TimeoutException
+      ? 'Network error: the request timed out'
+      : 'Network error: the request failed';
 
   Map<String, dynamic> _decode(http.Response response) {
     if (response.statusCode >= 200 && response.statusCode < 300) {

@@ -93,6 +93,27 @@ function splitTargetingIssues(detail: unknown): { targeting: string[]; otherMess
   return others.length > 0 ? { targeting, otherMessage: messageForDetail(422, others) } : { targeting };
 }
 
+/**
+ * What the API said about a split URL experiment's pages (#1961), or null.
+ *
+ * A 422 whose items all have `type: "split_url_config"` shows their `msg`s,
+ * joined by a space, in the API's own words and without the `loc` path that
+ * `messageForDetail` puts in front ("split_url_config.variants.1.url: …"):
+ * each msg names the variant and never repeats the address. Any other 422
+ * keeps the path as before.
+ */
+function splitUrlConfigMessage(detail: unknown): string | null {
+  if (!Array.isArray(detail) || detail.length === 0) return null;
+  const msgs: string[] = [];
+  for (const item of detail) {
+    if (!item || typeof item !== 'object') return null;
+    const { type, msg } = item as { type?: unknown; msg?: unknown };
+    if (type !== 'split_url_config' || typeof msg !== 'string' || msg.trim() === '') return null;
+    msgs.push(msg.trim());
+  }
+  return msgs.join(' ');
+}
+
 export const ROLE_CANNOT_CREATE =
   'Your role can view experiments but not create them. Ask an admin to create it or to change your role.';
 
@@ -134,6 +155,8 @@ function sentence(text: string): string {
  * - 409: the key is taken; the page's own sentence and "Edit details".
  * - 422 naming `targeting_rules`: each problem, shown at the targeting rules;
  *   any other item in the same 422 is kept in `otherMessage`.
+ * - 422 naming only `split_url_config` (#1961): the API's sentences, at the
+ *   foot, without the path.
  * - any other API answer: the message the API client built (for a server
  *   error it carries the request ID once).
  * - an exception that is not an API answer: `CREATE_FAILED`.
@@ -169,6 +192,8 @@ export function describeCreateError(
         };
       }
       if (split) return { message: TARGETING_REFUSED, ...split };
+      const pages = splitUrlConfigMessage(err.detail);
+      if (pages !== null) return { message: pages };
     }
   }
   if (err instanceof ApiError) return { message: err.message };

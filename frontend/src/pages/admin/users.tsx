@@ -55,6 +55,9 @@ export function UserManagementPage() {
     await AdminService.resetTwoFactor(userId);
   };
 
+  // The route has no owner filter: the dialog keeps the rows of the user it is about.
+  const handleListUserKeys = () => AdminService.listAllApiKeys();
+
   const handleCloseEdit = (options?: EditUserCloseOptions) => {
     if (editUser) setFocusUserId(editUser.id);
     setEditUser(null);
@@ -128,6 +131,7 @@ export function UserManagementPage() {
           onClose={handleCloseEdit}
           onSave={handleSaveUser}
           onResetTwoFactor={handleResetTwoFactor}
+          listUserKeys={handleListUserKeys}
         />
 
         {/* Effective Permissions Modal — reads `/api/v1/rbac/users/{id}/permissions`,

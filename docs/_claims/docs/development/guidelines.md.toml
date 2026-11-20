@@ -158,9 +158,9 @@ by = [
 ]
 
 [[unit]]
-text = "frontend/src/tests/a11y/dialog-sweep.test.ts refuses a string literal equal to dialog or alertdialog outside Dialog.tsx and InlineConfirm.tsx, apart from the panels still listed in its RAW_PANELS."
+text = "frontend/src/tests/a11y/dialog-sweep.test.ts refuses a string literal equal to dialog or alertdialog outside Dialog.tsx and InlineConfirm.tsx."
 by = [
-    "test:frontend/src/tests/a11y/dialog-sweep.test.ts::writes no dialog role by hand outside Dialog.tsx, InlineConfirm.tsx and RAW_PANELS, and every count matches",
+    "test:frontend/src/tests/a11y/dialog-sweep.test.ts::writes no dialog role by hand outside Dialog.tsx and InlineConfirm.tsx",
     "test:frontend/src/tests/a11y/dialog-sweep.test.ts::refuses a dialog role written as %s",
 ]
 

@@ -2,6 +2,7 @@ import {
   AdminUser,
   AdminUserPatch,
   AdminStats,
+  ApiKey,
   AuditLogListResponse,
   CreateUserRequest,
   CreatedUser,
@@ -112,6 +113,16 @@ export const AdminService = {
    */
   async resetTwoFactor(id: string): Promise<void> {
     await apiFetch<void>(`/api/v1/admin/users/${id}/2fa`, { method: 'DELETE' });
+  },
+
+  /**
+   * `GET /api/v1/api-keys?all=true`: every user's active keys, newest first
+   * (#657). The route has no owner filter, so the caller keeps the rows whose
+   * `user_id` is the user it asks about. Any superuser may call it, whatever
+   * their role; the Edit user dialog is only reachable by one.
+   */
+  async listAllApiKeys(): Promise<ApiKey[]> {
+    return apiFetch<ApiKey[]>('/api/v1/api-keys', { query: { all: true } });
   },
 
   // Stats

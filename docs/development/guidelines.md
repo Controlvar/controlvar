@@ -102,8 +102,7 @@ export function RenameFlag({ rename }: { rename: (name: string) => Promise<void>
   back to the button that opened it, or to `fallbackFocus` when that button is
   gone. It traps no focus and leaves the page behind it usable.
   `frontend/src/tests/a11y/dialog-sweep.test.ts` refuses a string literal equal
-  to `dialog` or `alertdialog` outside `Dialog.tsx` and `InlineConfirm.tsx`,
-  apart from the panels still listed in its `RAW_PANELS`.
+  to `dialog` or `alertdialog` outside `Dialog.tsx` and `InlineConfirm.tsx`.
 
 ## Pull requests
 
