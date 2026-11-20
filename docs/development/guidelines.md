@@ -95,6 +95,16 @@ export function RenameFlag({ rename }: { rename: (name: string) => Promise<void>
 }
 ```
 
+- An in-page confirmation, a question shown beside the button that opened it
+  rather than over the page, is `InlineConfirm`, from
+  `frontend/src/components/ui/InlineConfirm.tsx`. Mark its Cancel button
+  `data-autofocus`: focus opens there, Escape cancels, and on close focus goes
+  back to the button that opened it, or to `fallbackFocus` when that button is
+  gone. It traps no focus and leaves the page behind it usable.
+  `frontend/src/tests/a11y/dialog-sweep.test.ts` refuses a string literal equal
+  to `dialog` or `alertdialog` outside `Dialog.tsx` and `InlineConfirm.tsx`,
+  apart from the panels still listed in its `RAW_PANELS`.
+
 ## Pull requests
 
 - Write the title as a conventional commit, `type(optional scope): description`,
