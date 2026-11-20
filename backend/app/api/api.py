@@ -20,7 +20,6 @@ from backend.app.api.v1.endpoints import (
     client_errors,
     compliance,
     events,
-    experiment_wizard,
     experiments,
     export,
     feature_flags,
@@ -151,10 +150,6 @@ def register_core_routers(router: APIRouter) -> APIRouter:
     router.include_router(ai_design.router, prefix="/ai", tags=["AI Design"])
     # Issue #23: the tool list of the MCP server (sdk/mcp), which is not this API
     router.include_router(mcp.router, prefix="/mcp", tags=["MCP"])
-    # Issue #27: guided experiment builder (draft-and-submit API; no dashboard UI)
-    router.include_router(
-        experiment_wizard.router, prefix="/wizard", tags=["Experiment Wizard"]
-    )
     # EP-030: Notification preferences and delivery log
     router.include_router(
         notifications.router, prefix="/notifications", tags=["Notifications"]
@@ -326,10 +321,6 @@ CORE_TAGS_METADATA = [
     {
         "name": "MCP",
         "description": "The tool list of the Controlvar MCP server, which runs on your computer and calls this API",
-    },
-    {
-        "name": "Experiment Wizard",
-        "description": "Step-by-step draft-and-submit flow for designing an experiment; submitting creates it",
     },
     {
         "name": "Compliance",

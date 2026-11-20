@@ -552,12 +552,11 @@ by = [
 ]
 
 [[unit]]
-text = "experiment_create | experiment | POST /experiments/, /clone (reason names the source), wizard submit"
+text = "experiment_create | experiment | POST /experiments/, /clone (reason names the source)"
 by = [
     "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_experiment_create_update_delete",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_experiment_schedule_metadata_and_clone",
-    "test:backend/tests/integration/api/test_audit_route_events.py::test_wizard_submit_records_the_created_experiment",
 ]
 
 [[unit]]

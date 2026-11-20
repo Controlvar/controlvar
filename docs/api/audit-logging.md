@@ -301,7 +301,7 @@ No entry holds a password, a token, any part of an API key, or a request body.
 | `feature_flag_delete` | `feature_flag` | `DELETE /feature-flags/{id}` |
 | `feature_flag_activate`, `feature_flag_deactivate` | `feature_flag` | `/activate`, `/deactivate`, when the status changes |
 | `toggle_enable`, `toggle_disable` | `feature_flag` | A flag is turned on or off (`/toggle`, `/enable`, `/disable`, or bulk `enable`/`disable`); `old_value` and `new_value` are the status |
-| `experiment_create` | `experiment` | `POST /experiments/`, `/clone` (`reason` names the source), wizard submit |
+| `experiment_create` | `experiment` | `POST /experiments/`, `/clone` (`reason` names the source) |
 | `experiment_update` | `experiment` | `PUT /experiments/{id}`, `/schedule`, `/metadata`, `/archive`, `PUT /bandit/{id}/weights` (`reason` names the change, except for `PUT`) |
 | `experiment_update` | `experiment` | `PUT /visual-editor/sessions/current/variants/{variant_id}/changes` saves a variant's page changes from the visual editor, the actor being the session's user; `reason` is `visual editor session` and the first 8 characters of the session's id |
 | `experiment_delete` | `experiment` | `DELETE /experiments/{id}` |

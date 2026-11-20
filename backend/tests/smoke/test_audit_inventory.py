@@ -51,7 +51,6 @@ SDK = NotAudited("SDK traffic with an API key, not a change made by a person")
 CALCULATION = NotAudited("a calculation: it stores nothing")
 READ_ONLY = NotAudited("a POST that only reads: it changes nothing")
 LLM = NotAudited("LLM experiments are not on the audited event list")
-DRAFT = NotAudited("a wizard draft is not an experiment until it is submitted")
 COGNITO_ACCOUNT = NotAudited(
     "a Cognito account step (sign-up, confirmation, password reset, token "
     "refresh); not on the audited event list"
@@ -184,11 +183,6 @@ INVENTORY = {
     ("POST", f"{V1}/experiments/{{experiment_id}}/visual/editor-tickets"): Audited(
         A.VISUAL_EDITOR_SESSION_CLOSED
     ),
-    # --- experiment wizard ---------------------------------------------------
-    ("POST", f"{V1}/wizard/drafts"): DRAFT,
-    ("PUT", f"{V1}/wizard/drafts/{{draft_id}}/step"): DRAFT,
-    ("POST", f"{V1}/wizard/drafts/{{draft_id}}/submit"): Audited(A.EXPERIMENT_CREATE),
-    ("POST", f"{V1}/wizard/validate"): DRAFT,
     # --- holdouts ------------------------------------------------------------
     # is_active true also ends the active holdout: one deactivate for it.
     ("POST", f"{V1}/holdout"): Audited(A.HOLDOUT_CREATE, A.HOLDOUT_DEACTIVATE),
@@ -352,7 +346,7 @@ def test_the_inventory_is_exact():
         f"unclassified: {sorted(found - set(INVENTORY))}; "
         f"gone: {sorted(set(INVENTORY) - found)}"
     )
-    assert len(INVENTORY) == 124
+    assert len(INVENTORY) == 120
 
 
 def test_every_mutating_route_is_under_backend_or_modules():

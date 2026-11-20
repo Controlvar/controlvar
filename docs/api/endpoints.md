@@ -1996,24 +1996,6 @@ answers 404. Which warehouses are available is on
 
 ---
 
-### Experiment Wizard
-
-See [Experiment Wizard Guide](../guides/experiment-wizard.md) for full documentation.
-
-All six wizard operations are **deprecated**: the dashboard does not use them, and they
-may be removed in a later release.
-
-```text
-POST /api/v1/wizard/drafts              — Create draft (deprecated)
-GET  /api/v1/wizard/drafts              — List my drafts (deprecated)
-GET  /api/v1/wizard/drafts/{id}         — Get draft (deprecated)
-PUT  /api/v1/wizard/drafts/{id}/step    — Update draft step (deprecated)
-POST /api/v1/wizard/validate            — Validate step data (deprecated)
-POST /api/v1/wizard/drafts/{id}/submit  — Submit → create experiment (deprecated)
-```
-
----
-
 ### Rollout Schedules
 
 ```text

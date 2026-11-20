@@ -622,16 +622,6 @@ reason = "Generated ids, keys or tokens never name a stored row, so every reques
 
 [[unreached]]
 pass = "superuser"
-operation = "PUT /api/v1/wizard/drafts/{draft_id}/step"
-reason = "Generated ids never name a stored row (404); the other requests fail validation (422)."
-
-[[unreached]]
-pass = "superuser"
-operation = "POST /api/v1/wizard/drafts/{draft_id}/submit"
-reason = "Generated ids, keys or tokens never name a stored row, so every request answers 404."
-
-[[unreached]]
-pass = "superuser"
 operation = "GET /api/v1/compliance/reports/{standard}"
 reason = "The handler refuses the generated values (400); invalid requests answer 422."
 
@@ -1411,16 +1401,6 @@ reason = "The document gives its rates no bounds, and every generated request an
 pass = "viewer"
 operation = "GET /api/v1/ai/templates/{template_id}"
 reason = "Generated ids, keys or tokens never name a stored row, so every request answers 404."
-
-[[unreached]]
-pass = "viewer"
-operation = "PUT /api/v1/wizard/drafts/{draft_id}/step"
-reason = "Generated ids never name a stored row (404); the other requests fail validation (422)."
-
-[[unreached]]
-pass = "viewer"
-operation = "POST /api/v1/wizard/drafts/{draft_id}/submit"
-reason = "The VIEWER role may not use it, so the role check answers 403."
 
 [[unreached]]
 pass = "viewer"

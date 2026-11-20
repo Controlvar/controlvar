@@ -13,7 +13,8 @@ and the counts are pinned per profile, so a walk that sees fewer routes fails
 instead of passing on fewer. The profile is decided as the application decides
 it: whether ``modules`` imports.
 
-* JSON-body operations: 87 in the core profile, 117 in the full one (#1545
+* JSON-body operations: 84 in the core profile, 114 in the full one (#537
+  removed the three the deprecated wizard routes had; #1545
   gave ``POST /api/v1/experiments/{experiment_id}/start`` an optional one, and
   added ``POST /api/v1/tracking/visual``, ``POST /api/v1/tracking/visual/preview``
   and ``POST /api/v1/experiments/{experiment_id}/visual/preview-links``, then
@@ -51,8 +52,8 @@ from backend.app.main import app
 
 pytestmark = [pytest.mark.smoke]
 
-CORE_JSON_BODY_COUNT = 87
-FULL_JSON_BODY_COUNT = 117
+CORE_JSON_BODY_COUNT = 84
+FULL_JSON_BODY_COUNT = 114
 
 FORM_OPERATIONS = {("POST", "/api/v1/auth/token")}
 MODULE_FORM_OPERATIONS = {("POST", "/api/v1/auth/sso/saml/{config_id}/acs")}

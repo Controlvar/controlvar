@@ -49,9 +49,10 @@ pytestmark = [pytest.mark.unit]
 #: current password at /users/me/2fa/enroll (TwoFactorEnrolRequest). #1545's
 #: visual editor sign-in added 2 to both: the bodies of
 #: /visual-editor/tickets/claim (TicketClaim) and /visual-editor/sessions
-#: (ClaimExchange).
-CORE_MODEL_COUNT = 101
-FULL_MODEL_COUNT = 145
+#: (ClaimExchange). #537 removed 3 from both with the wizard routes:
+#: WizardDraftCreate, WizardStepUpdate and WizardValidationRequest.
+CORE_MODEL_COUNT = 98
+FULL_MODEL_COUNT = 142
 
 #: ``(model, field)`` pairs that a ``mode="before"`` field validator covers.
 CORE_BEFORE_COUNT = 46
