@@ -1263,6 +1263,12 @@
         "summary": "Get Tracking"
       }
     },
+    "/api/v1/tracking/alias": {
+      "post": {
+        "operationId": "link_anonymous_id_api_v1_tracking_alias_post",
+        "summary": "Link an anonymous id to a known user id (beta)"
+      }
+    },
     "/api/v1/tracking/assign": {
       "post": {
         "operationId": "assign_user_to_experiment_api_v1_tracking_assign_post",

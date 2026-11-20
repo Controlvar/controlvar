@@ -101,8 +101,9 @@ each entry is trimmed, so `"read, sdk:ruleset "` carries `sdk:ruleset`, while `S
 
 #### `sdk:ruleset`
 
-`sdk:ruleset` is for a server: one that evaluates flags locally, or one that assigns lists
-of users to an experiment. These routes answer `403` to a key that does not carry it:
+`sdk:ruleset` is for a server: one that evaluates flags locally, one that assigns lists
+of users to an experiment, or one that links an anonymous id to a known id. These routes answer
+`403` to a key that does not carry it:
 
 - `GET /api/v1/sdk/ruleset` (beta), which returns every feature flag's targeting rules in the
   form a server-side SDK evaluates locally;
@@ -111,7 +112,10 @@ of users to an experiment. These routes answer `403` to a key that does not carr
   rate;
 - `POST /api/v1/tracking/assign/batch` (beta), which assigns up to 1,000 users to an
   experiment in one request (see
-  [Assign a customer list to an experiment](../guides/assign-customer-list.md)).
+  [Assign a customer list to an experiment](../guides/assign-customer-list.md));
+- `POST /api/v1/tracking/alias` (beta), which your backend calls to link an anonymous id to
+  the known id of the same person (see
+  [API endpoints](../api/endpoints.md#link-an-anonymous-id-to-a-known-user-id-beta)).
 
 The `403` says
 `This API key does not have the 'sdk:ruleset' scope. Create a key with the 'sdk:ruleset' scope for server-side SDK use.`
@@ -121,7 +125,8 @@ including the values in them, and the values string, number and JSON flags serve
 such a key on a server and never ship it to a browser or a mobile app.
 
 - In the dashboard (**Admin → API Keys → Create API Key**), tick **Server-side local
-  evaluation (sdk:ruleset)**; the same checkbox is the one for assigning lists of users.
+  evaluation (sdk:ruleset)**; the same checkbox is the one for assigning lists of users and
+  for linking ids.
   Leave it unticked for any other key; the key is then created
   with no scopes. The dashboard's API Keys page needs a superuser account; any other user
   creates keys through the API.
@@ -132,11 +137,12 @@ the ADMIN and DEVELOPER roles, superusers, and in the full profile anyone whose 
 direct grant gives `feature_flag (update)`. For anyone else the request is refused with
 `403 Forbidden`, whose message says who may create such a key, and no key is created. Keys
 without that scope can be created by every role, as before. Using such a key follows the same
-rule: the three routes above accept a key with `sdk:ruleset` only while its owner can change
+rule: the four routes above accept a key with `sdk:ruleset` only while its owner can change
 feature flags, checked on every request, so a key whose owner loses that (moved to ANALYST or
 VIEWER, or a grant revoked or expired) is refused with `403` from then on.
 `POST /api/v1/tracking/assign/batch` also needs the owner to be able to change experiments;
-otherwise it answers `403` and assigns nobody.
+otherwise it answers `403` and assigns nobody. `POST /api/v1/tracking/alias` does not: an owner
+who can change feature flags may link ids, whether or not they can change experiments.
 
 #### `mcp:read`
 
@@ -369,7 +375,7 @@ integration without touching the others.
 
 ### Remember that a browser key answers for any user id
 
-A key used in a browser or a mobile app is visible to the people who use the app, and it answers for whichever user id it is sent: what that id is served, whether it is in a segment, and which experiments it is assigned to.
+A key used in a browser or a mobile app is visible to the people who use the app, and it answers for whichever user id it is sent: what that id is served, whether it is in a segment, and which experiments it is assigned to, which for an id linked to another as one person are that person's assignments.
 Where that matters, use user ids that do not identify a person (not email addresses), in ID lists too, and read assignments from your server.
 
 ### Remember that a key acts as its owner

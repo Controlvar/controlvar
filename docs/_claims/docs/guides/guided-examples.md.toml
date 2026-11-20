@@ -596,8 +596,13 @@ text = "One visitor under two ids."
 by = ["exempt:label"]
 
 [[unit]]
-text = "There is no identify or alias call, as Limitations says."
-by = ["test:backend/tests/unit/api/test_documented_limits.py::test_no_call_says_that_two_user_ids_are_one_user"]
+text = "Linking an anonymous id to a known id is a call your backend makes with a server-side key, POST /api/v1/tracking/alias (beta), as Limitations says."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_alias_route_is_the_one_call_that_links_two_user_ids",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_the_route_refuses_each_key_as_batch_assignment_does",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_known_id_answers_the_variant_its_anonymous_id_holds",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_known_ids_conversion_counts_for_its_persons_variant",
+]
 
 [[unit]]
 text = "How soon an open page sees a flag change."

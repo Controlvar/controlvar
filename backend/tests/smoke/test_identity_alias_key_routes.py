@@ -11,7 +11,8 @@ set of routes that take an API key, pinned against the application by
   experiment (the ruleset, flag evaluation counts, client errors, the visual
   preview, the split URL routes table);
 * ``FLAGS_NOT_ALIASED``: flag evaluation, which stays ``md5(user_id:flag_key)``
-  of the id sent.
+  of the id sent;
+* ``LINKS``: the route that writes a link, ``POST /api/v1/tracking/alias``.
 
 A new key route fails ``test_every_key_route_is_classified_once`` until it is
 put in a class here.
@@ -55,6 +56,8 @@ FLAGS_NOT_ALIASED = {
     ("GET", "/api/v1/feature-flags/user/{user_id}"),
 }
 
+LINKS = {("POST", "/api/v1/tracking/alias")}
+
 
 def _classes():
     resolves, not_scoped = set(RESOLVES), set(NOT_USER_SCOPED)
@@ -65,6 +68,7 @@ def _classes():
         "RESOLVES": resolves,
         "NOT_USER_SCOPED": not_scoped,
         "FLAGS_NOT_ALIASED": set(FLAGS_NOT_ALIASED),
+        "LINKS": set(LINKS),
     }
 
 
@@ -93,11 +97,21 @@ def test_every_key_route_is_classified_once():
 def test_the_classes_have_the_counts_of_this_profile():
     counts = {name: len(members) for name, members in _classes().items()}
     if _full_profile():
-        assert counts == {"RESOLVES": 8, "NOT_USER_SCOPED": 6, "FLAGS_NOT_ALIASED": 3}
-        assert len(_key_routes()) == 17
+        assert counts == {
+            "RESOLVES": 8,
+            "NOT_USER_SCOPED": 6,
+            "FLAGS_NOT_ALIASED": 3,
+            "LINKS": 1,
+        }
+        assert len(_key_routes()) == 18
     else:
-        assert counts == {"RESOLVES": 7, "NOT_USER_SCOPED": 5, "FLAGS_NOT_ALIASED": 3}
-        assert len(_key_routes()) == 15
+        assert counts == {
+            "RESOLVES": 7,
+            "NOT_USER_SCOPED": 5,
+            "FLAGS_NOT_ALIASED": 3,
+            "LINKS": 1,
+        }
+        assert len(_key_routes()) == 16
 
 
 def test_the_check_names_a_route_left_out():

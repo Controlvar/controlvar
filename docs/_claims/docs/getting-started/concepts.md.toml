@@ -406,8 +406,13 @@ by = [
 ]
 
 [[unit]]
-text = "A person known by two ids, such as a visitor who signs in, is two users: see Limitations."
-by = ["test:backend/tests/unit/api/test_documented_limits.py::test_no_call_says_that_two_user_ids_are_one_user"]
+text = "A person known by two ids, such as a visitor who signs in, is two users until your backend links the ids with POST /api/v1/tracking/alias (beta): see Limitations."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_alias_route_is_the_one_call_that_links_two_user_ids",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_known_id_answers_the_variant_its_anonymous_id_holds",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_known_ids_conversion_counts_for_its_persons_variant",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_server_key_whose_owner_can_change_flags_is_accepted",
+]
 
 [[unit]]
 text = "The API stores each assignment, and a user who already has one gets it back unchanged, even if the weights have changed since"

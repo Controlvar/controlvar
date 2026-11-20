@@ -746,7 +746,7 @@ by = ["exempt:label"]
 [[unit]]
 text = "Response: 200 OK"
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
-count = 12
+count = 13
 
 [[unit]]
 text = "Login"
@@ -1813,6 +1813,7 @@ by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestCou
 [[unit]]
 text = "Errors: see the table below."
 by = ["exempt:label"]
+count = 2
 
 [[unit]]
 text = "A 409 or a 500 may follow partial assignment: the users before the failure are assigned."
@@ -1847,10 +1848,15 @@ by = ["test:backend/tests/unit/api/test_assign_batch_contract.py::test_the_61st_
 [[unit]]
 text = "Status | When | detail"
 by = ["exempt:label"]
+count = 2
 
 [[unit]]
 text = "401 | no key | API key missing"
-by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_no_key_is_401"]
+by = [
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_no_key_is_401",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_the_route_refuses_each_key_as_batch_assignment_does",
+]
+count = 2
 
 [[unit]]
 text = "401 | an unknown, expired or revoked key | Invalid API Key"
@@ -1858,7 +1864,11 @@ by = ["test:backend/tests/unit/api/test_dependency_injection.py"]
 
 [[unit]]
 text = "403 | the key lacks the scope | This API key does not have the 'sdk:ruleset' scope. Create a key with the 'sdk:ruleset' scope for server-side SDK use."
-by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_a_key_without_the_scope_is_403"]
+by = [
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_a_key_without_the_scope_is_403",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_the_route_refuses_each_key_as_batch_assignment_does",
+]
+count = 2
 
 [[unit]]
 text = "403 | the key's owner can no longer change feature flags: inactive, or given feature_flag (update) neither by their role nor, in the full profile, by a custom role or direct grant | This key's owner can no longer change feature flags, so the key is refused for server-side SDK use."
@@ -2213,6 +2223,196 @@ by = ["test:backend/tests/integration/api/test_tracking_api.py::TestUserAssignme
 [[unit]]
 text = "active_only: boolean (default: true)"
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "Linked ids: for an id linked to another as one person (below), the list holds the person's assignments, one per experiment (the one stored first), each with user_id the id in the path."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_the_assignments_list_answers_a_linked_id_with_one_row_per_experiment",
+    "test:backend/tests/integration/api/test_plain_key_answers_for_any_user_id.py::test_the_assignments_list_answers_a_linked_id_with_its_persons",
+]
+
+[[unit]]
+text = "Link an Anonymous Id to a Known User Id (beta)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Endpoint: POST /api/v1/tracking/alias"
+by = [
+    "test:backend/tests/unit/api/test_alias_route_contract.py::test_the_route_is_where_the_limit_is",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "Description: Record that an anonymous id and a known user id are one person, from your backend, when you learn who the visitor is."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_link_is_stored_once_and_answered_again_with_created_false",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_server_key_whose_owner_can_change_flags_is_accepted",
+]
+
+[[unit]]
+text = "From then on the tracking routes answer either id as that person: in each experiment the assignment stored first among the person's ids answers for all of them, and an id with no assignment of its own gets no second one."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_link_made_through_the_route_is_the_one_the_tracking_routes_follow",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_the_earliest_assignment_wins_for_both_ids",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_person_with_no_row_is_assigned_once_under_the_known_id",
+]
+
+[[unit]]
+text = "An event either id sends to an experiment is stored under the id that holds that assignment and counts for it (How events count)."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_link_made_through_the_route_is_the_one_the_tracking_routes_follow",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_known_ids_conversion_counts_for_its_persons_variant",
+]
+
+[[unit]]
+text = "Nothing recorded before the link is moved or changed, and flags are not linked."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_counting.py::test_linked_people_count_per_row_on_every_endpoint",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_row_a_release_without_links_wrote_is_answered_by_the_earliest",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_flags_are_not_resolved_through_a_link",
+]
+
+[[unit]]
+text = "Rules: an anonymous id is linked to one user id and never moved to another."
+by = ["test:backend/tests/integration/api/test_identity_alias_route.py::test_an_anonymous_id_linked_to_one_known_id_is_not_moved"]
+
+[[unit]]
+text = "Links are one level deep: an id that has anonymous ids linked to it is not itself linked, and nothing is linked to an id linked as an anonymous id."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_known_id_with_links_is_not_itself_linked",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_the_two_ids_swapped_are_refused",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_nothing_is_linked_to_an_id_linked_as_an_anonymous_id",
+]
+
+[[unit]]
+text = "A user id has at most 100 anonymous ids."
+by = ["test:backend/tests/integration/api/test_identity_alias_route.py::test_a_known_id_takes_100_anonymous_ids_and_not_the_101st"]
+
+[[unit]]
+text = "The two ids are compared exactly."
+by = [
+    "test:backend/tests/unit/api/test_alias_route_contract.py::test_ids_are_compared_exactly",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_only_the_two_exact_placeholders_are_refused",
+]
+
+[[unit]]
+text = "Headers: X-API-Key: {api_key}, a server-side key: one with the sdk:ruleset scope whose owner can change feature flags, which is an ADMIN, a DEVELOPER, a superuser, or in the full profile anyone whose custom roles or direct grants give feature_flag (update)."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_server_key_whose_owner_can_change_flags_is_accepted",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_the_route_refuses_each_key_as_batch_assignment_does",
+    "test:modules/backend/tests/integration/rbac/test_rbac_alias_key.py::test_an_owner_who_can_change_flags_but_not_experiments_links_ids",
+]
+
+[[unit]]
+text = "Unlike batch assignment, the owner need not be able to change experiments."
+by = [
+    "test:modules/backend/tests/integration/rbac/test_rbac_alias_key.py::test_an_owner_who_can_change_flags_but_not_experiments_links_ids",
+    "test:backend/tests/unit/api/test_alias_route_contract.py::test_the_key_is_the_server_side_key_not_batch_assignments",
+]
+
+[[unit]]
+text = "See Scopes."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Body: {\"anonymous_id\": string, \"user_id\": string}, each 1 to 255 characters."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_missing_empty_or_too_long_field_is_refused",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_255_characters_is_accepted",
+]
+
+[[unit]]
+text = "The ids go in the body only, never in the path."
+by = ["test:backend/tests/unit/api/test_alias_route_contract.py::test_the_ids_are_in_the_body_only"]
+
+[[unit]]
+text = "created is false when that exact link already exists, and then nothing is written."
+by = ["test:backend/tests/integration/api/test_identity_alias_route.py::test_a_link_is_stored_once_and_answered_again_with_created_false"]
+
+[[unit]]
+text = "Nothing is written for any of them, and no detail names either id."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_an_anonymous_id_linked_to_one_known_id_is_not_moved",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_two_equal_ids_are_refused",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_the_route_refuses_each_key_as_batch_assignment_does",
+    "test:backend/tests/unit/api/test_alias_route_contract.py::test_any_other_failure_is_a_fixed_500",
+]
+
+[[unit]]
+text = "Rate limit: the tracking routes' limit, SDK_RATE_LIMIT_PER_MINUTE a minute per client address and path."
+by = [
+    "test:backend/tests/unit/api/test_alias_route_contract.py::test_the_route_is_in_the_sdk_rate_limit_bucket",
+    "test:backend/tests/unit/api/test_alias_route_contract.py::test_over_the_sdk_limit_the_route_answers_429_before_it_runs",
+]
+
+[[unit]]
+text = "401 | an unknown, expired or revoked key, or one whose owner is deactivated | Invalid API Key"
+by = ["test:backend/tests/integration/api/test_identity_alias_route.py::test_the_route_refuses_each_key_as_batch_assignment_does"]
+
+[[unit]]
+text = "403 | the key's owner can no longer change feature flags | This key's owner can no longer change feature flags, so the key is refused for server-side SDK use."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_the_route_refuses_each_key_as_batch_assignment_does",
+    "test:modules/backend/tests/integration/rbac/test_rbac_alias_key.py::test_an_owner_who_can_change_flags_but_not_experiments_links_ids",
+]
+
+[[unit]]
+text = "409 | the anonymous_id is linked to a different user_id | That anonymous_id is already linked to a different user_id. An anonymous_id can be linked to one user_id."
+by = ["test:backend/tests/integration/api/test_identity_alias_route.py::test_an_anonymous_id_linked_to_one_known_id_is_not_moved"]
+
+[[unit]]
+text = "409 | the anonymous_id has ids linked to it | That anonymous_id already has other ids linked to it, so it cannot itself be linked. Links are one level deep; check that the two ids are not swapped."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_known_id_with_links_is_not_itself_linked",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_the_two_ids_swapped_are_refused",
+]
+
+[[unit]]
+text = "409 | the user_id is linked as an anonymous id | That user_id is itself linked to another user_id, so nothing can be linked to it. Links are one level deep; link to the user_id it is linked to, or check that the two ids are not swapped."
+by = ["test:backend/tests/integration/api/test_identity_alias_route.py::test_nothing_is_linked_to_an_id_linked_as_an_anonymous_id"]
+
+[[unit]]
+text = "409 | the user_id already has 100 anonymous ids | That user_id already has 100 anonymous_ids linked to it, the most allowed, so this anonymous_id was not linked."
+by = ["test:backend/tests/integration/api/test_identity_alias_route.py::test_a_known_id_takes_100_anonymous_ids_and_not_the_101st"]
+
+[[unit]]
+text = "422 | the two ids are equal | loc [\"body\"], msg anonymous_id and user_id must differ."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_two_equal_ids_are_refused",
+    "test:backend/tests/unit/api/test_alias_route_contract.py::test_two_equal_ids_are_refused_at_the_body",
+]
+
+[[unit]]
+text = "422 | either id is exactly anonymous or anon | loc [\"body\",\"anonymous_id\"] or [\"body\",\"user_id\"], msg must identify one visitor or customer: 'anonymous' and 'anon' are placeholders shared by many and cannot be linked"
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_shared_placeholder_is_refused_in_either_field",
+    "test:backend/tests/unit/api/test_alias_route_contract.py::test_each_placeholder_is_refused_in_each_field",
+]
+
+[[unit]]
+text = "422 | an id missing, empty or over 255 characters, or text the database cannot store | pydantic's message at the field's loc"
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_missing_empty_or_too_long_field_is_refused",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_text_the_database_cannot_store_is_refused",
+]
+
+[[unit]]
+text = "429 | over the limit | Too Many Requests. Please slow down and retry after a moment., with Retry-After"
+by = ["test:backend/tests/unit/api/test_alias_route_contract.py::test_over_the_sdk_limit_the_route_answers_429_before_it_runs"]
+
+[[unit]]
+text = "500 | anything else | Could not link the two ids (request ID: <id>)."
+by = [
+    "test:backend/tests/unit/api/test_alias_route_contract.py::test_any_other_failure_is_a_fixed_500",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_without_the_table_the_routes_that_read_links_answer_500",
+]
+
+[[unit]]
+text = "Only anonymous and anon are refused as placeholders: Anonymous, ANON or anonymous-1 is an id like any other, so send each visitor's own id."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_only_the_two_exact_placeholders_are_refused",
+    "test:backend/tests/unit/api/test_alias_route_contract.py::test_only_the_exact_placeholders_are_refused",
+]
 
 [[unit]]
 text = "Admin Endpoints"
@@ -4017,6 +4217,13 @@ text = "The preview answers the visitor's stored variant, or the variant a new v
 by = [
     "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_the_preview_agrees_with_the_route_and_records_nothing",
     "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_the_preview_answers_a_stored_assignment",
+]
+
+[[unit]]
+text = "For an id linked to another by POST /api/v1/tracking/alias, it reads that id's own stored variant or hash, not its person's as the assign route does."
+by = [
+    "test:modules/backend/tests/integration/split_url/test_split_url_identity_aliases.py::test_the_preview_of_a_linked_id_reads_its_own_row_or_hash",
+    "test:modules/backend/tests/integration/split_url/test_split_url_identity_aliases.py::test_a_linked_visitor_is_sent_where_its_person_was",
 ]
 
 [[unit]]

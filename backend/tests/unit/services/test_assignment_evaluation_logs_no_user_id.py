@@ -5,8 +5,9 @@ Every per-request path in ``AssignmentService`` -- a new assignment, a sticky
 one, an ineligible user, targeting assignment, a targeting error, a
 reassignment, and a linked id's new and sticky answers (#449) -- the batch
 assignment route's two failure lines (#441), ``identity_aliases.link``
-storing and refusing a link (#449), and the flag service's two error lines
-are driven with a distinctive user id. For each:
+storing and refusing a link (#449), the alias route storing, refusing and
+failing to store a link and refusing two equal ids (#449), and the flag
+service's two error lines are driven with a distinctive user id. For each:
 
 * no record, at any level, contains the user id;
 * the routine per-request lines are at DEBUG, not INFO;
@@ -465,3 +466,138 @@ def test_evaluation_cache_invalidation_does_not_log_the_user(monkeypatch):
     ec.EvaluationCache().invalidate_user(USER)
     assert recorder.records, "nothing was captured"
     assert recorder.with_user() == [], recorder.with_user()
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/tracking/alias (#449): stored, refused, failed and equal ids
+# ---------------------------------------------------------------------------
+
+
+class _FailingLinkSession(_LinkSession):
+    """A session for ``identity_aliases.link`` whose insert fails as the
+    driver fails, with both ids in the error's text and parameters."""
+
+    def execute(self, statement, *args, **kwargs):
+        from sqlalchemy.exc import IntegrityError
+
+        if str(statement).lstrip().upper().startswith("INSERT"):
+            raise IntegrityError(
+                "INSERT INTO identity_aliases (anonymous_id, user_id) VALUES (...)",
+                {"anonymous_id": USER, "user_id": KNOWN},
+                Exception(f"Key (anonymous_id)=({USER}) conflicts with ({KNOWN})"),
+            )
+        return super().execute(statement, *args, **kwargs)
+
+
+def _alias_handler(session):
+    """Run the alias route's handler for USER and KNOWN on *session*, with the
+    real ``identity_aliases.link``; the answer, or the HTTPException raised."""
+    from fastapi import HTTPException
+
+    from backend.app.api.v1.endpoints import tracking
+    from backend.app.schemas.tracking import AliasRequest
+
+    request = AliasRequest(anonymous_id=USER, user_id=KNOWN)
+    try:
+        return asyncio.run(
+            tracking.link_anonymous_id(request=request, db=session, api_key=None)
+        )
+    except HTTPException as refused:
+        return refused
+
+
+@pytest.fixture
+def alias_logs(monkeypatch) -> Recorder:
+    from backend.app.api.v1.endpoints import tracking
+
+    recorder = Recorder()
+    for module in (tracking, identity_aliases):
+        monkeypatch.setattr(module, "logger", recorder.bind())
+    return recorder
+
+
+def test_the_alias_route_stores_and_refuses_a_link_logging_neither_id(alias_logs):
+    """IA-P1 (the route): a link stored, then one refused with its 409."""
+    stored = _alias_handler(_LinkSession())
+    refused = _alias_handler(_LinkSession(linked_to="someone-else"))
+
+    assert stored.created is True
+    assert refused.status_code == 409
+    assert USER not in refused.detail and KNOWN not in refused.detail
+    _assert_no_id(alias_logs.records)
+    assert [r[0] for r in alias_logs.records] == ["debug"], alias_logs.records
+
+
+def test_the_alias_route_logs_a_failures_class_not_its_text(alias_logs):
+    """IA-P1 (the route): the driver's text carries both ids; the route logs
+    the class at ERROR, answers a fixed 500 and repeats neither id."""
+    session = _FailingLinkSession()
+    with pytest.raises(Exception) as probe:
+        session.execute("INSERT INTO identity_aliases")
+    assert USER in str(probe.value)  # the probe: the text does carry it
+
+    failed = _alias_handler(_FailingLinkSession())
+
+    assert failed.status_code == 500
+    assert USER not in failed.detail and KNOWN not in failed.detail
+    _assert_no_id(alias_logs.records)
+    assert [r[0] for r in alias_logs.records] == ["error"], alias_logs.records
+    assert "IntegrityError" in alias_logs.records[0][1]
+
+
+def test_two_equal_ids_are_refused_before_linking_and_logged_nowhere(
+    alias_logs, monkeypatch
+):
+    """IA-P1 (the route): the 422 for equal ids comes from the request model,
+    before ``link`` runs; neither the answer nor any record, at any level and
+    from any logger, carries the id."""
+    import logging
+
+    from fastapi.testclient import TestClient
+
+    from backend.app.api import deps, sdk_scope
+    from backend.app.api.v1.endpoints import tracking
+    from backend.app.main import app
+
+    linked = []
+    monkeypatch.setattr(tracking, "link", lambda *args: linked.append(args))
+
+    class Everything(logging.Handler):
+        def __init__(self) -> None:
+            super().__init__(level=logging.DEBUG)
+            self.lines: List[str] = []
+
+        def emit(self, record: logging.LogRecord) -> None:
+            text = record.getMessage()
+            if record.exc_info:
+                text += "\n" + "".join(traceback.format_exception(*record.exc_info))
+            self.lines.append(text)
+
+    def stub_db():
+        yield MagicMock()
+
+    root = logging.getLogger()
+    handler, level = Everything(), root.level
+    app.dependency_overrides[deps.get_db] = stub_db
+    app.dependency_overrides[sdk_scope.require_sdk_ruleset_key] = lambda: MagicMock()
+    root.addHandler(handler)
+    root.setLevel(logging.DEBUG)
+    try:
+        client = TestClient(app, raise_server_exceptions=False)
+        response = client.post(
+            "/api/v1/tracking/alias",
+            json={"anonymous_id": USER, "user_id": USER},
+            headers={"X-API-Key": "stubbed"},
+        )
+    finally:
+        root.removeHandler(handler)
+        root.setLevel(level)
+        app.dependency_overrides.pop(deps.get_db, None)
+        app.dependency_overrides.pop(sdk_scope.require_sdk_ruleset_key, None)
+
+    assert response.status_code == 422, response.text
+    assert USER not in response.text, response.text
+    assert linked == [], "link ran for two equal ids"
+    assert handler.lines, "nothing was captured: the handler is not wired in"
+    assert [line for line in handler.lines if USER in line] == []
+    assert [r for r in alias_logs.records if USER in r[1]] == []

@@ -1329,6 +1329,14 @@ text = "The previous release, 0.47.0, runs against this schema unchanged: it nev
 by = ["test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_api_serves_a_database_a_newer_release_migrated"]
 
 [[unit]]
+text = "So during this release's rolling upgrade, and after an API-only rollback to 0.47.0, a 0.47.0 task answers 404 on POST /api/v1/tracking/alias and ignores every link: it answers each id as an id of its own, and assigns it under that id (see Rolling back past identity aliasing)."
+by = [
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_api_serves_a_database_a_newer_release_migrated",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_alias_route_is_the_one_call_that_links_two_user_ids",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_row_a_release_without_links_wrote_is_answered_by_the_earliest",
+]
+
+[[unit]]
 text = "From 0.47.0, this upgrade takes no lock on an existing table, so SDK requests do not wait for it."
 by = [
     "test:backend/tests/integration/database/test_identity_aliases_migration.py::test_the_upgrade_from_the_previous_core_head_runs_exactly_its_statements",

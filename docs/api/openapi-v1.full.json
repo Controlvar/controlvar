@@ -437,6 +437,59 @@
         "title": "AggregationPeriod",
         "type": "string"
       },
+      "AliasRequest": {
+        "description": "Body of ``POST /api/v1/tracking/alias``: link an anonymous id to a\nknown user id (#449).\n\nEach id is 1 to 255 characters of text the database can store, and is\ncompared exactly. Refused with a 422 before anything is read or written:\na missing, empty, over-long or unstorable field; either field exactly\n``anonymous`` or ``anon``; two equal ids. No message repeats an id.",
+        "example": {
+          "anonymous_id": "visitor-7f3a92",
+          "user_id": "customer-1042"
+        },
+        "properties": {
+          "anonymous_id": {
+            "description": "The id the visitor was known by before they were identified",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Anonymous Id",
+            "type": "string"
+          },
+          "user_id": {
+            "description": "The known user id of the same person",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "anonymous_id",
+          "user_id"
+        ],
+        "title": "AliasRequest",
+        "type": "object"
+      },
+      "AliasResponse": {
+        "description": "Response for ``POST /api/v1/tracking/alias``: the two ids as sent, and\nwhether this request stored the link (``false`` when it already existed).",
+        "properties": {
+          "anonymous_id": {
+            "title": "Anonymous Id",
+            "type": "string"
+          },
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "anonymous_id",
+          "user_id",
+          "created"
+        ],
+        "title": "AliasResponse",
+        "type": "object"
+      },
       "AlphaSpendingBoundaryResponse": {
         "description": "Alpha spending boundary at a single interim look.",
         "properties": {
@@ -35991,6 +36044,67 @@
         "tags": [
           "Tracking"
         ]
+      }
+    },
+    "/api/v1/tracking/alias": {
+      "post": {
+        "description": "Link an anonymous id to the known user id of the same person (beta).\n\nFrom then on the tracking routes answer either id as one person. In each\nexperiment the assignment stored first among the person's ids is the\nanswer for all of them, and an id with no assignment of its own gets no\nsecond one. An event sent under either id that names an experiment\ncounts for that assignment. Nothing stored before the link is moved or\nchanged, and feature flags are not linked.\n\nAn anonymous id is linked to one user id and never moved, links are one\nlevel deep, and a user id has at most 100 anonymous ids. A link that\nalready exists answers 200 with ``created: false`` and writes nothing; a\nlink a rule refuses answers 409, and nothing is written. The answer\nrepeats the two ids as sent; no refusal names either.\n\n**Authentication**: a server-side key, an API key with the\n``sdk:ruleset`` scope whose owner can change feature flags: ADMIN,\nDEVELOPER, a superuser, or in the full profile anyone whose custom roles\nor direct grants give ``feature_flag (update)``. Call it from your\nbackend.",
+        "operationId": "link_anonymous_id_api_v1_tracking_alias_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AliasRequest",
+                "description": "The anonymous id and the known user id of one person"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AliasResponse"
+                }
+              }
+            },
+            "description": "The two ids as sent, and whether this request stored the link"
+          },
+          "401": {
+            "description": "No API key, or an unknown, expired or revoked one, or one whose owner is deactivated"
+          },
+          "403": {
+            "description": "The key lacks the sdk:ruleset scope, or its owner can no longer change feature flags"
+          },
+          "409": {
+            "description": "A rule refuses the link: the anonymous_id is linked to another user_id, one of the ids is already on the other side of a link, or the user_id has 100 anonymous_ids; nothing is written"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "description": "Over the SDK rate limit for this address"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Link an anonymous id to a known user id (beta)",
+        "tags": [
+          "Tracking"
+        ],
+        "x-stability": "beta"
       }
     },
     "/api/v1/tracking/assign": {

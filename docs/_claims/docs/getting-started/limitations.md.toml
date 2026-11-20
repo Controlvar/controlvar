@@ -242,9 +242,14 @@ by = [
 ]
 
 [[unit]]
-text = "One user known by two ids, such as a visitor who signs in | No identify or alias call: a user who signs in under a new id mid-funnel gets a second assignment. Assign with the id you will track purchases with."
+text = "One user known by two ids, such as a visitor who signs in | There is no identify call. POST /api/v1/tracking/alias (beta) links an anonymous id to a known id; it needs a server-side key and is called from your backend. From the link on, both ids get one assignment per experiment, and an event either sends to an experiment counts for it. Until the ids are linked, a user who signs in under a new id mid-funnel gets a second assignment, and nothing recorded before the link is merged. Assign with the id you will track purchases with."
 by = [
-    "test:backend/tests/unit/api/test_documented_limits.py::test_no_call_says_that_two_user_ids_are_one_user",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_alias_route_is_the_one_call_that_links_two_user_ids",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_the_route_refuses_each_key_as_batch_assignment_does",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_link_made_through_the_route_is_the_one_the_tracking_routes_follow",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_known_id_answers_the_variant_its_anonymous_id_holds",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_known_ids_conversion_counts_for_its_persons_variant",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_row_a_release_without_links_wrote_is_answered_by_the_earliest",
     "test:backend/tests/unit/api/test_documented_limits.py::test_assignment_hashes_the_experiment_key_and_the_user",
     "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_assigns_user_to_a_variant_and_is_sticky",
 ]

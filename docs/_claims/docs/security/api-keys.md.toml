@@ -239,7 +239,7 @@ text = "sdk:ruleset"
 by = ["exempt:label"]
 
 [[unit]]
-text = "sdk:ruleset is for a server: one that evaluates flags locally, or one that assigns lists of users to an experiment."
+text = "sdk:ruleset is for a server: one that evaluates flags locally, one that assigns lists of users to an experiment, or one that links an anonymous id to a known id."
 by = ["test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these"]
 
 [[unit]]
@@ -261,10 +261,18 @@ text = "POST /api/v1/tracking/evaluations (beta), where a server-side SDK report
 by = ["test:backend/tests/integration/api/test_flag_evaluations_api.py"]
 
 [[unit]]
-text = "POST /api/v1/tracking/assign/batch (beta), which assigns up to 1,000 users to an experiment in one request (see Assign a customer list to an experiment)."
+text = "POST /api/v1/tracking/assign/batch (beta), which assigns up to 1,000 users to an experiment in one request (see Assign a customer list to an experiment);"
 by = [
     "test:backend/tests/unit/api/test_assign_batch_contract.py",
     "test:backend/tests/integration/api/test_tracking_assign_batch.py",
+]
+
+[[unit]]
+text = "POST /api/v1/tracking/alias (beta), which your backend calls to link an anonymous id to the known id of the same person (see API endpoints)."
+by = [
+    "test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_the_route_refuses_each_key_as_batch_assignment_does",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_link_is_stored_once_and_answered_again_with_created_false",
 ]
 
 [[unit]]
@@ -283,7 +291,7 @@ text = "A key with sdk:ruleset can therefore download every feature flag's targe
 by = ["test:backend/tests/integration/api/test_sdk_ruleset_api.py"]
 
 [[unit]]
-text = "In the dashboard (Admin → API Keys → Create API Key), tick Server-side local evaluation (sdk:ruleset); the same checkbox is the one for assigning lists of users."
+text = "In the dashboard (Admin → API Keys → Create API Key), tick Server-side local evaluation (sdk:ruleset); the same checkbox is the one for assigning lists of users and for linking ids."
 by = [
     "test:frontend/src/tests/admin/CreateApiKeyModal.test.tsx::offers one unchecked checkbox for the sdk:ruleset scope, described by its warning before submit",
     "test:frontend/src/tests/admin/CreateApiKeyModal.test.tsx::sends scopes [\"sdk:ruleset\"] when the checkbox is ticked",
@@ -325,12 +333,14 @@ text = "Keys without that scope can be created by every role, as before."
 by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_keys_without_the_scope_are_unchanged"]
 
 [[unit]]
-text = "Using such a key follows the same rule: the three routes above accept a key with sdk:ruleset only while its owner can change feature flags, checked on every request, so a key whose owner loses that (moved to ANALYST or VIEWER, or a grant revoked or expired) is refused with 403 from then on."
+text = "Using such a key follows the same rule: the four routes above accept a key with sdk:ruleset only while its owner can change feature flags, checked on every request, so a key whose owner loses that (moved to ANALYST or VIEWER, or a grant revoked or expired) is refused with 403 from then on."
 by = [
     "test:backend/tests/integration/api/test_sdk_ruleset_api.py",
     "test:backend/tests/integration/api/test_flag_evaluations_api.py",
     "test:backend/tests/integration/api/test_tracking_assign_batch.py",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_the_route_refuses_each_key_as_batch_assignment_does",
     "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
+    "test:modules/backend/tests/integration/rbac/test_rbac_alias_key.py::test_an_owner_who_can_change_flags_but_not_experiments_links_ids",
     "test:modules/backend/tests/integration/rbac/test_rbac_provider.py::test_a_grant_yields_its_pairs_only_when_activated_active_and_unexpired",
 ]
 
@@ -339,6 +349,13 @@ text = "POST /api/v1/tracking/assign/batch also needs the owner to be able to ch
 by = [
     "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
     "test:backend/tests/unit/api/test_assign_batch_contract.py::test_the_owner_experiment_text",
+]
+
+[[unit]]
+text = "POST /api/v1/tracking/alias does not: an owner who can change feature flags may link ids, whether or not they can change experiments."
+by = [
+    "test:modules/backend/tests/integration/rbac/test_rbac_alias_key.py::test_an_owner_who_can_change_flags_but_not_experiments_links_ids",
+    "test:backend/tests/unit/api/test_alias_route_contract.py::test_the_key_is_the_server_side_key_not_batch_assignments",
 ]
 
 [[unit]]
@@ -761,10 +778,11 @@ text = "Remember that a browser key answers for any user id"
 by = ["exempt:label"]
 
 [[unit]]
-text = "A key used in a browser or a mobile app is visible to the people who use the app, and it answers for whichever user id it is sent: what that id is served, whether it is in a segment, and which experiments it is assigned to."
+text = "A key used in a browser or a mobile app is visible to the people who use the app, and it answers for whichever user id it is sent: what that id is served, whether it is in a segment, and which experiments it is assigned to, which for an id linked to another as one person are that person's assignments."
 by = [
     "test:backend/tests/integration/api/test_plain_key_answers_for_any_user_id.py::test_a_flag_answers_for_any_user_id_and_an_id_list_decides_by_that_id",
     "test:backend/tests/integration/api/test_plain_key_answers_for_any_user_id.py::test_assign_and_the_assignments_list_answer_for_any_user_id",
+    "test:backend/tests/integration/api/test_plain_key_answers_for_any_user_id.py::test_the_assignments_list_answers_a_linked_id_with_its_persons",
 ]
 
 [[unit]]

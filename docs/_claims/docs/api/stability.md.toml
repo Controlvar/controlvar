@@ -881,8 +881,9 @@ by = [
 ]
 
 [[unit]]
-text = "GET /api/v1/experiments/{experiment_id}/split-url/preview | #1615 | The preview answers what POST /api/v1/tracking/split-url/assign gives the visitor id now, without recording anything: their stored assignment's variant if they have one, else the variant a new visitor with that id gets, by the bandit weights for a bandit experiment and otherwise by the hash of the id and the experiment's key that POST /api/v1/tracking/assign uses. It used to answer an MD5 hash of the id and the experiment's id, which matched the variant a visitor is assigned for only about half of the ids. It checks no eligibility rule. A stored configuration that does not match the experiment's variants answers 409 with the detail split_url_config is not valid; update it with PUT /api/v1/experiments/{id}, where it answered 200. The fields of the answer are unchanged. The OpenAPI document changes only in the operation's description, its response description and the description of user_id. See Split URL preview."
+text = "GET /api/v1/experiments/{experiment_id}/split-url/preview | #1615 | For a visitor id never linked to another, the preview answers what POST /api/v1/tracking/split-url/assign gives it now, without recording anything: their stored assignment's variant if they have one, else the variant a new visitor with that id gets, by the bandit weights for a bandit experiment and otherwise by the hash of the id and the experiment's key that POST /api/v1/tracking/assign uses. It used to answer an MD5 hash of the id and the experiment's id, which matched the variant a visitor is assigned for only about half of the ids. It checks no eligibility rule. A stored configuration that does not match the experiment's variants answers 409 with the detail split_url_config is not valid; update it with PUT /api/v1/experiments/{id}, where it answered 200. The fields of the answer are unchanged. The OpenAPI document changes only in the operation's description, its response description and the description of user_id. For an id linked to another by POST /api/v1/tracking/alias (#449), the preview reads the id it is sent, its own stored assignment or its own hash, not its person's. See Split URL preview."
 by = [
+    "test:modules/backend/tests/integration/split_url/test_split_url_identity_aliases.py::test_the_preview_of_a_linked_id_reads_its_own_row_or_hash",
     "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_the_preview_agrees_with_the_route_and_records_nothing",
     "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_the_preview_of_a_bandit_agrees_with_the_route",
     "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_the_preview_answers_a_stored_assignment",
@@ -1392,6 +1393,41 @@ by = [
     "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_bulk_toggle_answers_500_when_its_commit_fails",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_status_verbs",
     "test:backend/tests/unit/services/test_compliance_trail_writers.py::test_the_compliance_tag_says_what_writes_an_event",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "POST /api/v1/tracking/alias (beta) | #449 | A new beta operation: it links an anonymous id to the known user id of the same person, and needs a server-side key (the sdk:ruleset scope, with an owner who can change feature flags) called from a backend. It answers 200 with the two ids and created (false when the link already existed), 409 when a rule refuses the link, and 422 for two equal ids, for exactly anonymous or anon in either field, and for an id missing, empty, over 255 characters or not storable. Its shape may still change. The OpenAPI documents gain the operation and its AliasRequest and AliasResponse schemas. See Link an Anonymous Id to a Known User Id."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_link_is_stored_once_and_answered_again_with_created_false",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_the_route_refuses_each_key_as_batch_assignment_does",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_server_key_whose_owner_can_change_flags_is_accepted",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_an_anonymous_id_linked_to_one_known_id_is_not_moved",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_known_id_takes_100_anonymous_ids_and_not_the_101st",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_two_equal_ids_are_refused",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_shared_placeholder_is_refused_in_either_field",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_missing_empty_or_too_long_field_is_refused",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_text_the_database_cannot_store_is_refused",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "POST /api/v1/tracking/assign, POST /api/v1/tracking/assign/batch (beta), POST /api/v1/tracking/track, POST /api/v1/tracking/batch, POST /api/v1/tracking/events, GET /api/v1/tracking/assignments/{user_id}, POST /api/v1/tracking/visual (beta), POST /api/v1/tracking/split-url/assign (beta, full profile) | #449 | An id linked to another by POST /api/v1/tracking/alias is answered as its person: in each experiment the assignment stored first among the person's ids answers for every one of them, and an id with none of its own gets no second one. An event that names an experiment is stored under the id holding that assignment, tagged with its variant while the experiment runs, and its event_id is still kept per id as sent. The assignments list holds the person's assignments, one per experiment, each with user_id the id in the path. Every answer names the id that was sent, and an id never linked is answered and stored as before. The OpenAPI documents of these operations do not change. See How events count."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_known_id_answers_the_variant_its_anonymous_id_holds",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_the_earliest_assignment_wins_for_both_ids",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_person_with_no_row_is_assigned_once_under_the_known_id",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_the_batch_answers_a_linked_id_with_its_persons_variant",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_known_ids_conversion_counts_for_its_persons_variant",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_the_event_batch_stores_a_known_ids_events_under_its_person",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_an_event_by_ids_is_stored_under_its_person_with_the_variant_given",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_linked_ids_event_is_tagged_only_while_the_experiment_runs",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_an_event_id_is_stored_once_per_id_as_sent",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_the_assignments_list_answers_a_linked_id_with_one_row_per_experiment",
+    "test:backend/tests/integration/api/test_visual_tracking_api.py::test_a_linked_visitor_gets_the_variant_its_person_holds",
+    "test:modules/backend/tests/integration/split_url/test_split_url_identity_aliases.py::test_a_linked_visitor_is_sent_where_its_person_was",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]

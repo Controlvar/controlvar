@@ -248,7 +248,8 @@ and the same nightly CI run walks them.
   instead.
 - **What an order is worth.** These examples count the users who pressed a button or ordered;
   [Concepts](../getting-started/concepts.md) says how a revenue metric is analysed.
-- **One visitor under two ids.** There is no identify or alias call, as
+- **One visitor under two ids.** Linking an anonymous id to a known id is a call your backend
+  makes with a server-side key, `POST /api/v1/tracking/alias` (beta), as
   [Limitations](../getting-started/limitations.md) says.
 - **How soon an open page sees a flag change.** StreamPulse asks for its flags when you pick a
   device or press Refresh now, and does not poll.
