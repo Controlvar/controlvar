@@ -368,8 +368,8 @@ analytics-pipeline       → eptk_cccc…
 
 ### Grant `sdk:ruleset` only where it is needed
 
-Give the `sdk:ruleset` scope only to a server that will evaluate flags locally or assign
-lists of users. Every other key, including any key used in a browser or a mobile app, should be created without it.
+Give the `sdk:ruleset` scope only to a server that will evaluate flags locally, assign
+lists of users or link ids. Every other key, including any key used in a browser or a mobile app, should be created without it.
 Because no other scope limits a key, a separate key per service is what lets you revoke one
 integration without touching the others.
 

@@ -50,6 +50,7 @@ from backend.tests.integration.api.route_helpers import (
 from backend.tests.integration.identity_alias_world import (
     World,
     no_active_holdout,
+    variant_of,
 )
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_db, pytest.mark.regression]
@@ -651,6 +652,22 @@ def test_without_the_table_the_routes_that_read_links_answer_500(
                 history = client.post(
                     "/api/v1/tracking/track", json=untagged, headers=plain
                 )
+                by_ids = client.post(
+                    "/api/v1/tracking/events",
+                    json={
+                        "event_type": "purchase",
+                        "event_name": "purchase",
+                        "user_id": user,
+                        "experiment_id": str(exp.id),
+                        "variant_id": str(variant_of(exp, "control").id),
+                    },
+                    headers=plain,
+                )
+                in_batch = client.post(
+                    BATCH,
+                    json={"experiment_key": exp.key, "users": [{"user_id": user}]},
+                    headers=server_key,
+                )
                 anonymous = ids("anon")
                 linked = _alias(client, server_key, anonymous, user)
 
@@ -658,6 +675,8 @@ def test_without_the_table_the_routes_that_read_links_answer_500(
             assert tracked.status_code == 500, tracked.text
             assert listed.status_code == 500, listed.text
             assert linked.status_code == 500, linked.text
+            assert by_ids.status_code == 500, by_ids.text
+            assert in_batch.status_code == 500, in_batch.text
             assert batched.status_code == 200, batched.text
             assert (
                 batched.json()["success_count"],
@@ -665,7 +684,7 @@ def test_without_the_table_the_routes_that_read_links_answer_500(
                 [e["index"] for e in batched.json()["errors"]],
             ) == (1, 1, [0])
             assert history.status_code == 200, history.text
-            for answer in (assigned, tracked, listed, linked):
+            for answer in (assigned, tracked, listed, linked, by_ids, in_batch):
                 _no_id_in(answer, user, anonymous)
             db_session.expire_all()
             assert db_session.query(Event).filter(Event.user_id == user).count() == (

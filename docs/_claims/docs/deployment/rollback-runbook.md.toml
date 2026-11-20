@@ -1457,7 +1457,7 @@ by = [
 ]
 
 [[unit]]
-text = "Until the API is rolled back, a release that serves POST /api/v1/tracking/alias answers 500 to POST /api/v1/tracking/assign for an active experiment, to POST /api/v1/tracking/track with an experiment_key, to GET /api/v1/tracking/assignments/{user_id} and to POST /api/v1/tracking/alias, for every id, and POST /api/v1/tracking/batch reports each event that names an experiment in errors, because it reads that table at each one."
+text = "Until the API is rolled back, a release that serves POST /api/v1/tracking/alias answers 500, for every id, to each tracking route that reads that table, among them POST /api/v1/tracking/assign for an active experiment, POST /api/v1/tracking/assign/batch, POST /api/v1/tracking/track with an experiment_key, POST /api/v1/tracking/events with an experiment_id, GET /api/v1/tracking/assignments/{user_id} and POST /api/v1/tracking/alias; POST /api/v1/tracking/batch reports each event that names an experiment in errors."
 by = ["test:backend/tests/integration/api/test_identity_alias_route.py::test_without_the_table_the_routes_that_read_links_answer_500"]
 
 [[unit]]
