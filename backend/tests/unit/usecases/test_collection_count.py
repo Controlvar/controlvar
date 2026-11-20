@@ -48,9 +48,9 @@ USECASES_ROOT = REPO_ROOT / "tests" / "usecases"
 
 #: test node id count per module, as ``pytest --collect-only -q`` lists them.
 EXPECTED = {
-    "test_admin.py": 21,
+    "test_admin.py": 23,
     "test_collection_count.py": 5,
-    "test_gates.py": 73,
+    "test_gates.py": 94,
     "test_proxy.py": 107,
     "test_python_driver.py": 9,
     "test_runner.py": 12,
@@ -62,6 +62,7 @@ EXPECTED_CASES = {
     "test_flags_over_time.py": 5,
     "test_js_driver.py": 7,
     "test_local_evaluation.py": 4,
+    "test_targeting.py": 1,
 }
 #: What a copy needs to collect the cases: the root, the ground-truth library
 #: and driver it imports, and the one plugin it loads from the repository.
@@ -265,6 +266,7 @@ def test_no_gate_here_or_under_tests_usecases_can_skip():
         "tests/usecases/test_flags_over_time.py",
         "tests/usecases/test_js_driver.py",
         "tests/usecases/test_local_evaluation.py",
+        "tests/usecases/test_targeting.py",
     } <= scanned
     offenders = [
         f"{path.relative_to(REPO_ROOT).as_posix()}: {token}"
