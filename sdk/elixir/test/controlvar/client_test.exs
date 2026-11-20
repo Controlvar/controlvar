@@ -127,6 +127,70 @@ defmodule Controlvar.ClientTest do
     end
   end
 
+  # Reads a request path the way the server does: split on `&`, then on the
+  # first `=`, `+` is a space, percent-decode (UTF-8). `URI.decode_www_form/1`
+  # is that; `URI.decode/1` is not (it leaves `+` as `+`, which the server
+  # reads as a space), so a decoder built on it would pass an encoder that
+  # leaves `+` raw.
+  defmodule ServerQuery do
+    @moduledoc false
+
+    @doc "The query of `path` as a list of `{name, value}` pairs, in order."
+    def pairs(path) do
+      [_route, query] = String.split(path, "?", parts: 2)
+
+      query
+      |> String.split("&")
+      |> Enum.map(fn pair ->
+        [name, value] = String.split(pair, "=", parts: 2)
+        {URI.decode_www_form(name), URI.decode_www_form(value)}
+      end)
+    end
+
+    @doc "The JSON object in the `context` parameter, or `nil` when there is none."
+    def context(path) do
+      case List.keyfind(pairs(path), "context", 0) do
+        {"context", json} -> Jason.decode!(json)
+        nil -> nil
+      end
+    end
+  end
+
+  # The fake server for targeting: a flag rule `plan == "pro"`. It answers from
+  # what the server would read in the request, never from the raw path.
+  defmodule ContextHttp do
+    @moduledoc false
+    @behaviour HttpBehaviour
+
+    @spy :controlvar_client_test_spy
+
+    @impl true
+    def get(config, path) do
+      notify({:get, path, config})
+
+      case ServerQuery.context(path) do
+        %{"plan" => "pro"} ->
+          {:ok, %{"key" => "f", "enabled" => true, "config" => nil, "reason" => "targeting_rule"}}
+
+        _ ->
+          {:ok, %{"key" => "f", "enabled" => false, "config" => nil, "reason" => "rollout"}}
+      end
+    end
+
+    @impl true
+    def post(config, path, body) do
+      notify({:post, path, body, config})
+      {:ok, %{"success_count" => 1, "failure_count" => 0, "errors" => nil}}
+    end
+
+    defp notify(message) do
+      case Process.whereis(@spy) do
+        nil -> :ok
+        pid -> send(pid, message)
+      end
+    end
+  end
+
   defmodule BatchRejectHttp do
     @moduledoc false
     @behaviour HttpBehaviour
@@ -298,6 +362,324 @@ defmodule Controlvar.ClientTest do
 
       error_pid = start_client(http_client: NetworkErrorHttp)
       refute Client.feature_enabled?(error_pid, "dark-mode", "user-123")
+    end
+  end
+
+  # --- the user's attributes on flag evaluation (#1720) ---
+
+  # Every GET the spy has received so far, oldest first. The calls under test
+  # run in the test process, so their requests are already in the mailbox.
+  defp gets do
+    receive do
+      {:get, path, _config} -> [path | gets()]
+    after
+      0 -> []
+    end
+  end
+
+  defp enabled?(pid, attributes) do
+    {:ok, %FlagEvaluation{enabled: enabled}} =
+      Client.evaluate_flag(pid, "f", "u1", attributes: attributes)
+
+    enabled
+  end
+
+  @route "/api/v1/feature-flags/evaluate/f?user_id=u1"
+
+  describe "evaluate_flag/4 sends the attributes as context" do
+    @tag :regression
+    test "context=<compact JSON>, percent-encoded, after user_id" do
+      pid = start_client()
+
+      assert {:ok, _} = Client.evaluate_flag(pid, "f", "u1", attributes: %{"plan" => "pro"})
+
+      assert_receive {:get, path, _config}
+      assert path == @route <> "&context=%7B%22plan%22%3A%22pro%22%7D"
+    end
+
+    @tag :regression
+    test "matches a targeting rule on an attribute: the server reads plan=pro from the context" do
+      pid = start_client(http_client: ContextHttp)
+
+      assert {:ok, %FlagEvaluation{enabled: true}} =
+               Client.evaluate_flag(pid, "f", "u1", attributes: %{plan: "pro"})
+
+      other = start_client(http_client: ContextHttp)
+      assert {:ok, %FlagEvaluation{enabled: false}} = Client.evaluate_flag(other, "f", "u1")
+    end
+
+    @tag :regression
+    test "feature_enabled?/4 passes the options through; /3 is kept" do
+      pid = start_client(http_client: ContextHttp)
+
+      assert Client.feature_enabled?(pid, "f", "u1", attributes: %{plan: "pro"})
+      assert_receive {:get, path, _config}
+      assert path =~ "&context=%7B%22plan%22%3A%22pro%22%7D"
+
+      refute Client.feature_enabled?(pid, "f", "u2")
+      assert_receive {:get, "/api/v1/feature-flags/evaluate/f?user_id=u2", _config}
+    end
+
+    # The server reads the same object back from each of these, with `+` as a
+    # space. V3 has every character that the query string treats as syntax.
+    for {name, attributes} <- [
+          {"V3", %{"q" => "a+b&c=d#e f/é😀!'()*~"}},
+          {"V3a", %{"q" => "a+b&c=d#e fé"}},
+          {"V4",
+           %{
+             "age" => 30,
+             "beta" => true,
+             "device" => %{"os" => "ios", "version" => "17.4.0"},
+             "tags" => ["a", "b"]
+           }}
+        ] do
+      test "the server decodes the same object, the user id and nothing else (#{name})" do
+        attributes = unquote(Macro.escape(attributes))
+        pid = start_client(http_client: ContextHttp)
+
+        assert {:ok, _} = Client.evaluate_flag(pid, "f", "u1", attributes: attributes)
+
+        assert_receive {:get, path, _config}
+        pairs = ServerQuery.pairs(path)
+        assert Enum.map(pairs, &elem(&1, 0)) == ["user_id", "context"]
+        assert List.keyfind(pairs, "user_id", 0) == {"user_id", "u1"}
+        assert ServerQuery.context(path) == attributes
+      end
+    end
+
+    test "V3a's exact URL" do
+      pid = start_client()
+
+      assert {:ok, _} = Client.evaluate_flag(pid, "f", "u1", attributes: %{"q" => "a+b&c=d#e fé"})
+
+      # Measured at 10d5a19c with this change; correctness is the decode test above.
+      assert_receive {:get, path, _config}
+
+      assert path ==
+               @route <> "&context=%7B%22q%22%3A%22a%2Bb%26c%3Dd%23e%20f%C3%A9%22%7D"
+    end
+
+    test "the server reads the same object from atom-keyed attributes" do
+      pid = start_client(http_client: ContextHttp)
+
+      assert {:ok, _} = Client.evaluate_flag(pid, "f", "u1", attributes: %{plan: "pro", n: 1})
+
+      assert_receive {:get, path, _config}
+      assert ServerQuery.context(path) == %{"plan" => "pro", "n" => 1}
+    end
+
+    test "no attributes, an empty map or a non-map: the request is the one sent before attributes were" do
+      for attributes <- [nil, %{}, [], [plan: "pro"], "plan=pro", 1] do
+        pid = start_client()
+
+        assert {:ok, _} = Client.evaluate_flag(pid, "f", "u1", attributes: attributes)
+
+        assert_receive {:get, path, _config}
+        assert path == @route
+      end
+
+      pid = start_client()
+      assert {:ok, _} = Client.evaluate_flag(pid, "f", "u1")
+      assert_receive {:get, @route, _config}
+    end
+
+    test "the decoder reads + as a space: it fails an encoder that leaves + raw" do
+      # ServerQuery is what every assertion above rests on. If it left `+`
+      # alone, "a+b" and "a b" would both decode to "a+b".
+      assert ServerQuery.pairs("/p?q=a+b%2Bc") == [{"q", "a b+c"}]
+    end
+  end
+
+  describe "the cache holds one answer per user and flag, with its attributes" do
+    test "A then B: two requests and two answers" do
+      pid = start_client(http_client: ContextHttp)
+
+      assert [true, false] == [enabled?(pid, %{plan: "pro"}), enabled?(pid, %{plan: "free"})]
+      assert length(gets()) == 2
+    end
+
+    test "minimal pairs differ: {plan: pro} / {tier: pro}, and {n: 1} / {n: \"1\"}" do
+      for {a, b} <- [{%{plan: "pro"}, %{tier: "pro"}}, {%{n: 1}, %{n: "1"}}] do
+        pid = start_client(http_client: ContextHttp)
+
+        enabled?(pid, a)
+        enabled?(pid, b)
+
+        assert length(gets()) == 2
+      end
+    end
+
+    test "A, B, A: three requests, because the one slot holds B's context" do
+      pid = start_client(http_client: ContextHttp)
+
+      answers = [
+        enabled?(pid, %{plan: "pro"}),
+        enabled?(pid, %{plan: "free"}),
+        enabled?(pid, %{plan: "pro"})
+      ]
+
+      assert answers == [true, false, true]
+      assert length(gets()) == 3
+    end
+
+    test "A then no attributes: two requests, and the second is not A's answer" do
+      pid = start_client(http_client: ContextHttp)
+
+      assert enabled?(pid, %{plan: "pro"})
+      assert {:ok, %FlagEvaluation{enabled: false}} = Client.evaluate_flag(pid, "f", "u1")
+      assert length(gets()) == 2
+    end
+
+    test "{} and no attributes share an answer: one request" do
+      pid = start_client(http_client: ContextHttp)
+
+      assert {:ok, _} = Client.evaluate_flag(pid, "f", "u1", attributes: %{})
+      assert {:ok, _} = Client.evaluate_flag(pid, "f", "u1", attributes: %{})
+      assert {:ok, _} = Client.evaluate_flag(pid, "f", "u1")
+
+      assert length(gets()) == 1
+    end
+
+    test "A then A: one request" do
+      pid = start_client(http_client: ContextHttp)
+
+      assert enabled?(pid, %{plan: "pro"})
+      assert enabled?(pid, %{plan: "pro"})
+
+      assert length(gets()) == 1
+    end
+
+    test "evaluated_flags/2 and the keyless track fan-out list the flag once, with the latest answer" do
+      pid = start_client(http_client: ContextHttp)
+
+      enabled?(pid, %{plan: "pro"})
+      enabled?(pid, %{plan: "free"})
+
+      assert Client.evaluated_flags(pid, "u1") == ["f"]
+
+      Client.track(pid, "purchase", "u1")
+
+      assert_receive {:post, "/api/v1/tracking/batch", %{events: [event]}, _config}
+      assert event.feature_flag_key == "f"
+      refute_receive {:post, _path, _body, _config}, 50
+    end
+  end
+
+  describe "attributes that cannot be written as JSON" do
+    @canary "attrcanary7f3"
+
+    test "return the fixed {:error, :invalid_attributes}: nothing is sent, nothing is cached" do
+      unencodable = [
+        %{"q" => @canary, "bad" => <<255>>},
+        %{"q" => @canary, "bad" => self()},
+        %{"q" => @canary, {1, 2} => 1},
+        %{"q" => @canary, "bad" => fn -> :x end},
+        # A struct Jason writes as a string, not as an object.
+        DateTime.utc_now()
+      ]
+
+      for attributes <- unencodable do
+        pid = start_client()
+
+        log =
+          ExUnit.CaptureLog.capture_log(fn ->
+            stderr =
+              ExUnit.CaptureIO.capture_io(:stderr, fn ->
+                result = Client.evaluate_flag(pid, "f", "u1", attributes: attributes)
+                send(self(), {:result, result})
+              end)
+
+            send(self(), {:stderr, stderr})
+          end)
+
+        assert_received {:result, result}
+        assert_received {:stderr, stderr}
+        assert result == {:error, :invalid_attributes}
+        refute inspect(result) =~ @canary
+        refute log =~ @canary
+        refute stderr =~ @canary
+        refute_receive {:get, _path, _config}, 20
+        assert Client.evaluated_flags(pid, "u1") == []
+        refute Client.feature_enabled?(pid, "f", "u1", attributes: attributes)
+        refute_receive {:get, _path, _config}, 20
+      end
+    end
+
+    test "an earlier cached answer is neither served nor replaced" do
+      pid = start_client()
+
+      assert {:ok, _} = Client.evaluate_flag(pid, "f", "u1")
+      assert_receive {:get, _path, _config}
+
+      assert {:error, :invalid_attributes} =
+               Client.evaluate_flag(pid, "f", "u1", attributes: %{"bad" => <<255>>})
+
+      assert {:ok, _} = Client.evaluate_flag(pid, "f", "u1")
+      refute_receive {:get, _path, _config}, 50
+    end
+  end
+
+  describe "no error carries the request's query" do
+    # The real HttpClient: its error terms are the ones an integrator sees. No
+    # code in this SDK logs on this path, and `:httpc`'s reasons name no URL.
+    defp real_client(base_url) do
+      pid = start_client(base_url: base_url, http_client: Controlvar.HttpClient, timeout: 2_000)
+      pid
+    end
+
+    test "network errors: a bad URI, a bad scheme, a refused connection" do
+      for base_url <- ["http://loc al:8000", "htp://127.0.0.1:1", "http://127.0.0.1:1"] do
+        pid = real_client(base_url)
+
+        log =
+          ExUnit.CaptureLog.capture_log(fn ->
+            send(
+              self(),
+              {:result,
+               Client.evaluate_flag(pid, "f", "u1", attributes: %{"q" => @canary, "plan" => "pro"})}
+            )
+          end)
+
+        assert_received {:result, result}
+        assert {:error, {:network_error, _reason}} = result
+
+        for text <- [inspect(result), log] do
+          refute text =~ @canary
+          refute text =~ "context"
+          refute text =~ "user_id"
+          refute text =~ "%7B"
+        end
+      end
+    end
+
+    test "an API error carries the status and the server's own body" do
+      {:ok, listener} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true, ip: {127, 0, 0, 1}])
+      {:ok, port} = :inet.port(listener)
+
+      server =
+        spawn_link(fn ->
+          {:ok, socket} = :gen_tcp.accept(listener)
+          {:ok, _request} = :gen_tcp.recv(socket, 0, 2_000)
+          body = ~s({"detail":"context is not an object"})
+
+          :ok =
+            :gen_tcp.send(
+              socket,
+              "HTTP/1.1 422 Unprocessable Entity\r\ncontent-type: application/json\r\n" <>
+                "content-length: #{byte_size(body)}\r\nconnection: close\r\n\r\n" <> body
+            )
+
+          :gen_tcp.close(socket)
+        end)
+
+      pid = real_client("http://127.0.0.1:#{port}")
+
+      result = Client.evaluate_flag(pid, "f", "u1", attributes: %{"q" => @canary})
+
+      assert result == {:error, {:api_error, 422, ~s({"detail":"context is not an object"})}}
+      refute inspect(result) =~ @canary
+      :gen_tcp.close(listener)
+      Process.unlink(server)
     end
   end
 

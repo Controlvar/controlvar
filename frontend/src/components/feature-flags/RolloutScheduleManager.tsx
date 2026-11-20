@@ -1,5 +1,6 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { UNREACHABLE } from '@/components/experiments/ExperimentManageSection';
+import { InlineConfirm } from '@/components/ui/InlineConfirm';
 import { isApiError } from '@/services/api';
 import { demoRefusalMessage } from '@/utils/demoMode';
 import type { RolloutSchedule, RolloutStage } from '@/services/featureFlags';
@@ -689,7 +690,6 @@ export function RolloutScheduleManager({
   const pauseButton = useRef<HTMLButtonElement>(null);
   const cancelButton = useRef<HTMLButtonElement>(null);
   const advanceButton = useRef<HTMLButtonElement>(null);
-  const confirmRegion = useRef<HTMLDivElement>(null);
   const formHeading = useRef<HTMLHeadingElement>(null);
   const formAlert = useRef<HTMLDivElement>(null);
   const noticeRef = useRef<HTMLParagraphElement>(null);
@@ -706,10 +706,6 @@ export function RolloutScheduleManager({
   useEffect(() => {
     if (mode !== null) formHeading.current?.focus();
   }, [mode]);
-
-  useEffect(() => {
-    if (confirm !== null) confirmRegion.current?.focus();
-  }, [confirm]);
 
   useEffect(() => {
     if (notice) noticeRef.current?.focus();
@@ -984,6 +980,16 @@ export function RolloutScheduleManager({
       : completeConfirm(advance.stage, advance.next, flagPercentage);
   };
 
+  /** The button that asked: Activate and Resume share one, as do the two stage buttons. */
+  const askingButton = (kind: ConfirmKind) =>
+    ({
+      activate: activateButton,
+      resume: activateButton,
+      cancel: cancelButton,
+      start: advanceButton,
+      complete: advanceButton,
+    })[kind];
+
   const confirmYes: Record<ConfirmKind, string> = {
     activate: 'Activate',
     resume: 'Resume',
@@ -1131,23 +1137,31 @@ export function RolloutScheduleManager({
       )}
 
       {confirm && schedule && (
-        <div
-          ref={confirmRegion}
-          role="dialog"
-          aria-label={`Confirm ${confirmYes[confirm]}`}
-          tabIndex={-1}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') dismissConfirm();
-          }}
-          className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 focus:outline-none focus:ring-2 focus:ring-blue-600"
-          data-testid="rollout-schedule-confirm"
+        // Cancel and Escape go back to the button that asked. It is disabled
+        // while the request runs, as is every other action button, so after a
+        // confirm nothing takes focus until the answer, which the effect above
+        // places. The fallback is the first action button still enabled.
+        <InlineConfirm
+          label={`Confirm ${confirmYes[confirm]}`}
+          describedBy={`${uid}-confirm-text`}
+          onCancel={dismissConfirm}
+          returnFocus={() => askingButton(confirm).current}
+          fallbackFocus={() =>
+            [pauseButton, cancelButton, editButton, advanceButton, activateButton, createButton]
+              .map((ref) => ref.current)
+              .find((button) => button && !button.disabled)
+          }
+          tone="warning"
+          className="mt-3 rounded-lg border p-3"
+          testId="rollout-schedule-confirm"
         >
-          <p className="text-sm text-amber-900" data-testid="rollout-schedule-confirm-text">
+          <p id={`${uid}-confirm-text`} className="text-sm text-amber-900" data-testid="rollout-schedule-confirm-text">
             {confirmText()}
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"
+              data-autofocus
               onClick={dismissConfirm}
               className={SECONDARY}
               data-testid="rollout-schedule-confirm-no"
@@ -1163,7 +1177,7 @@ export function RolloutScheduleManager({
               {confirmYes[confirm]}
             </button>
           </div>
-        </div>
+        </InlineConfirm>
       )}
 
       {mayCreate && !creating && (

@@ -99,6 +99,35 @@ text = "If the first code is refused, check that your phone sets its clock autom
 by = ["test:frontend/src/tests/pages/account-two-factor.test.tsx::a wrong first code shows the phone's clock hint and keeps the secret waiting"]
 
 [[unit]]
+text = "When your role requires it"
+by = ["exempt:label"]
+
+[[unit]]
+text = "An operator can require two-step sign-in for chosen roles (LOCAL_AUTH_2FA_REQUIRED_ROLES, in Requiring it for a role)."
+by = [
+    "test:backend/tests/unit/core/test_two_factor_required_roles.py::test_exactly_the_listed_roles_are_required",
+    "test:backend/tests/integration/api/test_two_factor_required_roles_api.py::test_a_required_role_sets_it_up_at_its_first_sign_in",
+]
+
+[[unit]]
+text = "If your role is one of them and you have not set it up, signing in asks you to set it up after your password, with steps 2 to 4 above (it does not ask for your password again), before you are signed in: scan the QR code or type the key, enter the code the app shows and choose Turn on two-step sign-in, then save the recovery codes and choose Done."
+by = [
+    "test:frontend/src/tests/auth/two-step-enrol-sign-in.test.tsx::asks the API for a secret with the enrol token and no bearer, and shows it three ways",
+    "test:frontend/src/tests/auth/two-step-enrol-sign-in.test.tsx::U3: Done waits for \"I have saved these codes\", then stores the access token and goes on",
+]
+
+[[unit]]
+text = "If the set-up takes more than 10 minutes, sign-in starts again at the password."
+by = [
+    "test:backend/tests/unit/core/test_mfa_token.py::test_the_enrol_purpose_lasts_ten_minutes_and_is_only_its_own",
+    "test:frontend/src/tests/auth/two-step-enrol-sign-in.test.tsx::U3: %s at the first code starts sign-in again",
+]
+
+[[unit]]
+text = "While your role requires it, More → Two-step sign-in does not offer to turn it off."
+by = ["test:frontend/src/tests/pages/account-two-factor.test.tsx::on: Turn off is not offered, and the page says why"]
+
+[[unit]]
 text = "Sign in with a code"
 by = ["exempt:label"]
 
@@ -149,11 +178,14 @@ by = [
 ]
 
 [[unit]]
-text = "You then sign in with your password alone and can set two-step sign-in up again."
-by = ["test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_the_cap_refuses_the_right_code_until_a_superuser_resets_it"]
+text = "You then sign in with your password alone and can set two-step sign-in up again; if your role requires it, your next sign-in asks you to set it up."
+by = [
+    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_the_cap_refuses_the_right_code_until_a_superuser_resets_it",
+    "test:backend/tests/integration/api/test_two_factor_required_roles_api.py::test_a_reset_account_of_a_required_role_sets_it_up_again",
+]
 
 [[unit]]
-text = "No one can reset their own."
+text = "No one can reset their own from the dashboard or the API."
 by = [
     "test:backend/tests/unit/api/test_two_factor_routes.py::test_a_superuser_cannot_reset_their_own",
     "test:frontend/src/tests/admin/EditUserModal.test.tsx::is not offered on your own row, which says who can reset yours",
@@ -229,14 +261,7 @@ by = [
 ]
 
 [[unit]]
-text = "Nothing can require two-step sign-in for a role yet."
-by = [
-    "test:backend/tests/unit/api/test_documented_limits.py::test_a_local_account_can_turn_on_two_step_sign_in_but_no_role_requires_it",
-    "test:backend/tests/unit/api/test_two_factor_routes.py::test_reading_your_own_status",
-]
-
-[[unit]]
-text = "Signing in with SSO (OIDC, with the sso module) asks for no code: only the identity provider's own checks apply."
+text = "Signing in with SSO (OIDC, with the sso module) asks for no code, for a role that requires two-step sign-in too: only the identity provider's own checks apply."
 by = [
     "test:modules/backend/tests/unit/api/test_sso_asks_for_no_second_step.py::test_an_oidc_sign_in_issues_the_token_to_a_two_step_account_without_a_code",
     "test:modules/backend/tests/unit/api/test_sso_asks_for_no_second_step.py::test_the_dashboards_sso_exchange_issues_the_token_without_a_code",

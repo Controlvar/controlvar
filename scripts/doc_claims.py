@@ -2013,6 +2013,25 @@ MECHANISMS: Dict[str, Mechanism] = {
             "Each fails if its account turns two-step sign-in on:",
         ),
     ),
+    # The second table, when an account's role is required (#1812): exactly
+    # the first table's rows whose account is not a seeded one.
+    "password-sign-ins-required-roles": Mechanism(
+        "backend/tests/unit/docs/test_two_step_sign_in_docs.py"
+        "::test_each_account_that_is_not_seeded_says_what_a_required_role_does",
+        holds=(
+            (
+                "docs/api/auth.md",
+                r"^(?:\.github|backend|demo|deploy|scripts|tests)/"
+                r"[A-Za-z0-9_./-]{1,100} \| [^|]{1,200}$",
+            ),
+        )
+        + _whole(
+            "docs/api/auth.md",
+            "Each also fails if LOCAL_AUTH_2FA_REQUIRED_ROLES names its account's "
+            "role on the stack it signs in to: the password step then answers "
+            "enrol: true and no access_token.",
+        ),
+    ),
     "password-sign-ins-modules": Mechanism(
         "modules/backend/tests/unit/test_password_sign_ins_modules.py"
         "::test_the_page_names_the_full_profiles_password_sign_ins",

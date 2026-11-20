@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
+import { InlineConfirm } from '@/components/ui/InlineConfirm';
 import {
   ExperimentScheduleSection,
   SCHEDULE_HEADING,
@@ -199,8 +200,9 @@ export function ExperimentManageSection({
   const editButton = useRef<HTMLButtonElement>(null);
   const designButton = useRef<HTMLButtonElement>(null);
   const deleteButton = useRef<HTMLButtonElement>(null);
+  const cloneButton = useRef<HTMLButtonElement>(null);
   const nameInput = useRef<HTMLInputElement>(null);
-  const confirmRegion = useRef<HTMLDivElement>(null);
+  const confirmTextId = useId();
 
   // The schedule form (#1454): a DRAFT only, so it goes once the experiment
   // starts. Focus returns to its button when it closes.
@@ -217,10 +219,6 @@ export function ExperimentManageSection({
   useEffect(() => {
     if (editing) nameInput.current?.focus();
   }, [editing]);
-
-  useEffect(() => {
-    if (confirmingDelete) confirmRegion.current?.focus();
-  }, [confirmingDelete]);
 
   useEffect(() => {
     if (!scheduleFocus || scheduling) return;
@@ -353,6 +351,9 @@ export function ExperimentManageSection({
     } catch (err) {
       setError(errorCopy('delete', err));
       setPending(null);
+      // The question closed at Delete, so focus is lost: back to the button,
+      // beside the error, once it is enabled again.
+      setReturnFocus('delete');
     }
   };
 
@@ -393,6 +394,7 @@ export function ExperimentManageSection({
       <div role="group" aria-label="Manage this experiment" className="flex flex-wrap items-center gap-2">
         {mayClone && (
           <button
+            ref={cloneButton}
             type="button"
             onClick={() => void clone()}
             disabled={busy}
@@ -473,21 +475,23 @@ export function ExperimentManageSection({
       )}
 
       {confirmingDelete && (
-        <div
-          ref={confirmRegion}
-          role="dialog"
-          aria-label="Confirm Delete draft"
-          tabIndex={-1}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') cancelDelete();
-          }}
-          className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 focus:outline-none focus:ring-2 focus:ring-blue-600"
-          data-testid="manage-delete-confirm"
+        <InlineConfirm
+          label="Confirm Delete draft"
+          describedBy={confirmTextId}
+          onCancel={cancelDelete}
+          returnFocus={deleteButton}
+          fallbackFocus={cloneButton}
+          tone="warning"
+          className="mt-3 rounded-lg border p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+          testId="manage-delete-confirm"
         >
-          <p className="text-sm text-amber-900">{DELETE_CONFIRM}</p>
+          <p id={confirmTextId} className="text-sm text-amber-900">
+            {DELETE_CONFIRM}
+          </p>
           <div className="flex gap-2 shrink-0">
             <button
               type="button"
+              data-autofocus
               onClick={cancelDelete}
               className="px-3 py-1.5 rounded-md text-sm font-medium text-slate-600 border border-slate-300 bg-white hover:bg-slate-50"
               data-testid="manage-delete-cancel"
@@ -503,7 +507,7 @@ export function ExperimentManageSection({
               Delete
             </button>
           </div>
-        </div>
+        </InlineConfirm>
       )}
 
       {draft && (

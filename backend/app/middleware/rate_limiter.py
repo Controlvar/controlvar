@@ -306,6 +306,10 @@ RATE_LIMIT_CONFIG: Dict[str, Tuple[int, int]] = {
     # The code step of two-step sign-in: limited like the password step it
     # follows. Its wrong codes also count toward the sign-in lockout.
     "/api/v1/auth/mfa/verify": (10, 60),
+    # Setting two-step sign-in up during a sign-in (a role that requires it):
+    # the same limit; wrong first codes count toward the lockout like the others.
+    "/api/v1/auth/mfa/enroll": (10, 60),
+    "/api/v1/auth/mfa/enroll/confirm": (10, 60),
     "/api/v1/auth/signup": (5, 60),
     # Where the 6-digit sign-up code is guessed; its own counter, apart from
     # sign-up's (#700).

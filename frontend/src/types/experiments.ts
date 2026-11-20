@@ -213,6 +213,11 @@ export interface CreateExperimentRequest {
   sequential_testing_enabled?: boolean;
   /** Sent only when balancing is on. */
   balance_within?: BalanceWithin;
+  /**
+   * Sent for, and only for, a `split_url` experiment (#1961): one entry per
+   * experiment variant, with the same name and allocation, and the page as typed.
+   */
+  split_url_config?: { variants: Array<{ name: string; url: string; traffic_allocation: number }> };
 }
 
 /** `ExperimentListResponse` (offset pagination: `skip`/`limit`). */

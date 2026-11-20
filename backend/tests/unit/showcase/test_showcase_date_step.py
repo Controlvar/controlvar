@@ -86,14 +86,19 @@ def test_video_9_sets_its_start_two_days_ahead_at_9_in_los_angeles():
     )
 
 
-def test_only_video_9_pins_a_zone():
+def test_only_videos_9_and_11_pin_a_zone():
+    """Video 9 for its date step; video 11 because the flag list draws its
+    Updated column with ``toLocaleDateString`` (PE 6 of the V11-V13 plan)."""
     pinned = {
         slug: (board.time_zone, board.locale)
         for slug, relative in config.VIDEOS.items()
         for board in [storyboard.load(SHOWCASE / relative)]
         if board.time_zone is not None or board.locale is not None
     }
-    assert pinned == {"09-design-in-depth": ("America/Los_Angeles", "en-US")}
+    assert pinned == {
+        "09-design-in-depth": ("America/Los_Angeles", "en-US"),
+        "11-stale-flags": ("America/Los_Angeles", "en-US"),
+    }
 
 
 def test_a_date_is_estimated_as_a_choose_and_enters_data():
@@ -271,7 +276,7 @@ def test_a_board_that_pins_no_zone_gets_exactly_the_context_it_always_had():
         for slug, relative in config.VIDEOS.items()
     }
     unpinned = [slug for slug, board in boards.items() if board.time_zone is None]
-    assert len(unpinned) == len(boards) - 1
+    assert len(unpinned) == len(boards) - 2
     for slug in unpinned:
         assert run.context_zone(boards[slug]) == {}, slug
 

@@ -35,6 +35,10 @@ CONSUMERS = {
     "modules/backend/tests/realistic/scenarios/multi_tenant_isolation.py",
 }
 
+#: Scenarios that run against a stack: a file here that names the routes is
+#: a consumer, never classified by where it is.
+NAMED_ONLY = ("modules/backend/tests/realistic/",)
+
 #: Everything else under modules/ that names the routes, by where it is.
 BY_PREFIX = (
     ("modules/backend/app/", "the API itself"),
@@ -59,6 +63,8 @@ def _hits() -> Set[str]:
 def _class(rel: str):
     if rel in CONSUMERS:
         return "consumer"
+    if rel.startswith(NAMED_ONLY):
+        return None
     for prefix, name in BY_PREFIX:
         if rel.startswith(prefix):
             return name

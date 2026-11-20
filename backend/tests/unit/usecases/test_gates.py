@@ -809,3 +809,190 @@ def test_an_unfaulted_502_is_its_own_finding():
     failed = _record(2, 2.0, RULESET, 502)
     (finding,) = gates.upstream_failure_findings([injected, failed], "d")
     assert "1 unfaulted 502 answers (/api/v1/sdk/ruleset)" in finding
+
+
+# -- use case #5: targeting ----------------------------------------------------------------------
+TABLE = (
+    ("d1", True, "targeting_rule"),
+    ("d3", False, "rollout"),
+    ("d10", True, "targeting_rule"),
+    ("s2", True, "targeting_rule"),
+)
+
+
+def _answer(enabled, reason, source="server", error=None):
+    return gates.Poll(
+        sent=0.0,
+        answered=0.1,
+        enabled=enabled,
+        source=source,
+        reason=reason,
+        error=error,
+    )
+
+
+def _answers(**changes):
+    answers = {row_id: _answer(enabled, reason) for row_id, enabled, reason in TABLE}
+    answers.update(changes)
+    return answers
+
+
+def test_a_table_holds_when_every_row_is_answered_as_it_says():
+    assert gates.table_findings("python server", TABLE, _answers()) == []
+
+
+def test_a_table_fires_on_a_wrong_answer_naming_the_row_and_both_answers():
+    # An SDK that drops the context: the rule does not match, the rollout of 0
+    # answers.
+    wrong = _answers(d1=_answer(False, "rollout"), s2=_answer(False, "rollout"))
+    findings = gates.table_findings("python server", TABLE, wrong)
+    assert findings == [
+        "python server d1: answered (False, rollout), the table says"
+        " (True, targeting_rule)",
+        "python server s2: answered (False, rollout), the table says"
+        " (True, targeting_rule)",
+    ]
+
+
+def test_a_table_fires_on_a_wrong_reason_alone():
+    wrong = _answers(d3=_answer(False, "targeting_rule"))
+    (finding,) = gates.table_findings("raw GET", TABLE, wrong)
+    assert "raw GET d3: answered (False, targeting_rule)" in finding
+
+
+def test_a_table_does_not_take_a_truthy_answer_for_true():
+    wrong = _answers(d1=_answer(1, "targeting_rule"))
+    (finding,) = gates.table_findings("raw GET", TABLE, wrong)
+    assert finding.startswith("raw GET d1: answered (1, targeting_rule)")
+
+
+def test_a_table_fires_on_an_error_a_missing_row_and_an_extra_row():
+    wrong = _answers(d1=_answer(None, None, "default", {"type": "X", "status": 500}))
+    del wrong["d3"]
+    wrong["zz"] = _answer(True, "rollout")
+    findings = gates.table_findings("js local", TABLE, wrong)
+    assert any("js local d1: answered with an error" in f for f in findings)
+    assert any("js local d3: no answer" in f for f in findings)
+    assert any("rows the table does not have: ['zz']" in f for f in findings)
+    assert len(findings) == 3
+
+
+def test_a_table_is_void_with_no_rows():
+    (void,) = gates.table_findings("x", (), {})
+    assert void.startswith("void:")
+
+
+LOCAL = {"d1", "d3"}
+
+
+def _sourced(d1="local", d3="local", d10="server", s2="server"):
+    return {
+        row: _answer(True, "targeting_rule", source)
+        for row, source in (("d1", d1), ("d3", d3), ("d10", d10), ("s2", s2))
+    }
+
+
+def test_the_source_holds_local_on_local_rows_and_server_on_the_rest():
+    assert gates.source_findings("python local", _sourced(), LOCAL) == []
+
+
+@pytest.mark.parametrize(
+    ("changes", "fragment"),
+    [
+        ({"d1": "server"}, "d1: answered from 'server', expected 'local'"),
+        ({"d10": "local"}, "d10: answered from 'local', expected 'server'"),
+        ({"s2": "local"}, "s2: answered from 'local', expected 'server'"),
+        ({"d3": "default"}, "d3: answered from 'default', expected 'local'"),
+    ],
+    ids=["deferred-local-row", "boolean-evaluated-locally", "semver-local", "error"],
+)
+def test_the_source_fires_on_the_wrong_leg(changes, fragment):
+    (finding,) = gates.source_findings("js local", _sourced(**changes), LOCAL)
+    assert fragment in finding
+
+
+def test_the_source_is_void_with_no_answer():
+    (void,) = gates.source_findings("x", {}, LOCAL)
+    assert void.startswith("void:")
+
+
+def _calls(**counts):
+    records = []
+    for key, count in counts.items():
+        records += [
+            _record(
+                len(records) + i, float(len(records) + i), gates.EVALUATE_PREFIX + key
+            )
+            for i in range(count)
+        ]
+    return records
+
+
+def test_evaluate_counts_hold_at_the_numbers_given():
+    assert (
+        gates.evaluate_count_findings(
+            _calls(doc=11, sem=8), "python server", expected={"doc": 11, "sem": 8}
+        )
+        == []
+    )
+
+
+def test_evaluate_counts_hold_on_a_local_leg_behind_its_proxy():
+    records = [_record(0, 0.1, RULESET, 200, '"v"'), *_calls(doc=1, sem=8)]
+    assert (
+        gates.evaluate_count_findings(
+            records, "python local", expected={"doc": 1, "sem": 8}, require_ruleset=True
+        )
+        == []
+    )
+
+
+@pytest.mark.parametrize(
+    ("counts", "fragment"),
+    [
+        # A local evaluator that coerces the boolean: d10 stays local.
+        ({"doc": 0, "sem": 8}, "0 evaluate requests for 'doc', expected 1"),
+        # A local driver on a ruleset without the flag: it defers every row.
+        ({"doc": 11, "sem": 8}, "11 evaluate requests for 'doc', expected 1"),
+        ({"doc": 1, "sem": 7}, "7 evaluate requests for 'sem', expected 8"),
+        ({"doc": 1, "sem": 8, "other": 1}, "flags the case did not name: ['other']"),
+    ],
+    ids=["coerced", "stale-ruleset", "semver-local", "unnamed"],
+)
+def test_evaluate_counts_fire_on_a_wrong_count(counts, fragment):
+    records = [_record(0, 0.1, RULESET, 200, '"v"'), *_calls(**counts)]
+    findings = gates.evaluate_count_findings(
+        records, "js local", expected={"doc": 1, "sem": 8}, require_ruleset=True
+    )
+    assert any(fragment in f for f in findings), findings
+
+
+def test_evaluate_counts_are_void_for_a_local_leg_not_behind_its_proxy():
+    for records in (
+        _calls(doc=1, sem=8),
+        [
+            _record(0, 0.1, RULESET, 200, '"v"', fault="corrupt:truncated"),
+            *_calls(doc=1, sem=8),
+        ],
+        [_record(0, 0.1, RULESET, 304, '"v"'), *_calls(doc=1, sem=8)],
+    ):
+        (void,) = gates.evaluate_count_findings(
+            records, "js local", expected={"doc": 1, "sem": 8}, require_ruleset=True
+        )
+        assert void == (
+            "void: js local is not behind its proxy (no ruleset 200 went through it)"
+        )
+
+
+def test_a_server_leg_needs_no_ruleset_request():
+    assert (
+        gates.evaluate_count_findings(
+            _calls(doc=1), "python server", expected={"doc": 1}
+        )
+        == []
+    )
+
+
+def test_evaluate_counts_are_void_with_no_flag_named():
+    (void,) = gates.evaluate_count_findings(_calls(doc=1), "x", expected={})
+    assert void.startswith("void:")

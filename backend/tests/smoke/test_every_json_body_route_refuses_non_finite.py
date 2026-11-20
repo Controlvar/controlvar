@@ -13,15 +13,16 @@ and the counts are pinned per profile, so a walk that sees fewer routes fails
 instead of passing on fewer. The profile is decided as the application decides
 it: whether ``modules`` imports.
 
-* JSON-body operations: 85 in the core profile, 115 in the full one (#1545
+* JSON-body operations: 87 in the core profile, 117 in the full one (#1545
   gave ``POST /api/v1/experiments/{experiment_id}/start`` an optional one, and
   added ``POST /api/v1/tracking/visual``, ``POST /api/v1/tracking/visual/preview``
   and ``POST /api/v1/experiments/{experiment_id}/visual/preview-links``, then
   the visual editor's ``POST /api/v1/visual-editor/tickets/claim``,
   ``POST /api/v1/visual-editor/sessions`` and
   ``PUT /api/v1/visual-editor/sessions/current/variants/{variant_id}/changes``; #1812
-  added ``POST /api/v1/auth/mfa/verify`` and the ``confirm``, ``disable`` and
-  ``recovery-codes`` actions of ``/api/v1/users/me/2fa``, then gave its
+  added ``POST /api/v1/auth/mfa/verify``, ``POST /api/v1/auth/mfa/enroll``,
+  ``POST /api/v1/auth/mfa/enroll/confirm`` and the ``confirm``, ``disable``
+  and ``recovery-codes`` actions of ``/api/v1/users/me/2fa``, then gave its
   ``enroll`` action an optional one, the current password). A new
   route with a JSON body changes the count here: it is refused like the others
   (this test sends it the probe), and the number is bumped.
@@ -50,8 +51,8 @@ from backend.app.main import app
 
 pytestmark = [pytest.mark.smoke]
 
-CORE_JSON_BODY_COUNT = 85
-FULL_JSON_BODY_COUNT = 115
+CORE_JSON_BODY_COUNT = 87
+FULL_JSON_BODY_COUNT = 117
 
 FORM_OPERATIONS = {("POST", "/api/v1/auth/token")}
 MODULE_FORM_OPERATIONS = {("POST", "/api/v1/auth/sso/saml/{config_id}/acs")}

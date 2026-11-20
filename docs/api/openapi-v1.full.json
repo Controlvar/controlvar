@@ -11839,17 +11839,79 @@
         "title": "MetricsSummary",
         "type": "object"
       },
+      "MfaEnrolConfirmRequest": {
+        "description": "``POST /api/v1/auth/mfa/enroll/confirm``: the same token, and the first\ncode of the new secret.",
+        "properties": {
+          "code": {
+            "description": "The 6-digit code the authenticator app shows. Spaces and hyphens are ignored.",
+            "maxLength": 64,
+            "title": "Code",
+            "type": "string"
+          },
+          "mfa_token": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Mfa Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mfa_token",
+          "code"
+        ],
+        "title": "MfaEnrolConfirmRequest",
+        "type": "object"
+      },
+      "MfaEnrolConfirmResponse": {
+        "description": "``POST /api/v1/auth/mfa/enroll/confirm``: two-step sign-in is on, the\nrecovery codes are shown this once, and the account is signed in.",
+        "properties": {
+          "login": {
+            "$ref": "#/components/schemas/LoginResponse",
+            "description": "What POST /api/v1/auth/login answers an account without two-step sign-in: the access token and the profile"
+          },
+          "recovery_codes": {
+            "description": "10 codes of 10 characters; each signs in once",
+            "items": {
+              "type": "string"
+            },
+            "title": "Recovery Codes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "recovery_codes",
+          "login"
+        ],
+        "title": "MfaEnrolConfirmResponse",
+        "type": "object"
+      },
+      "MfaEnrolRequest": {
+        "description": "``POST /api/v1/auth/mfa/enroll``: the token of a password step that\nanswered ``enrol: true``.",
+        "properties": {
+          "mfa_token": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Mfa Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mfa_token"
+        ],
+        "title": "MfaEnrolRequest",
+        "type": "object"
+      },
       "MfaRequiredResponse": {
-        "description": "``POST /auth/login`` and ``/auth/token`` for an account with two-step\nsign-in on: the password was right, and a code is needed. There is no\n``access_token``: send ``mfa_token`` with a code to\n``POST /api/v1/auth/mfa/verify``.",
+        "description": "``POST /auth/login`` and ``/auth/token`` for an account with two-step\nsign-in on, or whose role requires it: the password was right, and a\nsecond step is needed. There is no ``access_token``. With ``enrol: false``\nsend ``mfa_token`` with a code to ``POST /api/v1/auth/mfa/verify``; with\n``enrol: true`` set two-step sign-in up first, with\n``POST /api/v1/auth/mfa/enroll`` and ``/auth/mfa/enroll/confirm``.",
         "properties": {
           "enrol": {
             "default": false,
-            "description": "Always false in this release: the account already has an authenticator app set up",
+            "description": "True when the account's role requires two-step sign-in (LOCAL_AUTH_2FA_REQUIRED_ROLES) and the account has not set it up: it sets it up before it is signed in. False when the account already has an authenticator app set up",
             "title": "Enrol",
             "type": "boolean"
           },
           "expires_in": {
-            "description": "Seconds until mfa_token expires",
+            "description": "Seconds until mfa_token expires: 300, or 600 with enrol true",
             "title": "Expires In",
             "type": "integer"
           },
@@ -11860,7 +11922,7 @@
             "type": "boolean"
           },
           "mfa_token": {
-            "description": "Send it to POST /api/v1/auth/mfa/verify with a code",
+            "description": "With enrol false, send it to POST /api/v1/auth/mfa/verify with a code; with enrol true, to POST /api/v1/auth/mfa/enroll and /auth/mfa/enroll/confirm",
             "title": "Mfa Token",
             "type": "string"
           }
@@ -18493,7 +18555,7 @@
           },
           "required": {
             "default": false,
-            "description": "Your role must use two-step sign-in. Always false in this release",
+            "description": "Your role must use two-step sign-in (LOCAL_AUTH_2FA_REQUIRED_ROLES), so it cannot be turned off. Always false for an account that signs in without a password",
             "title": "Required",
             "type": "boolean"
           }
@@ -23291,7 +23353,7 @@
     },
     "/api/v1/auth/login": {
       "post": {
-        "description": "Sign in with e-mail and password (``AUTH_PROVIDER=local``).\n\nReturns a bearer token plus the user's profile.  The same 401 message is\nused for an unknown address, a wrong password and an inactive account so\nthe endpoint cannot be used to enumerate users.  After\n``LOCAL_AUTH_MAX_FAILED_ATTEMPTS`` failures within\n``LOCAL_AUTH_LOCKOUT_MINUTES`` the address answers 423 until the window\nexpires.  The email address is matched whatever its letter case (A–Z),\nand every casing of it counts toward the same failed attempts.\n\nFor an account with two-step sign-in on, the right password answers\n``{\"mfa_required\": true, \"mfa_token\": \"...\", \"enrol\": false,\n\"expires_in\": 300}`` with no ``access_token``: send the ``mfa_token`` with\na code from the authenticator app (or a recovery code) to\n``POST /api/v1/auth/mfa/verify`` within ``expires_in`` seconds. Scripts\nthat sign in this way should use an API key instead.",
+        "description": "Sign in with e-mail and password (``AUTH_PROVIDER=local``).\n\nReturns a bearer token plus the user's profile.  The same 401 message is\nused for an unknown address, a wrong password and an inactive account so\nthe endpoint cannot be used to enumerate users.  After\n``LOCAL_AUTH_MAX_FAILED_ATTEMPTS`` failures within\n``LOCAL_AUTH_LOCKOUT_MINUTES`` the address answers 423 until the window\nexpires.  The email address is matched whatever its letter case (A–Z),\nand every casing of it counts toward the same failed attempts.\n\nFor an account with two-step sign-in on, the right password answers\n``{\"mfa_required\": true, \"mfa_token\": \"...\", \"enrol\": false,\n\"expires_in\": 300}`` with no ``access_token``: send the ``mfa_token`` with\na code from the authenticator app (or a recovery code) to\n``POST /api/v1/auth/mfa/verify`` within ``expires_in`` seconds. Scripts\nthat sign in this way should use an API key instead.\n\nFor an account whose role requires two-step sign-in\n(``LOCAL_AUTH_2FA_REQUIRED_ROLES``) and that has not set it up, the right\npassword answers ``{\"mfa_required\": true, \"mfa_token\": \"...\", \"enrol\":\ntrue, \"expires_in\": 600}``: set it up with ``POST /api/v1/auth/mfa/enroll``\nand ``/auth/mfa/enroll/confirm``, which then signs the account in.",
         "operationId": "login_local_api_v1_auth_login_post",
         "requestBody": {
           "content": {
@@ -23398,6 +23460,111 @@
           }
         ],
         "summary": "Get User Info",
+        "tags": [
+          "Authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/mfa/enroll": {
+      "post": {
+        "description": "Set two-step sign-in up during a sign-in, for an account whose role\nrequires it (``AUTH_PROVIDER=local``).\n\nTakes the ``mfa_token`` of a password step that answered ``enrol: true``\nand answers a new secret for the authenticator app, in base32 (to type in)\nand as an ``otpauth://`` link (for a QR code), as\n``POST /api/v1/users/me/2fa/enroll`` does for a signed-in account. Asking\nagain replaces a secret that is still waiting. Then send the app's first\ncode to ``POST /api/v1/auth/mfa/enroll/confirm`` with the same token,\nwithin its ``expires_in`` (600 seconds). Limited to 10 requests a minute\nper client address.",
+        "operationId": "enrol_during_sign_in_api_v1_auth_mfa_enroll_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaEnrolRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TwoFactorEnrolResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Sign-in expired. Start again. (the mfa_token is expired, forged or not of the enrol purpose; or the account can no longer sign in, its role no longer requires two-step sign-in, or it is already on)"
+          },
+          "404": {
+            "description": "AUTH_PROVIDER is not 'local'"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enrol During Sign In",
+        "tags": [
+          "Authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/mfa/enroll/confirm": {
+      "post": {
+        "description": "Turn two-step sign-in on with the app's first code, and finish the sign-in\n(``AUTH_PROVIDER=local``).\n\nTakes the ``mfa_token`` that ``POST /api/v1/auth/mfa/enroll`` was given\nand the 6-digit ``code`` the authenticator app shows for the new secret.\nAnswers the account's 10 recovery codes, shown this once, and ``login``:\nwhat ``POST /api/v1/auth/login`` answers an account without two-step\nsign-in, the access token and the profile. From then on, signing in asks\nfor a code.\n\nA wrong code answers 401, leaves the secret waiting, and counts toward\nthe same lockout as a wrong password. Limited to 10 requests a minute per\nclient address.",
+        "operationId": "confirm_enrolment_during_sign_in_api_v1_auth_mfa_enroll_confirm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaEnrolConfirmRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaEnrolConfirmResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "That code is not correct. (a wrong, used or malformed code), or Sign-in expired. Start again. (the mfa_token is expired, forged or not of the enrol purpose; or the account can no longer sign in, its role no longer requires two-step sign-in, or it is already on)"
+          },
+          "404": {
+            "description": "AUTH_PROVIDER is not 'local'"
+          },
+          "409": {
+            "description": "No new secret is waiting for its first code. Ask for one with POST /api/v1/auth/mfa/enroll."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "423": {
+            "description": "Too many failed attempts for this address, passwords and codes counted together (see Retry-After); or two-step sign-in is locked after too many wrong codes until an administrator resets it (no Retry-After)"
+          },
+          "503": {
+            "description": "Two-step sign-in is unavailable for this account. Ask an administrator to reset it."
+          }
+        },
+        "summary": "Confirm Enrolment During Sign In",
         "tags": [
           "Authentication"
         ]
@@ -37402,7 +37569,7 @@
     },
     "/api/v1/users/me/2fa": {
       "get": {
-        "description": "Whether your two-step sign-in is on, and how many recovery codes are left.\n\n`required` is always false in this release.",
+        "description": "Whether your two-step sign-in is on, and how many recovery codes are left.\n\n`required` is true when your role must use two-step sign-in\n(`LOCAL_AUTH_2FA_REQUIRED_ROLES`): it cannot be turned off, and a sign-in\nasks you to set it up while it is off. It is false for an account that\nsigns in without a password of its own.",
         "operationId": "read_own_two_factor_api_v1_users_me_2fa_get",
         "responses": {
           "200": {
@@ -37462,7 +37629,7 @@
             "description": "AUTH_PROVIDER is not 'local'."
           },
           "409": {
-            "description": "No new secret is waiting for its first code. Ask for one with POST /api/v1/users/me/2fa/enroll."
+            "description": "No new secret is waiting for its first code, or two-step sign-in is already on. While it is off, ask for a secret with POST /api/v1/users/me/2fa/enroll."
           },
           "422": {
             "content": {
@@ -37494,7 +37661,7 @@
     },
     "/api/v1/users/me/2fa/disable": {
       "post": {
-        "description": "Turn your two-step sign-in off, with a code from the app or a recovery\ncode (exactly one).\n\nAnswers 204. Sign-in then asks for the password alone. A wrong code\nanswers 403 and counts toward the same lockout as a wrong password.",
+        "description": "Turn your two-step sign-in off, with a code from the app or a recovery\ncode (exactly one).\n\nAnswers 204. Sign-in then asks for the password alone. A wrong code\nanswers 403 and counts toward the same lockout as a wrong password.\nWhen your role must use two-step sign-in (`LOCAL_AUTH_2FA_REQUIRED_ROLES`)\nit answers 403 without checking the code; an administrator's reset is\nthe way to start again.",
         "operationId": "disable_own_two_factor_api_v1_users_me_2fa_disable_post",
         "requestBody": {
           "content": {
@@ -37511,7 +37678,7 @@
             "description": "Successful Response"
           },
           "403": {
-            "description": "That code is not correct. (wrong, used or malformed)"
+            "description": "That code is not correct. (wrong, used or malformed); or Two-step sign-in is required for your role, so it cannot be turned off. (LOCAL_AUTH_2FA_REQUIRED_ROLES names your role; no code is checked or counted)"
           },
           "404": {
             "description": "AUTH_PROVIDER is not 'local'."

@@ -43,13 +43,15 @@ pytestmark = [pytest.mark.unit]
 #: /tracking/visual/preview (VisualPreviewRequest) and a preview link's create
 #: (PreviewLinkCreate). #1812 added 3 to both: the bodies of /auth/mfa/verify
 #: (MfaVerifyRequest), /users/me/2fa/confirm and /recovery-codes
-#: (TwoFactorCodeRequest) and /users/me/2fa/disable (TwoFactorDisableRequest).
-#: Then 1 more to both: the current password at /users/me/2fa/enroll
-#: (TwoFactorEnrolRequest). #1545's visual editor sign-in added 2 to both:
-#: the bodies of /visual-editor/tickets/claim (TicketClaim) and
-#: /visual-editor/sessions (ClaimExchange).
-CORE_MODEL_COUNT = 99
-FULL_MODEL_COUNT = 143
+#: (TwoFactorCodeRequest) and /users/me/2fa/disable (TwoFactorDisableRequest);
+#: its required roles 2 more to both: /auth/mfa/enroll (MfaEnrolRequest) and
+#: /auth/mfa/enroll/confirm (MfaEnrolConfirmRequest). Then 1 more to both: the
+#: current password at /users/me/2fa/enroll (TwoFactorEnrolRequest). #1545's
+#: visual editor sign-in added 2 to both: the bodies of
+#: /visual-editor/tickets/claim (TicketClaim) and /visual-editor/sessions
+#: (ClaimExchange).
+CORE_MODEL_COUNT = 101
+FULL_MODEL_COUNT = 145
 
 #: ``(model, field)`` pairs that a ``mode="before"`` field validator covers.
 CORE_BEFORE_COUNT = 46
