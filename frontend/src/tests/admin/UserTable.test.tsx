@@ -204,7 +204,14 @@ describe('UserTable', () => {
     const deleteBtn = screen.getByTestId('delete-user-user-99');
     fireEvent.click(deleteBtn);
 
-    expect(confirmMock).toHaveBeenCalled();
+    // The question says what the delete takes with it (#657): the account's
+    // API keys, which applications may be using.
+    expect(confirmMock).toHaveBeenCalledTimes(1);
+    expect((confirmMock.mock.calls[0] as unknown[])[0]).toBe(
+      'Are you sure you want to delete user "testuser"? ' +
+        'Their API keys are deleted too, and applications using them stop working. ' +
+        'This action cannot be undone.',
+    );
     // Since confirm returns false, deleteUser should NOT be called
     expect(mockDeleteUser).not.toHaveBeenCalled();
   });

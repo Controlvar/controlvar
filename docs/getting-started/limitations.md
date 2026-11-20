@@ -109,8 +109,11 @@ views a second is in that range.
 
 ## Visual experiments (not yet available)
 
-The visual editor is not yet available in the dashboard. This line is about the sign-in it will use.
+The visual editor is not yet available. These lines are about the browser script and the sign-in it will use.
 
 | What you might expect | What happens instead |
 |---|---|
+| A text change on a page React renders on the server, with no error | On a site whose pages React renders on the server (Next.js and others), a text change makes React report at least one hydration error per page view (several on React 18), which your error monitoring will record. The change still shows. |
+| A change to a text the page keeps updating | Do not change a text your site keeps updating while the page is open (a cart count, a timer, a price that loads late): once changed, either it stops showing your site's updates or your site's update replaces the change. |
+| A visual experiment on a site that routes after `#` | On a site that routes with the part of the address after `#` (hash routing), the visual editor always opens the site's default route, and page rules treat every route as one page. |
 | An editor sign-in that can be extended | The visual editor's sign-in on your page lasts 4 hours and cannot be extended there. Every saved change is kept, and you go on by opening the editor again from the experiment's page. This does not meet WCAG 2.1 success criterion 2.2.1 (Timing Adjustable). |

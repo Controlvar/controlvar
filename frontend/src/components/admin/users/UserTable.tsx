@@ -131,7 +131,9 @@ export function UserTable({
 
   const handleDelete = async (user: AdminUser) => {
     const confirmed = window.confirm(
-      `Are you sure you want to delete user "${user.username}"? This action cannot be undone.`
+      `Are you sure you want to delete user "${user.username}"? ` +
+        'Their API keys are deleted too, and applications using them stop working. ' +
+        'This action cannot be undone.'
     );
     if (!confirmed) return;
     setDeleteError(null);

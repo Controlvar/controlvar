@@ -8,7 +8,11 @@ those sentences are held here, by reading each SDK's non-test source under
 
 * The SDK directories whose source names the error-report path or an error
   report call (``reportError``, ``report_error``) are exactly ``js`` and
-  ``python``. A new SDK that adds one fails here until the pages say so.
+  ``python``. A new SDK that adds one fails here until the pages say so. The
+  one directory left out is ``visual``, the visual editor's browser script
+  (not yet available): its reports never carry a feature flag key, so none
+  reaches safety rollback, which is what the pages' sentence is about. Its
+  contract file and its source are checked for that here.
 * The directories whose source reads a ``Retry-After`` header are exactly
   ``go``, ``js``, ``mcp`` and ``python``. Of those, only ``js`` and ``python``
   send the request again: the JavaScript client keys its single retry on
@@ -39,6 +43,7 @@ Reads files only (no git), so it runs the same in core_build's copy.
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Dict, Set
@@ -96,6 +101,12 @@ RETRY_AFTER_HEADER = re.compile(r"retry-after|retry_after|retryAfter", re.IGNORE
 
 EXPECTED_REPORTERS = {"js", "python"}
 EXPECTED_HEADER_READERS = {"go", "js", "mcp", "python"}
+#: Directories that send error reports none of which can reach safety rollback.
+NO_FLAG_KEY_REPORTERS = {
+    "visual": "the visual editor's browser script: its reports have exactly "
+    "error_type, experiment_key, message and metadata, never a feature flag key",
+}
+VISUAL_REPORTS = REPO_ROOT / "tests" / "sdk-contract" / "visual-error-reports.json"
 
 
 def _source_files(sdk: Path):
@@ -136,7 +147,25 @@ def test_the_scan_sees_every_sdk_directory():
 
 
 def test_only_the_javascript_and_python_sdks_send_error_reports():
-    assert _dirs_matching(ERROR_REPORT) == EXPECTED_REPORTERS
+    reporters = _dirs_matching(ERROR_REPORT) - set(NO_FLAG_KEY_REPORTERS)
+    assert reporters == EXPECTED_REPORTERS
+
+
+def test_the_visual_scripts_reports_never_carry_a_feature_flag_key():
+    # The one directory left out above: its documented request keys, and its
+    # source, which never names the field.
+    assert set(NO_FLAG_KEY_REPORTERS) == {"visual"}
+    contract = json.loads(VISUAL_REPORTS.read_text(encoding="utf-8"))
+    assert contract["request_keys"] == [
+        "error_type",
+        "experiment_key",
+        "message",
+        "metadata",
+    ]
+    sources = list(_source_files(SDK_ROOT / "visual"))
+    assert sources, "no visual script source found"
+    for path in sources:
+        assert "feature_flag" not in path.read_text(encoding="utf-8"), path
 
 
 def test_the_error_report_path_is_in_both_clients():

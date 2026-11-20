@@ -291,7 +291,7 @@ updates:
   # Client SDKs (sdk/<lang>, MIT) — one entry per ecosystem
   # ---------------------------------------------------------------------------
   - package-ecosystem: "npm"
-    directories: ["/sdk/js", "/sdk/react", "/sdk/react-native", "/sdk/openfeature", "/sdk/edge"]
+    directories: ["/sdk/js", "/sdk/react", "/sdk/react-native", "/sdk/openfeature", "/sdk/edge", "/sdk/visual"]
     commit-message:
       prefix: "chore(deps)"
     schedule:

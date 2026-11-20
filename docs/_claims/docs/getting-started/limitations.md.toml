@@ -493,15 +493,30 @@ by = [
 
 [[unit]]
 text = "Visual experiments (not yet available)"
-by = ["exempt:label"]
+by = ["mechanism:visual-limitations-heading"]
 
 [[unit]]
-text = "The visual editor is not yet available in the dashboard."
-by = ["test:backend/tests/unit/api/test_visual_editor_not_in_dashboard.py::test_the_dashboard_does_not_open_the_visual_editor_yet"]
+text = "The visual editor is not yet available."
+by = ["mechanism:visual-limitations-heading"]
 
 [[unit]]
-text = "This line is about the sign-in it will use."
+text = "These lines are about the browser script and the sign-in it will use."
 by = ["exempt:navigation"]
+
+[[unit]]
+text = "A text change on a page React renders on the server, with no error | On a site whose pages React renders on the server (Next.js and others), a text change makes React report at least one hydration error per page view (several on React 18), which your error monitoring will record. The change still shows."
+by = ["test:frontend/tests/e2e/runtime/hydration.runtime.spec.ts::on 25 targets is kept through hydration"]
+
+[[unit]]
+text = "A change to a text the page keeps updating | Do not change a text your site keeps updating while the page is open (a cart count, a timer, a price that loads late): once changed, either it stops showing your site's updates or your site's update replaces the change."
+by = ["test:frontend/tests/e2e/runtime/keep.runtime.spec.ts::a page that resets a text every 100 ms gets the change back each time until the bound, then keeps its own"]
+
+[[unit]]
+text = "A visual experiment on a site that routes after # | On a site that routes with the part of the address after # (hash routing), the visual editor always opens the site's default route, and page rules treat every route as one page."
+by = [
+    "test:frontend/tests/e2e/runtime/editor-link.runtime.spec.ts::is removed from the address, claimed once, and handed to the panel after hello",
+    "test:frontend/tests/e2e/runtime/spa.runtime.spec.ts::each kind of change after # re-evaluates exactly once, with no call and no page view",
+]
 
 [[unit]]
 text = "An editor sign-in that can be extended | The visual editor's sign-in on your page lasts 4 hours and cannot be extended there. Every saved change is kept, and you go on by opening the editor again from the experiment's page. This does not meet WCAG 2.1 success criterion 2.2.1 (Timing Adjustable)."

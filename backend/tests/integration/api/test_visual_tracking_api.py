@@ -28,6 +28,7 @@ that fails it:
        included: the cleaning is this route's alone.
 * R10  a key with ``sdk:ruleset`` still works on ``/tracking/assign``,
        ``/tracking/batch`` and flag evaluation.
+* IA-S8 (#449) a visitor linked to an assigned id gets that id's variant.
 
 Also: at most 10 experiments, the one that started first first; a format
 newer than the script's, or stored values that fail their schema, leave that
@@ -60,8 +61,11 @@ from backend.app.db import request_sessions
 from backend.app.main import app
 from backend.app.models.assignment import Assignment
 from backend.app.models.event import Event
+from backend.app.models.experiment import Experiment
 from backend.app.models.global_holdout import GlobalHoldout
+from backend.app.models.identity_alias import IdentityAlias
 from backend.app.models.user import UserRole
+from backend.app.services import identity_aliases
 from backend.app.services.assignment_service import AssignmentService
 from backend.tests.integration.api.route_helpers import (
     api_client,
@@ -1088,10 +1092,11 @@ def _segment_running(client, developer, host: str) -> Dict[str, Any]:
 
 #: Statements for one page answer to a new visitor, at 1 and at 10 matching
 #: experiments, each targeting a rules segment, measured on PostgreSQL: each
-#: further experiment costs 13 more (136 = 19 + 9 x 13), and an extra
-#: statement per experiment moves both.
-STATEMENTS_AT_1 = 19
-STATEMENTS_AT_10 = 136
+#: further experiment costs 14 more (146 = 20 + 9 x 14), and an extra
+#: statement per experiment moves both. #449's read of the person the id
+#: belongs to is one statement per experiment (was 19 and 136).
+STATEMENTS_AT_1 = 20
+STATEMENTS_AT_10 = 146
 
 
 @pytest.mark.regression
@@ -1123,3 +1128,41 @@ def test_the_cost_of_one_answer_is_pinned(client, db_session, developer, key):
                 )
                 assert exposures == 30
     assert counts == {1: STATEMENTS_AT_1, 10: STATEMENTS_AT_10}, counts
+
+
+def test_a_linked_visitor_gets_the_variant_its_person_holds(
+    client, db_session, developer, key
+):
+    """IA-S8 (#449): the page answer assigns through ``/tracking/assign``, so a
+    visitor linked to an assigned id gets that id's variant and no row of its
+    own. The link is written through ``identity_aliases.link``."""
+    host = _host()
+    made = _running(client, developer, host, control=50)
+    session = _session(db_session)
+    try:
+        experiment = session.get(Experiment, uuid.UUID(made["id"]))
+        hashed = AssignmentService(session)._hash_user_to_variant
+        a1 = _visitor()
+        held = str(hashed(a1, experiment))
+        u1 = next(
+            v
+            for v in (_visitor() for _ in range(200))
+            if str(hashed(v, experiment)) != held
+        )
+    finally:
+        session.close()
+    first = _ask(client, key, host, user_id=a1).json()["experiments"]
+    assert [e["variant_id"] for e in first] == [held]
+    session = _session(db_session)
+    try:
+        assert identity_aliases.link(session, a1, u1) is True
+        answer = _ask(client, key, host, user_id=u1).json()["experiments"]
+        assert [e["variant_id"] for e in answer] == [held], (
+            "visual answered u1 its own hash"
+        )
+        assert _assignments(db_session, made["id"]) == 1
+    finally:
+        session.rollback()
+        session.query(IdentityAlias).filter(IdentityAlias.anonymous_id == a1).delete()
+        session.commit()
+        session.close()

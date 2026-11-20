@@ -517,6 +517,14 @@ jobs:
       - name: The comparison rejects a wrong answer; the published evaluators accept the ruleset
         run: python -m pytest tests/sdk-contract -v -o addopts=""
 
+      # The visual script (sdk/visual) gives the server's answer on every page-change
+      # and page-rule vector in visual-changes-vectors.json, exact count.
+      - name: Visual script page-change vectors (sdk/visual)
+        working-directory: sdk/visual
+        run: |
+          npm ci --no-audit --no-fund
+          npx jest --ci __tests__/validate.test.ts
+
       - name: Python SDK hash (sdk/python)
         run: python tests/sdk-contract/hash_contract.py python
 
@@ -992,6 +1000,59 @@ jobs:
         env:
           PLAYWRIGHT_API_URL: http://localhost:8000
         run: cd frontend && npx playwright test --project=journeys
+
+      # --- The visual experiments' browser script (sdk/visual, #1545). Built
+      # and packed as a release would pack it; the page-runtime specs load the
+      # files inside the tarball (tests/e2e/runtime/runtime.fixture.ts reads
+      # VISUAL_PACKAGE_DIR).
+      - name: Pack the browser script (sdk/visual)
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/visual-pack"
+          mkdir -p "$out"
+          cd sdk/visual
+          npm ci --no-audit --no-fund
+          npm run build
+          npm pack --pack-destination "$out"
+          tarballs=("$out"/*.tgz)
+          if [ "${#tarballs[@]}" -ne 1 ] || [ ! -f "${tarballs[0]}" ]; then
+            echo "expected exactly one tarball in $out"; ls -la "$out"; exit 1
+          fi
+          tar -xzf "${tarballs[0]}" -C "$out"
+          test -f "$out/package/dist/controlvar-visual.js"
+          echo "VISUAL_PACKAGE_DIR=$out/package" >> "$GITHUB_ENV"
+
+      # The customer sites the specs load that a framework builds, each in its
+      # own out/ under tests/e2e/runtime/fixtures: Next App Router and Pages
+      # Router static exports from the dashboard's own next and react, and two
+      # pages rendered with react-dom/server (React 18.3.1 from sdk/visual's
+      # devDependencies, installed by the step above, and the dashboard's
+      # React 19.3).
+      - name: Build the page-runtime fixtures
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: cd frontend && node tests/e2e/runtime/fixtures/build.mjs
+
+      # The project's listing, then the run, each as a JSON report (the run also
+      # prints the list reporter, for the log): Playwright exits 0 on a skipped
+      # test and on one that passed only on its retry, so the next step
+      # compares the two reports. real-api.runtime.spec.ts passes the script's
+      # requests on to the API started above, at PLAYWRIGHT_API_URL.
+      - name: Run the page-runtime specs
+        env:
+          PLAYWRIGHT_API_URL: http://localhost:8000
+        run: |
+          set -euo pipefail
+          cd frontend
+          PLAYWRIGHT_JSON_OUTPUT_NAME="$RUNNER_TEMP/page-runtime-list.json" \
+            npx playwright test --project=page-runtime --list --reporter=json
+          PLAYWRIGHT_JSON_OUTPUT_NAME="$RUNNER_TEMP/page-runtime-run.json" \
+            npx playwright test --project=page-runtime --reporter=list,json
+
+      - name: Check that every page-runtime spec ran and passed first time
+        run: |
+          python3 scripts/check_page_runtime_run.py "$RUNNER_TEMP/page-runtime-list.json" \
+            "$RUNNER_TEMP/page-runtime-run.json" frontend/tests/e2e
 
       # --- Two-step sign-in required for a role (#1812, U9 of PR 4). A second
       # API process on :8002 with LOCAL_AUTH_2FA_REQUIRED_ROLES=ANALYST, the

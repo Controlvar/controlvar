@@ -27,8 +27,8 @@ ALEMBIC_INI = REPO_ROOT / "backend" / "app" / "db" / "alembic.ini"
 CORE_VERSIONS = REPO_ROOT / "backend" / "app" / "db" / "migrations" / "versions"
 ENV_PY = REPO_ROOT / "backend" / "app" / "db" / "migrations" / "env.py"
 
-#: The core chain's head (#1812).
-CORE_HEAD = "t1812_user_totp"
+#: The core chain's head (#449).
+CORE_HEAD = "t449_identity_aliases"
 #: The modules branch's head (#826).
 MODULES_HEAD = "modules_0005_redshift"
 #: The revision 1ab99332f0ba's re-run recipe downgrades to, and what lies past it.

@@ -48,11 +48,16 @@ from backend.app.models.global_holdout import GlobalHoldout
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_db]
 
+#: Re-recorded for #449: every assign of an ACTIVE experiment reads the
+#: person the id belongs to (``SELECT identity_aliases``) before its sticky
+#: lookup, one statement and nothing else for an id never linked.
+#:
 #: A new user's ``/tracking/assign``, with a context, and no active holdout.
 ASSIGN_NEW_USER = [
     ("SET search_path TO test_experimentation", "ff5c96ca3f3a2d4d"),
     ("SELECT experiments", "deb03a6ac648343e"),
     ("SELECT experiments+variants", "92e5c9fa28954735"),
+    ("SELECT identity_aliases", "057d9e83406ae342"),
     ("SELECT assignments", "9f4f07bfbdd34878"),
     ("SELECT global_holdouts", "0b4c48f8051086b3"),
     ("INSERT assignments", "22aea8689339e06a"),
@@ -70,6 +75,7 @@ ASSIGN_STICKY_REPEAT = [
     ("SET search_path TO test_experimentation", "ff5c96ca3f3a2d4d"),
     ("SELECT experiments", "deb03a6ac648343e"),
     ("SELECT experiments+variants", "92e5c9fa28954735"),
+    ("SELECT identity_aliases", "057d9e83406ae342"),
     ("SELECT assignments", "9f4f07bfbdd34878"),
     ("SELECT assignments", "9f4f07bfbdd34878"),
     ("SELECT variants", "17dfe07abcf55f97"),
@@ -86,6 +92,7 @@ BALANCED_NEW_USER = [
     ("SELECT experiments", "deb03a6ac648343e"),
     ("SELECT experiments", "dc0a2d5b8215565b"),
     ("SELECT experiments+variants", "92e5c9fa28954735"),
+    ("SELECT identity_aliases", "057d9e83406ae342"),
     ("SELECT assignments", "9f4f07bfbdd34878"),
     ("SELECT global_holdouts", "0b4c48f8051086b3"),
     ("SAVEPOINT ?", "a83745f24726618a"),
@@ -109,6 +116,7 @@ BALANCED_STICKY_REPEAT = [
     ("SELECT experiments", "deb03a6ac648343e"),
     ("SELECT experiments", "dc0a2d5b8215565b"),
     ("SELECT experiments+variants", "92e5c9fa28954735"),
+    ("SELECT identity_aliases", "057d9e83406ae342"),
     ("SELECT assignments", "9f4f07bfbdd34878"),
     ("SELECT assignments", "9f4f07bfbdd34878"),
     ("SELECT variants", "17dfe07abcf55f97"),

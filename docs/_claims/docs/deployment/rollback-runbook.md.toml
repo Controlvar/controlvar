@@ -378,6 +378,13 @@ by = [
 ]
 
 [[unit]]
+text = "From a release that carries t449_identity_aliases (its own down_revision is t1812_user_totp), it also includes t449_identity_aliases's, which drops every link between an anonymous id and a known id and leaves assignments and events untouched; an upgrade afterwards starts with no links, and they must be sent again."
+by = [
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_after_the_newer_release_downgrades_the_database_the_older_one_starts",
+    "test:backend/tests/integration/database/test_identity_aliases_migration.py::test_the_downgrade_drops_every_link_and_keeps_assignments_and_events",
+]
+
+[[unit]]
 text = "Rolling back past segment targeting"
 by = ["exempt:label"]
 
@@ -1410,6 +1417,13 @@ text = "From a release that carries t1812_user_totp, whose down_revision is 4955
 by = [
     "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
     "test:backend/tests/integration/database/test_user_totp_migration.py::test_the_downgrade_drops_the_table_only",
+]
+
+[[unit]]
+text = "From a release that carries t449_identity_aliases, whose down_revision is t1812_user_totp, every core target in this list undoes t449_identity_aliases before all of these, which drops the table identity_aliases, every link between an anonymous id and a known id, and leaves every assignment and event untouched (nothing restores the links: an upgrade afterwards creates the table empty, and they must be sent again), and does not refuse; a downgrade to t1812_user_totp undoes it alone."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_identity_aliases_migration.py::test_the_downgrade_drops_every_link_and_keeps_assignments_and_events",
 ]
 
 [[unit]]

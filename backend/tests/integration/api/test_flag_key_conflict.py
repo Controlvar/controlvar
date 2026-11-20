@@ -55,9 +55,9 @@ def test_create_race_is_409(admin_client, db_session, admin_user, monkeypatch):
     key = unique_flag_key("race-create")
     original = FeatureFlagService.create_feature_flag
 
-    def create_after_a_concurrent_one(self, flag_data, owner_id):
+    def create_after_a_concurrent_one(self, flag_data, owner_id, **kwargs):
         _store_flag(db_session, admin_user.id, flag_data.key)
-        return original(self, flag_data, owner_id)
+        return original(self, flag_data, owner_id, **kwargs)
 
     monkeypatch.setattr(
         FeatureFlagService, "create_feature_flag", create_after_a_concurrent_one
@@ -82,9 +82,9 @@ def test_put_key_race_is_409(
     wanted = unique_flag_key("race-put-target")
     original = FeatureFlagService.update_feature_flag
 
-    def update_after_a_concurrent_create(self, flag_id, flag_data):
+    def update_after_a_concurrent_create(self, flag_id, flag_data, **kwargs):
         _store_flag(db_session, admin_user.id, flag_data.key)
-        return original(self, flag_id, flag_data)
+        return original(self, flag_id, flag_data, **kwargs)
 
     monkeypatch.setattr(
         FeatureFlagService, "update_feature_flag", update_after_a_concurrent_create
@@ -161,7 +161,7 @@ def test_put_key_check_past_first_100_refuses_before_any_write(
     db_session.commit()
     mover = make_feature_flag(key=unique_flag_key("precheck-mover"))
 
-    def the_write_must_not_be_reached(self, flag_id, flag_data):
+    def the_write_must_not_be_reached(self, flag_id, flag_data, **kwargs):
         raise AssertionError(f"update reached the write for key {flag_data.key!r}")
 
     monkeypatch.setattr(

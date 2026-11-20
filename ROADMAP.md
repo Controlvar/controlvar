@@ -96,7 +96,7 @@ install.
 - Local evaluation in more server SDKs, including segments and the advanced operators.
 - Changes through the MCP server, under the same role checks, with a person approving risky ones
   ([#1607](https://github.com/Controlvar/controlvar/issues/1607)).
-- More integrations, such as Slack and PagerDuty, when people ask for them.
+- More Slack events, and PagerDuty, when people ask for them.
 - The one-command AWS installer out of beta
   ([#1299](https://github.com/Controlvar/controlvar/issues/1299)).
 - Scheduled flag changes beyond rollout schedules.

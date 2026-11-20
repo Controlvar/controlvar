@@ -31,6 +31,8 @@ import io
 import json
 import re
 import shutil
+import subprocess
+import sys
 import tarfile
 import tomllib
 import zipfile
@@ -305,9 +307,17 @@ def _linux_languages() -> Dict[str, str]:
     return ast.literal_eval(re.search(r"LINUX = (\{.*?\})\n", text, re.S).group(1))
 
 
+#: The node and python legs the release does not build: sdk/visual (#1545) is
+#: unwired, so its README has no rule set, and the step names it and packs
+#: nothing (the `none` branch below). A second such leg fails the test below
+#: until it is added here.
+UNPUBLISHED_LEGS = {"visual"}
+
+
 def test_the_unit_tests_check_the_readme_of_every_npm_and_pypi_sdk() -> None:
     """The step runs on every node and python leg, and those legs are exactly
-    the SDKs the release builds for npm and PyPI."""
+    the SDKs the release builds for npm and PyPI, plus the unpublished ones,
+    each unwired and without a README rule set."""
     step = _unit_step()
     assert step.get("if") == "matrix.lang == 'node' || matrix.lang == 'python'"
     assert step.get("env") == {
@@ -319,9 +329,20 @@ def test_the_unit_tests_check_the_readme_of_every_npm_and_pypi_sdk() -> None:
         sdk for sdk, lang in _linux_languages().items() if lang in ("node", "python")
     }
     registry = {sdk for sdk, eco in ecosystems().items() if eco in ("npm", "pypi")}
-    assert legs == registry, sorted(legs ^ registry)
+    expected = registry | UNPUBLISHED_LEGS
+    assert legs == expected, sorted(legs ^ expected)
+    for sdk in sorted(UNPUBLISHED_LEGS):
+        assert ecosystems()[sdk] == "unwired", sdk
+        printed = subprocess.run(
+            [sys.executable, str(ROOT / GATE), "--sdk", sdk, "--print-rule-set"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        assert printed == "none", (sdk, printed)
     run = _run_of(step)
     assert "--print-rule-set" in run
+    assert 'if [ "$rules" = "none" ]; then' in run
     gate = 'python3 scripts/check_packaged_readme.py --sdk "$SDK" "$out"/*'
     lines = [line.strip() for line in run.splitlines() if line.strip()]
     # The gate's exit status is the step's: `set -e` is on, the gate is the
