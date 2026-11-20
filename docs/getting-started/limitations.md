@@ -1,3 +1,8 @@
+---
+title: Limitations, what Controlvar does not do
+description: "What Controlvar does not do and what happens instead, for feature flags, experiments and more, with links to the public issues that track each change."
+---
+
 # Limitations
 
 What Controlvar does not do, and what happens instead. Where a public issue tracks a change,
@@ -62,7 +67,7 @@ the row links it.
 
 | What you might expect | What happens instead |
 |---|---|
-| Requiring two-step sign-in for a role on an AWS CDK install | Not available yet: the CDK app cannot set `LOCAL_AUTH_2FA_REQUIRED_ROLES`, so each local account turns two-step sign-in on or off for itself there. Docker Compose and the Helm chart can set it. See [Requiring it for a role](../api/auth.md#requiring-it-for-a-role). |
+| Requiring two-step sign-in for a role on an AWS CDK install | Give `cdk deploy` the context `-c local_auth_2fa_required_roles=ADMIN,DEVELOPER`: the API task then has `LOCAL_AUTH_2FA_REQUIRED_ROLES`. It applies to local accounts only, so the CDK app refuses it together with `-c cognito_hosted_ui=true`, where sign-in goes through Cognito. Without the context, each local account turns two-step sign-in on or off for itself. Docker Compose and the Helm chart can set it too. See [Requiring it for a role](../api/auth.md#requiring-it-for-a-role). |
 | SAML sign-in | Not available. OIDC sign-in is, with the `sso` module (full profile). |
 | A custom role that removes access, or that grants administration | Custom roles and direct permission grants (the `rbac` module) only add, and only to experiments, flags and reading the audit log; never administration or the compliance audit trail. Administration depends on the built-in role or the superuser flag; to restrict someone, give them a lower built-in role. See [What a role or grant cannot give](../api/rbac.md#what-a-role-or-grant-cannot-give). |
 | Assigning roles and granting permissions in the dashboard | The Roles page defines roles; assigning them and granting permissions go through the [RBAC API](../api/rbac.md). |
@@ -98,7 +103,6 @@ views a second is in that range.
 
 | What you might expect | What happens instead |
 |---|---|
-| Flag targeting from a native mobile SDK | iOS, Android and Flutter send only the user id on flag evaluation, so rules on attributes do not match ([#438](https://github.com/Controlvar/controlvar/issues/438)). Experiment assignment sends them. React Native sends them on flag evaluation too. |
 | Every SDK on a package registry | The JavaScript, React and React Native SDKs and the OpenFeature provider for Node are on npm; the Python SDK and the OpenFeature provider for Python are on PyPI; the Java SDK and its Spring Boot starter are on Maven Central; the .NET SDK is on NuGet. The Go SDK installs by module path, and every other SDK installs from a clone of this repository. |
 | An `event_id` sent by the SDK, so that an event sent again is stored once | The Java SDK sends one with every event ([Event ids](../sdk/java.md#event-ids)). The JavaScript SDK sends the `eventId` you give it and the Python SDK the `event_id` you give it ([JavaScript](../sdk/javascript.md#event-ids), [Python](../sdk/python.md#event-ids)). The React and React Native SDKs send an `event_id` with every event, from their next published version ([React](../sdk/react.md#event-ids), [React Native](../sdk/react-native.md#event-ids)). The .NET SDK sends an `event_id` with every event, from its next published version ([.NET](../sdk/dotnet.md#event-ids)). No other SDK has an `event_id` option yet: not the edge, Go, Android, iOS, Flutter, PHP, Ruby or Elixir SDK, nor the OpenFeature providers. Send an event that may be sent again to `POST /api/v1/tracking/track` or `POST /api/v1/tracking/batch` with its `event_id` ([#1543](https://github.com/Controlvar/controlvar/issues/1543)). |
 | An event tracked without an experiment key counted, however late it comes | In the Go, Java, .NET, Ruby, PHP, Elixir, iOS, Android, Flutter, React Native and edge SDKs, an event tracked without a key reaches only the experiments and flags still in that client's cache (5 minutes by default, 60 seconds in the edge SDK), and is not sent at all once they have expired. Pass the experiment key on a conversion that can come later. |

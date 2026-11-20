@@ -509,10 +509,12 @@ by = [
 ]
 
 [[unit]]
-text = "Delete removes the account after you confirm it."
+text = "Delete removes the account, and every API key it created, after you confirm it."
 by = [
     "test:frontend/src/tests/admin/UserTable.test.tsx::shows confirmation before delete",
     "test:frontend/src/tests/admin/UserTable.test.tsx::clicking delete button calls AdminService.deleteUser with user id",
+    "test:backend/tests/integration/api/test_account_removal_keeps_segments_and_schedules.py::test_removing_an_account_keeps_its_segments_and_rollout_schedules",
+    "test:backend/tests/integration/api/test_account_removal_keeps_segments_and_schedules.py::test_only_api_keys_are_removed_with_the_account",
 ]
 
 [[unit]]
@@ -568,8 +570,22 @@ by = [
 ]
 
 [[unit]]
-text = "Check which keys a user created before deactivating them."
-by = ["exempt:baseline"]
+text = "When you clear Active, the Edit dialog lists the user's active keys, with each key's scopes and when it was last used, before you save."
+by = [
+    "test:frontend/src/tests/admin/EditUserModal.test.tsx::lists only the keys of this user that are active, not those of another user or an expired one",
+    "test:frontend/tests/e2e/dialog-focus.journey.spec.ts::the edit-user dialog: focus in, Tab trapped, page inert, focus back, announced after close",
+]
+
+[[unit]]
+text = "To keep an application running, switch it to a key created by an account that is staying, then deactivate the user."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Reactivating the user makes their keys work again, unless they have expired."
+by = [
+    "test:backend/tests/integration/api/test_admin_users_api.py::TestDeactivatingAnOwnerStopsTheirKeys::test_the_owners_key_is_401_while_they_are_inactive_and_works_again",
+    "test:backend/tests/integration/api/test_admin_users_api.py::TestDeactivatingAnOwnerStopsTheirKeys::test_a_key_that_expired_meanwhile_stays_401_after_reactivation",
+]
 
 [[unit]]
 text = "With AUTH_PROVIDER=cognito and SYNC_ROLES_ON_LOGIN on (the default), roles come from Cognito groups and are rewritten on every request, so a role change is refused with \"Roles on this deployment come from Cognito groups and are updated on every request."

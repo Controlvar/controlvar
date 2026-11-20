@@ -7,20 +7,20 @@ fresh weights.
 
 Stats sources, in order of preference
 -------------------------------------
-1. DynamoDB real-time counters (``DynamoDBCounterService.get_experiment_counters``),
-   an optional module reached through ``core.optional_modules``; a build
-   without it simply starts at source 2.  Used only when they are at least as
-   complete as PostgreSQL's: every variant's DynamoDB pulls and successes must
-   both be ``>=`` its PostgreSQL pulls and successes (#426).  A partial
-   DynamoDB count -- one manual increment, a counter that started late --
-   never replaces the complete PostgreSQL count.
-2. PostgreSQL: ``count(Assignment)`` per variant for pulls and, for
+1. PostgreSQL: ``count(Assignment)`` per variant for pulls and, for
    successes, the converting users exactly as ``/results`` counts them
    (``services/event_matching.count_converting_users`` on the primary
    metric's ``event_name``): users assigned to the variant with at least one
-   matching event tagged with that variant, each counted once.  Used when
-   DynamoDB is unavailable, holds no data for the experiment, or has fewer
-   pulls or successes than PostgreSQL for any variant.
+   matching event tagged with that variant, each counted once.  Used whenever
+   any variant has a pull.  Pulls and successes describe one population, so
+   they are returned whole, never mixed with another source's counts.
+2. DynamoDB real-time counters (``DynamoDBCounterService.get_experiment_counters``),
+   an optional module reached through ``core.optional_modules``; a build
+   without it simply skips this source.  Used only when PostgreSQL has no
+   pulls or cannot be read.  Its conversion counter counts conversion events,
+   not users (#581), so its successes are capped at its pulls but are
+   otherwise events; a partial DynamoDB count (#426) never replaces
+   PostgreSQL's, because PostgreSQL is consulted first.
 3. The previously persisted ``BanditState`` row.
 4. Zero-count priors (equal weights).
 
@@ -102,33 +102,26 @@ def _as_rewards(
     return flipped
 
 
-def _at_least_as_complete(
-    candidate: Optional[Dict[str, VariantStats]],
-    reference: Optional[Dict[str, VariantStats]],
-) -> bool:
-    """Return True when ``candidate`` has at least ``reference``'s pulls and
-    successes for every variant.
+def _capped_at_pulls(stats: Dict[str, VariantStats]) -> Dict[str, VariantStats]:
+    """``stats`` with no variant's successes above its pulls (#581).
 
-    Compared variant by variant, not on the totals, so a surplus in one
-    variant cannot hide a missing count in another; and on successes as well
-    as pulls, so complete assignments with partial conversions cannot
-    understate the conversion rate.  Ties count as complete.  A ``reference``
-    that is ``None`` (the source was unavailable) is trivially covered; a
-    ``candidate`` that is ``None`` covers nothing.
+    The DynamoDB conversion counter counts conversion events (and the
+    increment API adds any amount), so a user who converts three times counts
+    three there while ``/results`` and PostgreSQL count one.  Nothing can make
+    those counts users, but a success count above the pulls is impossible for
+    users, so it is capped; failures follow.
     """
-    if candidate is None:
-        return False
-    if not reference:
-        return True
-    for vid, ref in reference.items():
-        cand = candidate.get(vid)
-        if cand is None:
-            if ref.pulls > 0 or ref.successes > 0:
-                return False
-            continue
-        if cand.pulls < ref.pulls or cand.successes < ref.successes:
-            return False
-    return True
+    capped: Dict[str, VariantStats] = {}
+    for vid, vs in stats.items():
+        successes = min(vs.successes, vs.pulls)
+        capped[vid] = VariantStats(
+            variant_id=vid,
+            successes=successes,
+            failures=max(vs.pulls - successes, 0),
+            pulls=vs.pulls,
+            total_reward=float(successes),
+        )
+    return capped
 
 
 class BanditScheduler:
@@ -224,7 +217,7 @@ class BanditScheduler:
             logger.warning("Experiment %s has no variants — skipping", experiment.id)
             return False
 
-        # Fetch stats (DynamoDB → PostgreSQL → BanditState → priors)
+        # Fetch stats (PostgreSQL → DynamoDB → BanditState → priors)
         variant_stats = self.get_variant_stats_from_counters(
             experiment.id, variant_ids, experiment=experiment
         )
@@ -460,14 +453,14 @@ class BanditScheduler:
         """
         Fetch per-variant pull/conversion counts for an experiment.
 
-        Sources are tried in order: DynamoDB counters, PostgreSQL
-        (assignments + conversion events), the persisted BanditState, and
-        finally zero-count priors.  A source is skipped when it raises or
-        when no variant has recorded a pull.  DynamoDB is additionally
-        skipped when any variant has fewer pulls or successes there than in
-        PostgreSQL:
-        PostgreSQL's assignment rows are the complete record, and the
-        real-time counters are preferred only while they keep up with it.
+        Sources are tried in order: PostgreSQL (assignments + converting
+        users), DynamoDB counters, the persisted BanditState, and finally
+        zero-count priors.  A source is skipped when it raises or when no
+        variant has recorded a pull.  PostgreSQL comes first because its pulls
+        and converting users describe one population, while the DynamoDB
+        conversion counter counts events, not users (#581); DynamoDB is used
+        only when PostgreSQL has no pulls or cannot be read, and its successes
+        are then capped at its pulls.
 
         Parameters
         ----------
@@ -484,23 +477,19 @@ class BanditScheduler:
         dict
             ``{variant_id: VariantStats}``
         """
-        dynamo_stats = self._stats_from_dynamodb(experiment_id, variant_ids)
-        pg_stats = self._stats_from_postgres(experiment_id, variant_ids, experiment)
-
         # Every source returns RAW counts (successes = converting users, as
         # stored and reported); the metric's direction is applied only at the
         # algorithm input, by ``_as_rewards`` in ``update_experiment``.
-        if _has_pulls(dynamo_stats):
-            if _at_least_as_complete(dynamo_stats, pg_stats):
-                return dynamo_stats  # type: ignore[return-value]
-            logger.warning(
-                "BanditScheduler: DynamoDB counters for experiment %s have fewer "
-                "pulls or successes than PostgreSQL; using PostgreSQL",
-                experiment_id,
-            )
-
+        pg_stats = self._stats_from_postgres(experiment_id, variant_ids, experiment)
         if _has_pulls(pg_stats):
+            # PostgreSQL's pulls and converting users describe the same
+            # population; DynamoDB's counter counts events, so it is not
+            # consulted while PostgreSQL has data (#581).
             return pg_stats  # type: ignore[return-value]
+
+        dynamo_stats = self._stats_from_dynamodb(experiment_id, variant_ids)
+        if _has_pulls(dynamo_stats):
+            return _capped_at_pulls(dynamo_stats)  # type: ignore[arg-type]
 
         stats = self._stats_from_bandit_state(experiment_id, variant_ids)
         if stats is not None:

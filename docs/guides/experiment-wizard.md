@@ -63,8 +63,8 @@ experiment in five steps:
   either view. A key another experiment already has is named, with **Edit details** to
   change it. If your session has ended, sign in again in another tab, then press
   **Create Experiment** again.
-- Guided setup offers A/B Test, Multivariate and Bandit. Create a split URL experiment
-  through the API (`POST /api/v1/experiments/`).
+- Guided setup offers A/B Test, Multivariate and Bandit. In the full profile it offers
+  Split URL last, and asks for each variant's page.
 
 Guided setup sends the same `POST /api/v1/experiments` request as the single-page
 form. **It does not use the wizard API below** and creates no draft.

@@ -9,7 +9,7 @@
 import React from 'react';
 import fs from 'fs';
 import path from 'path';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import axe from 'axe-core';
 import ExperimentDetailPage from '@/pages/experiments/[id]';
 import { ApiError, apiFetch } from '@/services/api';
@@ -110,6 +110,11 @@ function install(current: Experiment, handlers: Handlers = {}) {
         method: 'DELETE',
         path: '/api/v1/experiments/exp-1',
         handler: () => (handlers.del ? handlers.del() : undefined),
+      },
+      {
+        method: 'POST',
+        path: '/api/v1/experiments/exp-1/start',
+        handler: () => ({ ...current, status: 'active' }),
       },
     ]) as unknown as typeof apiFetch,
   );
@@ -323,7 +328,9 @@ describe('Delete draft', () => {
     fireEvent.click(screen.getByTestId('experiment-delete'));
     const confirm = screen.getByTestId('manage-delete-confirm');
     expect(confirm).toHaveTextContent(DELETE_CONFIRM);
-    expect(confirm).toHaveFocus();
+    // Focus lands on the safe answer, not on the region (#1797).
+    expect(screen.getByTestId('manage-delete-cancel')).toHaveFocus();
+    expect(confirm).toHaveAccessibleDescription(DELETE_CONFIRM);
     expect(callsTo('DELETE')).toEqual([]);
 
     fireEvent.click(screen.getByTestId('manage-delete-yes'));
@@ -346,6 +353,40 @@ describe('Delete draft', () => {
     expect(screen.getByTestId('experiment-delete')).toHaveFocus();
     expect(callsTo('DELETE')).toEqual([]);
     expect(mockRouter.push).not.toHaveBeenCalled();
+  });
+
+  it('Escape from the focused Cancel closes it, sends nothing, and returns focus to the button', async () => {
+    await renderPage();
+    fireEvent.click(screen.getByTestId('experiment-delete'));
+    const cancel = screen.getByTestId('manage-delete-cancel');
+    expect(cancel).toHaveFocus();
+    fireEvent.keyDown(cancel, { key: 'Escape' });
+    expect(screen.queryByTestId('manage-delete-confirm')).toBeNull();
+    expect(screen.getByTestId('experiment-delete')).toHaveFocus();
+    expect(callsTo('DELETE')).toEqual([]);
+  });
+
+  it('opener gone: once the experiment starts under the open question, Cancel lands on Clone', async () => {
+    await renderPage();
+    fireEvent.click(screen.getByTestId('experiment-delete'));
+    // Start is in the header, outside the question; it takes Delete draft away.
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('action-start'));
+    });
+    await waitFor(() => expect(screen.getByTestId('experiment-status')).toHaveAttribute('data-status', 'active'));
+    expect(screen.queryByTestId('experiment-delete')).toBeNull();
+    fireEvent.click(screen.getByTestId('manage-delete-cancel'));
+    expect(screen.queryByTestId('manage-delete-confirm')).toBeNull();
+    expect(screen.getByTestId('experiment-clone')).toHaveFocus();
+    expect(callsTo('DELETE')).toEqual([]);
+  });
+
+  it('a refused delete puts focus back on Delete draft, beside the error', async () => {
+    await renderPage(experiment(), { del: () => { throw apiError(500, PLANTED); } });
+    fireEvent.click(screen.getByTestId('experiment-delete'));
+    fireEvent.click(screen.getByTestId('manage-delete-yes'));
+    await screen.findByTestId('manage-error');
+    await waitFor(() => expect(screen.getByTestId('experiment-delete')).toHaveFocus());
   });
 });
 

@@ -429,7 +429,7 @@ DESCRIPTION_FACTS: dict[str, dict[str, Any]] = {
         "description": (
             "A device rule, a kill switch, then the safety monitor rolls a staged "
             "rollout back by itself after simulated crashes. The demo uses the web "
-            "SDK; iOS, Android and Flutter send only the user id to flags."
+            "SDK."
         ),
         "seed": "demo",
         # The rule's page; the kill switch; Player v2's stage and its safety
@@ -791,25 +791,23 @@ LIMITATIONS = REPO / "docs" / "getting-started" / "limitations.md"
 STREAMPULSE_README = REPO / "demo" / "streampulse" / "README.md"
 
 
-def test_video_4s_native_sdk_sentence_is_the_documented_limitation():
+def test_video_4s_description_names_no_native_sdk_limit():
     """D163: video 4's description says what the docs say about native SDKs.
 
-    Its second sentence has two claims that are not in the storyboard, so each is
-    held to the file that states it: the demo's README (the app is built on the
-    web SDK) and the Limitations page's row on flag targeting from a native SDK.
+    Every SDK sends the user's attributes on flag evaluation now (#438), so the
+    Limitations page has no row on flag targeting from a native SDK and the
+    description names no such limit: it ends with the one claim that is not in
+    the storyboard, held to the demo's README (the app is built on the web SDK).
     """
     description = next(
         e["description"]
         for e in MANIFEST_ENTRIES
         if e["slug"] == "04-streampulse-rollout"
     )
-    assert "iOS, Android and Flutter send only the user id to flags" in description
-    assert "The demo uses the web SDK" in description
+    assert description.endswith("The demo uses the web SDK.")
+    assert "only the user id" not in description
     limitations = LIMITATIONS.read_text(encoding="utf-8")
-    assert (
-        "iOS, Android and Flutter send only the user id on flag evaluation, so rules "
-        "on attributes do not match"
-    ) in limitations
+    assert "only the user id" not in limitations
     assert "(web SDK)" in STREAMPULSE_README.read_text(encoding="utf-8").splitlines()[0]
 
 

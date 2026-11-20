@@ -206,7 +206,7 @@ superuser.
   page and search you were on.
 - **Permissions** (full profile) shows what the user can do: their role plus their custom
   roles and direct grants.
-- **Delete** removes the account after you confirm it.
+- **Delete** removes the account, and every API key it created, after you confirm it.
 
 The four roles are Admin, Developer, Analyst and Viewer. A legacy account with no
 role shows "No role" in the table; pick one in the Edit dialog. Custom roles in
@@ -224,7 +224,11 @@ Rules the page and the API both apply:
   on their next request, and nothing here stops that.
 - Deactivating a user stops them signing in, refuses requests with a token they
   already hold, and **stops the API keys they created, including keys your
-  applications use**. Check which keys a user created before deactivating them.
+  applications use**. When you clear **Active**, the Edit dialog lists the user's
+  active keys, with each key's scopes and when it was last used, before you save.
+  To keep an application running, switch it to a key created by an account that
+  is staying, then deactivate the user. Reactivating the user makes their keys
+  work again, unless they have expired.
 - With `AUTH_PROVIDER=cognito` and `SYNC_ROLES_ON_LOGIN` on (the default), roles
   come from Cognito groups and are rewritten on every request, so a role change
   is refused with "Roles on this deployment come from Cognito groups and are

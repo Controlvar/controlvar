@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { PageTitle } from '@/components/PageTitle';
+import { InlineConfirm } from '@/components/ui/InlineConfirm';
 import { BanditWeightHistory } from '@/components/experiments/BanditWeightHistory';
 import { BanditWeightsSection } from '@/components/experiments/BanditWeightsSection';
 import { ExperimentManageSection } from '@/components/experiments/ExperimentManageSection';
@@ -304,6 +305,15 @@ export default function ExperimentDetailPage() {
   const [pendingAction, setPendingAction] = useState<LifecycleAction | null>(null);
   const [confirming, setConfirming] = useState<LifecycleAction | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  // Where focus goes once a confirmed Complete or Archive answers (#1797):
+  // the heading on success (the status and the buttons change), the button
+  // that asked on a refusal. Applied in an effect, after that commit.
+  const [focusAfterAction, setFocusAfterAction] = useState<
+    { target: 'heading' } | { target: 'opener'; action: LifecycleAction } | null
+  >(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const actionButtons = useRef(new Map<LifecycleAction, HTMLButtonElement>());
+  const confirmTextId = useId();
   const [copied, setCopied] = useState(false);
   // While "Edit variants and metrics" is open its form stands in for the
   // read-only Variants and Metrics cards. The form exists on a draft only.
@@ -331,12 +341,19 @@ export default function ExperimentDetailPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (!focusAfterAction) return;
+    if (focusAfterAction.target === 'heading') heading.current?.focus();
+    else actionButtons.current.get(focusAfterAction.action)?.focus();
+  }, [focusAfterAction]);
+
   // Every change answers without the owner's name, so it is merged, not set.
   const onSaved = useCallback((updated: Experiment) => {
     setExperiment((previous) => keepOwnerName(previous, updated));
   }, []);
 
-  const runAction = async (action: LifecycleAction) => {
+  /** `confirmed`: sent from the confirmation panel, whose answer then owns focus. */
+  const runAction = async (action: LifecycleAction, confirmed = false) => {
     if (!experiment) return;
     setConfirming(null);
     setActionError(null);
@@ -344,8 +361,10 @@ export default function ExperimentDetailPage() {
     try {
       const updated = await ExperimentsService[action](experiment.id);
       onSaved(updated);
+      if (confirmed) setFocusAfterAction({ target: 'heading' });
     } catch (err) {
       setActionError(err instanceof Error ? err.message : `Failed to ${action} experiment`);
+      if (confirmed) setFocusAfterAction({ target: 'opener', action });
     } finally {
       setPendingAction(null);
     }
@@ -460,7 +479,12 @@ export default function ExperimentDetailPage() {
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-3">
-                <h1 className="text-2xl font-bold text-slate-900 break-words" data-testid="experiment-name">
+                <h1
+                  ref={heading}
+                  tabIndex={-1}
+                  className="text-2xl font-bold text-slate-900 break-words focus:outline-none"
+                  data-testid="experiment-name"
+                >
                   {experiment.name}
                 </h1>
                 <span
@@ -597,6 +621,10 @@ export default function ExperimentDetailPage() {
                 return (
                   <button
                     key={action}
+                    ref={(el) => {
+                      if (el) actionButtons.current.set(action, el);
+                      else actionButtons.current.delete(action);
+                    }}
                     type="button"
                     onClick={() => onActionClick(action)}
                     disabled={pendingAction !== null}
@@ -641,16 +669,29 @@ export default function ExperimentDetailPage() {
           )}
 
           {confirming && (
-            <div
-              role="dialog"
-              aria-label={`Confirm ${ACTION_META[confirming].label}`}
-              className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
-              data-testid="confirm-action"
+            // The button that asked stays on the page, so Cancel and Escape
+            // return to it. Confirm disables every action button while the
+            // request runs, so nothing takes focus until the answer, which
+            // the effect above places.
+            <InlineConfirm
+              label={`Confirm ${ACTION_META[confirming].label}`}
+              describedBy={confirmTextId}
+              onCancel={() => setConfirming(null)}
+              returnFocus={() => actionButtons.current.get(confirming)}
+              fallbackFocus={() =>
+                Array.from(actionButtons.current.values()).find((button) => !button.disabled)
+              }
+              tone="warning"
+              className="mt-4 rounded-lg border p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+              testId="confirm-action"
             >
-              <p className="text-sm text-amber-900">{ACTION_META[confirming].confirm}</p>
+              <p id={confirmTextId} className="text-sm text-amber-900">
+                {ACTION_META[confirming].confirm}
+              </p>
               <div className="flex gap-2 shrink-0">
                 <button
                   type="button"
+                  data-autofocus
                   onClick={() => setConfirming(null)}
                   className="px-3 py-1.5 rounded-md text-sm font-medium text-slate-600 border border-slate-300 bg-white hover:bg-slate-50"
                   data-testid="confirm-cancel"
@@ -659,14 +700,14 @@ export default function ExperimentDetailPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => void runAction(confirming)}
+                  onClick={() => void runAction(confirming, true)}
                   className="px-3 py-1.5 rounded-md text-sm font-medium bg-amber-600 text-white hover:bg-amber-700"
                   data-testid="confirm-yes"
                 >
                   Confirm
                 </button>
               </div>
-            </div>
+            </InlineConfirm>
           )}
 
           {actionError && (
