@@ -997,12 +997,8 @@ DELEGATES: Dict[str, Tuple[str, "re.Pattern[str]"]] = {
 #: source reads. When one starts sending it, change this set with its pages.
 SENDS_NO_CONTEXT = {
     "android",
-    "edge",
-    "elixir",
     "flutter",
     "ios",
-    "php",
-    "ruby",
 }
 
 
@@ -1160,6 +1156,32 @@ def test_the_claim_patterns_find_the_true_sentence_on_the_dotnet_pages():
     assert sends_context("dotnet")
     for page in ("docs/sdk/dotnet.md", "sdk/dotnet/README.md"):
         assert "sent as context on flag evaluation" in attribute_claims(text(page)), (
+            page
+        )
+
+
+def test_the_claim_patterns_find_the_true_sentences_on_the_ruby_pages():
+    # Ruby sends the context (part of #1720), and both its pages say so: the
+    # patterns must see it, so that ruby put back in SENDS_NO_CONTEXT fails
+    # test_a_page_claims_no_attribute_targeting_its_client_does_not_send on
+    # docs/sdk/ruby.md and sdk/ruby/README.md as well as here.
+    assert "ruby" not in SENDS_NO_CONTEXT
+    assert sends_context("ruby")
+    for page in RUBY_PAGES:
+        assert "flag evaluation sends the attributes" in attribute_claims(text(page)), (
+            page
+        )
+
+
+def test_the_claim_patterns_find_the_true_sentences_on_the_php_pages():
+    # PHP sends the context (part of #1720), and both its pages say so: the
+    # patterns must see it, so that php put back in SENDS_NO_CONTEXT fails
+    # test_a_page_claims_no_attribute_targeting_its_client_does_not_send on
+    # docs/sdk/php.md and sdk/php/README.md as well as here.
+    assert "php" not in SENDS_NO_CONTEXT
+    assert sends_context("php")
+    for page in PHP_PAGES:
+        assert "flag evaluation sends the attributes" in attribute_claims(text(page)), (
             page
         )
 
@@ -2257,3 +2279,516 @@ def test_each_java_context_sentence_is_on_its_page_and_held_by_a_test(
     assert missing == [], f"no JUnit test in {JAVA_TESTS.name} has these display names"
     gone = [node for node in server if not _python_test_exists(node)]
     assert gone == [], "these backend tests are gone"
+
+
+# ---------------------------------------------------------------------------
+# 8. The Ruby SDK's targeting context (part of #1720)
+# ---------------------------------------------------------------------------
+
+#: The Ruby SDK's page and its README, which say the same about the context.
+RUBY_PAGES = ("docs/sdk/ruby.md", "sdk/ruby/README.md")
+#: The Ruby SDK's client spec: each Ruby test named below is one of its
+#: ``it`` titles.
+RUBY_SPEC = SDK_DIR / "ruby/spec/controlvar/client_spec.rb"
+_RUBY_EXACT = (
+    "sends the attributes as context=<compact JSON>, percent-encoded, after user_id"
+)
+_RUBY_RULE = "matches a targeting rule on an attribute: the server reads plan=pro from the context"
+_RUBY_DECODE = (
+    "sends + & = # a space, / and non-ASCII so that the server decodes the same object"
+)
+_RUBY_SHORTHAND = "feature_enabled? sends the attributes too"
+_RUBY_NONE = (
+    "sends no context for nil, an empty Hash or a non-Hash: the URL is the one sent"
+    " before attributes were"
+)
+_RUBY_UNSENDABLE = (
+    "sends nothing and reports the flag as disabled when the attributes cannot be"
+    " written as JSON"
+)
+_RUBY_CACHE = (
+    "answers two calls that differ only in attributes with two requests and two answers",
+    "keeps one cached answer per user and flag: A, B, A makes three requests",
+    "does not serve an answer cached with attributes to a call without them",
+    "serves the same attributes from the cache: one request",
+)
+
+#: Each sentence both Ruby pages state about the targeting context (as written,
+#: folded to one line), the RSpec examples that fail when it stops being true,
+#: and the backend tests that hold the server's part of it. The pages are in
+#: ``CLAIMS_DEFERRED``, so no claims registry binds them; this does.
+RUBY_CONTEXT_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], ...] = (
+    (
+        "Flag evaluation sends the user's attributes as `context`, so a flag's targeting"
+        " rules match against them.",
+        (_RUBY_EXACT, _RUBY_RULE),
+        _SERVER_MATCHES,
+    ),
+    (
+        "`evaluate_flag` and `feature_enabled?` call"
+        " `GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=…`, where `context`"
+        " is the attributes as compact JSON, percent-encoded like `user_id`:"
+        " `{ plan: 'pro' }` travels as `context=%7B%22plan%22%3A%22pro%22%7D`.",
+        (_RUBY_EXACT, _RUBY_SHORTHAND, _RUBY_DECODE),
+        (),
+    ),
+    (
+        "With no attributes, an empty Hash or anything that is not a Hash, no `context`"
+        " is sent and the request carries the user id alone.",
+        (_RUBY_NONE,),
+        (),
+    ),
+    (
+        "If the attributes cannot be written as JSON (a `Float::NAN`, or a string that is"
+        " not valid UTF-8), nothing is sent, the flag is disabled, and a warning that"
+        " names no attribute is printed.",
+        (_RUBY_UNSENDABLE,),
+        (),
+    ),
+    (
+        "The SDK keeps one cached answer per user and flag, together with the attributes"
+        " it was asked with. A later call is answered from the cache only if its"
+        " attributes are exactly the same; otherwise the SDK asks the server, and the new"
+        " answer replaces the cached one. So two calls that differ only in attributes get"
+        " two answers. The same attributes written in a different key order may cost one"
+        " extra request; they never return another call's answer.",
+        _RUBY_CACHE,
+        (),
+    ),
+    (
+        "The change is in this repository"
+        " ([#1720](https://github.com/Controlvar/controlvar/issues/1720)); it reaches a"
+        " registry at this SDK's first publish, so a build from a clone of `main` has it"
+        " and a copy installed earlier does not.",
+        (_RUBY_EXACT,),
+        (),
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "sentence, tests, server",
+    RUBY_CONTEXT_SENTENCES,
+    ids=[s[:60] for s, _, _ in RUBY_CONTEXT_SENTENCES],
+)
+def test_each_ruby_context_sentence_is_on_both_pages_and_held_by_a_test(
+    sentence, tests, server
+):
+    unsaid = [page for page in RUBY_PAGES if sentence not in fold(text(page))]
+    assert unsaid == [], f"no longer said there: {sentence}"
+    source = RUBY_SPEC.read_text("utf-8")
+    missing = [
+        title
+        for title in tests
+        if f"it '{title}'" not in source and f'it "{title}"' not in source
+    ]
+    assert missing == [], f"no RSpec example in {RUBY_SPEC.name} has these titles"
+    gone = [node for node in server if not _python_test_exists(node)]
+    assert gone == [], "these backend tests are gone"
+
+
+def test_the_old_ruby_note_is_gone_from_both_pages():
+    # The note #1720 replaced: attributes accepted on evaluate_flag and not sent.
+    for page in RUBY_PAGES:
+        folded = fold(text(page))
+        assert "accepted for API symmetry only and not sent" not in folded, page
+        assert "accepted for symmetry only and not sent" not in folded, page
+        assert "targeting rules against an empty context" not in folded, page
+
+
+# ---------------------------------------------------------------------------
+# 9. The PHP SDK's targeting context (part of #1720)
+# ---------------------------------------------------------------------------
+
+#: The PHP SDK's page and its README, which say the same about the context.
+PHP_PAGES = ("docs/sdk/php.md", "sdk/php/README.md")
+#: The PHP SDK's client test: each PHP test named below is one of its methods.
+PHP_TESTS = SDK_DIR / "php/tests/ExperimentationClientTest.php"
+_PHP_EXACT = "testEvaluateFlagSendsTheAttributesAsContextAfterUserId"
+_PHP_RULE = "testEvaluateFlagMatchesATargetingRuleOnAnAttribute"
+_PHP_SHORTHAND = "testIsFeatureEnabledSendsTheAttributesToo"
+_PHP_DECODE = "testTheContextDecodesToTheAttributesTheServerReads"
+_PHP_PINNED = "testTheContextIsPinnedAsAnExactUrl"
+_PHP_NONE = "testNoAttributesOrAnEmptyArraySendNoContext"
+_PHP_UNSENDABLE = "testEvaluateFlagSendsNothingWhenTheAttributesCannotBeWrittenAsJson"
+_PHP_CACHE = (
+    "testTwoCallsThatDifferOnlyInAttributesGetTwoRequestsAndTwoAnswers",
+    "testOneCachedAnswerPerUserAndFlagSoABAMakesThreeRequests",
+    "testAnAnswerCachedWithAttributesIsNotServedToACallWithoutThem",
+    "testTheSameAttributesAreServedFromTheCache",
+    "testTheSameAttributesInAnotherKeyOrderCostOneExtraRequest",
+)
+
+#: Each sentence both PHP pages state about the targeting context (as written,
+#: folded to one line), the PHPUnit tests that fail when it stops being true,
+#: and the backend tests that hold the server's part of it. The pages are in
+#: ``CLAIMS_DEFERRED``, so no claims registry binds them; this does.
+PHP_CONTEXT_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], ...] = (
+    (
+        "Flag evaluation sends the user's attributes as `context`, so a flag's targeting"
+        " rules match against them.",
+        (_PHP_EXACT, _PHP_RULE),
+        _SERVER_MATCHES,
+    ),
+    (
+        "`evaluateFlag` and `isFeatureEnabled` call"
+        " `GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=…`, where `context`"
+        " is the attributes as compact JSON, percent-encoded like `user_id`:"
+        " `['plan' => 'pro']` travels as `context=%7B%22plan%22%3A%22pro%22%7D`.",
+        (_PHP_EXACT, _PHP_SHORTHAND, _PHP_DECODE, _PHP_PINNED),
+        (),
+    ),
+    (
+        "With no attributes, or an empty array, no `context` is sent and the request"
+        " carries the user id alone.",
+        (_PHP_NONE,),
+        (),
+    ),
+    (
+        "If the attributes cannot be written as JSON (a `NAN`, or a string that is not"
+        " valid UTF-8), `evaluateFlag` returns the disabled evaluation and sends nothing.",
+        (_PHP_UNSENDABLE,),
+        (),
+    ),
+    (
+        "The SDK keeps one cached answer per user and flag, together with the attributes"
+        " it was asked with. A later call is answered from the cache only if its"
+        " attributes are exactly the same; otherwise the SDK asks the server, and a"
+        " successful new answer replaces the cached one. So two calls that differ only in"
+        " attributes get two answers. The same attributes written in a different key order"
+        " may cost one extra request; they never return another call's answer.",
+        _PHP_CACHE,
+        (),
+    ),
+    (
+        "The change is in this repository"
+        " ([#1720](https://github.com/Controlvar/controlvar/issues/1720)); it reaches a"
+        " registry at this SDK's first publish, so a build from a clone of `main` has it"
+        " and a copy installed earlier does not.",
+        (_PHP_EXACT,),
+        (),
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "sentence, tests, server",
+    PHP_CONTEXT_SENTENCES,
+    ids=[s[:60] for s, _, _ in PHP_CONTEXT_SENTENCES],
+)
+def test_each_php_context_sentence_is_on_both_pages_and_held_by_a_test(
+    sentence, tests, server
+):
+    unsaid = [page for page in PHP_PAGES if sentence not in fold(text(page))]
+    assert unsaid == [], f"no longer said there: {sentence}"
+    source = PHP_TESTS.read_text("utf-8")
+    missing = [name for name in tests if f"public function {name}(" not in source]
+    assert missing == [], f"no PHPUnit test in {PHP_TESTS.name} has these names"
+    gone = [node for node in server if not _python_test_exists(node)]
+    assert gone == [], "these backend tests are gone"
+
+
+def test_the_old_php_note_is_gone_from_both_pages():
+    # The note #1720 replaced: the evaluate request carries the user id alone.
+    for page in PHP_PAGES:
+        folded = fold(text(page))
+        assert "the user id alone, so the server evaluates" not in folded, page
+        assert "against an empty context" not in folded, page
+
+
+# ---------------------------------------------------------------------------
+# The Edge SDK's targeting context (part of #1720)
+# ---------------------------------------------------------------------------
+
+#: The Edge SDK's page and its README, which say the same about the context.
+EDGE_PAGES = ("docs/sdk/edge.md", "sdk/edge/README.md")
+#: The Edge SDK's client tests: each test named below is one of its jest
+#: ``test('title', ...)`` titles.
+EDGE_TESTS = SDK_DIR / "edge/__tests__/client.test.ts"
+_EDGE_EXACT = (
+    "regression #1720: sends the attributes as context=<compact JSON>,"
+    " percent-encoded, after user_id"
+)
+_EDGE_RULE = (
+    "regression #1720: matches a targeting rule on an attribute: the server reads"
+    " plan=pro from the context"
+)
+_EDGE_SHORTHAND = "isFeatureEnabled sends the attributes too"
+_EDGE_ALL_FLAGS = (
+    "getAllFlags sends the attributes as context after the path, and nothing else"
+)
+_EDGE_NONE = (
+    "sends no context for no attributes or an empty object: the request is the one"
+    " sent before"
+)
+_EDGE_UNSENDABLE = (
+    "attributes that cannot be written as JSON send nothing, cache nothing and"
+    " report the flag as disabled",
+    "attributes that cannot be written as JSON log nothing",
+)
+_EDGE_CACHE = (
+    "(a) A then B: two requests, two answers",
+    "(c) A, B, A: three requests, because the one slot holds B when A comes back",
+    "(d) A then no attributes: two requests, and the second is the no-attribute answer",
+    "(f) A then A: one request",
+)
+_EDGE_STORE = (
+    "A on one client writes nothing, and B on another client does not get A answer"
+)
+_EDGE_SYNC = (
+    "evaluateFlagSync and getCachedFlag return the last answer cached, whatever"
+    " attributes it was asked with"
+)
+
+#: Each sentence both Edge pages state about the targeting context (as written,
+#: folded to one line), the jest tests that fail when it stops being true, and
+#: the backend tests that hold the server's part of it. The pages are in
+#: ``CLAIMS_DEFERRED``, so no claims registry binds them; this does.
+EDGE_CONTEXT_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], ...] = (
+    (
+        "Flag evaluation sends the user's attributes as `context`, so a flag's targeting"
+        " rules match against them.",
+        (_EDGE_EXACT, _EDGE_RULE),
+        _SERVER_MATCHES,
+    ),
+    (
+        "`evaluateFlag`, `isFeatureEnabled` and `getAllFlags` take them as an optional"
+        " last argument.",
+        (_EDGE_SHORTHAND, _EDGE_ALL_FLAGS),
+        (),
+    ),
+    (
+        "The flag calls are `GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=…`"
+        " and `GET /api/v1/feature-flags/user/{user_id}?context=…`, where `context` is"
+        " the attributes as compact JSON, percent-encoded: `{ plan: 'pro' }` travels as"
+        " `context=%7B%22plan%22%3A%22pro%22%7D`.",
+        (_EDGE_EXACT, _EDGE_ALL_FLAGS),
+        (),
+    ),
+    (
+        "With no attributes or an empty object, no `context` is sent and the request"
+        " carries the user id alone.",
+        (_EDGE_NONE,),
+        (),
+    ),
+    (
+        "If the attributes cannot be written as JSON (a BigInt, or an object that refers"
+        " to itself), nothing is sent, the call returns the disabled answer (`{}` for"
+        " `getAllFlags`), and nothing is logged.",
+        _EDGE_UNSENDABLE,
+        (),
+    ),
+    (
+        "The SDK keeps one cached answer per user and flag, together with the attributes"
+        " it was asked with. A later call is answered from the cache only if its"
+        " attributes are exactly the same; otherwise the SDK asks the server, and the new"
+        " answer replaces the cached one. So two calls that differ only in attributes get"
+        " two answers. The same attributes written in a different key order may cost one"
+        " extra request; they never return another call's answer.",
+        _EDGE_CACHE,
+        (),
+    ),
+    (
+        "Calls with attributes neither read nor write the shared store; only calls"
+        " without attributes use it.",
+        (_EDGE_STORE,),
+        (),
+    ),
+    (
+        "a flag call with attributes is not stored; see Attributes on flag evaluation",
+        (_EDGE_STORE,),
+        (),
+    ),
+    (
+        "`evaluateFlagSync` and `getCachedFlag` return the last answer cached for this"
+        " user and flag, whatever attributes it was asked with; call `evaluateFlag` with"
+        " the attributes when the answer must match them.",
+        (_EDGE_SYNC,),
+        (),
+    ),
+    (
+        "The change is in this repository"
+        " ([#1720](https://github.com/Controlvar/controlvar/issues/1720)); it reaches a"
+        " registry at this SDK's first publish, so a build from a clone of `main` has it"
+        " and a copy installed earlier does not.",
+        (_EDGE_EXACT,),
+        (),
+    ),
+)
+
+
+def test_the_claim_patterns_find_the_true_sentences_on_the_edge_pages():
+    # Edge sends the context (part of #1720), and both its pages say so: the
+    # patterns must see it, so that edge put back in SENDS_NO_CONTEXT fails
+    # test_a_page_claims_no_attribute_targeting_its_client_does_not_send on
+    # docs/sdk/edge.md and sdk/edge/README.md as well as here.
+    assert "edge" not in SENDS_NO_CONTEXT
+    assert sends_context("edge")
+    for page in EDGE_PAGES:
+        assert "flag evaluation sends the attributes" in attribute_claims(text(page)), (
+            page
+        )
+
+
+@pytest.mark.parametrize(
+    "sentence, tests, server",
+    EDGE_CONTEXT_SENTENCES,
+    ids=[s[:60] for s, _, _ in EDGE_CONTEXT_SENTENCES],
+)
+def test_each_edge_context_sentence_is_on_both_pages_and_held_by_a_test(
+    sentence, tests, server
+):
+    unsaid = [page for page in EDGE_PAGES if sentence not in fold(text(page))]
+    assert unsaid == [], f"no longer said there: {sentence}"
+    source = EDGE_TESTS.read_text("utf-8")
+    missing = [
+        title
+        for title in tests
+        if f"test('{title}'" not in source and f'test("{title}"' not in source
+    ]
+    assert missing == [], f"no jest test in {EDGE_TESTS.name} has these titles"
+    gone = [node for node in server if not _python_test_exists(node)]
+    assert gone == [], "these backend tests are gone"
+
+
+def test_the_old_edge_note_is_gone_from_both_pages():
+    # The note #1720 replaced: evaluateFlag takes no attributes and sends the
+    # user id alone, so the server evaluates against an empty context.
+    for page in EDGE_PAGES:
+        folded = fold(text(page))
+        assert "The `attributes` argument was dropped" not in folded, page
+        assert "`evaluateFlag` sends the user id alone" not in folded, page
+        assert "against an empty context" not in folded, page
+
+
+# ---------------------------------------------------------------------------
+# 9. The Elixir SDK's targeting context (part of #1720)
+# ---------------------------------------------------------------------------
+
+#: The Elixir SDK's page and its README, which say the same about the context.
+ELIXIR_PAGES = ("docs/sdk/elixir.md", "sdk/elixir/README.md")
+#: The Elixir SDK's client tests: each name below is one of its ``test "..."``
+#: titles (the decode test's has ``#{name}`` in it, once per vector).
+ELIXIR_TESTS = SDK_DIR / "elixir/test/controlvar/client_test.exs"
+_ELIXIR_EXACT = "context=<compact JSON>, percent-encoded, after user_id"
+_ELIXIR_RULE = "matches a targeting rule on an attribute: the server reads plan=pro from the context"
+_ELIXIR_DECODE = (
+    "the server decodes the same object, the user id and nothing else (#{name})"
+)
+_ELIXIR_PASS = "feature_enabled?/4 passes the options through; /3 is kept"
+_ELIXIR_NONE = (
+    "no attributes, an empty map or a non-map: the request is the one sent before"
+    " attributes were"
+)
+_ELIXIR_UNSENDABLE = (
+    "return the fixed {:error, :invalid_attributes}: nothing is sent, nothing is cached"
+)
+_ELIXIR_CACHE = (
+    "A then B: two requests and two answers",
+    "A, B, A: three requests, because the one slot holds B's context",
+    "A then no attributes: two requests, and the second is not A's answer",
+    "A then A: one request",
+)
+
+#: Each sentence both Elixir pages state about the targeting context (as
+#: written, folded to one line), the ExUnit tests that fail when it stops being
+#: true, and the backend tests that hold the server's part of it. The pages are
+#: in ``CLAIMS_DEFERRED``, so no claims registry binds them; this does.
+ELIXIR_CONTEXT_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], ...] = (
+    (
+        "Flag evaluation sends the user's attributes as `context`, so a flag's targeting"
+        " rules match against them.",
+        (_ELIXIR_EXACT, _ELIXIR_RULE),
+        _SERVER_MATCHES,
+    ),
+    (
+        "`evaluate_flag` and `feature_enabled?` call"
+        " `GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=…`, where `context`"
+        " is the attributes as compact JSON, percent-encoded like `user_id`:"
+        ' `%{plan: "pro"}` travels as `context=%7B%22plan%22%3A%22pro%22%7D`.',
+        (_ELIXIR_EXACT, _ELIXIR_PASS, _ELIXIR_DECODE),
+        (),
+    ),
+    (
+        "With no attributes, an empty map or anything that is not a map, no `context`"
+        " is sent and the request carries the user id alone. If the attributes cannot"
+        " be written as JSON, `evaluate_flag` returns `{:error, :invalid_attributes}`"
+        " and sends nothing.",
+        (_ELIXIR_NONE, _ELIXIR_UNSENDABLE),
+        (),
+    ),
+    (
+        "The SDK keeps one cached answer per user and flag, together with the attributes"
+        " it was asked with. A later call is answered from the cache only if its"
+        " attributes are exactly the same; otherwise the SDK asks the server, and the new"
+        " answer replaces the cached one. So two calls that differ only in attributes get"
+        " two answers. The same attributes written in a different key order may cost one"
+        " extra request; they never return another call's answer.",
+        _ELIXIR_CACHE,
+        (),
+    ),
+    (
+        "The change is in this repository"
+        " ([#1720](https://github.com/Controlvar/controlvar/issues/1720)); it reaches a"
+        " registry at this SDK's first publish, so a build from a clone of `main` has it"
+        " and a copy installed earlier does not.",
+        (_ELIXIR_EXACT,),
+        (),
+    ),
+)
+
+
+def test_the_claim_patterns_find_the_true_sentences_on_the_elixir_pages():
+    # Elixir sends the context (part of #1720), and both its pages say so: the
+    # patterns must see it, so that elixir put back in SENDS_NO_CONTEXT fails
+    # test_a_page_claims_no_attribute_targeting_its_client_does_not_send on
+    # docs/sdk/elixir.md and sdk/elixir/README.md as well as here.
+    assert "elixir" not in SENDS_NO_CONTEXT
+    assert sends_context("elixir")
+    for page in ELIXIR_PAGES:
+        assert "flag evaluation sends the attributes" in attribute_claims(text(page)), (
+            page
+        )
+
+
+@pytest.mark.parametrize(
+    "sentence, tests, server",
+    ELIXIR_CONTEXT_SENTENCES,
+    ids=[s[:60] for s, _, _ in ELIXIR_CONTEXT_SENTENCES],
+)
+def test_each_elixir_context_sentence_is_on_both_pages_and_held_by_a_test(
+    sentence, tests, server
+):
+    unsaid = [page for page in ELIXIR_PAGES if sentence not in fold(text(page))]
+    assert unsaid == [], f"no longer said there: {sentence}"
+    source = ELIXIR_TESTS.read_text("utf-8")
+    missing = [title for title in tests if f'test "{title}"' not in source]
+    assert missing == [], f"no ExUnit test in {ELIXIR_TESTS.name} has these titles"
+    gone = [node for node in server if not _python_test_exists(node)]
+    assert gone == [], "these backend tests are gone"
+
+
+def test_the_elixir_page_says_feature_enabled_passes_its_options_through():
+    # The facade's feature_enabled?/4 forwards its options to the client's
+    # (held by the _ELIXIR_PASS test and by the facade test named below).
+    page = fold(text("docs/sdk/elixir.md"))
+    assert (
+        "`opts` are those of `evaluate_flag/4` (`:attributes`, `:skip_cache`) and are"
+        " passed through to it." in page
+    )
+    assert "takes no options" not in page
+    assert f'test "{_ELIXIR_PASS}"' in ELIXIR_TESTS.read_text("utf-8")
+    facade = SDK_DIR / "elixir/test/controlvar_test.exs"
+    assert (
+        'test "the facade forwards attributes: the request carries &context= after'
+        ' user_id"' in facade.read_text("utf-8")
+    )
+
+
+def test_the_old_elixir_note_is_gone_from_both_pages():
+    # The note #1720 replaced: attributes accepted on evaluate_flag and not sent.
+    for page in ELIXIR_PAGES:
+        folded = fold(text(page))
+        assert "accepted for symmetry and not sent" not in folded, page
+        assert "accepted for symmetry" not in folded, page
+        assert "against an empty context" not in folded, page

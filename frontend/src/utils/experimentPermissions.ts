@@ -72,6 +72,53 @@ export function canAdministerEligibility(
 }
 
 /**
+ * Whether the API would accept a bandit's weights set by hand from this user
+ * (#1957): "Set weights by hand" on the experiment page's Current traffic
+ * weights panel, which sends `PUT /api/v1/bandit/{id}/weights`.
+ *
+ * Mirrors `override_bandit_weights`: a superuser, or the ADMIN role itself.
+ * Like `_require_admin`, the route checks the role, not a permission from the
+ * role table, so no custom role or direct grant can give it and this takes no
+ * effective map. It keeps its own list rather than sharing
+ * `canAdministerEligibility`'s, because it answers a different route:
+ * `test_dashboard_experiment_roles.py` calls `override_bandit_weights` for
+ * every role and holds the set it admits equal to this list.
+ *
+ * A null user (no session yet) answers false: the control appears only once
+ * the user is known to be an ADMIN or a superuser.
+ */
+const ROLES_THAT_OVERRIDE_BANDIT_WEIGHTS = ['ADMIN'] as const;
+
+export function canOverrideBanditWeights(user: PermissionUser): boolean {
+  if (!user) return false;
+  if (user.is_superuser) return true;
+  return ROLES_THAT_OVERRIDE_BANDIT_WEIGHTS.includes(user.role as 'ADMIN');
+}
+
+/**
+ * Whether the API would let this user use interaction analysis (#1960): the
+ * scan (`GET /api/v1/interactions/scan`) and the pair test (beta,
+ * `GET /api/v1/interactions/{a}/{b}`).
+ *
+ * Mirrors `_require_developer` in `interactions.py`: a superuser, or one of
+ * the roles it names (`INTERACTION_ROLES`). Like `_require_admin` it checks
+ * the role, not the role table, so no custom role or direct grant can give
+ * it and it takes no effective map; `test_dashboard_experiment_roles.py`
+ * calls `_require_developer` for every role and holds the set it admits
+ * equal to this list.
+ *
+ * A null user (no session yet) answers FALSE: the Interactions link and the
+ * page's requests wait until the user is known to be allowed.
+ */
+const ROLES_THAT_ANALYSE_INTERACTIONS = ['ADMIN', 'ANALYST', 'DEVELOPER'] as const;
+
+export function canAnalyseInteractions(user: PermissionUser): boolean {
+  if (!user) return false;
+  if (user.is_superuser) return true;
+  return ROLES_THAT_ANALYSE_INTERACTIONS.includes(user.role as 'ADMIN' | 'ANALYST' | 'DEVELOPER');
+}
+
+/**
  * Whether the API would accept a change to an experiment from this user:
  * start, pause, complete, archive, schedule, and edit a draft's details,
  * variants and metrics.
@@ -113,9 +160,9 @@ export function canDeleteExperiment(user: PermissionUser, effective?: EffectiveP
 
 /**
  * Whether the API would accept a change to a feature flag from this user
- * (#917): create (`canCreateFeatureFlags`), and turn on or off and update,
+ * (#917): create (`canCreateFeatureFlags`), turn on or off and update,
  * including its targeting rules, values, rollout percentage and rollout
- * schedules (`canChangeFeatureFlags`).
+ * schedules (`canChangeFeatureFlags`), and delete (`canDeleteFeatureFlags`).
  *
  * Mirrors `can_act_on_feature_flag` and `deps.can_create_feature_flag`: a
  * superuser is accepted before the role table is read; otherwise the role
@@ -157,4 +204,14 @@ export function canCreateFeatureFlags(user: PermissionUser, effective?: Effectiv
 /** FEATURE_FLAG UPDATE: the switches, the flag form and the rollout schedule. */
 export function canChangeFeatureFlags(user: PermissionUser, effective?: EffectivePermissions): boolean {
   return flagAllows(user, 'update', effective);
+}
+
+/**
+ * FEATURE_FLAG DELETE: "Delete" on the flag's page (#442). The same roles
+ * hold it as UPDATE, but a custom role or direct grant can give either one
+ * alone, so it is answered separately (`DELETE /feature-flags/{id}` checks
+ * exactly this pair).
+ */
+export function canDeleteFeatureFlags(user: PermissionUser, effective?: EffectivePermissions): boolean {
+  return flagAllows(user, 'delete', effective);
 }

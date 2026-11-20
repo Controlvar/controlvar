@@ -1,15 +1,18 @@
-"""No Lambda or showcase test may open a network connection to anything but loopback.
+"""No Lambda, showcase or demo-mode test may open a network connection to anything but loopback.
 
 A pytest plugin, loaded for every session rooted at the repository root by
 ``conftest.py`` there (``pytest_plugins``), like ``no_real_aws``. Its fixture
 is autouse but acts only on tests whose file lies under ``backend/lambda/``,
-``modules/lambda/`` or ``backend/tests/unit/showcase/``: every Lambda suite,
-including one added later, is covered without its conftest having to opt in --
-and the Lambda packages could not import it anyway, since
-``backend/lambda/.importlinter`` forbids them to import ``backend``. The
-showcase tests (#1066) cover a tool that starts a browser and a local stack;
-they check its logic against stand-ins and must not reach any network service
-themselves.
+``modules/lambda/``, ``backend/tests/unit/showcase/`` or
+``backend/tests/integration/demo/``: every Lambda suite, including one added
+later, is covered without its conftest having to opt in -- and the Lambda
+packages could not import it anyway, since ``backend/lambda/.importlinter``
+forbids them to import ``backend``. The showcase tests (#1066) cover a tool
+that starts a browser and a local stack; they check its logic against
+stand-ins and must not reach any network service themselves. The demo-mode
+integration tests call every read route as a demo visitor, and a demo install
+must make no outbound call on a visitor's behalf; their database and Redis are
+on loopback, and libpq's own socket is not seen (below).
 
 Why: the Lambda functions build real boto3 clients on a cold start. A test
 that forgets to stub one of them does not fail. ``no_real_aws`` gives it dummy
@@ -54,6 +57,7 @@ GUARDED_DIRS = (
     _REPO_ROOT / "backend" / "lambda",
     _REPO_ROOT / "modules" / "lambda",
     _REPO_ROOT / "backend" / "tests" / "unit" / "showcase",
+    _REPO_ROOT / "backend" / "tests" / "integration" / "demo",
 )
 
 _LOOPBACK_NAMES = {"localhost", "localhost.localdomain", "ip6-localhost"}

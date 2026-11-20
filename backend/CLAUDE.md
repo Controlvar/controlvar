@@ -323,7 +323,7 @@ class Settings(BaseSettings):
 
 ### User Roles
 
-- **ADMIN**: Full access to all resources
+- **ADMIN**: Manages experiments, flags, integrations and compliance exports; not a superuser, so user management and changing safety settings need `is_superuser`
 - **DEVELOPER**: Create and manage experiments/feature flags
 - **ANALYST**: View all data, cannot create/modify
 - **VIEWER**: Read-only access to approved resources
@@ -379,12 +379,12 @@ def delete_experiment(
 ```bash
 # Format and auto-fix (ruff replaces black, isort and flake8). The scope is
 # backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/
-# tests/usecases/ -- what `make format` and the lint job use.
-ruff format backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/
-ruff check backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/ --fix
+# tests/usecases/ tests/personas/ -- what `make format` and the lint job use.
+ruff format backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/ tests/personas/
+ruff check backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/ tests/personas/ --fix
 
 # Check only, exactly as CI does
-ruff check backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/ && ruff format --check backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/
+ruff check backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/ tests/personas/ && ruff format --check backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/ tests/personas/
 
 # Type checking
 mypy backend/app/

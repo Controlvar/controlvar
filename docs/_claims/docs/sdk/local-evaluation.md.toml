@@ -415,6 +415,24 @@ text = "Membership lives on the server (an ID list can hold a million IDs), so t
 by = ["test:backend/tests/unit/services/test_sdk_ruleset_vectors.py::test_segment_flags_are_remote"]
 
 [[unit]]
+text = "a flag whose stored rules the server cannot read (only a direct database write leaves one): the ruleset marks it \"remote\", and the server answers it enabled: false, reason: \"error\"."
+by = [
+    "test:backend/tests/unit/services/test_unreadable_stored_rules.py::test_the_ruleset_marks_only_the_unreadable_flags_remote",
+    "test:backend/tests/unit/services/test_unreadable_stored_rules.py::test_an_unreadable_flag_fails_closed_not_open",
+    "test:backend/tests/unit/services/test_unreadable_stored_rules.py::test_only_a_direct_database_write_leaves_such_rules",
+    "test:backend/tests/integration/api/test_unreadable_stored_rules_api.py::test_the_ruleset_route_serves_the_flag_remote",
+    "test:backend/tests/integration/api/test_unreadable_stored_rules_api.py::test_evaluate_answers_error_as_before",
+]
+
+[[unit]]
+text = "While it is active, every local getAllFlags / get_all_flags call goes to the server, because a bulk call is answered locally only when every active flag is;"
+by = [
+    "test:backend/tests/unit/services/test_unreadable_stored_rules.py::test_the_ruleset_marks_only_the_unreadable_flags_remote",
+    "test:sdk/js/__tests__/local.test.ts::getAllFlags: one remote flag sends the whole call to the server",
+    "test:sdk/python/tests/test_local.py::test_get_all_flags_one_remote_flag_sends_the_whole_call",
+]
+
+[[unit]]
 text = "an attribute whose type does not match the rule (a string against a number, a boolean, a numeric string such as \"10\"); the server's type coercions are not reproduced;"
 by = [
     "test:sdk/python/tests/test_evaluator.py::test_defers",

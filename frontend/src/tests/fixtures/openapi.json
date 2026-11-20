@@ -1,7 +1,7 @@
 {
   "info": {
     "title": "Controlvar",
-    "version": "0.45.0"
+    "version": "0.47.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -39,6 +39,12 @@
       "put": {
         "operationId": "update_user_api_v1_admin_users__user_id__put",
         "summary": "Update User"
+      }
+    },
+    "/api/v1/admin/users/{user_id}/2fa": {
+      "delete": {
+        "operationId": "reset_user_two_factor_api_v1_admin_users__user_id__2fa_delete",
+        "summary": "Reset User Two Factor"
       }
     },
     "/api/v1/ai/design": {
@@ -171,6 +177,24 @@
         "summary": "Get User Info"
       }
     },
+    "/api/v1/auth/mfa/enroll": {
+      "post": {
+        "operationId": "enrol_during_sign_in_api_v1_auth_mfa_enroll_post",
+        "summary": "Enrol During Sign In"
+      }
+    },
+    "/api/v1/auth/mfa/enroll/confirm": {
+      "post": {
+        "operationId": "confirm_enrolment_during_sign_in_api_v1_auth_mfa_enroll_confirm_post",
+        "summary": "Confirm Enrolment During Sign In"
+      }
+    },
+    "/api/v1/auth/mfa/verify": {
+      "post": {
+        "operationId": "verify_mfa_api_v1_auth_mfa_verify_post",
+        "summary": "Verify Mfa"
+      }
+    },
     "/api/v1/auth/refresh": {
       "post": {
         "operationId": "refresh_token_api_v1_auth_refresh_post",
@@ -259,6 +283,12 @@
       "get": {
         "operationId": "get_bandit_status_api_v1_bandit__experiment_id__get",
         "summary": "Get Bandit Status"
+      }
+    },
+    "/api/v1/bandit/{experiment_id}/history": {
+      "get": {
+        "operationId": "get_bandit_history_api_v1_bandit__experiment_id__history_get",
+        "summary": "Get Bandit History"
       }
     },
     "/api/v1/bandit/{experiment_id}/update": {
@@ -451,6 +481,16 @@
       "post": {
         "operationId": "start_experiment_api_v1_experiments__experiment_id__start_post",
         "summary": "Start experiment"
+      }
+    },
+    "/api/v1/experiments/{experiment_id}/visual/preview-links": {
+      "delete": {
+        "operationId": "revoke_preview_links_api_v1_experiments__experiment_id__visual_preview_links_delete",
+        "summary": "End every preview link of an experiment (beta)"
+      },
+      "post": {
+        "operationId": "create_preview_link_api_v1_experiments__experiment_id__visual_preview_links_post",
+        "summary": "Make a preview link for a visual experiment's variant (beta)"
       }
     },
     "/api/v1/export/experiments": {
@@ -1016,13 +1056,19 @@
     "/api/v1/results/{experiment_id}/post-stratification": {
       "post": {
         "operationId": "compute_post_stratification_api_v1_results__experiment_id__post_stratification_post",
-        "summary": "Post-stratification variance reduction (not available yet)"
+        "summary": "Post-stratification variance reduction, not available yet (deprecated)"
       }
     },
     "/api/v1/results/{experiment_id}/sample-size": {
       "get": {
         "operationId": "get_sample_size_status_api_v1_results__experiment_id__sample_size_get",
         "summary": "Get Sample Size Status"
+      }
+    },
+    "/api/v1/results/{experiment_id}/segments/{segment_id}": {
+      "get": {
+        "operationId": "get_segment_results_api_v1_results__experiment_id__segments__segment_id__get",
+        "summary": "Beta: an experiment's results for the members of one ID-list segment"
       }
     },
     "/api/v1/results/{experiment_id}/sequential": {
@@ -1289,6 +1335,18 @@
         "summary": "Track event"
       }
     },
+    "/api/v1/tracking/visual": {
+      "post": {
+        "operationId": "visual_changes_for_page_api_v1_tracking_visual_post",
+        "summary": "The visual changes and goals a visitor gets on a page (beta)"
+      }
+    },
+    "/api/v1/tracking/visual/preview": {
+      "post": {
+        "operationId": "visual_preview_api_v1_tracking_visual_preview_post",
+        "summary": "One variant's visual changes, for a preview link (beta)"
+      }
+    },
     "/api/v1/users/": {
       "get": {
         "operationId": "list_users_api_v1_users__get",
@@ -1303,6 +1361,36 @@
       "get": {
         "operationId": "get_user_me_api_v1_users_me_get",
         "summary": "Get User Me"
+      }
+    },
+    "/api/v1/users/me/2fa": {
+      "get": {
+        "operationId": "read_own_two_factor_api_v1_users_me_2fa_get",
+        "summary": "Read Own Two Factor"
+      }
+    },
+    "/api/v1/users/me/2fa/confirm": {
+      "post": {
+        "operationId": "confirm_own_two_factor_api_v1_users_me_2fa_confirm_post",
+        "summary": "Confirm Own Two Factor"
+      }
+    },
+    "/api/v1/users/me/2fa/disable": {
+      "post": {
+        "operationId": "disable_own_two_factor_api_v1_users_me_2fa_disable_post",
+        "summary": "Disable Own Two Factor"
+      }
+    },
+    "/api/v1/users/me/2fa/enroll": {
+      "post": {
+        "operationId": "enrol_own_two_factor_api_v1_users_me_2fa_enroll_post",
+        "summary": "Enrol Own Two Factor"
+      }
+    },
+    "/api/v1/users/me/2fa/recovery-codes": {
+      "post": {
+        "operationId": "regenerate_own_recovery_codes_api_v1_users_me_2fa_recovery_codes_post",
+        "summary": "Regenerate Own Recovery Codes"
       }
     },
     "/api/v1/users/me/password": {

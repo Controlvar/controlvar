@@ -11,6 +11,7 @@ import { TargetingRules } from '@/types/targeting';
 import { createEmptyRules, validateRules } from '@/utils/targeting';
 import {
   BalanceWithin,
+  BayesianConfigInput,
   DesignMetric,
   DesignVariant,
   Experiment,
@@ -19,6 +20,7 @@ import {
   ExperimentType,
   ExperimentVariant,
   MetricType,
+  OptimizationType,
   CreateExperimentRequest,
 } from '@/types/experiments';
 import { CorrectionMethod } from '@/types/results';
@@ -104,6 +106,12 @@ export interface ExperimentFormState {
   description: string;
   hypothesis: string;
   type: ExperimentType;
+  /**
+   * The bandit's algorithm (#1956), sent as `optimization_type` only while
+   * `type` is `bandit`. Kept when the type changes, so choosing Bandit again
+   * finds it, but an A/B or multivariate request never carries it.
+   */
+  optimizationType: BanditOptimizationType;
   rules: TargetingRules;
   variants: VariantFormData[];
   metrics: MetricFormData[];
@@ -112,6 +120,12 @@ export interface ExperimentFormState {
   correctionMethod: CorrectionMethod;
   /** Also analyse the primary metric with Bayesian statistics (#216); saved with the experiment. */
   bayesianEnabled: boolean;
+  /**
+   * Advanced Bayesian settings (#442), as typed. Read only while
+   * `bayesianEnabled` is on, and sent as `bayesian_config` only when a field
+   * has left its default (`buildBayesianConfig`).
+   */
+  bayesianConfig: BayesianConfigFormState;
   /**
    * Also test the primary metric sequentially (beta, #1454); saved with the
    * experiment. Only the switch: no `sequential_testing_config` is sent, so the
@@ -145,6 +159,120 @@ export interface ExperimentFormState {
   balanceStored?: BalanceWithin | null;
 }
 
+// --- Advanced Bayesian settings (#442) ---------------------------------------
+//
+// The four numbers of the API's `BayesianConfig` that the create form offers
+// (`backend/app/schemas/bayesian.py`). `prior_family` is not offered: the
+// analysis reads only alpha and beta, so every family gives the same results
+// (T337), and the form always sends "beta". `rope` is never sent. They are set
+// only when an experiment is created: the design edit does not send them, and
+// the API refuses a change once the experiment has left draft.
+
+/**
+ * The fields as typed. The numbers are kept as text, so a value that is half
+ * typed shows as it is; `bayesianConfigProblems` reads them as the API's
+ * `BayesianConfig` does.
+ */
+export interface BayesianConfigFormState {
+  alpha: string;
+  beta: string;
+  lossThreshold: string;
+  credibleLevel: string;
+}
+
+export type BayesianNumberField = keyof BayesianConfigFormState;
+export const BAYESIAN_NUMBER_FIELDS: BayesianNumberField[] = ['alpha', 'beta', 'lossThreshold', 'credibleLevel'];
+
+/** The fields as they start: the API's defaults. */
+export const DEFAULT_BAYESIAN_CONFIG: BayesianConfigFormState = {
+  alpha: '1.0',
+  beta: '1.0',
+  lossThreshold: '0.001',
+  credibleLevel: '0.95',
+};
+
+export const BAYESIAN_FIELD_LABELS: Record<BayesianNumberField, string> = {
+  alpha: 'Prior alpha',
+  beta: 'Prior beta',
+  lossThreshold: 'Loss threshold',
+  credibleLevel: 'Credible level',
+};
+
+/** The API's own bounds: alpha, beta and the loss threshold > 0; 0 < credible level < 1. */
+export const MUST_BE_POSITIVE = 'Must be greater than 0.';
+export const MUST_BE_BETWEEN_0_AND_1 = 'Must be more than 0 and less than 1.';
+
+/** The number `text` holds, or null when it holds none (blank, not a number, or infinite). */
+function typedNumber(text: string): number | null {
+  if (text.trim() === '') return null;
+  const value = Number(text);
+  return Number.isFinite(value) ? value : null;
+}
+
+/** Each number field's problem, or null where there is none. */
+export function bayesianConfigProblems(
+  config: BayesianConfigFormState,
+): Record<BayesianNumberField, string | null> {
+  const positive = (text: string) => {
+    const value = typedNumber(text);
+    return value !== null && value > 0 ? null : MUST_BE_POSITIVE;
+  };
+  const level = typedNumber(config.credibleLevel);
+  return {
+    alpha: positive(config.alpha),
+    beta: positive(config.beta),
+    lossThreshold: positive(config.lossThreshold),
+    credibleLevel: level !== null && level > 0 && level < 1 ? null : MUST_BE_BETWEEN_0_AND_1,
+  };
+}
+
+/**
+ * The first problem with Advanced Bayesian settings, in the words shown where
+ * Next or Create is refused, or null. Nothing while Bayesian analysis is off:
+ * the fields are hidden then, and not sent.
+ */
+export function bayesianConfigProblem(
+  state: Pick<ExperimentFormState, 'bayesianEnabled' | 'bayesianConfig'>,
+): string | null {
+  if (!state.bayesianEnabled) return null;
+  const problems = bayesianConfigProblems(state.bayesianConfig);
+  const first = BAYESIAN_NUMBER_FIELDS.find((field) => problems[field] !== null);
+  return first ? `Advanced Bayesian settings, ${BAYESIAN_FIELD_LABELS[first]}: ${problems[first]}` : null;
+}
+
+/**
+ * The `bayesian_config` to send, or undefined when all four numbers hold the
+ * API's defaults: the API then stores the defaults itself. Otherwise the five
+ * fields, `prior_family` always "beta", so the stored config is complete.
+ * Compared by value, so "1" is alpha's default as much as "1.0" is.
+ * Validation refuses a field with a problem before this is called.
+ */
+export function buildBayesianConfig(config: BayesianConfigFormState): BayesianConfigInput | undefined {
+  const sent: BayesianConfigInput = {
+    prior_family: 'beta',
+    alpha: Number(config.alpha),
+    beta: Number(config.beta),
+    loss_threshold: Number(config.lossThreshold),
+    credible_level: Number(config.credibleLevel),
+  };
+  const atDefaults =
+    sent.alpha === Number(DEFAULT_BAYESIAN_CONFIG.alpha) &&
+    sent.beta === Number(DEFAULT_BAYESIAN_CONFIG.beta) &&
+    sent.loss_threshold === Number(DEFAULT_BAYESIAN_CONFIG.lossThreshold) &&
+    sent.credible_level === Number(DEFAULT_BAYESIAN_CONFIG.credibleLevel);
+  return atDefaults ? undefined : sent;
+}
+
+// --- a bandit's algorithm (#1956) --------------------------------------------
+
+/** A bandit's algorithm: every `optimization_type` but `fixed`, which is a plain split. */
+export type BanditOptimizationType = Exclude<OptimizationType, 'fixed'>;
+
+/** The algorithms the form offers for a bandit, in order; the first is the default. */
+export const BANDIT_OPTIMIZATION_TYPES: BanditOptimizationType[] = ['thompson_sampling', 'ucb1', 'epsilon_greedy'];
+
+export const DEFAULT_OPTIMIZATION_TYPE: BanditOptimizationType = 'thompson_sampling';
+
 const DEFAULT_VARIANTS: VariantFormData[] = [
   { name: 'Control', description: '', traffic_allocation: 50, is_control: true },
   { name: 'Treatment', description: '', traffic_allocation: 50, is_control: false },
@@ -163,12 +291,14 @@ export function createInitialFormState(): ExperimentFormState {
     description: '',
     hypothesis: '',
     type: 'a_b',
+    optimizationType: DEFAULT_OPTIMIZATION_TYPE,
     rules: createEmptyRules(),
     variants: DEFAULT_VARIANTS,
     metrics: DEFAULT_METRICS,
     confidenceLevel: DEFAULT_CONFIDENCE_LEVEL,
     correctionMethod: DEFAULT_CORRECTION_METHOD,
     bayesianEnabled: false,
+    bayesianConfig: { ...DEFAULT_BAYESIAN_CONFIG },
     sequentialEnabled: false,
     plannedEffectPct: '',
     balance: initialBalanceState(),
@@ -178,15 +308,16 @@ export function createInitialFormState(): ExperimentFormState {
 export const INITIAL_FORM_STATE: ExperimentFormState = createInitialFormState();
 
 /**
- * Types this form can fully configure.
+ * Types this form can fully configure, in the order both views offer them.
  *
  * `split_url` needs a `split_url_config` (without it the split-URL path has no
- * URLs to route to) and `bandit` needs `optimization_type != "fixed"` (with the
- * default `fixed` the bandit scheduler skips the experiment forever, so traffic
- * never adapts). This form sends neither field, so it must not offer them —
- * see `backend/app/schemas/experiment.py::ExperimentCreate`.
+ * URLs to route to), which this form does not ask for, so it is not offered —
+ * see `backend/app/schemas/experiment.py::ExperimentCreate`. `bandit` (#1956)
+ * is offered last: the form asks for its algorithm and always sends one,
+ * because with the API's default `optimization_type` of `fixed` the bandit
+ * scheduler skips the experiment for ever and traffic never adapts.
  */
-export const FORM_EXPERIMENT_TYPES: ExperimentType[] = ['a_b', 'mv'];
+export const FORM_EXPERIMENT_TYPES: ExperimentType[] = ['a_b', 'mv', 'bandit'];
 
 /** Sum of the variants' traffic allocations, counting a blank or invalid entry as 0. */
 export function allocationTotalOf(variants: VariantFormData[]): number {
@@ -334,11 +465,15 @@ export function validateForm(
 
 /**
  * The API's refusal of the split for a balanced experiment (every share must
- * be a multiple of 5), or null: nothing while the switch is off, and nothing
- * until the shares add up to 100.
+ * be a multiple of 5), or null: nothing while the switch is off, nothing
+ * until the shares add up to 100, and nothing for a bandit, which sends no
+ * balance setting (#1956). A state without `type` (the design edit's
+ * callers) is read as before.
  */
-export function balanceSplitProblem(state: Pick<ExperimentFormState, 'balance' | 'variants'>): string | null {
-  if (!state.balance.on) return null;
+export function balanceSplitProblem(
+  state: Pick<ExperimentFormState, 'balance' | 'variants'> & Partial<Pick<ExperimentFormState, 'type'>>,
+): string | null {
+  if (!state.balance.on || state.type === 'bandit') return null;
   return splitProblem(state.variants.map((v) => Number(v.traffic_allocation) || 0));
 }
 
@@ -367,11 +502,12 @@ export type FormStep = (typeof FORM_STEPS)[number];
 /**
  * The first problem with the part of the form one step asks for, or null.
  *
- * `type` always has a valid value and cannot fail. `estimate` fails only on a
- * minimum detectable effect that is typed but cannot be saved (blank is fine;
- * the rest of that step is not sent). `review` is the whole-form check, and
- * every other message is one `validateForm` can return. The single-page form
- * does not ask for the effect, so `validateForm` does not check it, and
+ * `type` always has a valid value and cannot fail. `estimate` fails on an
+ * Advanced Bayesian setting the API would refuse (#442), and on a minimum
+ * detectable effect that is typed but cannot be saved (blank is fine; the rest
+ * of the estimate is not sent). `review` is the whole-form check, and every
+ * other message is one `validateForm` can return. The single-page form does
+ * not ask for the effect, so `validateForm` does not check it, and
  * `buildCreatePayload` sends only a usable one.
  */
 export function validateStep(step: FormStep, state: ExperimentFormState): string | null {
@@ -383,9 +519,13 @@ export function validateStep(step: FormStep, state: ExperimentFormState): string
     case 'variants':
       return checkVariants(state.variants) ?? balanceSplitProblem(state);
     case 'estimate':
-      return plannedEffectProblem(state.plannedEffectPct);
+      return bayesianConfigProblem(state) ?? plannedEffectProblem(state.plannedEffectPct);
     case 'review':
-      return validateForm(state.name, state.variants, state.metrics) ?? balanceSplitProblem(state);
+      return (
+        validateForm(state.name, state.variants, state.metrics) ??
+        balanceSplitProblem(state) ??
+        bayesianConfigProblem(state)
+      );
   }
 }
 
@@ -409,6 +549,13 @@ export function maxReachableStep(state: ExperimentFormState): number {
  *
  * A usable planned effect goes on the primary metric only, as
  * `expected_effect`; with none, no metric carries the key at all.
+ *
+ * A bandit (#1956) is the same body with `experiment_type: "bandit"`, no
+ * `balance_within` (the API refuses balancing for a bandit, whatever the
+ * switch says) and its algorithm appended as `optimization_type`. No other
+ * type carries `optimization_type`, not even "fixed": the A/B and
+ * multivariate bodies are byte for byte the ones sent before
+ * (experiment-new-ab-body.test.tsx).
  */
 export function buildCreatePayload(state: ExperimentFormState): CreateExperimentRequest {
   const { name, key, description, hypothesis, type, rules, variants, metrics } = state;
@@ -449,8 +596,17 @@ export function buildCreatePayload(state: ExperimentFormState): CreateExperiment
     confidence_level: state.confidenceLevel,
     correction_method: state.correctionMethod,
   };
-  if (state.bayesianEnabled) payload.bayesian_enabled = true;
+  if (state.bayesianEnabled) {
+    payload.bayesian_enabled = true;
+    // Only a change is sent: with all five at their defaults the API stores the defaults itself.
+    const bayesianConfig = buildBayesianConfig(state.bayesianConfig);
+    if (bayesianConfig) payload.bayesian_config = bayesianConfig;
+  }
   if (state.sequentialEnabled) payload.sequential_testing_enabled = true;
+  if (type === 'bandit') {
+    payload.optimization_type = state.optimizationType;
+    return payload;
+  }
   // Sent only when on: a draft that does not balance is created as before.
   const balance = buildBalancePayload(state.balance);
   if (balance) payload.balance_within = balance;
@@ -651,10 +807,12 @@ export type ExperimentFormAction =
   | { type: 'setDescription'; description: string }
   | { type: 'setHypothesis'; hypothesis: string }
   | { type: 'setType'; experimentType: ExperimentType }
+  | { type: 'setOptimizationType'; optimizationType: BanditOptimizationType }
   | { type: 'setRules'; rules: TargetingRules }
   | { type: 'setConfidenceLevel'; confidenceLevel: number }
   | { type: 'setCorrectionMethod'; correctionMethod: CorrectionMethod }
   | { type: 'setBayesianEnabled'; bayesianEnabled: boolean }
+  | { type: 'setBayesianField'; field: BayesianNumberField; value: string }
   | { type: 'setSequentialEnabled'; sequentialEnabled: boolean }
   | { type: 'setPlannedEffect'; plannedEffectPct: string }
   | { type: 'setBalanceOn'; on: boolean }
@@ -700,6 +858,8 @@ export function experimentFormReducer(
       return { ...state, hypothesis: action.hypothesis };
     case 'setType':
       return { ...state, type: action.experimentType };
+    case 'setOptimizationType':
+      return { ...state, optimizationType: action.optimizationType };
     case 'setRules':
       return { ...state, rules: action.rules };
     case 'setConfidenceLevel':
@@ -708,6 +868,8 @@ export function experimentFormReducer(
       return { ...state, correctionMethod: action.correctionMethod };
     case 'setBayesianEnabled':
       return { ...state, bayesianEnabled: action.bayesianEnabled };
+    case 'setBayesianField':
+      return { ...state, bayesianConfig: { ...state.bayesianConfig, [action.field]: action.value } };
     case 'setSequentialEnabled':
       return { ...state, sequentialEnabled: action.sequentialEnabled };
     case 'setPlannedEffect':

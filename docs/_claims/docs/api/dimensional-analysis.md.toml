@@ -75,16 +75,34 @@ text = "HTE Detection"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Heterogeneous treatment effect detection compares the first treatment with the control."
-by = ["test:backend/tests/unit/services/test_dimensional_analysis_service.py::TestDetectHTE::test_hte_detected_when_effects_differ_strongly"]
+text = "Heterogeneous treatment effect detection compares the first treatment (the non-control variant whose name sorts first) with the control."
+by = ["test:backend/tests/unit/services/test_hte_detection.py::test_the_first_treatment_by_name_is_the_one_tested"]
 
 [[unit]]
-text = "It flags the experiment when a chi-squared test on their conversion counts across the segments gives p < 0.05, when the lift varies widely between segments, or when the lift is positive in one segment and negative in another."
+text = "It tests whether that treatment's difference from the control, in percentage points, is the same in every segment, and flags the experiment when the test rejects at 1 minus the confidence level the results were computed at."
 by = [
-    "test:backend/tests/unit/services/test_dimensional_analysis_service.py::TestDetectHTE::test_hte_detected_when_effects_differ_strongly",
-    "test:backend/tests/unit/services/test_dimensional_analysis_service.py::TestDetectHTE::test_no_hte_when_effects_are_homogeneous",
-    "test:backend/tests/unit/services/test_dimensional_analysis_service.py::TestDetectHTE::test_single_segment_never_has_hte",
+    "test:backend/tests/unit/services/test_hte_detection.py::test_the_breakdown_tests_at_the_alpha_it_is_given",
+    "test:backend/tests/unit/services/test_hte_detection.py::test_the_alpha_fixtures_p_values",
+    "test:backend/tests/unit/stats_validation/test_golden_hte_false_positive_rate.py::test_the_replica_agrees_with_detect_hte",
 ]
+
+[[unit]]
+text = "A segment is tested only when, in both arms, its users times the pooled conversion rate, and times one minus that rate, are at least 10."
+by = [
+    "test:backend/tests/unit/services/test_hte_detection.py::test_a_segment_at_the_floor_is_tested",
+    "test:backend/tests/unit/services/test_hte_detection.py::test_a_segment_one_conversion_below_the_floor_is_not_tested",
+]
+
+[[unit]]
+text = "With fewer than two such segments it never flags, so no flag means either that the segments' effects look alike or that there was too little data to tell."
+by = [
+    "test:backend/tests/unit/services/test_hte_detection.py::test_too_little_to_test_is_false_without_a_warning",
+    "test:backend/tests/unit/services/test_hte_detection.py::test_a_segment_one_conversion_below_the_floor_is_not_tested",
+]
+
+[[unit]]
+text = "Each dimension is tested on its own, with no correction across dimensions, so the more dimensions you open, the likelier one flags by chance; treat a flag as a lead to confirm with a follow-up experiment."
+by = ["test:backend/tests/unit/services/test_hte_detection.py::test_each_route_hands_its_confidence_level_down_as_the_alpha"]
 
 [[unit]]
 text = "Where the segments come from"
@@ -367,6 +385,227 @@ by = [
 ]
 
 [[unit]]
+text = "Results for one saved segment"
+by = ["exempt:label"]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id}/segments/{segment_id} (beta) computes the experiment's results for the users in one ID-list segment and nobody else."
+by = [
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_fixture_m_matches_the_hand_counts",
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_the_answer_is_the_unfiltered_one_on_a_pruned_database",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_the_segment_results_route_is_beta_and_adds_only_its_two_components",
+]
+
+[[unit]]
+text = "Nobody's assignment changes, and GET /api/v1/results/{experiment_id} answers exactly as before."
+by = [
+    "test:backend/tests/integration/api/test_unfiltered_results_pinned.py::test_the_unfiltered_answers_are_byte_identical",
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_nothing_is_computed_for_bayesian_and_no_snapshot_is_written",
+]
+
+[[unit]]
+text = "A result for a segment is exploratory, like a breakdown."
+by = ["test:backend/tests/integration/api/test_segment_results_api.py::test_the_answer_is_labelled_and_carries_no_whole_experiment_block"]
+
+[[unit]]
+text = "The correction covers the comparisons inside the segment, not the choice of segment, and each segment you read is another chance of a false positive."
+by = ["test:backend/tests/integration/api/test_segment_results_api.py::test_the_correction_runs_across_the_segments_treatments"]
+
+[[unit]]
+text = "Confirm a finding with an experiment that targets the segment."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "A user is counted when their user_id is in the list at the time the results are computed, matched exactly."
+by = [
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_membership_is_now_and_never_cached",
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_ids_match_exactly",
+]
+
+[[unit]]
+text = "A user added later is counted, and one removed is not."
+by = ["test:backend/tests/integration/api/test_segment_results_api.py::test_membership_is_now_and_never_cached"]
+
+[[unit]]
+text = "A list built from something the experiment could change biases the comparison."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "The segment must be an ID list, in any status."
+by = [
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_an_archived_or_inactive_list_is_accepted",
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_a_rules_segment_is_refused",
+]
+
+[[unit]]
+text = "An archived list's IDs cannot change while it stays archived, so its answer stays the same."
+by = [
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_kind_member_routes_refuse_an_archived_segment",
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_an_archived_or_inactive_list_is_accepted",
+]
+
+[[unit]]
+text = "A rules segment is refused: the attributes its rules read are stored only with the assignment event of /tracking/assign, and /tracking/assign/batch records none."
+by = [
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_a_rules_segment_is_refused",
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_a_batch_assigned_user_is_placed_by_a_tracked_event_batch",
+]
+
+[[unit]]
+text = "This creates an ID-list segment, \"Desktop testers\", with the four desktop users above, and saves its id in $DESKTOP:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints {\"added\":4,\"already_members\":0,\"member_count\":4}."
+by = ["docex:docs/api/dimensional-analysis.md#{\"added\":4,\"already_members\":0,\"member_count\":4}"]
+
+[[unit]]
+text = "The experiment's results for those four users:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints {\"segment\":{\"name\":\"Desktop testers\",\"kind\":\"id_list\",\"status\":\"active\",\"membership\":\"current\",\"member_count\":4},\"is_exploratory\":true,\"total_users\":4}."
+by = ["docex:docs/api/dimensional-analysis.md#{\"segment\":{\"name\":\"Desktop testers\",\"kind\":\"id_list\",\"status\":\"active\",\"membership\":\"current\",\"member_count\":4},\"is_exploratory\":true,\"total_users\":4}"]
+
+[[unit]]
+text = "The four were assigned with the device desktop, so each variant's users and converting users are the desktop row of the breakdown above:"
+by = ["docex:docs/api/dimensional-analysis.md#same"]
+
+[[unit]]
+text = "It prints same."
+by = ["docex:docs/api/dimensional-analysis.md#same"]
+
+[[unit]]
+text = "srm is the sample ratio check of the segment's users alone."
+by = ["test:backend/tests/integration/api/test_segment_results_api.py::test_srm_is_the_members_own_check"]
+
+[[unit]]
+text = "They were assigned by the allocation like everyone else, so they should split as allocated; a mismatch inside the segment while all users pass usually means the list depends on something the experiment changed."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Its counts are the segment's users:"
+by = ["docex:docs/api/dimensional-analysis.md#{\"srm_users\":4}"]
+
+[[unit]]
+text = "It prints {\"srm_users\":4}."
+by = ["docex:docs/api/dimensional-analysis.md#{\"srm_users\":4}"]
+
+[[unit]]
+text = "A rules segment is refused."
+by = ["test:backend/tests/integration/api/test_segment_results_api.py::test_a_rules_segment_is_refused"]
+
+[[unit]]
+text = "This creates one on the device desktop and asks for its results:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints This is a rules segment."
+by = ["docex:docs/api/dimensional-analysis.md#This is a rules segment."]
+
+[[unit]]
+text = "Results can be computed for the members of an id_list segment only: the attributes a rules segment matches are not stored for every assigned user."
+by = ["test:backend/tests/integration/api/test_segment_results_api.py::test_a_rules_segment_is_refused"]
+
+[[unit]]
+text = "Request | Answer"
+by = ["exempt:label"]
+
+[[unit]]
+text = "An experiment that does not exist | 404 Experiment not found"
+by = ["test:backend/tests/integration/api/test_segment_results_api.py::test_the_order_of_the_checks"]
+
+[[unit]]
+text = "A segment that does not exist | 404 Segment not found"
+by = ["test:backend/tests/integration/api/test_segment_results_api.py::test_an_unknown_segment_is_404"]
+
+[[unit]]
+text = "A rules segment | 422, its detail a list with one entry at loc [\"path\", \"segment_id\"], the text above"
+by = ["test:backend/tests/integration/api/test_segment_results_api.py::test_a_rules_segment_is_refused"]
+
+[[unit]]
+text = "An id that is not a UUID | FastAPI's own 422 at [\"path\", \"experiment_id\"] or [\"path\", \"segment_id\"]; like every route's, it repeats the value sent"
+by = ["test:backend/tests/integration/api/test_segment_results_api.py::test_a_malformed_id_is_fastapis_422"]
+
+[[unit]]
+text = "A caller without READ on experiments | 403 You don't have permission to view experiments, before any of the above"
+by = [
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_the_order_of_the_checks",
+    "test:backend/tests/integration/api/test_experiment_data_read_rule.py::test_no_base_role_is_refused_on_results_routes",
+]
+
+[[unit]]
+text = "Another segment's results are being computed in the same API process | 503 with Retry-After: 5: Another segment's results are being computed. Try again shortly."
+by = ["test:backend/tests/integration/api/test_segment_results_api.py::test_a_second_computation_waits_its_turn"]
+
+[[unit]]
+text = "The answer has the fields of GET /api/v1/results/{experiment_id} that describe the results:"
+by = ["test:backend/tests/integration/api/test_segment_results_api.py::test_a_segment_of_every_assigned_user_answers_the_unfiltered_numbers"]
+
+[[unit]]
+text = "segment (id, name, kind, status, membership, member_count, experiment_users, experiment_srm_warning) and is_exploratory;"
+by = [
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_fixture_m_matches_the_hand_counts",
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_the_answer_is_labelled_and_carries_no_whole_experiment_block",
+]
+
+[[unit]]
+text = "metrics, summary, sample_size_adequate and srm, for the segment's users;"
+by = ["test:backend/tests/integration/api/test_segment_results_api.py::test_the_answer_is_the_unfiltered_one_on_a_pruned_database"]
+
+[[unit]]
+text = "summary.recommendation, computed for them, with the sample-ratio rule applied to their check and to the whole experiment's: it is INCONCLUSIVE when either warns."
+by = [
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_srm_is_the_members_own_check",
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_the_whole_experiments_failure_overrides_the_recommendation",
+]
+
+[[unit]]
+text = "Do not automate a decision from it;"
+by = ["exempt:advice"]
+
+[[unit]]
+text = "no sequential_testing, bayesian_results or breakdown."
+by = ["test:backend/tests/integration/api/test_segment_results_api.py::test_the_answer_is_labelled_and_carries_no_whole_experiment_block"]
+
+[[unit]]
+text = "Only GET /api/v1/results/{experiment_id}/segments/{segment_id} filters by a saved segment."
+by = [
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_the_other_routes_ignore_segment_id",
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_the_export_report_ignores_segment_id",
+]
+
+[[unit]]
+text = "Its answer always has a segment object and is_exploratory: true, and never has sequential_testing, bayesian_results or breakdown."
+by = ["test:backend/tests/integration/api/test_segment_results_api.py::test_the_answer_is_labelled_and_carries_no_whole_experiment_block"]
+
+[[unit]]
+text = "Every other results route, GET /api/v1/experiments/{experiment_id}/results and the export answer for all users; a segment_id query parameter sent to one of them is ignored, not refused."
+by = [
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_the_other_routes_ignore_segment_id",
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_the_export_report_ignores_segment_id",
+]
+
+[[unit]]
+text = "A server older than 0.48.0 answers the segment route with 404 {\"detail\": \"Not Found\"}."
+by = ["test:backend/tests/unit/api/test_segment_results_read_rule.py::test_a_server_without_the_route_answers_404_not_found"]
+
+[[unit]]
+text = "The answer is computed on each request: it is not cached, and no analysis snapshot is recorded."
+by = [
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_membership_is_now_and_never_cached",
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_the_segment_route_never_touches_the_cache",
+    "test:backend/tests/integration/api/test_segment_results_api.py::test_nothing_is_computed_for_bayesian_and_no_snapshot_is_written",
+]
+
+[[unit]]
+text = "Reading the results for a saved segment takes the same permission, which is also the one that reads the segment, so every role can do it."
+by = [
+    "test:backend/tests/integration/api/test_experiment_data_read_rule.py::test_every_shipped_role_reads_a_segments_results",
+    "test:backend/tests/unit/api/test_segment_results_read_rule.py::test_segments_read_and_results_read_admit_the_same_callers",
+]
+
+[[unit]]
 text = "Reading the Results"
 by = ["exempt:baseline"]
 
@@ -455,3 +694,10 @@ by = [
 [[unit]]
 text = "Balance the split within groups says what it returns and where the two differ."
 by = ["exempt:navigation"]
+
+[[unit]]
+text = "On the results page, the Breakdowns tab of such an experiment lists its balanced groups first and opens on them; its other choices are breakdowns as above."
+by = [
+    "test:frontend/src/tests/pages/results-balanced-groups.test.tsx::lists Platform (balanced) first and chooses it, from the balanced-groups route",
+    "test:frontend/src/tests/pages/results-balanced-groups.test.tsx::another dimension reads /results?breakdown= as before, and the balanced groups can be chosen again",
+]

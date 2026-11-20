@@ -40,7 +40,7 @@ goes for an `sdk:ruleset` key whose owner can no longer change feature flags. To
 count, send them to your server and forward them from there with a server-side key; see
 [Reporting client-side errors](create.md#reporting-client-side-errors). A server using the
 JavaScript or Python SDK sends one with `reportError` or `report_error`; `true` from either means
-the report was stored, not that it counts.
+the report was stored, not that it counts. No other SDK has its own call for it; the OpenFeature providers expose the JavaScript or Python client, which does.
 
 `GET /api/v1/metrics/summary` counts errors by the same rule: its `error_rate` leaves out the
 reports that do not count, and its `uncounted_error_count` is the number of them in its period.

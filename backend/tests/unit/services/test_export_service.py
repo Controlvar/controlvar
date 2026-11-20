@@ -281,16 +281,29 @@ class TestPlatformOverviewReport:
         assert report.period_start == start.isoformat()
         assert report.period_end == end.isoformat()
 
-    def test_report_has_experiments_with_winners(self, mock_db):
-        """Platform overview includes count of experiments with winners"""
+    def test_report_has_experiments_with_winners(self, mock_db, mock_experiment):
+        """The overview counts the experiments whose results name a winner"""
         mock_db.query.return_value.count.return_value = 0
         mock_db.query.return_value.filter.return_value.count.return_value = 0
+        winner = MagicMock()
+        winner.id = "var-002"
+        winner.name = "treatment"
+        mock_experiment.variants = [winner]
+        without = MagicMock()
+        without.id = "exp-002"
+        mock_db.query.return_value.all.return_value = [mock_experiment, without]
+        results = {
+            "exp-001": {"summary": {"winning_variant_id": "var-002"}},
+            "exp-002": {"summary": {"winning_variant_id": None}},
+        }
 
-        service = ExportService(mock_db)
-        report = service.generate_platform_overview()
+        with patch("backend.app.services.export_service.AnalysisService") as analysis:
+            analysis.return_value.get_experiment_results.side_effect = (
+                lambda experiment_id, **_: results[experiment_id]
+            )
+            report = ExportService(mock_db).generate_platform_overview()
 
-        assert hasattr(report, "experiments_with_winners")
-        assert report.experiments_with_winners >= 0
+        assert report.experiments_with_winners == 1
 
 
 class TestToCSV:

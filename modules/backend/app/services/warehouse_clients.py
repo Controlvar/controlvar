@@ -29,9 +29,13 @@ from modules.backend.app.core.credential_crypto import (
     CredentialKeysUnavailable,
     CredentialUndecryptable,
 )
-from modules.backend.app.models.warehouse_connection import WarehouseConnection
+from modules.backend.app.models.warehouse_connection import (
+    ROLE_TYPES,
+    WarehouseConnection,
+)
 from modules.backend.app.services.warehouse_query_builder import (
     BIGQUERY_SQL,
+    REDSHIFT_SQL,
     SNOWFLAKE_SQL,
     SqlDialect,
 )
@@ -45,6 +49,16 @@ PARAMETER_FIELDS: Mapping[str, tuple[str, ...]] = {
     "snowflake": ("account", "user", "role", "warehouse"),
     "bigquery": ("billing_project", "location", "client_email"),
     "athena": ("region", "role_arn", "workgroup", "database"),
+    # A workgroup (Serverless) or a cluster with its database user
+    # (provisioned): a connection stores one shape, never both.
+    "redshift": (
+        "region",
+        "role_arn",
+        "workgroup_name",
+        "cluster_identifier",
+        "db_user",
+        "database",
+    ),
 }
 
 #: Snowflake roles a connection may not use, compared without regard to case.
@@ -58,6 +72,16 @@ TIME_TYPES: Mapping[str, FrozenSet[str]] = {
     "snowflake": frozenset({"TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP_TZ"}),
     "bigquery": frozenset({"TIMESTAMP"}),
     "athena": frozenset({"TIMESTAMP", "TIMESTAMP WITH TIME ZONE"}),
+    # DescribeTable's names and the SQL ones: a TIMESTAMP is read in the
+    # session's time zone, which the connector sets to UTC.
+    "redshift": frozenset(
+        {
+            "TIMESTAMP",
+            "TIMESTAMPTZ",
+            "TIMESTAMP WITHOUT TIME ZONE",
+            "TIMESTAMP WITH TIME ZONE",
+        }
+    ),
 }
 NUMERIC_TYPES: Mapping[str, FrozenSet[str]] = {
     "snowflake": frozenset(
@@ -82,18 +106,43 @@ NUMERIC_TYPES: Mapping[str, FrozenSet[str]] = {
     "athena": frozenset(
         {"TINYINT", "SMALLINT", "INT", "INTEGER", "BIGINT", "REAL", "DOUBLE", "FLOAT"}
     ),
+    # The SQL names and the internal ones (int2, int4, int8, float4, float8)
+    # DescribeTable may report.
+    "redshift": frozenset(
+        {
+            "SMALLINT",
+            "INTEGER",
+            "INT",
+            "BIGINT",
+            "INT2",
+            "INT4",
+            "INT8",
+            "REAL",
+            "FLOAT4",
+            "FLOAT",
+            "FLOAT8",
+            "DOUBLE PRECISION",
+            "NUMERIC",
+            "DECIMAL",
+        }
+    ),
 }
 
 
 @dataclass(frozen=True, repr=False)
 class ConnectionSpec:
-    """Everything needed to reach one warehouse.  ``credential`` is plaintext."""
+    """Everything needed to reach one warehouse.  ``credential`` is plaintext.
+
+    A role-based connection (``ROLE_TYPES``) has no credential and carries the
+    ``external_id`` generated when it was saved instead.
+    """
 
     warehouse_type: str
     parameters: Mapping[str, str]
     query_timeout_seconds: int
     max_bytes_per_query: Optional[int]
     credential: Optional[bytes] = None
+    external_id: Optional[str] = None
 
     def __repr__(self) -> str:  # never the credential
         return f"ConnectionSpec(warehouse_type={self.warehouse_type!r})"
@@ -184,11 +233,45 @@ def _snowflake_client(spec: ConnectionSpec) -> WarehouseClient:
     )
 
 
+def _redshift_client(spec: ConnectionSpec) -> WarehouseClient:
+    from modules.backend.app.warehouse.redshift import (
+        RedshiftAdapter,
+        RedshiftConnection,
+    )
+
+    # A role-based connection: no stored credential, the external ID instead.
+    if spec.credential is not None or spec.external_id is None:
+        raise WarehouseError(WarehouseErrorCode.INTERNAL, warehouse="redshift")
+    parameters = spec.parameters
+    adapter = RedshiftAdapter(
+        RedshiftConnection(
+            region=parameters["region"],
+            role_arn=parameters["role_arn"],
+            external_id=spec.external_id,
+            database=parameters["database"],
+            query_timeout_seconds=spec.query_timeout_seconds,
+            workgroup_name=parameters.get("workgroup_name"),
+            cluster_identifier=parameters.get("cluster_identifier"),
+            db_user=parameters.get("db_user"),
+        )
+    )
+    return WarehouseClient(
+        "redshift",
+        adapter,
+        REDSHIFT_SQL,
+        TIME_TYPES["redshift"],
+        NUMERIC_TYPES["redshift"],
+    )
+
+
 #: The connectors this code can build.  Athena's adapter is not built yet; a
 #: type with no builder answers ``connector_disabled`` before it gets here.
+#: Redshift's is built, and ships disabled
+#: (:mod:`modules.backend.app.warehouse.connectors`).
 _BUILDERS: Mapping[str, ClientFactory] = {
     "bigquery": _bigquery_client,
     "snowflake": _snowflake_client,
+    "redshift": _redshift_client,
 }
 
 
@@ -209,7 +292,10 @@ def spec_for(
     (409) from :mod:`~modules.backend.app.core.credential_crypto`.
     """
     credential = None
-    if connection.warehouse_type != "athena":
+    external_id = None
+    if connection.warehouse_type in ROLE_TYPES:
+        external_id = connection.external_id
+    else:
         credential = connection.get_credentials(pending=pending)
         if credential is None:
             raise CredentialUndecryptable("no stored credential")
@@ -219,12 +305,13 @@ def spec_for(
         query_timeout_seconds=int(connection.query_timeout_seconds),
         max_bytes_per_query=connection.max_bytes_per_query,
         credential=credential,
+        external_id=external_id,
     )
 
 
 def credentials_status(connection: WarehouseConnection) -> str:
     """``ok``, ``unavailable``, ``needs_new_credentials`` or ``pending_key``."""
-    if connection.warehouse_type == "athena":
+    if connection.warehouse_type in ROLE_TYPES:
         return "ok"
     try:
         if connection.get_credentials() is None:

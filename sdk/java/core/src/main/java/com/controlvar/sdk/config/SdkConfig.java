@@ -1,5 +1,6 @@
 package com.controlvar.sdk.config;
 
+import com.controlvar.sdk.ErrorListener;
 import com.controlvar.sdk.ExposureListener;
 
 /**
@@ -21,6 +22,7 @@ public class SdkConfig {
     private final int cacheSize;
     private final long cacheTtlMs;
     private final ExposureListener exposureListener;
+    private final ErrorListener errorListener;
 
     private SdkConfig(Builder builder) {
         this.apiKey = builder.apiKey;
@@ -29,6 +31,7 @@ public class SdkConfig {
         this.cacheSize = builder.cacheSize;
         this.cacheTtlMs = builder.cacheTtlMs;
         this.exposureListener = builder.exposureListener;
+        this.errorListener = builder.errorListener;
     }
 
     /**
@@ -77,6 +80,16 @@ public class SdkConfig {
     }
 
     /**
+     * Returns the function the client calls each time a typed getter returns the caller's
+     * default (see {@link ErrorListener}).
+     *
+     * @return the listener, or {@code null} when none is set
+     */
+    public ErrorListener getErrorListener() {
+        return errorListener;
+    }
+
+    /**
      * Creates a new builder for {@link SdkConfig}.
      *
      * @param apiKey  the API key (required, must be non-empty)
@@ -97,6 +110,7 @@ public class SdkConfig {
         private int cacheSize = 1000;
         private long cacheTtlMs = 300_000L; // 5 minutes
         private ExposureListener exposureListener;
+        private ErrorListener errorListener;
 
         /**
          * Constructs a builder with the required fields.
@@ -168,6 +182,19 @@ public class SdkConfig {
          */
         public Builder exposureListener(ExposureListener listener) {
             this.exposureListener = listener;
+            return this;
+        }
+
+        /**
+         * Sets the function the client calls, with the reason, each time a typed getter
+         * ({@code getStringValue}, {@code getNumberValue}, {@code getJsonValue}) returns the
+         * caller's default (see {@link ErrorListener}). Default: none.
+         *
+         * @param listener the listener, or {@code null} to set none
+         * @return this builder
+         */
+        public Builder errorListener(ErrorListener listener) {
+            this.errorListener = listener;
             return this;
         }
 

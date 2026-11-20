@@ -2,7 +2,10 @@ import React, { ReactNode, useCallback, useEffect, useRef, useState } from 'reac
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/contexts/AuthContext';
+import { useDemoMode } from '@/contexts/AuthConfigContext';
+import { DemoBanner } from '@/components/DemoBanner';
 import { SiteHeader } from '@/components/SiteHeader';
+import { HomeFooter } from '@/components/homepage/HomeFooter';
 import { Wordmark } from '@/components/Wordmark';
 import { LOGIN_PATH, Role, UserMe, safeNextPath } from '@/services/api';
 import { isMarketingSite } from '@/utils/site-mode';
@@ -57,6 +60,16 @@ export const CHANGE_PASSWORD_ITEM: NavItem = {
   label: 'Change password',
   href: CHANGE_PASSWORD_PATH,
   testId: 'change-password-link',
+};
+
+/** The page where a local-sign-in user turns two-step sign-in on or off (#1812). */
+export const TWO_FACTOR_PATH = '/account/two-factor';
+
+/** "Two-step sign-in", beside "Change password" in More: local sign-in only. */
+export const TWO_FACTOR_ITEM: NavItem = {
+  label: 'Two-step sign-in',
+  href: TWO_FACTOR_PATH,
+  testId: 'two-factor-link',
 };
 
 /** The page where any signed-in user manages their own API keys. */
@@ -135,7 +148,7 @@ export function installedModuleNav(
  * navigation at all, in the core profile a "Modules" link to the guide
  * that says what the modules are and how to run the full profile, and the
  * signed-in user's own pages: "Your API keys", and, for a local sign-in user,
- * "Change password".
+ * "Change password" and "Two-step sign-in".
  */
 function MoreNavGroup({
   items,
@@ -147,7 +160,7 @@ function MoreNavGroup({
   items: NavItem[];
   /** Add the "Modules" documentation link (the core profile). */
   showModulesGuide: boolean;
-  /** The signed-in user's own pages, listed last ("Your API keys", "Change password"). */
+  /** The signed-in user's own pages, listed last ("Your API keys", "Change password", "Two-step sign-in"). */
   accountItems: NavItem[];
   id: string;
   /** Called when a link inside the group is followed (closes the mobile menu). */
@@ -271,15 +284,17 @@ interface AppShellProps {
 
 /**
  * Application chrome: top navigation (Experiments · Feature Flags · Segments ·
- * Audit Log · Admin · Docs · More, which holds "Your API keys" and "Change
- * password") and the user
+ * Audit Log · Admin · Docs · More, which holds "Your API keys", "Change
+ * password" and "Two-step sign-in") and the user
  * area with a visible "Log out" button. Mounted by `_app.tsx` for every route
- * except `/login`.
+ * except `/login`. In demo mode the demo banner sits above the header and
+ * More holds no account page (the API refuses each page's changes).
  */
 export function AppShell({ children }: AppShellProps) {
   const router = useRouter();
   const { user, status, logout } = useAuth();
   const { profile, modules, version, isLoading: modulesLoading, error: modulesError } = useModules();
+  const demo = useDemoMode();
   const [menuOpen, setMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -309,13 +324,15 @@ export function AppShell({ children }: AppShellProps) {
   // profile it reports is meaningless there.
   const showModulesGuide = !marketing && !modulesLoading && modulesError === null && profile === 'core';
   // The signed-in user's own pages. "Your API keys" is every user's. Only
-  // local sign-in has a password the API can change; under any other provider
-  // that route answers 404. Neither waits for the modules probe.
+  // local sign-in has a password the API can change, or a two-step sign-in it
+  // manages; under any other provider those routes answer 404. None waits for
+  // the modules probe. A read-only demo offers none: each exists to change
+  // something.
   const accountNav: NavItem[] =
-    marketing || !user
+    marketing || !user || demo
       ? []
       : user.auth_provider === 'local'
-        ? [OWN_API_KEYS_ITEM, CHANGE_PASSWORD_ITEM]
+        ? [OWN_API_KEYS_ITEM, CHANGE_PASSWORD_ITEM, TWO_FACTOR_ITEM]
         : [OWN_API_KEYS_ITEM];
   const moreRoutes = modulesLoading ? [] : moduleNav;
   const showMore = accountNav.length > 0 || moreRoutes.length > 0 || showModulesGuide;
@@ -348,6 +365,9 @@ export function AppShell({ children }: AppShellProps) {
     </a>
   );
 
+  // The homepage's footer too, so every page of the public site ends the same
+  // way (/docs had a footer of its own, /power-calculator and /privacy none).
+  // The homepage is a `bare` route and renders HomeFooter itself.
   if (marketing) {
     return (
       <div data-testid="app-shell" className="min-h-screen bg-slate-50 flex flex-col">
@@ -356,6 +376,7 @@ export function AppShell({ children }: AppShellProps) {
         <main id="main-content" className="flex-1 flex flex-col">
           {children}
         </main>
+        <HomeFooter />
       </div>
     );
   }
@@ -363,6 +384,7 @@ export function AppShell({ children }: AppShellProps) {
   return (
     <div data-testid="app-shell" className="min-h-screen bg-slate-50 flex flex-col">
       {skipLink}
+      {demo && <DemoBanner signedIn={status === 'authenticated'} />}
 
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-4">

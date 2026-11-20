@@ -41,9 +41,12 @@
  *                                    [--api http://localhost:8000]
  *                                    [--nginx-headers [--nginx-conf frontend/nginx.conf]]
  *
+ * `--port 0` takes a port the OS hands out; the line it prints once it is
+ * listening names that port.
+ *
  * Playwright starts it automatically (see playwright.config.ts) whenever an
  * export exists; tests/e2e/hosted-ui-sign-in.journey.spec.ts starts its own,
- * with `--nginx-headers`.
+ * with `--nginx-headers`, on a port the OS hands out (tests/e2e/free-port.ts).
  */
 
 import { createServer, request as httpRequest } from 'node:http';
@@ -250,8 +253,10 @@ const server = createServer((req, res) => {
 });
 
 server.listen(port, host, () => {
+  // The port it got, which is not `port` when that is 0 (the OS picks one):
+  // tests/e2e/free-port.ts reads it from this line.
   console.log(
-    `static-server: serving ${rootDir} on http://${host}:${port} ` +
+    `static-server: serving ${rootDir} on http://${host}:${server.address().port} ` +
       `(${dynamicRoutes.length} dynamic route(s), /api -> ${apiOrigin.origin}` +
       `${Object.keys(pageHeaders).length ? `, ${nginxConfPath}'s headers` : ''})`,
   );

@@ -35,6 +35,36 @@ const FILES = [
   'pages/experiments/[id].tsx',
   'components/experiments/new/BasicInfoFields.tsx',
   'components/experiments/new/ExperimentTypeField.tsx',
+  // #442: the results table's Effect size and Interval columns and their help.
+  'components/results/MetricComparison/MetricComparisonTable.tsx',
+  // #442: the results page's Download CSV button and the sentence under it.
+  'components/results/ResultsCsvDownload.tsx',
+  'pages/results/[id].tsx',
+  // #1959: the results page's CUPED (beta) tab.
+  'components/results/Cuped/CupedResultsPanel.tsx',
+  // #1958: the experiment page's bandit panel and its Weight history.
+  'components/experiments/BanditWeightsSection.tsx',
+  'components/experiments/BanditWeightHistory.tsx',
+  // #442: the flag page's Manage this flag group (Archive, its dialog,
+  // Unarchive), and the archived flag's note on both flag pages.
+  'components/feature-flags/FlagManageSection.tsx',
+  'components/feature-flags/ArchivedFlag.tsx',
+  // #442: the new-experiment form's analysis settings and Advanced Bayesian settings.
+  'components/experiments/new/AnalysisSettingsFields.tsx',
+  // #1957: the bandit panel, its role note and "Set weights by hand".
+  'components/experiments/BanditWeightsSection.tsx',
+  'components/experiments/BanditWeightsOverride.tsx',
+  // #1960: the interactions page and its pair test answer. The nightly audit
+  // does not visit them, so this is their only pin.
+  'pages/experiments/interactions.tsx',
+  'components/experiments/InteractionPairResult.tsx',
+  // #1956: the Bandit type, its Optimization algorithm and its lines, in guided
+  // setup and the single-page form (the algorithm field itself is in
+  // ExperimentTypeField.tsx, above), and the page that holds both views.
+  'components/experiments/new/Wizard.tsx',
+  'components/experiments/new/AdvancedForm.tsx',
+  'components/experiments/new/BalanceWithinFields.tsx',
+  'pages/experiments/new.tsx',
 ];
 
 /**
@@ -49,6 +79,9 @@ const SLATE_50_FILES = [
   'pages/experiments/holdouts.tsx',
   'components/experiments/HoldoutForm.tsx',
   'components/experiments/HoldoutResultsPanel.tsx',
+  // #1960: the interactions page sits on slate-50 too.
+  'pages/experiments/interactions.tsx',
+  'components/experiments/InteractionPairResult.tsx',
 ];
 
 describe('slate-50 pages use slate-600 or darker text', () => {

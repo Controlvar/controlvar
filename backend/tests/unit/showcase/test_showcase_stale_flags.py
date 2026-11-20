@@ -186,14 +186,13 @@ def test_the_plans_kill_switch_caption_is_refused_on_length_so_its_beat_is_cut()
     assert storyboard.is_permanent(kill.tags)
 
 
-def test_the_archive_card_is_cut_and_the_dashboard_still_has_no_archive_action():
-    """Check fix 6: no card, and the dashboard test that pins no archive
-    action is still there to say so."""
+def test_the_archive_card_is_cut_and_the_dashboard_archive_pin_is_named():
+    """Check fix 6: no card on any scene. The dashboard now has an archive
+    action (#442), and the test that pins it is still there; the card stays
+    cut, which is a plan decision, not a gap in the dashboard."""
     assert all(scene.card is None for scene in board().scenes)
     pinned = NO_ARCHIVE_TEST.read_text(encoding="utf-8")
-    assert "neither the list nor the detail page offers an archive or unarchive" in (
-        squeezed(pinned)
-    )
+    assert "archiving (#442): the flag's page offers" in squeezed(pinned)
 
 
 def hint_beat(made: Optional[storyboard.Storyboard] = None) -> storyboard.Beat:

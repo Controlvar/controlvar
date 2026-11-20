@@ -104,10 +104,13 @@ defmodule Controlvar do
   @doc """
   `true` when the server enables the flag for the user, `false` otherwise
   (including on any failure).
+
+  `opts` are those of `evaluate_flag/4`: `:attributes` (sent as `context` for
+  targeting rules) and `:skip_cache`. See `Controlvar.Client.feature_enabled?/4`.
   """
-  @spec feature_enabled?(Client.server(), String.t(), String.t()) :: boolean()
-  def feature_enabled?(client, flag_key, user_id) do
-    Client.feature_enabled?(client, flag_key, user_id)
+  @spec feature_enabled?(Client.server(), String.t(), String.t(), keyword()) :: boolean()
+  def feature_enabled?(client, flag_key, user_id, opts \\ []) do
+    Client.feature_enabled?(client, flag_key, user_id, opts)
   end
 
   @doc """

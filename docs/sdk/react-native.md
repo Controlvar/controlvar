@@ -240,8 +240,9 @@ const result = await client.trackBatch([
 | `clearStorage` | `() => Promise<void>` | Removes every `ep_sdk_*` key from AsyncStorage | — |
 
 `TrackOptions`: `value?` (number), `experimentKey?`, `featureFlagKey?`, `eventType?` (defaults
-to the event name), `timestamp?` (`Date` or string, sent as ISO-8601). `properties` is sent as
-`metadata`. `TrackEvent` = `TrackOptions & { eventName, userId, properties? }`.
+to the event name), `timestamp?` (`Date` or string, sent as ISO-8601), `eventId?` (sent as
+`event_id`, see [Event ids](#event-ids)). `properties` is sent as `metadata`. `TrackEvent` =
+`TrackOptions & { eventName, userId, properties? }`.
 
 **Fan-out rule.** With `experimentKey` and/or `featureFlagKey` the SDK sends one
 `POST /api/v1/tracking/track`. Without a key it sends `POST /api/v1/tracking/batch` (chunked at
@@ -257,6 +258,31 @@ that can come later.
 
 Concurrent calls for the same user + key share one in-flight request, so mounting several
 components that use the same experiment produces one assignment (and one exposure event).
+
+### Event ids
+
+Every event this SDK sends carries an `event_id`. The server stores an event sent again with the
+same `event_id`, user, experiment, flag and event name only once (see
+[How events count](../guides/how-events-count.md#sending-an-event-again)). Use this from the next
+published version of this package, not from the version on npm now. It also needs a Controlvar
+server that includes the `event_id` change ([#1640](https://github.com/Controlvar/controlvar/pull/1640)),
+which the platform release after 0.39.0 is to carry; an older server ignores the field and stores
+an event sent again a second time.
+
+- Without an `eventId`, each `track()` call, and each event of `trackBatch()`, makes a new id, a
+  lowercase UUID v4, so two calls are two events. For an event your code may send again (a retried
+  checkout, a handler that runs twice), make the id once, when the event happens, and pass the
+  same `eventId` each time.
+- `eventId: undefined`, `null` and `''` mean none, so the SDK makes one. The SDK does not check
+  the id: the server refuses (`422`) one of more than 255 characters or one holding NUL, and in a
+  batch one such event refuses the whole request.
+- An event fanned out to several experiments and flags carries the same `event_id` in every entry,
+  so it counts once in each of them. In `trackBatch`, each event has its own.
+- The SDK does not send a request again. A request that fails on the network or times out may
+  have been stored; send the event again with the same `eventId` and it is stored once.
+- Hermes has no `crypto.randomUUID()` unless your app installs a polyfill; the SDK then makes the
+  id from `crypto.getRandomValues()` or, with neither, from `Math.random()`. The id only has to
+  differ between events: it is not a secret.
 
 ---
 
@@ -369,7 +395,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 | `getAssignment`, `getVariant`, `useExperiment` | `POST /api/v1/tracking/assign` | `{"experiment_key","user_id","context"?: object}` | `{"experiment_key","user_id","variant_id","variant_name","is_control","configuration","assigned","reason"}` |
 | `evaluateFlag`, `isFeatureEnabled`, `useFlag` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<id>&context=<url-encoded JSON>` (no `context` for missing or empty attributes) | — | `{"key","enabled","config"}` |
 | `getAllFlags` | `GET /api/v1/feature-flags/user/{user_id}?context=<url-encoded JSON>` (no `context` for missing or empty attributes) | — | `{"<flag_key>": bool, ...}` |
-| `track` with a key | `POST /api/v1/tracking/track` | `{"event_type","event_name","user_id","experiment_key"?,"feature_flag_key"?,"value"?,"metadata"?,"timestamp"?}` | stored event (ignored) |
+| `track` with a key | `POST /api/v1/tracking/track` | `{"event_type","event_name","user_id","experiment_key"?,"feature_flag_key"?,"value"?,"metadata"?,"timestamp"?,"event_id"}` | stored event (ignored) |
 | `track` without a key, `trackBatch` | `POST /api/v1/tracking/batch` | `{"events":[<track body>...]}` (max 100) | `{"success_count","failure_count","errors"}` |
 
 Errors: 401 bad key; 404 an unknown experiment or flag key, or a draft experiment with no control variant; 422 an invalid

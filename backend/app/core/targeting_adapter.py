@@ -183,8 +183,16 @@ def normalise_targeting_rules(
         ``TargetingRules`` for the native shape (has ``rules``) and for the
         dashboard shape (has ``groups``); ``None`` for empty input, for the
         legacy list shape (the flag service keeps evaluating that itself) and
-        for anything else that cannot be interpreted, so callers fall back to
-        the flag's global rollout percentage. Invalid content never raises.
+        for the shapes it checks that cannot be interpreted, so callers fall
+        back to the flag's global rollout percentage.
+
+    Raises:
+        Stored content can still raise another exception: an integer too
+        large for a float in a geo value (``OverflowError``), a version part
+        ``int()`` cannot read (``ValueError``). The write validators refuse
+        those, so only a direct database write leaves one. Every caller that
+        reads more than one owner's rules guards its own call, so one such
+        row affects only its owner (:func:`report_unreadable_rules`, #1674).
     """
     if raw is None:
         return None
@@ -223,6 +231,35 @@ def normalise_targeting_rules(
             return None
 
     return None
+
+
+def report_unreadable_rules(owner: str, exc: Exception) -> None:
+    """Log, once per owner, that its stored rules raised when read (#1674).
+
+    ``owner`` is ``flag:<key>`` or ``segment:<id>``. The consequence text is a
+    string literal chosen here per owner kind, so no free text reaches the log
+    call: a flag answers false (reason "error") and the SDK ruleset marks it
+    "remote"; a segment's membership is unavailable. The exception's type
+    only, never its text, which can repeat the rule's content.
+    """
+    if not EVALUATION_NOTES.first(owner, "stored rules unreadable"):
+        return
+    if owner.startswith("segment:"):
+        logger.warning(
+            "Cannot read the stored targeting rules for %s (%s); its membership "
+            "is unavailable, so the flags and experiments that use it are not "
+            "evaluated; the other segments are unaffected. Logged once.",
+            owner,
+            type(exc).__name__,
+        )
+    else:
+        logger.warning(
+            "Cannot read the stored targeting rules for %s (%s); that flag "
+            'answers false (reason "error") and the SDK ruleset marks it '
+            '"remote"; the other flags are unaffected. Logged once.',
+            owner,
+            type(exc).__name__,
+        )
 
 
 def expand_context(context: Optional[Dict[str, Any]]) -> Dict[str, Any]:

@@ -47,6 +47,7 @@ from backend.app.core.permissions import (
     ResourceType,
     can_act_on_feature_flag,
     check_permission,
+    feature_flag_roles_for,
 )
 from backend.app.crud import crud_feature_flag
 from backend.app.models.audit_log import ActionType, EntityType
@@ -779,11 +780,14 @@ async def delete_feature_flag(
             status_code=status.HTTP_404_NOT_FOUND, detail="Feature flag not found"
         )
 
-    # Check if the user is either the owner or a superuser
+    # Access is by role, not ownership (D11)
     if not can_act_on_feature_flag(current_user, flag.owner_id, Action.DELETE):
+        roles = " or ".join(
+            role.value.capitalize() for role in feature_flag_roles_for(Action.DELETE)
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You must be the owner or a superuser to delete this feature flag",
+            detail=f"Deleting a feature flag needs the {roles} role",
         )
 
     # Capture flag info before deletion for audit trail

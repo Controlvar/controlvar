@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AdminUser, AdminUserPatch, UserRole, USER_ROLE_LABELS } from '@/types/admin';
 import { isApiError } from '@/services/api';
+import { demoRefusalMessage } from '@/utils/demoMode';
 import { RequiresModule } from '@/contexts/ModulesContext';
 import { MODULES } from '@/services/modules';
 import { Dialog } from '@/components/ui/Dialog';
@@ -21,6 +22,12 @@ interface EditUserModalProps {
    * success; reject with the request's error and the modal shows it.
    */
   onSave: (userId: string, changes: AdminUserPatch) => Promise<void>;
+  /**
+   * Turn off the user's two-step sign-in (#1812). Resolve on success; reject
+   * with the request's error and the modal shows it. Without it the dialog
+   * offers no reset.
+   */
+  onResetTwoFactor?: (userId: string) => Promise<void>;
 }
 
 const ROLES: UserRole[] = ['ADMIN', 'DEVELOPER', 'ANALYST', 'VIEWER'];
@@ -36,6 +43,37 @@ export const FORBIDDEN_MESSAGE =
 export const NOT_FOUND_MESSAGE =
   'This user no longer exists. Close this dialog to refresh the list.';
 
+/** Your own row: someone else resets your two-step sign-in (the API answers 400). */
+export const TWO_FACTOR_RESET_SELF_NOTE = 'Ask another administrator to reset yours.';
+/** The reset route under a provider other than local. */
+export const TWO_FACTOR_NOT_LOCAL_MESSAGE =
+  'This server does not manage sign-in, so two-step sign-in cannot be reset here.';
+
+/**
+ * What a reset does, said before it is confirmed. Deliberately says that the
+ * session stays: a reset is not a way to sign someone out. The dialog does
+ * not know which roles the server requires it for, so it names both cases.
+ */
+export function twoFactorResetWarning(name: string): string {
+  return (
+    `${name} will sign in with their password alone until they set two-step sign-in up again, ` +
+    'or, if their role requires it, set it up at their next sign-in. ' +
+    'Their current session stays valid until it expires.'
+  );
+}
+
+export function twoFactorResetDone(name: string): string {
+  return `Two-step sign-in is off for ${name}.`;
+}
+
+/** What the modal shows when a reset fails. */
+export function resetErrorMessage(err: unknown): string {
+  if (isApiError(err) && err.status === 404) {
+    return err.detail === 'User not found' ? NOT_FOUND_MESSAGE : TWO_FACTOR_NOT_LOCAL_MESSAGE;
+  }
+  return editErrorMessage(err);
+}
+
 /**
  * What the modal shows when a save fails. 400 and 409 carry the API's own
  * sentence (the self-change and Cognito refusals); 403 and 404 get copy that
@@ -44,6 +82,8 @@ export const NOT_FOUND_MESSAGE =
  */
 export function editErrorMessage(err: unknown): string {
   if (isApiError(err)) {
+    const demo = demoRefusalMessage(err);
+    if (demo) return demo;
     if (err.status === 403) return FORBIDDEN_MESSAGE;
     if (err.status === 404) return NOT_FOUND_MESSAGE;
     if (err.status === 422) return `Couldn't save: ${err.message}`;
@@ -57,14 +97,25 @@ export function editErrorMessage(err: unknown): string {
  * the shared Dialog's (#369). Focus opens on Role, or on Cancel on the
  * signed-in user's own row, where Role and Active are disabled.
  */
-export function EditUserModal({ isOpen, user, currentUserId, onClose, onSave }: EditUserModalProps) {
+export function EditUserModal({
+  isOpen,
+  user,
+  currentUserId,
+  onClose,
+  onSave,
+  onResetTwoFactor,
+}: EditUserModalProps) {
   const [role, setRole] = useState<UserRole | null>(null);
   const [isActive, setIsActive] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
+  // Two-step sign-in reset (#1812): offered, asked to confirm, or done.
+  const [reset, setReset] = useState<'offered' | 'confirming' | 'resetting' | 'done'>('offered');
   const roleRef = useRef<HTMLSelectElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const keepRef = useRef<HTMLButtonElement>(null);
+  const resetDoneRef = useRef<HTMLParagraphElement>(null);
 
   const isSelf = !!user && !!currentUserId && user.id === currentUserId;
 
@@ -76,8 +127,14 @@ export function EditUserModal({ isOpen, user, currentUserId, onClose, onSave }: 
       setSaving(false);
       setError(null);
       setNotFound(false);
+      setReset('offered');
     }
   }, [user, isOpen]);
+
+  useEffect(() => {
+    if (reset === 'confirming') keepRef.current?.focus();
+    if (reset === 'done') resetDoneRef.current?.focus();
+  }, [reset]);
 
   if (!isOpen || !user) return null;
 
@@ -86,8 +143,27 @@ export function EditUserModal({ isOpen, user, currentUserId, onClose, onSave }: 
   if (isActive !== user.is_active) changes.is_active = isActive;
   const hasChanges = Object.keys(changes).length > 0;
   const showDeactivateWarning = user.is_active && !isActive;
+  const displayName = user.email ?? user.username;
+  // Only for an account that has it on, and only where the page can reset it.
+  const showTwoFactor = !!onResetTwoFactor && (user.totp_enabled === true || reset === 'done');
 
-  const close = () => onClose(notFound ? { reload: true } : undefined);
+  // After a reset the list's copy of the user still says two-step sign-in is
+  // on: reload it on the way out.
+  const close = () => onClose(notFound || reset === 'done' ? { reload: true } : undefined);
+
+  const handleReset = async () => {
+    if (!onResetTwoFactor || reset === 'resetting') return;
+    setReset('resetting');
+    setError(null);
+    try {
+      await onResetTwoFactor(user.id);
+      setReset('done');
+    } catch (err) {
+      setReset('confirming');
+      setError(resetErrorMessage(err));
+      if (isApiError(err) && err.status === 404 && err.detail === 'User not found') setNotFound(true);
+    }
+  };
 
   const handleSave = async () => {
     if (!hasChanges || saving) return;
@@ -195,6 +271,76 @@ export function EditUserModal({ isOpen, user, currentUserId, onClose, onSave }: 
           </div>
         )}
       </div>
+
+      {/* Two-step sign-in (#1812): shown only while the account has it on. */}
+      {showTwoFactor && (
+        <div className="mb-4 border-t border-slate-200 pt-4" data-testid="edit-two-factor">
+          <p className="text-sm font-medium text-slate-700">Two-step sign-in</p>
+          {reset === 'done' ? (
+            <p
+              ref={resetDoneRef}
+              tabIndex={-1}
+              role="status"
+              data-testid="edit-two-factor-reset-done"
+              className="mt-2 text-sm text-green-800 focus:outline-none"
+            >
+              {twoFactorResetDone(displayName)}
+            </p>
+          ) : isSelf ? (
+            <p data-testid="edit-two-factor-self-note" className="mt-2 text-sm text-slate-600">
+              On. {TWO_FACTOR_RESET_SELF_NOTE}
+            </p>
+          ) : reset === 'offered' ? (
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <p className="text-sm text-slate-600">On.</p>
+              <button
+                type="button"
+                data-testid="edit-two-factor-reset"
+                onClick={() => {
+                  setError(null);
+                  setReset('confirming');
+                }}
+                className="px-3 py-1.5 text-sm font-medium text-red-700 bg-white border border-red-300 rounded-md hover:bg-red-50"
+              >
+                Reset two-step sign-in
+              </button>
+            </div>
+          ) : (
+            <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-md" data-testid="edit-two-factor-confirm">
+              <p id="edit-two-factor-warning" className="text-sm text-amber-900">
+                {twoFactorResetWarning(displayName)}
+              </p>
+              <div className="mt-3 flex justify-end gap-3">
+                <button
+                  type="button"
+                  ref={keepRef}
+                  data-testid="edit-two-factor-keep"
+                  onClick={() => {
+                    setError(null);
+                    setReset('offered');
+                  }}
+                  disabled={reset === 'resetting'}
+                  aria-describedby="edit-two-factor-warning"
+                  className="px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 disabled:opacity-60"
+                >
+                  Keep it
+                </button>
+                <button
+                  type="button"
+                  data-testid="edit-two-factor-reset-confirm"
+                  onClick={() => void handleReset()}
+                  disabled={reset === 'resetting'}
+                  aria-busy={reset === 'resetting'}
+                  aria-describedby="edit-two-factor-warning"
+                  className="px-3 py-1.5 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-60"
+                >
+                  {reset === 'resetting' ? 'Resetting…' : 'Reset two-step sign-in'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {error && (
         <div

@@ -75,11 +75,27 @@ jobs:
           POSTGRES_PASSWORD: postgres
         run: python -m pytest backend/tests/unit/ -p no:cov -q --tb=short
 
-  integration-tests:
-    name: Integration Tests
+  # The integration suite in four pieces, each a full job with its own
+  # services, as integration-tests.yml runs it: a test belongs to piece `i`
+  # when sha256(its node id) % 4 == i-1 (backend/tests/shard.py). One session
+  # took 57.5, 63.6, 78.3 and 79.8 minutes in its last four green runs against
+  # a 100 minute limit; a quarter of it is about 15-20 minutes plus the setup,
+  # so 45 leaves more than double. The job named `Integration Tests` is the
+  # summary below, not these.
+  integration-shard:
+    name: Integration Tests (shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
     needs: unit-tests
-    timeout-minutes: 75
+    timeout-minutes: 45
+    strategy:
+      # One red shard must not cancel the others: the summary needs every
+      # shard's report to say which tests failed and that the rest ran.
+      fail-fast: false
+      matrix:
+        # The one hand-typed list. The total is `strategy.job-total`, never
+        # typed: a repeated or missing number leaves a shard number with no
+        # report, and the summary refuses that.
+        shard: [1, 2, 3, 4]
     services:
       postgres:
         image: postgres:15
@@ -160,7 +176,87 @@ jobs:
           # makes its tests skip green, with them it fails the job.
           EXPERIMENTLY_REQUIRE_REDIS: "1"
           EXPERIMENTLY_REQUIRE_REDIS_AUTH: "1"
+          # The editable install above is what test_the_integration_job_is_armed
+          # (test_core_tree_isolation.py) checks; without this it skips, and the
+          # shard checker refuses a skip nothing allows, as integration-tests.yml.
+          EXPERIMENTLY_REQUIRE_EDITABLE: "1"
+          # This shard's slice of the suite, and where it records what it
+          # collected, selected and ran (outside the checkout, under a name
+          # unique to the shard).
+          EXPERIMENTLY_TEST_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
+          EXPERIMENTLY_TEST_SHARD_REPORT: ${{ runner.temp }}/shard-integration-${{ matrix.shard }}.json
         run: python -m pytest backend/tests/integration/ -p no:cov -q --tb=short
+
+      # Even when the suite failed: the summary reads every shard's report.
+      # `overwrite`, because a re-run of one shard uploads the same name again.
+      - name: Upload the shard report
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: shard-report-integration-${{ matrix.shard }}
+          path: ${{ runner.temp }}/shard-integration-${{ matrix.shard }}.json
+          if-no-files-found: warn
+          overwrite: true
+          retention-days: 30
+
+  # The job the nightly's readers know as `Integration Tests` (id
+  # `integration-tests`, in the failure issue's `needs:`): green only when every
+  # shard succeeded and the shards between them ran every collected
+  # integration test exactly once. `always()`, so it reports an explicit
+  # result, and a failure names what failed.
+  integration-tests:
+    name: Integration Tests
+    needs: integration-shard
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      # No report at all is the checker's to judge (it fails), so a download
+      # that finds nothing must not end the job before it.
+      - name: Collect the shard reports
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: shard-report-integration-*
+          path: ${{ runner.temp }}/shard-reports
+
+      - name: Every shard passed
+        env:
+          # The whole `needs` object; a matrix job's result covers all its
+          # legs. Only `success` passes: failure, cancelled (a timeout too)
+          # and skipped are all red.
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$RESULTS" | jq -r 'to_entries[] | "\(.key)=\(.value.result)"' > results.txt
+          test -s results.txt || { printf '::error::needs produced no results\n'; exit 1; }
+          failed=0
+          while IFS='=' read -r job result; do
+            printf '  %s: %s\n' "$job" "$result"
+            case "$result" in
+              success) ;;
+              *) printf '::error::%s: %s\n' "$job" "$result"; failed=1 ;;
+            esac
+          done < results.txt
+          if [ "$failed" -ne 0 ]; then
+            printf '::error::integration tests failed\n'
+            exit 1
+          fi
+
+      # Even after a failed shard, so the log says which tests failed and
+      # whether the rest ran. The one skip allowed is the benchmark, which
+      # runs only with RUN_BENCHMARKS=1 (backend/tests/benchmark_gate.py); the
+      # suite runs with `-p no:cov`, which is the one plugin allowed off.
+      - name: Every test ran in exactly one shard
+        if: always()
+        run: |
+          python3 scripts/check_test_shards.py \
+            --suite backend/tests/integration \
+            --allow-skip 'backend/tests/integration=absolute-timing benchmark; set RUN_BENCHMARKS=1 to run it' \
+            --allow-disabled-plugin backend/tests/integration=cov \
+            "$RUNNER_TEMP/shard-reports"
 
   # Absolute wall-clock targets ("P99 under 40 ms", "over 1000 evaluations a
   # second"). They measure the runner as much as the code, so no pull-request
@@ -526,7 +622,7 @@ jobs:
   nightly-failure-issue:
     name: File an issue on failure
     runs-on: ubuntu-latest
-    needs: [unit-tests, integration-tests, benchmarks, smoke-tests, sdk-contract-tests, frontend-tests, e2e-tests, synthetic-freshness, ground-truth, ground-truth-faults, flags-over-time]
+    needs: [unit-tests, integration-shard, integration-tests, benchmarks, smoke-tests, sdk-contract-tests, frontend-tests, e2e-tests, synthetic-freshness, ground-truth, ground-truth-faults, flags-over-time]
     # A job that hits its timeout-minutes ends `cancelled`, not `failure`, so
     # failure() alone stayed false on 2026-11-02 and 2026-11-03 and no issue was
     # filed. A person cancelling the run files one too; that fails closed.

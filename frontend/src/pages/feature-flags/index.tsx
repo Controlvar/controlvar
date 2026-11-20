@@ -4,11 +4,15 @@ import { PageTitle } from '@/components/PageTitle';
 import { FlagToggle } from '@/components/feature-flags/FlagToggle';
 import {
   ARCHIVED_LABEL,
-  ArchivedFlagRowLink,
+  ArchivedFlagRowNote,
   isFlagArchived,
 } from '@/components/feature-flags/ArchivedFlag';
+import { hasDeletedFlagNotice, takeDeletedFlagNotice } from '@/components/feature-flags/FlagManageSection';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
+import { useDemoMode } from '@/contexts/AuthConfigContext';
+import { DemoNote } from '@/components/DemoNote';
+import { DEMO_FLAGS_ACTION } from '@/utils/demoMode';
 import { FLAG_ROLE_NOTE, canChangeFeatureFlags, canCreateFeatureFlags } from '@/utils/experimentPermissions';
 import {
   FeatureFlagListItem,
@@ -62,6 +66,8 @@ export default function FeatureFlagsPage() {
   const canCreate = canCreateFeatureFlags(auth?.user, effective);
   const canChange = canChangeFeatureFlags(auth?.user, effective);
   const createPending = !canCreate && permissionsLoading;
+  // A read-only demo puts the demo note where "+ New Flag" or the role note would be.
+  const demo = useDemoMode();
   const [statusFilter, setStatusFilter] = useState<FeatureFlagStatus | 'all'>('all');
   const [staleFilter, setStaleFilter] = useState<'any' | 'stale'>('any');
   const [staleDays, setStaleDays] = useState<number | undefined>(undefined);
@@ -73,6 +79,16 @@ export default function FeatureFlagsPage() {
   const [toggling, setToggling] = useState<Record<string, boolean>>({});
   // Keyed by flag id: two toggles can fail at once and both messages matter.
   const [toggleErrors, setToggleErrors] = useState<Record<string, string>>({});
+  // "Deleted {name}." when the flag's page has just deleted one (#442). Its
+  // status region is on the page from the first render, only then, and the
+  // text is set after it, so a screen reader announces it.
+  const [announcesDelete] = useState(hasDeletedFlagNotice);
+  const [deletedStatus, setDeletedStatus] = useState('');
+
+  useEffect(() => {
+    const notice = takeDeletedFlagNotice();
+    if (notice) setDeletedStatus(notice);
+  }, []);
 
   /**
    * Sequence number of the most recent list request. Switching filters quickly
@@ -175,7 +191,9 @@ export default function FeatureFlagsPage() {
               Turn features on and off, roll them out gradually and watch their safety signals
             </p>
           </div>
-          {canCreate ? (
+          {demo ? (
+            <DemoNote action={DEMO_FLAGS_ACTION} className="text-sm text-slate-600 max-w-md" />
+          ) : canCreate ? (
             <Link
               href="/feature-flags/new"
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
@@ -189,6 +207,20 @@ export default function FeatureFlagsPage() {
             </p>
           )}
         </div>
+
+        {announcesDelete && (
+          <p
+            role="status"
+            className={
+              deletedStatus
+                ? 'mb-4 rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-700'
+                : undefined
+            }
+            data-testid="flags-deleted-status"
+          >
+            {deletedStatus}
+          </p>
+        )}
 
         {/* Filters */}
         {totalFlags > flags.length && flags.length > 0 && (
@@ -363,7 +395,8 @@ export default function FeatureFlagsPage() {
                 {flags.map((flag) => {
                   const on = isFlagOn(flag);
                   // The API refuses to turn an archived flag on (400), so its
-                  // row has no switch: it says how to unarchive it (#1748).
+                  // row has no switch: it says to unarchive it first, which is
+                  // done on the flag's page (#1748, #442).
                   const archived = isFlagArchived(flag);
                   return (
                     <tr
@@ -431,7 +464,7 @@ export default function FeatureFlagsPage() {
                       {canChange && (
                         <td className="px-4 py-3 text-right">
                           {archived ? (
-                            <ArchivedFlagRowLink flagKey={flag.key} />
+                            <ArchivedFlagRowNote flagKey={flag.key} />
                           ) : (
                             <FlagToggle
                               on={on}

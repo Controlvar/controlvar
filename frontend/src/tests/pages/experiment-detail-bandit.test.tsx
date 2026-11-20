@@ -1,11 +1,13 @@
 /**
  * The bandit weights panel on the experiment page (#442 PR D): mounted for a
- * bandit, absent for a fixed split, the same read-only panel for all four
- * roles (reading it is allowed to every signed-in user), and a failure to
- * read the weights leaves the rest of the page intact.
+ * bandit, absent for a fixed split, the same weights for all four roles
+ * (reading them is allowed to every signed-in user), and a failure to read the
+ * weights leaves the rest of the page intact. "Set weights by hand" (#1957)
+ * is offered to an ADMIN or a superuser only, never through a custom-role
+ * grant, and every other signed-in role gets the one-sentence role note.
  */
 import React from 'react';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import ExperimentDetailPage from '@/pages/experiments/[id]';
 import { BANDIT_ERROR } from '@/components/experiments/BanditWeightsSection';
 import { apiFetch } from '@/services/api';
@@ -29,6 +31,13 @@ jest.mock('next/head', () => {
 
 const mockUseAuth = jest.fn();
 jest.mock('@/contexts/AuthContext', () => ({ useAuth: () => mockUseAuth() }));
+
+// The page's effective map (#891): role lists only unless a test grants more.
+const mockEffective = jest.fn();
+jest.mock('@/contexts/EffectivePermissionsContext', () => ({
+  ...jest.requireActual('@/contexts/EffectivePermissionsContext'),
+  useEffectivePermissions: () => mockEffective(),
+}));
 
 const mockedApiFetch = apiFetch as jest.MockedFunction<typeof apiFetch>;
 
@@ -89,6 +98,7 @@ const banditCalls = () =>
 
 beforeEach(() => {
   mockedApiFetch.mockReset();
+  mockEffective.mockReturnValue({ effective: undefined, loading: false });
   signIn('ADMIN');
 });
 
@@ -123,7 +133,11 @@ describe('mounting', () => {
   });
 });
 
-describe('every role reads the same panel, and none is offered a change', () => {
+// #1957: every role reads the same weights, and only an ADMIN or a superuser
+// is offered "Set weights by hand" (PUT /api/v1/bandit/{id}/weights admits
+// exactly those two). Each role is a NON-superuser here: a superuser fixture
+// would pass every row whatever the role rule said.
+describe('every role reads the same weights; only an ADMIN or a superuser may set them by hand', () => {
   const roles = ['ADMIN', 'DEVELOPER', 'ANALYST', 'VIEWER'] as const;
 
   async function panelFor(role: string) {
@@ -133,24 +147,137 @@ describe('every role reads the same panel, and none is offered a change', () => 
     const panel = await screen.findByTestId('bandit-weights');
     await within(panel).findByTestId('bandit-weights-table');
     const snapshot = {
-      text: panel.textContent,
+      weights: within(panel).getByTestId('bandit-weights-table').textContent,
       buttons: within(panel).getAllByRole('button').map((b) => b.textContent),
+      note: within(panel).queryByTestId('bandit-weights-role-note')?.textContent ?? null,
     };
     view.unmount();
     return snapshot;
   }
 
-  it.each(roles)('%s sees the weights with Refresh as the only control', async (role) => {
-    const { buttons, text } = await panelFor(role);
-    expect(buttons).toEqual(['Refresh']);
-    expect(text).toContain('80.0%');
-    // Only reads: no update or override request is ever sent.
-    expect(banditCalls().every(([, options]) => (options?.method ?? 'GET').toUpperCase() === 'GET')).toBe(true);
+  const onlyReads = () =>
+    banditCalls().every(([, options]) => (options?.method ?? 'GET').toUpperCase() === 'GET');
+
+  it.each(roles)('%s, not a superuser', async (role) => {
+    const { buttons, note, weights } = await panelFor(role);
+    expect(weights).toContain('80.0%');
+    if (role === 'ADMIN') {
+      expect(buttons).toEqual(['Refresh', 'Set weights by hand']);
+      expect(note).toBeNull();
+    } else {
+      expect(buttons).toEqual(['Refresh']);
+      expect(note).toBe("Setting a bandit's weights by hand needs the ADMIN role.");
+    }
+    // Offering is not doing: loading the page sends no update or override.
+    expect(onlyReads()).toBe(true);
   });
 
-  it('the four roles see identical panels', async () => {
+  it('a superuser is offered it whatever the role', async () => {
+    for (const role of ['VIEWER', 'ANALYST', 'DEVELOPER']) {
+      mockUseAuth.mockReturnValue({
+        user: { id: 'user-1', email: 'root@demo.com', username: 'root', role, is_superuser: true },
+        status: 'authenticated',
+      });
+      install(BANDIT);
+      const view = render(<ExperimentDetailPage />);
+      const panel = await screen.findByTestId('bandit-weights');
+      await within(panel).findByTestId('bandit-weights-table');
+      expect(within(panel).getAllByRole('button').map((b) => b.textContent)).toEqual(['Refresh', 'Set weights by hand']);
+      expect(within(panel).queryByTestId('bandit-weights-role-note')).toBeNull();
+      view.unmount();
+    }
+  });
+
+  it('no user yet (no session): neither the control nor the note', async () => {
+    mockUseAuth.mockReturnValue({ user: null, status: 'loading' });
+    install(BANDIT);
+    render(<ExperimentDetailPage />);
+    const panel = await screen.findByTestId('bandit-weights');
+    await within(panel).findByTestId('bandit-weights-table');
+    expect(within(panel).getAllByRole('button').map((b) => b.textContent)).toEqual(['Refresh']);
+    expect(within(panel).queryByTestId('bandit-weights-role-note')).toBeNull();
+  });
+
+  // The route checks the role itself, not a permission, so no custom role or
+  // direct grant can admit anyone: a full experiment grant changes nothing.
+  it.each(['DEVELOPER', 'ANALYST', 'VIEWER'])('a custom-role grant does not unlock it (%s)', async (role) => {
+    mockEffective.mockReturnValue({
+      effective: { experiment: ['create', 'read', 'update', 'delete', 'list'], bandit: ['update'] },
+      loading: false,
+    });
+    const { buttons, note } = await panelFor(role);
+    expect(buttons).toEqual(['Refresh']);
+    expect(note).toBe("Setting a bandit's weights by hand needs the ADMIN role.");
+  });
+
+  it('every role reads the same weights', async () => {
     const seen = [];
     for (const role of roles) seen.push(await panelFor(role));
-    expect(seen.map((s) => s.text)).toEqual(Array(roles.length).fill(seen[0].text));
+    expect(seen.map((s) => s.weights)).toEqual(Array(roles.length).fill(seen[0].weights));
+  });
+
+  it.each(['completed', 'archived'] as const)('on a %s experiment nobody is offered it, and no note is shown', async (status) => {
+    for (const role of roles) {
+      signIn(role);
+      install({ ...BANDIT, status });
+      const view = render(<ExperimentDetailPage />);
+      const panel = await screen.findByTestId('bandit-weights');
+      await within(panel).findByTestId('bandit-weights-table');
+      expect(within(panel).getAllByRole('button').map((b) => b.textContent)).toEqual(['Refresh']);
+      expect(within(panel).queryByTestId('bandit-weights-role-note')).toBeNull();
+      view.unmount();
+    }
+  });
+});
+
+describe('Set weights by hand on the page', () => {
+  it('an ADMIN opens the form and saves; the panel shows the answer', async () => {
+    const saved: BanditStatus = {
+      ...STATUS,
+      current_weights: STATUS.current_weights.map((w, i) => ({
+        ...w,
+        current_weight: i === 0 ? 0.35 : 0.65,
+        pulls: 0,
+        successes: 0,
+        conversion_rate: 0,
+      })),
+      total_pulls: 0,
+      last_updated: '2026-10-05T12:00:00+00:00',
+    };
+    const puts: unknown[] = [];
+    mockedApiFetch.mockImplementation(
+      routedApi([
+        { path: '/api/v1/experiments/exp-1', handler: () => BANDIT },
+        { path: '/api/v1/bandit/exp-1', handler: () => STATUS },
+        {
+          method: 'PUT',
+          path: '/api/v1/bandit/exp-1/weights',
+          handler: (_path, options) => {
+            puts.push(options.json);
+            return saved;
+          },
+        },
+      ]) as unknown as typeof apiFetch,
+    );
+    render(<ExperimentDetailPage />);
+    const panel = await screen.findByTestId('bandit-weights');
+    await within(panel).findByTestId('bandit-weights-table');
+    fireEvent.click(within(panel).getByRole('button', { name: 'Set weights by hand' }));
+    const form = screen.getByTestId('bandit-weights-override');
+    expect(within(form).getByTestId('bandit-override-status-copy')).toHaveTextContent(
+      'The bandit replaces these weights at its next update, within minutes (every 5 minutes by default).',
+    );
+    const inputs = within(form).getAllByRole('spinbutton') as HTMLInputElement[];
+    // After an update the form opens with the current weights: 20% and 80%.
+    expect(inputs.map((i) => i.value)).toEqual(['20', '80']);
+    fireEvent.change(inputs[0], { target: { value: '35' } });
+    fireEvent.change(inputs[1], { target: { value: '65' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Save weights' }));
+    await waitFor(() => expect(screen.queryByTestId('bandit-weights-override')).toBeNull());
+    expect(puts).toEqual([{ weights: { 'v-1': 0.35, 'v-2': 0.65 } }]);
+    expect(within(panel).getAllByTestId('bandit-weight-share').map((c) => c.textContent)).toEqual(['35.0%', '65.0%']);
+    expect(within(panel).getByTestId('bandit-weights-saved')).toHaveTextContent('Weights saved.');
+    // The rest of the page is untouched by the save.
+    expect(screen.getByTestId('experiment-name')).toHaveTextContent('Recommendation algorithm');
   });
 });

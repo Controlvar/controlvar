@@ -7,6 +7,12 @@ Two providers share this router (selected by ``settings.AUTH_PROVIDER``):
   ``users`` table, HS256 JWTs issued by ``core.security``.  Endpoints:
   ``POST /login``, ``GET /me``, ``POST /logout`` and the OAuth2 form
   ``POST /token`` (``username`` = e-mail) so Swagger's *Authorize* works.
+  For an account with two-step sign-in on (#1812), ``/login`` and ``/token``
+  answer ``mfa_required`` with a short ``mfa_token`` instead of an access
+  token, and ``POST /mfa/verify`` exchanges that token and a code for one.
+  An account whose role requires it (``LOCAL_AUTH_2FA_REQUIRED_ROLES``) and
+  that has not set it up gets ``enrol: true`` instead, and sets it up with
+  ``POST /mfa/enroll`` and ``POST /mfa/enroll/confirm``, which signs it in.
 * ``cognito`` — AWS Cognito.  The legacy endpoints (signup, confirm, token,
   forgot/reset password, refresh, me) forward to the user pool; ``/login``
   answers 404 because Cognito has its own flows.  The dashboard signs in
@@ -31,7 +37,7 @@ unaffected by that setting.
 """
 
 import logging
-from typing import Any, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -40,8 +46,23 @@ from sqlalchemy.orm import Session
 
 from backend.app.api import deps
 from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.two_factor_answers import (
+    NO_PENDING_SIGN_IN_SECRET_DETAIL,
+    REFUSALS,
+    SIGN_IN_EXPIRED_DETAIL,
+    refusal_answer,
+)
 from backend.app.core.config import settings
+from backend.app.core.mfa_token import (
+    ENROL_PURPOSE,
+    ENROL_TTL_SECONDS,
+    VERIFY_TTL_SECONDS,
+    InvalidMfaToken,
+    create_mfa_token,
+    decode_mfa_token,
+)
 from backend.app.core.security import create_local_access_token, oauth2_scheme
+from backend.app.core.two_factor_policy import two_factor_required
 from backend.app.models.audit_log import ActionType, EntityType
 from backend.app.models.user import User
 from backend.app.schemas.auth import (
@@ -52,6 +73,7 @@ from backend.app.schemas.auth import (
     ConfirmForgotPasswordResponse,
     ConfirmSignUpRequest,
     ConfirmSignUpResponse,
+    DemoAccount,
     ForgotPasswordRequest,
     ForgotPasswordResponse,
     LoginRequest,
@@ -62,6 +84,14 @@ from backend.app.schemas.auth import (
     TokenResponse,
     UserInfoResponse,
     UserMe,
+)
+from backend.app.schemas.two_factor import (
+    MfaEnrolConfirmRequest,
+    MfaEnrolConfirmResponse,
+    MfaEnrolRequest,
+    MfaRequiredResponse,
+    MfaVerifyRequest,
+    TwoFactorEnrolResponse,
 )
 from backend.app.services import cognito_hosted_ui
 from backend.app.services.audit_service import AuditService
@@ -77,7 +107,13 @@ from backend.app.services.cognito_accounts import cognito_external_id
 from backend.app.services.local_auth_service import (
     AccountLockedError,
     InvalidCredentialsError,
+    account_may_sign_in,
     local_auth_service,
+)
+from backend.app.services.two_factor_service import (
+    UNAVAILABLE_TEXT,
+    WRONG_CODE_TEXT,
+    two_factor_service,
 )
 
 logger = logging.getLogger(__name__)
@@ -178,10 +214,23 @@ def user_to_me(user: User) -> UserMe:
     )
 
 
-def _issue_local_login(db: Session, email: str, password: str) -> LoginResponse:
-    """Authenticate with the local provider and build the token response."""
+def _issue_local_login(
+    db: Session, email: str, password: str
+) -> Union[LoginResponse, MfaRequiredResponse]:
+    """Authenticate with the local provider and build the token response.
+
+    For an account with two-step sign-in on, the right password answers
+    ``mfa_required`` with a short ``mfa_token`` and no access token, and the
+    address's failure count is NOT cleared: only an accepted code clears it
+    (``POST /auth/mfa/verify``), and wrong codes add to it. An account whose
+    role requires two-step sign-in (``LOCAL_AUTH_2FA_REQUIRED_ROLES``) and has
+    not set it up answers ``enrol: true`` with a token of the enrol purpose,
+    and its count is likewise cleared only by the first code that turns it on
+    (``POST /auth/mfa/enroll/confirm``). For any other account the count is
+    cleared and the access token issued, as before.
+    """
     try:
-        user = local_auth_service.authenticate(db, email, password)
+        user = local_auth_service.authenticate(db, email, password, reset=False)
     except AccountLockedError as exc:
         raise HTTPException(
             status_code=status.HTTP_423_LOCKED,
@@ -198,6 +247,28 @@ def _issue_local_login(db: Session, email: str, password: str) -> LoginResponse:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # No except: a failed lookup (the user_totp table missing, say) is a 500,
+    # never a sign-in with the password alone.
+    if two_factor_service.is_enabled(db, user.id):
+        return MfaRequiredResponse(
+            mfa_token=create_mfa_token(user), expires_in=VERIFY_TTL_SECONDS
+        )
+    if two_factor_required(user):
+        return MfaRequiredResponse(
+            mfa_token=create_mfa_token(
+                user, purpose=ENROL_PURPOSE, ttl_seconds=ENROL_TTL_SECONDS
+            ),
+            enrol=True,
+            expires_in=ENROL_TTL_SECONDS,
+        )
+    local_auth_service.reset_failures(db, user)
+    return _local_sign_in_answer(db, user, after={"provider": "local"})
+
+
+def _local_sign_in_answer(
+    db: Session, user: User, *, after: Dict[str, str]
+) -> LoginResponse:
+    """The access token for ``user``, and its ``user_login`` entry."""
     token = create_local_access_token(user)
     response = LoginResponse(
         access_token=token,
@@ -206,7 +277,8 @@ def _issue_local_login(db: Session, email: str, password: str) -> LoginResponse:
         user=user_to_me(user),
     )
     # After the sign-in has succeeded; a failed audit write does not refuse
-    # it. The entry records the provider only.
+    # it. The entry records the provider, and the second step if there was
+    # one; never a code or a token.
     AuditService.record_after_commit(
         db,
         actor=user,
@@ -214,7 +286,7 @@ def _issue_local_login(db: Session, email: str, password: str) -> LoginResponse:
         entity_type=EntityType.USER,
         entity_id=user.id,
         entity_name=user.username or str(user.id),
-        after={"provider": "local"},
+        after=after,
     )
     return response
 
@@ -347,7 +419,7 @@ def _sign_out_of_cognito(token: Optional[str]) -> None:
 
 @router.post(
     "/login",
-    response_model=LoginResponse,
+    response_model=Union[LoginResponse, MfaRequiredResponse],
     responses={
         401: {"description": INVALID_CREDENTIALS_DETAIL},
         423: {"description": "Account temporarily locked after repeated failures"},
@@ -364,9 +436,232 @@ def login_local(body: LoginRequest, db: Session = Depends(deps.get_db)) -> Any:
     ``LOCAL_AUTH_LOCKOUT_MINUTES`` the address answers 423 until the window
     expires.  The email address is matched whatever its letter case (A–Z),
     and every casing of it counts toward the same failed attempts.
+
+    For an account with two-step sign-in on, the right password answers
+    ``{"mfa_required": true, "mfa_token": "...", "enrol": false,
+    "expires_in": 300}`` with no ``access_token``: send the ``mfa_token`` with
+    a code from the authenticator app (or a recovery code) to
+    ``POST /api/v1/auth/mfa/verify`` within ``expires_in`` seconds. Scripts
+    that sign in this way should use an API key instead.
+
+    For an account whose role requires two-step sign-in
+    (``LOCAL_AUTH_2FA_REQUIRED_ROLES``) and that has not set it up, the right
+    password answers ``{"mfa_required": true, "mfa_token": "...", "enrol":
+    true, "expires_in": 600}``: set it up with ``POST /api/v1/auth/mfa/enroll``
+    and ``/auth/mfa/enroll/confirm``, which then signs the account in.
     """
     _require_local_provider()
     return _issue_local_login(db, body.email, body.password)
+
+
+@router.post(
+    "/mfa/verify",
+    response_model=LoginResponse,
+    dependencies=[Depends(_require_local_provider)],
+    responses={
+        401: {
+            "description": (
+                f"{WRONG_CODE_TEXT} (a wrong, used or malformed code or "
+                f"recovery code), or {SIGN_IN_EXPIRED_DETAIL} (the mfa_token "
+                "is expired, forged or of another purpose, or the account can "
+                "no longer sign in)"
+            )
+        },
+        404: {"description": "AUTH_PROVIDER is not 'local'"},
+        423: {
+            "description": (
+                "Too many failed attempts for this address, passwords and codes "
+                "counted together (see Retry-After); or two-step sign-in is "
+                "locked after too many wrong codes until an administrator "
+                "resets it (no Retry-After)"
+            )
+        },
+        503: {"description": UNAVAILABLE_TEXT},
+    },
+)
+def verify_mfa(
+    body: MfaVerifyRequest, request: Request, db: Session = Depends(deps.get_db)
+) -> Any:
+    """
+    The second step of a sign-in with two-step sign-in on
+    (``AUTH_PROVIDER=local``).
+
+    Takes the ``mfa_token`` that ``POST /api/v1/auth/login`` (or
+    ``/auth/token``) answered and exactly one of ``code`` (the 6 digits the
+    authenticator app shows) and ``recovery_code`` (one of the account's
+    recovery codes, each usable once). Answers what ``/auth/login`` answers
+    for an account without two-step sign-in: an access token and the
+    profile, read from the account as it is now.
+
+    A wrong code answers 401 and counts toward the same lockout as a wrong
+    password; a code is accepted once. Limited to 10 requests a minute per
+    client address.
+    """
+    try:
+        user_id = decode_mfa_token(body.mfa_token)
+    except InvalidMfaToken:
+        raise _sign_in_expired()
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None or not account_may_sign_in(user):
+        raise _sign_in_expired()
+    try:
+        result = two_factor_service.verify_sign_in(
+            db,
+            user,
+            code=body.code,
+            recovery_code=body.recovery_code,
+            client_host=request.client.host if request.client else None,
+        )
+    except REFUSALS as exc:
+        # Two-step sign-in turned off or reset since the password step: the
+        # sign-in starts again, and then asks for no code.
+        raise refusal_answer(
+            exc,
+            signed_in=False,
+            not_enabled_status=status.HTTP_401_UNAUTHORIZED,
+            not_enabled_detail=SIGN_IN_EXPIRED_DETAIL,
+        )
+    return _local_sign_in_answer(
+        db, user, after={"provider": "local", "second_step": result.method}
+    )
+
+
+def _sign_in_expired() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=SIGN_IN_EXPIRED_DETAIL,
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+def _enrolling_account(db: Session, mfa_token: str) -> User:
+    """The account an enrol-purpose ``mfa_token`` names, re-read from the
+    database, if it still has to set two-step sign-in up during this sign-in.
+
+    Anything else answers 401 "Sign-in expired. Start again.": the token is
+    expired, forged or of the verify purpose; the account is gone, deactivated
+    or (in demo mode) not a viewer; its role no longer requires two-step
+    sign-in; or it is already on (set up elsewhere since the password step).
+    Signing in again then answers what the account needs now.
+    """
+    try:
+        user_id = decode_mfa_token(mfa_token, purpose=ENROL_PURPOSE)
+    except InvalidMfaToken:
+        raise _sign_in_expired()
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None or not account_may_sign_in(user) or not two_factor_required(user):
+        raise _sign_in_expired()
+    if two_factor_service.is_enabled(db, user.id):
+        raise _sign_in_expired()
+    return user
+
+
+_ENROL_EXPIRED = (
+    f"{SIGN_IN_EXPIRED_DETAIL} (the mfa_token is expired, forged or not of the "
+    "enrol purpose; or the account can no longer sign in, its role no longer "
+    "requires two-step sign-in, or it is already on)"
+)
+
+
+@router.post(
+    "/mfa/enroll",
+    response_model=TwoFactorEnrolResponse,
+    dependencies=[Depends(_require_local_provider)],
+    responses={
+        401: {"description": _ENROL_EXPIRED},
+        404: {"description": "AUTH_PROVIDER is not 'local'"},
+    },
+)
+def enrol_during_sign_in(
+    body: MfaEnrolRequest, db: Session = Depends(deps.get_db)
+) -> Any:
+    """
+    Set two-step sign-in up during a sign-in, for an account whose role
+    requires it (``AUTH_PROVIDER=local``).
+
+    Takes the ``mfa_token`` of a password step that answered ``enrol: true``
+    and answers a new secret for the authenticator app, in base32 (to type in)
+    and as an ``otpauth://`` link (for a QR code), as
+    ``POST /api/v1/users/me/2fa/enroll`` does for a signed-in account. Asking
+    again replaces a secret that is still waiting. Then send the app's first
+    code to ``POST /api/v1/auth/mfa/enroll/confirm`` with the same token,
+    within its ``expires_in`` (600 seconds). Limited to 10 requests a minute
+    per client address.
+    """
+    user = _enrolling_account(db, body.mfa_token)
+    try:
+        enrolment = two_factor_service.enrol(db, user)
+    except REFUSALS:
+        # Turned on by another request since the check above.
+        raise _sign_in_expired()
+    return TwoFactorEnrolResponse(
+        secret=enrolment.secret, otpauth_uri=enrolment.otpauth_uri
+    )
+
+
+@router.post(
+    "/mfa/enroll/confirm",
+    response_model=MfaEnrolConfirmResponse,
+    dependencies=[Depends(_require_local_provider)],
+    responses={
+        401: {
+            "description": (
+                f"{WRONG_CODE_TEXT} (a wrong, used or malformed code), or "
+                f"{_ENROL_EXPIRED}"
+            )
+        },
+        404: {"description": "AUTH_PROVIDER is not 'local'"},
+        409: {"description": NO_PENDING_SIGN_IN_SECRET_DETAIL},
+        423: {
+            "description": (
+                "Too many failed attempts for this address, passwords and codes "
+                "counted together (see Retry-After); or two-step sign-in is "
+                "locked after too many wrong codes until an administrator "
+                "resets it (no Retry-After)"
+            )
+        },
+        503: {"description": UNAVAILABLE_TEXT},
+    },
+)
+def confirm_enrolment_during_sign_in(
+    body: MfaEnrolConfirmRequest, request: Request, db: Session = Depends(deps.get_db)
+) -> Any:
+    """
+    Turn two-step sign-in on with the app's first code, and finish the sign-in
+    (``AUTH_PROVIDER=local``).
+
+    Takes the ``mfa_token`` that ``POST /api/v1/auth/mfa/enroll`` was given
+    and the 6-digit ``code`` the authenticator app shows for the new secret.
+    Answers the account's 10 recovery codes, shown this once, and ``login``:
+    what ``POST /api/v1/auth/login`` answers an account without two-step
+    sign-in, the access token and the profile. From then on, signing in asks
+    for a code.
+
+    A wrong code answers 401, leaves the secret waiting, and counts toward
+    the same lockout as a wrong password. Limited to 10 requests a minute per
+    client address.
+    """
+    user = _enrolling_account(db, body.mfa_token)
+    try:
+        codes = two_factor_service.confirm(
+            db,
+            user,
+            body.code,
+            client_host=request.client.host if request.client else None,
+        )
+    except REFUSALS as exc:
+        raise refusal_answer(
+            exc,
+            signed_in=False,
+            not_enabled_detail=NO_PENDING_SIGN_IN_SECRET_DETAIL,
+        )
+    # The first code is this sign-in's second step: like an accepted code at
+    # POST /auth/mfa/verify, it clears the count the password left standing.
+    local_auth_service.reset_failures(db, user)
+    login_answer = _local_sign_in_answer(
+        db, user, after={"provider": "local", "second_step": "totp"}
+    )
+    return MfaEnrolConfirmResponse(recovery_codes=codes, login=login_answer)
 
 
 @router.post(
@@ -482,7 +777,9 @@ def confirm_signup(confirm_data: ConfirmSignUpRequest) -> Any:
         )
 
 
-@router.post("/token", response_model=Union[LoginResponse, TokenResponse])
+@router.post(
+    "/token", response_model=Union[LoginResponse, MfaRequiredResponse, TokenResponse]
+)
 def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(deps.get_db),
@@ -492,7 +789,10 @@ def login(
 
     With ``AUTH_PROVIDER=local`` the form's ``username`` field is the user's
     e-mail address and the response has the same shape as ``/login`` (this is
-    what makes Swagger's *Authorize* button work).  With ``cognito`` the
+    what makes Swagger's *Authorize* button work), ``mfa_required`` for an
+    account with two-step sign-in on included: Swagger's *Authorize* cannot
+    take the second step, so such an account signs in with ``/login`` and
+    ``/mfa/verify`` and pastes the access token.  With ``cognito`` the
     credentials are forwarded to the user pool; a successful sign-in of a
     user who already has an account writes ``user_login`` with the provider
     ``cognito``.
@@ -649,9 +949,26 @@ def get_auth_config() -> Any:
     * ``AUTH_PROVIDER=cognito`` with any of the three unset:
       ``{"provider": "cognito", "configured": false, "missing": [...]}``,
       naming the unset settings.
+    * ``DEMO_MODE=true`` adds ``"demo_mode": true`` to any of these, and
+      ``"demo_account": {"email", "password"}`` when ``DEMO_ACCOUNT_EMAIL`` and
+      ``DEMO_ACCOUNT_PASSWORD`` are set: the shared account a demo visitor
+      signs in with, whose password is public by design.
 
     Every value comes from the configuration, none from the request.
     """
+    response = _sign_in_config()
+    if settings.DEMO_MODE:
+        response.demo_mode = True
+        if settings.demo_account_published:
+            response.demo_account = DemoAccount(
+                email=settings.DEMO_ACCOUNT_EMAIL,
+                password=settings.DEMO_ACCOUNT_PASSWORD,
+            )
+    return response
+
+
+def _sign_in_config() -> AuthConfigResponse:
+    """``GET /auth/config`` without the demo fields."""
     if settings.AUTH_PROVIDER != "cognito" or deps.dev_auth_bypass_active():
         return AuthConfigResponse(provider="local")
     missing = _hosted_ui_missing()

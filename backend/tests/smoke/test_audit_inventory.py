@@ -71,6 +71,8 @@ INVENTORY = {
     ("DELETE", f"{V1}/admin/users/{{user_id}}"): Audited(A.USER_DELETE),
     ("PATCH", f"{V1}/admin/users/{{user_id}}"): ACCESS,
     ("PUT", f"{V1}/admin/users/{{user_id}}"): ACCESS,
+    # A superuser turning off someone else's two-step sign-in (#1812).
+    ("DELETE", f"{V1}/admin/users/{{user_id}}/2fa"): Audited(A.USER_2FA_RESET),
     # --- AI design helpers ---------------------------------------------------
     ("POST", f"{V1}/ai/design"): CALCULATION,
     ("POST", f"{V1}/ai/interpret/{{experiment_id}}"): CALCULATION,
@@ -84,6 +86,17 @@ INVENTORY = {
     ("POST", f"{V1}/auth/confirm"): COGNITO_ACCOUNT,
     ("POST", f"{V1}/auth/forgot-password"): COGNITO_ACCOUNT,
     ("POST", f"{V1}/auth/login"): Audited(A.USER_LOGIN),
+    # The code step of two-step sign-in (#1812): the sign-in, and a recovery
+    # code used for it. A wrong code writes a log line, never an entry.
+    ("POST", f"{V1}/auth/mfa/verify"): Audited(A.USER_LOGIN, A.USER_2FA_RECOVERY_USED),
+    # Setting it up during a sign-in, for a role that requires it (#1812): a
+    # secret waiting for its first code changes nothing; the first code turns
+    # it on and signs the account in.
+    ("POST", f"{V1}/auth/mfa/enroll"): NotAudited(
+        "a secret waiting for its first code changes nothing at sign-in; "
+        "confirming it writes user_2fa_enable"
+    ),
+    ("POST", f"{V1}/auth/mfa/enroll/confirm"): Audited(A.USER_2FA_ENABLE, A.USER_LOGIN),
     ("POST", f"{V1}/auth/logout"): NotAudited(
         "signing out is not on the audited event list: under local it changes "
         "nothing on the server (the tokens are stateless); under Cognito it "
@@ -132,9 +145,7 @@ INVENTORY = {
     ("DELETE", f"{V1}/rollout-schedules/stages/{{stage_id}}"): ROLLOUT,
     ("POST", f"{V1}/rollout-schedules/stages/{{stage_id}}/advance"): ROLLOUT,
     # --- safety --------------------------------------------------------------
-    ("POST", f"{V1}/safety/settings"): NotAudited(
-        "safety settings are not on the audited event list"
-    ),
+    ("POST", f"{V1}/safety/settings"): Audited(A.SAFETY_CONFIG_UPDATE),
     ("POST", f"{V1}/safety/feature-flags/{{feature_flag_id}}/config"): NotAudited(
         "a flag's safety config is not on the audited event list"
     ),
@@ -158,6 +169,13 @@ INVENTORY = {
     ("POST", f"{V1}/experiments/{{experiment_id}}/pause"): Audited(A.EXPERIMENT_PAUSE),
     ("PUT", f"{V1}/experiments/{{experiment_id}}/schedule"): EXP_UPDATE,
     ("POST", f"{V1}/experiments/{{experiment_id}}/start"): Audited(A.EXPERIMENT_START),
+    # #1545: a visual experiment's preview links.
+    ("POST", f"{V1}/experiments/{{experiment_id}}/visual/preview-links"): Audited(
+        A.EXPERIMENT_PREVIEW_LINK_CREATE
+    ),
+    ("DELETE", f"{V1}/experiments/{{experiment_id}}/visual/preview-links"): Audited(
+        A.EXPERIMENT_PREVIEW_LINKS_REVOKE
+    ),
     # --- experiment wizard ---------------------------------------------------
     ("POST", f"{V1}/wizard/drafts"): DRAFT,
     ("PUT", f"{V1}/wizard/drafts/{{draft_id}}/step"): DRAFT,
@@ -199,6 +217,19 @@ INVENTORY = {
     ("POST", f"{V1}/users/"): Audited(A.USER_CREATE),
     ("POST", f"{V1}/users/me/password"): NotAudited(
         "a user changing their own password is not on the audited event list"
+    ),
+    # Your own two-step sign-in (#1812). A wrong code writes a log line, never
+    # an entry.
+    ("POST", f"{V1}/users/me/2fa/enroll"): NotAudited(
+        "a secret waiting for its first code changes nothing at sign-in; "
+        "confirming it writes user_2fa_enable"
+    ),
+    ("POST", f"{V1}/users/me/2fa/confirm"): Audited(A.USER_2FA_ENABLE),
+    ("POST", f"{V1}/users/me/2fa/disable"): Audited(
+        A.USER_2FA_DISABLE, A.USER_2FA_RECOVERY_USED
+    ),
+    ("POST", f"{V1}/users/me/2fa/recovery-codes"): Audited(
+        A.USER_2FA_RECOVERY_REGENERATE
     ),
     ("PUT", f"{V1}/users/{{user_id}}"): ACCESS,
     ("DELETE", f"{V1}/users/{{user_id}}"): Audited(A.USER_DELETE),
@@ -243,6 +274,9 @@ INVENTORY = {
     ("POST", f"{V1}/tracking/errors"): SDK,
     ("POST", f"{V1}/tracking/errors/batch"): SDK,
     ("POST", f"{V1}/tracking/evaluations"): SDK,
+    # #1545: the visual editor's browser script, with a key in the page.
+    ("POST", f"{V1}/tracking/visual"): SDK,
+    ("POST", f"{V1}/tracking/visual/preview"): READ_ONLY,
 }
 
 #: GET routes a reader could expect to be recorded, and why they are not.
@@ -293,7 +327,7 @@ def test_the_inventory_is_exact():
         f"unclassified: {sorted(found - set(INVENTORY))}; "
         f"gone: {sorted(set(INVENTORY) - found)}"
     )
-    assert len(INVENTORY) == 107
+    assert len(INVENTORY) == 119
 
 
 def test_every_mutating_route_is_under_backend_or_modules():

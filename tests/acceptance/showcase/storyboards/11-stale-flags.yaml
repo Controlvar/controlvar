@@ -27,9 +27,11 @@
 #   not stale by gate 10. The hint's words about permanent are said only
 #   with the hint on screen.
 # * The headline card "Remove it from code, then archive it" is CUT (check
-#   fix 6): the dashboard has no archive action
-#   (frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx). The
-#   word archived is said only with the hint on screen, which draws it.
+#   fix 6, kept cut by a plan decision): the dashboard has an archive action
+#   now (#442, #1911; pinned in
+#   frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx), but
+#   this video does not show it. The word archived is said only with the
+#   hint on screen, which draws it.
 # * The narration quotes the merged page (PE 6): the reason lines
 #   (staleReasonText, N the API's 30) and the hint, split at its semicolon
 #   into two sentences (a sentence is at most 12 words).

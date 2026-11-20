@@ -7,6 +7,12 @@
  * the single-page form sends"); this file covers the field itself: what it
  * refuses, that a problem is never left in a closed section, what Review
  * shows, who sees it, and that it passes axe.
+ *
+ * The last part is Advanced Bayesian settings (#442): the prior's alpha and
+ * beta, the loss threshold and the credible level, set only when creating an
+ * experiment. The request carries `bayesian_config` (with prior_family always
+ * "beta", T337) only when one of the four left its default, and is checked
+ * against the API's own schema (openapiShape).
  */
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
@@ -21,6 +27,7 @@ import {
 import { STEP_HEADINGS } from '@/components/experiments/new/Wizard';
 import { BAYESIAN_HELP, BAYESIAN_LABEL } from '@/components/experiments/new/AnalysisSettingsFields';
 import { CREATE_FAILED } from '@/components/experiments/new/createErrors';
+import { shapeErrors } from '@/tests/helpers/openapiShape';
 import { makeRouter, routedApi } from './helpers/apiMock';
 
 jest.mock('@/services/api', () => ({
@@ -398,5 +405,297 @@ describe('accessibility of the new fields (axe-core in jsdom; colour contrast is
     next();
     next();
     expect(await violations()).toEqual([]);
+  });
+});
+
+// --- #442: Advanced Bayesian settings ----------------------------------------
+//
+// The copy is typed out here, not imported, so a test cannot pass by comparing
+// a constant with itself.
+
+const PRIORS_HELP =
+  'The results then also give, for the primary metric, the probability that each variant is the ' +
+  'best, using the priors under Advanced Bayesian settings (the defaults unless you change them). ' +
+  'The frequentist results and the recommendation are unchanged.';
+const MUST_POSITIVE = 'Must be greater than 0.';
+const MUST_BETWEEN = 'Must be more than 0 and less than 1.';
+
+/** Each field: its label, its test id, the value it starts with, and its help. No prior family (T337). */
+const PRIOR_FIELDS: [string, string, string, string][] = [
+  ['Prior alpha', 'bayesian-alpha', '1.0', `Default 1.0. ${MUST_POSITIVE}`],
+  ['Prior beta', 'bayesian-beta', '1.0', `Default 1.0. ${MUST_POSITIVE}`],
+  ['Loss threshold', 'bayesian-loss-threshold', '0.001', `Default 0.001. ${MUST_POSITIVE}`],
+  ['Credible level', 'bayesian-credible-level', '0.95', `Default 0.95. ${MUST_BETWEEN}`],
+];
+
+const VIEWS: [string, boolean][] = [
+  ['guided setup', false],
+  ['the single-page form', true],
+];
+
+/** The create form ready to send: a name typed, and guided setup on its Estimate step. */
+function openForm(advanced: boolean) {
+  if (advanced) {
+    routerAt({ advanced: '' });
+    api();
+    render(<NewExperimentPage />);
+    setValue('experiment-name', 'Hero copy');
+  } else {
+    toVariants();
+    next();
+    expect(heading()).toHaveTextContent(STEP_HEADINGS.estimate);
+  }
+}
+
+const tickBayesian = () => fireEvent.click(screen.getByTestId('analysis-bayesian'));
+const togglePriors = () => fireEvent.click(screen.getByTestId('bayesian-config-toggle'));
+
+/** Guided setup: Next to Review, then Create. The single-page form: Create. */
+function pressCreate(advanced: boolean) {
+  if (advanced) {
+    fireEvent.click(screen.getByTestId('submit-experiment'));
+    return;
+  }
+  next();
+  if (screen.queryByTestId('wizard-create')) fireEvent.click(screen.getByTestId('wizard-create'));
+}
+
+/** Create, and the one POST's body as it goes over the wire (undefined dropped). */
+async function createdBody(advanced: boolean): Promise<Record<string, unknown>> {
+  pressCreate(advanced);
+  await waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith('/experiments/exp-9'));
+  const sent = posts();
+  expect(sent).toHaveLength(1);
+  expect(sent[0][0]).toBe('/api/v1/experiments');
+  return JSON.parse(JSON.stringify(sent[0][1]?.json));
+}
+
+/** Where a refused create says why: the step's line in guided setup, the form's foot otherwise. */
+const refusal = (advanced: boolean) => screen.getByTestId(advanced ? 'form-error' : 'step-error');
+
+describe('#442: Advanced Bayesian settings, set when creating an experiment', () => {
+  it('the Bayesian help names Advanced Bayesian settings and no longer says priors can be changed through the API', () => {
+    routerAt({ advanced: '' });
+    render(<NewExperimentPage />);
+    expect(BAYESIAN_HELP).toBe(PRIORS_HELP);
+    expect(document.getElementById('analysis-bayesian-help')?.textContent).toBe(
+      `${PRIORS_HELP} How Bayesian analysis works`,
+    );
+    expect(document.body.textContent).not.toContain('Priors can be changed through the API');
+  });
+
+  it.each(VIEWS)(
+    '%s: shown only while the box is ticked, closed by default, and opens to four fields at their defaults with their helps',
+    (_view, advanced) => {
+      openForm(advanced);
+      expect(screen.queryByTestId('bayesian-config-toggle')).not.toBeInTheDocument();
+      tickBayesian();
+      const toggle = screen.getByTestId('bayesian-config-toggle');
+      expect(toggle).toHaveTextContent('Advanced Bayesian settings');
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.queryByTestId('bayesian-config-fields')).not.toBeInTheDocument();
+
+      togglePriors();
+      expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      const fields = screen.getByTestId('bayesian-config-fields');
+      expect(toggle).toHaveAttribute('aria-controls', fields.id);
+      for (const [label, testId, value, help] of PRIOR_FIELDS) {
+        const field = within(fields).getByLabelText(label);
+        expect(field).toBe(screen.getByTestId(testId));
+        expect(field).toHaveProperty('value', value);
+        expect(field).toHaveAccessibleDescription(help);
+      }
+
+      tickBayesian();
+      expect(screen.queryByTestId('bayesian-config-toggle')).not.toBeInTheDocument();
+    },
+  );
+
+  it.each(VIEWS)('%s: untouched, the POST has no bayesian_config', async (_view, advanced) => {
+    openForm(advanced);
+    tickBayesian();
+    togglePriors();
+    const body = await createdBody(advanced);
+    expect(body.bayesian_enabled).toBe(true);
+    expect('bayesian_config' in body).toBe(false);
+  });
+
+  it.each(VIEWS)('%s: alpha 2 sends the five-field object, as the API defines it', async (_view, advanced) => {
+    openForm(advanced);
+    tickBayesian();
+    togglePriors();
+    setValue('bayesian-alpha', '2');
+    const body = await createdBody(advanced);
+    expect(body.bayesian_enabled).toBe(true);
+    expect(body.bayesian_config).toStrictEqual({
+      prior_family: 'beta',
+      alpha: 2,
+      beta: 1,
+      loss_threshold: 0.001,
+      credible_level: 0.95,
+    });
+    expect(shapeErrors('ExperimentCreate', body)).toEqual([]);
+  });
+
+  it.each(VIEWS)('%s: alpha 0 reads "Must be greater than 0." and sends nothing', async (_view, advanced) => {
+    openForm(advanced);
+    tickBayesian();
+    togglePriors();
+    setValue('bayesian-alpha', '0');
+    const alpha = screen.getByTestId('bayesian-alpha');
+    expect(screen.getByTestId('bayesian-alpha-error').textContent).toBe(MUST_POSITIVE);
+    expect(alpha).toHaveAttribute('aria-invalid', 'true');
+    expect(alpha).toHaveAccessibleDescription(`Default 1.0. ${MUST_POSITIVE} ${MUST_POSITIVE}`);
+
+    pressCreate(advanced);
+    await waitFor(() =>
+      expect(refusal(advanced)).toHaveTextContent(`Advanced Bayesian settings, Prior alpha: ${MUST_POSITIVE}`),
+    );
+    if (!advanced) expect(heading()).toHaveTextContent(STEP_HEADINGS.estimate);
+    expect(posts()).toHaveLength(0);
+  });
+
+  it.each([
+    ['bayesian-beta', 'Prior beta', '-1', MUST_POSITIVE],
+    ['bayesian-loss-threshold', 'Loss threshold', '0', MUST_POSITIVE],
+    ['bayesian-credible-level', 'Credible level', '1', MUST_BETWEEN],
+    ['bayesian-credible-level', 'Credible level', '0', MUST_BETWEEN],
+    ['bayesian-alpha', 'Prior alpha', '', MUST_POSITIVE],
+  ])('%s (%s) set to "%s" is refused beside the field and at Next', (testId, label, value, problem) => {
+    openForm(false);
+    tickBayesian();
+    togglePriors();
+    setValue(testId, value);
+    expect(screen.getByTestId(`${testId}-error`).textContent).toBe(problem);
+    next();
+    expect(heading()).toHaveTextContent(STEP_HEADINGS.estimate);
+    expect(screen.getByTestId('step-error')).toHaveTextContent(`Advanced Bayesian settings, ${label}: ${problem}`);
+    expect(posts()).toHaveLength(0);
+  });
+
+  // T337: each number changed alone is sent, with the other three at their
+  // defaults and prior_family always "beta".
+  const ALONE: [string, string, Record<string, number>][] = [
+    ['bayesian-alpha', '3', { alpha: 3 }],
+    ['bayesian-beta', '7', { beta: 7 }],
+    ['bayesian-loss-threshold', '0.01', { loss_threshold: 0.01 }],
+    ['bayesian-credible-level', '0.9', { credible_level: 0.9 }],
+  ];
+  const ALONE_CASES = VIEWS.flatMap(([view, advanced]) =>
+    ALONE.map(([testId, value, change]) => [view, testId, value, change, advanced] as const),
+  );
+  it.each(ALONE_CASES)(
+    '%s: %s set to %s, changed alone, sends the five-field object with prior_family "beta"',
+    async (_view, testId, value, change, advanced) => {
+      openForm(advanced);
+      tickBayesian();
+      togglePriors();
+      setValue(testId, value);
+      const body = await createdBody(advanced);
+      expect(body.bayesian_config).toStrictEqual({
+        prior_family: 'beta',
+        alpha: 1,
+        beta: 1,
+        loss_threshold: 0.001,
+        credible_level: 0.95,
+        ...change,
+      });
+      expect(shapeErrors('ExperimentCreate', body)).toEqual([]);
+    },
+  );
+
+  it.each(VIEWS)('%s: offers no Prior family control (T337: every family is analysed as Beta)', (_view, advanced) => {
+    openForm(advanced);
+    tickBayesian();
+    togglePriors();
+    const fields = screen.getByTestId('bayesian-config-fields');
+    expect(within(fields).queryByLabelText(/prior family/i)).not.toBeInTheDocument();
+    expect(fields.querySelector('select')).toBeNull();
+    expect(within(fields).getAllByRole('spinbutton')).toHaveLength(4);
+    expect(document.body.textContent).not.toMatch(/prior family/i);
+    expect(screen.queryByTestId('bayesian-prior-family')).not.toBeInTheDocument();
+  });
+
+  it('a field changed back to its default value sends no bayesian_config', async () => {
+    openForm(false);
+    tickBayesian();
+    togglePriors();
+    setValue('bayesian-alpha', '2');
+    setValue('bayesian-alpha', '1');
+    const body = await createdBody(false);
+    expect('bayesian_config' in body).toBe(false);
+  });
+
+  it('unticking the box sends neither key, and a bad value it hides blocks nothing', async () => {
+    openForm(false);
+    tickBayesian();
+    togglePriors();
+    setValue('bayesian-alpha', '0');
+    tickBayesian();
+    const body = await createdBody(false);
+    expect('bayesian_enabled' in body).toBe(false);
+    expect('bayesian_config' in body).toBe(false);
+  });
+
+  it.each(VIEWS)('%s: a problem in the closed section opens it and focuses the field', async (_view, advanced) => {
+    openForm(advanced);
+    tickBayesian();
+    togglePriors();
+    setValue('bayesian-alpha', '0');
+    togglePriors();
+    expect(screen.queryByTestId('bayesian-alpha')).not.toBeInTheDocument();
+
+    pressCreate(advanced);
+
+    await waitFor(() => expect(screen.getByTestId('bayesian-alpha')).toHaveFocus());
+    expect(screen.getByTestId('bayesian-config-toggle')).toHaveAttribute('aria-expanded', 'true');
+    if (advanced) expect(screen.getByTestId('analysis-settings-details')).toHaveAttribute('open');
+    expect(posts()).toHaveLength(0);
+  });
+
+  it('a section holding a changed value starts open after switching views', () => {
+    routerAt({ advanced: '' });
+    api();
+    const view = render(<NewExperimentPage />);
+    tickBayesian();
+    togglePriors();
+    setValue('bayesian-credible-level', '0.9');
+    routerAt();
+    view.rerender(<NewExperimentPage />);
+    next();
+    setValue('experiment-name', 'Hero copy');
+    next();
+    next();
+    expect(heading()).toHaveTextContent(STEP_HEADINGS.estimate);
+    expect(screen.getByTestId('bayesian-config-toggle')).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByTestId('bayesian-credible-level')).toHaveProperty('value', '0.9');
+  });
+
+  it.each(['ADMIN', 'DEVELOPER'])('%s can open the settings', (role) => {
+    mockUser = { role, is_superuser: false };
+    openForm(true);
+    tickBayesian();
+    togglePriors();
+    expect(screen.getByTestId('bayesian-config-fields')).toBeInTheDocument();
+  });
+
+  it.each(['ANALYST', 'VIEWER'])('%s is told it cannot create, and sees no Bayesian setting', (role) => {
+    mockUser = { role, is_superuser: false };
+    routerAt({ advanced: '' });
+    render(<NewExperimentPage />);
+    expect(screen.getByTestId('create-not-allowed')).toBeInTheDocument();
+    expect(screen.queryByTestId('analysis-bayesian')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('bayesian-config-toggle')).not.toBeInTheDocument();
+  });
+
+  it('the open settings with a problem showing have no axe violations', async () => {
+    openForm(false);
+    tickBayesian();
+    togglePriors();
+    setValue('bayesian-alpha', '0');
+    const container = document.querySelector('body > div');
+    if (!container) throw new Error('nothing rendered');
+    const result = await axe.run(container, { rules: { 'color-contrast': { enabled: false } } });
+    expect(result.violations.map((v) => v.id)).toEqual([]);
   });
 });

@@ -472,3 +472,80 @@ def test_the_balanced_groups_route_is_beta_and_carries_no_place_in_a_group(
         text = json.dumps(document)
         for word in ("balance_seed", "balance_seq", "next_seq"):
             assert word not in text, f"{word} found in {name}"
+
+
+SEGMENT_RESULTS_PATH = "/api/v1/results/{experiment_id}/segments/{segment_id}"
+
+#: The components only the segment-results operation references: the two #1933
+#: added. ``SegmentKind`` and ``SegmentStatus`` must come from the segment
+#: schemas, which every segment operation already uses; the model's
+#: ``SegmentKind`` would add a third (and rename the shared one).
+SEGMENT_RESULTS_OWN_COMPONENTS = {"ResultsSegment", "SegmentResultsResponse"}
+
+
+def _components_of_other_operations(document: Dict[str, Any], skip: str) -> Set[str]:
+    names: Set[str] = set()
+    for path, _method, operation in _operations(document):
+        if path != skip:
+            names |= set(_referenced_schemas(document, operation))
+    return names
+
+
+def test_the_segment_results_route_is_beta_and_adds_only_its_two_components(
+    stable_snapshot, full_snapshot, core_document
+):
+    """#1933: the segment-results route is in both snapshots, marked beta, as
+    the live core document serves it (a beta route's change only warns in the
+    comparison above, so this compares it exactly), with its schemas; and the
+    components no other operation references are exactly its two."""
+    live = core_document["paths"][SEGMENT_RESULTS_PATH]["get"]
+    for name, document in (
+        ("openapi-v1.stable.json", stable_snapshot),
+        ("openapi-v1.full.json", full_snapshot),
+    ):
+        operation = document["paths"][SEGMENT_RESULTS_PATH]["get"]
+        assert operation.get("x-stability") == "beta", name
+        assert operation == live, f"{name}: the segment-results route differs"
+        assert _referenced_schemas(document, operation) == _referenced_schemas(
+            core_document, live
+        ), f"{name}: the segment-results schemas differ"
+    for name, document in (
+        ("openapi-v1.stable.json", stable_snapshot),
+        ("openapi-v1.full.json", full_snapshot),
+        ("the live core document", core_document),
+    ):
+        operation = document["paths"][SEGMENT_RESULTS_PATH]["get"]
+        own = set(_referenced_schemas(document, operation)) - (
+            _components_of_other_operations(document, SEGMENT_RESULTS_PATH)
+        )
+        assert own == SEGMENT_RESULTS_OWN_COMPONENTS, f"{name}: {sorted(own)}"
+
+
+POST_STRATIFICATION_PATH = "/api/v1/results/{experiment_id}/post-stratification"
+
+
+@pytest.mark.regression
+def test_the_post_stratification_route_is_deprecated_in_the_published_documents(
+    stable_snapshot, full_snapshot, core_document
+):
+    """#963: the post-stratification route is deprecated in both snapshots, as
+    the live core document serves it (a beta route's change only warns in the
+    comparison above, so this compares it exactly): ``"deprecated": true``, a
+    summary ending in "(deprecated)" and a description that says why, as the
+    API stability rules ask of a deprecated operation. It stays beta and still
+    documents its 501."""
+    live = core_document["paths"][POST_STRATIFICATION_PATH]["post"]
+    for name, document in (
+        ("openapi-v1.stable.json", stable_snapshot),
+        ("openapi-v1.full.json", full_snapshot),
+        ("the live core document", core_document),
+    ):
+        operation = document["paths"][POST_STRATIFICATION_PATH]["post"]
+        assert operation.get("deprecated") is True, name
+        assert operation["summary"].endswith("(deprecated)"), name
+        assert operation["description"].startswith(
+            "**Deprecated**, because it is not available: this route answers 501"
+        ), name
+        assert operation.get("x-stability") == "beta", name
+        assert "501" in operation["responses"], name
+        assert operation == live, f"{name}: the post-stratification route differs"

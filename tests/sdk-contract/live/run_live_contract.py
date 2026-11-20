@@ -219,6 +219,10 @@ VALUE_SDKS: frozenset[str] = frozenset(
     [
         # One line per SDK, in the form "js",
         "js",
+        "react",
+        "react-native",
+        "java",
+        "dotnet",
     ]
 )
 #: The seed's on values (backend/scripts/seed_sdk_contract.py VALUE_FLAGS).
@@ -256,6 +260,9 @@ EVENT_ID_SDKS: frozenset[str] = frozenset(
         "java",
         "js",
         "python",
+        "react",
+        "react-native",
+        "dotnet",
     ]
 )
 

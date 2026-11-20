@@ -18,7 +18,7 @@ made-up products with gradient artwork.
 | **Homepage** `/` | `shoplab_hero_banner` — image hero vs. CSS-animated "video" hero | Classic A/B test, sequential testing (mSPRT), Bayesian results, variant configuration driving copy |
 | **Product list** `/products` | `shoplab_plp_sort` — relevance vs. price vs. "ML personalised" ordering | **Multi-armed bandit** (Thompson sampling): traffic shifts toward the winning sort |
 | **Product detail** `/products/[id]` | `shoplab_pdp_buy_button` — button colour × CTA text (4 cells) | **Multivariate** test, sequential testing, `value` on `add_to_cart` |
-| **Checkout** `/checkout` | `shoplab_checkout_flow` — 3-step stepper vs. one-page form | **CUPED** (API only; the simulator's visitors are new, so they have no history), revenue metric from `purchase` value |
+| **Checkout** `/checkout` | `shoplab_checkout_flow` — 3-step stepper vs. one-page form | **CUPED** (the results page's CUPED tab; the simulator's visitors are new, so they have no history), revenue metric from `purchase` value |
 | **Search** `/search` | `shoplab_new_search` flag — exact name match vs. fuzzy engine with highlights | **Feature-flag gradual rollout** (10% → 50% → 100%), safety config, flag-attributed events |
 | Header (every page) | `shoplab_free_shipping_banner` flag | **Kill switch**: turn the banner off in the dashboard, reload the storefront |
 
@@ -151,14 +151,14 @@ source venv/bin/activate && python -m pytest demo/shoplab/simulator/test_traffic
 2. **Product sort** (`shoplab_plp_sort`): open the experiment's page. Its **Current traffic
    weights** panel shows each variant's share of new visitors, drifting toward `ml_personalized`
    (true click rate 28% vs 22% / 19%). Press **Refresh** to see the latest weights; the panel does
-   not update by itself, and the dashboard has no chart of past weights. Then go to `/products`
+   not update by itself; **Weight history** below it lists each past update. Then go to `/products`
    and note the sort the page names: it follows the visitor's arm, and "Recommended for you" is
    `ml_personalized`'s, the arm the weights favour.
 3. **Buy button** (`shoplab_pdp_buy_button`): four cells. `orange_buy_now` wins on add-to-cart;
    show the multivariate breakdown. On a product page, switch
    visitors to see colour and text change.
 4. **Checkout flow** (`shoplab_checkout_flow`): open Results. Its primary metric is the `purchase`
-   conversion, and its secondary the revenue metric *Order value*. There is no CUPED toggle in the dashboard.
+   conversion, and its secondary the revenue metric *Order value*. Its **CUPED (beta)** tab shows the adjustment.
    CUPED adjusts for each user's own purchases before assignment, and the simulator's visitors are
    new, so its `covariate_coverage_pct` is near 0 and it does not narrow the interval here; the
    Quick Start's `checkout_button_color` has history and shows a reduction

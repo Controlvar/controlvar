@@ -63,14 +63,28 @@ DUCKDB_PREVIEW_SQL = dataclasses.replace(
 DUCKDB_TIME_TYPES = frozenset({"TIMESTAMP WITH TIME ZONE", "TIMESTAMP"})
 DUCKDB_NUMERIC_TYPES = frozenset({"DOUBLE", "INTEGER", "BIGINT", "DECIMAL"})
 
+#: A role under the path every role-based connection's role must be under.
+ROLE_ARN = "arn:aws:iam::123456789012:role/controlvar-warehouse/controlvar-reader"
+
 ATHENA_BODY: Dict[str, Any] = {
     "warehouse_type": "athena",
     "name": "Lake",
     "region": "us-east-1",
-    "role_arn": "arn:aws:iam::123456789012:role/controlvar-reader",
+    "role_arn": ROLE_ARN,
     "workgroup": "primary",
     "database": "main",
     "max_bytes_per_query": 10_000_000_000,
+}
+
+#: An Amazon Redshift Serverless connection; a provisioned one names
+#: ``cluster_identifier`` and ``db_user`` in place of ``workgroup_name``.
+REDSHIFT_BODY: Dict[str, Any] = {
+    "warehouse_type": "redshift",
+    "name": "Redshift prod",
+    "region": "eu-west-1",
+    "role_arn": ROLE_ARN,
+    "workgroup_name": "analytics",
+    "database": "dev",
 }
 
 EXPOSURE_COLUMNS = [

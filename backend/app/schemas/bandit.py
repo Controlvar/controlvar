@@ -5,14 +5,17 @@ Defines the Pydantic v2 models used for:
 - Reporting current bandit state and allocation weights (BanditStatusResponse)
 - Describing per-variant statistics (BanditVariantWeight)
 - Manual weight overrides by administrators (BanditUpdateRequest)
+- One past weight update of the bandit (BanditHistoryTick)
 """
 
+from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from backend.app.core.stats_engine import ENGINE_VERSION
+from backend.app.schemas.finite_number import FiniteFloat
 
 # ---------------------------------------------------------------------------
 # Enum
@@ -157,6 +160,32 @@ class BanditStatusResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# History schema
+# ---------------------------------------------------------------------------
+
+
+class BanditHistoryTick(BaseModel):
+    """
+    One weight update of a bandit: the time it ran and each variant's weight.
+
+    Read from ``bandit_state_history``, whose rows for one update share one
+    ``tick_at``. A manual override (``PUT /bandit/{id}/weights``) writes no
+    row, so it is never a tick.
+    """
+
+    tick_at: datetime = Field(
+        ..., description="When the update ran, in UTC (ISO-8601, ending in Z)"
+    )
+    weights: Dict[str, float] = Field(
+        ...,
+        description=(
+            "Mapping of variant_id to the weight that update gave it; the "
+            "variants recorded in that update"
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Update request schema
 # ---------------------------------------------------------------------------
 
@@ -171,7 +200,7 @@ class BanditUpdateRequest(BaseModel):
       floating-point rounding across many variants)
     """
 
-    weights: Dict[str, float] = Field(
+    weights: Dict[str, FiniteFloat] = Field(
         ...,
         description="Mapping of variant_id → allocation weight; must sum to ~1.0",
     )

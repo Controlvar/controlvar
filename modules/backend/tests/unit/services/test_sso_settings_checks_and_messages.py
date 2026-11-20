@@ -13,6 +13,7 @@ import base64
 import datetime
 import logging
 import pathlib
+import tomllib
 import uuid
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -49,13 +50,19 @@ ALICE = saml.ALICE
 def test_sso_is_a_module_of_the_full_profile_under_apache_2():
     manifest = (REPO / "modules-manifest.txt").read_text()
     assert "modules/backend/app/services/sso_service.py" in manifest
-    reuse = (REPO / "REUSE.toml").read_text()
-    # One rule for everything but the SDKs: modules/ included.
-    assert reuse.count("[[annotations]]") == 2
-    assert (
-        'path = ["**"]' in reuse and 'SPDX-License-Identifier = "Apache-2.0"' in reuse
-    )
-    assert 'path = ["sdk/**"]' in reuse
+    reuse = tomllib.loads((REPO / "REUSE.toml").read_text())
+    # One rule for everything but the SDKs: modules/ included. The only other
+    # table is one third-party file in the public site (GitHub's mark, MIT,
+    # pinned in test_front_door_facts.py); none names a path under modules/.
+    licences = {
+        tuple(a["path"]): a["SPDX-License-Identifier"] for a in reuse["annotations"]
+    }
+    assert licences == {
+        ("**",): "Apache-2.0",
+        ("sdk/**",): "MIT",
+        ("frontend/src/components/GitHubMark.tsx",): "MIT",
+    }
+    assert not [p for paths in licences for p in paths if p.startswith("modules")]
     for path in (REPO / "modules").rglob("*.py"):
         head = path.read_text(errors="ignore")[:400]
         assert "SPDX-License-Identifier" not in head or "Apache-2.0" in head, path

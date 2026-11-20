@@ -171,7 +171,7 @@ turn that into their safe default.
 | `getNumberValue` | `(flagKey, user, defaultValue: number) => Promise<number>` | The number a number flag serves this user | `defaultValue`; never rejects; `onError(err, 'value')` |
 | `getJsonValue` | `<T>(flagKey, user, defaultValue: T) => Promise<T>` | A new copy of the object or array a json flag serves this user | `defaultValue`; never rejects; `onError(err, 'value')` |
 | `getAllFlags` | `(userId, attributes?) => Promise<Record<string, boolean>>` | `{ flagKey: enabled }`; `attributes` sent as `context`; not cached, not part of the fan-out | Rejects |
-| `track` | `(userId, eventName, options?: TrackOptions) => Promise<void>` | — | Never rejects; `onError(err, 'track')` |
+| `track` | `(userId, eventName, options?: TrackOptions) => Promise<void>` | — | Never rejects; `onError(err, 'track')` when a request fails (network error or non-2xx). A 2xx answer is not inspected, so an entry the server refuses inside a 200 does not reach `onError`; `trackBatch` returns those |
 | `trackBatch` | `(events: TrackEvent[]) => Promise<BatchResult>` | `{ successCount, failureCount, errors }` | Never rejects; a failed chunk counts all its events as failures and calls `onError(err, 'trackBatch')` |
 | `reportError` | `(report: ErrorReport) => Promise<boolean>` | `true` when the server stored the report (201); see [Reporting errors](#reporting-errors) | `false`; never rejects; `onError(err, 'reportError')` |
 | `fetchAssignments` | `(userId, { activeOnly?: boolean } = { activeOnly: true }) => Promise<AssignmentRecord[]>` | Server-side assignment rows (raw objects); not cached | Rejects |
@@ -538,7 +538,9 @@ is served, whether it is in a segment, and which experiments it is assigned to. 
 user ids that do not identify a person (not email addresses), in ID lists too, and read assignments from
 your server. Use a dedicated key for browser traffic so it can be revoked on its
 own, and never give it the `sdk:ruleset` scope, which lets a key download every flag's targeting
-rules. Server-side, lower `timeoutMs` if the SDK sits on a request path:
+rules. The two routes the visual editor's browser script calls refuse a key with any scope
+([Refused in a web page](../security/api-keys.md#refused-in-a-web-page)); the routes this SDK
+calls do not. Server-side, lower `timeoutMs` if the SDK sits on a request path:
 
 ```typescript
 const client = new ExperimentationClient({

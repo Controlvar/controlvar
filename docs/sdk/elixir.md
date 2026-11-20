@@ -114,7 +114,7 @@ different restart strategy. Its cache is process-owned, so a restart starts with
 
 ### `evaluate_flag(client, flag_key, user_id, opts \\ [])`
 
-Calls `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` and returns
+Calls `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=…` and returns
 `{:ok, %Controlvar.FlagEvaluation{}}`:
 
 | Field | Type | Description |
@@ -134,14 +134,42 @@ end
 Returns `{:error, reason}` on a network/HTTP failure (including `{:api_error, 404, _}` for an
 unknown flag key). A flag that is not ACTIVE is not an error: it returns `enabled: false`.
 A cached evaluation, when present and unexpired, is returned without calling
-the server; failures are never cached, so the next call retries. Options: `skip_cache: true` to
-skip the cache; `:attributes` is accepted for symmetry and not sent: the request carries the user
-id alone, so the server evaluates the flag's targeting rules against an empty context.
+the server (for the same attributes, see below); failures are never cached, so the next call
+retries. Options: `skip_cache: true` to skip the cache; `attributes: %{...}` to send the user's
+attributes (see [Attributes on flag evaluation](#attributes-on-flag-evaluation)).
 
-### `feature_enabled?(client, flag_key, user_id)`
+### `feature_enabled?(client, flag_key, user_id, opts \\ [])`
 
 `true` when the server enables the flag for the user, `false` otherwise — including on any
-failure.
+failure. `opts` are those of `evaluate_flag/4` (`:attributes`, `:skip_cache`) and are passed
+through to it.
+
+### Attributes on flag evaluation
+
+Flag evaluation sends the user's attributes as `context`, so a flag's targeting rules match against
+them. `evaluate_flag` and `feature_enabled?` call
+`GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=…`, where `context` is the attributes
+as compact JSON, percent-encoded like `user_id`: `%{plan: "pro"}` travels as
+`context=%7B%22plan%22%3A%22pro%22%7D`.
+
+```elixir
+Controlvar.evaluate_flag(client, "dark-mode", "user-456", attributes: %{plan: "pro"})
+Controlvar.feature_enabled?(client, "dark-mode", "user-456", attributes: %{plan: "pro"})
+```
+
+With no attributes, an empty map or anything that is not a map, no `context` is sent and the
+request carries the user id alone. If the attributes cannot be written as JSON, `evaluate_flag`
+returns `{:error, :invalid_attributes}` and sends nothing.
+
+The SDK keeps one cached answer per user and flag, together with the attributes it was asked with.
+A later call is answered from the cache only if its attributes are exactly the same; otherwise the
+SDK asks the server, and the new answer replaces the cached one. So two calls that differ only in
+attributes get two answers. The same attributes written in a different key order may cost one extra
+request; they never return another call's answer.
+
+The change is in this repository ([#1720](https://github.com/Controlvar/controlvar/issues/1720)); it
+reaches a registry at this SDK's first publish, so a build from a clone of `main` has it and a copy
+installed earlier does not.
 
 ---
 
@@ -268,7 +296,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
-| `evaluate_flag`, `feature_enabled?` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
+| `evaluate_flag`, `feature_enabled?` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=…` | `context`: the user's attributes as JSON, left out when there are none | `{key, enabled, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
 | `get_assignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp}` | ignored |
 | `track` without keys, `track_batch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | `{success_count, failure_count, errors}` |
@@ -288,6 +316,7 @@ The public functions never raise on network or HTTP errors; they return tagged t
 | `{:api_error, status, body}` | Other 4xx/5xx — 404 (an unknown experiment or flag key, or a draft experiment with no control variant), 422 validation, 429 rate limited |
 | `{:network_error, reason}` | `:httpc` connection failures and timeouts, with `:httpc`'s own reason (a refused connection is `{:failed_connect, [...]}`, a timeout `:timeout`) |
 | `{:malformed_response, body}` | 2xx body without the expected fields (assignment without `variant_name`) |
+| `:invalid_attributes` | `evaluate_flag` was given attributes that cannot be written as JSON; nothing was sent |
 
 `Controlvar.Config.new/1` raises `ArgumentError` for a missing `:base_url`/`:api_key`.
 The exception structs in `Controlvar.{Error, AuthError, ApiError, NetworkError, ConfigError}`

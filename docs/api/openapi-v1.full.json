@@ -811,7 +811,7 @@
           },
           "role_arn": {
             "maxLength": 600,
-            "pattern": "^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]{1,512}$",
+            "pattern": "^arn:aws:iam::[0-9]{12}:role/controlvar-warehouse/[A-Za-z0-9+=,.@_-]{1,64}$",
             "title": "Role Arn",
             "type": "string"
           },
@@ -884,7 +884,7 @@
           },
           "role_arn": {
             "maxLength": 600,
-            "pattern": "^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]{1,512}$",
+            "pattern": "^arn:aws:iam::[0-9]{12}:role/controlvar-warehouse/[A-Za-z0-9+=,.@_-]{1,64}$",
             "title": "Role Arn",
             "type": "string"
           },
@@ -957,7 +957,7 @@
           },
           "role_arn": {
             "maxLength": 600,
-            "pattern": "^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]{1,512}$",
+            "pattern": "^arn:aws:iam::[0-9]{12}:role/controlvar-warehouse/[A-Za-z0-9+=,.@_-]{1,64}$",
             "title": "Role Arn",
             "type": "string"
           },
@@ -1352,7 +1352,7 @@
         "type": "object"
       },
       "AuthConfigResponse": {
-        "description": "``GET /api/v1/auth/config``: how the dashboard signs in.\n\n``{\"provider\": \"local\"}`` under the local provider. Under Cognito, either\nthe Hosted UI's ``hosted_ui_domain``, the app ``client_id`` and the\n``scopes`` to ask for, or ``configured: false`` with the names of the\nunset settings in ``missing``. A field that does not apply is absent.",
+        "description": "``GET /api/v1/auth/config``: how the dashboard signs in.\n\n``{\"provider\": \"local\"}`` under the local provider. Under Cognito, either\nthe Hosted UI's ``hosted_ui_domain``, the app ``client_id`` and the\n``scopes`` to ask for, or ``configured: false`` with the names of the\nunset settings in ``missing``. With ``DEMO_MODE=true``, ``demo_mode:\ntrue`` as well, and ``demo_account`` when a demo account is configured.\nA field that does not apply is absent.",
         "properties": {
           "client_id": {
             "anyOf": [
@@ -1378,6 +1378,30 @@
             ],
             "description": "Present, and false, when Cognito sign-in is not set up",
             "title": "Configured"
+          },
+          "demo_account": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DemoAccount"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The shared demo account, when demo_mode is true and one is set"
+          },
+          "demo_mode": {
+            "anyOf": [
+              {
+                "const": true,
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Present, and true, when this is a read-only demo install: every write but signing in and the SDK's tracking calls is refused",
+            "title": "Demo Mode"
           },
           "hosted_ui_domain": {
             "anyOf": [
@@ -1764,7 +1788,7 @@
             "type": "string"
           },
           "engine_version": {
-            "default": "1.10.0",
+            "default": "1.12.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"
@@ -1849,6 +1873,31 @@
         "title": "BalancedGroupsResponse",
         "type": "object"
       },
+      "BanditHistoryTick": {
+        "description": "One weight update of a bandit: the time it ran and each variant's weight.\n\nRead from ``bandit_state_history``, whose rows for one update share one\n``tick_at``. A manual override (``PUT /bandit/{id}/weights``) writes no\nrow, so it is never a tick.",
+        "properties": {
+          "tick_at": {
+            "description": "When the update ran, in UTC (ISO-8601, ending in Z)",
+            "format": "date-time",
+            "title": "Tick At",
+            "type": "string"
+          },
+          "weights": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "description": "Mapping of variant_id to the weight that update gave it; the variants recorded in that update",
+            "title": "Weights",
+            "type": "object"
+          }
+        },
+        "required": [
+          "tick_at",
+          "weights"
+        ],
+        "title": "BanditHistoryTick",
+        "type": "object"
+      },
       "BanditStatusResponse": {
         "description": "Full bandit status snapshot for an experiment.\n\nAttributes\n----------\nexperiment_id:\n    Identifier of the parent experiment.\nalgorithm:\n    Algorithm currently driving traffic allocation.\ncurrent_weights:\n    Per-variant allocation weights.\ntotal_pulls:\n    Total pulls across all variants.\nregret_reduction_pct:\n    Estimated regret reduction vs. uniform allocation (may be None early on).\nrecommendation:\n    Narrative recommendation: one of ``\"EXPLORING\"``, ``\"CONVERGING\"``,\n    or ``\"DEPLOYING_<VariantName>\"``.\nlast_updated:\n    ISO-8601 timestamp of the last weight update (None if never updated).\nseed:\n    Deterministic RNG seed used by the last Thompson-sampling tick\n    (``blake2b(experiment_id | tick day | n_samples)``); ``None`` for\n    deterministic algorithms or before the first tick.\nn_samples:\n    Monte Carlo draws per variant used by the last Thompson-sampling\n    tick; ``None`` for deterministic algorithms or before the first tick.\nengine_version:\n    Version of the statistics engine that computed the current weights.",
         "properties": {
@@ -1865,7 +1914,7 @@
             "type": "array"
           },
           "engine_version": {
-            "default": "1.10.0",
+            "default": "1.12.0",
             "description": "Statistics engine version that computed the current weights",
             "title": "Engine Version",
             "type": "string"
@@ -2251,7 +2300,7 @@
             ]
           },
           "engine_version": {
-            "default": "1.10.0",
+            "default": "1.12.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"
@@ -2884,6 +2933,37 @@
           "success"
         ],
         "title": "BulkToggleResult",
+        "type": "object"
+      },
+      "ClickGoal": {
+        "additionalProperties": false,
+        "description": "A click on the one element *selector* matches, on page *page*.",
+        "properties": {
+          "event_name": {
+            "description": "A goal's event_name is 1 to 100 lower-case letters, digits and underscores, and cannot be exposure or experiment_exposure.",
+            "title": "Event Name",
+            "type": "string"
+          },
+          "kind": {
+            "const": "click",
+            "title": "Kind",
+            "type": "string"
+          },
+          "page": {
+            "$ref": "#/components/schemas/VisualPage"
+          },
+          "selector": {
+            "title": "Selector",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_name",
+          "page",
+          "kind",
+          "selector"
+        ],
+        "title": "ClickGoal",
         "type": "object"
       },
       "ClientErrorBatchRequest": {
@@ -3854,7 +3934,8 @@
             "enum": [
               "bigquery",
               "snowflake",
-              "athena"
+              "athena",
+              "redshift"
             ],
             "title": "Warehouse Type",
             "type": "string"
@@ -4409,7 +4490,7 @@
             "title": "Covariate Lookback Days"
           },
           "engine_version": {
-            "default": "1.10.0",
+            "default": "1.12.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"
@@ -4742,6 +4823,27 @@
         "title": "DelegatePermissionRequest",
         "type": "object"
       },
+      "DemoAccount": {
+        "description": "The shared account a demo visitor signs in with (``DEMO_MODE=true``).",
+        "properties": {
+          "email": {
+            "description": "The demo account's e-mail address",
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "description": "The demo account's published password",
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "DemoAccount",
+        "type": "object"
+      },
       "DesignRequest": {
         "description": "Request body for POST /ai/design.",
         "properties": {
@@ -4910,7 +5012,7 @@
             "type": "string"
           },
           "has_heterogeneous_effects": {
-            "description": "True when a chi-squared test detects significant heterogeneity in treatment effects across segments.",
+            "description": "True when a test that the first treatment's difference from the control, in percentage points, is the same in every tested segment rejects at 1 minus the confidence level the results were computed at. The first treatment is the non-control variant whose name sorts first. A segment is tested only when, in both the control and that treatment, its users times the pooled conversion rate, and times one minus that rate, are each at least 10; with fewer than two tested segments it is false. An exploratory signal, not a confirmed finding.",
             "title": "Has Heterogeneous Effects",
             "type": "boolean"
           },
@@ -6040,11 +6142,10 @@
             "title": "Key"
           },
           "metrics": {
-            "description": "Metrics to track, at least one. Each name may appear once: names are compared exactly, so case and spaces count (`Revenue` and `revenue` are two metrics), and a repeated name is refused with 422.",
+            "description": "Metrics to track: at least one, except on an experiment created with visual_config, which may have none until it starts (start still refuses an experiment without a metric). Each name may appear once: names are compared exactly, so case and spaces count (`Revenue` and `revenue` are two metrics), and a repeated name is refused with 422.",
             "items": {
               "$ref": "#/components/schemas/MetricBase"
             },
-            "minItems": 1,
             "title": "Metrics",
             "type": "array"
           },
@@ -6140,6 +6241,17 @@
             "minItems": 1,
             "title": "Variants",
             "type": "array"
+          },
+          "visual_config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VisualConfig"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Makes this a visual experiment (#1545): {\"version\": 1, \"editor_url\": ..., \"pages\": [{\"match\": \"exact\"|\"prefix\", \"url\": ...}], \"goals\": [...]}, with 1 to 10 pages and 0 to 10 goals; each goal's event_name is the event_name of one of the metrics. Not on a split URL experiment. Cannot change once the experiment leaves draft. A visual draft keeps it (null is refused with 422), cannot be given a scheduled start, and starts only with POST /api/v1/experiments/{id}/start carrying its design_etag. Stored and returned; nothing applies it to a page yet."
           }
         },
         "required": [
@@ -6282,6 +6394,18 @@
               }
             ],
             "title": "Description"
+          },
+          "design_etag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A visual experiment's design version (#1545): the SHA-256 hex of its targeting rules, exclusion group, balance_within (when set), visual_config and every field of every variant and metric. Any change to one of them changes it. Starting a visual draft sends it in the body of POST /api/v1/experiments/{id}/start, and a different value answers 409. Null for an experiment that is not visual.",
+            "title": "Design Etag"
           },
           "end_date": {
             "anyOf": [
@@ -6507,6 +6631,19 @@
             },
             "title": "Variants",
             "type": "array"
+          },
+          "visual_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The experiment's visual settings, as stored (#1545); null for an experiment that is not visual.",
+            "title": "Visual Config"
           }
         },
         "required": [
@@ -6640,6 +6777,18 @@
               }
             ],
             "title": "Description"
+          },
+          "design_etag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A visual experiment's design version (#1545): the SHA-256 hex of its targeting rules, exclusion group, balance_within (when set), visual_config and every field of every variant and metric. Any change to one of them changes it. Starting a visual draft sends it in the body of POST /api/v1/experiments/{id}/start, and a different value answers 409. Null for an experiment that is not visual.",
+            "title": "Design Etag"
           },
           "end_date": {
             "anyOf": [
@@ -6853,6 +7002,19 @@
             },
             "title": "Variants",
             "type": "array"
+          },
+          "visual_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The experiment's visual settings, as stored (#1545); null for an experiment that is not visual.",
+            "title": "Visual Config"
           }
         },
         "required": [
@@ -7004,6 +7166,26 @@
           "metrics"
         ],
         "title": "ExperimentResultsResponse",
+        "type": "object"
+      },
+      "ExperimentStartRequest": {
+        "description": "The optional body of ``POST /api/v1/experiments/{id}/start`` (#1545).\n\nNo body, ``null`` and ``{}`` all start as before. An unknown key is\nignored, as on ``PUT /experiments/{id}`` (#595).",
+        "properties": {
+          "design_etag": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Required to start a visual draft: the design_etag of the version being started, as GET /api/v1/experiments/{id} returned it. Missing answers 400; different from the experiment's current one answers 409 and nothing is started. Ignored for any other experiment and on a resume.",
+            "title": "Design Etag"
+          }
+        },
+        "title": "ExperimentStartRequest",
         "type": "object"
       },
       "ExperimentStatus": {
@@ -7314,6 +7496,17 @@
             ],
             "description": "Experiment variants",
             "title": "Variants"
+          },
+          "visual_config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VisualConfig"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Makes this a visual experiment (#1545): {\"version\": 1, \"editor_url\": ..., \"pages\": [{\"match\": \"exact\"|\"prefix\", \"url\": ...}], \"goals\": [...]}, with 1 to 10 pages and 0 to 10 goals; each goal's event_name is the event_name of one of the metrics. Not on a split URL experiment. Cannot change once the experiment leaves draft. A visual draft keeps it (null is refused with 422), cannot be given a scheduled start, and starts only with POST /api/v1/experiments/{id}/start carrying its design_etag. Stored and returned; nothing applies it to a page yet. Refused with 422 on a draft that has a scheduled start."
           }
         },
         "title": "ExperimentUpdate",
@@ -8805,6 +8998,28 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "Hide": {
+        "additionalProperties": false,
+        "description": "Hide the element, from assistive technology too.",
+        "properties": {
+          "op": {
+            "const": "hide",
+            "title": "Op",
+            "type": "string"
+          },
+          "selector": {
+            "description": "A CSS selector for exactly one element: 1 to 512 characters, without { } ; \\ @ <, the comment marks /* and */, or a control character. A change whose selector matches no element, or more than one, is not applied.",
+            "title": "Selector",
+            "type": "string"
+          }
+        },
+        "required": [
+          "selector",
+          "op"
+        ],
+        "title": "Hide",
         "type": "object"
       },
       "HoldoutCheckResponse": {
@@ -11386,6 +11601,143 @@
         "title": "MetricsSummary",
         "type": "object"
       },
+      "MfaEnrolConfirmRequest": {
+        "description": "``POST /api/v1/auth/mfa/enroll/confirm``: the same token, and the first\ncode of the new secret.",
+        "properties": {
+          "code": {
+            "description": "The 6-digit code the authenticator app shows. Spaces and hyphens are ignored.",
+            "maxLength": 64,
+            "title": "Code",
+            "type": "string"
+          },
+          "mfa_token": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Mfa Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mfa_token",
+          "code"
+        ],
+        "title": "MfaEnrolConfirmRequest",
+        "type": "object"
+      },
+      "MfaEnrolConfirmResponse": {
+        "description": "``POST /api/v1/auth/mfa/enroll/confirm``: two-step sign-in is on, the\nrecovery codes are shown this once, and the account is signed in.",
+        "properties": {
+          "login": {
+            "$ref": "#/components/schemas/LoginResponse",
+            "description": "What POST /api/v1/auth/login answers an account without two-step sign-in: the access token and the profile"
+          },
+          "recovery_codes": {
+            "description": "10 codes of 10 characters; each signs in once",
+            "items": {
+              "type": "string"
+            },
+            "title": "Recovery Codes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "recovery_codes",
+          "login"
+        ],
+        "title": "MfaEnrolConfirmResponse",
+        "type": "object"
+      },
+      "MfaEnrolRequest": {
+        "description": "``POST /api/v1/auth/mfa/enroll``: the token of a password step that\nanswered ``enrol: true``.",
+        "properties": {
+          "mfa_token": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Mfa Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mfa_token"
+        ],
+        "title": "MfaEnrolRequest",
+        "type": "object"
+      },
+      "MfaRequiredResponse": {
+        "description": "``POST /auth/login`` and ``/auth/token`` for an account with two-step\nsign-in on, or whose role requires it: the password was right, and a\nsecond step is needed. There is no ``access_token``. With ``enrol: false``\nsend ``mfa_token`` with a code to ``POST /api/v1/auth/mfa/verify``; with\n``enrol: true`` set two-step sign-in up first, with\n``POST /api/v1/auth/mfa/enroll`` and ``/auth/mfa/enroll/confirm``.",
+        "properties": {
+          "enrol": {
+            "default": false,
+            "description": "True when the account's role requires two-step sign-in (LOCAL_AUTH_2FA_REQUIRED_ROLES) and the account has not set it up: it sets it up before it is signed in. False when the account already has an authenticator app set up",
+            "title": "Enrol",
+            "type": "boolean"
+          },
+          "expires_in": {
+            "description": "Seconds until mfa_token expires: 300, or 600 with enrol true",
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "mfa_required": {
+            "const": true,
+            "default": true,
+            "title": "Mfa Required",
+            "type": "boolean"
+          },
+          "mfa_token": {
+            "description": "With enrol false, send it to POST /api/v1/auth/mfa/verify with a code; with enrol true, to POST /api/v1/auth/mfa/enroll and /auth/mfa/enroll/confirm",
+            "title": "Mfa Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mfa_token",
+          "expires_in"
+        ],
+        "title": "MfaRequiredResponse",
+        "type": "object"
+      },
+      "MfaVerifyRequest": {
+        "description": "``POST /api/v1/auth/mfa/verify``: the token from the password step, and\na code or a recovery code (exactly one).",
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The 6-digit code the authenticator app shows. Spaces and hyphens are ignored.",
+            "title": "Code"
+          },
+          "mfa_token": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Mfa Token",
+            "type": "string"
+          },
+          "recovery_code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "One of the account's recovery codes (10 characters, A-Z and 2-7). Spaces, hyphens and letter case are ignored. Each works once.",
+            "title": "Recovery Code"
+          }
+        },
+        "required": [
+          "mfa_token"
+        ],
+        "title": "MfaVerifyRequest",
+        "type": "object"
+      },
       "ModulesResponse": {
         "description": "What the dashboard needs to decide what to render.",
         "properties": {
@@ -12223,6 +12575,32 @@
         "title": "PHIEncryptResponse",
         "type": "object"
       },
+      "PageViewGoal": {
+        "additionalProperties": false,
+        "description": "A view of page *page*.",
+        "properties": {
+          "event_name": {
+            "description": "A goal's event_name is 1 to 100 lower-case letters, digits and underscores, and cannot be exposure or experiment_exposure.",
+            "title": "Event Name",
+            "type": "string"
+          },
+          "kind": {
+            "const": "page_view",
+            "title": "Kind",
+            "type": "string"
+          },
+          "page": {
+            "$ref": "#/components/schemas/VisualPage"
+          }
+        },
+        "required": [
+          "event_name",
+          "page",
+          "kind"
+        ],
+        "title": "PageViewGoal",
+        "type": "object"
+      },
       "PartitionInfo": {
         "description": "Metadata about a Glue catalog partition.",
         "properties": {
@@ -12619,6 +12997,52 @@
         "title": "PowerCurveResponse",
         "type": "object"
       },
+      "PreviewLinkCreate": {
+        "additionalProperties": false,
+        "description": "The variant to preview, and for how long.",
+        "properties": {
+          "expires_in_hours": {
+            "default": 24,
+            "description": "How long the link works: 1 to 168 hours. 24 if not given.",
+            "maximum": 168,
+            "minimum": 1,
+            "title": "Expires In Hours",
+            "type": "integer"
+          },
+          "variant_id": {
+            "description": "One of the experiment's variants, the control included.",
+            "format": "uuid",
+            "title": "Variant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "variant_id"
+        ],
+        "title": "PreviewLinkCreate",
+        "type": "object"
+      },
+      "PreviewLinkCreated": {
+        "description": "The link, shown once.",
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "url": {
+            "description": "The experiment's editor page with `#controlvar-preview=<token>`. Anyone who opens it on a page with the Controlvar script sees the variant, until it expires or is revoked; opening it records nothing.",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "expires_at"
+        ],
+        "title": "PreviewLinkCreated",
+        "type": "object"
+      },
       "PreviewOut": {
         "description": "Aggregates only: counts and the earliest and latest time.  No rows.",
         "properties": {
@@ -12833,6 +13257,220 @@
         "title": "RecommendationAction",
         "type": "string"
       },
+      "RecoveryCodesResponse": {
+        "description": "A new set of recovery codes, shown this once; any earlier set stops\nworking.",
+        "properties": {
+          "recovery_codes": {
+            "description": "10 codes of 10 characters; each signs in once",
+            "items": {
+              "type": "string"
+            },
+            "title": "Recovery Codes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "recovery_codes"
+        ],
+        "title": "RecoveryCodesResponse",
+        "type": "object"
+      },
+      "RedshiftConnectionCreate": {
+        "additionalProperties": false,
+        "description": "An Amazon Redshift connection.  It stores no secret.",
+        "properties": {
+          "cluster_identifier": {
+            "anyOf": [
+              {
+                "maxLength": 63,
+                "pattern": "^[a-z][a-z0-9-]{0,62}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cluster Identifier"
+          },
+          "database": {
+            "maxLength": 127,
+            "pattern": "^[a-z_][a-z0-9_$]{0,126}$",
+            "title": "Database",
+            "type": "string"
+          },
+          "db_user": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9_+.@-]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Db User"
+          },
+          "max_runs_per_day": {
+            "default": 20,
+            "maximum": 10000,
+            "minimum": 1,
+            "title": "Max Runs Per Day",
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x1f\\x7f\\u2028\\u2029]+$",
+            "title": "Name",
+            "type": "string"
+          },
+          "query_timeout_seconds": {
+            "default": 300,
+            "maximum": 86400,
+            "minimum": 10,
+            "title": "Query Timeout Seconds",
+            "type": "integer"
+          },
+          "region": {
+            "maxLength": 32,
+            "pattern": "^[a-z]{2}(-[a-z]+)+-[0-9]{1,2}$",
+            "title": "Region",
+            "type": "string"
+          },
+          "role_arn": {
+            "maxLength": 600,
+            "pattern": "^arn:aws:iam::[0-9]{12}:role/controlvar-warehouse/[A-Za-z0-9+=,.@_-]{1,64}$",
+            "title": "Role Arn",
+            "type": "string"
+          },
+          "warehouse_type": {
+            "const": "redshift",
+            "title": "Warehouse Type",
+            "type": "string"
+          },
+          "workgroup_name": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "pattern": "^[a-z0-9-]{3,64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workgroup Name"
+          }
+        },
+        "required": [
+          "name",
+          "warehouse_type",
+          "region",
+          "role_arn",
+          "database"
+        ],
+        "title": "RedshiftConnectionCreate",
+        "type": "object"
+      },
+      "RedshiftConnectionUpdate": {
+        "additionalProperties": false,
+        "description": "``PUT /connections/{id}`` for an Amazon Redshift connection.",
+        "properties": {
+          "cluster_identifier": {
+            "anyOf": [
+              {
+                "maxLength": 63,
+                "pattern": "^[a-z][a-z0-9-]{0,62}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cluster Identifier"
+          },
+          "database": {
+            "maxLength": 127,
+            "pattern": "^[a-z_][a-z0-9_$]{0,126}$",
+            "title": "Database",
+            "type": "string"
+          },
+          "db_user": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9_+.@-]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Db User"
+          },
+          "max_runs_per_day": {
+            "default": 20,
+            "maximum": 10000,
+            "minimum": 1,
+            "title": "Max Runs Per Day",
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x1f\\x7f\\u2028\\u2029]+$",
+            "title": "Name",
+            "type": "string"
+          },
+          "query_timeout_seconds": {
+            "default": 300,
+            "maximum": 86400,
+            "minimum": 10,
+            "title": "Query Timeout Seconds",
+            "type": "integer"
+          },
+          "region": {
+            "maxLength": 32,
+            "pattern": "^[a-z]{2}(-[a-z]+)+-[0-9]{1,2}$",
+            "title": "Region",
+            "type": "string"
+          },
+          "role_arn": {
+            "maxLength": 600,
+            "pattern": "^arn:aws:iam::[0-9]{12}:role/controlvar-warehouse/[A-Za-z0-9+=,.@_-]{1,64}$",
+            "title": "Role Arn",
+            "type": "string"
+          },
+          "warehouse_type": {
+            "const": "redshift",
+            "title": "Warehouse Type",
+            "type": "string"
+          },
+          "workgroup_name": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "pattern": "^[a-z0-9-]{3,64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workgroup Name"
+          }
+        },
+        "required": [
+          "name",
+          "warehouse_type",
+          "region",
+          "role_arn",
+          "database"
+        ],
+        "title": "RedshiftConnectionUpdate",
+        "type": "object"
+      },
       "RefreshTokenRequest": {
         "description": "Schema for refresh token request.",
         "properties": {
@@ -12882,6 +13520,71 @@
           "generated_by"
         ],
         "title": "ResultsInterpretationResponse",
+        "type": "object"
+      },
+      "ResultsSegment": {
+        "description": "The segment the results were counted for, and how its members were read.",
+        "properties": {
+          "experiment_srm_warning": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The warning of the whole experiment's sample ratio check. Null when that check is not defined (a bandit, fewer than two allocated variants, no assignments).",
+            "title": "Experiment Srm Warning"
+          },
+          "experiment_users": {
+            "description": "Distinct users assigned to the experiment, members of the list or not.",
+            "minimum": 0,
+            "title": "Experiment Users",
+            "type": "integer"
+          },
+          "id": {
+            "description": "The segment's id.",
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SegmentKind",
+            "description": "Always id_list: only an ID-list segment is accepted."
+          },
+          "member_count": {
+            "description": "How many user ids the list held when it was read, members not assigned to the experiment included.",
+            "minimum": 0,
+            "title": "Member Count",
+            "type": "integer"
+          },
+          "membership": {
+            "const": "current",
+            "description": "Always current: the list's user ids when the request was made, not when each user was assigned.",
+            "title": "Membership",
+            "type": "string"
+          },
+          "name": {
+            "description": "The segment's name.",
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SegmentStatus",
+            "description": "The segment's status when the results were computed. A segment in any status is accepted."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "status",
+          "membership",
+          "member_count",
+          "experiment_users"
+        ],
+        "title": "ResultsSegment",
         "type": "object"
       },
       "RevokeRoleRequest": {
@@ -15956,6 +16659,122 @@
         "title": "SegmentResponse",
         "type": "object"
       },
+      "SegmentResultsResponse": {
+        "description": "An experiment's main results, counted only for its assigned users whose\nuser_id is in one ID-list segment.",
+        "properties": {
+          "computed_at": {
+            "description": "UTC timestamp at which these results were computed.",
+            "format": "date-time",
+            "title": "Computed At",
+            "type": "string"
+          },
+          "confidence_level": {
+            "default": 0.95,
+            "description": "Confidence level the results were computed at: the request's, or the experiment's stored one.",
+            "maximum": 0.99,
+            "minimum": 0.8,
+            "title": "Confidence Level",
+            "type": "number"
+          },
+          "correction_method": {
+            "$ref": "#/components/schemas/CorrectionMethod",
+            "default": "none",
+            "description": "Multiple-comparison correction applied across each metric's treatments within the segment: the request's, or the experiment's stored one. It does not cover the choice of segment."
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "UTC timestamp when the experiment ended, or None if still running.",
+            "title": "End Date"
+          },
+          "experiment_id": {
+            "description": "Unique identifier of the experiment.",
+            "format": "uuid",
+            "title": "Experiment Id",
+            "type": "string"
+          },
+          "experiment_name": {
+            "description": "Human-readable name of the experiment.",
+            "title": "Experiment Name",
+            "type": "string"
+          },
+          "is_exploratory": {
+            "default": true,
+            "description": "Always true. The correction covers the comparisons within the segment, not the choice of segment.",
+            "title": "Is Exploratory",
+            "type": "boolean"
+          },
+          "metrics": {
+            "description": "Every metric, primary first, for the segment's users.",
+            "items": {
+              "$ref": "#/components/schemas/MetricResult"
+            },
+            "title": "Metrics",
+            "type": "array"
+          },
+          "sample_size_adequate": {
+            "description": "True when every variant's users in the segment reach the primary metric's minimum sample size.",
+            "title": "Sample Size Adequate",
+            "type": "boolean"
+          },
+          "segment": {
+            "$ref": "#/components/schemas/ResultsSegment",
+            "description": "The segment these results were counted for."
+          },
+          "srm": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SRMResult"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The sample ratio check of the segment's users alone. Null for a bandit, for fewer than two allocated variants, and when no member is assigned."
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "UTC timestamp when the experiment started, or None if not yet started.",
+            "title": "Start Date"
+          },
+          "status": {
+            "description": "Current lifecycle status of the experiment: 'draft', 'active', 'paused', 'completed', or 'archived'.",
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/backend__app__schemas__results__ExperimentSummary",
+            "description": "The summary for the segment's users. Its recommendation is INCONCLUSIVE whenever their sample ratio check or the whole experiment's warns. Exploratory: do not automate a decision from it."
+          }
+        },
+        "required": [
+          "experiment_id",
+          "experiment_name",
+          "status",
+          "sample_size_adequate",
+          "computed_at",
+          "summary",
+          "metrics",
+          "segment"
+        ],
+        "title": "SegmentResultsResponse",
+        "type": "object"
+      },
       "SegmentStatus": {
         "description": "Segment lifecycle status.",
         "enum": [
@@ -16277,6 +17096,144 @@
           "recommended_action"
         ],
         "title": "SequentialTestingResponse",
+        "type": "object"
+      },
+      "SetAttribute": {
+        "additionalProperties": false,
+        "description": "Set one of five attributes. ``href`` takes a link (see ``link_problem``).",
+        "properties": {
+          "name": {
+            "enum": [
+              "alt",
+              "title",
+              "aria-label",
+              "placeholder",
+              "href"
+            ],
+            "title": "Name",
+            "type": "string"
+          },
+          "op": {
+            "const": "set_attribute",
+            "title": "Op",
+            "type": "string"
+          },
+          "selector": {
+            "description": "A CSS selector for exactly one element: 1 to 512 characters, without { } ; \\ @ <, the comment marks /* and */, or a control character. A change whose selector matches no element, or more than one, is not applied.",
+            "title": "Selector",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 2048,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "selector",
+          "op",
+          "name",
+          "value"
+        ],
+        "title": "SetAttribute",
+        "type": "object"
+      },
+      "SetImage": {
+        "additionalProperties": false,
+        "description": "Show another image: an ``http(s)`` URL or a path on this site.",
+        "properties": {
+          "alt": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alt"
+          },
+          "op": {
+            "const": "set_image",
+            "title": "Op",
+            "type": "string"
+          },
+          "selector": {
+            "description": "A CSS selector for exactly one element: 1 to 512 characters, without { } ; \\ @ <, the comment marks /* and */, or a control character. A change whose selector matches no element, or more than one, is not applied.",
+            "title": "Selector",
+            "type": "string"
+          },
+          "src": {
+            "maxLength": 2048,
+            "title": "Src",
+            "type": "string"
+          }
+        },
+        "required": [
+          "selector",
+          "op",
+          "src"
+        ],
+        "title": "SetImage",
+        "type": "object"
+      },
+      "SetStyle": {
+        "additionalProperties": false,
+        "description": "Set 1 to 20 properties from a fixed list, through the CSSOM.",
+        "properties": {
+          "op": {
+            "const": "set_style",
+            "title": "Op",
+            "type": "string"
+          },
+          "selector": {
+            "description": "A CSS selector for exactly one element: 1 to 512 characters, without { } ; \\ @ <, the comment marks /* and */, or a control character. A change whose selector matches no element, or more than one, is not applied.",
+            "title": "Selector",
+            "type": "string"
+          },
+          "styles": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Styles",
+            "type": "object"
+          }
+        },
+        "required": [
+          "selector",
+          "op",
+          "styles"
+        ],
+        "title": "SetStyle",
+        "type": "object"
+      },
+      "SetText": {
+        "additionalProperties": false,
+        "description": "Replace the element's text. Written as text, never as HTML.",
+        "properties": {
+          "op": {
+            "const": "set_text",
+            "title": "Op",
+            "type": "string"
+          },
+          "selector": {
+            "description": "A CSS selector for exactly one element: 1 to 512 characters, without { } ; \\ @ <, the comment marks /* and */, or a control character. A change whose selector matches no element, or more than one, is not applied.",
+            "title": "Selector",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 2000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "selector",
+          "op",
+          "text"
+        ],
+        "title": "SetText",
         "type": "object"
       },
       "SignUpRequest": {
@@ -17214,6 +18171,124 @@
         "title": "TriggerType",
         "type": "string"
       },
+      "TwoFactorCodeRequest": {
+        "description": "A code from the authenticator app (``confirm``, ``recovery-codes``).",
+        "properties": {
+          "code": {
+            "description": "The 6-digit code the authenticator app shows. Spaces and hyphens are ignored.",
+            "maxLength": 64,
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "TwoFactorCodeRequest",
+        "type": "object"
+      },
+      "TwoFactorDisableRequest": {
+        "description": "``POST /api/v1/users/me/2fa/disable``: a code or a recovery code\n(exactly one).",
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The 6-digit code the authenticator app shows. Spaces and hyphens are ignored.",
+            "title": "Code"
+          },
+          "recovery_code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "One of the account's recovery codes (10 characters, A-Z and 2-7). Spaces, hyphens and letter case are ignored. Each works once.",
+            "title": "Recovery Code"
+          }
+        },
+        "title": "TwoFactorDisableRequest",
+        "type": "object"
+      },
+      "TwoFactorEnrolRequest": {
+        "description": "``POST /api/v1/users/me/2fa/enroll``: your current password, as\nchanging your password asks for it.",
+        "properties": {
+          "current_password": {
+            "anyOf": [
+              {
+                "format": "password",
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Your current password. Required: a request without it, or with an empty one, is refused with 403.",
+            "title": "Current Password"
+          }
+        },
+        "title": "TwoFactorEnrolRequest",
+        "type": "object"
+      },
+      "TwoFactorEnrolResponse": {
+        "description": "``POST /api/v1/users/me/2fa/enroll``: a new secret for the\nauthenticator app, waiting for its first code.",
+        "properties": {
+          "otpauth_uri": {
+            "description": "The same secret as an otpauth:// link, for a QR code",
+            "title": "Otpauth Uri",
+            "type": "string"
+          },
+          "secret": {
+            "description": "The secret in base32, to type in",
+            "title": "Secret",
+            "type": "string"
+          }
+        },
+        "required": [
+          "secret",
+          "otpauth_uri"
+        ],
+        "title": "TwoFactorEnrolResponse",
+        "type": "object"
+      },
+      "TwoFactorStatusResponse": {
+        "description": "``GET /api/v1/users/me/2fa``.",
+        "properties": {
+          "enabled": {
+            "description": "Two-step sign-in is on",
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "recovery_codes_remaining": {
+            "description": "Unused recovery codes; 0 while two-step sign-in is off",
+            "title": "Recovery Codes Remaining",
+            "type": "integer"
+          },
+          "required": {
+            "default": false,
+            "description": "Your role must use two-step sign-in (LOCAL_AUTH_2FA_REQUIRED_ROLES), so it cannot be turned off. Always false for an account that signs in without a password",
+            "title": "Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled",
+          "recovery_codes_remaining"
+        ],
+        "title": "TwoFactorStatusResponse",
+        "type": "object"
+      },
       "UpdateLLMExperimentRequest": {
         "description": "Request schema for updating an LLM experiment.",
         "properties": {
@@ -17665,6 +18740,11 @@
             ],
             "title": "Role"
           },
+          "totp_enabled": {
+            "description": "The account has two-step sign-in on (an authenticator app confirmed with a code)",
+            "title": "Totp Enabled",
+            "type": "boolean"
+          },
           "updated_at": {
             "format": "date-time",
             "title": "Updated At",
@@ -17682,7 +18762,8 @@
           "is_active",
           "is_superuser",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "totp_enabled"
         ],
         "title": "UserResponse",
         "type": "object"
@@ -17985,6 +19066,17 @@
             "minimum": 0,
             "title": "Traffic Allocation",
             "type": "integer"
+          },
+          "visual_changes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VisualChanges"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A visual experiment's page changes for this variant (#1545): {\"version\": 1, \"changes\": [...]}, at most 100 changes and 64 KiB. Only on a non-control variant of an experiment with visual_config. On an update, a variant sent without this field keeps the changes stored for the variant of the same name; null removes them. Stored and returned; nothing applies them to a page yet."
           }
         },
         "required": [
@@ -18094,6 +19186,19 @@
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
+          },
+          "visual_changes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The variant's page changes, as stored (#1545); null when none.",
+            "title": "Visual Changes"
           }
         },
         "required": [
@@ -18627,6 +19732,413 @@
           "cumulative"
         ],
         "title": "VariantTimeSeries",
+        "type": "object"
+      },
+      "VisualChanges": {
+        "additionalProperties": false,
+        "description": "A variant's page changes: ``{\"version\": 1, \"changes\": [...]}``.",
+        "properties": {
+          "changes": {
+            "description": "At most 100 changes, and at most 64 KiB in all. Each is one of set_text, set_attribute, set_image, hide and set_style.",
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "hide": "#/components/schemas/Hide",
+                  "set_attribute": "#/components/schemas/SetAttribute",
+                  "set_image": "#/components/schemas/SetImage",
+                  "set_style": "#/components/schemas/SetStyle",
+                  "set_text": "#/components/schemas/SetText"
+                },
+                "propertyName": "op"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/SetText"
+                },
+                {
+                  "$ref": "#/components/schemas/SetAttribute"
+                },
+                {
+                  "$ref": "#/components/schemas/SetImage"
+                },
+                {
+                  "$ref": "#/components/schemas/Hide"
+                },
+                {
+                  "$ref": "#/components/schemas/SetStyle"
+                }
+              ]
+            },
+            "maxItems": 100,
+            "title": "Changes",
+            "type": "array"
+          },
+          "version": {
+            "description": "The format version: 1.",
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "changes"
+        ],
+        "title": "VisualChanges",
+        "type": "object"
+      },
+      "VisualConfig": {
+        "additionalProperties": false,
+        "description": "``experiments.visual_config``: the pages, the editor's page and the goals.",
+        "properties": {
+          "editor_url": {
+            "description": "The page the visual editor opens: on one of the pages, and like them except that it may carry a query.",
+            "title": "Editor Url",
+            "type": "string"
+          },
+          "goals": {
+            "description": "0 to 10 goals. Each event_name must be the event_name of one of the experiment's metrics.",
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "click": "#/components/schemas/ClickGoal",
+                  "page_view": "#/components/schemas/PageViewGoal"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/ClickGoal"
+                },
+                {
+                  "$ref": "#/components/schemas/PageViewGoal"
+                }
+              ]
+            },
+            "maxItems": 10,
+            "title": "Goals",
+            "type": "array"
+          },
+          "pages": {
+            "items": {
+              "$ref": "#/components/schemas/VisualPage"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Pages",
+            "type": "array"
+          },
+          "version": {
+            "description": "The format version: 1.",
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "editor_url",
+          "pages"
+        ],
+        "title": "VisualConfig",
+        "type": "object"
+      },
+      "VisualExperimentAnswer": {
+        "description": "One running visual experiment whose pages include this page.",
+        "properties": {
+          "assigned": {
+            "description": "False when the visitor is not in the experiment; `changes` and `goals` are then null.",
+            "title": "Assigned",
+            "type": "boolean"
+          },
+          "changes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The variant's page changes, `{version, changes}`, or null (the control, a variant with none, or a visitor not in the experiment).",
+            "title": "Changes"
+          },
+          "experiment_key": {
+            "title": "Experiment Key",
+            "type": "string"
+          },
+          "goals": {
+            "anyOf": [
+              {
+                "items": {
+                  "discriminator": {
+                    "mapping": {
+                      "click": "#/components/schemas/ClickGoal",
+                      "page_view": "#/components/schemas/PageViewGoal"
+                    },
+                    "propertyName": "kind"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ClickGoal"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PageViewGoal"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The experiment's goals, to record for every assigned visitor, the control's included; null when the visitor is not in the experiment.",
+            "title": "Goals"
+          },
+          "reason": {
+            "description": "As POST /api/v1/tracking/assign answers it: assigned, holdout, mutual_exclusion or targeting.",
+            "title": "Reason",
+            "type": "string"
+          },
+          "variant_id": {
+            "title": "Variant Id",
+            "type": "string"
+          },
+          "variant_name": {
+            "title": "Variant Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "experiment_key",
+          "variant_id",
+          "variant_name",
+          "assigned",
+          "reason"
+        ],
+        "title": "VisualExperimentAnswer",
+        "type": "object"
+      },
+      "VisualPage": {
+        "additionalProperties": false,
+        "description": "A page rule: ``exact`` matches one path, ``prefix`` the path and every\npath below it. Matching ignores the scheme, the port, the query, the\nfragment and one trailing ``/``; the host is compared in lower case and\nthe path exactly. No regular expressions.",
+        "properties": {
+          "match": {
+            "enum": [
+              "exact",
+              "prefix"
+            ],
+            "title": "Match",
+            "type": "string"
+          },
+          "url": {
+            "description": "A page is a full http:// or https:// URL with an ASCII host, without a user name, password, query, # fragment, backslash or space.",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "match",
+          "url"
+        ],
+        "title": "VisualPage",
+        "type": "object"
+      },
+      "VisualPageRule": {
+        "description": "A page rule on the page's host: ``exact`` matches one path, ``prefix``\nthe path and every path below it.",
+        "properties": {
+          "match": {
+            "enum": [
+              "exact",
+              "prefix"
+            ],
+            "title": "Match",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "match",
+          "path"
+        ],
+        "title": "VisualPageRule",
+        "type": "object"
+      },
+      "VisualPages": {
+        "description": "The page rules of every running visual experiment on this host, which\nthe script may keep for ``max_age`` seconds and use to skip a page none\nof them matches.",
+        "properties": {
+          "host": {
+            "description": "The host, lower case, without a port.",
+            "title": "Host",
+            "type": "string"
+          },
+          "max_age": {
+            "default": 60,
+            "description": "Seconds the rules may be kept.",
+            "title": "Max Age",
+            "type": "integer"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/VisualPageRule"
+            },
+            "title": "Rules",
+            "type": "array"
+          }
+        },
+        "required": [
+          "host",
+          "rules"
+        ],
+        "title": "VisualPages",
+        "type": "object"
+      },
+      "VisualPreviewRequest": {
+        "additionalProperties": false,
+        "description": "``POST /api/v1/tracking/visual/preview``: one variant, by preview link.",
+        "properties": {
+          "host": {
+            "description": "The page's host, as `location.host` gives it: 1 to 261 characters, a port allowed. Not stored.",
+            "title": "Host",
+            "type": "string"
+          },
+          "path": {
+            "description": "The page's path, as `location.pathname` gives it: 1 to 2048 characters, with no query. Not stored.",
+            "title": "Path",
+            "type": "string"
+          },
+          "token": {
+            "description": "The token from the preview link's `#controlvar-preview=` fragment.",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "host",
+          "path",
+          "token"
+        ],
+        "title": "VisualPreviewRequest",
+        "type": "object"
+      },
+      "VisualPreviewResponse": {
+        "description": "``POST /api/v1/tracking/visual/preview``'s answer: one variant's page\nchanges. A preview records nothing. Sent with ``Cache-Control: no-store``.",
+        "properties": {
+          "changes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The variant's page changes, or null for the control or a variant with none.",
+            "title": "Changes"
+          },
+          "experiment_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The experiment's key; null only for an experiment that has none.",
+            "title": "Experiment Key"
+          },
+          "pages": {
+            "$ref": "#/components/schemas/VisualPages"
+          },
+          "variant_name": {
+            "title": "Variant Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "variant_name",
+          "pages"
+        ],
+        "title": "VisualPreviewResponse",
+        "type": "object"
+      },
+      "VisualTrackingRequest": {
+        "additionalProperties": false,
+        "description": "``POST /api/v1/tracking/visual``: which visual changes and goals this\nvisitor gets on this page.",
+        "properties": {
+          "context": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Attributes for targeting, as in POST /api/v1/tracking/assign: the site's own and the script's `web_*` website details. A `web_*` key not in its documented form is dropped, never refused. Stored on each exposure.",
+            "title": "Context"
+          },
+          "format_version": {
+            "description": "The newest page-change format the script applies. An experiment stored in a newer format is left out, and nobody is assigned to it.",
+            "minimum": 1,
+            "title": "Format Version",
+            "type": "integer"
+          },
+          "host": {
+            "description": "The page's host, as `location.host` gives it: 1 to 261 characters, a port allowed. Not stored.",
+            "title": "Host",
+            "type": "string"
+          },
+          "path": {
+            "description": "The page's path, as `location.pathname` gives it: 1 to 2048 characters, with no query. Not stored.",
+            "title": "Path",
+            "type": "string"
+          },
+          "user_id": {
+            "description": "The visitor's id: the script's random cookie id, or the site's own `data-user-id`.",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "host",
+          "path",
+          "user_id",
+          "format_version"
+        ],
+        "title": "VisualTrackingRequest",
+        "type": "object"
+      },
+      "VisualTrackingResponse": {
+        "description": "``POST /api/v1/tracking/visual``'s answer. Sent with\n``Cache-Control: no-store``.",
+        "properties": {
+          "experiments": {
+            "description": "At most 10 running experiments whose pages include this page, the one that started first first.",
+            "items": {
+              "$ref": "#/components/schemas/VisualExperimentAnswer"
+            },
+            "title": "Experiments",
+            "type": "array"
+          },
+          "pages": {
+            "$ref": "#/components/schemas/VisualPages"
+          }
+        },
+        "required": [
+          "experiments",
+          "pages"
+        ],
+        "title": "VisualTrackingResponse",
         "type": "object"
       },
       "WizardDraftCreate": {
@@ -19557,7 +21069,7 @@
   "info": {
     "description": "API for managing experiments and feature flags in test environment",
     "title": "Controlvar",
-    "version": "0.45.0"
+    "version": "0.47.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -19952,6 +21464,56 @@
           }
         ],
         "summary": "Update User",
+        "tags": [
+          "Administration"
+        ]
+      }
+    },
+    "/api/v1/admin/users/{user_id}/2fa": {
+      "delete": {
+        "description": "Turn off someone else's two-step sign-in (superusers only).\n\nFor an account that lost its authenticator app and its recovery codes:\nits next sign-in asks for the password alone, and it can set two-step\nsign-in up again. The wrong-code count goes with it. A session the account\nalready holds stays valid until it expires. Writes `user_2fa_reset`\n(nothing when the account had no two-step sign-in, which still answers\n204). Your own account answers 400: another administrator resets yours.",
+        "operationId": "reset_user_two_factor_api_v1_admin_users__user_id__2fa_delete",
+        "parameters": [
+          {
+            "description": "The account to reset",
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "description": "The account to reset",
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "You can't reset your own two-step sign-in. Ask another administrator to do it."
+          },
+          "404": {
+            "description": "No such user, or AUTH_PROVIDER is not 'local'."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Reset User Two Factor",
         "tags": [
           "Administration"
         ]
@@ -21403,7 +22965,7 @@
     },
     "/api/v1/auth/config": {
       "get": {
-        "description": "How the dashboard signs in. Needs no credentials.\n\n* ``AUTH_PROVIDER=local``, or the development sign-in bypass:\n  ``{\"provider\": \"local\"}``.\n* ``AUTH_PROVIDER=cognito`` with ``COGNITO_DOMAIN``, ``COGNITO_CLIENT_ID``\n  and ``COGNITO_USER_POOL_ID`` set: ``{\"provider\": \"cognito\",\n  \"hosted_ui_domain\", \"client_id\", \"scopes\"}``, what the dashboard needs\n  to send the browser to the Hosted UI. The callback is not served: it is\n  the dashboard's own origin followed by ``/auth/callback``, which must be\n  an allowed callback URL of the app client.\n* ``AUTH_PROVIDER=cognito`` with any of the three unset:\n  ``{\"provider\": \"cognito\", \"configured\": false, \"missing\": [...]}``,\n  naming the unset settings.\n\nEvery value comes from the configuration, none from the request.",
+        "description": "How the dashboard signs in. Needs no credentials.\n\n* ``AUTH_PROVIDER=local``, or the development sign-in bypass:\n  ``{\"provider\": \"local\"}``.\n* ``AUTH_PROVIDER=cognito`` with ``COGNITO_DOMAIN``, ``COGNITO_CLIENT_ID``\n  and ``COGNITO_USER_POOL_ID`` set: ``{\"provider\": \"cognito\",\n  \"hosted_ui_domain\", \"client_id\", \"scopes\"}``, what the dashboard needs\n  to send the browser to the Hosted UI. The callback is not served: it is\n  the dashboard's own origin followed by ``/auth/callback``, which must be\n  an allowed callback URL of the app client.\n* ``AUTH_PROVIDER=cognito`` with any of the three unset:\n  ``{\"provider\": \"cognito\", \"configured\": false, \"missing\": [...]}``,\n  naming the unset settings.\n* ``DEMO_MODE=true`` adds ``\"demo_mode\": true`` to any of these, and\n  ``\"demo_account\": {\"email\", \"password\"}`` when ``DEMO_ACCOUNT_EMAIL`` and\n  ``DEMO_ACCOUNT_PASSWORD`` are set: the shared account a demo visitor\n  signs in with, whose password is public by design.\n\nEvery value comes from the configuration, none from the request.",
         "operationId": "get_auth_config_api_v1_auth_config_get",
         "responses": {
           "200": {
@@ -21513,7 +23075,7 @@
     },
     "/api/v1/auth/login": {
       "post": {
-        "description": "Sign in with e-mail and password (``AUTH_PROVIDER=local``).\n\nReturns a bearer token plus the user's profile.  The same 401 message is\nused for an unknown address, a wrong password and an inactive account so\nthe endpoint cannot be used to enumerate users.  After\n``LOCAL_AUTH_MAX_FAILED_ATTEMPTS`` failures within\n``LOCAL_AUTH_LOCKOUT_MINUTES`` the address answers 423 until the window\nexpires.  The email address is matched whatever its letter case (A–Z),\nand every casing of it counts toward the same failed attempts.",
+        "description": "Sign in with e-mail and password (``AUTH_PROVIDER=local``).\n\nReturns a bearer token plus the user's profile.  The same 401 message is\nused for an unknown address, a wrong password and an inactive account so\nthe endpoint cannot be used to enumerate users.  After\n``LOCAL_AUTH_MAX_FAILED_ATTEMPTS`` failures within\n``LOCAL_AUTH_LOCKOUT_MINUTES`` the address answers 423 until the window\nexpires.  The email address is matched whatever its letter case (A–Z),\nand every casing of it counts toward the same failed attempts.\n\nFor an account with two-step sign-in on, the right password answers\n``{\"mfa_required\": true, \"mfa_token\": \"...\", \"enrol\": false,\n\"expires_in\": 300}`` with no ``access_token``: send the ``mfa_token`` with\na code from the authenticator app (or a recovery code) to\n``POST /api/v1/auth/mfa/verify`` within ``expires_in`` seconds. Scripts\nthat sign in this way should use an API key instead.\n\nFor an account whose role requires two-step sign-in\n(``LOCAL_AUTH_2FA_REQUIRED_ROLES``) and that has not set it up, the right\npassword answers ``{\"mfa_required\": true, \"mfa_token\": \"...\", \"enrol\":\ntrue, \"expires_in\": 600}``: set it up with ``POST /api/v1/auth/mfa/enroll``\nand ``/auth/mfa/enroll/confirm``, which then signs the account in.",
         "operationId": "login_local_api_v1_auth_login_post",
         "requestBody": {
           "content": {
@@ -21530,7 +23092,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/LoginResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/LoginResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MfaRequiredResponse"
+                    }
+                  ],
+                  "title": "Response Login Local Api V1 Auth Login Post"
                 }
               }
             },
@@ -21612,6 +23182,165 @@
           }
         ],
         "summary": "Get User Info",
+        "tags": [
+          "Authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/mfa/enroll": {
+      "post": {
+        "description": "Set two-step sign-in up during a sign-in, for an account whose role\nrequires it (``AUTH_PROVIDER=local``).\n\nTakes the ``mfa_token`` of a password step that answered ``enrol: true``\nand answers a new secret for the authenticator app, in base32 (to type in)\nand as an ``otpauth://`` link (for a QR code), as\n``POST /api/v1/users/me/2fa/enroll`` does for a signed-in account. Asking\nagain replaces a secret that is still waiting. Then send the app's first\ncode to ``POST /api/v1/auth/mfa/enroll/confirm`` with the same token,\nwithin its ``expires_in`` (600 seconds). Limited to 10 requests a minute\nper client address.",
+        "operationId": "enrol_during_sign_in_api_v1_auth_mfa_enroll_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaEnrolRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TwoFactorEnrolResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Sign-in expired. Start again. (the mfa_token is expired, forged or not of the enrol purpose; or the account can no longer sign in, its role no longer requires two-step sign-in, or it is already on)"
+          },
+          "404": {
+            "description": "AUTH_PROVIDER is not 'local'"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enrol During Sign In",
+        "tags": [
+          "Authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/mfa/enroll/confirm": {
+      "post": {
+        "description": "Turn two-step sign-in on with the app's first code, and finish the sign-in\n(``AUTH_PROVIDER=local``).\n\nTakes the ``mfa_token`` that ``POST /api/v1/auth/mfa/enroll`` was given\nand the 6-digit ``code`` the authenticator app shows for the new secret.\nAnswers the account's 10 recovery codes, shown this once, and ``login``:\nwhat ``POST /api/v1/auth/login`` answers an account without two-step\nsign-in, the access token and the profile. From then on, signing in asks\nfor a code.\n\nA wrong code answers 401, leaves the secret waiting, and counts toward\nthe same lockout as a wrong password. Limited to 10 requests a minute per\nclient address.",
+        "operationId": "confirm_enrolment_during_sign_in_api_v1_auth_mfa_enroll_confirm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaEnrolConfirmRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaEnrolConfirmResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "That code is not correct. (a wrong, used or malformed code), or Sign-in expired. Start again. (the mfa_token is expired, forged or not of the enrol purpose; or the account can no longer sign in, its role no longer requires two-step sign-in, or it is already on)"
+          },
+          "404": {
+            "description": "AUTH_PROVIDER is not 'local'"
+          },
+          "409": {
+            "description": "No new secret is waiting for its first code. Ask for one with POST /api/v1/auth/mfa/enroll."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "423": {
+            "description": "Too many failed attempts for this address, passwords and codes counted together (see Retry-After); or two-step sign-in is locked after too many wrong codes until an administrator resets it (no Retry-After)"
+          },
+          "503": {
+            "description": "Two-step sign-in is unavailable for this account. Ask an administrator to reset it."
+          }
+        },
+        "summary": "Confirm Enrolment During Sign In",
+        "tags": [
+          "Authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/mfa/verify": {
+      "post": {
+        "description": "The second step of a sign-in with two-step sign-in on\n(``AUTH_PROVIDER=local``).\n\nTakes the ``mfa_token`` that ``POST /api/v1/auth/login`` (or\n``/auth/token``) answered and exactly one of ``code`` (the 6 digits the\nauthenticator app shows) and ``recovery_code`` (one of the account's\nrecovery codes, each usable once). Answers what ``/auth/login`` answers\nfor an account without two-step sign-in: an access token and the\nprofile, read from the account as it is now.\n\nA wrong code answers 401 and counts toward the same lockout as a wrong\npassword; a code is accepted once. Limited to 10 requests a minute per\nclient address.",
+        "operationId": "verify_mfa_api_v1_auth_mfa_verify_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaVerifyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "That code is not correct. (a wrong, used or malformed code or recovery code), or Sign-in expired. Start again. (the mfa_token is expired, forged or of another purpose, or the account can no longer sign in)"
+          },
+          "404": {
+            "description": "AUTH_PROVIDER is not 'local'"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "423": {
+            "description": "Too many failed attempts for this address, passwords and codes counted together (see Retry-After); or two-step sign-in is locked after too many wrong codes until an administrator resets it (no Retry-After)"
+          },
+          "503": {
+            "description": "Two-step sign-in is unavailable for this account. Ask an administrator to reset it."
+          }
+        },
+        "summary": "Verify Mfa",
         "tags": [
           "Authentication"
         ]
@@ -22356,7 +24085,7 @@
     },
     "/api/v1/auth/token": {
       "post": {
-        "description": "OAuth2 compatible token login, get an access token for future requests.\n\nWith ``AUTH_PROVIDER=local`` the form's ``username`` field is the user's\ne-mail address and the response has the same shape as ``/login`` (this is\nwhat makes Swagger's *Authorize* button work).  With ``cognito`` the\ncredentials are forwarded to the user pool; a successful sign-in of a\nuser who already has an account writes ``user_login`` with the provider\n``cognito``.",
+        "description": "OAuth2 compatible token login, get an access token for future requests.\n\nWith ``AUTH_PROVIDER=local`` the form's ``username`` field is the user's\ne-mail address and the response has the same shape as ``/login`` (this is\nwhat makes Swagger's *Authorize* button work), ``mfa_required`` for an\naccount with two-step sign-in on included: Swagger's *Authorize* cannot\ntake the second step, so such an account signs in with ``/login`` and\n``/mfa/verify`` and pastes the access token.  With ``cognito`` the\ncredentials are forwarded to the user pool; a successful sign-in of a\nuser who already has an account writes ``user_login`` with the provider\n``cognito``.",
         "operationId": "login_api_v1_auth_token_post",
         "requestBody": {
           "content": {
@@ -22376,6 +24105,9 @@
                   "anyOf": [
                     {
                       "$ref": "#/components/schemas/LoginResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MfaRequiredResponse"
                     },
                     {
                       "$ref": "#/components/schemas/TokenResponse"
@@ -22451,6 +24183,72 @@
         "tags": [
           "Bandit"
         ]
+      }
+    },
+    "/api/v1/bandit/{experiment_id}/history": {
+      "get": {
+        "description": "Return the bandit's past weight updates, newest first (beta).\n\nEach update is its time (``tick_at``, UTC) and each variant's weight,\nkeyed by variant id. ``limit`` (default 200, 1 to 1000) counts updates,\nnot variants. A manual weight override is not an update and is not\nlisted. ``[]`` before the first update; ``404`` for an unknown experiment\nor one whose ``optimization_type`` is ``fixed``. Requires permission to\nview the experiment, as GET /api/v1/bandit/{experiment_id} does; every\nrole has it.",
+        "operationId": "get_bandit_history_api_v1_bandit__experiment_id__history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BanditHistoryTick"
+                  },
+                  "title": "Response Get Bandit History Api V1 Bandit  Experiment Id  History Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Bandit History",
+        "tags": [
+          "Bandit"
+        ],
+        "x-stability": "beta"
       }
     },
     "/api/v1/bandit/{experiment_id}/update": {
@@ -24308,7 +26106,7 @@
         ]
       },
       "put": {
-        "description": "Update experiment.\n\nThis endpoint allows users to update an existing experiment.\nThe caller's role must hold UPDATE on experiments; who created the\nexperiment is not considered.\n\nFields that can be updated:\n- Basic properties: name, description, hypothesis\n- Variants: if experiment is in DRAFT status\n- Metrics: if experiment is in DRAFT status\n- `balance_within`: if experiment is in DRAFT status, for every role\n  including superusers\n- Analysis settings (`correction_method`, `confidence_level`,\n  `variance_reduction_config`, `sequential_testing_enabled`,\n  `sequential_testing_config`, `bayesian_enabled`, `bayesian_config`):\n  if experiment is in DRAFT status, for every role including superusers.\n  Outside DRAFT a request that includes one is refused, even when the\n  value equals the stored one or is null. To change one on a running\n  experiment, clone it (`POST /api/v1/experiments/{id}/clone`, a draft\n  copy) and set it on the copy.\n- Targeting (`targeting_rules`): while the experiment is DRAFT or PAUSED,\n  for every role including superusers. On a PAUSED experiment it must be\n  the only field in the request. On an ACTIVE, COMPLETED or ARCHIVED\n  experiment a request that includes `targeting_rules` is refused, even\n  when the value equals the stored one; pause the experiment first.\n  People already assigned keep their variant; the new rules apply to\n  people not yet in the experiment once it is resumed.\n\n`status` is not changed by an update, for any role including superusers.\nA `status` equal to the current one is accepted and changes nothing, so an\nexperiment fetched with GET can be sent back. Any other value is refused\nwith 422; status changes through `POST /api/v1/experiments/{id}/start`,\n`/pause`, `/complete` or `/archive`. `status` still counts as a field\nsent, so on a PAUSED experiment `targeting_rules` must be sent without it.\n\n`schedule` is not applied here: a request that contains it, with any\nvalue including null, is refused with 422. Schedule an experiment with\n`PUT /api/v1/experiments/{experiment_id}/schedule`.\n\nReturns:\n    ExperimentResponse: The updated experiment\n\nRaises:\n    HTTPException 403: If the caller's role does not hold UPDATE on\n        experiments. This is checked before the experiment's state.\n    HTTPException 400: If the experiment's state does not allow the change\n        (the detail names the state): any change to a non-DRAFT experiment\n        by a non-superuser, other than targeting alone on a PAUSED one;\n        targeting outside DRAFT or PAUSED; targeting with other fields on\n        a PAUSED experiment; variants, metrics, `balance_within` or an\n        analysis setting outside DRAFT\n    HTTPException 404: If the experiment doesn't exist\n    HTTPException 422: If `targeting_rules` is not a valid rule set,\n        `status` differs from the experiment's current status, the\n        request contains `schedule`, `metrics` is an empty list or repeats\n        a metric name, or a request sending `variants`,\n        `split_url_config` or `experiment_type` would leave a split URL\n        experiment whose `split_url_config` does not match its variants.\n        An empty or repeating `metrics` is refused before the caller's\n        role, the experiment's existence or its state is checked.",
+        "description": "Update experiment.\n\nThis endpoint allows users to update an existing experiment.\nThe caller's role must hold UPDATE on experiments; who created the\nexperiment is not considered.\n\nFields that can be updated:\n- Basic properties: name, description, hypothesis\n- Variants: if experiment is in DRAFT status\n- Metrics: if experiment is in DRAFT status\n- `balance_within`: if experiment is in DRAFT status, for every role\n  including superusers\n- Analysis settings (`correction_method`, `confidence_level`,\n  `variance_reduction_config`, `sequential_testing_enabled`,\n  `sequential_testing_config`, `bayesian_enabled`, `bayesian_config`):\n  if experiment is in DRAFT status, for every role including superusers.\n  Outside DRAFT a request that includes one is refused, even when the\n  value equals the stored one or is null. To change one on a running\n  experiment, clone it (`POST /api/v1/experiments/{id}/clone`, a draft\n  copy) and set it on the copy.\n- Targeting (`targeting_rules`): while the experiment is DRAFT or PAUSED,\n  for every role including superusers. On a PAUSED experiment it must be\n  the only field in the request. On an ACTIVE, COMPLETED or ARCHIVED\n  experiment a request that includes `targeting_rules` is refused, even\n  when the value equals the stored one; pause the experiment first.\n  People already assigned keep their variant; the new rules apply to\n  people not yet in the experiment once it is resumed.\n\n`status` is not changed by an update, for any role including superusers.\nA `status` equal to the current one is accepted and changes nothing, so an\nexperiment fetched with GET can be sent back. Any other value is refused\nwith 422; status changes through `POST /api/v1/experiments/{id}/start`,\n`/pause`, `/complete` or `/archive`. `status` still counts as a field\nsent, so on a PAUSED experiment `targeting_rules` must be sent without it.\n\n`schedule` is not applied here: a request that contains it, with any\nvalue including null, is refused with 422. Schedule an experiment with\n`PUT /api/v1/experiments/{experiment_id}/schedule`.\n\nReturns:\n    ExperimentResponse: The updated experiment\n\nRaises:\n    HTTPException 403: If the caller's role does not hold UPDATE on\n        experiments. This is checked before the experiment's state.\n    HTTPException 400: If the experiment's state does not allow the change\n        (the detail names the state): any change to a non-DRAFT experiment\n        by a non-superuser, other than targeting alone on a PAUSED one;\n        targeting outside DRAFT or PAUSED; targeting with other fields on\n        a PAUSED experiment; variants, metrics, `balance_within` or an\n        analysis setting outside DRAFT\n    HTTPException 404: If the experiment doesn't exist\n    HTTPException 422: If `targeting_rules` is not a valid rule set,\n        `status` differs from the experiment's current status, the\n        request contains `schedule`, `metrics` is an empty list or repeats\n        a metric name, or a request sending `variants`,\n        `split_url_config` or `experiment_type` would leave a split URL\n        experiment whose `split_url_config` does not match its variants.\n        An empty or repeating `metrics` is refused before the caller's\n        role, the experiment's existence or its state is checked.\n        Also (#1545): `visual_config: null` on a visual draft, and\n        `visual_config` on a draft with a scheduled start, at\n        `[\"body\", \"visual_config\"]`; and, at the field the rule is about,\n        a result in which page changes sit on the control or on an\n        experiment without `visual_config`, a goal's event_name is no\n        metric's, or a split URL experiment has `visual_config`.\n\nA variant sent without `visual_changes` keeps the page changes stored\nfor the variant of the same name; `visual_changes: null` removes them.",
         "operationId": "update_experiment_api_v1_experiments__experiment_id__put",
         "parameters": [
           {
@@ -24524,7 +26322,7 @@
     },
     "/api/v1/experiments/{experiment_id}/clone": {
       "post": {
-        "description": "Clone an experiment.\n\nThis endpoint creates a new experiment that is a copy of an existing experiment.\nThe cloned experiment will:\n- Have a name prefixed with \"Copy of\", shortened to fit the 100-character\n  name limit when the source's name is long\n- Be in DRAFT status\n- Have the same variants, metrics, and configuration as the original\n- Have the current user as the owner\n\nThis is useful for creating variations of existing experiments or repeating\nsuccessful experiments with minor modifications.\n\nReturns:\n    ExperimentResponse: The newly created cloned experiment\n\nRaises:\n    HTTPException 403: If the caller's role does not hold READ and CREATE on experiments\n    HTTPException 404: If the source experiment doesn't exist",
+        "description": "Clone an experiment.\n\nThis endpoint creates a new experiment that is a copy of an existing experiment.\nThe cloned experiment will:\n- Have a name prefixed with \"Copy of\", shortened to fit the 100-character\n  name limit when the source's name is long\n- Be in DRAFT status\n- Have the same variants, metrics, and configuration as the original\n- Have the current user as the owner\n\nThis is useful for creating variations of existing experiments or repeating\nsuccessful experiments with minor modifications.\n\nReturns:\n    ExperimentResponse: The newly created cloned experiment\n\nRaises:\n    HTTPException 403: If the caller's role does not hold READ and CREATE on experiments\n    HTTPException 404: If the source experiment doesn't exist\n    HTTPException 422: If the source's stored visual settings or page\n        changes (#1545), which the clone copies, are not valid",
         "operationId": "clone_experiment_api_v1_experiments__experiment_id__clone_post",
         "parameters": [
           {
@@ -25162,7 +26960,7 @@
     },
     "/api/v1/experiments/{experiment_id}/schedule": {
       "put": {
-        "description": "Update experiment scheduling configuration.\n\nOn a **DRAFT** experiment this schedules its activation and completion:\n\n- **start_date**: When the experiment should automatically activate\n- **end_date**: When the experiment should automatically complete\n- **time_zone**: IANA time zone name (default: UTC) for a date given\n  without a UTC offset; a date with an offset keeps it. Dates are stored\n  in UTC. A name that is not an IANA zone answers 422.\n\nOn either status, a field the request omits is left unchanged and an\nexplicit null clears it. On a draft, end_date must be at least an hour\nafter start_date (the stored one when the request omits it).\n\nOn a **PAUSED** experiment, start_date is the time to resume it at. It is\nstored as ``resume_at``; the experiment's own start_date is never moved. A\nnull start_date cancels a scheduled resume. end_date must be later than\nthe experiment's start date and, with a resume scheduled, at least an hour\nafter the resume time. A paused experiment is resumed automatically only\nby a resume scheduled after it was paused; any change of status cancels a\nscheduled resume.\n\nstart_date may not be more than ten minutes in the past.\n\nReturns:\n    ExperimentResponse: The updated experiment with scheduling information\n\nRaises:\n    HTTPException 400: If scheduling parameters are invalid\n    HTTPException 403: If the caller's role does not hold READ and UPDATE\n        on experiments\n    HTTPException 404: If experiment not found\n    HTTPException 422: If a date is malformed or time_zone is not an IANA\n        time zone name",
+        "description": "Update experiment scheduling configuration.\n\nOn a **DRAFT** experiment this schedules its activation and completion:\n\n- **start_date**: When the experiment should automatically activate\n- **end_date**: When the experiment should automatically complete\n- **time_zone**: IANA time zone name (default: UTC) for a date given\n  without a UTC offset; a date with an offset keeps it. Dates are stored\n  in UTC. A name that is not an IANA zone answers 422.\n\nOn either status, a field the request omits is left unchanged and an\nexplicit null clears it. On a draft, end_date must be at least an hour\nafter start_date (the stored one when the request omits it).\n\nOn a **PAUSED** experiment, start_date is the time to resume it at. It is\nstored as ``resume_at``; the experiment's own start_date is never moved. A\nnull start_date cancels a scheduled resume. end_date must be later than\nthe experiment's start date and, with a resume scheduled, at least an hour\nafter the resume time. A paused experiment is resumed automatically only\nby a resume scheduled after it was paused; any change of status cancels a\nscheduled resume.\n\nstart_date may not be more than ten minutes in the past.\n\nA visual draft (one with `visual_config`, #1545) takes no start date: it\nstarts only with POST /{experiment_id}/start. A request with a start date\nother than null answers 400; `{\"start_date\": null}` clears one, and an end\ndate is accepted.\n\nReturns:\n    ExperimentResponse: The updated experiment with scheduling information\n\nRaises:\n    HTTPException 400: If scheduling parameters are invalid\n    HTTPException 403: If the caller's role does not hold READ and UPDATE\n        on experiments\n    HTTPException 404: If experiment not found\n    HTTPException 422: If a date is malformed or time_zone is not an IANA\n        time zone name",
         "operationId": "update_experiment_schedule_api_v1_experiments__experiment_id__schedule_put",
         "parameters": [
           {
@@ -25514,7 +27312,7 @@
     },
     "/api/v1/experiments/{experiment_id}/start": {
       "post": {
-        "description": "Start an experiment.\n\nThis endpoint activates an experiment, changing its status to ACTIVE\nand setting the start date to now if not already set. A draft started\nbefore its scheduled start date starts now, and its start date is set to\nnow; a scheduled end date is kept.\n\nStarting an experiment makes it eligible for:\n- User traffic assignment\n- Event tracking and analysis\n- Results calculation\n\nPrerequisites for starting an experiment:\n- The experiment must be in DRAFT or PAUSED status\n- The experiment must have at least one control and one non-control variant\n- The experiment must have at least one metric defined\n- An experiment with no start date must not have an end date that has\n  passed: set a later one, or clear it, with\n  PUT /{experiment_id}/schedule first\n- A split URL experiment must have a `split_url_config` whose URL\n  variants match its variants. Its control URL's host and path must not\n  be those of an active split URL experiment's control URL or of one of\n  that experiment's variant URLs, and none of its variant URLs may have\n  the host and path of an active split URL experiment's control URL\n\nReturns:\n    ExperimentResponse: The updated experiment with ACTIVE status\n\nRaises:\n    HTTPException 400: If the experiment cannot be started\n    HTTPException 403: If the caller's role does not hold UPDATE on experiments",
+        "description": "Start an experiment.\n\nThis endpoint activates an experiment, changing its status to ACTIVE\nand setting the start date to now if not already set. A draft started\nbefore its scheduled start date starts now, and its start date is set to\nnow; a scheduled end date is kept.\n\nStarting an experiment makes it eligible for:\n- User traffic assignment\n- Event tracking and analysis\n- Results calculation\n\nPrerequisites for starting an experiment:\n- The experiment must be in DRAFT or PAUSED status\n- The experiment must have at least one control and one non-control variant\n- The experiment must have at least one metric defined\n- An experiment with no start date must not have an end date that has\n  passed: set a later one, or clear it, with\n  PUT /{experiment_id}/schedule first\n- A split URL experiment must have a `split_url_config` whose URL\n  variants match its variants. Its control URL's host and path must not\n  be those of an active split URL experiment's control URL or of one of\n  that experiment's variant URLs, and none of its variant URLs may have\n  the host and path of an active split URL experiment's control URL\n- A visual draft (one with `visual_config`, #1545) is started with the\n  body `{\"design_etag\": ...}`, the `design_etag` of the version being\n  started as `GET /api/v1/experiments/{id}` returned it: without one it\n  answers 400, and with one that is not its current design's it answers\n  409 and nothing is started. It needs a page change in a non-control\n  variant, stored visual settings and page changes that are valid, and a\n  metric for every goal. Every other start takes no body (an empty body,\n  `null` and `{}` are the same), and ignores a `design_etag` sent.\n\nStarting an experiment ends every visual editor sign-in of it.\n\nReturns:\n    ExperimentResponse: The updated experiment with ACTIVE status\n\nRaises:\n    HTTPException 400: If the experiment cannot be started\n    HTTPException 403: If the caller's role does not hold UPDATE on experiments\n    HTTPException 409: If a visual draft's design_etag is not its\n        current design's",
         "operationId": "start_experiment_api_v1_experiments__experiment_id__start_post",
         "parameters": [
           {
@@ -25540,6 +27338,24 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ExperimentStartRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Optional. A visual draft needs its design_etag here; every other start takes no body, null or {}.",
+                "title": "Start"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
@@ -25611,6 +27427,119 @@
           "Experiments",
           "Experiments"
         ]
+      }
+    },
+    "/api/v1/experiments/{experiment_id}/visual/preview-links": {
+      "delete": {
+        "description": "End every live preview link of the experiment at once: each answers 404\nfrom then on. Needs a caller who may change experiments (READ and\nUPDATE). The audit entry records how many links were ended.",
+        "operationId": "revoke_preview_links_api_v1_experiments__experiment_id__visual_preview_links_delete",
+        "parameters": [
+          {
+            "description": "The experiment",
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "description": "The experiment",
+              "format": "uuid",
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "The caller may not change experiments"
+          },
+          "404": {
+            "description": "No such experiment"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "End every preview link of an experiment (beta)",
+        "tags": [
+          "Experiments"
+        ],
+        "x-stability": "beta"
+      },
+      "post": {
+        "description": "Make a link that shows one variant of a visual experiment on its page.\n\nAnyone who opens the link on a page with the Controlvar script sees the\nvariant there, whatever the experiment's audience and status, until the\nlink expires (1 to 168 hours, 24 by default) or the experiment's links are\nrevoked. Opening it records nothing. The link is answered once; only a\nhash of its token is stored.\n\nNeeds a caller who may change experiments (READ and UPDATE). Refused with\n422 when one of the experiment's pages, or its editor page, is on a site\nthis server does not accept requests from (CORS_ORIGINS), or on the\ndashboard's own address, when CORS_ORIGINS is `*`, or when the server does\nnot know the dashboard's address (DASHBOARD_ORIGINS or PUBLIC_BASE_URL).\nSent with `Cache-Control: no-store`.",
+        "operationId": "create_preview_link_api_v1_experiments__experiment_id__visual_preview_links_post",
+        "parameters": [
+          {
+            "description": "The visual experiment",
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "description": "The visual experiment",
+              "format": "uuid",
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewLinkCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewLinkCreated"
+                }
+              }
+            },
+            "description": "The link, shown once"
+          },
+          "400": {
+            "description": "The experiment has no visual settings"
+          },
+          "403": {
+            "description": "The caller may not change experiments"
+          },
+          "404": {
+            "description": "No such experiment, or no such variant of it"
+          },
+          "422": {
+            "description": "The request is not in the documented form, or a page of the experiment is on a site this server does not accept"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Make a preview link for a visual experiment's variant (beta)",
+        "tags": [
+          "Experiments"
+        ],
+        "x-stability": "beta"
       }
     },
     "/api/v1/export/experiments": {
@@ -32261,7 +34190,8 @@
     },
     "/api/v1/results/{experiment_id}/post-stratification": {
       "post": {
-        "description": "Not available yet: this route answers 501 for every existing experiment. Post-stratification needs one metric value and the stratum attributes per assigned user, and nothing builds those rows from an experiment's recorded assignments and events yet. The route reports no numbers until it can compute them from that data.",
+        "deprecated": true,
+        "description": "**Deprecated**, because it is not available: this route answers 501 for every existing experiment, and it may be removed in a later release. Post-stratification needs one metric value and the stratum attributes per assigned user, and nothing builds those rows from an experiment's recorded assignments and events yet.",
         "operationId": "compute_post_stratification_api_v1_results__experiment_id__post_stratification_post",
         "parameters": [
           {
@@ -32318,7 +34248,7 @@
             "OAuth2PasswordBearer": []
           }
         ],
-        "summary": "Post-stratification variance reduction (not available yet)",
+        "summary": "Post-stratification variance reduction, not available yet (deprecated)",
         "tags": [
           "Results",
           "Results"
@@ -32466,6 +34396,111 @@
         "tags": [
           "Results"
         ]
+      }
+    },
+    "/api/v1/results/{experiment_id}/segments/{segment_id}": {
+      "get": {
+        "description": "Beta. The experiment's results counted only for its assigned users whose user_id is in the id_list segment when the request is made, matched exactly. Exploratory: is_exploratory is always true, and the correction covers the comparisons within the segment, not the choice of segment. srm is the sample ratio check of those users alone; summary.recommendation is computed for them, and is INCONCLUSIVE whenever that check or the whole experiment's (segment.experiment_srm_warning) warns. Do not automate a decision from it. A segment in any status is accepted. 404 for an unknown experiment or segment; 422 for a rules segment; 503 with Retry-After while another segment's results are being computed in the same API process. Computed on each request: not cached, and no snapshot is recorded. No other route filters by a segment.",
+        "operationId": "get_segment_results_api_v1_results__experiment_id__segments__segment_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "segment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Segment Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Confidence level for this request. Omit it to use the experiment's stored confidence_level (0.95 unless set otherwise).",
+            "in": "query",
+            "name": "confidence_level",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 0.99,
+                  "minimum": 0.8,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Confidence level for this request. Omit it to use the experiment's stored confidence_level (0.95 unless set otherwise).",
+              "title": "Confidence Level"
+            }
+          },
+          {
+            "description": "Multiple-comparison correction for this request. Omit it to use the experiment's stored correction_method (benjamini_hochberg unless set otherwise). 'none' shows the uncorrected numbers.",
+            "in": "query",
+            "name": "correction_method",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(none|bonferroni|benjamini_hochberg)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Multiple-comparison correction for this request. Omit it to use the experiment's stored correction_method (benjamini_hochberg unless set otherwise). 'none' shows the uncorrected numbers.",
+              "title": "Correction Method"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SegmentResultsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Experiment not found, or Segment not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Another segment's results are being computed. Try again shortly."
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Beta: an experiment's results for the members of one ID-list segment",
+        "tags": [
+          "Results"
+        ],
+        "x-stability": "beta"
       }
     },
     "/api/v1/results/{experiment_id}/sequential": {
@@ -34959,6 +36994,114 @@
         ]
       }
     },
+    "/api/v1/tracking/visual": {
+      "post": {
+        "description": "Which visual changes and goals this visitor gets on this page.\n\nCalled by the visual editor's browser script on each page view, with the\npage's host and path (never its query) and the visitor's id. Answers the\nrunning visual experiments whose pages include the page, at most 10, the\none that started first first. Each is assigned exactly as\n`POST /api/v1/tracking/assign` assigns, and records what it records: an\nassignment for a new visitor, and an exposure event with the context on\nevery matched page view. A visitor who is not in an experiment gets\n`assigned: false` with the reason, and no changes or goals.\n\nThe context's `web_*` website details are kept only in their documented\nform; any other `web_*` key, and `web_country`, is dropped, never refused.\nThe host and the path are not stored.\n\n`pages` holds the page rules of every running visual experiment on this\nhost; the script may keep them for `max_age` seconds and make no call on a\npage none of them matches. Sent with `Cache-Control: no-store`.\n\n**Authentication**: an API key with no scopes, in `X-API-Key`. A key with\nany scope is refused with 403: it belongs on a server.",
+        "operationId": "visual_changes_for_page_api_v1_tracking_visual_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VisualTrackingRequest",
+                "description": "The page and the visitor"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisualTrackingResponse"
+                }
+              }
+            },
+            "description": "Each running visual experiment on the page, and the host's page rules"
+          },
+          "401": {
+            "description": "No API key, or an unknown, expired or revoked one"
+          },
+          "403": {
+            "description": "The API key has scopes: a key in a web page must have none"
+          },
+          "422": {
+            "description": "The request is not in the documented form"
+          },
+          "429": {
+            "description": "More requests from this address than the SDK limit allows"
+          },
+          "503": {
+            "description": "The database is not available; send the request again later"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "The visual changes and goals a visitor gets on a page (beta)",
+        "tags": [
+          "Tracking"
+        ],
+        "x-stability": "beta"
+      }
+    },
+    "/api/v1/tracking/visual/preview": {
+      "post": {
+        "description": "The page changes of the variant a preview link shows.\n\nThe token is the one in the link's `#controlvar-preview=` fragment, made\non the experiment's page in Controlvar (`POST /api/v1/experiments/{id}/\nvisual/preview-links`). A preview ignores the experiment's audience and\nstatus and records nothing: no assignment, no exposure, no event. A link\nthat is unknown, expired or revoked answers 404 with one text for all\nthree. `pages` holds the experiment's page rules on this host. Sent with\n`Cache-Control: no-store`.\n\n**Authentication**: an API key with no scopes, in `X-API-Key`; a key with\nany scope is refused with 403.",
+        "operationId": "visual_preview_api_v1_tracking_visual_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VisualPreviewRequest",
+                "description": "The preview link's token and the page"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisualPreviewResponse"
+                }
+              }
+            },
+            "description": "The variant's page changes and the host's page rules"
+          },
+          "401": {
+            "description": "No API key, or an unknown, expired or revoked one"
+          },
+          "403": {
+            "description": "The API key has scopes: a key in a web page must have none"
+          },
+          "404": {
+            "description": "The preview link is unknown, expired or revoked"
+          },
+          "422": {
+            "description": "The request is not in the documented form"
+          },
+          "429": {
+            "description": "More requests from this address than the SDK limit allows"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "One variant's visual changes, for a preview link (beta)",
+        "tags": [
+          "Tracking"
+        ],
+        "x-stability": "beta"
+      }
+    },
     "/api/v1/users/": {
       "get": {
         "description": "List users.\n\nFor superusers: retrieves all users\nFor regular users: retrieves only their own user",
@@ -35087,6 +37230,281 @@
           }
         ],
         "summary": "Get User Me",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/api/v1/users/me/2fa": {
+      "get": {
+        "description": "Whether your two-step sign-in is on, and how many recovery codes are left.\n\n`required` is true when your role must use two-step sign-in\n(`LOCAL_AUTH_2FA_REQUIRED_ROLES`): it cannot be turned off, and a sign-in\nasks you to set it up while it is off. It is false for an account that\nsigns in without a password of its own.",
+        "operationId": "read_own_two_factor_api_v1_users_me_2fa_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TwoFactorStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "AUTH_PROVIDER is not 'local'."
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Read Own Two Factor",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/api/v1/users/me/2fa/confirm": {
+      "post": {
+        "description": "Turn two-step sign-in on with the first code from your authenticator app.\n\nAnswers 10 recovery codes, shown this once: each signs in once when the\napp is not at hand. A wrong code answers 403, leaves the secret waiting,\nand counts toward the same lockout as a wrong password.",
+        "operationId": "confirm_own_two_factor_api_v1_users_me_2fa_confirm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TwoFactorCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryCodesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "That code is not correct. (wrong, used or malformed)"
+          },
+          "404": {
+            "description": "AUTH_PROVIDER is not 'local'."
+          },
+          "409": {
+            "description": "No new secret is waiting for its first code, or two-step sign-in is already on. While it is off, ask for a secret with POST /api/v1/users/me/2fa/enroll."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "423": {
+            "description": "Too many failed attempts for this account, passwords and codes counted together (see Retry-After); or two-step sign-in is locked after too many wrong codes until an administrator resets it"
+          },
+          "503": {
+            "description": "Two-step sign-in is unavailable for this account. Ask an administrator to reset it."
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Confirm Own Two Factor",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/api/v1/users/me/2fa/disable": {
+      "post": {
+        "description": "Turn your two-step sign-in off, with a code from the app or a recovery\ncode (exactly one).\n\nAnswers 204. Sign-in then asks for the password alone. A wrong code\nanswers 403 and counts toward the same lockout as a wrong password.\nWhen your role must use two-step sign-in (`LOCAL_AUTH_2FA_REQUIRED_ROLES`)\nit answers 403 without checking the code; an administrator's reset is\nthe way to start again.",
+        "operationId": "disable_own_two_factor_api_v1_users_me_2fa_disable_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TwoFactorDisableRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "That code is not correct. (wrong, used or malformed); or Two-step sign-in is required for your role, so it cannot be turned off. (LOCAL_AUTH_2FA_REQUIRED_ROLES names your role; no code is checked or counted)"
+          },
+          "404": {
+            "description": "AUTH_PROVIDER is not 'local'."
+          },
+          "409": {
+            "description": "Two-step sign-in is not on for this account."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "423": {
+            "description": "Too many failed attempts for this account, passwords and codes counted together (see Retry-After); or two-step sign-in is locked after too many wrong codes until an administrator resets it"
+          },
+          "503": {
+            "description": "Two-step sign-in is unavailable for this account. Ask an administrator to reset it."
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Disable Own Two Factor",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/api/v1/users/me/2fa/enroll": {
+      "post": {
+        "description": "Start setting up two-step sign-in: a new secret for your authenticator app.\n\nAsks for your current password (`current_password`), as changing your\npassword does. Without it, or with an empty one, it answers 403. A wrong\none answers 403 and counts toward the same lockout as sign-in; after too\nmany failures it answers 423 until `Retry-After` has passed. An account\nwith no password of its own answers 403: it does not sign in with a\npassword, so two-step sign-in does not apply to it.\n\nAnswers the secret in base32 (to type in) and as an `otpauth://` link (for\na QR code). Nothing changes at sign-in until a code from the app confirms\nit (`POST /api/v1/users/me/2fa/confirm`). Asking again replaces a secret\nthat is still waiting, so a code from the earlier one no longer works.\n409 once two-step sign-in is on.",
+        "operationId": "enrol_own_two_factor_api_v1_users_me_2fa_enroll_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/TwoFactorEnrolRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TwoFactorEnrolResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "The current password is missing or incorrect, or the account has no password of its own."
+          },
+          "404": {
+            "description": "AUTH_PROVIDER is not 'local'."
+          },
+          "409": {
+            "description": "Two-step sign-in is already on for this account. Turn it off first to set it up again."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "423": {
+            "description": "Too many failed attempts for this account (counted together with sign-in); see Retry-After."
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Enrol Own Two Factor",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/api/v1/users/me/2fa/recovery-codes": {
+      "post": {
+        "description": "A new set of 10 recovery codes, for a code from your authenticator app.\n\nShown this once; every earlier recovery code stops working. A wrong code\nanswers 403 and counts toward the same lockout as a wrong password.",
+        "operationId": "regenerate_own_recovery_codes_api_v1_users_me_2fa_recovery_codes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TwoFactorCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryCodesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "That code is not correct. (wrong, used or malformed)"
+          },
+          "404": {
+            "description": "AUTH_PROVIDER is not 'local'."
+          },
+          "409": {
+            "description": "Two-step sign-in is not on for this account."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "423": {
+            "description": "Too many failed attempts for this account, passwords and codes counted together (see Retry-After); or two-step sign-in is locked after too many wrong codes until an administrator resets it"
+          },
+          "503": {
+            "description": "Two-step sign-in is unavailable for this account. Ask an administrator to reset it."
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Regenerate Own Recovery Codes",
         "tags": [
           "Users"
         ]
@@ -35427,6 +37845,9 @@
                   },
                   {
                     "$ref": "#/components/schemas/AthenaConnectionCreate"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RedshiftConnectionCreate"
                   }
                 ],
                 "title": "Body"
@@ -35641,6 +38062,9 @@
                   },
                   {
                     "$ref": "#/components/schemas/AthenaConnectionUpdate"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RedshiftConnectionUpdate"
                   }
                 ],
                 "title": "Body"

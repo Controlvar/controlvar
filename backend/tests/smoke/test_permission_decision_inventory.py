@@ -420,6 +420,10 @@ ROLE_READS = {
         "a decider: honours grants",
     ),
     ("core/permissions.py", "check_permission"): ("A", "a decider: honours grants"),
+    ("core/permissions.py", "feature_flag_roles_for"): (
+        "N",
+        "names the built-in roles for a refusal message; decides nothing",
+    ),
     ("core/permissions.py", "has_permission"): (
         "A",
         "the built-in role table the deciders read first",
@@ -428,6 +432,11 @@ ROLE_READS = {
         "N",
         "puts the role in the token's claims",
     ),
+    ("core/two_factor_policy.py", "two_factor_required"): (
+        "B",
+        "LOCAL_AUTH_2FA_REQUIRED_ROLES names built-in roles whose accounts must "
+        "use two-step sign-in; no grantable pair names sign-in",
+    ),
     ("services/audit_service.py", "role_value"): (
         "N",
         "records the actor's role in an audit entry",
@@ -435,6 +444,10 @@ ROLE_READS = {
     ("services/cognito_accounts.py", "resolve_cognito_user"): (
         "N",
         "syncs the role from Cognito groups",
+    ),
+    ("services/local_auth_service.py", "_is_demo_viewer"): (
+        "B",
+        "demo mode signs in only a built-in non-superuser VIEWER",
     ),
 }
 
@@ -511,7 +524,7 @@ def test_every_role_read_is_classified():
 def test_the_computed_b_set():
     """The class-B decisions, as the PR reports them (PB91-7)."""
     b = sorted(f"{f}::{fn}" for (f, fn), (cls, _) in ROLE_READS.items() if cls == "B")
-    assert len(b) == 12, b
+    assert len(b) == 14, b
 
 
 def test_a_role_comparison_in_a_route_is_named():

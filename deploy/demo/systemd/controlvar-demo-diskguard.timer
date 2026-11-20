@@ -1,0 +1,9 @@
+[Unit]
+Description=Controlvar demo: disk guard, every 10 minutes
+
+[Timer]
+OnCalendar=*-*-* *:00/10:00 UTC
+Persistent=false
+
+[Install]
+WantedBy=timers.target

@@ -610,19 +610,27 @@ export function metricLowerIsBetter(metric: Pick<MetricResult, 'lower_is_better'
  * Only a significant change gets a verdict, from the same `is_significant` as
  * the badge and the recommendation; null for the control, a change that is
  * not significant, not finite or zero, and a response without the direction.
+ * When the relative change is undefined (the control had no conversions) the
+ * sign of `absolute_difference` stands in for it.
  *
  * The parameters name only the fields the rule reads, so a warehouse result
  * (modules/frontend RunResults) is held to the same types without a cast.
  */
 export function changeVerdict(
   metric: Pick<MetricResult, 'lower_is_better'>,
-  variant: Pick<VariantResult, 'is_control' | 'is_significant' | 'relative_improvement_pct'>,
+  variant: Pick<
+    VariantResult,
+    'is_control' | 'is_significant' | 'relative_improvement_pct' | 'absolute_difference'
+  >,
 ): 'better' | 'worse' | null {
   const lowerIsBetter = metricLowerIsBetter(metric);
   if (lowerIsBetter === undefined || variant.is_control || !variant.is_significant) return null;
   const pct = variant.relative_improvement_pct;
-  if (!isFiniteNumber(pct) || pct === 0) return null;
-  const fell = pct < 0;
+  // A control at 0 has no relative change; the sign of the absolute
+  // difference then gives the direction (both arms at 0 gives 0: no verdict).
+  const change = isFiniteNumber(pct) ? pct : variant.absolute_difference;
+  if (!isFiniteNumber(change) || change === 0) return null;
+  const fell = change < 0;
   return fell === lowerIsBetter ? 'better' : 'worse';
 }
 

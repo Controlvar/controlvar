@@ -9,6 +9,8 @@
 /**
  * Operations whose failures are swallowed and reported through `onError`.
  * `'exposure'` is an `onExposure` that threw or whose Promise rejected.
+ * `'value'` is a typed getter (`getStringValue`, `getNumberValue`,
+ * `getJsonValue`) or `useFlagValue` that returned your default.
  */
 export type SwallowedOperation =
   | 'evaluateFlag'
@@ -16,7 +18,8 @@ export type SwallowedOperation =
   | 'getAllFlags'
   | 'track'
   | 'trackBatch'
-  | 'exposure';
+  | 'exposure'
+  | 'value';
 
 /**
  * What `onExposure` receives: one experiment exposure the server recorded. A
@@ -56,7 +59,11 @@ export interface SdkConfig {
    * Called whenever the client swallows a failure (`evaluateFlag`,
    * `getAssignment`, `getAllFlags`, `track`, `trackBatch` never throw), and
    * whenever `onExposure` throws or its Promise rejects (`'exposure'`, with
-   * what it threw, or an `Error` wrapping it when it is not one).
+   * what it threw, or an `Error` wrapping it when it is not one). Each call
+   * of a typed getter, and each answer `useFlagValue` reads, calls it once
+   * with `'value'` when the request failed (with the request's own error, a
+   * 404 for an unknown flag included) or the answer holds no value of the
+   * type asked for (with a `FlagValueError`).
    */
   onError?: (error: Error, operation: SwallowedOperation) => void;
   /**
@@ -82,6 +89,20 @@ export interface FlagEvaluation {
   key: string;
   enabled: boolean;
   config: unknown | null;
+  /**
+   * The value the server served the user (`value` in its answer): the flag's
+   * on value when it is on for them, its off value otherwise. Absent when the
+   * server sent none (a server without flag values, or one that cannot serve
+   * the flag's stored value), on a failure, and in an answer stored by 0.1. It
+   * is the cached answer's own value; the typed getters and `useFlagValue`
+   * read it by type and return a copy.
+   */
+  value?: unknown;
+  /**
+   * The type the server says the flag serves (`value_type` in its answer):
+   * `'boolean'`, `'string'`, `'number'` or `'json'`. Absent when it sent none.
+   */
+  valueType?: string;
 }
 
 /** Result of `POST /api/v1/tracking/assign`, mapped to camelCase. */
@@ -106,6 +127,14 @@ export interface TrackOptions {
   eventType?: string;
   /** Client-side timestamp; sent as an ISO-8601 string. */
   timestamp?: Date | string;
+  /**
+   * Your id for this event (sent as `event_id`). The server stores an event sent again with the
+   * same `event_id`, user, experiment, flag and event name only once. The SDK makes an id for
+   * each event when you give none (the same one on every entry the event fans out to), so give
+   * your own when your code may send the same event again. `undefined`, `null` and `''` mean
+   * none. The server refuses an id longer than 255 characters.
+   */
+  eventId?: string | null;
 }
 
 /** One entry for {@link ExperimentationClient.trackBatch}. */
@@ -126,7 +155,10 @@ export interface BatchResult {
 
 /** Return type of {@link useFlag}. */
 export interface FlagState extends FlagEvaluation {
-  /** Alias of `enabled` (kept for compatibility with 0.1). */
+  /**
+   * Alias of `enabled` (kept for compatibility with 0.1), also for a string,
+   * number or JSON flag: read its value with `useFlagValue`.
+   */
   value: boolean;
   loading: boolean;
   error: Error | null;
@@ -174,6 +206,14 @@ export interface FlagEvaluateResponse {
   key: string;
   enabled: boolean;
   config?: unknown | null;
+  /**
+   * The value served to this user: the on value when `enabled`, else the off
+   * value. Absent on servers without flag values, and when the flag's stored
+   * value cannot be served.
+   */
+  value?: unknown;
+  /** `boolean` | `string` | `number` | `json`; absent on servers without flag values. */
+  value_type?: string;
 }
 
 export interface BatchResponse {
@@ -192,4 +232,5 @@ export interface TrackBody {
   value?: number;
   metadata?: Record<string, unknown>;
   timestamp?: string;
+  event_id?: string;
 }

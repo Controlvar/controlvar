@@ -10,6 +10,89 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.47.0](https://github.com/Controlvar/controlvar/compare/v0.46.0...v0.47.0) (2026-11-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** A number field in a request body given "NaN", "Infinity", "-Infinity" or a number too large for a double such as "1e400" as a string, or a number query parameter given one of them, now answers 422 with `"type": "finite_number"` at that field, on signed-in routes and on the anonymous power calculator alike. These accepted one or more of them before: `POST /api/v1/power/plan` (`runtime_days`) and `GET /api/v1/power/curve` (`mde`), which answered 200; `PUT /api/v1/bandit/{experiment_id}/weights` (`weights`); `POST /api/v1/experiments/` and `PUT /api/v1/experiments/{experiment_id}` (`metrics[].expected_effect`); `POST /api/v1/llm-experiments/{experiment_id}/evaluate` (`business_metric_value`); `PUT /api/v1/llm-experiments/{experiment_id}/variants/{variant_id}` (`temperature`, `traffic_split`); `POST /api/v1/results/{experiment_id}/fdr-correction` (`p_values`); `POST /api/v1/safety/settings` (`default_metrics`) and `POST /api/v1/safety/feature-flags/{feature_flag_id}/config` (`metrics`), in `warning_threshold` and `critical_threshold`; and `POST /api/v1/ai/interpret/{experiment_id}` (`p_value`, `relative_improvement_pct`). Where a field already refused such a value with a 422 (a range check, or the fixed text of `GET /api/v1/ai/sample-size`, `GET /api/v1/experiments/analysis/sample-size`, `POST /api/v1/utils/utils/sample-size` and the `baseline_std` of `POST /api/v1/power/sample-size`), the status is unchanged and the 422 now carries `finite_number` at the field. A field that takes only a JSON number, a warehouse run's `confidence_level` or a metric source's `cap_value`, keeps answering `float_type` to any string, these included. A tracking event's `value` keeps its own refusals, and a bare NaN or Infinity in a JSON body was already refused ([#1630](https://github.com/Controlvar/controlvar/issues/1630)). The OpenAPI document does not change.
+
+### Features
+
+* **api:** a page asks which visual changes and goals its visitor gets, and preview links ([#1545](https://github.com/Controlvar/controlvar/issues/1545)) ([#1945](https://github.com/Controlvar/controlvar/issues/1945)) ([32184c5](https://github.com/Controlvar/controlvar/commit/32184c514cfb1a261bdb00a0bd38038687f65e80))
+* **api:** a visual experiment stores its page changes, pages and goals ([#1545](https://github.com/Controlvar/controlvar/issues/1545)) ([#1940](https://github.com/Controlvar/controlvar/issues/1940)) ([b8109e5](https://github.com/Controlvar/controlvar/commit/b8109e586e7ebeb30cea6b4582574e618b77f3e8))
+* **auth:** store two-step sign-in secrets for local accounts ([#1948](https://github.com/Controlvar/controlvar/issues/1948)) ([119f37f](https://github.com/Controlvar/controlvar/commit/119f37f5a287a3f71138976723336d736a26a039))
+* **dashboard:** delete a feature flag ([#442](https://github.com/Controlvar/controlvar/issues/442)) ([#1951](https://github.com/Controlvar/controlvar/issues/1951)) ([27a13cd](https://github.com/Controlvar/controlvar/commit/27a13cdc219901f940244fce694359f648f48167))
+* **dashboard:** show each balanced group's results ([#448](https://github.com/Controlvar/controlvar/issues/448)) ([#1952](https://github.com/Controlvar/controlvar/issues/1952)) ([2567fcb](https://github.com/Controlvar/controlvar/commit/2567fcb49747c5165423635ad80398f7e71ba9bc))
+* **dotnet-sdk:** typed value getters and OnError, from the next published version ([#1966](https://github.com/Controlvar/controlvar/issues/1966)) ([7c3ba6e](https://github.com/Controlvar/controlvar/commit/7c3ba6e1fd5fab60c4dbf54f6e2fabb7ff22a3d4))
+* **infra:** the API task role may assume customer warehouse roles ([#1955](https://github.com/Controlvar/controlvar/issues/1955)) ([edd0f56](https://github.com/Controlvar/controlvar/commit/edd0f5625d1593fc155cec58a67cb8b11e9558da))
+* **java-sdk:** typed value getters and an error listener, from the next published version ([#1947](https://github.com/Controlvar/controlvar/issues/1947)) ([24d63f5](https://github.com/Controlvar/controlvar/commit/24d63f5210f1a7e1070c56e4daad011c25e028bc))
+* **react-native-sdk:** useFlagValue and typed getters, from the next published version ([#1949](https://github.com/Controlvar/controlvar/issues/1949)) ([4861ab7](https://github.com/Controlvar/controlvar/commit/4861ab7b31b3e054207e3676bd4f6e6124a8ae77))
+* **react-sdk:** useFlagValue reads a string, number or JSON flag, from the next published version ([#1946](https://github.com/Controlvar/controlvar/issues/1946)) ([c7520f9](https://github.com/Controlvar/controlvar/commit/c7520f934be4e67c07bbb546bc944b4fd1ef730a))
+* **site:** link the live read-only demo from the homepage, README and docs ([#1925](https://github.com/Controlvar/controlvar/issues/1925)) ([ed53aa1](https://github.com/Controlvar/controlvar/commit/ed53aa14ad40ea8f53316c915b7d4b9a303ea8e6))
+* **warehouse:** Amazon Redshift client (ships disabled) ([#1954](https://github.com/Controlvar/controlvar/issues/1954)) ([0f38abb](https://github.com/Controlvar/controlvar/commit/0f38abbe5ab49efc5a564cf045d562e107d3fd09))
+* **warehouse:** Amazon Redshift connector type (ships disabled, no client) ([#1943](https://github.com/Controlvar/controlvar/issues/1943)) ([f333d51](https://github.com/Controlvar/controlvar/commit/f333d5139846ad5bc83d284f2abbe88f82fe727f))
+
+
+### Bug Fixes
+
+* **api-keys:** scopes over 255 characters answer 422, not 500 ([#1944](https://github.com/Controlvar/controlvar/issues/1944)) ([7f4539b](https://github.com/Controlvar/controlvar/commit/7f4539b07b98704c220912ed03bb0fd3d171f576))
+* **api:** a number field given NaN, Infinity or 1e400 answers 422 ([#1742](https://github.com/Controlvar/controlvar/issues/1742)) ([455c74c](https://github.com/Controlvar/controlvar/commit/455c74ce69e2e6fa79a1ae6bc1e321f4c54b04f5))
+* **api:** deprecate post-stratification in the API document ([#963](https://github.com/Controlvar/controlvar/issues/963)) ([#1963](https://github.com/Controlvar/controlvar/issues/1963)) ([dcd5f2e](https://github.com/Controlvar/controlvar/commit/dcd5f2ebb4da18abe0d49061a360a1a0ea12d641))
+* **dashboard:** a winner over a control with no conversions says better ([#1962](https://github.com/Controlvar/controlvar/issues/1962)) ([9096bb2](https://github.com/Controlvar/controlvar/commit/9096bb2b23524a9c9aadba444240402378f50ccc))
+* **integrations:** refuse a last_error over 1,024 characters with 422 ([#1938](https://github.com/Controlvar/controlvar/issues/1938)) ([2e40c3b](https://github.com/Controlvar/controlvar/commit/2e40c3bbb80740ee968c66ff673f85f6711c52b1))
+* **site:** end the homepage's closing line at "in the repository" ([#1929](https://github.com/Controlvar/controlvar/issues/1929)) ([c36a3cb](https://github.com/Controlvar/controlvar/commit/c36a3cb0d92d094636b9412bba494d154d6ba28f))
+* **site:** plainer wording for nine homepage lines and the books sentence ([#1931](https://github.com/Controlvar/controlvar/issues/1931)) ([2e79b96](https://github.com/Controlvar/controlvar/commit/2e79b966647bfd6c69cf96f07d7630a86dd98796))
+
+
+### Dependencies
+
+* dnspython 2.9.2 and opentelemetry 1.45.2 ([#1953](https://github.com/Controlvar/controlvar/issues/1953)) ([fbb033a](https://github.com/Controlvar/controlvar/commit/fbb033a38a79e2a5fca1619801a5ff170b74edb4))
+
+
+### Documentation
+
+* link the Controlvar books from the contributing guide ([#1941](https://github.com/Controlvar/controlvar/issues/1941)) ([290bd92](https://github.com/Controlvar/controlvar/commit/290bd9297cfb01850a7b6b06bbaa312fecf6a68c))
+* the Admin role is not a superuser ([#1967](https://github.com/Controlvar/controlvar/issues/1967)) ([71128a4](https://github.com/Controlvar/controlvar/commit/71128a403887811a4c2e116d753070f5d1182524))
+
+## [0.46.0](https://github.com/Controlvar/controlvar/compare/v0.45.0...v0.46.0) (2026-11-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* **tracking:** Event `metadata` (`properties` on `/events`) larger than 16,384 bytes as compact JSON in UTF-8 is refused, where it was stored up to the 5 MiB body limit: `/track` answers 422 (`Invalid event: properties not valid`), `/events` answers 422 at `["body", "properties"]` (or `"metadata"`), and `/batch` reports the entry in `errors` and stores the others.
+
+### Features
+
+* **api:** demo mode, a read-only switch for public demo installs ([79998fe](https://github.com/Controlvar/controlvar/commit/79998fe0a2aee0aabc47841de322d9514e45133b))
+* **dashboard:** archive and unarchive a feature flag ([#442](https://github.com/Controlvar/controlvar/issues/442)) ([1a3fb1b](https://github.com/Controlvar/controlvar/commit/1a3fb1b0e4816378ca530887ce3438db0ee482db))
+* **dashboard:** demo mode banner, one-click entry and read-only notes ([#1918](https://github.com/Controlvar/controlvar/issues/1918)) ([ab17771](https://github.com/Controlvar/controlvar/commit/ab17771eab203558b51a66ebaaeb8621d6d14188))
+* **dashboard:** download an experiment's results as CSV ([#442](https://github.com/Controlvar/controlvar/issues/442)) ([#1908](https://github.com/Controlvar/controlvar/issues/1908)) ([bb6231c](https://github.com/Controlvar/controlvar/commit/bb6231c04c9a55c3ad53aaa8adcc535f5907eb3a))
+* **dashboard:** edit a rollout schedule's dates, maximum and minimum stage duration ([#442](https://github.com/Controlvar/controlvar/issues/442)) ([#1905](https://github.com/Controlvar/controlvar/issues/1905)) ([8d20f30](https://github.com/Controlvar/controlvar/commit/8d20f303f90f8e82b40c55bf5a1481bc1f964814))
+* **dashboard:** effect size and each variant's interval in the results table ([#442](https://github.com/Controlvar/controlvar/issues/442)) ([#1904](https://github.com/Controlvar/controlvar/issues/1904)) ([1353d4f](https://github.com/Controlvar/controlvar/commit/1353d4f6a9a350a7ee4e8d9e6b006ea629af06fd))
+* **dashboard:** set Bayesian priors when creating an experiment ([#442](https://github.com/Controlvar/controlvar/issues/442)) ([#1912](https://github.com/Controlvar/controlvar/issues/1912)) ([5c41838](https://github.com/Controlvar/controlvar/commit/5c4183811370922baaa9b034ddd978ba730e7c89))
+* **deploy:** a recipe for a read-only public demo box ([#1921](https://github.com/Controlvar/controlvar/issues/1921)) ([915b569](https://github.com/Controlvar/controlvar/commit/915b5692ac3fa0b9178647dd26f9bd9e6a3c82c3))
+* **site:** books and walkthroughs pages, hero B, and a shorter homepage and docs hub ([e634136](https://github.com/Controlvar/controlvar/commit/e63413682ca56fbb1e906b65ae253e11ed503135))
+* **site:** link what Controlvar does and the roadmap from the docs hub, footer and homepage ([#1916](https://github.com/Controlvar/controlvar/issues/1916)) ([2a8c990](https://github.com/Controlvar/controlvar/commit/2a8c990011e683bb3d06684b024b10b6929bc81d))
+* **tracking:** an event's metadata is refused over 16,384 bytes ([#1085](https://github.com/Controlvar/controlvar/issues/1085)) ([b2b0106](https://github.com/Controlvar/controlvar/commit/b2b01065ea09433b54ee8750bc83265b30de75a4))
+
+
+### Bug Fixes
+
+* **api:** the API does not start without its request-ID and metrics middleware ([#1898](https://github.com/Controlvar/controlvar/issues/1898)) ([f9afda2](https://github.com/Controlvar/controlvar/commit/f9afda21891d17c9f31c372def2cffeae216b802))
+* **auth:** POST /auth/confirm takes five attempts a minute, as sign-up does ([#1900](https://github.com/Controlvar/controlvar/issues/1900)) ([46147ab](https://github.com/Controlvar/controlvar/commit/46147abb68389f00637f0f6798c6e9adf6145153))
+* **cdk:** the Redis subnet group name is valid for the prod and demo environments ([#1914](https://github.com/Controlvar/controlvar/issues/1914)) ([b748cb7](https://github.com/Controlvar/controlvar/commit/b748cb7d94f950fb09e43e5720b5c878296adaec))
+* **ci:** unit tests pass in rc-evidence's shards (child test runs no longer inherit the shard) ([#1922](https://github.com/Controlvar/controlvar/issues/1922)) ([25b1496](https://github.com/Controlvar/controlvar/commit/25b14968e24fdbdc70641c504808cabad79a433f))
+* **export:** experiments_with_winners counts experiments with a winner ([#1907](https://github.com/Controlvar/controlvar/issues/1907)) ([32149d5](https://github.com/Controlvar/controlvar/commit/32149d5463460d01a1213e0c76686d5de4322812))
+* **results:** a significant win over a control with no conversions names the winner (engine 1.11.0) ([#1924](https://github.com/Controlvar/controlvar/issues/1924)) ([73cb943](https://github.com/Controlvar/controlvar/commit/73cb943c527cb6dd74e22aa6a8eeb071794a8401))
+* **site:** a not-found page, one footer, wrapping code, and the power calculator as hero ([a1f89cb](https://github.com/Controlvar/controlvar/commit/a1f89cb19780a7a4b1bc78b9ab75b83ffb239634))
+* **targeting:** an unreadable stored rule set affects only its own flag or segment ([#1674](https://github.com/Controlvar/controlvar/issues/1674)) ([#1899](https://github.com/Controlvar/controlvar/issues/1899)) ([fbbf02f](https://github.com/Controlvar/controlvar/commit/fbbf02f0643fd63ede85c8aba7998ffd0dcc6600))
+
+
+### Documentation
+
+* **cdk:** known issue: prod and demo deploys fail at the Redis stack until 0.46.0 ([#1915](https://github.com/Controlvar/controlvar/issues/1915)) ([764d792](https://github.com/Controlvar/controlvar/commit/764d7928feb944e2c848872c3b573b7246d5797b))
+
 ## [0.45.0](https://github.com/Controlvar/controlvar/compare/v0.44.1...v0.45.0) (2026-11-10)
 
 

@@ -23,7 +23,7 @@ from pydantic import (
 )
 from pydantic_core import InitErrorDetails, PydanticCustomError
 
-from backend.app.core.context_limits import nested_deeper_than
+from backend.app.core.context_limits import compact_size, nested_deeper_than
 from backend.app.core.finite_json import (
     FINITE_NUMBER_MESSAGE,
     FINITE_NUMBER_TYPE,
@@ -135,13 +135,23 @@ class EventFields(BaseModel):
 #: serialiser after the event was already stored.
 EVENT_METADATA_MAX_DEPTH = 64
 
+#: The largest an event's ``metadata`` / ``properties`` may be (#1085), in
+#: bytes of compact JSON (no spaces, characters not escaped) in UTF-8:
+#: ``context_limits.compact_size``, measured on the value as parsed (a
+#: JSON-encoded string after it is decoded) and only after the depth check has
+#: passed. Each field is held to it on its own. A constant, not a setting, as
+#: ``context_limits.MAX_CONTEXT_BYTES`` is.
+EVENT_METADATA_MAX_BYTES = 16384
+
 
 class BoundedEventMetadata(BaseModel):
-    """Refuses ``metadata`` / ``properties`` nested deeper than the limit.
+    """Refuses ``metadata`` / ``properties`` nested deeper than
+    ``EVENT_METADATA_MAX_DEPTH`` levels or larger than
+    ``EVENT_METADATA_MAX_BYTES`` bytes. Depth is checked first.
 
     For the schemas an event is built from before it is stored (``EventCreate``
     and ``UntaggedEventCreate``), so the refusal comes before any write. The
-    message names the field and never the value.
+    message names the field and the limit, never the value.
     """
 
     @field_validator("properties", "metadata", mode="after", check_fields=False)
@@ -151,6 +161,11 @@ class BoundedEventMetadata(BaseModel):
             raise ValueError(
                 f"{info.field_name} must not be nested more than "
                 f"{EVENT_METADATA_MAX_DEPTH} levels deep"
+            )
+        if value is not None and compact_size(value) > EVENT_METADATA_MAX_BYTES:
+            raise ValueError(
+                f"{info.field_name} must not be larger than "
+                f"{EVENT_METADATA_MAX_BYTES} bytes"
             )
         return value
 

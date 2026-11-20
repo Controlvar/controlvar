@@ -1,9 +1,10 @@
 """The founder-run real-account check: configuration, spend caps, evidence.
 
 The tests beside this module (``test_bigquery_live.py``,
-``test_snowflake_live.py``) call the real connector adapters and the run
-executor against a real BigQuery project or Snowflake account.  They are run
-by hand, never by CI::
+``test_redshift_live.py``, ``test_snowflake_live.py``) call the real connector
+adapters and the run executor against a real BigQuery project, Amazon
+Redshift (a Serverless workgroup and a provisioned cluster) or Snowflake
+account.  They are run by hand, never by CI::
 
     pytest -m warehouse_live modules/backend/tests/live_warehouse/
 
@@ -31,6 +32,11 @@ Spend caps
   check reads with ``SHOW WAREHOUSES`` before anything runs on it, and every
   statement is cancelled by Snowflake at :data:`SF_DEFAULT_TIMEOUT_SECONDS`
   (at most :data:`SF_HARD_MAX_TIMEOUT_SECONDS`).
+* **Amazon Redshift**: the session does not start unless
+  ``WAREHOUSE_LIVE_RS_USAGE_LIMIT`` names the usage limits set on the
+  workgroup and the cluster; the check reads them back from AWS before
+  anything runs, and every statement is stopped at
+  :data:`RS_DEFAULT_TIMEOUT_SECONDS` (at most :data:`RS_HARD_MAX_TIMEOUT_SECONDS`).
 
 Evidence
 --------
@@ -101,7 +107,32 @@ ENV_SF_KEY_PASSPHRASE = "WAREHOUSE_LIVE_SF_KEY_PASSPHRASE"
 ENV_SF_RESOURCE_MONITOR = "WAREHOUSE_LIVE_SF_RESOURCE_MONITOR"
 ENV_SF_TIMEOUT = "WAREHOUSE_LIVE_SF_TIMEOUT_SECONDS"
 
-TARGETS = ("bigquery", "snowflake")
+ENV_RS_REGION = "WAREHOUSE_LIVE_RS_REGION"
+ENV_RS_ROLE_ARN = "WAREHOUSE_LIVE_RS_ROLE_ARN"
+ENV_RS_EXTERNAL_ID = "WAREHOUSE_LIVE_RS_EXTERNAL_ID"
+ENV_RS_DATABASE = "WAREHOUSE_LIVE_RS_DATABASE"
+ENV_RS_SCHEMA = "WAREHOUSE_LIVE_RS_SCHEMA"
+ENV_RS_WORKGROUP = "WAREHOUSE_LIVE_RS_WORKGROUP"
+ENV_RS_CLUSTER = "WAREHOUSE_LIVE_RS_CLUSTER"
+ENV_RS_DB_USER = "WAREHOUSE_LIVE_RS_DB_USER"
+#: The usage limits set on the workgroup and the cluster, comma-separated ids.
+ENV_RS_USAGE_LIMIT = "WAREHOUSE_LIVE_RS_USAGE_LIMIT"
+ENV_RS_TIMEOUT = "WAREHOUSE_LIVE_RS_TIMEOUT_SECONDS"
+#: The identity the deployment would have (the role is assumed from it).  The
+#: test session replaces every AWS_* credential with a dummy, so it is read
+#: from these and nowhere else.
+ENV_RS_ACCESS_KEY_ID = "WAREHOUSE_LIVE_RS_AWS_ACCESS_KEY_ID"
+ENV_RS_SECRET_ACCESS_KEY = "WAREHOUSE_LIVE_RS_AWS_SECRET_ACCESS_KEY"
+ENV_RS_SESSION_TOKEN = "WAREHOUSE_LIVE_RS_AWS_SESSION_TOKEN"
+
+TARGETS = ("bigquery", "snowflake", "redshift")
+#: Each target's check names start with its prefix; a live test is
+#: ``test_<prefix><check>``.
+CHECK_PREFIXES: Dict[str, str] = {
+    "bigquery": "bq_",
+    "snowflake": "sf_",
+    "redshift": "rs_",
+}
 
 BQ_REQUIRED = (ENV_BQ_KEY_FILE, ENV_BQ_PROJECT, ENV_BQ_DATASET)
 SF_REQUIRED = (
@@ -114,6 +145,20 @@ SF_REQUIRED = (
     ENV_SF_KEY_FILE,
     ENV_SF_RESOURCE_MONITOR,
 )
+RS_REQUIRED = (
+    ENV_RS_REGION,
+    ENV_RS_ROLE_ARN,
+    ENV_RS_EXTERNAL_ID,
+    ENV_RS_DATABASE,
+    ENV_RS_SCHEMA,
+    ENV_RS_WORKGROUP,
+    ENV_RS_CLUSTER,
+    ENV_RS_DB_USER,
+    ENV_RS_USAGE_LIMIT,
+    ENV_RS_ACCESS_KEY_ID,
+    ENV_RS_SECRET_ACCESS_KEY,
+)
+_REQUIRED = {"bigquery": BQ_REQUIRED, "snowflake": SF_REQUIRED, "redshift": RS_REQUIRED}
 
 # -- spend caps -------------------------------------------------------------------
 
@@ -140,6 +185,11 @@ SF_TAMPER_TIMEOUT_SECONDS = 10
 SF_LONG_RUNNING_SQL = (
     "SELECT COUNT(*) AS n FROM TABLE(GENERATOR(ROWCOUNT => 1000000000000))"
 )
+
+RS_DEFAULT_TIMEOUT_SECONDS = 60
+RS_HARD_MAX_TIMEOUT_SECONDS = 120
+#: The statement limit the time-limit check runs under.
+RS_TAMPER_TIMEOUT_SECONDS = 10
 
 #: Fixed names of the fixture tables the founder loads (Snowflake folds them to
 #: upper case; the check resolves case through the table's own metadata).
@@ -214,7 +264,56 @@ class SnowflakeLiveConfig:
         }
 
 
-LiveConfig = Any  # BigQueryLiveConfig | SnowflakeLiveConfig
+@dataclass(frozen=True, repr=False)
+class RedshiftLiveConfig:
+    region: str
+    role_arn: str
+    external_id: str
+    database: str
+    schema: str
+    workgroup: str
+    cluster: str
+    db_user: str
+    usage_limits: Tuple[str, ...]
+    query_timeout_seconds: int
+    access_key_id: str
+    secret_access_key: str
+    session_token: Optional[str]
+
+    target = "redshift"
+
+    def __repr__(self) -> str:  # never the keys
+        return (
+            f"RedshiftLiveConfig(region={self.region!r}, workgroup={self.workgroup!r})"
+        )
+
+    def public(self) -> Dict[str, Any]:
+        """What the evidence records about the connection: nothing secret."""
+        return {
+            "region": self.region,
+            "role_arn": self.role_arn,
+            "database": self.database,
+            "schema": self.schema,
+            "workgroup": self.workgroup,
+            "cluster": self.cluster,
+            "db_user": self.db_user,
+            "usage_limits": list(self.usage_limits),
+            "query_timeout_seconds": self.query_timeout_seconds,
+        }
+
+    def platform_session(self) -> Any:
+        """A boto3 session holding the identity the role is assumed from."""
+        import boto3
+
+        return boto3.session.Session(
+            aws_access_key_id=self.access_key_id,
+            aws_secret_access_key=self.secret_access_key,
+            aws_session_token=self.session_token,
+            region_name=self.region,
+        )
+
+
+LiveConfig = Any  # BigQueryLiveConfig | SnowflakeLiveConfig | RedshiftLiveConfig
 
 
 def _missing(environ: Mapping[str, str], names: Iterable[str]) -> List[str]:
@@ -263,7 +362,7 @@ def load_config(environ: Optional[Mapping[str, str]] = None) -> LiveConfig:
             f"{target or 'nothing'}). The live check runs against one real "
             "warehouse at a time; see the runbook for the other variables."
         )
-    required = BQ_REQUIRED if target == "bigquery" else SF_REQUIRED
+    required = _REQUIRED[target]
     missing = _missing(env, required)
     if missing:
         raise LiveConfigError(
@@ -288,6 +387,8 @@ def load_config(environ: Optional[Mapping[str, str]] = None) -> LiveConfig:
                 env, ENV_BQ_MAX_BYTES, BQ_DEFAULT_MAX_BYTES, BQ_HARD_MAX_BYTES
             ),
         )
+    if target == "redshift":
+        return _redshift_config(env)
     key_pem = _read_key_file(ENV_SF_KEY_FILE, env[ENV_SF_KEY_FILE])
     passphrase = env.get(ENV_SF_KEY_PASSPHRASE) or None
     return SnowflakeLiveConfig(
@@ -304,6 +405,38 @@ def load_config(environ: Optional[Mapping[str, str]] = None) -> LiveConfig:
         query_timeout_seconds=_int_setting(
             env, ENV_SF_TIMEOUT, SF_DEFAULT_TIMEOUT_SECONDS, SF_HARD_MAX_TIMEOUT_SECONDS
         ),
+    )
+
+
+_USAGE_LIMIT_ID = re.compile(r"[A-Za-z0-9._:/-]{1,256}")
+
+
+def _redshift_config(env: Mapping[str, str]) -> RedshiftLiveConfig:
+    limits = tuple(
+        part.strip() for part in env[ENV_RS_USAGE_LIMIT].split(",") if part.strip()
+    )
+    if not limits or not all(_USAGE_LIMIT_ID.fullmatch(limit) for limit in limits):
+        raise LiveConfigError(
+            f"{ENV_RS_USAGE_LIMIT} must name the usage limits set on the workgroup "
+            "and the cluster (their ids, comma-separated), read back with the AWS "
+            "CLI before the check starts. No test has run."
+        )
+    return RedshiftLiveConfig(
+        region=env[ENV_RS_REGION].strip(),
+        role_arn=env[ENV_RS_ROLE_ARN].strip(),
+        external_id=env[ENV_RS_EXTERNAL_ID].strip(),
+        database=env[ENV_RS_DATABASE].strip(),
+        schema=env[ENV_RS_SCHEMA].strip(),
+        workgroup=env[ENV_RS_WORKGROUP].strip(),
+        cluster=env[ENV_RS_CLUSTER].strip(),
+        db_user=env[ENV_RS_DB_USER].strip(),
+        usage_limits=limits,
+        query_timeout_seconds=_int_setting(
+            env, ENV_RS_TIMEOUT, RS_DEFAULT_TIMEOUT_SECONDS, RS_HARD_MAX_TIMEOUT_SECONDS
+        ),
+        access_key_id=env[ENV_RS_ACCESS_KEY_ID].strip(),
+        secret_access_key=env[ENV_RS_SECRET_ACCESS_KEY].strip(),
+        session_token=(env.get(ENV_RS_SESSION_TOKEN) or "").strip() or None,
     )
 
 
@@ -325,6 +458,10 @@ def config_secrets(config: LiveConfig) -> List[str]:
         found.append(config.key_pem.decode("utf-8", errors="replace"))
         if config.key_passphrase:
             found.append(config.key_passphrase)
+    elif isinstance(config, RedshiftLiveConfig):
+        found.extend([config.access_key_id, config.secret_access_key])
+        if config.session_token:
+            found.append(config.session_token)
     return found
 
 
@@ -477,6 +614,51 @@ NOT_VERIFIED_ROWS: Dict[str, Dict[str, Any]] = {
         "warehouse": "snowflake",
         "checks": ["sf_timezone"],
     },
+    "redshift_wire_format": {
+        "item": "Redshift DOUBLE PRECISION digits over the Data API with "
+        "extra_float_digits set in the batch: a table read round-trips exactly",
+        "warehouse": "redshift",
+        "checks": ["rs_wire_probe", "rs_load_fidelity", "rs_mean_parity"],
+    },
+    "redshift_time_zone": {
+        "item": "Redshift session time zone set in the batch, its name, and a "
+        "TIMESTAMP read as UTC",
+        "warehouse": "redshift",
+        "checks": ["rs_timezone"],
+    },
+    "redshift_transaction": {
+        "item": "A SET that fails stops the whole batch (one transaction)",
+        "warehouse": "redshift",
+        "checks": ["rs_invalid_set_fails_batch"],
+    },
+    "redshift_shapes": {
+        "item": "A Serverless workgroup and a provisioned cluster, through the Data API",
+        "warehouse": "redshift",
+        "checks": ["rs_sign_in", "rs_sign_in_cluster", "rs_runner_parity_cluster"],
+    },
+    "redshift_metadata": {
+        "item": "DescribeTable's type names, and how a name in upper case is matched",
+        "warehouse": "redshift",
+        "checks": ["rs_table_columns", "rs_upper_case_column"],
+    },
+    "redshift_codes": {
+        "item": "What the Data API answers for a missing table, grant, workgroup "
+        "and cluster (Codes recorded)",
+        "warehouse": "redshift",
+        "checks": [
+            "rs_missing_table",
+            "rs_missing_grant",
+            "rs_missing_workgroup",
+            "rs_missing_cluster",
+        ],
+    },
+    "redshift_preview": {
+        "item": "Both source previews through the connector on a table read "
+        "(SUBSTRING, EXTRACT(EPOCH) of a TIMESTAMPTZ), against counts and bounds "
+        "computed from the fixture",
+        "warehouse": "redshift",
+        "checks": ["rs_preview"],
+    },
 }
 
 
@@ -539,12 +721,9 @@ class EvidenceRecorder:
     def document(self) -> Dict[str, Any]:
         expected = list(EXPECTED_CHECKS.get(self.target, ()))
         rows: Dict[str, Any] = {}
+        prefix = CHECK_PREFIXES[self.target]
         for key, row in NOT_VERIFIED_ROWS.items():
-            names = [
-                n
-                for n in row["checks"]
-                if n.startswith("bq_" if self.target == "bigquery" else "sf_")
-            ]
+            names = [n for n in row["checks"] if n.startswith(prefix)]
             if not names:
                 rows[key] = {**row, "settled_by_this_run": None}
                 continue
@@ -636,6 +815,13 @@ def spend_caps(target: str) -> Dict[str, Any]:
             "session_budget_bytes": BQ_SESSION_BUDGET_BYTES,
             "refusal_check_max_bytes": BQ_TAMPER_MAX_BYTES,
             "dry_run_first": True,
+        }
+    if target == "redshift":
+        return {
+            "default_query_timeout_seconds": RS_DEFAULT_TIMEOUT_SECONDS,
+            "hard_max_query_timeout_seconds": RS_HARD_MAX_TIMEOUT_SECONDS,
+            "refusal_check_timeout_seconds": RS_TAMPER_TIMEOUT_SECONDS,
+            "usage_limits_required": True,
         }
     return {
         "default_query_timeout_seconds": SF_DEFAULT_TIMEOUT_SECONDS,
@@ -735,6 +921,28 @@ EXPECTED_CHECKS: Dict[str, Tuple[str, ...]] = {
         "sf_multi_statement_refused",
         "sf_create_refused",
         "sf_time_limit",
+    ),
+    "redshift": (
+        "rs_spend_cap",
+        "rs_trust_requires_external_id",
+        "rs_sign_in",
+        "rs_sign_in_cluster",
+        "rs_wire_probe",
+        "rs_timezone",
+        "rs_invalid_set_fails_batch",
+        "rs_table_columns",
+        "rs_upper_case_column",
+        "rs_load_fidelity",
+        "rs_preview",
+        "rs_mean_parity",
+        "rs_runner_parity",
+        "rs_runner_parity_cluster",
+        "rs_missing_table",
+        "rs_missing_grant",
+        "rs_missing_workgroup",
+        "rs_missing_cluster",
+        "rs_create_refused",
+        "rs_time_limit",
     ),
 }
 
@@ -866,6 +1074,82 @@ def recording_factory(
         return RecordingClient(inner_factory(deadline), recorder, check)
 
     return factory
+
+
+#: AWS services whose answers are recorded without a body: they carry credentials.
+UNRECORDED_AWS_SERVICES = frozenset({"sts"})
+
+
+class AwsRecording:
+    """Records every AWS call a connector makes, for the evidence.
+
+    :meth:`install` wraps :func:`modules.backend.app.warehouse.aws.make_client`
+    so each client it builds -- the guard installed as before -- also reports,
+    through botocore's ``after-call`` event, the service, the operation, the
+    HTTP status and the parsed answer.  An STS answer is recorded without its
+    body, and the credentials in it are registered as secrets, so the evidence
+    search looks for them.  :meth:`uninstall` puts the function back.
+    """
+
+    def __init__(
+        self, recorder: EvidenceRecorder, check: Callable[[], Optional[str]]
+    ) -> None:
+        self._recorder = recorder
+        self._check = check
+        self._real: Optional[Callable[..., Any]] = None
+
+    def install(self) -> None:
+        from modules.backend.app.warehouse import aws
+
+        real = aws.make_client
+        self._real = real
+
+        def build(*args: Any, **kwargs: Any) -> Any:
+            client = real(*args, **kwargs)
+            client.meta.events.register("after-call", self.after_call)
+            return client
+
+        aws.make_client = build
+
+    def uninstall(self) -> None:
+        from modules.backend.app.warehouse import aws
+
+        if self._real is not None:
+            aws.make_client = self._real
+            self._real = None
+
+    def after_call(
+        self,
+        http_response: Any = None,
+        parsed: Any = None,
+        model: Any = None,
+        **kwargs: Any,
+    ) -> None:
+        service = getattr(getattr(model, "service_model", None), "service_name", "")
+        operation = getattr(model, "name", "")
+        exchange: Dict[str, Any] = {
+            "check": self._check(),
+            "request": {"service": service, "operation": operation},
+            "status": getattr(http_response, "status_code", None),
+            "label": re.sub(r"[^A-Za-z0-9_]+", "_", f"{service}_{operation}")[:80],
+        }
+        body = dict(parsed) if isinstance(parsed, dict) else {}
+        body.pop("ResponseMetadata", None)
+        if service in UNRECORDED_AWS_SERVICES:
+            credentials = body.get("Credentials")
+            if isinstance(credentials, dict):
+                for name in ("AccessKeyId", "SecretAccessKey", "SessionToken"):
+                    value = credentials.get(name)
+                    self._recorder.register_secret(
+                        value if isinstance(value, str) else None
+                    )
+            exchange["body_keys"] = sorted(str(k) for k in body)
+            error = body.get("Error")
+            if isinstance(error, dict) and isinstance(error.get("Code"), str):
+                exchange["error_code"] = error["Code"]
+        else:
+            exchange["body"] = _jsonable(body)
+        self._recorder.add_exchange(exchange)
 
 
 # -- the fixture data ---------------------------------------------------------------
@@ -1013,6 +1297,141 @@ def wire_probe_sql(dialect: Any) -> str:
     if dialect.session_offset:
         sql += f", {dialect.session_offset} AS session_offset"
     return sql
+
+
+# -- the Redshift verdicts (each planted in test_live_check_harness.py) -------------
+
+
+def wire_probe_verdict(probe: Any, time_zone: Any) -> List[str]:
+    """What is wrong with the connector's own probe reading, or nothing.
+
+    The probe must parse to binary64's ``0.1 + 0.2`` exactly and the session's
+    time zone must read ``UTC``: what the connector itself refuses otherwise.
+    """
+    from modules.backend.app.services.warehouse_sufficient_stats import (
+        WarehouseResultRefused,
+        parse_float,
+    )
+
+    problems: List[str] = []
+    try:
+        value, _ = parse_float(probe, "probe")
+    except WarehouseResultRefused:
+        problems.append(f"the probe {probe!r} is not a number")
+    else:
+        if value != WIRE_PROBE_VALUE:
+            problems.append(f"the probe {probe!r} is not {WIRE_PROBE_TEXT}")
+    if time_zone != "UTC":
+        problems.append(f"the session's time zone is {time_zone!r}, not UTC")
+    return problems
+
+
+def failed_statement_verdict(
+    refusal: Mapping[str, Any], seen: Mapping[str, Any]
+) -> List[str]:
+    """What is wrong with a FAILED batch's refusal, or nothing.
+
+    ``refusal`` is what the connector raised (code, vendor code, request id);
+    ``seen`` is an independent DescribeStatement of the same batch, as
+    :func:`~modules.backend.app.warehouse.redshift.described` returns it.  The
+    request id must be the Data API ``Id`` of the first sub-statement that
+    reading shows ``FAILED``.
+    """
+    problems: List[str] = []
+    if refusal.get("refused") != "unrecognised_warehouse_error":
+        problems.append(f"refused as {refusal.get('refused')!r}")
+    if refusal.get("vendor_code") != "FAILED":
+        problems.append(f"vendor code {refusal.get('vendor_code')!r}")
+    subs = seen.get("SubStatements") or []
+    failed = [s.get("Id") for s in subs if s.get("Status") == "FAILED"]
+    if seen.get("Status") != "FAILED" or not failed:
+        problems.append("the independent reading shows no FAILED sub-statement")
+    elif refusal.get("request_id") != failed[0]:
+        problems.append(
+            f"request id {refusal.get('request_id')!r} is not the FAILED "
+            f"sub-statement's Id {failed[0]!r}"
+        )
+    return problems
+
+
+def _utc_datetime(text: str) -> datetime:
+    return datetime.strptime(text, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+
+
+def expected_previews(
+    control: np.ndarray, treatment: np.ndarray
+) -> Dict[str, Dict[str, Any]]:
+    """What the two source previews must report for the fixture.
+
+    Worked out here, in Python, from the rows the tables are loaded with
+    (:func:`fixture_rows`), with no SQL engine and no query builder: the
+    assignment preview of :data:`EXPERIMENT_KEY` and the mean metric preview
+    of ``amount``, both over ``[WINDOW_START, WINDOW_END)``, in the shape
+    ``warehouse_runner.execute_preview`` returns.
+    """
+    from modules.backend.app.services.warehouse_query_builder import (
+        LABEL_MAX_CHARS,
+        VARIANT_ROW_LIMIT,
+    )
+
+    exposure_rows, event_rows = fixture_rows(control, treatment)
+    exposed = [
+        (unit or None, variant or None, _utc_datetime(at))
+        for unit, key, variant, at in exposure_rows
+        if key == EXPERIMENT_KEY and WINDOW_START <= _utc_datetime(at) < WINDOW_END
+    ]
+    units: Dict[str, set] = {}
+    for unit, variant, _ in exposed:
+        if variant is not None:
+            units.setdefault(variant, set()).update([unit] if unit else [])
+    labels = sorted(units, key=lambda v: (-len(units[v]), v))[:VARIANT_ROW_LIMIT]
+    exposed_at = [at for _, _, at in exposed]
+    events = [
+        (unit or None, amount or None, _utc_datetime(at))
+        for unit, at, amount, _ in event_rows
+        if WINDOW_START <= _utc_datetime(at) < WINDOW_END
+    ]
+    event_at = [at for _, _, at in events]
+    return {
+        "assignment": {
+            "total_rows": len(exposed),
+            "null_unit_rows": sum(1 for unit, _, _ in exposed if unit is None),
+            "null_variant_rows": sum(1 for _, v, _ in exposed if v is None),
+            "earliest": min(exposed_at, default=None),
+            "latest": max(exposed_at, default=None),
+            "variants": [
+                {"label": v[:LABEL_MAX_CHARS], "units": len(units[v])} for v in labels
+            ],
+        },
+        "metric": {
+            "total_rows": len(events),
+            "null_unit_rows": sum(1 for unit, _, _ in events if unit is None),
+            "null_value_rows": sum(1 for _, amount, _ in events if amount is None),
+            "earliest": min(event_at, default=None),
+            "latest": max(event_at, default=None),
+        },
+    }
+
+
+def preview_verdict(
+    summaries: Mapping[str, Mapping[str, Any]],
+    expected: Mapping[str, Mapping[str, Any]],
+) -> List[str]:
+    """Every difference between what the previews returned and what they must."""
+    problems: List[str] = []
+    if set(summaries) != set(expected):
+        problems.append(f"previews {sorted(summaries)} != {sorted(expected)}")
+    for kind, want in expected.items():
+        got = summaries.get(kind)
+        if not isinstance(got, Mapping):
+            continue
+        if set(got) != set(want):
+            problems.append(f"{kind}: keys {sorted(got)} != {sorted(want)}")
+            continue
+        for key, value in want.items():
+            if got[key] != value:
+                problems.append(f"{kind}.{key}: {got[key]!r} != {value!r}")
+    return problems
 
 
 class NullSession:
@@ -1255,6 +1674,8 @@ def package_versions() -> Dict[str, Optional[str]]:
         "sqlglot",
         "numpy",
         "duckdb",
+        "boto3",
+        "botocore",
     ):
         try:
             found[name] = metadata.version(name)
