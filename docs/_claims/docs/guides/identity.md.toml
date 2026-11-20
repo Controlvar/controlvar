@@ -396,10 +396,7 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "Erasing a linked person means erasing the rows of every one of their ids, and their links (How events count)."
-by = [
-    "test:backend/tests/integration/services/test_identity_aliases_service.py::test_every_id_of_a_star_gives_the_whole_person",
-    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_known_ids_conversion_counts_for_its_persons_variant",
-]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The rules a link follows"

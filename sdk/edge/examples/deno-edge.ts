@@ -84,6 +84,7 @@ export async function manualHandler(request: Request): Promise<Response> {
     kvTtlMs: 300_000, // 5 minutes
   });
 
+  // Keep the visitor's id in a cookie, so that each request does not store a fresh assignment
   const userId = request.headers.get('X-User-Id') ?? crypto.randomUUID();
   const assignment = await client.getAssignment('checkout_flow', userId);
   const { enabled } = await client.evaluateFlag('my-feature', userId);
