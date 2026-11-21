@@ -3,8 +3,9 @@
  * or a mean, and how it writes an amount per user.
  *
  * The response's `analysis` decides. A result without it, from a server older
- * than the field, is read from the test it ran: `welch_t_test` is a mean. The
- * field names are the API's, read from the stable OpenAPI snapshot.
+ * than the field, is read from the test it ran: `welch_t_test` or
+ * `permutation_t_test` is a mean. The field names and the test names are the
+ * API's, read from the stable OpenAPI snapshot.
  */
 import fs from 'fs';
 import path from 'path';
@@ -65,6 +66,9 @@ describe('analysedAsMean / analysedAsRate', () => {
   it.each([
     // [type, analysis, treatment's test, a mean?]
     ['revenue', 'mean', 'welch_t_test', true],
+    // #2041 (engine 1.13.0): a mean's test is the permutation test of Welch's t.
+    ['revenue', 'mean', 'permutation_t_test', true],
+    ['revenue', 'proportion', 'permutation_t_test', false],
     // Before the first purchase no treatment has a test; `analysis` still says mean.
     ['revenue', 'mean', null, true],
     ['revenue', 'mean', 'fisher_exact', true],
@@ -81,6 +85,7 @@ describe('analysedAsMean / analysedAsRate', () => {
     ['revenue', undefined, 'fisher_exact', false],
     ['revenue', undefined, null, false],
     ['duration', undefined, 'welch_t_test', true],
+    ['count', undefined, 'permutation_t_test', true],
     ['conversion', undefined, 'welch_t_test', false],
     ['conversion', undefined, 'z_test_proportions', false],
   ] as const)('%s with analysis %s and test %s: mean is %s', (type, analysis, test, mean) => {
@@ -248,6 +253,16 @@ describe('the field names are the API’s', () => {
     const analysis = schemas.MetricResult.properties.analysis;
     const values: MetricAnalysis[] = ['proportion', 'mean'];
     expect([...analysis.enum].sort()).toEqual([...values].sort());
+  });
+
+  it('StatisticalTest is exactly the tests the dashboard knows', () => {
+    const values: StatisticalTestUsed[] = [
+      'fisher_exact',
+      'z_test_proportions',
+      'welch_t_test',
+      'permutation_t_test',
+    ];
+    expect([...schemas.StatisticalTest.enum].sort()).toEqual([...values].sort());
   });
 
   it('VariantResult carries absolute_difference and absolute_difference_ci', () => {

@@ -1409,6 +1409,13 @@ text = "For a proportion, near the threshold, the interval and Fisher's exact te
 by = ["test:backend/tests/unit/services/test_difference_intervals.py::test_named_boundary_tables"]
 
 [[unit]]
+text = "For a mean, the test is a permutation test of Welch's t (statistical_test_used permutation_t_test, engine 1.13.0) while the interval is Welch's, so the two can disagree either way, most often when the variants' sizes are very different."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_mean_interval_against_significance",
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_a_lopsided_split_names_a_false_winner_no_more_often_than_alpha",
+]
+
+[[unit]]
 text = "For a proportion, relative_improvement_pct_ci is null only when an arm has no users or the control has no conversions."
 by = [
     "test:backend/tests/unit/services/test_difference_intervals.py::test_a_treatment_with_no_users_has_no_intervals",

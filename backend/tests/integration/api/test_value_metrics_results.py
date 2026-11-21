@@ -50,6 +50,12 @@ from backend.app.models.experiment import (
     MetricType,
     Variant,
 )
+from backend.app.services.permutation_test import (
+    comparison_seed,
+    listed_values,
+    permutation_t_p_value,
+    permutations_for,
+)
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_db]
 
@@ -239,6 +245,35 @@ def _arms(result):
     return metric, by_name["control"], by_name["treatment"]
 
 
+def _permutation_p(metric, control_y, treatment_y, alpha=0.05):
+    """The permutation test's p-value (#2041) for these per-user values,
+    zeros included, under this metric's and its variants' ids: what
+    ``per_user_mean_metric_result`` gives when the database's per-user values
+    are exactly these.  The seed comes from the ids the response names."""
+    control = next(v for v in metric["variants"] if v["is_control"])
+    treatment = next(v for v in metric["variants"] if not v["is_control"])
+    listed_c, listed_t = listed_values([control_y, treatment_y])
+    permutations = permutations_for(1, alpha)
+    seed = comparison_seed(
+        metric["metric_id"],
+        control["variant_id"],
+        treatment["variant_id"],
+        len(control_y),
+        len(treatment_y),
+        listed_c.size,
+        listed_t.size,
+        permutations,
+    )
+    return permutation_t_p_value(
+        listed_c,
+        len(control_y),
+        listed_t,
+        len(treatment_y),
+        seed=seed,
+        permutations=permutations,
+    )
+
+
 def _per_user(per_user, users=USERS):
     return np.array(list(per_user) + [0.0] * (users - len(per_user)), dtype=float)
 
@@ -301,8 +336,10 @@ def test_a_count_metric_counts_events_sent_with_no_value(
     assert treatment["mean"] == pytest.approx(0.8, rel=1e-12)
     for variant, y in ((control, COUNT_CONTROL_Y), (treatment, COUNT_TREATMENT_Y)):
         assert variant["std_dev"] == pytest.approx(np.std(y, ddof=1), rel=1e-9)
-    assert treatment["statistical_test_used"] == "welch_t_test"
-    assert treatment["p_value"] == pytest.approx(welch.pvalue, rel=1e-9)
+    assert treatment["statistical_test_used"] == "permutation_t_test"
+    assert treatment["p_value"] == _permutation_p(
+        metric, COUNT_CONTROL_Y, COUNT_TREATMENT_Y
+    )
     assert treatment["absolute_difference"] == pytest.approx(0.3, rel=1e-9)
     assert treatment["absolute_difference_ci"] == pytest.approx(
         list(welch.confidence_interval(0.95)), rel=1e-9
@@ -386,8 +423,10 @@ def test_duration_and_custom_add_up_each_users_values(admin_client, value_experi
     assert treatment["mean"] == pytest.approx(93.25 / USERS, rel=1e-12)
     for variant, y in ((control, VALUE_CONTROL_Y), (treatment, VALUE_TREATMENT_Y)):
         assert variant["std_dev"] == pytest.approx(np.std(y, ddof=1), rel=1e-9)
-    assert treatment["statistical_test_used"] == "welch_t_test"
-    assert treatment["p_value"] == pytest.approx(welch.pvalue, rel=1e-9)
+    assert treatment["statistical_test_used"] == "permutation_t_test"
+    assert treatment["p_value"] == _permutation_p(
+        metric, VALUE_CONTROL_Y, VALUE_TREATMENT_Y
+    )
     assert treatment["absolute_difference_ci"] == pytest.approx(
         list(welch.confidence_interval(0.95)), rel=1e-9
     )
@@ -431,12 +470,16 @@ def test_a_count_primary_can_change_its_recommendation(
 ):
     """The same rows: as a conversion (the analysis before #439) the share of
     senders, 75 against 80 of 100, is not significant (Fisher p 0.4985); as a
-    count, 1.5 against 2.0 events per user is (Welch p 0.0064), so the
-    recommendation moves from CONTINUE_TESTING to SHIP_VARIANT."""
+    count, 1.5 against 2.0 events per user is (the permutation test's p is
+    about 0.007; Welch's was 0.0064), so the recommendation moves from
+    CONTINUE_TESTING to SHIP_VARIANT."""
     exp = running_count_primary
     as_count = _results(admin_client, exp)
-    _, _, treatment = _arms(as_count)
-    assert treatment["p_value"] == pytest.approx(0.006359822708272411, rel=1e-9)
+    metric, _, treatment = _arms(as_count)
+    control_y = np.array([float(i % 4) for i in range(100)])
+    treatment_y = np.array([float(i % 5) for i in range(100)])
+    assert treatment["p_value"] == _permutation_p(metric, control_y, treatment_y)
+    assert treatment["p_value"] < 0.05
     assert as_count["summary"]["recommendation"] == "SHIP_VARIANT"
     assert as_count["summary"]["winning_variant_id"] == treatment["variant_id"]
 

@@ -19,7 +19,10 @@ unit count and its sums of ``y - k`` and ``(y - k) ** 2`` centred on the grand
 mean ``k``.  ``test_mean_metric_result.py`` holds it to an exact reference.
 ``per_user_mean_metric_result`` gives ``/results`` a revenue, count, duration
 or custom metric's mean per assigned user from each user's value, through
-``mean_metric_result``.
+``mean_metric_result``; each treatment's p-value comes from a permutation test
+of Welch's t on those values (#2041, ``permutation_test.py``), while
+``mean_metric_result`` on sums alone (warehouse mean runs) keeps Welch's
+t-test.
 
 ``binomial_metric_result`` and ``per_user_mean_metric_result`` give each
 treatment its difference from the control with an interval, the relative
@@ -30,9 +33,16 @@ change's interval and the incremental impact (#1496);
 
 import logging
 import math
-from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, NamedTuple, Optional, Sequence, Tuple
 
 from scipy import stats
+
+from backend.app.services.permutation_test import (
+    comparison_seed,
+    listed_values,
+    permutation_t_p_value,
+    permutations_for,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -689,6 +699,23 @@ class SufficientStatsNotComputed(ValueError):
         self.message = message
 
 
+class PermutationPValueError(Exception):
+    """The permutation p-values given to ``mean_metric_result`` are not
+    exactly one per treatment that receives a p-value.
+
+    A defect in the caller, never a reason to fall back to Welch's p-value:
+    the fallback would reopen the error the permutation test closes (#2041).
+    Deliberately not a ``ValueError``, which the results route answers with
+    404; raised, it reaches the route's ``unexpected_failure`` (500).
+    """
+
+
+#: ``statistical_test_used`` for a mean treatment compared on sums alone, and
+#: for one compared on its users' values (``per_user_mean_metric_result``).
+WELCH_T_TEST = "welch_t_test"
+PERMUTATION_T_TEST = "permutation_t_test"
+
+
 class _MeanArm(NamedTuple):
     variant: Any
     n: int
@@ -720,17 +747,29 @@ def _mean_arm(variant: Any, n: Any, sum_d: Any, sum_d2: Any) -> _MeanArm:
     return _MeanArm(variant, n, c, var)
 
 
+def _mean_is_compared(arm: _MeanArm, control: _MeanArm) -> bool:
+    """Whether a treatment receives a p-value: it or the control varies."""
+    return not (arm.var == 0 and control.var == 0)
+
+
 def _mean_comparison(
-    arm: _MeanArm, control: _MeanArm, k: float, alpha: float
+    arm: _MeanArm,
+    control: _MeanArm,
+    k: float,
+    alpha: float,
+    p_values: Optional[Mapping[str, float]] = None,
 ) -> Dict[str, Any]:
     """One treatment against the control: p-value, effect size, power and
-    relative improvement, or None for each that cannot be computed."""
+    relative improvement, or None for each that cannot be computed.
+
+    The p-value is Welch's t-test's, or with ``p_values`` the one it holds
+    for the treatment's id; a missing one raises, never falls back."""
     from statsmodels.stats.power import NormalIndPower
 
     diff = arm.c - control.c
     control_mean = k + control.c
     improvement = diff / abs(control_mean) * 100 if control_mean != 0 else None
-    if arm.var == 0 and control.var == 0:
+    if not _mean_is_compared(arm, control):
         return {
             "p_value": None,
             "effect_size": None,
@@ -738,19 +777,27 @@ def _mean_comparison(
             "relative_improvement_pct": improvement,
             "note": NO_VARIATION,
         }
-    # The centred means go in, never k + c: at a large k the reconstructed
-    # means round away most of the difference.
-    p_value = float(
-        stats.ttest_ind_from_stats(
-            arm.c,
-            math.sqrt(arm.var),
-            arm.n,
-            control.c,
-            math.sqrt(control.var),
-            control.n,
-            equal_var=False,
-        ).pvalue
-    )
+    if p_values is not None:
+        treatment_id = str(arm.variant.id)
+        if treatment_id not in p_values:
+            raise PermutationPValueError(
+                f"no permutation p-value for treatment {treatment_id}"
+            )
+        p_value = float(p_values[treatment_id])
+    else:
+        # The centred means go in, never k + c: at a large k the
+        # reconstructed means round away most of the difference.
+        p_value = float(
+            stats.ttest_ind_from_stats(
+                arm.c,
+                math.sqrt(arm.var),
+                arm.n,
+                control.c,
+                math.sqrt(control.var),
+                control.n,
+                equal_var=False,
+            ).pvalue
+        )
     effect = diff / math.sqrt((control.var + arm.var) / 2.0)
     power: Optional[float]
     try:
@@ -780,6 +827,7 @@ def mean_metric_result(
     correction_method: str,
     *,
     metric: Any,
+    p_values: Optional[Mapping[str, float]] = None,
 ) -> Dict[str, Any]:
     """One mean metric's result from per-variant sums centred on ``k``.
 
@@ -793,7 +841,8 @@ def mean_metric_result(
     Per variant: ``mean = k + sum_d / n``; the sample variance (ddof 1) and
     its square root as ``std_dev``; and ``mean +/- t(1 - alpha/2, n - 1) *
     sqrt(var / n)`` as the interval.  Per treatment, against the control:
-    Welch's t-test p-value, Cohen's d as ``AnalysisService.cohens_d`` defines
+    Welch's t-test p-value (or the permutation p-value ``p_values`` gives),
+    Cohen's d as ``AnalysisService.cohens_d`` defines
     it, observed power at ``alpha`` (``NormalIndPower``, the convention of the
     proportion results) and the relative improvement in percent, which is None
     when the control's mean is 0.  When neither the treatment nor the control
@@ -814,6 +863,13 @@ def mean_metric_result(
             ``lower_is_better`` (absent or None reads as False).  When it is
             true the winner is the significant treatment with the LOWEST mean
             below the control's; otherwise the highest above it.
+        p_values: None (sums alone: Welch's t-test), or each compared
+            treatment's p-value keyed by ``str(variant.id)``, from the
+            permutation test ``per_user_mean_metric_result`` runs on the
+            users' values.  It must hold exactly the treatments that receive
+            a p-value (a treatment or the control varies); the
+            ``statistical_test_used`` is then ``permutation_t_test``.  With
+            None, the output is what it was before #2041, byte for byte.
 
     Returns:
         A dict in the shape of ``schemas.results.MetricResult``.  Each variant
@@ -825,6 +881,8 @@ def mean_metric_result(
             residue is read as 0).
         SufficientStatsNotComputed: a variant has fewer than 2 units.
         ValueError: when no variant is the control.
+        PermutationPValueError: ``p_values`` lacks a compared treatment or
+            holds one that is not compared.  There is no fallback to Welch.
     """
     k = float(k)
     if not math.isfinite(k):
@@ -835,10 +893,23 @@ def mean_metric_result(
         raise ValueError("No variant is the control")
 
     comparisons = [
-        _mean_comparison(arm, control, k, alpha)
+        _mean_comparison(arm, control, k, alpha, p_values)
         for arm in arms
         if not arm.variant.is_control
     ]
+    if p_values is not None:
+        compared = {
+            str(arm.variant.id)
+            for arm in arms
+            if not arm.variant.is_control and _mean_is_compared(arm, control)
+        }
+        extra = set(p_values) - compared
+        if extra:
+            raise PermutationPValueError(
+                f"permutation p-values for treatments that are not compared: "
+                f"{sorted(extra)}"
+            )
+    test_used = WELCH_T_TEST if p_values is None else PERMUTATION_T_TEST
     adjusted = adjusted_p_values(
         [comparison["p_value"] for comparison in comparisons], correction_method
     )
@@ -885,7 +956,7 @@ def mean_metric_result(
                 else None,
                 relative_improvement_pct=comparison["relative_improvement_pct"],
                 power=comparison["power"],
-                statistical_test_used="welch_t_test" if p_value is not None else None,
+                statistical_test_used=test_used if p_value is not None else None,
                 note=comparison["note"],
             )
         results.append(entry)
@@ -1112,6 +1183,63 @@ def _descriptive_mean_entry(
     }
 
 
+def _permutation_p_values(
+    arms: Sequence[Tuple[Any, int, int, List[float]]],
+    sums: Sequence[MeanSums],
+    alpha: float,
+    metric: Any,
+) -> Dict[str, float]:
+    """Each compared treatment's p-value from the permutation test of
+    Welch's t (#2041, ``permutation_test.py``), keyed by ``str(variant.id)``.
+
+    The treatments are exactly the ones ``mean_metric_result`` compares on
+    ``sums``: 2 users or more, and the treatment or the control varies.
+    Their number is the family the correction adjusts, and decides ``B``.
+    Each arm's listed values come from every arm of the metric (the zero
+    tolerance reads the largest total over all of them).
+
+    Raises:
+        ComparisonIdentityError: the metric or a compared variant has no
+            UUID; there is no fallback.
+    """
+    listed = listed_values([values for _, _, _, values in arms])
+    candidates = [
+        (_mean_arm(*row), values) for row, values in zip(sums, listed) if row[1] >= 2
+    ]
+    control, control_listed = next(
+        (arm, values) for arm, values in candidates if arm.variant.is_control
+    )
+    tested = [
+        (arm, values)
+        for arm, values in candidates
+        if not arm.variant.is_control and _mean_is_compared(arm, control)
+    ]
+    if not tested:
+        return {}
+    permutations = permutations_for(len(tested), alpha)
+    p_values: Dict[str, float] = {}
+    for arm, treatment_listed in tested:
+        seed = comparison_seed(
+            getattr(metric, "id", None),
+            control.variant.id,
+            arm.variant.id,
+            control.n,
+            arm.n,
+            control_listed.size,
+            treatment_listed.size,
+            permutations,
+        )
+        p_values[str(arm.variant.id)] = permutation_t_p_value(
+            control_listed,
+            control.n,
+            treatment_listed,
+            arm.n,
+            seed=seed,
+            permutations=permutations,
+        )
+    return p_values
+
+
 def per_user_mean_metric_result(
     variants: Sequence[PerUserTotals],
     alpha: float,
@@ -1133,8 +1261,11 @@ def per_user_mean_metric_result(
     proportion metric; ``mean`` is the total of the values over ``n``;
     ``std_dev`` is over the ``n`` per-user values (ddof 1); and the interval
     is ``mean +/- t(1 - alpha / 2, n - 1) * std_dev / sqrt(n)``.  Per
-    treatment: Welch's t-test against the control and the rest of
-    ``mean_metric_result``'s comparison, the winner in the metric's direction,
+    treatment: the p-value of the permutation test of Welch's t against the
+    control over every assigned user's value (``permutation_test``;
+    ``statistical_test_used`` ``permutation_t_test``), which
+    ``is_significant`` follows; the rest of ``mean_metric_result``'s
+    comparison on Welch's numbers; the winner in the metric's direction,
     ``relative_improvement_pct`` computed on the means (None when the
     control's mean is 0), and ``absolute_difference`` with its interval from
     ``welch_difference_intervals``.  From the same Welch numbers (#1496):
@@ -1143,9 +1274,10 @@ def per_user_mean_metric_result(
     control's ``mean +/- c * se`` reaches 0), and ``incremental_impact`` and
     ``incremental_impact_ci``, the difference and its interval times the
     treatment's ``sample_size``.  None of the intervals is adjusted for
-    multiple comparisons.
+    multiple comparisons, and none of them comes from the permutation test.
 
-    Nothing here raises for well-formed input:
+    Nothing here raises for well-formed input whose metric and variants have
+    UUID ids:
 
     * an arm with fewer than 2 users has its mean (0.0 with none), no
       ``std_dev``, the interval ``(mean, mean)`` and no comparison; with a
@@ -1163,6 +1295,9 @@ def per_user_mean_metric_result(
         SufficientStatsRefused: a count is not a non-negative integer, or a
             total is not finite.
         ValueError: when no variant is the control.
+        ComparisonIdentityError: the metric or a compared variant has no id,
+            or one that is not a UUID, so its comparison has no seed.  It is
+            not caught here: there is no fallback to Welch's p-value.
     """
     arms: List[Tuple[Any, int, int, List[float]]] = []
     for variant, n, n_converted, totals in variants:
@@ -1206,8 +1341,14 @@ def per_user_mean_metric_result(
     welch: Dict[str, _WelchDifference] = {}
     if any(row[0].is_control for row in compared):
         try:
+            p_values = _permutation_p_values(arms, sums, alpha, metric)
             result = mean_metric_result(
-                k, compared, alpha, correction_method, metric=metric
+                k,
+                compared,
+                alpha,
+                correction_method,
+                metric=metric,
+                p_values=p_values,
             )
             welch = _welch_differences(compared, alpha)
         except SufficientStatsRefused as exc:

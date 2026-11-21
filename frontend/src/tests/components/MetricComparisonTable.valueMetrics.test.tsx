@@ -54,7 +54,7 @@ const NAMES: Record<MeanType, string> = {
   custom: 'Points',
 };
 
-/** F4's count data: 1.5 against 2.0 events per user, Welch p 0.0064. */
+/** F4's count data: 1.5 against 2.0 events per user, p 0.0064. */
 function meanMetric(
   type: MeanType,
   treatment: Partial<VariantResult> = {},
@@ -84,7 +84,7 @@ function meanMetric(
         p_value: 0.0064,
         is_significant: true,
         relative_improvement_pct: 33.33,
-        statistical_test_used: 'welch_t_test',
+        statistical_test_used: 'permutation_t_test',
         absolute_difference: 0.5,
         absolute_difference_ci: [0.14, 0.86],
         ...treatment,

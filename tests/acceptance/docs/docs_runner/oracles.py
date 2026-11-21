@@ -594,50 +594,6 @@ def revenue_difference(
     return float(_mean(*arms["treatment"][:2]) - _mean(*arms["control"][:2]))
 
 
-def revenue_welch_p(
-    control_users: int,
-    control_converted: int,
-    treatment_users: int,
-    treatment_converted: int,
-    base: int,
-    step: int,
-    modulo: int,
-) -> float:
-    """The two-sided p-value of Welch's t-test on the users' values.
-
-    ``getting-started/concepts.md``: a revenue metric's per-user values are
-    "compared with Welch's t-test". The test is Welch's, B. L. Welch, "The
-    generalization of 'Student's' problem when several different population
-    variances are involved", Biometrika 34 (1947), with the degrees of freedom
-    of F. E. Satterthwaite, "An approximate distribution of estimates of
-    variance components", Biometrics Bulletin 2 (1946); the NIST/SEMATECH
-    e-Handbook of Statistical Methods, 1.3.5.3 "Two-Sample t-Test for Equal
-    Means", gives both::
-
-        t  = (mean_t - mean_c) / se,   se^2 = s_t^2 / n_t + s_c^2 / n_c
-        df = se^4 / ((s_t^2 / n_t)^2 / (n_t - 1) + (s_c^2 / n_c)^2 / (n_c - 1))
-        p  = 2 * P(T_df > |t|)
-
-    ``t``'s parts are exact rationals (``_welch_terms``); scipy's Student t
-    gives the tail. Every assigned user is one value, 0 for a non-buyer. The
-    unit tests check it against ``scipy.stats.ttest_ind(..., equal_var=False)``
-    on the users' values written out one by one.
-    """
-    difference, se2, df = _welch_terms(
-        _revenue_arms(
-            control_users,
-            control_converted,
-            treatment_users,
-            treatment_converted,
-            base,
-            step,
-            modulo,
-        )
-    )
-    t = float(difference) / math.sqrt(float(se2))
-    return float(2 * stats.t.sf(abs(t), float(df)))
-
-
 def revenue_welch_interval(
     control_users: int,
     control_converted: int,
@@ -653,10 +609,20 @@ def revenue_welch_interval(
 
     The OpenAPI document: "Two-sided Welch-Satterthwaite confidence interval of
     absolute_difference as (lower, upper), at the response's confidence_level
-    and not adjusted for multiple comparisons". With ``se`` and ``df`` of
-    ``revenue_welch_p`` (the same sources)::
+    and not adjusted for multiple comparisons". Welch, B. L., "The
+    generalization of 'Student's' problem when several different population
+    variances are involved", Biometrika 34 (1947), with the degrees of freedom
+    of F. E. Satterthwaite, Biometrics Bulletin 2 (1946); the NIST/SEMATECH
+    e-Handbook of Statistical Methods, 1.3.5.3, gives both::
 
+        se^2 = s_t^2 / n_t + s_c^2 / n_c
+        df   = se^4 / ((s_t^2 / n_t)^2 / (n_t - 1) + (s_c^2 / n_c)^2 / (n_c - 1))
         (mean_t - mean_c) +/- t(1 - (1 - confidence_level) / 2, df) * se
+
+    ``se``'s and ``df``'s parts are exact rationals (``_welch_terms``). A
+    revenue metric's p-value has no oracle: from engine 1.13.0 it comes from a
+    permutation test of Welch's t, seeded from the ids the server makes, so
+    the journey holds its significance instead.
 
     ``confidence_level`` is above 0 and below 1 (default 0.95, an
     experiment's own default); ``bound`` is ``lower`` or ``upper``.
@@ -1075,7 +1041,6 @@ ORACLES: Dict[str, Callable[..., float]] = {
     "bayes_prob_best": bayes_prob_best,
     "revenue_mean": revenue_mean,
     "revenue_difference": revenue_difference,
-    "revenue_welch_p": revenue_welch_p,
     "revenue_welch_interval": revenue_welch_interval,
     "cuped_theta": cuped_theta,
     "cuped_adjusted_mean": cuped_adjusted_mean,

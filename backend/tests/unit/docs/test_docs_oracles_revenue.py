@@ -9,15 +9,21 @@ docs and textbook formulas (``docs_runner/oracles.py``). What decides whether
 those checks can fail is pure, and is tested here, in the unit job:
 
 * each oracle is its formula: the ramp's sums are the values the traffic step
-  sends; a mean is over every ASSIGNED user, 0 for a non-buyer; Welch's p-value
-  and interval are scipy's on the users' values written out one by one, and
-  the textbook formula's by hand;
+  sends; a mean is over every ASSIGNED user, 0 for a non-buyer; Welch's
+  interval is scipy's on the users' values written out one by one, and the
+  textbook formula's by hand;
 * the journey's exact numbers are binary fractions a double holds whatever the
   order of the additions, so ``rel: 0`` can hold, and the nearest wrong answers
   fall outside every tolerance;
 * doubling every value doubles the means, the difference and the interval,
-  leaves the buyers and the p-value as they were, and the journey's two
-  experiments differ in nothing else;
+  leaves the buyers as they were, and the journey's two experiments differ in
+  nothing else;
+* a revenue metric's p-value comes from a permutation test of Welch's t
+  (engine 1.13.0, #2041) seeded from the ids the server makes, so no oracle
+  can hold it: the journey holds the test's name, ``is_significant`` and the
+  recommendation, and the p-value's size is held here, on the journey's two
+  populations run through ``per_user_mean_metric_result`` under 20 sets of
+  ids (the one place this file runs product code);
 * each oracle refuses what no step can send (a decimal ramp, a value past
   10^12, a variant of one user, no variation);
 * each read's oracle is given its traffic's counts and ramp; the
@@ -26,7 +32,7 @@ those checks can fail is pure, and is tested here, in the unit job:
   pages' "of 57,763" is the formula's too;
 * the runner fails each step on the answer each defect would give.
 
-No network, no browser, no product code.
+No network, no browser, and no product code but the twin's.
 """
 
 from __future__ import annotations
@@ -37,6 +43,7 @@ import math
 import statistics
 import sys
 import types
+import uuid
 from fractions import Fraction
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -231,11 +238,10 @@ def test_the_journeys_means_and_difference_are_the_totals_over_every_user():
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda c: "-".join(map(str, c.values())))
-def test_welch_is_scipys_on_the_values_written_out(case):
+def test_welchs_interval_is_scipys_on_the_values_written_out(case):
     control, treatment = _arrays(case)
     counts = _counts(case)
     welch = stats.ttest_ind(treatment, control, equal_var=False)
-    assert oracles.revenue_welch_p(*counts) == pytest.approx(welch.pvalue, rel=1e-12)
     for level in (0.9, 0.95, 0.99):
         interval = welch.confidence_interval(level)
         for bound, expected in (("lower", interval.low), ("upper", interval.high)):
@@ -250,20 +256,16 @@ def test_welch_is_scipys_on_the_values_written_out(case):
 @pytest.mark.parametrize(
     "case", CASES[:4], ids=["revenue", "doubled", "300-200", "late"]
 )
-def test_welch_is_the_textbook_formula_by_hand(case):
-    """NIST/SEMATECH 1.3.5.3: t on the unpooled standard error, Satterthwaite's df."""
+def test_welchs_interval_is_the_textbook_formula_by_hand(case):
+    """NIST/SEMATECH 1.3.5.3: the unpooled standard error, Satterthwaite's df."""
     control, treatment = (list(map(int, a)) for a in _arrays(case))
     v_t = statistics.variance(treatment) / len(treatment)
     v_c = statistics.variance(control) / len(control)
     se = math.sqrt(v_t + v_c)
-    t = (statistics.fmean(treatment) - statistics.fmean(control)) / se
     df = (v_t + v_c) ** 2 / (
         v_t**2 / (len(treatment) - 1) + v_c**2 / (len(control) - 1)
     )
     counts = _counts(case)
-    assert oracles.revenue_welch_p(*counts) == pytest.approx(
-        2 * stats.t.sf(abs(t), df), rel=1e-10
-    )
     upper = statistics.fmean(treatment) - statistics.fmean(control)
     upper += stats.t.ppf(0.975, df) * se
     assert oracles.revenue_welch_interval(*counts, 0.95, "upper") == pytest.approx(
@@ -304,9 +306,11 @@ def test_the_exact_numbers_are_exact_however_they_are_added():
     assert Fraction(1840 / 200) != Fraction(1840, 200)
 
 
-def test_doubling_every_value_doubles_the_means_and_leaves_the_p_value():
-    """Welch's t is unchanged by a scale: the difference and its standard
-    error both double. The buyers do not depend on the values at all."""
+def test_doubling_every_value_doubles_the_means_and_the_interval():
+    """A scale doubles the difference and its standard error, so the interval
+    doubles; the buyers do not depend on the values at all.  (Welch's t is
+    unchanged by it, and so is the permutation test's p-value:
+    ``test_the_journeys_populations_are_significant_under_every_identity``.)"""
     original, doubled = _counts(REVENUE), _counts(DOUBLED)
     for variant in ("control", "treatment"):
         assert oracles.revenue_mean(
@@ -314,9 +318,6 @@ def test_doubling_every_value_doubles_the_means_and_leaves_the_p_value():
         ) == 2 * oracles.revenue_mean(*original, variant=variant)
     assert oracles.revenue_difference(*doubled) == 2 * oracles.revenue_difference(
         *original
-    )
-    assert oracles.revenue_welch_p(*doubled) == pytest.approx(
-        oracles.revenue_welch_p(*original), rel=1e-13
     )
     for bound in ("lower", "upper"):
         assert oracles.revenue_welch_interval(*doubled, 0.95, bound) == pytest.approx(
@@ -347,7 +348,6 @@ def _defects(case: Dict[str, int]) -> Dict[str, Dict[str, float]]:
             "control_mean": buyers_c.mean(),
             "treatment_mean": buyers_t.mean(),
             "difference": buyers_t.mean() - buyers_c.mean(),
-            "p": stats.ttest_ind(buyers_t, buyers_c, equal_var=False).pvalue,
         },
         "the refunds dropped": {
             "control_mean": refunds_dropped_c,
@@ -360,18 +360,14 @@ def _defects(case: Dict[str, int]) -> Dict[str, Dict[str, float]]:
             "difference": treatment.sum() - control.sum(),
         },
         "Student's t with a pooled variance": {
-            "p": pooled.pvalue,
             "lower": pooled.confidence_interval(0.95).low,
             "upper": pooled.confidence_interval(0.95).high,
         },
         "a normal tail in place of Student's": {
-            "p": 2 * stats.norm.sf(abs(float(welch.statistic))),
             "lower": diff - stats.norm.ppf(0.975) * se,
             "upper": diff + stats.norm.ppf(0.975) * se,
         },
-        "one-sided": {"p": float(welch.pvalue) / 2},
         "the smaller arm's n - 1 as the degrees of freedom": {
-            "p": 2 * stats.t.sf(abs(float(welch.statistic)), len(control) - 1),
             "lower": diff - stats.t.ppf(0.975, len(control) - 1) * se,
             "upper": diff + stats.t.ppf(0.975, len(control) - 1) * se,
         },
@@ -392,18 +388,17 @@ def _right(case: Dict[str, int]) -> Dict[str, float]:
         "control_mean": oracles.revenue_mean(*counts, variant="control"),
         "treatment_mean": oracles.revenue_mean(*counts),
         "difference": oracles.revenue_difference(*counts),
-        "p": oracles.revenue_welch_p(*counts),
         "lower": oracles.revenue_welch_interval(*counts, 0.95, "lower"),
         "upper": oracles.revenue_welch_interval(*counts, 0.95, "upper"),
     }
 
 
-#: The tolerance each number is held to in the journey.
+#: The tolerance each number is held to in the journey.  A mean's p-value is
+#: not among them (engine 1.13.0): the journey holds its significance.
 TOLERANCE = {
     "control_mean": 0.0,
     "treatment_mean": 0.0,
     "difference": 0.0,
-    "p": REL,
     "lower": REL,
     "upper": REL,
 }
@@ -423,7 +418,8 @@ def test_each_defects_answer_is_far_outside_its_tolerance(case):
 
 def test_the_pooled_t_moves_only_through_its_degrees_of_freedom():
     """With the same users in each variant Student's statistic is Welch's;
-    only the degrees of freedom tell them apart (0.17% on the p-value)."""
+    only the degrees of freedom tell them apart (0.17% on the p-value, more
+    on the interval's bound)."""
     control, treatment = _arrays(REVENUE)
     pooled = stats.ttest_ind(treatment, control, equal_var=True)
     welch = stats.ttest_ind(treatment, control, equal_var=False)
@@ -464,12 +460,8 @@ def test_the_pooled_t_moves_only_through_its_degrees_of_freedom():
 )
 def test_what_no_traffic_step_can_send_is_refused(change, message):
     counts = _counts({**REVENUE, **change})
-    for call in (
-        lambda: oracles.revenue_welch_p(*counts),
-        lambda: oracles.revenue_welch_interval(*counts),
-    ):
-        with pytest.raises(ValueError, match=message):
-            call()
+    with pytest.raises(ValueError, match=message):
+        oracles.revenue_welch_interval(*counts)
     if message in ("at least 2 users", "neither variant"):
         # A mean and a difference need no variance.
         oracles.revenue_mean(*counts)
@@ -514,13 +506,98 @@ def test_an_option_no_read_can_mean_is_refused(keyword, value, message):
 
 
 def test_the_revenue_oracles_are_registered():
+    """And no oracle gives a mean's p-value: from engine 1.13.0 it is a
+    permutation test's, seeded from the ids the server makes."""
     for name in (
         "revenue_mean",
         "revenue_difference",
-        "revenue_welch_p",
         "revenue_welch_interval",
     ):
         assert oracles.ORACLES[name] is getattr(oracles, name)
+    assert "revenue_welch_p" not in oracles.ORACLES
+    assert not hasattr(oracles, "revenue_welch_p")
+
+
+# ---------------------------------------------------------------------------
+# The p-value's size: the journey's populations through the product
+# ---------------------------------------------------------------------------
+#: How many sets of ids the twin runs: each gives the permutation test another
+#: seed, as each run of the journey does with the ids its server makes.
+IDENTITIES = 20
+#: Every p-value the twin gives is within this, so significant at 0.05 with
+#: room (measured 0.005 to 0.016 before #2041 shipped).
+TWIN_P_RANGE = (0.001, 0.03)
+
+
+def _twin_results(case: Dict[str, int], identity: int) -> Dict[str, Any]:
+    """``per_user_mean_metric_result`` on the journey's population *case*,
+    every buyer's value from the ramp (a 0 and the refunds included), under
+    the metric and variant ids ``uuid5`` gives for *identity*."""
+    from backend.app.services.sufficient_stats_analysis import (
+        BinomialVariant,
+        per_user_mean_metric_result,
+    )
+
+    namespace = uuid.UUID(int=2041)
+    metric_id, control_id, treatment_id = (
+        str(uuid.uuid5(namespace, f"{identity}/{role}"))
+        for role in ("metric", "control", "treatment")
+    )
+    ramp = (case["base"], case["step"], case["modulo"])
+    control = _values(case["control_converted"], case["control_converted"], *ramp)
+    treatment = _values(case["treatment_converted"], case["treatment_converted"], *ramp)
+    return per_user_mean_metric_result(
+        [
+            (
+                BinomialVariant(control_id, "Control", True),
+                case["control_users"],
+                case["control_converted"],
+                [float(v) for v in control],
+            ),
+            (
+                BinomialVariant(treatment_id, "Treatment", False),
+                case["treatment_users"],
+                case["treatment_converted"],
+                [float(v) for v in treatment],
+            ),
+        ],
+        1 - DEFAULT_CONFIDENCE,
+        "benjamini_hochberg",
+        metric=types.SimpleNamespace(
+            id=metric_id, name="Order value", metric_type="revenue", is_primary=True
+        ),
+    )
+
+
+def _twin_p_values(case: Dict[str, int]) -> List[float]:
+    return [
+        _twin_results(case, identity)["variants"][1]["p_value"]
+        for identity in range(IDENTITIES)
+    ]
+
+
+def test_the_journeys_populations_are_significant_under_every_identity():
+    """The journey holds ``is_significant`` and the recommendation, not the
+    p-value, which depends on the ids its server makes.  Here: the journey's
+    two populations (256 users each; 64 and 112 buyers; the ramps -20/20/6
+    and -40/40/6) through ``per_user_mean_metric_result`` under 20 sets of
+    ids give a p-value from the permutation test between 0.001 and 0.03 every
+    time, significant; and doubling every value leaves the p-value exactly as
+    it was, since the seed depends on the ids and the counts, never on the
+    values."""
+    for case in (REVENUE, DOUBLED):
+        for identity in range(IDENTITIES):
+            treatment = _twin_results(case, identity)["variants"][1]
+            assert treatment["statistical_test_used"] == "permutation_t_test", (
+                identity,
+                treatment["statistical_test_used"],
+            )
+            low, high = TWIN_P_RANGE
+            assert low <= treatment["p_value"] <= high, (identity, treatment["p_value"])
+            assert treatment["is_significant"] is True, identity
+    original = _twin_results(REVENUE, 0)["variants"][1]["p_value"]
+    doubled = _twin_results(DOUBLED, 0)["variants"][1]["p_value"]
+    assert doubled == original, (original, doubled)
 
 
 # ---------------------------------------------------------------------------
@@ -539,7 +616,6 @@ def test_each_revenue_reads_oracles_get_its_traffics_counts_and_ramp(steps, read
     assert names == {
         "revenue_mean",
         "revenue_difference",
-        "revenue_welch_p",
         "revenue_welch_interval",
     }
     for call in calls:
@@ -564,6 +640,9 @@ def test_each_revenue_read_holds_the_exact_numbers_exactly(steps, read_id):
             assert (Fraction(answer) * 256).denominator == 1, path
         else:
             assert check["rel"] == REL, path
+    # No computed check on a mean's p-value: a permutation test's, seeded from
+    # the ids the server makes (engine 1.13.0).
+    assert not [path for path in computed if "p_value" in path]
     expected = _step(steps, read_id)["expect"]["json"]
     # The buyers are the users who sent the event, whatever its value.
     assert expected["metrics.0.variants.0.sample_size"] == sent["control_users"]
@@ -571,7 +650,11 @@ def test_each_revenue_read_holds_the_exact_numbers_exactly(steps, read_id):
     assert expected["metrics.0.variants.1.sample_size"] == sent["treatment_users"]
     assert expected["metrics.0.variants.1.conversions"] == sent["treatment_converted"]
     assert expected["metrics.0.analysis"] == "mean"
-    assert expected["metrics.0.variants.1.statistical_test_used"] == "welch_t_test"
+    assert (
+        expected["metrics.0.variants.1.statistical_test_used"] == "permutation_t_test"
+    )
+    # The journey holds the significance the twin below measures.
+    assert expected["metrics.0.variants.1.is_significant"] is True
     assert set(wanted) == set(COUNT_ARGS + RAMP_ARGS)
 
 
@@ -682,7 +765,8 @@ def test_the_lower_is_better_metric_is_listed_and_decides_nothing(steps):
     )
     assert sent["treatment_converted"] > sent["control_converted"]
     counts = _counts(REVENUE)
-    assert oracles.revenue_welch_p(*counts) < 1 - DEFAULT_CONFIDENCE
+    # The primary metric's rise is significant under every identity (the twin).
+    assert max(_twin_p_values(REVENUE)) < 1 - DEFAULT_CONFIDENCE
     assert oracles.revenue_difference(*counts) > 0
     # Nothing but a listing is expected of the listed metric.
     keys = {path.split(".", 2)[2] for path in expected if path.startswith("metrics.1.")}
@@ -833,8 +917,14 @@ def _variant(name, users, buyers, numbers=None, control=False) -> Dict[str, Any]
     return entry
 
 
+#: A treatment's p-value as the server's permutation test could give it on the
+#: journey's population: any number the journey does not check.
+SOME_P = 0.0095
+
+
 def _results_body(name: str, case: Dict[str, int], numbers: Dict[str, float]):
-    """A /results answer with *numbers* in the revenue row (``_right``'s keys)."""
+    """A /results answer with *numbers* in the revenue row (``_right``'s keys),
+    the treatment significant by the permutation test."""
     nc, cc, nt, ct = (case[arg] for arg in COUNT_ARGS)
     return {
         "experiment_name": name,
@@ -860,10 +950,10 @@ def _results_body(name: str, case: Dict[str, int], numbers: Dict[str, float]):
                                 numbers["lower"],
                                 numbers["upper"],
                             ],
-                            "p_value": numbers["p"],
-                            "adjusted_p_value": numbers["p"],
-                            "statistical_test_used": "welch_t_test",
-                            "is_significant": numbers["p"] < 0.05,
+                            "p_value": SOME_P,
+                            "adjusted_p_value": SOME_P,
+                            "statistical_test_used": "permutation_t_test",
+                            "is_significant": True,
                         },
                     ),
                 ],
@@ -923,6 +1013,28 @@ def test_each_revenue_step_passes_the_formulas_answer_and_fails_a_defects(
         body["metrics"][0]["variants"][variant][field] = wrong
         with pytest.raises(execute_module._Failed):
             _run(execute_module, tmp_path, steps, read_id, body)
+    # The test is the permutation test's, and the treatment is significant by
+    # it (and, for the first read, recommended): each fails on its own.
+    for change in (
+        lambda b: b["metrics"][0]["variants"][1].update(
+            statistical_test_used="welch_t_test"
+        ),
+        lambda b: b["metrics"][0]["variants"][1].update(is_significant=False),
+    ):
+        body = copy.deepcopy(_results_body(name, case, right))
+        change(body)
+        with pytest.raises(execute_module._Failed):
+            _run(execute_module, tmp_path, steps, read_id, body)
+    if read_id == "revenue-results":
+        body = copy.deepcopy(_results_body(name, case, right))
+        body["summary"]["recommendation"] = "CONTINUE_TESTING"
+        with pytest.raises(execute_module._Failed):
+            _run(execute_module, tmp_path, steps, read_id, body)
+    # Any p-value passes: the journey does not hold it.
+    body = copy.deepcopy(_results_body(name, case, right))
+    body["metrics"][0]["variants"][1].update(p_value=0.031, adjusted_p_value=0.031)
+    observed, _ = _run(execute_module, tmp_path, steps, read_id, body)
+    assert observed == "status 200"
 
 
 @pytest.mark.parametrize(
