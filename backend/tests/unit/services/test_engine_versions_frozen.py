@@ -97,6 +97,10 @@ PIN_TABLES: Dict[Tuple[str, str], Dict[str, Any]] = {
         "services/test_value_metrics_per_user.py",
         "VALUE_RESULTS_FINGERPRINTS",
     ): value_metrics.VALUE_RESULTS_FINGERPRINTS,
+    (
+        "services/test_sufficient_stats_fingerprint.py",
+        "PER_USER_MEAN_CASE_DIGESTS",
+    ): sufficient.PER_USER_MEAN_CASE_DIGESTS,
 }
 
 #: One digest per frozen version.  Append a line; never edit one.
@@ -129,6 +133,10 @@ FROZEN_DIGESTS: Dict[str, str] = {
     # 1.12.0 (#1969): 1.11.0's entries, except ENGINE_FINGERPRINTS, whose
     # dataset runs the breakdown's heterogeneity flag and adds the walk data.
     "1.12.0": "a2f02f83762ab8c2dbb84320cf95a8c2c3e2a2701bcfabf514b0fae476ffbdf9",
+    # 1.13.0 (#2041): a mean metric's p-value from a permutation test of
+    # Welch's t; per_user_mean_metric_result and its cases are pinned for the
+    # first time, and the revenue and value-metric results move.
+    "1.13.0": "f70d95a6a5b050620e60eab6b30e9238f07be49b754679ae60cf73f6bb14b47d",
 }
 
 
@@ -149,6 +157,7 @@ FROZEN_VERSIONS: Tuple[str, ...] = (
     "1.10.0",
     "1.11.0",
     "1.12.0",
+    "1.13.0",
 )
 
 

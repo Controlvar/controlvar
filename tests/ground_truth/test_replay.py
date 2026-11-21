@@ -71,7 +71,16 @@ The gates, per scenario (SPEC #1544 v1.2, section 3.5):
 * **G2** ``p_value``, ``adjusted_p_value``, ``absolute_difference``, a mean's
   ``absolute_difference_ci`` and the sample-ratio check's ``p_value`` within
   ``REL`` (a difference also within 1e-9 times the larger of the two means; a
-  p-value also within ``P_FLOOR``); ``is_significant`` exactly.
+  p-value also within ``P_FLOOR``); ``is_significant`` exactly.  Except a
+  mean's p-values (engine 1.13.0, #2041): the server's permutation test and
+  the reference's (scipy's ``PermutationMethod``, 9,999 resamples seeded by
+  ``reference.permutation_rng(seed, scenario, metric)``) each draw at random,
+  so ``p_value`` and ``adjusted_p_value`` pass within
+  ``reference.permutation_tolerance`` (5 standard errors of the difference of
+  two equal-tailed p-values plus the server's step, about 0.039 at p 0.05),
+  and a mean's ``is_significant`` is compared exactly only when both adjusted
+  p-values are further than that from alpha; otherwise it is named in the
+  run's output and not compared.
 * **Z** no answer is a 5xx.
 
 And once, without a server:
@@ -340,6 +349,21 @@ def _near(
         found.append(Finding(where, got, want, tolerance))
 
 
+def _number(value: Any) -> bool:
+    """A finite int or float, not a bool."""
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+    )
+
+
+def _decisive(adjusted: Any, p_value: Any) -> Any:
+    """The p-value ``is_significant`` is decided on: the adjusted one, or the
+    p-value itself when no correction applies (``adjusted_p_value`` null)."""
+    return adjusted if adjusted is not None else p_value
+
+
 def _by(items: Any, field: str) -> dict[Any, Mapping[str, Any]]:
     return {
         item.get(field): item
@@ -532,11 +556,33 @@ def g1_findings(
     return found
 
 
+#: The treatments whose ``is_significant`` G2 did not compare because a
+#: mean's p-value was within tolerance of alpha, per scenario: named in the
+#: run's output.
+SIGNIFICANCE_SKIPPED: dict[str, list[str]] = {}
+
+
 def g2_findings(
-    scenario: Scenario, experiment: contract.ExperimentExpected, results: Any
+    scenario: Scenario,
+    experiment: contract.ExperimentExpected,
+    results: Any,
+    *,
+    seed: int = SEED,
 ) -> list[Finding]:
-    """G2: the closed-form statistics against ``reference``."""
+    """G2: the closed-form statistics against ``reference``.
+
+    A mean's ``p_value`` and ``adjusted_p_value`` come from a permutation
+    test, the server's and the reference's each with its own random draws, so
+    they are compared within ``reference.permutation_tolerance`` (the server's
+    resamples from the documented rule for the metric's compared treatments),
+    and its ``is_significant`` only when both adjusted p-values are further
+    than that from alpha; a skipped one is recorded in
+    ``SIGNIFICANCE_SKIPPED``.  A proportion's are compared within ``REL`` and
+    exactly."""
     found: list[Finding] = []
+    skipped = SIGNIFICANCE_SKIPPED.setdefault(scenario.name, [])
+    skipped.clear()
+    alpha = 1 - scenario.confidence_level
     results = results if isinstance(results, Mapping) else {}
     _exact(
         found,
@@ -564,7 +610,15 @@ def g2_findings(
         }
         variants = _by(result.get("variants"), "variant_name")
         comparisons = reference.compare(
-            per_user, analysis, scenario.correction_method, scenario.confidence_level
+            per_user,
+            analysis,
+            scenario.correction_method,
+            scenario.confidence_level,
+            rng=reference.permutation_rng(seed, scenario.name, metric.name),
+        )
+        resamples = reference.product_resamples(
+            max(1, sum(c.p_value is not None for c in comparisons)),
+            scenario.confidence_level,
         )
         for comparison in comparisons:
             name = comparison.variant
@@ -578,20 +632,37 @@ def g2_findings(
             floor = 1e-9 * max(
                 abs(_mean(per_user[control])), abs(_mean(per_user[name]))
             )
-            _near(
-                found,
-                f"{where} 'p_value'",
-                got.get("p_value"),
-                comparison.p_value,
-                floor=P_FLOOR,
-            )
-            _near(
-                found,
-                f"{where} 'adjusted_p_value'",
-                got.get("adjusted_p_value"),
-                comparison.adjusted_p_value,
-                floor=P_FLOOR,
-            )
+            significance_compared = True
+            for field, want in (
+                ("p_value", comparison.p_value),
+                ("adjusted_p_value", comparison.adjusted_p_value),
+            ):
+                value = got.get(field)
+                if analysis == "mean" and _number(value) and _number(want):
+                    tolerance = reference.permutation_tolerance(value, want, resamples)
+                    if abs(value - want) > tolerance:
+                        found.append(
+                            Finding(
+                                f"{where} {field!r}",
+                                value,
+                                want,
+                                f"abs {tolerance:.4f}, two permutation tests",
+                            )
+                        )
+                else:
+                    _near(found, f"{where} {field!r}", value, want, floor=P_FLOOR)
+            if analysis == "mean":
+                got_p = _decisive(got.get("adjusted_p_value"), got.get("p_value"))
+                want_p = _decisive(comparison.adjusted_p_value, comparison.p_value)
+                if _number(got_p) and _number(want_p):
+                    tolerance = reference.permutation_tolerance(
+                        got_p, want_p, resamples
+                    )
+                    significance_compared = reference.significance_comparable(
+                        got_p, want_p, alpha, tolerance
+                    )
+                    if not significance_compared:
+                        skipped.append(f"{metric.name}/{name}")
             _near(
                 found,
                 f"{where} 'absolute_difference'",
@@ -615,12 +686,13 @@ def g2_findings(
                             want_end,
                             floor=floor,
                         )
-            _exact(
-                found,
-                f"{where} 'is_significant'",
-                got.get("is_significant"),
-                comparison.is_significant,
-            )
+            if significance_compared:
+                _exact(
+                    found,
+                    f"{where} 'is_significant'",
+                    got.get("is_significant"),
+                    comparison.is_significant,
+                )
     srm = results.get("srm")
     srm = srm if isinstance(srm, Mapping) else {}
     _near(
@@ -1478,6 +1550,36 @@ def test_g2_statistics_equal_the_reference(replayed: Replayed) -> None:
     findings = g2_findings(replayed.scenario, replayed.experiment, replayed.results)
     if findings:
         pytest.fail(report("G2", replayed, findings), pytrace=False)
+
+
+def significance_skipped_line() -> str | None:
+    """The run's line naming each treatment whose ``is_significant`` G2 did
+    not compare (``SIGNIFICANCE_SKIPPED``), or None when there is none."""
+    named = [
+        f"{scenario} {name}"
+        for scenario, names in sorted(SIGNIFICANCE_SKIPPED.items())
+        for name in names
+    ]
+    if not named:
+        return None
+    return (
+        "G2: is_significant not compared, a mean's p-value within tolerance of "
+        f"alpha: {', '.join(named)}"
+    )
+
+
+def write_step_summary(text: str, environ: Mapping[str, str]) -> None:
+    """Append the step summary to the file ``GITHUB_STEP_SUMMARY`` names, when
+    it is set, followed by :func:`significance_skipped_line` when there is
+    one: the summary is what a reader of the run looks at, not the raw log."""
+    target = environ.get("GITHUB_STEP_SUMMARY")
+    if not target:
+        return
+    skipped = significance_skipped_line()
+    with open(target, "a", encoding="utf-8") as stream:
+        stream.write(text)
+        if skipped:
+            stream.write(f"\n{skipped}\n")
 
 
 @pytest.mark.parametrize("replayed", ALL, indirect=True)

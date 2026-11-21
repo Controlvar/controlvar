@@ -194,12 +194,27 @@ text = "A result is statistically significant when p < your chosen alpha thresho
 by = ["exempt:theory"]
 
 [[unit]]
-text = "On zero-inflated, right-skewed revenue with a lopsided split, these rates did not hold at α = 0.05: A/A experiments (both variants the same) recommended shipping a variant that was no better more often than alpha says."
-by = ["test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_an_uneven_split_recommends_a_false_winner_above_the_band"]
+text = "A revenue, count, duration or custom metric's p-value comes from a permutation test of Welch's t statistic, so these rates hold when both variants have the same distribution (an A/A test), at every split measured, a lopsided split on zero-inflated, right-skewed revenue included."
+by = [
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_a_lopsided_split_names_a_false_winner_no_more_often_than_alpha",
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_the_mirrored_split_names_neither_arm_beyond_the_band",
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_an_equal_split_recommends_a_false_winner_within_the_band",
+]
 
 [[unit]]
-text = "See Limitations for what was measured."
-by = ["exempt:navigation"]
+text = "A variant that is no better but changes the shape of the values is not covered: see Limitations for what was measured."
+by = ["test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_a_shape_change_at_5400_600_is_held_as_measured"]
+
+[[unit]]
+text = "A running experiment's p-value near 0.05 can move by about ±0.015 between refreshes as data arrives, because each new count re-draws the permutations."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "With the same data, every request, process and day gives the same p-value."
+by = [
+    "test:backend/tests/unit/stats_validation/test_permutation_test.py::test_two_processes_with_different_hash_seeds_give_the_same_p_value",
+    "test:backend/tests/unit/stats_validation/test_permutation_test.py::test_the_same_values_on_two_days_give_the_same_p_value",
+]
 
 [[unit]]
 text = "Important: statistical significance does not tell you the effect is large or meaningful."
@@ -319,7 +334,7 @@ by = [
 ]
 
 [[unit]]
-text = "A revenue, count, duration or custom metric is analysed as its mean per assigned user, compared with Welch's t-test: for a count metric each user's value is the number of the metric's events they sent, whatever their value; for a revenue, duration or custom metric it is the total of those events' value; a user with none counts as 0."
+text = "A revenue, count, duration or custom metric is analysed as its mean per assigned user, compared with a permutation test of Welch's t: for a count metric each user's value is the number of the metric's events they sent, whatever their value; for a revenue, duration or custom metric it is the total of those events' value; a user with none counts as 0."
 by = [
     "test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_every_type_but_conversion_as_a_mean",
     "test:backend/tests/integration/api/test_value_metrics_results.py::test_a_count_metric_counts_events_sent_with_no_value",
@@ -638,8 +653,11 @@ text = "A/B/n test | Experiment comparing more than two variants"
 by = ["exempt:theory"]
 
 [[unit]]
-text = "Alpha (α) | The significance threshold; probability of a false positive you are willing to accept (typically 0.05). On zero-inflated, right-skewed revenue with a lopsided split, false positives were measured more often than α: see Limitations"
-by = ["test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_an_uneven_split_recommends_a_false_winner_above_the_band"]
+text = "Alpha (α) | The significance threshold; probability of a false positive you are willing to accept (typically 0.05). For a revenue, count, duration or custom metric it holds when both variants have the same distribution (an A/A test), at every split measured; a variant that changes the shape of the values is not covered: see Limitations"
+by = [
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_a_lopsided_split_names_a_false_winner_no_more_often_than_alpha",
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_a_shape_change_at_5400_600_is_held_as_measured",
+]
 
 [[unit]]
 text = "Bucketing | The process of assigning users to variants"

@@ -3,14 +3,14 @@
     {
       "id": "revenue-metric",
       "parts": [
-        "Revenue, count, duration and custom metrics are analysed as their mean per assigned user, compared with Welch's t-test, and their results give the difference per user with its confidence interval."
+        "Revenue, count, duration and custom metrics are analysed as their mean per assigned user, compared with a permutation test of Welch's t, and their results give the difference per user with its confidence interval."
       ],
       "sources": [
         {
           "page": "getting-started/concepts",
           "phrases": [
             "revenue, count, duration",
-            "mean per assigned user, compared with Welch's t-test"
+            "mean per assigned user, compared with a permutation test of Welch's t"
           ]
         },
         {

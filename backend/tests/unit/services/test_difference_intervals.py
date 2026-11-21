@@ -506,25 +506,33 @@ def _mean_rows(correction: str, level: float = 0.95) -> Tuple[Tuple[Any, ...], .
     return tuple(rows)
 
 
-#: correction -> "interval excludes 0, not significant" over the treatments
-#: of ``_mean_datasets`` at 0.95.  "Significant, interval covers 0" is 0 for
-#: every correction: an adjusted p-value is never below the raw one.
-MEAN_EXCLUDING_NOT_SIGNIFICANT = {
-    "none": 0,
-    "bonferroni": 51,
-    "benjamini_hochberg": 38,
+#: correction -> ("interval excludes 0, not significant", "significant,
+#: interval covers 0") over the 800 treatments of ``_mean_datasets`` at 0.95.
+#: The interval is Welch's; is_significant follows the permutation test of
+#: Welch's t (#2041, engine 1.13.0), so the two can disagree either way, with
+#: no correction too.  Until engine 1.12.0 the test was Welch's own, and the
+#: counts were (0, 0), (51, 0) and (38, 0): only a correction separated them.
+MEAN_INTERVAL_DISAGREEMENT: Dict[str, Tuple[int, int]] = {
+    "none": (3, 2),
+    "bonferroni": (49, 0),
+    "benjamini_hochberg": (38, 0),
 }
 
 
-@pytest.mark.parametrize("correction", sorted(MEAN_EXCLUDING_NOT_SIGNIFICANT))
+@pytest.mark.parametrize("correction", sorted(MEAN_INTERVAL_DISAGREEMENT))
 def test_the_mean_interval_against_significance(correction):
     significant_covering = excluding_not_significant = 0
     for row, _, _ in _mean_rows(correction):
+        assert row["statistical_test_used"] == "permutation_t_test"
         interval = row["absolute_difference_ci"]
         significant_covering += row["is_significant"] and not _excludes_0(interval)
         excluding_not_significant += _excludes_0(interval) and not row["is_significant"]
-    assert significant_covering == 0
-    assert excluding_not_significant == MEAN_EXCLUDING_NOT_SIGNIFICANT[correction]
+    measured = (excluding_not_significant, significant_covering)
+    assert measured == MEAN_INTERVAL_DISAGREEMENT[correction], (
+        f"{correction}: (interval excludes 0 and not significant, significant "
+        f"and interval covers 0) = {measured}, pinned "
+        f"{MEAN_INTERVAL_DISAGREEMENT[correction]}"
+    )
 
 
 def test_the_mean_interval_is_welchs():
@@ -869,10 +877,20 @@ def test_without_the_new_fields_results_are_the_ones_before_them(case, monkeypat
     assert actual == characterisation.CHARACTERISATIONS[BEFORE_DIFFERENCE_FIELDS][case]
 
 
+def _with_welch_p_values(monkeypatch) -> None:
+    """A mean's p-value as engines 1.7.0 to 1.12.0 computed it: Welch's
+    t-test, which ``mean_metric_result`` gives when no permutation p-values
+    are passed.  The comparisons with 1.7.0's pins below isolate the fields
+    #1496 added; the permutation test (#2041, 1.13.0) is held elsewhere."""
+    monkeypatch.setattr(ssa, "_permutation_p_values", lambda *args, **kwargs: None)
+
+
 def test_without_the_new_fields_the_revenue_results_are_the_ones_before_them(
     monkeypatch,
 ):
-    """R6: a mean metric's difference and its interval do not move."""
+    """R6: a mean metric's difference and its interval do not move (with the
+    p-value Welch's, as it was then)."""
+    _with_welch_p_values(monkeypatch)
     output = routing._results(
         [
             routing._metric(MetricType.REVENUE, is_primary=True),
@@ -897,7 +915,9 @@ def test_without_the_new_fields_the_value_metric_results_are_the_ones_before_the
     monkeypatch,
 ):
     """R6 for #439's mean types: a count, duration or custom metric's
-    difference and its interval do not move either."""
+    difference and its interval do not move either (with the p-value
+    Welch's, as it was then)."""
+    _with_welch_p_values(monkeypatch)
     output = value_metrics._value_metrics_output(monkeypatch)
     assert {m["analysis"] for m in output["metrics"]} == {"mean"}
     for metric in output["metrics"]:

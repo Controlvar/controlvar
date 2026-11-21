@@ -3,7 +3,7 @@
   "alias": {
    "bayesian_results": {
     "decision": "CONTINUE",
-    "engine_version": "1.12.0",
+    "engine_version": "1.13.0",
     "is_enabled": true,
     "n_samples": 100000,
     "seed": 8295670714556272865,
@@ -158,7 +158,7 @@
         -1.847343672,
         0.5473436717
        ],
-       "adjusted_p_value": 0.2343847735,
+       "adjusted_p_value": 0.266,
        "confidence_interval": [
         -0.07369136344,
         0.7736913634
@@ -174,12 +174,12 @@
        "is_control": false,
        "is_significant": false,
        "mean": 0.35,
-       "p_value": 0.2343847735,
+       "p_value": 0.266,
        "power": 0.260434292,
        "relative_improvement_pct": -65.0,
        "relative_improvement_pct_ci": null,
        "sample_size": 6,
-       "statistical_test_used": "welch_t_test",
+       "statistical_test_used": "permutation_t_test",
        "std_dev": 0.4037325848,
        "variant_id": "19330000-0000-4000-8000-000000000012",
        "variant_name": "treatment"
@@ -228,7 +228,7 @@
         -18.76090179,
         63.76090179
        ],
-       "adjusted_p_value": 0.2202441174,
+       "adjusted_p_value": 0.168,
        "confidence_interval": [
         -17.93853906,
         64.60520573
@@ -244,12 +244,12 @@
        "is_control": false,
        "is_significant": false,
        "mean": 23.33333333,
-       "p_value": 0.2202441174,
+       "p_value": 0.168,
        "power": 0.2879748976,
        "relative_improvement_pct": 2700.0,
        "relative_improvement_pct_ci": null,
        "sample_size": 6,
-       "statistical_test_used": "welch_t_test",
+       "statistical_test_used": "permutation_t_test",
        "std_dev": 39.32768321,
        "variant_id": "19330000-0000-4000-8000-000000000012",
        "variant_name": "treatment"
@@ -319,7 +319,7 @@
        "relative_improvement_pct": 0.0,
        "relative_improvement_pct_ci": null,
        "sample_size": 6,
-       "statistical_test_used": "welch_t_test",
+       "statistical_test_used": "permutation_t_test",
        "std_dev": 0.8366600265,
        "variant_id": "19330000-0000-4000-8000-000000000012",
        "variant_name": "treatment"
@@ -394,7 +394,7 @@
   "breakdown_tier": {
    "bayesian_results": {
     "decision": "CONTINUE",
-    "engine_version": "1.12.0",
+    "engine_version": "1.13.0",
     "is_enabled": true,
     "n_samples": 100000,
     "seed": 8295670714556272865,
@@ -625,7 +625,7 @@
         -1.847343672,
         0.5473436717
        ],
-       "adjusted_p_value": 0.2343847735,
+       "adjusted_p_value": 0.266,
        "confidence_interval": [
         -0.07369136344,
         0.7736913634
@@ -641,12 +641,12 @@
        "is_control": false,
        "is_significant": false,
        "mean": 0.35,
-       "p_value": 0.2343847735,
+       "p_value": 0.266,
        "power": 0.260434292,
        "relative_improvement_pct": -65.0,
        "relative_improvement_pct_ci": null,
        "sample_size": 6,
-       "statistical_test_used": "welch_t_test",
+       "statistical_test_used": "permutation_t_test",
        "std_dev": 0.4037325848,
        "variant_id": "19330000-0000-4000-8000-000000000012",
        "variant_name": "treatment"
@@ -695,7 +695,7 @@
         -18.76090179,
         63.76090179
        ],
-       "adjusted_p_value": 0.2202441174,
+       "adjusted_p_value": 0.168,
        "confidence_interval": [
         -17.93853906,
         64.60520573
@@ -711,12 +711,12 @@
        "is_control": false,
        "is_significant": false,
        "mean": 23.33333333,
-       "p_value": 0.2202441174,
+       "p_value": 0.168,
        "power": 0.2879748976,
        "relative_improvement_pct": 2700.0,
        "relative_improvement_pct_ci": null,
        "sample_size": 6,
-       "statistical_test_used": "welch_t_test",
+       "statistical_test_used": "permutation_t_test",
        "std_dev": 39.32768321,
        "variant_id": "19330000-0000-4000-8000-000000000012",
        "variant_name": "treatment"
@@ -786,7 +786,7 @@
        "relative_improvement_pct": 0.0,
        "relative_improvement_pct_ci": null,
        "sample_size": 6,
-       "statistical_test_used": "welch_t_test",
+       "statistical_test_used": "permutation_t_test",
        "std_dev": 0.8366600265,
        "variant_id": "19330000-0000-4000-8000-000000000012",
        "variant_name": "treatment"
@@ -861,7 +861,7 @@
   "cache_hit": {
    "bayesian_results": {
     "decision": "CONTINUE",
-    "engine_version": "1.12.0",
+    "engine_version": "1.13.0",
     "is_enabled": true,
     "n_samples": 100000,
     "seed": 8295670714556272865,
@@ -1016,7 +1016,7 @@
         -1.847343672,
         0.5473436717
        ],
-       "adjusted_p_value": 0.2343847735,
+       "adjusted_p_value": 0.266,
        "confidence_interval": [
         -0.07369136344,
         0.7736913634
@@ -1032,12 +1032,12 @@
        "is_control": false,
        "is_significant": false,
        "mean": 0.35,
-       "p_value": 0.2343847735,
+       "p_value": 0.266,
        "power": 0.260434292,
        "relative_improvement_pct": -65.0,
        "relative_improvement_pct_ci": null,
        "sample_size": 6,
-       "statistical_test_used": "welch_t_test",
+       "statistical_test_used": "permutation_t_test",
        "std_dev": 0.4037325848,
        "variant_id": "19330000-0000-4000-8000-000000000012",
        "variant_name": "treatment"
@@ -1086,7 +1086,7 @@
         -18.76090179,
         63.76090179
        ],
-       "adjusted_p_value": 0.2202441174,
+       "adjusted_p_value": 0.168,
        "confidence_interval": [
         -17.93853906,
         64.60520573
@@ -1102,12 +1102,12 @@
        "is_control": false,
        "is_significant": false,
        "mean": 23.33333333,
-       "p_value": 0.2202441174,
+       "p_value": 0.168,
        "power": 0.2879748976,
        "relative_improvement_pct": 2700.0,
        "relative_improvement_pct_ci": null,
        "sample_size": 6,
-       "statistical_test_used": "welch_t_test",
+       "statistical_test_used": "permutation_t_test",
        "std_dev": 39.32768321,
        "variant_id": "19330000-0000-4000-8000-000000000012",
        "variant_name": "treatment"
@@ -1177,7 +1177,7 @@
        "relative_improvement_pct": 0.0,
        "relative_improvement_pct_ci": null,
        "sample_size": 6,
-       "statistical_test_used": "welch_t_test",
+       "statistical_test_used": "permutation_t_test",
        "std_dev": 0.8366600265,
        "variant_id": "19330000-0000-4000-8000-000000000012",
        "variant_name": "treatment"
@@ -1252,7 +1252,7 @@
   "computed": {
    "bayesian_results": {
     "decision": "CONTINUE",
-    "engine_version": "1.12.0",
+    "engine_version": "1.13.0",
     "is_enabled": true,
     "n_samples": 100000,
     "seed": 8295670714556272865,
@@ -1407,7 +1407,7 @@
         -1.847343672,
         0.5473436717
        ],
-       "adjusted_p_value": 0.2343847735,
+       "adjusted_p_value": 0.266,
        "confidence_interval": [
         -0.07369136344,
         0.7736913634
@@ -1423,12 +1423,12 @@
        "is_control": false,
        "is_significant": false,
        "mean": 0.35,
-       "p_value": 0.2343847735,
+       "p_value": 0.266,
        "power": 0.260434292,
        "relative_improvement_pct": -65.0,
        "relative_improvement_pct_ci": null,
        "sample_size": 6,
-       "statistical_test_used": "welch_t_test",
+       "statistical_test_used": "permutation_t_test",
        "std_dev": 0.4037325848,
        "variant_id": "19330000-0000-4000-8000-000000000012",
        "variant_name": "treatment"
@@ -1477,7 +1477,7 @@
         -18.76090179,
         63.76090179
        ],
-       "adjusted_p_value": 0.2202441174,
+       "adjusted_p_value": 0.168,
        "confidence_interval": [
         -17.93853906,
         64.60520573
@@ -1493,12 +1493,12 @@
        "is_control": false,
        "is_significant": false,
        "mean": 23.33333333,
-       "p_value": 0.2202441174,
+       "p_value": 0.168,
        "power": 0.2879748976,
        "relative_improvement_pct": 2700.0,
        "relative_improvement_pct_ci": null,
        "sample_size": 6,
-       "statistical_test_used": "welch_t_test",
+       "statistical_test_used": "permutation_t_test",
        "std_dev": 39.32768321,
        "variant_id": "19330000-0000-4000-8000-000000000012",
        "variant_name": "treatment"
@@ -1568,7 +1568,7 @@
        "relative_improvement_pct": 0.0,
        "relative_improvement_pct_ci": null,
        "sample_size": 6,
-       "statistical_test_used": "welch_t_test",
+       "statistical_test_used": "permutation_t_test",
        "std_dev": 0.8366600265,
        "variant_id": "19330000-0000-4000-8000-000000000012",
        "variant_name": "treatment"
@@ -1642,7 +1642,7 @@
   },
   "snapshot_bayesian": {
    "decision": "CONTINUE",
-   "engine_version": "1.12.0",
+   "engine_version": "1.13.0",
    "is_enabled": true,
    "n_samples": 100000,
    "seed": 8295670714556272865,
@@ -1678,7 +1678,7 @@
   "snapshot_frequentist": {
    "bayesian_results": {
     "decision": "CONTINUE",
-    "engine_version": "1.12.0",
+    "engine_version": "1.13.0",
     "is_enabled": true,
     "n_samples": 100000,
     "seed": 8295670714556272865,
@@ -1833,7 +1833,7 @@
         -1.847343672,
         0.5473436717
        ],
-       "adjusted_p_value": 0.2343847735,
+       "adjusted_p_value": 0.266,
        "confidence_interval": [
         -0.07369136344,
         0.7736913634
@@ -1849,12 +1849,12 @@
        "is_control": false,
        "is_significant": false,
        "mean": 0.35,
-       "p_value": 0.2343847735,
+       "p_value": 0.266,
        "power": 0.260434292,
        "relative_improvement_pct": -65.0,
        "relative_improvement_pct_ci": null,
        "sample_size": 6,
-       "statistical_test_used": "welch_t_test",
+       "statistical_test_used": "permutation_t_test",
        "std_dev": 0.4037325848,
        "variant_id": "19330000-0000-4000-8000-000000000012",
        "variant_name": "treatment"
@@ -1903,7 +1903,7 @@
         -18.76090179,
         63.76090179
        ],
-       "adjusted_p_value": 0.2202441174,
+       "adjusted_p_value": 0.168,
        "confidence_interval": [
         -17.93853906,
         64.60520573
@@ -1919,12 +1919,12 @@
        "is_control": false,
        "is_significant": false,
        "mean": 23.33333333,
-       "p_value": 0.2202441174,
+       "p_value": 0.168,
        "power": 0.2879748976,
        "relative_improvement_pct": 2700.0,
        "relative_improvement_pct_ci": null,
        "sample_size": 6,
-       "statistical_test_used": "welch_t_test",
+       "statistical_test_used": "permutation_t_test",
        "std_dev": 39.32768321,
        "variant_id": "19330000-0000-4000-8000-000000000012",
        "variant_name": "treatment"
@@ -1994,7 +1994,7 @@
        "relative_improvement_pct": 0.0,
        "relative_improvement_pct_ci": null,
        "sample_size": 6,
-       "statistical_test_used": "welch_t_test",
+       "statistical_test_used": "permutation_t_test",
        "std_dev": 0.8366600265,
        "variant_id": "19330000-0000-4000-8000-000000000012",
        "variant_name": "treatment"
@@ -2103,5 +2103,5 @@
    "recommended_action": "continue"
   }
  },
- "engine_version": "1.12.0"
+ "engine_version": "1.13.0"
 }

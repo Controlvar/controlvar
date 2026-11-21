@@ -174,20 +174,28 @@ by = [
 ]
 
 [[unit]]
-text = "A variant that is no better recommended to ship no more often than α says, whatever the split | On zero-inflated, right-skewed revenue (most users spend nothing, a few spend a lot), a lopsided split recommended shipping a variant that was no better more often than α says. Measured in 2,000 A/A experiments (both variants the same) at each split, at α = 0.05, with 5% of users buying, order values lognormal and repeat purchases: with 600 users in the control and 5,400 in the treatment, the treatment was recommended to ship in 150 (7.5%), where about 50 (2.5%) are expected in that direction, and there the larger variant was the one wrongly named; with 3,000 users in each, in 46, within the expected rate. These are the sizes measured; no size is known at which a lopsided split meets α."
+text = "A variant that is no better recommended to ship no more often than α says, whatever the split | On zero-inflated, right-skewed revenue (most users spend nothing, a few spend a lot), measured in 2,000 experiments at each split, at α = 0.05, with 5% of users buying, order values lognormal and repeat purchases. When both variants have the same distribution (an A/A test) it holds: with 600 users in the control and 5,400 in the treatment, the treatment was recommended to ship in 48 and the control kept in 52, about 50 expected in each direction (before engine 1.13.0, which compared means with Welch's t-test, 150 and 12). A variant that changes the shape of the values without changing the mean is not covered: with 5,400 users in the control and 600 in the treatment, 12.5% of the treatment's users buying and each of their orders 0.4 times the size, 71 of 2,000 such experiments recommended shipping it, where about 50 are expected. The interval on the difference is Welch's and is unchanged: in the same A/A experiments at 600/5,400 it excluded 0 in 162 of 2,000, where about 100 are expected."
 by = [
-    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_an_uneven_split_recommends_a_false_winner_above_the_band",
-    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_an_equal_split_recommends_a_false_winner_within_the_band",
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_a_lopsided_split_names_a_false_winner_no_more_often_than_alpha",
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_a_shape_change_at_5400_600_is_held_as_measured",
     "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_the_band_is_the_central_99_9_percent_of_one_direction",
 ]
 
 [[unit]]
-text = "Intervals on a treatment's difference adjusted for the experiment's correction | The intervals on a treatment's difference from the control, on its relative change and on its impact are not adjusted for comparing several treatments with the control, while is_significant is (Benjamini-Hochberg by default). With two or more treatments an interval can exclude 0 on a treatment that is not significant. For a metric analysed as a share of users, the interval and Fisher's exact test can also disagree near the threshold, either way."
+text = "Intervals on a treatment's difference adjusted for the experiment's correction | The intervals on a treatment's difference from the control, on its relative change and on its impact are not adjusted for comparing several treatments with the control, while is_significant is (Benjamini-Hochberg by default). With two or more treatments an interval can exclude 0 on a treatment that is not significant. For a metric analysed as a share of users, the interval and Fisher's exact test can also disagree near the threshold, either way. For a metric analysed as a mean, the interval is Welch's while is_significant follows the permutation test, so the two can disagree either way, most often at a lopsided split: in 2,000 A/A experiments with 600 users in the control and 5,400 in the treatment they disagreed in 142 (7.1%)."
 by = [
     "test:backend/tests/unit/services/test_difference_intervals.py::test_b5_an_adjusted_treatment_is_not_significant_although_its_interval_excludes_0",
     "test:backend/tests/unit/services/test_difference_intervals.py::test_the_mean_interval_against_significance",
     "test:backend/tests/unit/services/test_difference_intervals.py::test_the_proportion_interval_against_significance",
     "test:backend/tests/unit/services/test_difference_intervals.py::test_named_boundary_tables",
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_a_lopsided_split_names_a_false_winner_no_more_often_than_alpha",
+]
+
+[[unit]]
+text = "A mean metric tested by the permutation test everywhere | A warehouse analysis has only each variant's sums, so a mean metric there keeps Welch's t-test (welch_t_test), which on zero-inflated, right-skewed values at a lopsided split names a variant that is no better more often than α says: 150 of 2,000 A/A experiments with 600 users in the control and 5,400 in the treatment recommended shipping it. An LLM experiment compares its variants with its own Welch's t-test."
+by = [
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_a_mean_from_sums_alone_keeps_welchs_t_test",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestWelchPValueIsExact::test_p_value_matches_scipy_welch",
 ]
 
 [[unit]]
@@ -516,6 +524,14 @@ text = "A visual experiment on a site that routes after # | On a site that route
 by = [
     "test:frontend/tests/e2e/runtime/editor-link.runtime.spec.ts::is removed from the address, claimed once, and handed to the panel after hello",
     "test:frontend/tests/e2e/runtime/spa.runtime.spec.ts::each kind of change after # re-evaluates exactly once, with no call and no page view",
+]
+
+[[unit]]
+text = "A revenue, count, duration or custom metric whose variants have the same distribution: the p-value comes from a permutation test that holds α at every split measured; 2,000 A/A experiments at 600/5,400 and at 3,000/3,000 recommended shipping the treatment in 48 and 46 and keeping the control in 52 and 45, about 50 expected in each direction."
+by = [
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_a_lopsided_split_names_a_false_winner_no_more_often_than_alpha",
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_an_equal_split_recommends_a_false_winner_within_the_band",
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_the_mirrored_split_names_neither_arm_beyond_the_band",
 ]
 
 [[unit]]
