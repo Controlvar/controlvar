@@ -16,8 +16,9 @@ text = "No API edits or deletes an entry."
 by = ["test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact"]
 
 [[unit]]
-text = "It records the changes people make through the API: creating, changing and deleting feature flags and experiments, turning flags on and off, starting, pausing and completing experiments, rollout schedule changes, API keys, holdouts, mutual exclusion groups, segments, creating and deleting users, changes to a user's role, superuser flag or active status, signing in with a password or through Cognito (POST /auth/token; a sign-in through the Cognito Hosted UI does not pass through the API and is not recorded), and safety rollbacks and saves of the global safety settings."
+text = "It records the changes people make through the API: creating, changing and deleting feature flags and experiments, turning flags on and off, starting, pausing and completing experiments, rollout schedule changes, API keys, holdouts, mutual exclusion groups, segments, creating and deleting users, changes to a user's role, superuser flag or active status, signing in with a password or through Cognito (POST /auth/token; a sign-in through the Cognito Hosted UI does not pass through the API and is not recorded), safety rollbacks and saves of the global safety settings, and erasing one app user's data."
 by = [
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_an_app_user_erase_writes_a_start_and_a_final_entry",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_saving_the_global_safety_settings_writes_one_entry",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_create",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_update_records_only_what_changed",
@@ -195,7 +196,7 @@ text = "Parameter | Type | Description"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "entity_type | string | feature_flag, experiment, user, role, permission, safety_config, rollout_schedule, api_key, holdout, mutual_exclusion_group, segment"
+text = "entity_type | string | feature_flag, experiment, user, role, permission, safety_config, rollout_schedule, api_key, holdout, mutual_exclusion_group, segment, app_user"
 by = ["test:backend/tests/unit/services/test_audit_log_rules.py::test_the_entity_types"]
 
 [[unit]]
@@ -883,6 +884,16 @@ text = "safety_config_update | safety_config | POST /safety/settings saves the g
 by = [
     "test:backend/tests/unit/services/test_safety_settings_audit.py::test_a_save_writes_one_entry_with_before_and_after",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_saving_the_global_safety_settings_writes_one_entry",
+]
+
+[[unit]]
+text = "app_user_erase_started, app_user_erased | app_user | POST /admin/app-users/erase (beta), by the calling superuser: one entry when the call starts, before anything is deleted, and one when it finishes, both with the response's receipt_id as entity_id and app user as entity_name. app_user_erased's new_value is {\"deleted\", \"ids_erased\", \"complete\"}: counts only, never the id. A start entry with no finish entry: the call did not finish; some rows may be gone, or none. See Erase one app user's data"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_an_app_user_erase_writes_a_start_and_a_final_entry",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_each_call_writes_a_start_and_a_final_entry_with_counts_only",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_no_start_entry_erases_nothing",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_a_failed_final_transaction_is_a_500_with_the_start_entry_only",
 ]
 
 [[unit]]

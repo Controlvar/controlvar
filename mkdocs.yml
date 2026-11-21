@@ -150,6 +150,7 @@ nav:
   - Authentication: api/auth.md
   - Experiments: api/endpoints.md
   - Compliance & Audit: api/compliance.md
+  - Erase one app user's data (beta): api/erase-user-data.md
   - Integrations: api/integrations.md
 - Integrations:
   - AWS: integrations/aws.md

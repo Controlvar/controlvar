@@ -59,9 +59,10 @@ SDK has an `event_id` option yet ([Limitations](../getting-started/limitations.m
 event that may be sent again to `POST /api/v1/tracking/track` or `POST /api/v1/tracking/batch`
 yourself.
 
-`event_dedup_keys` holds your app's user ids and keeps them when events are deleted. An operator
-erasing one person's events by hand must delete their keys too. An `event_id` is remembered for as
-long as its key is kept.
+`event_dedup_keys` holds your app's user ids and keeps them when events are deleted. Erasing one
+app user's data ([Erase one app user's data](../api/erase-user-data.md)) deletes their keys with
+their events, so an `event_id` they send again after an erase is stored again. An `event_id` is
+remembered for as long as its key is kept.
 
 ### When sending fails
 

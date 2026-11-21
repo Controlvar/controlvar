@@ -48,6 +48,7 @@ universe = [
     "docs/api/data-export.md",
     "docs/api/dimensional-analysis.md",
     "docs/api/endpoints.md",
+    "docs/api/erase-user-data.md",
     "docs/api/integrations.md",
     "docs/api/interaction-detection.md",
     "docs/api/multi-armed-bandit.md",

@@ -324,14 +324,23 @@ text = "Data"
 by = ["exempt:label"]
 
 [[unit]]
-text = "A retention policy, or a tool that erases one person's data | Neither exists. Nothing deletes events, assignments or audit records by age, and no route deletes the events of one of your app's users. One setting purges the platform's own analysis history: ANALYSIS_HISTORY_RETENTION_DAYS (default 90) deletes analysis snapshots and bandit-state history older than that, each time the metrics scheduler runs."
+text = "A retention policy | None exists. Nothing deletes events, assignments or audit records by age. One setting purges the platform's own analysis history: ANALYSIS_HISTORY_RETENTION_DAYS (default 90) deletes analysis snapshots and bandit-state history older than that, each time the metrics scheduler runs."
 by = [
-    "test:backend/tests/unit/api/test_documented_limits.py::test_no_route_sets_retention_or_erases_a_users_data",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_one_route_erases_an_app_users_data_and_none_sets_retention",
     "test:backend/tests/unit/api/test_documented_limits.py::test_nothing_calls_the_event_purge",
     "test:backend/tests/unit/api/test_documented_limits.py::test_only_analysis_history_and_evaluation_counters_are_deleted_by_age",
     "test:backend/tests/unit/core/test_documented_defaults.py::test_analysis_history_is_kept_90_days",
     "test:backend/tests/unit/core/test_documented_defaults.py::test_the_metrics_tick_purges_the_analysis_history",
     "test:backend/tests/integration/services/test_analysis_history_retention.py::TestPurgeExpiredHistory::test_deletes_rows_older_than_the_window_and_keeps_newer",
+]
+
+[[unit]]
+text = "Erasing one person's data from the dashboard | A superuser erases one app user's data with the API (beta): Erase one app user's data. The dashboard has no control for it, and copies already exported to a warehouse or a backup are not touched."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_one_route_erases_an_app_users_data_and_none_sets_retention",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_only_a_superuser_may_erase",
+    "test:backend/tests/unit/services/test_app_user_erase_inventory.py::test_the_dashboard_has_no_control_for_the_erase",
+    "test:backend/tests/unit/services/test_app_user_erase_inventory.py::test_the_erase_touches_no_cache_and_no_other_store",
 ]
 
 [[unit]]

@@ -97,6 +97,7 @@ on for that user: `"new_dashboard_ui": true` and `"beta_features": true`.
    - Can manage all experiments
    - Can access admin endpoints
    - Can create other users
+   - Can erase one app user's data (beta)
 
 ## Usage Examples
 
@@ -1410,6 +1411,22 @@ A 422 names positions and fields, never the ids that were sent.
 - **Response**: 204 No Content
 - **Errors**: 400 "Cannot delete your own user account" when the account is
   your own. 404 "User not found".
+
+### Erase One App User's Data (Admin, beta)
+- **Endpoint**: `POST /api/v1/admin/app-users/erase`
+- **Description**: Delete every row stored under one `user_id` your app sent
+  (superuser only); dashboard accounts are not touched.
+- **Headers**: Authorization: Bearer {token}
+- **Request Body**: `{"user_id": "user-to-erase"}`, 1 to 255 characters,
+  matched exactly; any other field answers 422.
+- **Response**: 200 with `receipt_id`, `complete`, `ids_erased` and `deleted`
+  (rows per table). `complete: false` means send the same request again.
+- **Errors**: 401 with no token or with an API key alone; 403 "Not enough
+  permissions" for anyone but a superuser; 422 for a body tracking could not
+  store; 500 when the erase could not be recorded (nothing erased) or failed
+  part way (send the request again).
+- See [Erase one app user's data](erase-user-data.md) for what is and is not
+  deleted, and what results look like afterwards.
 
 ## Error Responses
 

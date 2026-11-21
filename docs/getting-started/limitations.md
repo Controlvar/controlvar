@@ -79,7 +79,8 @@ A revenue, count, duration or custom metric whose variants have the same distrib
 
 | What you might expect | What happens instead |
 |---|---|
-| A retention policy, or a tool that erases one person's data | Neither exists. Nothing deletes events, assignments or audit records by age, and no route deletes the events of one of your app's users. One setting purges the platform's own analysis history: `ANALYSIS_HISTORY_RETENTION_DAYS` (default 90) deletes analysis snapshots and bandit-state history older than that, each time the metrics scheduler runs. |
+| A retention policy | None exists. Nothing deletes events, assignments or audit records by age. One setting purges the platform's own analysis history: `ANALYSIS_HISTORY_RETENTION_DAYS` (default 90) deletes analysis snapshots and bandit-state history older than that, each time the metrics scheduler runs. |
+| Erasing one person's data from the dashboard | A superuser erases one app user's data with the API (beta): [Erase one app user's data](../api/erase-user-data.md). The dashboard has no control for it, and copies already exported to a warehouse or a backup are not touched. |
 
 ## Split URL testing
 

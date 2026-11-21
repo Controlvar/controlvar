@@ -127,6 +127,11 @@ class ActionType(str, Enum):
     SEGMENT_UPDATE = "segment_update"
     SEGMENT_ARCHIVE = "segment_archive"
 
+    # Erasing one app user's data (#2042): one entry when a call starts and
+    # one when it finishes, with the same entity_id (the receipt), counts only.
+    APP_USER_ERASE_STARTED = "app_user_erase_started"
+    APP_USER_ERASED = "app_user_erased"
+
 
 class EntityType(str, Enum):
     """Types of entities that can be audited."""
@@ -142,6 +147,8 @@ class EntityType(str, Enum):
     HOLDOUT = "holdout"
     MUTUAL_EXCLUSION_GROUP = "mutual_exclusion_group"
     SEGMENT = "segment"
+    # An id your app tracks (#2042), not a dashboard account (USER).
+    APP_USER = "app_user"
 
 
 class AuditLog(Base, BaseModel):
@@ -273,6 +280,8 @@ class AuditLog(Base, BaseModel):
             ActionType.SEGMENT_CREATE: "created",
             ActionType.SEGMENT_UPDATE: "updated",
             ActionType.SEGMENT_ARCHIVE: "archived",
+            ActionType.APP_USER_ERASE_STARTED: "started erasing an app user's data",
+            ActionType.APP_USER_ERASED: "erased an app user's data",
         }
         return action_descriptions.get(self.action_type, self.action_type)
 

@@ -214,6 +214,10 @@ text = "Can create other users"
 by = ["test:backend/tests/integration/api/test_user_email_case_conflict.py::TestCreate::test_a_free_address_is_still_created"]
 
 [[unit]]
+text = "Can erase one app user's data (beta)"
+by = ["test:backend/tests/integration/api/test_app_user_erase_api.py::test_only_a_superuser_may_erase"]
+
+[[unit]]
 text = "Usage Examples"
 by = ["exempt:label"]
 
@@ -798,7 +802,7 @@ by = [
     "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_valid_bearer_does_not_read_the_key",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
-count = 16
+count = 17
 
 [[unit]]
 text = "User Management Endpoints"
@@ -2469,6 +2473,51 @@ by = [
 [[unit]]
 text = "Errors: 400 \"Cannot delete your own user account\" when the account is your own."
 by = ["test:backend/tests/integration/api/test_own_access_put.py::TestDeleteAnswersAsDocumented::test_a_superuser_cannot_delete_their_own_account"]
+
+[[unit]]
+text = "Erase One App User's Data (Admin, beta)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Endpoint: POST /api/v1/admin/app-users/erase"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "Description: Delete every row stored under one user_id your app sent (superuser only); dashboard accounts are not touched."
+by = [
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_nothing_of_the_user_remains_in_any_table",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_only_a_superuser_may_erase",
+    "test:backend/tests/unit/services/test_app_user_erase_inventory.py::test_every_table_is_classified",
+]
+
+[[unit]]
+text = "Request Body: {\"user_id\": \"user-to-erase\"}, 1 to 255 characters, matched exactly; any other field answers 422."
+by = [
+    "test:backend/tests/unit/api/test_app_user_erase_input.py::test_the_id_has_the_bounds_of_an_assignments_user_id",
+    "test:backend/tests/unit/api/test_app_user_erase_input.py::test_a_body_tracking_could_not_store_is_a_422_that_never_echoes",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_only_the_exact_id_is_erased",
+]
+
+[[unit]]
+text = "Response: 200 with receipt_id, complete, ids_erased and deleted (rows per table)."
+by = ["test:backend/tests/integration/api/test_app_user_erase_api.py::test_the_response_counts_each_table_exactly"]
+
+[[unit]]
+text = "complete: false means send the same request again."
+by = ["test:backend/tests/integration/api/test_app_user_erase_api.py::test_a_failure_part_way_is_reported_and_resumable"]
+
+[[unit]]
+text = "Errors: 401 with no token or with an API key alone; 403 \"Not enough permissions\" for anyone but a superuser; 422 for a body tracking could not store; 500 when the erase could not be recorded (nothing erased) or failed part way (send the request again)."
+by = [
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_only_a_superuser_may_erase",
+    "test:backend/tests/unit/api/test_app_user_erase_input.py::test_a_body_tracking_could_not_store_is_a_422_that_never_echoes",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_no_start_entry_erases_nothing",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_an_unplanned_failure_part_way_answers_500_and_a_resend_finishes",
+]
+
+[[unit]]
+text = "See Erase one app user's data for what is and is not deleted, and what results look like afterwards."
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Error Responses"

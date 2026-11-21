@@ -245,8 +245,8 @@ text = "event_dedup_keys holds your app's user ids and keeps them when events ar
 by = ["test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_a_key_outlives_its_event_and_is_remembered_while_it_is_kept"]
 
 [[unit]]
-text = "An operator erasing one person's events by hand must delete their keys too."
-by = ["exempt:instruction"]
+text = "Erasing one app user's data (Erase one app user's data) deletes their keys with their events, so an event_id they send again after an erase is stored again."
+by = ["test:backend/tests/integration/api/test_app_user_erase_api.py::test_an_event_sent_again_after_an_erase_is_stored_again"]
 
 [[unit]]
 text = "An event_id is remembered for as long as its key is kept."

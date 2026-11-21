@@ -1,0 +1,443 @@
+document = "docs/api/erase-user-data.md"
+
+[[unit]]
+text = "Erase one app user's data (beta)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Superuser only."
+by = ["test:backend/tests/integration/api/test_app_user_erase_api.py::test_only_a_superuser_may_erase"]
+
+[[unit]]
+text = "POST /api/v1/admin/app-users/erase deletes everything Controlvar stores under one user_id that your app sent."
+by = [
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_nothing_of_the_user_remains_in_any_table",
+    "test:backend/tests/unit/services/test_app_user_erase_inventory.py::test_every_table_is_classified",
+]
+
+[[unit]]
+text = "It does not delete dashboard accounts; that is DELETE /api/v1/admin/users/{user_id}."
+by = [
+    "test:backend/tests/unit/services/test_app_user_erase_inventory.py::test_every_table_is_classified",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_user_delete",
+]
+
+[[unit]]
+text = "Beta: the response may still change."
+by = ["test:backend/tests/unit/api/test_capabilities_beta_operations.py::test_a_core_operation_the_page_calls_beta_is_beta"]
+
+[[unit]]
+text = "There is no undo."
+by = ["test:backend/tests/integration/api/test_app_user_erase_api.py::test_nothing_of_the_user_remains_in_any_table"]
+
+[[unit]]
+text = "Restoring a backup brings back everything in it, not only this user."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Before you erase"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Stop sending the id, and linking it, first: rows your app sends during or after the erase are stored."
+by = [
+    "test:backend/tests/integration/api/test_app_user_erase_identity_aliases.py::test_a_link_waiting_on_the_erase_is_stored_after_it",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_an_event_sent_again_after_an_erase_is_stored_again",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_a_returning_user_is_assigned_afresh",
+]
+
+[[unit]]
+text = "An id many visitors share (an SDK default such as anonymous) erases all of them."
+by = [
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_only_the_exact_id_is_erased",
+    "test:backend/tests/unit/services/test_app_user_erase_inventory.py::test_the_statement_shape_of_each_table",
+]
+
+[[unit]]
+text = "The id is erased across every experiment and workspace of the installation."
+by = ["test:backend/tests/unit/services/test_app_user_erase_inventory.py::test_the_statement_shape_of_each_table"]
+
+[[unit]]
+text = "Because an erase cannot be undone, the accounts that can run it should use two-step sign-in."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The request"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Send the id in the body, signed in as a superuser with a bearer token; an API key is not accepted:"
+by = ["test:backend/tests/integration/api/test_app_user_erase_api.py::test_only_a_superuser_may_erase"]
+
+[[unit]]
+text = "The id is matched exactly: case and spaces count, and % and _ are plain characters."
+by = [
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_only_the_exact_id_is_erased",
+    "test:backend/tests/unit/api/test_app_user_erase_input.py::test_an_id_tracking_can_store_reaches_the_erase_unchanged",
+]
+
+[[unit]]
+text = "It is 1 to 255 characters with no NUL, the ids the tracking routes store."
+by = [
+    "test:backend/tests/unit/api/test_app_user_erase_input.py::test_the_id_has_the_bounds_of_an_assignments_user_id",
+    "test:backend/tests/unit/api/test_app_user_erase_input.py::test_a_body_tracking_could_not_store_is_a_422_that_never_echoes",
+]
+
+[[unit]]
+text = "Any other field is refused with 422."
+by = ["test:backend/tests/unit/api/test_app_user_erase_input.py::test_a_body_tracking_could_not_store_is_a_422_that_never_echoes"]
+
+[[unit]]
+text = "A 200 answers what this call deleted, one count per table:"
+by = [
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_the_response_counts_each_table_exactly",
+    "test:backend/tests/unit/services/test_app_user_erase_inventory.py::test_the_response_counts_every_erased_table",
+]
+
+[[unit]]
+text = "An id with nothing stored answers 200 with every count 0."
+by = [
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_the_response_counts_each_table_exactly",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_each_call_writes_a_start_and_a_final_entry_with_counts_only",
+]
+
+[[unit]]
+text = "The response never holds the id."
+by = [
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_the_response_counts_each_table_exactly",
+    "test:backend/tests/unit/api/test_app_user_erase_input.py::test_an_id_tracking_can_store_reaches_the_erase_unchanged",
+]
+
+[[unit]]
+text = "Status | When"
+by = ["exempt:label"]
+
+[[unit]]
+text = "200 | Erased, or nothing was stored under the id"
+by = ["test:backend/tests/integration/api/test_app_user_erase_api.py::test_the_response_counts_each_table_exactly"]
+
+[[unit]]
+text = "200 with complete: false | Time ran out, a statement timed out, or a link added an id to the person during the call: send the same request again"
+by = [
+    "test:backend/tests/integration/api/test_app_user_erase_identity_aliases.py::test_a_link_made_during_the_erase_answers_complete_false_then_a_resend_erases_it",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_a_failure_part_way_is_reported_and_resumable",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_the_budget_ends_a_call_and_a_resend_resumes",
+]
+
+[[unit]]
+text = "401 | No token, an invalid token, or an API key alone"
+by = [
+    "test:backend/tests/smoke/test_signed_in_refusal_sweep.py::test_every_signed_in_route_refuses_a_request_without_a_token",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_only_a_superuser_may_erase",
+]
+
+[[unit]]
+text = "403 | Not a superuser (Not enough permissions), or demo mode"
+by = [
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_only_a_superuser_may_erase",
+    "test:backend/tests/smoke/test_demo_mode_routes.py::test_every_mutating_route_is_refused_for_a_signed_in_viewer",
+]
+
+[[unit]]
+text = "422 | The body or user_id is missing, empty, longer than 255 characters, not text, holds NUL or an unpaired surrogate, or the body has another field"
+by = ["test:backend/tests/unit/api/test_app_user_erase_input.py::test_a_body_tracking_could_not_store_is_a_422_that_never_echoes"]
+
+[[unit]]
+text = "429 | More than 300 requests a minute to this path from one address"
+by = ["test:backend/tests/unit/api/test_app_user_erase_input.py::test_the_erase_takes_the_default_limit_on_its_one_path"]
+
+[[unit]]
+text = "500 | An unplanned failure. If the erase could not be recorded, nothing was erased; otherwise part of the data may already be erased: send the request again"
+by = [
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_no_start_entry_erases_nothing",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_an_unplanned_failure_part_way_answers_500_and_a_resend_finishes",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_a_failed_final_transaction_is_a_500_with_the_start_entry_only",
+]
+
+[[unit]]
+text = "One call works for at most 20 seconds."
+by = [
+    "test:backend/tests/unit/services/test_app_user_erase_budget.py::test_the_documented_constants",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_the_budget_ends_a_call_and_a_resend_resumes",
+]
+
+[[unit]]
+text = "What is deleted"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Every row of these tables whose id column holds the id:"
+by = [
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_nothing_of_the_user_remains_in_any_table",
+    "test:backend/tests/unit/services/test_app_user_erase_inventory.py::test_the_statement_shape_of_each_table",
+]
+
+[[unit]]
+text = "Table | What it held"
+by = ["exempt:label"]
+
+[[unit]]
+text = "events | Events and exposures, with their metadata"
+by = ["test:backend/tests/integration/api/test_app_user_erase_api.py::test_nothing_of_the_user_remains_in_any_table"]
+
+[[unit]]
+text = "raw_metrics | Flag evaluations and latencies"
+by = ["test:backend/tests/integration/api/test_app_user_erase_api.py::test_nothing_of_the_user_remains_in_any_table"]
+
+[[unit]]
+text = "error_logs | Client errors, with their message, stack trace and attributes"
+by = ["test:backend/tests/integration/api/test_app_user_erase_api.py::test_nothing_of_the_user_remains_in_any_table"]
+
+[[unit]]
+text = "llm_evaluations | LLM experiment evaluations: inputs, prompts and responses"
+by = ["test:backend/tests/integration/api/test_app_user_erase_api.py::test_nothing_of_the_user_remains_in_any_table"]
+
+[[unit]]
+text = "event_dedup_keys | The event_id of each event sent with one"
+by = [
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_nothing_of_the_user_remains_in_any_table",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_an_event_sent_again_after_an_erase_is_stored_again",
+]
+
+[[unit]]
+text = "assignments | Experiment assignments, with the attributes sent"
+by = ["test:backend/tests/integration/api/test_app_user_erase_api.py::test_nothing_of_the_user_remains_in_any_table"]
+
+[[unit]]
+text = "holdout_population | Global-holdout membership"
+by = ["test:backend/tests/integration/api/test_app_user_erase_api.py::test_nothing_of_the_user_remains_in_any_table"]
+
+[[unit]]
+text = "segment_members | Membership of id-list segments"
+by = ["test:backend/tests/integration/api/test_app_user_erase_api.py::test_nothing_of_the_user_remains_in_any_table"]
+
+[[unit]]
+text = "feature_flag_overrides | Per-user flag overrides"
+by = ["test:backend/tests/integration/api/test_app_user_erase_api.py::test_nothing_of_the_user_remains_in_any_table"]
+
+[[unit]]
+text = "identity_aliases | Links between the person's ids, deleted last"
+by = [
+    "test:backend/tests/integration/api/test_app_user_erase_identity_aliases.py::test_links_naming_the_id_in_either_column_are_deleted",
+    "test:backend/tests/integration/api/test_app_user_erase_identity_aliases.py::test_a_link_made_during_the_erase_answers_complete_false_then_a_resend_erases_it",
+    "test:backend/tests/integration/api/test_app_user_erase_identity_aliases.py::test_a_call_that_stops_early_keeps_the_links_and_a_resend_erases_the_person",
+]
+
+[[unit]]
+text = "A user linked to other ids"
+by = ["exempt:label"]
+
+[[unit]]
+text = "If the user was linked to other ids, the erase covers every id of that person (up to 101); ids_erased says how many."
+by = [
+    "test:backend/tests/integration/api/test_app_user_erase_identity_aliases.py::test_an_anonymous_ids_rows_held_for_the_person_are_erased",
+    "test:backend/tests/integration/api/test_app_user_erase_identity_aliases.py::test_a_person_at_the_cap_is_erased_whole",
+]
+
+[[unit]]
+text = "Erasing an anonymous id erases the whole person."
+by = ["test:backend/tests/integration/api/test_app_user_erase_identity_aliases.py::test_links_naming_the_id_in_either_column_are_deleted"]
+
+[[unit]]
+text = "If a link adds an id while the erase runs, the answer is complete: false; send the request again."
+by = ["test:backend/tests/integration/api/test_app_user_erase_identity_aliases.py::test_a_link_made_during_the_erase_answers_complete_false_then_a_resend_erases_it"]
+
+[[unit]]
+text = "A table that stores a user_id and is not in this list is a defect; report it."
+by = [
+    "test:backend/tests/unit/services/test_app_user_erase_inventory.py::test_every_table_is_classified",
+    "test:backend/tests/unit/services/test_app_user_erase_inventory.py::test_kept_tables_have_no_unlisted_id_column",
+]
+
+[[unit]]
+text = "What is not deleted"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Aggregates, which hold no ids: analysis snapshots, bandit states and their history, aggregated flag metrics, balance-group counters, SDK evaluation counters, warehouse analysis runs, reports and safety rollback records."
+by = [
+    "test:backend/tests/unit/services/test_app_user_erase_inventory.py::test_every_table_is_classified",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_nothing_of_the_user_remains_in_any_table",
+]
+
+[[unit]]
+text = "Results cached in Redis (see Results afterwards)."
+by = ["test:backend/tests/unit/services/test_app_user_erase_inventory.py::test_the_erase_touches_no_cache_and_no_other_store"]
+
+[[unit]]
+text = "Configuration that names the id: flag, experiment and segment rules."
+by = ["test:backend/tests/unit/services/test_app_user_erase_inventory.py::test_every_table_is_classified"]
+
+[[unit]]
+text = "Dashboard accounts and their records: users, API keys, two-step sign-in, the audit log and the compliance trail, including older entries that mention the id."
+by = [
+    "test:backend/tests/unit/services/test_app_user_erase_inventory.py::test_every_table_is_classified",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_the_audit_trails_are_untouched_but_for_the_two_entries",
+]
+
+[[unit]]
+text = "Rate-limit counters of requests whose path carries the id, for up to a minute."
+by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestSdkRateLimitIsPerPath::test_sdk_paths_with_different_ids_are_counted_separately",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestSlidingWindowRateLimiter::test_window_expiry",
+]
+
+[[unit]]
+text = "Copies outside the database: backups, snapshots and point-in-time recovery (a restore brings the rows back), load-balancer, API and database server logs, exports and reports already downloaded, your warehouse and what it feeds, DynamoDB counters and the event processor's items where they are deployed, and SDK caches on devices and servers."
+by = [
+    "test:backend/tests/unit/services/test_app_user_erase_inventory.py::test_the_erase_touches_no_cache_and_no_other_store",
+]
+
+[[unit]]
+text = "Results afterwards"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Results are computed from the stored rows when they are read."
+by = ["test:backend/tests/integration/api/test_app_user_erase_api.py::test_earlier_analysis_snapshots_keep_their_numbers"]
+
+[[unit]]
+text = "After an erase the experiment counts this user nowhere: their variant has one fewer user, without their exposures, conversions or values."
+by = [
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_earlier_analysis_snapshots_keep_their_numbers",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_nothing_of_the_user_remains_in_any_table",
+]
+
+[[unit]]
+text = "A p-value, a winner, an SRM check, CUPED, segment breakdowns, Bayesian posteriors and the global-holdout comparison can change."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "A decision you already made on the old numbers is not undone, and a sequential test that already stopped is not revisited."
+by = [
+    "test:backend/tests/unit/services/test_app_user_erase_inventory.py::test_every_table_is_classified",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_erasing_a_variants_last_user_keeps_results_answering",
+]
+
+[[unit]]
+text = "Results are cached for 5 minutes while an experiment runs and 24 hours otherwise; the daily and segmented views for 1 hour."
+by = [
+    "test:backend/tests/unit/api/test_results_stored_settings.py::test_results_are_kept_300_seconds_while_running_and_86400_otherwise",
+    "test:backend/tests/unit/core/test_documented_defaults.py::test_experiments_are_cached_for_an_hour",
+]
+
+[[unit]]
+text = "The erase does not clear them, so a completed experiment can show the old numbers for up to 24 hours."
+by = [
+    "test:backend/tests/unit/services/test_app_user_erase_inventory.py::test_the_erase_touches_no_cache_and_no_other_store",
+    "test:backend/tests/unit/api/test_results_stored_settings.py::test_results_are_kept_300_seconds_while_running_and_86400_otherwise",
+]
+
+[[unit]]
+text = "POST /api/v1/results/{experiment_id}/invalidate-cache clears one experiment's results at once; it is best-effort and answers 200 even when Redis is unreachable."
+by = [
+    "test:backend/tests/unit/api/test_results_api.py::TestInvalidateCache::test_invalidate_cache_returns_200",
+    "test:backend/tests/integration/api/test_sequential_results_routes.py::test_a_settings_change_reaches_the_cached_results_only_once_cleared",
+]
+
+[[unit]]
+text = "The daily and segmented views expire within the hour."
+by = ["test:backend/tests/unit/core/test_documented_defaults.py::test_experiments_are_cached_for_an_hour"]
+
+[[unit]]
+text = "Today's analysis snapshot is replaced by the next fresh computation."
+by = ["test:backend/tests/integration/api/test_app_user_erase_api.py::test_earlier_analysis_snapshots_keep_their_numbers"]
+
+[[unit]]
+text = "Earlier days' snapshots and the bandit-state history keep counting the user until ANALYSIS_HISTORY_RETENTION_DAYS (default 90) purges them."
+by = [
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_earlier_analysis_snapshots_keep_their_numbers",
+    "test:backend/tests/unit/core/test_documented_defaults.py::test_analysis_history_is_kept_90_days",
+]
+
+[[unit]]
+text = "Reports keep counting the user."
+by = ["test:backend/tests/unit/services/test_app_user_erase_inventory.py::test_every_table_is_classified"]
+
+[[unit]]
+text = "Aggregated flag metrics are recomputed for recent periods at the metrics scheduler's next run; older periods keep counting the user."
+by = ["test:backend/tests/unit/core/test_metrics_scheduler.py::test_scheduler_aggregate_metrics"]
+
+[[unit]]
+text = "A bandit's weights are recomputed at its next update (every BANDIT_UPDATE_INTERVAL_MINUTES, default 5) without the user."
+by = [
+    "test:backend/tests/unit/core/test_documented_defaults.py::test_the_scheduler_cycles",
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestBanditSchedulerStatsFallback::test_falls_back_to_postgres_when_counter_module_is_absent",
+]
+
+[[unit]]
+text = "The bandit reads PostgreSQL first; DynamoDB counters are used only when PostgreSQL has no assignments for the experiment or cannot be read, and then they still count the user."
+by = [
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestDynamoDBCompleteness::test_postgres_wins_when_dynamodb_is_ahead_of_postgres",
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestDynamoDBCompleteness::test_dynamodb_used_when_postgres_has_no_pulls",
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestDynamoDBCompleteness::test_dynamodb_used_when_postgres_is_unavailable",
+    "test:backend/tests/unit/services/test_app_user_erase_inventory.py::test_the_erase_touches_no_cache_and_no_other_store",
+]
+
+[[unit]]
+text = "Users already routed keep their assignments."
+by = ["test:backend/tests/integration/api/test_tracking_api.py::TestBanditAssignment::test_existing_assignment_is_sticky_when_weights_change"]
+
+[[unit]]
+text = "Warehouse-native analysis (full profile) reads your warehouse and still counts the user."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "If your app sends the id again it is a new user: a new assignment (the same variant in a plain experiment whose split has not changed; a bandit or balanced experiment may give another), a new exposure and the same global-holdout arm."
+by = [
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_a_returning_user_is_assigned_afresh",
+    "test:backend/tests/unit/services/test_global_holdout_service.py::TestDeterministicBucketing::test_same_user_same_bucket",
+]
+
+[[unit]]
+text = "An event_id sent again is stored again."
+by = ["test:backend/tests/integration/api/test_app_user_erase_api.py::test_an_event_sent_again_after_an_erase_is_stored_again"]
+
+[[unit]]
+text = "The record"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Each call writes two audit-log entries with the response's receipt_id as their entity_id: app_user_erase_started when it starts, before anything is deleted, and app_user_erased when it finishes, whose new_value is {\"deleted\": {...}, \"ids_erased\": 1, \"complete\": true}."
+by = [
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_each_call_writes_a_start_and_a_final_entry_with_counts_only",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_no_start_entry_erases_nothing",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_an_app_user_erase_writes_a_start_and_a_final_entry",
+]
+
+[[unit]]
+text = "They hold counts only, never the id."
+by = ["test:backend/tests/integration/api/test_app_user_erase_api.py::test_each_call_writes_a_start_and_a_final_entry_with_counts_only"]
+
+[[unit]]
+text = "A start entry with no finish entry: the call did not finish; some rows may be gone, or none."
+by = [
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_an_unplanned_failure_part_way_answers_500_and_a_resend_finishes",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_a_failed_final_transaction_is_a_500_with_the_start_entry_only",
+]
+
+[[unit]]
+text = "Send the request again."
+by = ["test:backend/tests/integration/api/test_app_user_erase_api.py::test_an_unplanned_failure_part_way_answers_500_and_a_resend_finishes"]
+
+[[unit]]
+text = "Find both with GET /api/v1/audit-logs/?entity_id=<receipt_id>."
+by = ["test:backend/tests/integration/api/test_app_user_erase_api.py::test_each_call_writes_a_start_and_a_final_entry_with_counts_only"]
+
+[[unit]]
+text = "When the answer is complete: false"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Send the same request again until it is true."
+by = [
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_a_failure_part_way_is_reported_and_resumable",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_the_budget_ends_a_call_and_a_resend_resumes",
+]
+
+[[unit]]
+text = "Each call's counts and entries cover that call only."
+by = [
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_a_failure_part_way_is_reported_and_resumable",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_the_response_counts_each_table_exactly",
+]

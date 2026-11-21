@@ -5,6 +5,12 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/admin/app-users/erase": {
+      "post": {
+        "operationId": "erase_app_user_data_api_v1_admin_app_users_erase_post",
+        "summary": "Erase App User Data"
+      }
+    },
     "/api/v1/admin/cache/clear": {
       "post": {
         "operationId": "clear_cache_api_v1_admin_cache_clear_post",
