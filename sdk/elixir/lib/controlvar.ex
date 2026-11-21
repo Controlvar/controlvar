@@ -130,8 +130,10 @@ defmodule Controlvar do
   Track an event (fire-and-forget). Always returns `:ok`; never raises.
 
   `opts`: `:experiment_key`, `:feature_flag_key`, `:value`, `:event_type`,
-  `:timestamp`. Without a key the event is fanned out to every cached
+  `:timestamp`, `:event_id`. Without a key the event is fanned out to every cached
   assignment and evaluated flag for the user (nothing cached — nothing sent).
+  Every event carries an `event_id`: the `:event_id` given, or a lowercase
+  random UUID made for this call, the same in every fan-out entry.
   See `Controlvar.Client.track/5`.
   """
   @spec track(Client.server(), String.t(), String.t(), map(), keyword()) :: :ok
@@ -142,7 +144,8 @@ defmodule Controlvar do
   @doc """
   Track several events via `POST /api/v1/tracking/batch` (max 100 per request).
 
-  Returns `{:ok, %BatchResult{}}` or `{:error, reason}`.
+  Each event carries its own `event_id` (its `event_id` key, or one made for
+  it). Returns `{:ok, %BatchResult{}}` or `{:error, reason}`.
   See `Controlvar.Client.track_batch/2`.
   """
   @spec track_batch(Client.server(), [map()]) :: {:ok, BatchResult.t()} | {:error, term()}

@@ -228,6 +228,7 @@ Controlvar.track(client, "page_view", "user-123", %{page: "/products"})   # no k
 | `:value` | `number()` | Numeric value (revenue, duration, …) |
 | `:event_type` | `String.t()` | Defaults to `event_name` |
 | `:timestamp` | `DateTime.t() \| String.t()` | Defaults to now (UTC, ISO-8601) |
+| `:event_id` | `String.t()` | Sent as `event_id`; one is made when not given (see [Event ids](#event-ids)) |
 
 **Fan-out rule.** With `:experiment_key` and/or `:feature_flag_key` the SDK sends one
 `POST /api/v1/tracking/track`. Without a key it sends one `POST /api/v1/tracking/batch` containing
@@ -256,8 +257,8 @@ Synchronous. Sends up to 100 events per `POST /api/v1/tracking/batch` (longer li
 and returns `{:ok, %Controlvar.BatchResult{success_count, failure_count, errors}}` or
 `{:error, reason}` when a request fails. Each event is a map (atom or string keys) with
 `event_name` and `user_id`; optional `experiment_key`, `feature_flag_key`, `properties` (sent as
-`metadata`), `value`, `event_type`, `timestamp`. An event with no key is stored as history and
-counts in no experiment's results; tag outcome events.
+`metadata`), `value`, `event_type`, `timestamp`, `event_id`. An event with no key is stored as
+history and counts in no experiment's results; tag outcome events.
 
 ```elixir
 {:ok, result} =
@@ -271,6 +272,32 @@ result.errors                                      # nil, or a list of error map
 ```
 
 Malformed events are counted as failures (with `%{index, error}` entries) without being sent.
+
+---
+
+## Event ids
+
+Every event this SDK sends carries an `event_id`. The server stores an event sent again with the
+same `event_id`, user, experiment, flag and event name only once (see
+[How events count](../guides/how-events-count.md#sending-an-event-again)). The package is not on
+Hex yet: the `git:` dependency in [Installation](#installation), which builds this repository's
+`main`, has it.
+
+- `track/5`'s `:event_id` option, or an `event_id` key (atom or string) in a `track_batch/2`
+  event, sets the id. Without one (`nil` or `""`), the SDK makes a lowercase random UUID
+  (version 4) for the event in that call, so tracking the same event twice sends two events.
+- An event fanned out to several experiments and flags carries the same id in every entry, so it
+  counts once in each of them. In `track_batch/2`, each event has its own id.
+- An id must be a string of at most 255 characters (counted in code points, as the server counts
+  them), valid UTF-8, with no NUL. With any other id, `track/5` sends nothing and logs a warning
+  that names the rule and not the id; `track_batch/2` counts that event as a failure, with an
+  `%{index, error}` entry, and sends the others.
+- When `:httpc` sends a request again by itself, it sends the same body and `event_id`, so the
+  server stores the event once. This SDK's tests see the `:httpc` of OTP 26 do so when the server
+  closes a kept-alive connection while the request is in flight.
+- A request that times out is not sent again: `track/5` logs it, and `track_batch/2` returns
+  `{:error, {:network_error, :timeout}}`. The server may have stored it. To send it again yourself
+  and have it stored once, give the event an `event_id` and send it again with that same id.
 
 ---
 
@@ -298,7 +325,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 |---|---|---|---|
 | `evaluate_flag`, `feature_enabled?` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=…` | `context`: the user's attributes as JSON, left out when there are none | `{key, enabled, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
 | `get_assignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
-| `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp}` | ignored |
+| `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp, event_id}` | ignored |
 | `track` without keys, `track_batch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | `{success_count, failure_count, errors}` |
 
 These SDK paths share a per-IP rate-limit ceiling of `SDK_RATE_LIMIT_PER_MINUTE` requests
