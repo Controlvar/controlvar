@@ -115,6 +115,19 @@ object ContractSmoke {
                 }
                 http.post("/api/v1/tracking/batch", JSONObject().put("events", fanout))
 
+                // 4b. One keyed event sent twice with one fixed event_id (#1543). The server is
+                //     to store it once: the runner counts the rows for this user and event name.
+                //     Sent through HttpClient, like the tracking above, so a refused body fails.
+                val dedupName = "contract_dedup_${UUID.randomUUID()}"
+                val dedupId = "contract-${UUID.randomUUID()}"
+                val dedup = TrackEvent(
+                    userId = userId,
+                    eventName = dedupName,
+                    experimentKey = experimentKey,
+                    eventId = dedupId
+                )
+                repeat(2) { http.post("/api/v1/tracking/track", dedup.toJson()) }
+
                 client.close()
 
                 val report = JSONObject()
@@ -129,6 +142,14 @@ object ContractSmoke {
                     .put("flag", JSONObject().put("enabled", flag.enabled))
                     .put("track", JSONObject().put("ok", true))
                     .put("fanout", JSONObject().put("ok", true))
+                    .put(
+                        "event_id",
+                        JSONObject()
+                            .put("user_id", userId)
+                            .put("event_name", dedupName)
+                            .put("id", dedupId)
+                            .put("sends", 2)
+                    )
                 println(report.toString())
             }
         } catch (e: Exception) {
