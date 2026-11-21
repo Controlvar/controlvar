@@ -130,24 +130,33 @@ def _require_update_on_flag(
 def _record_rollout(
     db: Session, user: User, flag_id: UUID, before: dict, verb: str
 ) -> None:
-    """The audit entry for a committed schedule or stage change: a
+    """The audit entry for a schedule or stage change: a
     ``feature_flag_update`` on the schedule's flag, with the reason
-    "rollout schedule <verb>". It fails open: the change stands.
+    "rollout schedule <verb>". Passed to the service as ``record`` and called
+    before its commit, so the change and the entry are committed together or
+    not at all (#1042): if the entry cannot be written, ``AuditWriteFailed``
+    is raised and nothing is saved.
     """
-    flag = db.query(FeatureFlag).filter(FeatureFlag.id == flag_id).first()
-    after = audit_snapshot(EntityType.FEATURE_FLAG, flag) if flag else before
-    old_value, new_value = audit_changes(before, after)
-    AuditService.record_after_commit(
+    with AuditService.audit_with_change(
         db,
-        actor=user,
         action=ActionType.FEATURE_FLAG_UPDATE,
         entity_type=EntityType.FEATURE_FLAG,
         entity_id=flag_id,
-        entity_name=after.get("name") or str(flag_id),
-        before=old_value,
-        after=new_value,
-        reason=f"rollout schedule {verb}",
-    )
+    ):
+        flag = db.query(FeatureFlag).filter(FeatureFlag.id == flag_id).first()
+        after = audit_snapshot(EntityType.FEATURE_FLAG, flag) if flag else before
+        old_value, new_value = audit_changes(before, after)
+        AuditService.record(
+            db,
+            actor=user,
+            action=ActionType.FEATURE_FLAG_UPDATE,
+            entity_type=EntityType.FEATURE_FLAG,
+            entity_id=flag_id,
+            entity_name=after.get("name") or str(flag_id),
+            before=old_value,
+            after=new_value,
+            reason=f"rollout schedule {verb}",
+        )
 
 
 @router.post(
@@ -172,9 +181,13 @@ def create_rollout_schedule(
     before = audit_snapshot(EntityType.FEATURE_FLAG, flag)
     try:
         schedule = RolloutService.create_rollout_schedule(
-            db=db, data=data, owner_id=current_user.id
+            db=db,
+            data=data,
+            owner_id=current_user.id,
+            record=lambda: _record_rollout(
+                db, current_user, flag.id, before, "created"
+            ),
         )
-        _record_rollout(db, current_user, flag.id, before, "created")
         return schedule
     except RolloutRuleConflict as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
@@ -306,7 +319,12 @@ def update_rollout_schedule(
     before = audit_snapshot(EntityType.FEATURE_FLAG, flag)
     try:
         schedule = RolloutService.update_rollout_schedule(
-            db=db, schedule_id=schedule_id, data=data
+            db=db,
+            schedule_id=schedule_id,
+            data=data,
+            record=lambda: _record_rollout(
+                db, current_user, flag.id, before, "updated"
+            ),
         )
 
         if not schedule:
@@ -314,7 +332,6 @@ def update_rollout_schedule(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Rollout schedule not found with ID: {schedule_id}",
             )
-        _record_rollout(db, current_user, flag.id, before, "updated")
 
         return schedule
     except RolloutRuleConflict as e:
@@ -363,14 +380,19 @@ def delete_rollout_schedule(
     flag = _require_update_on_flag(db, current_user, schedule_id=schedule_id)
     before = audit_snapshot(EntityType.FEATURE_FLAG, flag)
     try:
-        success = RolloutService.delete_rollout_schedule(db=db, schedule_id=schedule_id)
+        success = RolloutService.delete_rollout_schedule(
+            db=db,
+            schedule_id=schedule_id,
+            record=lambda: _record_rollout(
+                db, current_user, flag.id, before, "deleted"
+            ),
+        )
 
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Rollout schedule not found with ID: {schedule_id}",
             )
-        _record_rollout(db, current_user, flag.id, before, "deleted")
 
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -403,7 +425,11 @@ def activate_rollout_schedule(
     before = audit_snapshot(EntityType.FEATURE_FLAG, flag)
     try:
         schedule = RolloutService.activate_rollout_schedule(
-            db=db, schedule_id=schedule_id
+            db=db,
+            schedule_id=schedule_id,
+            record=lambda: _record_rollout(
+                db, current_user, flag.id, before, "activated"
+            ),
         )
 
         if not schedule:
@@ -411,7 +437,6 @@ def activate_rollout_schedule(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Rollout schedule not found with ID: {schedule_id}",
             )
-        _record_rollout(db, current_user, flag.id, before, "activated")
 
         return schedule
     except RolloutRuleConflict as e:
@@ -448,14 +473,17 @@ def pause_rollout_schedule(
     flag = _require_update_on_flag(db, current_user, schedule_id=schedule_id)
     before = audit_snapshot(EntityType.FEATURE_FLAG, flag)
     try:
-        schedule = RolloutService.pause_rollout_schedule(db=db, schedule_id=schedule_id)
+        schedule = RolloutService.pause_rollout_schedule(
+            db=db,
+            schedule_id=schedule_id,
+            record=lambda: _record_rollout(db, current_user, flag.id, before, "paused"),
+        )
 
         if not schedule:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Rollout schedule not found with ID: {schedule_id}",
             )
-        _record_rollout(db, current_user, flag.id, before, "paused")
 
         return schedule
     except ValueError as e:
@@ -489,7 +517,11 @@ def cancel_rollout_schedule(
     before = audit_snapshot(EntityType.FEATURE_FLAG, flag)
     try:
         schedule = RolloutService.cancel_rollout_schedule(
-            db=db, schedule_id=schedule_id
+            db=db,
+            schedule_id=schedule_id,
+            record=lambda: _record_rollout(
+                db, current_user, flag.id, before, "cancelled"
+            ),
         )
 
         if not schedule:
@@ -497,7 +529,6 @@ def cancel_rollout_schedule(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Rollout schedule not found with ID: {schedule_id}",
             )
-        _record_rollout(db, current_user, flag.id, before, "cancelled")
 
         return schedule
     except ValueError as e:
@@ -533,7 +564,12 @@ def add_rollout_stage(
     before = audit_snapshot(EntityType.FEATURE_FLAG, flag)
     try:
         stage = RolloutService.add_rollout_stage(
-            db=db, schedule_id=schedule_id, data=data
+            db=db,
+            schedule_id=schedule_id,
+            data=data,
+            record=lambda: _record_rollout(
+                db, current_user, flag.id, before, "stage added"
+            ),
         )
 
         if not stage:
@@ -541,7 +577,6 @@ def add_rollout_stage(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Rollout schedule not found with ID: {schedule_id}",
             )
-        _record_rollout(db, current_user, flag.id, before, "stage added")
 
         return stage
     except RolloutRuleConflict as e:
@@ -579,14 +614,20 @@ def update_rollout_stage(
     flag = _require_update_on_flag(db, current_user, stage_id=stage_id)
     before = audit_snapshot(EntityType.FEATURE_FLAG, flag)
     try:
-        stage = RolloutService.update_rollout_stage(db=db, stage_id=stage_id, data=data)
+        stage = RolloutService.update_rollout_stage(
+            db=db,
+            stage_id=stage_id,
+            data=data,
+            record=lambda: _record_rollout(
+                db, current_user, flag.id, before, "stage updated"
+            ),
+        )
 
         if not stage:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Rollout stage not found with ID: {stage_id}",
             )
-        _record_rollout(db, current_user, flag.id, before, "stage updated")
 
         return stage
     except RolloutRuleConflict as e:
@@ -623,14 +664,19 @@ def delete_rollout_stage(
     flag = _require_update_on_flag(db, current_user, stage_id=stage_id)
     before = audit_snapshot(EntityType.FEATURE_FLAG, flag)
     try:
-        success = RolloutService.delete_rollout_stage(db=db, stage_id=stage_id)
+        success = RolloutService.delete_rollout_stage(
+            db=db,
+            stage_id=stage_id,
+            record=lambda: _record_rollout(
+                db, current_user, flag.id, before, "stage deleted"
+            ),
+        )
 
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Rollout stage not found with ID: {stage_id}",
             )
-        _record_rollout(db, current_user, flag.id, before, "stage deleted")
 
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -662,14 +708,19 @@ def manually_advance_stage(
     flag = _require_update_on_flag(db, current_user, stage_id=stage_id)
     before = audit_snapshot(EntityType.FEATURE_FLAG, flag)
     try:
-        stage = RolloutService.manually_advance_stage(db=db, stage_id=stage_id)
+        stage = RolloutService.manually_advance_stage(
+            db=db,
+            stage_id=stage_id,
+            record=lambda: _record_rollout(
+                db, current_user, flag.id, before, "stage advanced"
+            ),
+        )
 
         if not stage:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Rollout stage not found with ID: {stage_id}",
             )
-        _record_rollout(db, current_user, flag.id, before, "stage advanced")
 
         return stage
     except RolloutRuleConflict as e:

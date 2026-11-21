@@ -55,6 +55,12 @@ from backend.app.models.experiment import (
     MetricType,
     Variant,
 )
+from backend.app.services.permutation_test import (
+    comparison_seed,
+    listed_values,
+    permutation_t_p_value,
+    permutations_for,
+)
 from backend.app.services.results_streaming_service import ResultsStreamingService
 from backend.app.services.sufficient_stats_analysis import MEAN_METRIC_TYPES
 
@@ -273,6 +279,35 @@ def _arms(result):
     return metric, by_name["control"], by_name["treatment"]
 
 
+def _permutation_p(metric, control_y, treatment_y, alpha=0.05):
+    """The permutation test's p-value (#2041) for these per-user values,
+    zeros included, under this metric's and its variants' ids: what
+    ``per_user_mean_metric_result`` gives when the database's totals are
+    exactly these values.  The seed comes from the ids the response names."""
+    control = next(v for v in metric["variants"] if v["is_control"])
+    treatment = next(v for v in metric["variants"] if not v["is_control"])
+    listed_c, listed_t = listed_values([control_y, treatment_y])
+    permutations = permutations_for(1, alpha)
+    seed = comparison_seed(
+        metric["metric_id"],
+        control["variant_id"],
+        treatment["variant_id"],
+        len(control_y),
+        len(treatment_y),
+        listed_c.size,
+        listed_t.size,
+        permutations,
+    )
+    return permutation_t_p_value(
+        listed_c,
+        len(control_y),
+        listed_t,
+        len(treatment_y),
+        seed=seed,
+        permutations=permutations,
+    )
+
+
 def test_a_revenue_metric_is_analysed_per_assigned_user(admin_client, experiment):
     metric, control, treatment = _arms(_results(admin_client, experiment))
     welch = stats.ttest_ind(TREATMENT_Y, CONTROL_Y, equal_var=False)
@@ -294,8 +329,8 @@ def test_a_revenue_metric_is_analysed_per_assigned_user(admin_client, experiment
         assert variant["confidence_interval"] == pytest.approx(
             [y.mean() - half, y.mean() + half], rel=1e-9
         )
-    assert treatment["statistical_test_used"] == "welch_t_test"
-    assert treatment["p_value"] == pytest.approx(welch.pvalue, rel=1e-9)
+    assert treatment["statistical_test_used"] == "permutation_t_test"
+    assert treatment["p_value"] == _permutation_p(metric, CONTROL_Y, TREATMENT_Y)
     assert treatment["absolute_difference"] == pytest.approx(11.225, rel=1e-9)
     assert treatment["absolute_difference_ci"] == pytest.approx(
         list(welch.confidence_interval(0.95)), rel=1e-9
@@ -318,8 +353,8 @@ def test_the_export_leaves_the_rate_empty_for_a_revenue_primary(
     admin_client, mean_experiment
 ):
     """The export's rows for a primary metric analysed as a mean (a revenue,
-    count, duration or custom metric): no rate, the buyers, and the Welch
-    p-value."""
+    count, duration or custom metric): no rate, the buyers, and the
+    permutation test's p-value."""
     experiment = mean_experiment
     metric, _, treatment = _arms(_results(admin_client, experiment))
     assert metric["analysis"] == "mean"
@@ -337,7 +372,7 @@ def test_the_export_leaves_the_rate_empty_for_a_revenue_primary(
     assert rows["control"]["p_value"] is None
     assert rows["treatment"]["p_value"] == pytest.approx(treatment["p_value"])
     assert rows["treatment"]["p_value"] == pytest.approx(
-        stats.ttest_ind(treatment_y, control_y, equal_var=False).pvalue, rel=1e-9
+        _permutation_p(metric, control_y, treatment_y), rel=1e-12
     )
 
 
@@ -499,8 +534,7 @@ def test_winsorization_in_the_stored_config_changes_no_number(
     assert treatment["mean"] == pytest.approx((1e12 + 10.0) / users, rel=1e-12)
     y = np.array([1e12, 10.0] + [0.0] * (users - 2))
     assert treatment["std_dev"] == pytest.approx(np.std(y, ddof=1), rel=1e-9)
-    welch = stats.ttest_ind(y, np.zeros(users), equal_var=False)
-    assert treatment["p_value"] == pytest.approx(welch.pvalue, rel=1e-9)
+    assert treatment["p_value"] == _permutation_p(metric, np.zeros(users), y)
 
 
 def test_values_that_are_not_finite_or_too_large_add_nothing(
@@ -526,11 +560,10 @@ def test_values_that_are_not_finite_or_too_large_add_nothing(
     assert control["std_dev"] == 0.0
     assert treatment["conversions"] == 2
     assert treatment["mean"] == pytest.approx((1e12 + 10.0) / users, rel=1e-12)
-    assert treatment["statistical_test_used"] == "welch_t_test"
+    assert treatment["statistical_test_used"] == "permutation_t_test"
     assert treatment["relative_improvement_pct"] is None
     y = np.array([1e12, 10.0] + [0.0] * (users - 2))
-    welch = stats.ttest_ind(y, np.zeros(users), equal_var=False)
-    assert treatment["p_value"] == pytest.approx(welch.pvalue, rel=1e-9)
+    assert treatment["p_value"] == _permutation_p(metric, np.zeros(users), y)
 
     export = admin_client.get("/api/v1/export/variants", params={"format": "json"})
     assert export.status_code == 200, export.text
@@ -559,6 +592,5 @@ def test_a_refund_is_subtracted_from_its_buyers_total(admin_client, refund):
     assert control["conversions"] == 2
     assert control["mean"] == pytest.approx(6.25, rel=1e-12)
     assert control["std_dev"] == pytest.approx(np.std(control_y, ddof=1), rel=1e-9)
-    welch = stats.ttest_ind(treatment_y, control_y, equal_var=False)
-    assert treatment["p_value"] == pytest.approx(welch.pvalue, rel=1e-9)
+    assert treatment["p_value"] == _permutation_p(metric, control_y, treatment_y)
     assert treatment["absolute_difference"] == pytest.approx(3.0 - 6.25, rel=1e-12)

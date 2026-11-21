@@ -199,6 +199,9 @@ WRITTEN_ACTION_TYPES: frozenset = frozenset(
         ActionType.EXPERIMENT_COMPLETE,
         ActionType.EXPERIMENT_PREVIEW_LINK_CREATE,
         ActionType.EXPERIMENT_PREVIEW_LINKS_REVOKE,
+        ActionType.VISUAL_EDITOR_SESSION_OPENED,
+        ActionType.VISUAL_EDITOR_SESSION_CLOSED,
+        ActionType.VISUAL_EDITOR_TICKET_REUSED,
         ActionType.USER_CREATE,
         ActionType.USER_DELETE,
         ActionType.USER_LOGIN,
@@ -281,6 +284,10 @@ SYSTEM_SSO_SYNC = AuditActor(id=None, email="system:sso-sync")
 #: An operator's command run where the database is reachable, such as
 #: ``python -m backend.app.db.two_factor_reset`` (#1812): nobody is signed in.
 SYSTEM_OPERATOR_CLI = AuditActor(id=None, email="system:operator-cli")
+#: The visual editor's sign-in ending the editor an editor link opened, when
+#: that link is presented again after it was used (#1545): nobody signed in
+#: sends that request.
+SYSTEM_VISUAL_EDITOR = AuditActor(id=None, email="system:visual-editor")
 
 #: The reserved ``user_email`` values of the system actors.
 SYSTEM_ACTOR_EMAILS: frozenset = frozenset(
@@ -292,6 +299,7 @@ SYSTEM_ACTOR_EMAILS: frozenset = frozenset(
         SYSTEM_COGNITO_SYNC,
         SYSTEM_SSO_SYNC,
         SYSTEM_OPERATOR_CLI,
+        SYSTEM_VISUAL_EDITOR,
     )
 )
 

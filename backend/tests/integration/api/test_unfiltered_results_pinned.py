@@ -81,6 +81,25 @@ PINNED: Dict[str, Dict[str, str]] = {
             "d9d705ebd77321676e62a674b2885b6e0e2eb5a9c4bfe88d511a8b7ddf5eec3f"
         ),
     },
+    # #2041: each mean metric's p-value comes from a permutation test of
+    # Welch's t (permutation_t_test): Load time 0.2344 -> 0.266, Revenue
+    # 0.2202 -> 0.168; Sessions only renames its test; engine_version 1.13.0.
+    # The sequential snapshot carries no mean p-value and no engine version.
+    "1.13.0": {
+        "computed": "bddb9b3a23f316a334397d0ed9ef764443f962382f0c7df2162158b20cc124f2",
+        "cache_hit": "bddb9b3a23f316a334397d0ed9ef764443f962382f0c7df2162158b20cc124f2",
+        "alias": "bddb9b3a23f316a334397d0ed9ef764443f962382f0c7df2162158b20cc124f2",
+        "breakdown_tier": "6a2d0fb48b0d51135a620a50f43b4b90c0026cdf2a663b11cb24927401e1be32",
+        "snapshot_frequentist": (
+            "bddb9b3a23f316a334397d0ed9ef764443f962382f0c7df2162158b20cc124f2"
+        ),
+        "snapshot_bayesian": (
+            "4b0f2aebc8d8d6ed31d183c730ab1f9e24ade50a182fad88f4c2a01421f53c9d"
+        ),
+        "snapshot_sequential": (
+            "d9d705ebd77321676e62a674b2885b6e0e2eb5a9c4bfe88d511a8b7ddf5eec3f"
+        ),
+    },
 }
 
 # --- the fixed experiment ------------------------------------------------------

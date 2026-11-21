@@ -914,7 +914,10 @@ is not significant. For a proportion, near the threshold, the interval and
 Fisher's exact test can disagree either way: 128 of 1,000 against 100 of
 1,000 is not significant (p 0.057) while its interval runs from +0.0001
 to +0.056, and 3 of 50 against 18 of 100 is significant (p 0.049) while its
-interval reaches +0.00003.
+interval reaches +0.00003. For a mean, the test is a permutation test of
+Welch's t (`statistical_test_used` `permutation_t_test`, engine 1.13.0) while
+the interval is Welch's, so the two can disagree either way, most often when
+the variants' sizes are very different.
 
 For a proportion, `relative_improvement_pct_ci` is null only when an arm has no
 users or the control has no conversions. The ratio is taken over values of 0

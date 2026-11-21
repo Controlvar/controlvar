@@ -44,6 +44,9 @@ export const ACTIONS: Readonly<Record<string, { label: string; group: ActionGrou
   experiment_complete: { label: 'Experiment completed', group: 'Experiments' },
   experiment_preview_link_create: { label: 'Preview link created', group: 'Experiments' },
   experiment_preview_links_revoke: { label: 'Preview links revoked', group: 'Experiments' },
+  visual_editor_session_opened: { label: 'Visual editor opened', group: 'Experiments' },
+  visual_editor_session_closed: { label: 'Visual editor closed', group: 'Experiments' },
+  visual_editor_ticket_reused: { label: 'Visual editor link used twice', group: 'Experiments' },
   user_create: { label: 'User created', group: 'Users and access' },
   user_delete: { label: 'User deleted', group: 'Users and access' },
   user_activate: { label: 'User reactivated', group: 'Users and access' },
@@ -133,6 +136,7 @@ export const SYSTEM_ACTORS: Readonly<Record<string, string>> = {
   'system:cognito-sync': 'Cognito sync',
   'system:sso-sync': 'SSO sync',
   'system:operator-cli': 'Operator command',
+  'system:visual-editor': 'Visual editor',
 };
 
 /**

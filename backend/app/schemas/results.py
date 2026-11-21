@@ -119,12 +119,17 @@ class StatisticalTest(str, Enum):
 
     FISHER_EXACT       - Fisher's exact test (small-sample conversion data).
     Z_TEST_PROPORTIONS - Two-proportion z-test (large-sample conversions).
-    WELCH_T_TEST       - Welch's t-test (continuous/revenue metrics).
+    WELCH_T_TEST       - Welch's t-test, on per-variant sums alone (a
+                         warehouse mean run).
+    PERMUTATION_T_TEST - A permutation test of Welch's t statistic on each
+                         user's value: a revenue, count, duration or custom
+                         metric in /results, from engine 1.13.0.
     """
 
     FISHER_EXACT = "fisher_exact"
     Z_TEST_PROPORTIONS = "z_test_proportions"
     WELCH_T_TEST = "welch_t_test"
+    PERMUTATION_T_TEST = "permutation_t_test"
 
 
 # ---------------------------------------------------------------------------
@@ -210,8 +215,11 @@ class VariantResult(BaseModel):
     p_value: Optional[float] = Field(
         None,
         description=(
-            "Unadjusted p-value from the chosen statistical test.  "
-            "None for the control variant."
+            "Unadjusted p-value from the chosen statistical test "
+            "(statistical_test_used).  For a mean, the permutation test's: "
+            "twice the smaller tail over the observed assignment and the "
+            "permutations, a multiple of 2 / (permutations + 1), so at least "
+            "0.001 with one treatment.  None for the control variant."
         ),
     )
     adjusted_p_value: Optional[float] = Field(
@@ -227,7 +235,8 @@ class VariantResult(BaseModel):
         description=(
             "True when the adjusted (or raw, if no correction) p-value is "
             "below the significance threshold 1 - confidence_level, the same "
-            "level as confidence_interval."
+            "level as confidence_interval.  For a mean it follows the "
+            "permutation test, not absolute_difference_ci."
         ),
     )
     effect_size: Optional[float] = Field(
@@ -266,7 +275,11 @@ class VariantResult(BaseModel):
     statistical_test_used: Optional[StatisticalTest] = Field(
         None,
         description=(
-            "The statistical test that produced p_value.  None for the control variant."
+            "The statistical test that produced p_value: permutation_t_test "
+            "for a mean in /results (welch_t_test before engine 1.13.0, and "
+            "for a mean computed from per-variant sums alone, as a warehouse "
+            "run is), fisher_exact for a proportion.  None for the control "
+            "variant and for a variant that was not compared."
         ),
     )
     absolute_difference: Optional[float] = Field(
@@ -292,9 +305,12 @@ class VariantResult(BaseModel):
             "decided by statistical_test_used on adjusted_p_value (p_value "
             "when no correction applies), not by this interval: with two or "
             "more treatments under a correction the interval can exclude 0 on "
-            "a variant that is not significant, and for a proportion near the "
+            "a variant that is not significant; for a proportion near the "
             "threshold the interval and Fisher's exact test can disagree "
-            "either way.  relative_improvement_pct_ci and "
+            "either way; and for a mean the interval is Welch's while the "
+            "test is the permutation test, so they can disagree either way, "
+            "most often when the variants' sizes are very different.  "
+            "relative_improvement_pct_ci and "
             "incremental_impact_ci, when not None, contain 0 exactly when "
             "this interval does.  None when absolute_difference is None; for "
             "a mean, also when neither variant's per-user values vary.  For a "
@@ -407,7 +423,9 @@ class MetricResult(BaseModel):
         description=(
             "How the variants are compared.  'mean' for a revenue, count, "
             "duration or custom metric: the mean per assigned user (see "
-            "VariantResult.mean), compared with Welch's t-test.  'proportion' "
+            "VariantResult.mean), compared with a permutation test of Welch's "
+            "t statistic (statistical_test_used permutation_t_test; engines "
+            "before 1.13.0 used Welch's t-test).  'proportion' "
             "for a conversion metric: the share of users who converted, "
             "compared with Fisher's exact test."
         ),

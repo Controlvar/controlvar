@@ -489,6 +489,12 @@
         "summary": "Start experiment"
       }
     },
+    "/api/v1/experiments/{experiment_id}/visual/editor-tickets": {
+      "post": {
+        "operationId": "open_visual_editor_api_v1_experiments__experiment_id__visual_editor_tickets_post",
+        "summary": "Open a visual draft in the visual editor (beta)"
+      }
+    },
     "/api/v1/experiments/{experiment_id}/visual/preview-links": {
       "delete": {
         "operationId": "revoke_preview_links_api_v1_experiments__experiment_id__visual_preview_links_delete",
@@ -1417,6 +1423,34 @@
       "post": {
         "operationId": "calculate_sample_size_api_v1_utils_utils_sample_size_post",
         "summary": "Calculate required sample size"
+      }
+    },
+    "/api/v1/visual-editor/sessions": {
+      "post": {
+        "operationId": "open_editor_session_api_v1_visual_editor_sessions_post",
+        "summary": "Start a visual editor session (beta)"
+      }
+    },
+    "/api/v1/visual-editor/sessions/current": {
+      "delete": {
+        "operationId": "sign_out_of_editor_api_v1_visual_editor_sessions_current_delete",
+        "summary": "Sign out of the visual editor (beta)"
+      },
+      "get": {
+        "operationId": "read_editor_session_api_v1_visual_editor_sessions_current_get",
+        "summary": "The visual editor session and its draft (beta)"
+      }
+    },
+    "/api/v1/visual-editor/sessions/current/variants/{variant_id}/changes": {
+      "put": {
+        "operationId": "save_variant_changes_api_v1_visual_editor_sessions_current_variants__variant_id__changes_put",
+        "summary": "Save one variant's page changes from the visual editor (beta)"
+      }
+    },
+    "/api/v1/visual-editor/tickets/claim": {
+      "post": {
+        "operationId": "claim_editor_link_api_v1_visual_editor_tickets_claim_post",
+        "summary": "Claim an editor link, from the page it opened (beta)"
       }
     },
     "/api/v1/warehouse/analysis/connections": {

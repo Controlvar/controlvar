@@ -37,10 +37,11 @@ export function correctionLabel(method: CorrectionMethod | undefined): string | 
 
 /**
  * True when the engine analysed this metric as a mean: a revenue, count,
- * duration or custom metric's value per assigned user, compared with Welch's
- * t-test. The response's `analysis` says so, so the page reads what this
- * server did, never a list of types. A result without it, from a server older
- * than the field, is read from the test it ran: `welch_t_test` is a mean,
+ * duration or custom metric's value per assigned user, compared with a
+ * permutation test of Welch's t (Welch's t-test before engine 1.13.0). The
+ * response's `analysis` says so, so the page reads what this server did, never
+ * a list of types. A result without it, from a server older than the field, is
+ * read from the test it ran: `welch_t_test` or `permutation_t_test` is a mean,
  * anything else a share. `analysis` comes first because before the first
  * event no treatment has a test to read.
  */
@@ -48,7 +49,11 @@ export function analysedAsMean(metric: MetricResult): boolean {
   if (metric.analysis === 'mean') return true;
   if (metric.analysis === 'proportion') return false;
   if (metric.metric_type === 'conversion') return false;
-  return metric.variants.some((v) => v.statistical_test_used === 'welch_t_test');
+  return metric.variants.some(
+    (v) =>
+      v.statistical_test_used === 'welch_t_test' ||
+      v.statistical_test_used === 'permutation_t_test',
+  );
 }
 
 /**
@@ -486,6 +491,8 @@ function testName(test: StatisticalTestUsed | null | undefined): string {
       return "Fisher's exact test";
     case 'welch_t_test':
       return "Welch's t-test";
+    case 'permutation_t_test':
+      return 'the permutation test';
     case 'z_test_proportions':
       return 'the z-test for two proportions';
     default:
@@ -514,7 +521,10 @@ export function formatPOnSide(p: number, alpha: number, below: boolean): string 
  * The sentence under a row's badge when its interval on the difference and
  * its significance disagree: the interval is not adjusted and significance
  * is, or, near the threshold, Fisher's exact test and Newcombe's interval
- * differ. Null when they agree, for the control, and without a finite
+ * differ, or, for a mean, the permutation test and Welch's interval differ
+ * (their tail sentence says the interval is computed differently, since that
+ * can happen away from the threshold too, most often at a lopsided split).
+ * Null when they agree, for the control, and without a finite
  * interval or p-value. Each p has 4 decimals, more when needed to stay on
  * the side of the threshold the sentence states (`formatPOnSide`).
  *
@@ -544,7 +554,10 @@ export function reconciliationNote(
   const alpha = formatAlpha(confidenceLevel);
   const threshold = Number(alpha);
   const test = testName(variant.statistical_test_used);
-  const tail = ' The test decides; near the threshold the two can differ.';
+  const tail =
+    variant.statistical_test_used === 'permutation_t_test'
+      ? " The test decides; the interval is computed differently and can disagree with it, most often when the variants' sizes are very different."
+      : ' The test decides; near the threshold the two can differ.';
   if (excludesZero) {
     if (adjustedShown && correctionMethod) {
       const adjusted = variant.adjusted_p_value as number;
