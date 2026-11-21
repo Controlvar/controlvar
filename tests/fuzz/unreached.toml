@@ -316,6 +316,18 @@
 # experiment (200), so those two entries are gone. The lists are 121 for
 # superuser, 195 for viewer and 9 for sdk.
 
+# Then #2087 (#2042) added POST /api/v1/admin/app-users/erase, read from
+# fuzz_check's evaluation of a local run of the superuser and viewer passes
+# at this seed on the merged head (fc6d2cdd), whose counts equal that
+# head's fuzz.yml run 44855917678. The superuser pass reaches it (200); only a
+# superuser may use it, so the viewer pass gets 403 and it is listed there.
+# None is an SDK route, so the sdk pass selects none. And, as #1607 found, a
+# new operation changes the ids reused by the operations after it: the
+# superuser pass's POST /api/v1/rbac/users/{user_id}/grant no longer carries
+# the path's user id in its body, so each such request answers 400 (#1789),
+# it no longer reaches it, and it is listed again. The lists are 122 for
+# superuser, 196 for viewer and 9 for sdk.
+
 # --- superuser: the seeded demo administrator's bearer token ----------------
 
 [[unreached]]
@@ -497,6 +509,11 @@ reason = "An SDK route: it takes an API key, and this pass sends a bearer token 
 pass = "superuser"
 operation = "GET /api/v1/results/{experiment_id}/sequential"
 reason = "No request names a stored experiment: an id that names no stored row answers 404, and the other requests fail validation (422)."
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/rbac/users/{user_id}/grant"
+reason = "No generated body's user_id is the path's: those that pass validation answer 400 (#1789, a body naming another user than the path), and the other requests fail validation (422)."
 
 [[unreached]]
 pass = "superuser"
@@ -1144,6 +1161,11 @@ reason = "An SDK route: it takes an API key, and this pass sends a bearer token 
 pass = "viewer"
 operation = "POST /api/v1/tracking/evaluations"
 reason = "An SDK route: it takes an API key, and this pass sends a bearer token (401). The sdk pass fuzzes it."
+
+[[unreached]]
+pass = "viewer"
+operation = "POST /api/v1/admin/app-users/erase"
+reason = "Only a superuser may use it, so the role check answers 403."
 
 [[unreached]]
 pass = "viewer"
