@@ -10,6 +10,87 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.48.0](https://github.com/Controlvar/controlvar/compare/v0.47.0...v0.48.0) (2026-11-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* **auth:** `POST /api/v1/users/me/password` answers 200 with a new access token (the login response) for an account that signs in with its password alone. It answers 204, as before, for an account with two-step sign-in on or required for its role. Every token issued before the change stops working, including the one that sent it. Use the returned token, or sign in again after a 204.
+* **api:** The six /api/v1/wizard operations (POST and GET /api/v1/wizard/drafts, GET /api/v1/wizard/drafts/{draft_id}, PUT /api/v1/wizard/drafts/{draft_id}/step, POST /api/v1/wizard/drafts/{draft_id}/submit and POST /api/v1/wizard/validate), deprecated since 0.15.0, are removed and answer 404. Create an experiment with POST /api/v1/experiments/, as the dashboard's guided setup does, and size it with GET /api/v1/experiments/analysis/sample-size.
+
+### Features
+
+* **api:** a superuser can erase one app user's data (beta) ([#2087](https://github.com/Controlvar/controlvar/issues/2087)) ([8281e67](https://github.com/Controlvar/controlvar/commit/8281e67f41ad48b8dd79e5b8935aaa39a474898b))
+* **api:** remove the deprecated wizard endpoints ([#537](https://github.com/Controlvar/controlvar/issues/537)) ([#2082](https://github.com/Controlvar/controlvar/issues/2082)) ([4f611b5](https://github.com/Controlvar/controlvar/commit/4f611b513c7db941517ff213da2706a14e2d2231))
+* **auth:** ask local accounts for a second step at sign-in ([#1992](https://github.com/Controlvar/controlvar/issues/1992)) ([ddf5395](https://github.com/Controlvar/controlvar/commit/ddf53952ede8fd30c7d457faa78e15e704b06a52))
+* **auth:** changing a password signs out the user's other sessions ([#501](https://github.com/Controlvar/controlvar/issues/501)) ([#2083](https://github.com/Controlvar/controlvar/issues/2083)) ([37c90b6](https://github.com/Controlvar/controlvar/commit/37c90b68d6081ec728f76b11aecd845226323144))
+* **auth:** require two-step sign-in for chosen roles ([#2010](https://github.com/Controlvar/controlvar/issues/2010)) ([373744b](https://github.com/Controlvar/controlvar/commit/373744b30da154ce4be4b08126996d0bef076f45))
+* **auth:** setting up two-step sign-in asks for your current password ([#2008](https://github.com/Controlvar/controlvar/issues/2008)) ([8471781](https://github.com/Controlvar/controlvar/commit/8471781dfd0423439aad9dcb0b48f2c82af9da7f))
+* **bandit:** a bandit's weight history in the API (beta) ([#2000](https://github.com/Controlvar/controlvar/issues/2000)) ([5023032](https://github.com/Controlvar/controlvar/commit/5023032de3d02fe4b700252091137f72890cfd63))
+* **dashboard:** a bandit's weight history on the experiment page ([#2016](https://github.com/Controlvar/controlvar/issues/2016)) ([fb67dac](https://github.com/Controlvar/controlvar/commit/fb67dacdcae700f3cd2a0d576146772dbe4404c4))
+* **dashboard:** an admin sets a bandit's weights by hand ([#2002](https://github.com/Controlvar/controlvar/issues/2002)) ([8d0e2d8](https://github.com/Controlvar/controlvar/commit/8d0e2d8eafb6fdee99e03da8467168e480bd2fe7))
+* **dashboard:** create a bandit experiment from the new-experiment form ([#1999](https://github.com/Controlvar/controlvar/issues/1999)) ([c5c9acc](https://github.com/Controlvar/controlvar/commit/c5c9acc9935f5e98c25fe1610ac684debff62408))
+* **dashboard:** create a split URL experiment from the new-experiment form (full profile) ([#2077](https://github.com/Controlvar/controlvar/issues/2077)) ([487520c](https://github.com/Controlvar/controlvar/commit/487520cf2084e74909d9ed86bce6c7926e134d12))
+* **dashboard:** CUPED-adjusted results on the results page (beta) ([#1998](https://github.com/Controlvar/controlvar/issues/1998)) ([4c53619](https://github.com/Controlvar/controlvar/commit/4c53619d7fb74b7c1b20381efe3a70a076848544))
+* **dashboard:** list the API keys that stop working when you deactivate a user ([#2078](https://github.com/Controlvar/controlvar/issues/2078)) ([1e0410d](https://github.com/Controlvar/controlvar/commit/1e0410d789626c2c55c08bde91d915d7843119a5))
+* **dashboard:** results for one saved segment's members ([#2006](https://github.com/Controlvar/controlvar/issues/2006)) ([21c3935](https://github.com/Controlvar/controlvar/commit/21c3935ecabd002c5b1028a279172b651ffcd06e))
+* **dashboard:** the interactions page, with the scan and the pair test (beta) ([#2003](https://github.com/Controlvar/controlvar/issues/2003)) ([10d5a19](https://github.com/Controlvar/controlvar/commit/10d5a19ca221eb0524d9ab86c10b5cd231718956))
+* **dashboard:** the other confirm panels use the in-page confirm component ([#2073](https://github.com/Controlvar/controlvar/issues/2073)) ([7105479](https://github.com/Controlvar/controlvar/commit/7105479795b58706ce3b00c520978907b345d76f))
+* **dashboard:** two-step sign-in on the account page and at sign-in ([#1995](https://github.com/Controlvar/controlvar/issues/1995)) ([8e95b2a](https://github.com/Controlvar/controlvar/commit/8e95b2abc3107211c045936ad787ed9e34bef294))
+* **db:** add the identity_aliases table (schema only) ([#2080](https://github.com/Controlvar/controlvar/issues/2080)) ([723cc97](https://github.com/Controlvar/controlvar/commit/723cc97b8052e3e62e76510b191d854dbfd08e40))
+* **dotnet-sdk:** track sends an event id, so a retried event is stored once ([#1987](https://github.com/Controlvar/controlvar/issues/1987)) ([9f93c63](https://github.com/Controlvar/controlvar/commit/9f93c63fe220c4393060e7131f9b0772895ab69d))
+* **infra:** the CDK app can require two-step sign-in for chosen roles ([#2060](https://github.com/Controlvar/controlvar/issues/2060)) ([caaafcf](https://github.com/Controlvar/controlvar/commit/caaafcfb01e19055d00ce07e455c17efc88d56c2))
+* **results:** results for one saved segment's members (beta route) ([#1997](https://github.com/Controlvar/controlvar/issues/1997)) ([0b7e3cc](https://github.com/Controlvar/controlvar/commit/0b7e3cc5481a49a081d552fcdb13f68de6efabf8))
+* **sdk:** a browser script applies visual changes before the page shows ([#1545](https://github.com/Controlvar/controlvar/issues/1545)) ([#2088](https://github.com/Controlvar/controlvar/issues/2088)) ([38fed2d](https://github.com/Controlvar/controlvar/commit/38fed2d2db93c8e9e1e13168104b455f8d451c9f))
+* **sdk:** add alias to the JavaScript and Python SDKs (unreleased) ([#2100](https://github.com/Controlvar/controlvar/issues/2100)) ([1deb425](https://github.com/Controlvar/controlvar/commit/1deb425d73c8224b9ea85aa5eea18c65a894f3ac))
+* **sdk:** the React and React Native SDKs send an event id, so a retried event is stored once ([#1985](https://github.com/Controlvar/controlvar/issues/1985)) ([9baa90c](https://github.com/Controlvar/controlvar/commit/9baa90c6637a1e66b83dc9df42988f811de2960f))
+* **site:** controlvar.com gets a sitemap, a canonical address and a descriptive title ([#2050](https://github.com/Controlvar/controlvar/issues/2050)) ([537a391](https://github.com/Controlvar/controlvar/commit/537a3919d3772a951a896c6a74dead2f48465c49))
+* **tracking:** resolve identity links on assign and events (no route writes one yet) ([#2085](https://github.com/Controlvar/controlvar/issues/2085)) ([7d257f2](https://github.com/Controlvar/controlvar/commit/7d257f23178488b9057e47e1e282a8d5bc2c8e34))
+* **warehouse:** enable Amazon Redshift (live run wl-redshift-20261118T011715Z-6b77b53f) ([#2053](https://github.com/Controlvar/controlvar/issues/2053)) ([b9887a6](https://github.com/Controlvar/controlvar/commit/b9887a62b281166de422acea586d9ef4f24c70f5))
+
+
+### Bug Fixes
+
+* **api:** leave post-stratification out of the API document until it is available ([#963](https://github.com/Controlvar/controlvar/issues/963)) ([#2081](https://github.com/Controlvar/controlvar/issues/2081)) ([86721d7](https://github.com/Controlvar/controlvar/commit/86721d7c46d35118ffcdef094d9ba52dbb3bc754))
+* **audit:** a feature flag change is saved with its audit entries or not at all ([#2079](https://github.com/Controlvar/controlvar/issues/2079)) ([f09a300](https://github.com/Controlvar/controlvar/commit/f09a30058dde18e6a493488c20e5464bb7c4b9b9))
+* **audit:** a rollout schedule change is saved with its audit entry or not at all ([#2099](https://github.com/Controlvar/controlvar/issues/2099)) ([01703b8](https://github.com/Controlvar/controlvar/commit/01703b8e1a9cd8a316f96735adae69774ea3b83b))
+* **audit:** saving the safety settings writes an audit entry ([#1982](https://github.com/Controlvar/controlvar/issues/1982)) ([ac14a22](https://github.com/Controlvar/controlvar/commit/ac14a229c7aeb4a225c91c4a3b971ef990051726))
+* **auth:** Cognito calls time out after a few seconds ([#2072](https://github.com/Controlvar/controlvar/issues/2072)) ([da66e16](https://github.com/Controlvar/controlvar/commit/da66e165123efe8b6f19c1ec0eba8aa781144ad8))
+* **bandit:** read converting users from PostgreSQL first, not DynamoDB conversion events ([#2076](https://github.com/Controlvar/controlvar/issues/2076)) ([ddd479d](https://github.com/Controlvar/controlvar/commit/ddd479d3c4fe68c837ad701af075cc4730daafd5))
+* **dashboard:** a late rollback result no longer shows in another flag's dialog ([#1993](https://github.com/Controlvar/controlvar/issues/1993)) ([f1c6a15](https://github.com/Controlvar/controlvar/commit/f1c6a15a1874d6057596a491415348b6b80cf4d7))
+* **dashboard:** every sign-in page applies the same check to the next path ([#2052](https://github.com/Controlvar/controlvar/issues/2052)) ([108710f](https://github.com/Controlvar/controlvar/commit/108710f18c3c9eecaea56a4ec01d25b206ba1fcf))
+* **dashboard:** no sideways scroll on a phone, safety-check units, and four wording fixes ([#1988](https://github.com/Controlvar/controlvar/issues/1988)) ([7d84469](https://github.com/Controlvar/controlvar/commit/7d84469685617102a5fe75a926a11821836f5dd1))
+* **db:** database errors are logged without the statement's parameter values ([#2036](https://github.com/Controlvar/controlvar/issues/2036)) ([d0fdf35](https://github.com/Controlvar/controlvar/commit/d0fdf356332129ec52e551909f7122584f887718))
+* **deps:** postcss-selector-parser 6.1.5 in the dashboard, including under @tailwindcss/typography ([#1984](https://github.com/Controlvar/controlvar/issues/1984)) ([3859b1e](https://github.com/Controlvar/controlvar/commit/3859b1ed7a637bb763be83820c4d5e8440c66ae2))
+* **deps:** postcss-selector-parser 6.1.5 in the StreamPulse demo ([#1983](https://github.com/Controlvar/controlvar/issues/1983)) ([9cc7db1](https://github.com/Controlvar/controlvar/commit/9cc7db1d2263db8d2867f574a893087a55f113e2))
+* **infra:** cdk destroy of the Fargate stack works in one run whatever target group is live ([#2071](https://github.com/Controlvar/controlvar/issues/2071)) ([dae7332](https://github.com/Controlvar/controlvar/commit/dae73327e9000b66301413c8120c9ae1f411d612))
+* **infra:** remove the CloudWatch dashboards that graph metrics nothing publishes ([#2005](https://github.com/Controlvar/controlvar/issues/2005)) ([0e7e4ce](https://github.com/Controlvar/controlvar/commit/0e7e4ce25d93871123b920851ce9d3fde3cc3b7e))
+* **notifications:** email sends time out instead of waiting for ever ([#2034](https://github.com/Controlvar/controlvar/issues/2034)) ([27151c6](https://github.com/Controlvar/controlvar/commit/27151c631c39471d8eabce2c479f5941f2f91669))
+* **results:** the heterogeneous-effects banner no longer fires when the effect is the same in every segment (engine 1.12.0) ([#1981](https://github.com/Controlvar/controlvar/issues/1981)) ([b5e9248](https://github.com/Controlvar/controlvar/commit/b5e9248ea272cc3383e10522e56f121e9b37c90f))
+* **sdk:** the Android SDK sends the user's attributes when it evaluates a flag ([#2074](https://github.com/Controlvar/controlvar/issues/2074)) ([9448fb3](https://github.com/Controlvar/controlvar/commit/9448fb391688f66101d1c67266a48ff4fcd194ec))
+* **sdk:** the Edge SDK sends the user's attributes when it evaluates a flag ([#2043](https://github.com/Controlvar/controlvar/issues/2043)) ([15291cf](https://github.com/Controlvar/controlvar/commit/15291cf7921215f20400dbe005ca3384a3ede8ef))
+* **sdk:** the Elixir SDK sends the user's attributes when it evaluates a flag ([#2044](https://github.com/Controlvar/controlvar/issues/2044)) ([df64f75](https://github.com/Controlvar/controlvar/commit/df64f75afc23c53715ac5fa9f2fceb8ee47ad00c))
+* **sdk:** the Flutter SDK sends the user's attributes when it evaluates a flag ([#2062](https://github.com/Controlvar/controlvar/issues/2062)) ([b54fc0a](https://github.com/Controlvar/controlvar/commit/b54fc0a73f54b8b5bc57177c0763c31155b9b02f))
+* **sdk:** the iOS SDK sends the user's attributes when it evaluates a flag ([#2045](https://github.com/Controlvar/controlvar/issues/2045)) ([10dcca7](https://github.com/Controlvar/controlvar/commit/10dcca7834774a12f8f813379548a9709399c0f2))
+* **sdk:** the PHP SDK sends the user's attributes when it evaluates a flag ([#2037](https://github.com/Controlvar/controlvar/issues/2037)) ([f280816](https://github.com/Controlvar/controlvar/commit/f280816a29722c41deb63a5ae1f04e337fe60e04))
+* **sdk:** the Ruby SDK sends the user's attributes when it evaluates a flag ([#2035](https://github.com/Controlvar/controlvar/issues/2035)) ([5370cca](https://github.com/Controlvar/controlvar/commit/5370ccab413bb0e89781c2a84fad3f403816e8f9))
+* **site:** the homepage and docs hub say which features are beta ([#2049](https://github.com/Controlvar/controlvar/issues/2049)) ([1bf9613](https://github.com/Controlvar/controlvar/commit/1bf96132616aa3d3ba175f80c87fc097077ec382))
+* **wizard:** limits on a draft's fields and on how many drafts one user keeps ([#2033](https://github.com/Controlvar/controlvar/issues/2033)) ([c894353](https://github.com/Controlvar/controlvar/commit/c894353db804cd89c897e2e4fc4926c661c0f3a8))
+* **workspaces:** a workspace slug must match the whole pattern ([#2031](https://github.com/Controlvar/controlvar/issues/2031)) ([4e8e902](https://github.com/Controlvar/controlvar/commit/4e8e9029087de5d90d86c3031fa19880d1da5505))
+
+
+### Documentation
+
+* **claims:** the bandit page's three jest targets name the whole it.each title ([#2059](https://github.com/Controlvar/controlvar/issues/2059)) ([74666ab](https://github.com/Controlvar/controlvar/commit/74666abb1833d0297d125251fefc60a7100f5772))
+* link previews, logo and favicon on the docs site ([#2075](https://github.com/Controlvar/controlvar/issues/2075)) ([82b813e](https://github.com/Controlvar/controlvar/commit/82b813e17ed351c7e7c1ca0594a9cd8bb77c79eb))
+* mark CUPED, sequential testing and the SSO routes as beta ([#2032](https://github.com/Controlvar/controlvar/issues/2032)) ([ba87d64](https://github.com/Controlvar/controlvar/commit/ba87d64fa39616c2361b1ad9ab39ba1fe3e203e1))
+* page descriptions and robots.txt for search ([#2061](https://github.com/Controlvar/controlvar/issues/2061)) ([e09dfac](https://github.com/Controlvar/controlvar/commit/e09dfacc94b42c6a682bb991a5dc9c88fd99a1a8))
+* **roadmap:** name Slack accurately, and point contributors to where to start ([#2089](https://github.com/Controlvar/controlvar/issues/2089)) ([a20452e](https://github.com/Controlvar/controlvar/commit/a20452e164be27bc6f58a3c5c5020b83b9201045))
+* **sdk:** a key-less track() does not report entries a 200 answer refuses ([#1994](https://github.com/Controlvar/controlvar/issues/1994)) ([34f0fc3](https://github.com/Controlvar/controlvar/commit/34f0fc3f194a37f9be002933b674670226673a69))
+* the capabilities page lists what shipped through 0.47.0 ([#1980](https://github.com/Controlvar/controlvar/issues/1980)) ([31a8c19](https://github.com/Controlvar/controlvar/commit/31a8c196f69a76c715d0613afb4d776270339e6e))
+* the limitations page names the SDKs whose error reports reach safety rollback ([#2051](https://github.com/Controlvar/controlvar/issues/2051)) ([4f82358](https://github.com/Controlvar/controlvar/commit/4f8235838316fb71d5c42c60fe02859d074e2c66))
+* the roadmap drops five finished items, notes 0.47.0 first steps ([#1977](https://github.com/Controlvar/controlvar/issues/1977)) ([517080c](https://github.com/Controlvar/controlvar/commit/517080c1cc80bb9c4d580984e1e6df2a7abfb93b))
+
 ## [0.47.0](https://github.com/Controlvar/controlvar/compare/v0.46.0...v0.47.0) (2026-11-14)
 
 
