@@ -21,8 +21,10 @@ own:
   another change holds ends the request the same way, and a bulk toggle whose
   commit fails answers 500 (it answered 200, reporting every flag as changed).
 
-A rollout schedule change still keeps its change when its entry cannot be
-written (``test_rollout_change_keeps_the_change_when_the_audit_write_fails``).
+The ten rollout schedule and stage routes, which record a
+``feature_flag_update`` on the schedule's flag, are held the same way: with
+the entry refused they answer 500 with their own message and save nothing,
+and the identical request saves once the refusal is lifted.
 """
 
 from __future__ import annotations
@@ -680,15 +682,202 @@ def test_bulk_toggle_answers_500_when_its_commit_fails(
     )
 
 
-# --- rollout schedule changes keep their change (today) ------------------------
+# --- rollout schedule and stage changes ----------------------------------------
+
+SCHEDULES = f"{V1}/rollout-schedules"
+ROLLOUT_LOGGER = "backend.app.api.v1.endpoints.rollout_schedules"
 
 
-def test_rollout_change_keeps_the_change_when_the_audit_write_fails(
+@dataclass(frozen=True)
+class RolloutCase:
+    """One rollout route: the schedule it starts from ("none", "draft" or
+    "active"), the verb and the object its 500 message and ERROR line name,
+    the reason its entry records, and its status when saved."""
+
+    start: str
+    doing: str
+    thing: str
+    reason: str
+    ok: int = 200
+
+
+ROLLOUT_CASES = {
+    "create": RolloutCase("none", "creating", "schedule", "created", 201),
+    "update": RolloutCase("draft", "updating", "schedule", "updated"),
+    "delete": RolloutCase("draft", "deleting", "schedule", "deleted", 204),
+    "activate": RolloutCase("draft", "activating", "schedule", "activated"),
+    "pause": RolloutCase("active", "pausing", "schedule", "paused"),
+    "cancel": RolloutCase("active", "cancelling", "schedule", "cancelled"),
+    "add-stage": RolloutCase("draft", "adding", "stage", "stage added", 201),
+    "update-stage": RolloutCase("draft", "updating", "stage", "stage updated"),
+    "delete-stage": RolloutCase("draft", "deleting", "stage", "stage deleted", 204),
+    "advance": RolloutCase("active", "advancing", "stage", "stage advanced"),
+}
+
+
+def _schedule_body(flag_id):
+    soon = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+    later = (datetime.now(timezone.utc) + timedelta(hours=72)).isoformat()
+    return {
+        "name": f"{PREFIX} schedule",
+        "feature_flag_id": str(flag_id),
+        "start_date": soon,
+        "end_date": later,
+        "max_percentage": 100,
+        "min_stage_duration": 1,
+        "stages": [
+            {
+                "name": "One",
+                "stage_order": 1,
+                "target_percentage": 25,
+                "trigger_type": "manual",
+            },
+            {
+                "name": "Two",
+                "stage_order": 2,
+                "target_percentage": 100,
+                "trigger_type": "manual",
+            },
+        ],
+    }
+
+
+def _rollout_setup(client, db_session, developer, case, name):
+    """The flag, and the schedule the route acts on (None for create)."""
+    flag = _flag(db_session, A, name, owner=developer)
+    if case.start == "none":
+        return flag, None
+    h = _headers(developer, "fa1042-setup")
+    created = client.post(f"{SCHEDULES}/", json=_schedule_body(flag.id), headers=h)
+    assert created.status_code == 201, created.text
+    schedule = created.json()
+    if case.start == "active":
+        activated = client.post(f"{SCHEDULES}/{schedule['id']}/activate", headers=h)
+        assert activated.status_code == 200, activated.text
+    return flag, schedule
+
+
+def _rollout_send(client, user, name, flag, schedule, request_id):
+    h = _headers(user, request_id)
+    if name == "create":
+        return client.post(f"{SCHEDULES}/", json=_schedule_body(flag.id), headers=h)
+    sid = schedule["id"]
+    first, second = sorted(schedule["stages"], key=lambda s: s["stage_order"])
+    if name == "update":
+        body = {"name": f"{PREFIX} renamed"}
+        return client.put(f"{SCHEDULES}/{sid}", json=body, headers=h)
+    if name == "delete":
+        return client.delete(f"{SCHEDULES}/{sid}", headers=h)
+    if name in ("activate", "pause", "cancel"):
+        return client.post(f"{SCHEDULES}/{sid}/{name}", headers=h)
+    if name == "add-stage":
+        body = {
+            "name": "Three",
+            "stage_order": 3,
+            "target_percentage": 100,
+            "trigger_type": "manual",
+        }
+        return client.post(f"{SCHEDULES}/{sid}/stages", json=body, headers=h)
+    if name == "update-stage":
+        body = {"name": "One renamed"}
+        return client.put(f"{SCHEDULES}/stages/{first['id']}", json=body, headers=h)
+    if name == "delete-stage":
+        return client.delete(f"{SCHEDULES}/stages/{second['id']}", headers=h)
+    return client.post(f"{SCHEDULES}/stages/{first['id']}/advance", headers=h)
+
+
+def _rollout_state(fresh, flag_id):
+    """The flag's status and rollout percentage, and each of its schedules
+    with its stages, as stored."""
+    session = fresh()
+    try:
+        flag = session.get(FeatureFlag, flag_id)
+        schedules = (
+            session.query(RolloutSchedule)
+            .filter(RolloutSchedule.feature_flag_id == flag_id)
+            .all()
+        )
+        return (
+            str(flag.status),
+            flag.rollout_percentage,
+            sorted(
+                (
+                    str(s.id),
+                    s.name,
+                    str(s.status),
+                    sorted(
+                        (str(t.id), t.name, t.stage_order, str(t.status))
+                        for t in s.stages
+                    ),
+                )
+                for s in schedules
+            ),
+        )
+    finally:
+        session.close()
+
+
+def _rollout_entries(fresh, flag_id, case):
+    return [
+        e
+        for e in _entries(fresh, flag_id)
+        if e.reason == f"rollout schedule {case.reason}"
+    ]
+
+
+@pytest.mark.parametrize("name", list(ROLLOUT_CASES))
+def test_a_refused_entry_saves_no_rollout_change_and_answers_500(
+    client, fresh, db_session, developer, refuse, after_request, caplog, name
+):
+    case = ROLLOUT_CASES[name]
+    canary = f"fa1042-canary-{uuid.uuid4().hex}"
+    flag, schedule = _rollout_setup(
+        client, db_session, developer, case, f"{PREFIX} {canary}"
+    )
+    before = _rollout_state(fresh, flag.id)
+    refuse.inserts_into("audit_logs")
+    counts = Counts(fresh)
+    caplog.set_level(logging.INFO)
+
+    response = _rollout_send(client, developer, name, flag, schedule, "fa1042-r")
+
+    assert response.status_code == 500, (response.status_code, response.text)
+    assert response.json() == {
+        "detail": f"An error occurred while {case.doing} the rollout {case.thing}"
+    }
+    assert _rollout_state(fresh, flag.id) == before
+    # No entry, and nothing counted as a lost entry.
+    assert counts.delta() == (0, 0, 0)
+    assert _error_lines(caplog) == (
+        (
+            ROLLOUT_LOGGER,
+            f"Error {case.doing} rollout {case.thing}: audit entry for "
+            "feature_flag_update on feature_flag <id> could not be written "
+            "(InternalError)",
+        ),
+    )
+    _assert_no_values_logged(caplog, canary, REFUSED, developer.email)
+    assert after_request[-1] is None, type(after_request[-1]).__name__
+
+    # The identical request, once the refusal is lifted: saved, one entry.
+    refuse.lift()
+    counts = Counts(fresh)
+    again = _rollout_send(client, developer, name, flag, schedule, "fa1042-again")
+    assert again.status_code == case.ok, again.text
+    assert counts.delta() == (1, 0, 0)
+    entries = _rollout_entries(fresh, flag.id, case)
+    assert len(entries) == 1, [e.reason for e in _entries(fresh, flag.id)]
+    assert entries[0].user_id == developer.id
+    assert _rollout_state(fresh, flag.id) != before
+
+
+def test_rollout_change_keeps_nothing_when_the_audit_write_fails(
     client, fresh, db_session, developer, refuse
 ):
     """A manual stage advance changes the flag's rollout percentage; with its
-    entry refused, the advance is kept, there is no entry, and the failure is
-    counted as a lost entry."""
+    entry refused, nothing is saved and the route answers 500. It used to keep
+    the advance, with no entry and the failure counted as a lost entry
+    (``test_rollout_change_keeps_the_change_when_the_audit_write_fails``)."""
     flag = _flag(db_session, A, f"{PREFIX} rollout", owner=developer)
     h = _headers(developer, "fa1042-rollout")
     soon = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
@@ -728,7 +917,7 @@ def test_rollout_change_keeps_the_change_when_the_audit_write_fails(
         f"{V1}/rollout-schedules/stages/{stage_id}/advance", headers=h
     )
 
-    assert response.status_code == 200, response.text
+    assert response.status_code == 500, response.text
     session = fresh()
     try:
         percentage = (
@@ -738,6 +927,6 @@ def test_rollout_change_keeps_the_change_when_the_audit_write_fails(
         )
     finally:
         session.close()
-    assert percentage == 25
+    assert percentage == 0
     assert len(_entries(fresh, flag.id)) == before
-    assert counts.delta() == (0, 0, 1)
+    assert counts.delta() == (0, 0, 0)

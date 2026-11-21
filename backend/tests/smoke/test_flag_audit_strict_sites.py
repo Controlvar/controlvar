@@ -1,12 +1,13 @@
 """A feature flag change writes its audit entries in its own transaction (#1042).
 
 ``backend/tests/integration/api/test_flag_change_audit_strict.py`` drives each
-flag route with the audit tables refusing writes. This file pins, from the
-source, what keeps a new or edited flag route from writing its entry after
-the change is committed again:
+flag and rollout schedule route with the audit tables refusing writes. This
+file pins, from the source, what keeps a new or edited route from writing its
+entry after the change is committed again:
 
-* the flag routes (``feature_flags.py``) and bulk toggle (``bulk_toggle.py``)
-  call none of the writers that commit, or swallow a failure, on their own:
+* the flag routes (``feature_flags.py``), bulk toggle (``bulk_toggle.py``) and
+  the rollout schedule routes (``rollout_schedules.py``) call none of the
+  writers that commit, or swallow a failure, on their own:
   ``record_after_commit``, ``record_in_savepoint``, ``log_action``,
   ``log_toggle_operation`` and ``log_bulk_toggle``;
 * in those files every ``AuditService.record`` call and every compliance
@@ -14,11 +15,12 @@ the change is committed again:
   ``with AuditService.audit_with_change(...)`` block, and no such block
   commits or awaits: the change and its entries are committed after the
   block, together;
-* the five ``FeatureFlagService`` writers are called exactly five times in the
-  application (``backend/app``, and ``modules/backend/app`` when it is
-  present), each with ``record=`` set to something other than ``None``.
-  ``record`` defaults to ``None`` for the tests that call the service
-  directly, so a route that leaves it out would save its change alone.
+* the five ``FeatureFlagService`` writers and the ten ``RolloutService``
+  writers are called exactly fifteen times in the application
+  (``backend/app``, and ``modules/backend/app`` when it is present), each
+  with ``record=`` set to something other than ``None``. ``record`` defaults
+  to ``None`` for the tests that call the services directly, so a route that
+  leaves it out would save its change alone.
 
 The source is read from this file's own path (no git), so the check runs the
 same in core-build's copy of the tree.
@@ -38,7 +40,7 @@ pytestmark = [pytest.mark.smoke, pytest.mark.regression]
 REPO_ROOT = Path(__file__).resolve().parents[3]
 ENDPOINTS = REPO_ROOT / "backend" / "app" / "api" / "v1" / "endpoints"
 #: The route modules whose flag changes are strict.
-STRICT_FILES = ("feature_flags.py", "bulk_toggle.py")
+STRICT_FILES = ("feature_flags.py", "bulk_toggle.py", "rollout_schedules.py")
 #: The application trees searched for calls of the service's writers.
 TREES = (REPO_ROOT / "backend" / "app", REPO_ROOT / "modules" / "backend" / "app")
 
@@ -50,15 +52,26 @@ BANNED = {
     "log_toggle_operation",
     "log_bulk_toggle",
 }
-#: ``FeatureFlagService``'s writers, which take ``record=``.
+#: ``FeatureFlagService``'s and ``RolloutService``'s writers, which take
+#: ``record=``.
 SERVICE_WRITERS = {
     "create_feature_flag",
     "update_feature_flag",
     "delete_feature_flag",
     "activate_feature_flag",
     "deactivate_feature_flag",
+    "create_rollout_schedule",
+    "update_rollout_schedule",
+    "delete_rollout_schedule",
+    "activate_rollout_schedule",
+    "pause_rollout_schedule",
+    "cancel_rollout_schedule",
+    "add_rollout_stage",
+    "update_rollout_stage",
+    "delete_rollout_stage",
+    "manually_advance_stage",
 }
-SERVICE_WRITER_CALLS = 5
+SERVICE_WRITER_CALLS = 15
 
 
 def _tree(path: Path) -> ast.Module:

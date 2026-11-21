@@ -1423,3 +1423,12 @@ by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
+
+[[unit]]
+text = "POST /api/v1/rollout-schedules/, PUT/DELETE /api/v1/rollout-schedules/{schedule_id}, POST /api/v1/rollout-schedules/{schedule_id}/activate, POST /api/v1/rollout-schedules/{schedule_id}/pause, POST /api/v1/rollout-schedules/{schedule_id}/cancel, POST /api/v1/rollout-schedules/{schedule_id}/stages, PUT/DELETE /api/v1/rollout-schedules/stages/{stage_id}, POST /api/v1/rollout-schedules/stages/{stage_id}/advance | #1042 | A schedule or stage change is saved together with its audit-log entry on the schedule's flag. When the entry cannot be written, nothing is saved and the operation answers 500 with its existing message; it used to keep the change and answer 2xx with no entry. A change whose entry is written answers as before. The OpenAPI document does not change. See When an entry can be missing."
+by = [
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_a_refused_entry_saves_no_rollout_change_and_answers_500",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_rollout_schedule_routes_record_on_the_flag",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
