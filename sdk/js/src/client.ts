@@ -87,6 +87,13 @@ function serialisedQuery(url: string): string {
   }
 }
 
+/** The 200 of `POST /api/v1/tracking/alias`: the two ids as sent, and whether this call stored the link. */
+interface AliasResponse {
+  anonymous_id: string;
+  user_id: string;
+  created: boolean;
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -142,7 +149,7 @@ function isUntagged(bodies: TrackBody[]): boolean {
  *   user + key share one in-flight request.
  * - Every successful answer also records its key for the key-less `track()`
  *   fan-out, for 24 hours, or the cache lifetime if longer (see `attribution.ts`); `clearCache()` keeps that record.
- * - `getAssignment`, `evaluateFlag`, `getAllFlags` and `fetchAssignments` throw
+ * - `getAssignment`, `evaluateFlag`, `getAllFlags`, `fetchAssignments` and `alias` throw
  *   `ExperimentationError`; `getVariant` / `isFeatureEnabled` return safe
  *   defaults instead; `getStringValue` / `getNumberValue` / `getJsonValue` return
  *   the caller's default and pass the reason to `onError(err, 'value')`;
@@ -331,6 +338,40 @@ export class ExperimentationClient {
       `/api/v1/tracking/assignments/${encode(userId)}?active_only=${activeOnly ? 'true' : 'false'}`
     );
     return Array.isArray(data) ? (data as AssignmentRecord[]) : [];
+  }
+
+  // ─── Linking two ids ───────────────────────────────────────────────────────
+
+  /**
+   * Link an anonymous id to the known user id of the same person (#449, beta) with one
+   * `POST /api/v1/tracking/alias`. Resolves `created`: `true` when this call stored the link,
+   * `false` when it was already stored. Needs a server-side key (the `sdk:ruleset` scope, created
+   * by a user who can change feature flags): call it from your backend.
+   *
+   * Rejects with `ExperimentationError` on any other answer, as `getAssignment` does: `status` and
+   * `body` are the server's (404 from a server without the route, 403, 409, 422, a 429 after its
+   * one retry); a network failure or a timeout has no `status`. Nothing is kept of a failure: call
+   * it again.
+   *
+   * On success this client also sends a key-less `track(userId)` to the experiments it answered
+   * for `anonymousId` (as `keys()` gives them, never its flags: flags are not linked), for 24 hours
+   * from now, and drops `userId`'s cached assignments, so its next `getAssignment` asks the server.
+   * Events are not changed: the anonymous id's own events keep the anonymous id.
+   */
+  async alias(anonymousId: string, userId: string): Promise<boolean> {
+    const data = await this.requestJson<AliasResponse>('/api/v1/tracking/alias', {
+      method: 'POST',
+      body: { anonymous_id: anonymousId, user_id: userId },
+    });
+    if (!data || typeof data.created !== 'boolean') {
+      throw new ExperimentationError('Alias response is missing created', {
+        code: 'INVALID_RESPONSE',
+        body: data,
+      });
+    }
+    this.attributed.copyExperiments(anonymousId, userId);
+    this.assignments.forget(userId);
+    return data.created;
   }
 
   // ─── Feature flags ─────────────────────────────────────────────────────────

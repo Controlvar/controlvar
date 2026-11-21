@@ -26,8 +26,8 @@ export interface ExperimentationErrorOptions {
 }
 
 /**
- * Error thrown by `getAssignment`, `evaluateFlag`, `getAllFlags` and `fetchAssignments`, and
- * passed to `onError` for the failures the other methods swallow.
+ * Error thrown by `getAssignment`, `evaluateFlag`, `getAllFlags`, `fetchAssignments` and `alias`,
+ * and passed to `onError` for the failures the other methods swallow.
  */
 export class ExperimentationError extends Error {
   readonly code: ExperimentationErrorCode;

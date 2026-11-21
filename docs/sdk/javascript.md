@@ -134,6 +134,12 @@ interface UserContext {
 }
 ```
 
+Keep `userId` the same for one person: the server buckets on it, and an id it has not seen is a
+new user to every experiment. If a visitor is anonymous until they sign in, give them an anonymous
+id of their own, and when they sign in, link it to their known id from your backend with
+[`alias`](#linking-an-anonymous-id-to-a-known-user-id-alias): a known id with no assignment of its
+own is then answered the variant the anonymous id holds.
+
 ### Targeting context
 
 `attributes` is what the platform's targeting rules evaluate against, and what sets the user's
@@ -175,6 +181,7 @@ turn that into their safe default.
 | `trackBatch` | `(events: TrackEvent[]) => Promise<BatchResult>` | `{ successCount, failureCount, errors }` | Never rejects; a failed chunk counts all its events as failures and calls `onError(err, 'trackBatch')` |
 | `reportError` | `(report: ErrorReport) => Promise<boolean>` | `true` when the server stored the report (201); see [Reporting errors](#reporting-errors) | `false`; never rejects; `onError(err, 'reportError')` |
 | `fetchAssignments` | `(userId, { activeOnly?: boolean } = { activeOnly: true }) => Promise<AssignmentRecord[]>` | Server-side assignment rows (raw objects); not cached | Rejects |
+| `alias` | `(anonymousId, userId) => Promise<boolean>` | `true` when this call stored the link, `false` when it was already stored; in the source tree only, see [Linking an anonymous id to a known user id](#linking-an-anonymous-id-to-a-known-user-id-alias) | Rejects with `ExperimentationError`, with the server's `status` and `body` |
 | `getAssignments` | `(userId) => Assignment[]` | Cached, unexpired assignments in assignment order (no network) | — |
 | `getEvaluatedFlags` | `(userId) => string[]` | Keys of cached, successfully evaluated flags (no network) | — |
 | `getCachedFlags` | `(userId) => FlagEvaluation[]` | Cached, unexpired flag evaluations for the user (no network); in local mode each carries `source` (`'local'` or `'server'`) | — |
@@ -268,6 +275,49 @@ without checking it.
   window. With no evaluations in the window it reads 0, so an error-rate threshold cannot fire: in
   local mode the counts reach the server every 60 seconds and on `close()`.
 
+### Linking an anonymous id to a known user id: `alias`
+
+`alias` is in the source tree only: it is not in the published `@controlvar/js-sdk` 0.3.0, and
+arrives with the package's next release. Until then, call `POST /api/v1/tracking/alias` from your
+backend, or install the SDK from a clone of this repository (see [Installation](#installation)).
+
+`alias(anonymousId, userId)` sends one `POST /api/v1/tracking/alias` (beta): the anonymous id a
+visitor was assigned under and the user id they signed in with are one person. From then on, in
+each experiment, the assignment stored first among the two ids answers for both, so a user id with
+no assignment of its own is answered the variant the anonymous id holds, and its events for that
+experiment count toward it. The rules and every answer are in
+[Link an anonymous id to a known user id](../api/endpoints.md#link-an-anonymous-id-to-a-known-user-id-beta).
+
+```typescript
+// In your backend, when the visitor signs in:
+const server = new ExperimentationClient({
+  apiUrl: process.env.CONTROLVAR_API_URL!,
+  apiKey: process.env.CONTROLVAR_SERVER_KEY!, // sdk:ruleset scope
+});
+const created = await server.alias(visitorId, customerId); // false: the link was already stored
+```
+
+- It needs a server-side key: one with the `sdk:ruleset` scope, created by a user who can change
+  feature flags. Call it from your backend.
+- It resolves `true` when this call stored the link and `false` when the link was already stored.
+- Any other answer rejects with `ExperimentationError`, as `getAssignment` does, with the server's
+  `status` and `body`: `404` from a server without the route, `403` for a key that is not a
+  server-side key, `409` when a rule refuses the link (the anonymous id is already linked to
+  another user id, for one), and `422` for an id the server refuses (the two ids equal, for one).
+  A network failure or a timeout rejects with no `status`. A `429` is retried once, as for every
+  call.
+- A failed alias is yours to call again: the client keeps nothing of it. Until it succeeds, the
+  server may give the user id an assignment of its own.
+- On success the client sends a key-less `track(userId, …)` to each experiment a key-less
+  `track(anonymousId, …)` would reach (see [the fan-out rule](#tracking-and-the-fan-out-rule)),
+  for 24 hours from the alias, and not to the anonymous id's flags: flags are not linked. It also
+  drops the user id's cached assignments, so its next `getAssignment` asks the server.
+- The anonymous id's own events keep the anonymous id: nothing already sent, or sent later under
+  it, is changed.
+- The copy helps only on the client that assigned the anonymous id. After a browser assigned it
+  and your backend called `alias`, the backend's client holds nothing for the anonymous id: call
+  `getAssignment(experimentKey, { userId })` there before a key-less `track(userId, …)`.
+
 ### Caching, shared requests and retries
 
 - Successful assignments and evaluations are cached per user + key for `cacheTtlMs`; failures are
@@ -279,7 +329,7 @@ without checking it.
 
 ### Errors
 
-`getAssignment`, `evaluateFlag`, `getAllFlags` and `fetchAssignments` reject with
+`getAssignment`, `evaluateFlag`, `getAllFlags`, `fetchAssignments` and `alias` reject with
 `ExperimentationError` (`name === 'ExperimentationError'`):
 
 | `code` | Meaning | `status` |
@@ -415,6 +465,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 | `track` without a key | `POST /api/v1/tracking/batch`, one entry per experiment and flag it reaches; with none, `POST /api/v1/tracking/track` | `{"events":[<track body>...]}` (max 100); with none, the track body with no key | ignored |
 | `trackBatch` | `POST /api/v1/tracking/batch` | `{"events":[<track body>...]}` (max 100) | `{"success_count","failure_count","errors"}` |
 | `fetchAssignments` | `GET /api/v1/tracking/assignments/{user_id}?active_only=true` | — | list of assignment rows |
+| `alias` | `POST /api/v1/tracking/alias` (beta; a server-side key) | `{"anonymous_id","user_id"}` | `{"anonymous_id","user_id","created"}` |
 | local mode: ruleset refresh | `GET /api/v1/sdk/ruleset` (beta) | `If-None-Match: "<version>"` | the ruleset, `ETag`; `304` when unchanged |
 | local mode: evaluation counts | `POST /api/v1/tracking/evaluations` (beta) | `{"evaluations":[{"flag_key","count","enabled_count","window_start","window_end"}]}` | `{"accepted","errors"}` |
 | `reportError` | `POST /api/v1/tracking/errors` | `{"error_type","message","feature_flag_key"?,"experiment_key"?,"user_id"?,"stack_trace"?,"metadata"?,"timestamp"?}` | 201 and the stored report (only the status is read) |
@@ -576,6 +627,12 @@ With a seeded backend (`python backend/scripts/seed_sdk_contract.py`):
 evaluations answered locally, the counts sent on `close()`, then two error reports sent with
 `reportError` and the same key, and the runner checks in the database that no evaluate call was made, that the safety
 monitor's denominator grew by exactly 40 and that both reports were counted.
+
+The runner gives the smoke the seed's `sdk:ruleset` key as `CONTROLVAR_LOCAL_API_KEY`. With it the
+smoke also links a new anonymous id to a new known id with `alias` and reports them as `alias`,
+and the runner checks in the database that the two ids hold one assignment row, the anonymous
+id's, and that the key-less event the smoke sent under the known id is stored under the anonymous
+id with the experiment and its variant.
 
 ---
 

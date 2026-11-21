@@ -15,9 +15,9 @@ __all__ = [
 
 
 class ExperimentationError(Exception):
-    """Raised by ``get_assignment``, ``get_feature_flag``, ``get_all_flags`` and
-    ``get_assignments`` when the API call fails, and passed to ``on_error`` for
-    the failures the other methods swallow.
+    """Raised by ``get_assignment``, ``get_feature_flag``, ``get_all_flags``,
+    ``get_assignments`` and ``alias`` when the API call fails, and passed to
+    ``on_error`` for the failures the other methods swallow.
 
     Attributes:
         status: HTTP status code of the failed response, or ``None`` for

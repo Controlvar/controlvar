@@ -110,6 +110,13 @@ by = [
 ]
 
 [[unit]]
+text = "Link an anonymous id to a known user id (beta) | POST /api/v1/tracking/alias | {anonymous_id, user_id} | {anonymous_id, user_id, created}"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_link_is_stored_once_and_answered_again_with_created_false",
+]
+
+[[unit]]
 text = "Each entry of the batch response's errors is {index, event_type, user_id, error}."
 by = [
     "test:backend/tests/integration/api/test_tracking_api.py::TestBatch::test_reports_success_and_failure_per_event",
@@ -129,6 +136,25 @@ by = [
     "test:backend/tests/integration/api/test_tracking_failure_messages.py::test_a_failed_store_answers_the_fixed_sentence_with_the_request_id",
     "test:backend/tests/integration/api/test_tracking_failure_messages.py::test_a_batch_item_whose_metadata_the_database_refuses_answers_the_fixed_sentence",
 ]
+
+[[unit]]
+text = "Linking two ids needs a server-side key, one with the sdk:ruleset scope whose owner can change feature flags: call it from your backend (Link an Anonymous Id to a Known User Id)."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_the_route_refuses_each_key_as_batch_assignment_does",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_server_key_whose_owner_can_change_flags_is_accepted",
+]
+
+[[unit]]
+text = "The JavaScript and Python SDKs have an alias method for it in the source tree only: it is not in the published packages, @controlvar/js-sdk@0.3.0 and controlvar==0.3.0, and arrives with each package's next release."
+by = [
+    "test:tests/sdk-contract/test_published_alias.py::test_both_clients_in_this_tree_define_alias",
+    "test:tests/sdk-contract/test_published_alias.py::test_no_published_release_defines_alias",
+    "test:backend/tests/unit/scripts/test_run_live_contract.py::test_js_and_python_are_the_sdks_whose_smokes_link_two_ids",
+]
+
+[[unit]]
+text = "From any other SDK, and from those two until then, call the route itself."
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "On /tracking/track, /tracking/batch and /tracking/events an event's metadata may be at most 16,384 bytes as compact JSON in UTF-8 and nest at most 64 levels (Event limits): over either limit, /track and /events answer 422 and /batch reports the entry in errors."

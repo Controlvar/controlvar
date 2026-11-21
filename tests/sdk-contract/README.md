@@ -210,6 +210,18 @@ seed's plain key and requires that it is stored but not counted (`error_count` +
 `uncounted_error_count` +1): only reports sent with a server-side key count toward automatic
 rollback. The runner therefore needs the backend's Python environment and `POSTGRES_*`.
 
+The runner also gives every smoke that `sdk:ruleset` key as `CONTROLVAR_LOCAL_API_KEY` (and a decoy
+under the former name), because `POST /api/v1/tracking/alias` needs a server-side key. With it the
+smokes of the SDKs in `ALIAS_SDKS` (`js` and `python`, #449) link two ids: a new client assigns a
+fresh anonymous id, links it to a fresh known id twice (`created` true, then false), sends one
+key-less event under the known id before anything assigned it, then assigns the known id, which must
+be answered the anonymous id's variant. The runner then reads the database and requires one
+assignment row among the two ids, held by the anonymous id, and the event stored once, under the
+anonymous id, with the experiment and that variant. An SDK that does not copy the anonymous id's
+keys to the known id fails with `alias: 0 tagged events (experiment_id NULL)`, and a server that
+does not follow the link when it receives the event with `alias: event variant NULL`. As with
+`EXPOSURE_SDKS`, an SDK not listed may not report it.
+
 Last come the published releases (`PUBLISHED_LOCAL`: the `js 0.2.0 (published, local)` and
 `python 0.2.0 (published, local)` rows, #1497). Each is downloaded and checked by digest as in
 section 2, and its own client runs in local mode against this server
