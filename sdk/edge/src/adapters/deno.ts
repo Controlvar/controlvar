@@ -18,7 +18,7 @@
  *
  * export default createDenoHandler(
  *   async (req, client) => {
- *     const userId = req.headers.get('X-User-Id') ?? 'anon';
+ *     const userId = req.headers.get('X-User-Id') ?? crypto.randomUUID();
  *     const { enabled } = await client.evaluateFlag('new-feature', userId);
  *     return new Response(enabled ? 'new' : 'old');
  *   },

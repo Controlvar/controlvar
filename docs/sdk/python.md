@@ -255,7 +255,7 @@ with the package's next release. Until then, call `POST /api/v1/tracking/alias` 
 backend, or install the SDK from a clone of this repository (see [Installation](#installation)).
 
 `alias(anonymous_id, user_id)` sends one `POST /api/v1/tracking/alias` (beta): the anonymous id a
-visitor was assigned under and the user id they signed in with are one person. From then on, in
+visitor was assigned under and the user id they signed in with [are one person](../guides/identity.md). From then on, in
 each experiment, the assignment stored first among the two ids answers for both, so a user id with
 no assignment of its own is answered the variant the anonymous id holds, and its events for that
 experiment count toward it. The rules and every answer are in

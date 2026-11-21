@@ -32,7 +32,7 @@ why the item was refused (for example, a key that was given was not found), or r
 `Could not store this event (request ID: <id>).` when the server failed to store it; quote that ID
 when you report the failure.
 
-Linking two ids needs a server-side key, one with the `sdk:ruleset` scope whose owner can change
+[Linking two ids](guides/identity.md) needs a server-side key, one with the `sdk:ruleset` scope whose owner can change
 feature flags: call it from your backend
 ([Link an Anonymous Id to a Known User Id](api/endpoints.md#link-an-anonymous-id-to-a-known-user-id-beta)).
 The JavaScript and Python SDKs have an `alias` method for it in the source tree only: it is not in

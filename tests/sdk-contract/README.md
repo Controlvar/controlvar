@@ -250,6 +250,7 @@ Each SDK documents its smoke command in its README; the runner's `MANIFEST` list
 toolchains are skipped (reported as `SKIP`) unless `--strict` is given. The seeded API key can be
 overridden with `CONTROLVAR_API_KEY`, the backend with `CONTROLVAR_API_URL` (the runner still reads
 the former names, `EXPERIMENTLY_API_KEY` and `EXPERIMENTLY_API_URL`, when these are not set).
+A local run of the runner needs the seed's scoped key (`live/.api_key_local`); without it the `js` and `python` rows fail on `alias`.
 
 Three entries need no toolchain beyond node or a JVM, but get there differently from the rest:
 

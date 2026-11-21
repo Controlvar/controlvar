@@ -98,8 +98,9 @@ that.
 
 ## Ids linked as one person
 
-`POST /api/v1/tracking/alias` (beta) links an anonymous id to a known id of the same person; it
-needs a server-side key and is called from your backend
+`POST /api/v1/tracking/alias` (beta)
+[links an anonymous id to a known id of the same person](identity.md); it needs a server-side
+key and is called from your backend
 ([API endpoints](../api/endpoints.md#link-an-anonymous-id-to-a-known-user-id-beta)). From the
 link on:
 
