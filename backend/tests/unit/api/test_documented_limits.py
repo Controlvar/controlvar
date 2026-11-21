@@ -167,17 +167,20 @@ def test_every_metric_is_planned_as_a_conversion():
     assert field.annotation.__args__ == ("conversion",)
 
 
-def test_no_call_says_that_two_user_ids_are_one_user(routes):
-    """There is no identify or alias call: an assignment names one user id,
-    and no route joins two, so a user who signs in under a new id is a new
-    user to ``/tracking/assign``."""
+def test_the_alias_route_is_the_one_call_that_links_two_user_ids(routes):
+    """There is no identify call (#449). ``POST /api/v1/tracking/alias``
+    (beta) links an anonymous id to a known id, and no other route joins two
+    ids: an assignment still names one user id, so a user who signs in under
+    a new id that was never linked is a new user to ``/tracking/assign``."""
     assert set(AssignmentRequest.model_fields) == {
         "experiment_key",
         "user_id",
         "context",
     }
     pattern = re.compile(r"identify|alias|merge", re.I)
-    assert [path for _, path in routes if pattern.search(path)] == []
+    assert [route for route in routes if pattern.search(route[1])] == [
+        ("POST", "/api/v1/tracking/alias")
+    ]
 
 
 # ---------------------------------------------------------------------------

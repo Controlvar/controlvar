@@ -45,6 +45,8 @@ KEY_ROUTES = {
     ("GET", "/api/v1/feature-flags/user/{user_id}"),
     ("GET", "/api/v1/sdk/ruleset"),
     ("GET", "/api/v1/tracking/assignments/{user_id}"),
+    # #449: links an anonymous id to a known id (beta).
+    ("POST", "/api/v1/tracking/alias"),
     ("POST", "/api/v1/tracking/assign"),
     ("POST", "/api/v1/tracking/assign/batch"),
     ("POST", "/api/v1/tracking/batch"),
@@ -187,7 +189,7 @@ def test_each_api_key_route_has_one_synchronous_step():
 
 
 def test_the_counts_match_the_tables():
-    assert len(KEY_ROUTES) == 15
+    assert len(KEY_ROUTES) == 16
     assert len(MODULE_KEY_ROUTES) == 2
     assert len(READER_ROUTES) == 5
     assert not KEY_ROUTES & MODULE_KEY_ROUTES

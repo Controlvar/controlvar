@@ -844,7 +844,11 @@ stored, with an index on the known id. It adds no foreign key and changes no
 other table, and the new table is empty after the upgrade.
 
 The previous release, 0.47.0, runs against this schema unchanged: it never
-reads or writes the table.
+reads or writes the table. So during this release's rolling upgrade, and after
+an API-only rollback to 0.47.0, a 0.47.0 task answers `404` on
+`POST /api/v1/tracking/alias` and ignores every link: it answers each id as an
+id of its own, and assigns it under that id (see
+[Rolling back past identity aliasing](../deployment/rollback-runbook.md#rolling-back-past-identity-aliasing)).
 
 From 0.47.0, this upgrade takes no lock on an existing table, so SDK requests
 do not wait for it. The upgrade itself waits at most 0.25 s, behind a

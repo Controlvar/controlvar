@@ -272,6 +272,7 @@ INVENTORY = {
     ("POST", f"{V1}/power/sample-size"): CALCULATION,
     ("POST", f"{V1}/utils/utils/sample-size"): CALCULATION,
     # --- tracking (SDKs) -----------------------------------------------------
+    ("POST", f"{V1}/tracking/alias"): SDK,
     ("POST", f"{V1}/tracking/assign"): SDK,
     ("POST", f"{V1}/tracking/assign/batch"): NotAudited(
         "assignments are not audit events (D49)"
@@ -352,7 +353,7 @@ def test_the_inventory_is_exact():
         f"unclassified: {sorted(found - set(INVENTORY))}; "
         f"gone: {sorted(set(INVENTORY) - found)}"
     )
-    assert len(INVENTORY) == 121
+    assert len(INVENTORY) == 122
 
 
 def test_every_mutating_route_is_under_backend_or_modules():

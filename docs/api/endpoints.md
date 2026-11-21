@@ -1260,6 +1260,58 @@ A 422 names positions and fields, never the ids that were sent.
     }
   ]
   ```
+- **Linked ids**: for an id linked to another as one person
+  ([below](#link-an-anonymous-id-to-a-known-user-id-beta)), the list holds the person's
+  assignments, one per experiment (the one stored first), each with `user_id` the id in the path.
+
+### Link an Anonymous Id to a Known User Id (beta)
+- **Endpoint**: `POST /api/v1/tracking/alias`
+- **Description**: Record that an anonymous id and a known user id are one person, from your
+  backend, when you learn who the visitor is. From then on the tracking routes answer either id
+  as that person: in each experiment the assignment stored first among the person's ids answers
+  for all of them, and an id with no assignment of its own gets no second one. An event either id
+  sends to an experiment is stored under the id that holds that assignment and counts for it
+  ([How events count](../guides/how-events-count.md#ids-linked-as-one-person)). Nothing recorded
+  before the link is moved or changed, and flags are not linked.
+- **Rules**: an anonymous id is linked to one user id and never moved to another. Links are one
+  level deep: an id that has anonymous ids linked to it is not itself linked, and nothing is
+  linked to an id linked as an anonymous id. A user id has at most 100 anonymous ids. The two ids
+  are compared exactly.
+- **Headers**: `X-API-Key: {api_key}`, a server-side key: one with the `sdk:ruleset` scope whose
+  owner can change feature flags, which is an ADMIN, a DEVELOPER, a superuser, or in the full
+  profile anyone whose custom roles or direct grants give `feature_flag (update)`. Unlike batch
+  assignment, the owner need not be able to change experiments. See
+  [Scopes](../security/api-keys.md#scopes).
+- **Body**: `{"anonymous_id": string, "user_id": string}`, each 1 to 255 characters. The ids go in
+  the body only, never in the path.
+- **Response**: 200 OK
+  ```json
+  {"anonymous_id": "visitor-7f3a92", "user_id": "customer-1042", "created": true}
+  ```
+  `created` is `false` when that exact link already exists, and then nothing is written.
+- **Errors**: see the table below. Nothing is written for any of them, and no `detail` names
+  either id.
+- **Rate limit**: the tracking routes' limit, `SDK_RATE_LIMIT_PER_MINUTE` a minute per client
+  address and path.
+
+| Status | When | `detail` |
+|---|---|---|
+| 401 | no key | `API key missing` |
+| 401 | an unknown, expired or revoked key, or one whose owner is deactivated | `Invalid API Key` |
+| 403 | the key lacks the scope | `This API key does not have the 'sdk:ruleset' scope. Create a key with the 'sdk:ruleset' scope for server-side SDK use.` |
+| 403 | the key's owner can no longer change feature flags | `This key's owner can no longer change feature flags, so the key is refused for server-side SDK use.` |
+| 409 | the `anonymous_id` is linked to a different `user_id` | `That anonymous_id is already linked to a different user_id. An anonymous_id can be linked to one user_id.` |
+| 409 | the `anonymous_id` has ids linked to it | `That anonymous_id already has other ids linked to it, so it cannot itself be linked. Links are one level deep; check that the two ids are not swapped.` |
+| 409 | the `user_id` is linked as an anonymous id | `That user_id is itself linked to another user_id, so nothing can be linked to it. Links are one level deep; link to the user_id it is linked to, or check that the two ids are not swapped.` |
+| 409 | the `user_id` already has 100 anonymous ids | `That user_id already has 100 anonymous_ids linked to it, the most allowed, so this anonymous_id was not linked.` |
+| 422 | the two ids are equal | loc `["body"]`, msg `anonymous_id and user_id must differ.` |
+| 422 | either id is exactly `anonymous` or `anon` | loc `["body","anonymous_id"]` or `["body","user_id"]`, msg `must identify one visitor or customer: 'anonymous' and 'anon' are placeholders shared by many and cannot be linked` |
+| 422 | an id missing, empty or over 255 characters, or text the database cannot store | pydantic's message at the field's loc |
+| 429 | over the limit | `Too Many Requests. Please slow down and retry after a moment.`, with `Retry-After` |
+| 500 | anything else | `Could not link the two ids (request ID: <id>).` |
+
+Only `anonymous` and `anon` are refused as placeholders: `Anonymous`, `ANON` or `anonymous-1` is
+an id like any other, so send each visitor's own id.
 
 ## Admin Endpoints
 
@@ -2504,7 +2556,8 @@ GET  /api/v1/experiments/{experiment_id}/split-url/preview — The URL a visitor
 
 Query parameters for preview: `user_id` (required). The preview answers the visitor's stored
 variant, or the variant a new visitor with that id would get, as the assign route does,
-without recording anything.
+without recording anything. For an id linked to another by `POST /api/v1/tracking/alias`, it
+reads that id's own stored variant or hash, not its person's as the assign route does.
 
 **`SplitUrlConfig` schema** (`split_url_config` field):
 

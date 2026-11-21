@@ -558,6 +558,72 @@ class AssignmentBatchResponse(BaseModel):
     counts: BatchAssignmentCounts
 
 
+#: Ids many visitors share, which a link would join into one person (#449).
+#: Compared exactly: ``Anonymous`` or ``anon `` is an id like any other.
+SHARED_PLACEHOLDER_IDS = frozenset({"anonymous", "anon"})
+
+#: The 422 message, at the field, for a shared placeholder.
+SHARED_PLACEHOLDER_MESSAGE = (
+    "must identify one visitor or customer: 'anonymous' and 'anon' are "
+    "placeholders shared by many and cannot be linked"
+)
+
+#: The 422 message, at the body, for two equal ids.
+EQUAL_IDS_MESSAGE = "anonymous_id and user_id must differ."
+
+
+class AliasRequest(StorableTextModel):
+    """Body of ``POST /api/v1/tracking/alias``: link an anonymous id to a
+    known user id (#449).
+
+    Each id is 1 to 255 characters of text the database can store, and is
+    compared exactly. Refused with a 422 before anything is read or written:
+    a missing, empty, over-long or unstorable field; either field exactly
+    ``anonymous`` or ``anon``; two equal ids. No message repeats an id.
+    """
+
+    anonymous_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="The id the visitor was known by before they were identified",
+    )
+    user_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="The known user id of the same person",
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {"anonymous_id": "visitor-7f3a92", "user_id": "customer-1042"}
+        }
+    )
+
+    @field_validator("anonymous_id", "user_id")
+    @classmethod
+    def _not_a_shared_placeholder(cls, value: str) -> str:
+        if value in SHARED_PLACEHOLDER_IDS:
+            raise PydanticCustomError("shared_placeholder", SHARED_PLACEHOLDER_MESSAGE)
+        return value
+
+    @model_validator(mode="after")
+    def _two_different_ids(self) -> "AliasRequest":
+        if self.anonymous_id == self.user_id:
+            raise PydanticCustomError("equal_ids", EQUAL_IDS_MESSAGE)
+        return self
+
+
+class AliasResponse(BaseModel):
+    """Response for ``POST /api/v1/tracking/alias``: the two ids as sent, and
+    whether this request stored the link (``false`` when it already existed)."""
+
+    anonymous_id: str
+    user_id: str
+    created: bool
+
+
 class EventRequest(StorableTextModel):
     """
     Model for tracking an event through the public tracking API.

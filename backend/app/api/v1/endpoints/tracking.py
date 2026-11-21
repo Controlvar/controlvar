@@ -19,7 +19,7 @@ from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps
 from backend.app.api.off_loop_route import OffLoopRoute, release_request_sessions
-from backend.app.api.sdk_scope import require_batch_assign_key
+from backend.app.api.sdk_scope import require_batch_assign_key, require_sdk_ruleset_key
 from backend.app.core.balanced_blocks import balance_setting
 from backend.app.core.context_limits import check_context
 from backend.app.core.logger import failure_detail, unexpected_failure
@@ -35,6 +35,8 @@ from backend.app.models.experiment import Experiment, ExperimentStatus
 from backend.app.models.feature_flag import FeatureFlag
 from backend.app.schemas.storable_text import storable_text_param
 from backend.app.schemas.tracking import (
+    AliasRequest,
+    AliasResponse,
     AssignmentBatchRequest,
     AssignmentBatchResponse,
     AssignmentRequest,
@@ -56,7 +58,17 @@ from backend.app.services.assignment_service import (
 )
 from backend.app.services.bandit_routing import bandit_chooser
 from backend.app.services.event_service import EventService
-from backend.app.services.identity_aliases import holder_of, person_of
+from backend.app.services.identity_aliases import (
+    ANONYMOUS_ID_HAS_LINKS,
+    ANONYMOUS_ID_LINKED_ELSEWHERE,
+    MAX_ANONYMOUS_IDS_PER_USER,
+    USER_ID_AT_CAP,
+    USER_ID_IS_LINKED,
+    AliasConflict,
+    holder_of,
+    link,
+    person_of,
+)
 
 # Create router
 router = APIRouter(route_class=OffLoopRoute)
@@ -720,6 +732,111 @@ def _assign_users_in_batch(
         )
     finally:
         db.close()
+
+
+#: The 409 ``detail`` for each reason ``identity_aliases.link`` refuses a link
+#: for (#449). None of them names either id.
+ALIAS_CONFLICT_DETAILS: Dict[str, str] = {
+    ANONYMOUS_ID_LINKED_ELSEWHERE: (
+        "That anonymous_id is already linked to a different user_id. An "
+        "anonymous_id can be linked to one user_id."
+    ),
+    ANONYMOUS_ID_HAS_LINKS: (
+        "That anonymous_id already has other ids linked to it, so it cannot itself "
+        "be linked. Links are one level deep; check that the two ids are not "
+        "swapped."
+    ),
+    USER_ID_IS_LINKED: (
+        "That user_id is itself linked to another user_id, so nothing can be "
+        "linked to it. Links are one level deep; link to the user_id it is linked "
+        "to, or check that the two ids are not swapped."
+    ),
+    USER_ID_AT_CAP: (
+        f"That user_id already has {MAX_ANONYMOUS_IDS_PER_USER} anonymous_ids "
+        "linked to it, the most allowed, so this anonymous_id was not linked."
+    ),
+}
+
+#: The sentence of the 500 for any other failure to store a link.
+ALIAS_FAILURE_SENTENCE = "Could not link the two ids"
+
+
+@router.post(
+    "/alias",
+    response_model=AliasResponse,
+    summary="Link an anonymous id to a known user id (beta)",
+    response_description="The two ids as sent, and whether this request stored the link",
+    openapi_extra={"x-stability": "beta"},
+    responses={
+        401: {
+            "description": "No API key, or an unknown, expired or revoked one, or "
+            "one whose owner is deactivated"
+        },
+        403: {
+            "description": "The key lacks the sdk:ruleset scope, or its owner can "
+            "no longer change feature flags"
+        },
+        409: {
+            "description": "A rule refuses the link: the anonymous_id is linked "
+            "to another user_id, one of the ids is already on the other side of "
+            "a link, or the user_id has 100 anonymous_ids; nothing is written"
+        },
+        429: {"description": "Over the SDK rate limit for this address"},
+    },
+)
+async def link_anonymous_id(
+    request: AliasRequest = Body(
+        ..., description="The anonymous id and the known user id of one person"
+    ),
+    db: Session = Depends(deps.get_db),
+    api_key: APIKey = Depends(require_sdk_ruleset_key),
+) -> AliasResponse:
+    """
+    Link an anonymous id to the known user id of the same person (beta).
+
+    From then on the tracking routes answer either id as one person. In each
+    experiment the assignment stored first among the person's ids is the
+    answer for all of them, and an id with no assignment of its own gets no
+    second one. An event sent under either id that names an experiment
+    counts for that assignment. Nothing stored before the link is moved or
+    changed, and feature flags are not linked.
+
+    An anonymous id is linked to one user id and never moved, links are one
+    level deep, and a user id has at most 100 anonymous ids. A link that
+    already exists answers 200 with ``created: false`` and writes nothing; a
+    link a rule refuses answers 409, and nothing is written. The answer
+    repeats the two ids as sent; no refusal names either.
+
+    **Authentication**: a server-side key, an API key with the
+    ``sdk:ruleset`` scope whose owner can change feature flags: ADMIN,
+    DEVELOPER, a superuser, or in the full profile anyone whose custom roles
+    or direct grants give ``feature_flag (update)``. Call it from your
+    backend.
+    """
+    # ``link`` waits for advisory locks another request can be holding, so it
+    # runs in a worker thread, off the event loop, as /assign does for a
+    # balanced experiment (#448): the request's sessions are released first,
+    # then the lock, read, decision, insert and commit take one trip.
+    release_request_sessions()
+    try:
+        created = await run_in_threadpool(
+            link, db, request.anonymous_id, request.user_id
+        )
+    except AliasConflict as conflict:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=ALIAS_CONFLICT_DETAILS[conflict.reason],
+        ) from None
+    except Exception as e:
+        # The class name only: the driver's text repeats both ids.
+        logger.error("Tracking alias failed (%s)", type(e).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=failure_detail(ALIAS_FAILURE_SENTENCE),
+        ) from None
+    return AliasResponse(
+        anonymous_id=request.anonymous_id, user_id=request.user_id, created=created
+    )
 
 
 @router.post(
