@@ -44,5 +44,8 @@
   "user_create",
   "user_deactivate",
   "user_delete",
-  "user_login"
+  "user_login",
+  "visual_editor_session_closed",
+  "visual_editor_session_opened",
+  "visual_editor_ticket_reused"
 ]

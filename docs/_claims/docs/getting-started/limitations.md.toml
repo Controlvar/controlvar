@@ -508,7 +508,7 @@ text = "The visual editor is not yet available."
 by = ["mechanism:visual-limitations-heading"]
 
 [[unit]]
-text = "These lines are about the browser script it will use."
+text = "These lines are about the browser script and the sign-in it will use."
 by = ["exempt:navigation"]
 
 [[unit]]
@@ -532,4 +532,11 @@ by = [
     "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_a_lopsided_split_names_a_false_winner_no_more_often_than_alpha",
     "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_an_equal_split_recommends_a_false_winner_within_the_band",
     "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_the_mirrored_split_names_neither_arm_beyond_the_band",
+]
+
+[[unit]]
+text = "An editor sign-in that can be extended | The visual editor's sign-in on your page lasts 4 hours and cannot be extended there. Every saved change is kept, and you go on by opening the editor again from the experiment's page. This does not meet WCAG 2.1 success criterion 2.2.1 (Timing Adjustable)."
+by = [
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_each_credential_lasts_its_time",
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_the_editor_routes_are_exactly_these",
 ]

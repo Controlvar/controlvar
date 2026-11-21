@@ -42,6 +42,22 @@ describe('audit action labels (#221)', () => {
     }
   });
 
+  it("labels the visual editor's sign-in entries, under Experiments (#1545)", () => {
+    const labelled = {
+      visual_editor_session_opened: 'Visual editor opened',
+      visual_editor_session_closed: 'Visual editor closed',
+      visual_editor_ticket_reused: 'Visual editor link used twice',
+    };
+    for (const [type, label] of Object.entries(labelled)) {
+      expect(actionTypes).toContain(type);
+      expect(actionLabel(type)).toBe(label);
+      expect(ACTIONS[type].group).toBe('Experiments');
+    }
+    expect(actorLabel({ user_id: null, user_email: 'system:visual-editor' })).toBe(
+      'Visual editor (automatic)',
+    );
+  });
+
   it('shows an unknown type as itself', () => {
     expect(actionLabel('user_update')).toBe('user_update');
   });

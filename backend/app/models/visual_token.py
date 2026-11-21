@@ -2,15 +2,16 @@
 
 One row per credential. Only the SHA-256 of a token is stored
 (``core.security.hash_api_key``), never the token. ``kind`` says what the row
-is; a session points at the ticket it was exchanged for, and a claim at the
-ticket it burned, through ``parent_id``. A row is never reused: a ticket is
+is. The editor's sign-in is a chain, ticket -> claim -> session, linked
+through ``parent_id``: a claim points at the ticket it spent, and a session at
+the claim it was exchanged for. A row is never reused: a ticket or a claim is
 spent by setting ``used_at``, and any credential is ended by setting
 ``revoked_at`` with the reason in ``revoked_reason``.
 
 The two checks below admit every kind and reason the design names, including
-``editor_claim`` and ``scheduled``, which no code writes yet, so neither needs
-a second migration. They are plain ``VARCHAR`` columns with a check, not a
-native enum: a new value is a new check, never an ``ALTER TYPE``.
+``scheduled``, which no code writes yet, so it needs no second migration.
+They are plain ``VARCHAR`` columns with a check, not a native enum: a new
+value is a new check, never an ``ALTER TYPE``.
 
 Starting an experiment, by ``POST /start`` or by the scheduler, revokes every
 editor ticket, session and claim of that experiment (``revoked_reason``
@@ -44,13 +45,20 @@ VISUAL_TOKEN_KINDS = (EDITOR_TICKET, EDITOR_SESSION, EDITOR_CLAIM, PREVIEW)
 #: The kinds that sign someone in to the editor: a start revokes these.
 EDITOR_KINDS = (EDITOR_TICKET, EDITOR_SESSION, EDITOR_CLAIM)
 
-#: Why a credential was ended.
+#: Why a credential was ended: the editor was opened again for the
+#: experiment; the experiment was started; a spent ticket or claim was
+#: presented again; the editor signed out; a start date was set.
+REOPENED = "reopened"
+STARTED = "started"
+TICKET_REUSED = "ticket_reused"
+SIGNED_OUT = "signed_out"
+SCHEDULED = "scheduled"
 VISUAL_TOKEN_REVOKED_REASONS = (
-    "reopened",
-    "started",
-    "ticket_reused",
-    "signed_out",
-    "scheduled",
+    REOPENED,
+    STARTED,
+    TICKET_REUSED,
+    SIGNED_OUT,
+    SCHEDULED,
 )
 
 #: The checks: the same names and SQL as migration ``4955571d232c``.
@@ -95,7 +103,7 @@ class VisualToken(Base):
     used_at = Column(DateTime(timezone=True), nullable=True)
     revoked_at = Column(DateTime(timezone=True), nullable=True)
     revoked_reason = Column(String(20), nullable=True)
-    #: A session's ticket, or a claim's ticket.
+    #: A claim's ticket, or a session's claim.
     parent_id = Column(
         UUID(as_uuid=True),
         ForeignKey(f"{get_schema_name()}.visual_tokens.id", ondelete="CASCADE"),

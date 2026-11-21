@@ -69,6 +69,12 @@ class ActionType(str, Enum):
     # of the experiment ended.
     EXPERIMENT_PREVIEW_LINK_CREATE = "experiment_preview_link_create"
     EXPERIMENT_PREVIEW_LINKS_REVOKE = "experiment_preview_links_revoke"
+    # The visual editor's sign-in (#1545): an editor session opened; one
+    # closed (opened again, started, link used twice, signed out); an editor
+    # link presented again after it was used.
+    VISUAL_EDITOR_SESSION_OPENED = "visual_editor_session_opened"
+    VISUAL_EDITOR_SESSION_CLOSED = "visual_editor_session_closed"
+    VISUAL_EDITOR_TICKET_REUSED = "visual_editor_ticket_reused"
 
     # User Actions
     USER_CREATE = "user_create"
@@ -231,6 +237,9 @@ class AuditLog(Base, BaseModel):
             ActionType.EXPERIMENT_COMPLETE: "completed",
             ActionType.EXPERIMENT_PREVIEW_LINK_CREATE: "created a preview link",
             ActionType.EXPERIMENT_PREVIEW_LINKS_REVOKE: "revoked the preview links",
+            ActionType.VISUAL_EDITOR_SESSION_OPENED: "opened the visual editor",
+            ActionType.VISUAL_EDITOR_SESSION_CLOSED: "closed a visual editor session",
+            ActionType.VISUAL_EDITOR_TICKET_REUSED: "used a visual editor link twice",
             ActionType.USER_CREATE: "created",
             ActionType.USER_UPDATE: "updated",
             ActionType.USER_DELETE: "deleted",
