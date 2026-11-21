@@ -103,6 +103,9 @@ ENGINE_FINGERPRINTS: Dict[str, str] = {
     # goes from True (lifts of both signs) to False (p 0.061), and the
     # dataset gains the walk data of #1969 (``breakdown_walk``, p 0.23).
     "1.12.0": "99d7a3cc572e1181cf24400c893b7fbe6889425247dc2f1a759171ca5db39f84",
+    # 1.13.0 (#2041) changes a mean metric's p-value only; this dataset has
+    # no mean metric: 1.12.0's.
+    "1.13.0": "99d7a3cc572e1181cf24400c893b7fbe6889425247dc2f1a759171ca5db39f84",
 }
 
 # Two ids where the control sorts AFTER the treatment, so an engine that

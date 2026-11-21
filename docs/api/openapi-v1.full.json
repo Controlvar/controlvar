@@ -524,6 +524,128 @@
         "title": "AlphaSpendingBoundaryResponse",
         "type": "object"
       },
+      "AppUserEraseCounts": {
+        "description": "Rows this call deleted, per table.",
+        "properties": {
+          "assignments": {
+            "description": "Experiment assignments.",
+            "title": "Assignments",
+            "type": "integer"
+          },
+          "error_logs": {
+            "description": "Client errors.",
+            "title": "Error Logs",
+            "type": "integer"
+          },
+          "event_dedup_keys": {
+            "description": "Keys of events sent with an id.",
+            "title": "Event Dedup Keys",
+            "type": "integer"
+          },
+          "events": {
+            "description": "Events, exposures included.",
+            "title": "Events",
+            "type": "integer"
+          },
+          "feature_flag_overrides": {
+            "description": "Per-user flag overrides.",
+            "title": "Feature Flag Overrides",
+            "type": "integer"
+          },
+          "holdout_population": {
+            "description": "Global-holdout rows.",
+            "title": "Holdout Population",
+            "type": "integer"
+          },
+          "identity_aliases": {
+            "description": "Links between the person's ids, deleted last.",
+            "title": "Identity Aliases",
+            "type": "integer"
+          },
+          "llm_evaluations": {
+            "description": "LLM experiment evaluations.",
+            "title": "Llm Evaluations",
+            "type": "integer"
+          },
+          "raw_metrics": {
+            "description": "Flag evaluations and latencies.",
+            "title": "Raw Metrics",
+            "type": "integer"
+          },
+          "segment_members": {
+            "description": "Id-list segment memberships.",
+            "title": "Segment Members",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "events",
+          "raw_metrics",
+          "error_logs",
+          "llm_evaluations",
+          "event_dedup_keys",
+          "assignments",
+          "holdout_population",
+          "segment_members",
+          "feature_flag_overrides",
+          "identity_aliases"
+        ],
+        "title": "AppUserEraseCounts",
+        "type": "object"
+      },
+      "AppUserEraseRequest": {
+        "additionalProperties": false,
+        "description": "The app user to erase. Any other field is refused with 422.",
+        "example": {
+          "user_id": "user-to-erase"
+        },
+        "properties": {
+          "user_id": {
+            "description": "The id your app sent as user_id. Matched exactly, case and spaces included.",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id"
+        ],
+        "title": "AppUserEraseRequest",
+        "type": "object"
+      },
+      "AppUserEraseResponse": {
+        "description": "What one call did. Counts only: never the id.",
+        "properties": {
+          "complete": {
+            "description": "True when no row of the person's ids is left. False when time ran out, a statement timed out or a link added an id during the call: send the same request again.",
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "deleted": {
+            "$ref": "#/components/schemas/AppUserEraseCounts"
+          },
+          "ids_erased": {
+            "description": "How many ids the erase covered: the id sent and every id linked to the same person.",
+            "title": "Ids Erased",
+            "type": "integer"
+          },
+          "receipt_id": {
+            "description": "The entity_id of this call's two audit-log entries: GET /api/v1/audit-logs/?entity_id=<receipt_id>.",
+            "format": "uuid",
+            "title": "Receipt Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "receipt_id",
+          "complete",
+          "ids_erased",
+          "deleted"
+        ],
+        "title": "AppUserEraseResponse",
+        "type": "object"
+      },
       "AssignRoleRequest": {
         "properties": {
           "reason": {
@@ -1841,7 +1963,7 @@
             "type": "string"
           },
           "engine_version": {
-            "default": "1.12.0",
+            "default": "1.13.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"
@@ -1967,7 +2089,7 @@
             "type": "array"
           },
           "engine_version": {
-            "default": "1.12.0",
+            "default": "1.13.0",
             "description": "Statistics engine version that computed the current weights",
             "title": "Engine Version",
             "type": "string"
@@ -2353,7 +2475,7 @@
             ]
           },
           "engine_version": {
-            "default": "1.12.0",
+            "default": "1.13.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"
@@ -2986,6 +3108,30 @@
           "success"
         ],
         "title": "BulkToggleResult",
+        "type": "object"
+      },
+      "ClaimExchange": {
+        "additionalProperties": false,
+        "description": "What the visual editor's panel sends to start its session.",
+        "properties": {
+          "claim": {
+            "description": "The value the page handed the panel: the 43 base64url characters it sent with the editor link.",
+            "title": "Claim",
+            "type": "string"
+          },
+          "page_origin": {
+            "description": "The origin of the page that handed the panel the value: the `origin` of that message event. It must be one of the experiment's sites.",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Page Origin",
+            "type": "string"
+          }
+        },
+        "required": [
+          "claim",
+          "page_origin"
+        ],
+        "title": "ClaimExchange",
         "type": "object"
       },
       "ClickGoal": {
@@ -4543,7 +4689,7 @@
             "title": "Covariate Lookback Days"
           },
           "engine_version": {
-            "default": "1.12.0",
+            "default": "1.13.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"
@@ -5232,6 +5378,220 @@
         ],
         "title": "ETLJobType",
         "type": "string"
+      },
+      "EditorExperiment": {
+        "properties": {
+          "design_etag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The design's version, as the experiment's own answer gives it.",
+            "title": "Design Etag"
+          },
+          "editor_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Editor Url"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pages": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Pages",
+            "type": "array"
+          },
+          "variants": {
+            "items": {
+              "$ref": "#/components/schemas/EditorVariant"
+            },
+            "title": "Variants",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "pages",
+          "variants"
+        ],
+        "title": "EditorExperiment",
+        "type": "object"
+      },
+      "EditorLinkOpened": {
+        "description": "The editor link, shown once.",
+        "properties": {
+          "expires_at": {
+            "description": "When the link stops working.",
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "open_url": {
+            "description": "The experiment's editor page with `#controlvar-editor=<43 characters>`. It opens the visual editor once, within 120 seconds, on a page with the Controlvar script.",
+            "title": "Open Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "open_url",
+          "expires_at"
+        ],
+        "title": "EditorLinkOpened",
+        "type": "object"
+      },
+      "EditorSessionOpened": {
+        "description": "A new editor session, with its token, shown once.",
+        "properties": {
+          "experiment": {
+            "$ref": "#/components/schemas/EditorExperiment"
+          },
+          "expires_at": {
+            "description": "When the session ends: 4 hours after it began.",
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "site_origins": {
+            "description": "The experiment's sites the editor may run on: its pages' origins that this server accepts requests from.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Site Origins",
+            "type": "array"
+          },
+          "token": {
+            "description": "`cves_` and 43 base64url characters: the session's bearer token for the visual editor's session routes and no other.",
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expires_at",
+          "site_origins",
+          "experiment",
+          "token"
+        ],
+        "title": "EditorSessionOpened",
+        "type": "object"
+      },
+      "EditorSessionRefusal": {
+        "description": "An editor session's 401.",
+        "properties": {
+          "detail": {
+            "description": "The sentence the editor shows.",
+            "title": "Detail",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Why: reopened, ticket_reused, started, signed_out, scheduled, expired or not_recognised.",
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail",
+          "reason"
+        ],
+        "title": "EditorSessionRefusal",
+        "type": "object"
+      },
+      "EditorSessionState": {
+        "description": "An editor session: when it ends, where it may run, and the draft.",
+        "properties": {
+          "experiment": {
+            "$ref": "#/components/schemas/EditorExperiment"
+          },
+          "expires_at": {
+            "description": "When the session ends: 4 hours after it began.",
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "site_origins": {
+            "description": "The experiment's sites the editor may run on: its pages' origins that this server accepts requests from.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Site Origins",
+            "type": "array"
+          }
+        },
+        "required": [
+          "expires_at",
+          "site_origins",
+          "experiment"
+        ],
+        "title": "EditorSessionState",
+        "type": "object"
+      },
+      "EditorVariant": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_control": {
+            "title": "Is Control",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "visual_changes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The variant's page changes as stored, or null.",
+            "title": "Visual Changes"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "is_control"
+        ],
+        "title": "EditorVariant",
+        "type": "object"
       },
       "EffectSizeLabel": {
         "description": "Qualitative label for the magnitude of an effect size.\n\nBased on Cohen's conventional thresholds (h or d):\n  NEGLIGIBLE - |d| < 0.2\n  SMALL      - 0.2 <= |d| < 0.5\n  MEDIUM     - 0.5 <= |d| < 0.8\n  LARGE      - |d| >= 0.8",
@@ -11242,7 +11602,7 @@
         "properties": {
           "analysis": {
             "default": "proportion",
-            "description": "How the variants are compared.  'mean' for a revenue, count, duration or custom metric: the mean per assigned user (see VariantResult.mean), compared with Welch's t-test.  'proportion' for a conversion metric: the share of users who converted, compared with Fisher's exact test.",
+            "description": "How the variants are compared.  'mean' for a revenue, count, duration or custom metric: the mean per assigned user (see VariantResult.mean), compared with a permutation test of Welch's t statistic (statistical_test_used permutation_t_test; engines before 1.13.0 used Welch's t-test).  'proportion' for a conversion metric: the share of users who converted, compared with Fisher's exact test.",
             "enum": [
               "proportion",
               "mean"
@@ -17915,11 +18275,12 @@
         "type": "object"
       },
       "StatisticalTest": {
-        "description": "Statistical test used when computing significance for a variant result.\n\nFISHER_EXACT       - Fisher's exact test (small-sample conversion data).\nZ_TEST_PROPORTIONS - Two-proportion z-test (large-sample conversions).\nWELCH_T_TEST       - Welch's t-test (continuous/revenue metrics).",
+        "description": "Statistical test used when computing significance for a variant result.\n\nFISHER_EXACT       - Fisher's exact test (small-sample conversion data).\nZ_TEST_PROPORTIONS - Two-proportion z-test (large-sample conversions).\nWELCH_T_TEST       - Welch's t-test, on per-variant sums alone (a\n                     warehouse mean run).\nPERMUTATION_T_TEST - A permutation test of Welch's t statistic on each\n                     user's value: a revenue, count, duration or custom\n                     metric in /results, from engine 1.13.0.",
         "enum": [
           "fisher_exact",
           "z_test_proportions",
-          "welch_t_test"
+          "welch_t_test",
+          "permutation_t_test"
         ],
         "title": "StatisticalTest",
         "type": "string"
@@ -17985,6 +18346,46 @@
           }
         },
         "title": "TestNotificationRequest",
+        "type": "object"
+      },
+      "TicketClaim": {
+        "additionalProperties": false,
+        "description": "What the page an editor link opened sends.",
+        "properties": {
+          "claim": {
+            "description": "43 base64url characters (A-Z, a-z, 0-9, - and _, no padding), drawn at random by the page.",
+            "title": "Claim",
+            "type": "string"
+          },
+          "ticket": {
+            "description": "The value after `#controlvar-editor=` in the editor link.",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Ticket",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticket",
+          "claim"
+        ],
+        "title": "TicketClaim",
+        "type": "object"
+      },
+      "TicketClaimed": {
+        "description": "The claim was stored. No credential comes back.",
+        "properties": {
+          "expires_at": {
+            "description": "When the claim stops working if the editor has not used it.",
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expires_at"
+        ],
+        "title": "TicketClaimed",
         "type": "object"
       },
       "ToggleRequest": {
@@ -19179,7 +19580,7 @@
                 "type": "null"
               }
             ],
-            "description": "Two-sided confidence interval of absolute_difference as (lower, upper), at the response's confidence_level and not adjusted for multiple comparisons.  For a proportion, Newcombe's hybrid score interval, built from each variant's Wilson score interval; for a mean, the Welch-Satterthwaite interval.  is_significant is decided by statistical_test_used on adjusted_p_value (p_value when no correction applies), not by this interval: with two or more treatments under a correction the interval can exclude 0 on a variant that is not significant, and for a proportion near the threshold the interval and Fisher's exact test can disagree either way.  relative_improvement_pct_ci and incremental_impact_ci, when not None, contain 0 exactly when this interval does.  None when absolute_difference is None; for a mean, also when neither variant's per-user values vary.  For a proportion with users in both variants it is never None: 0 of 20 against 0 of 20 gives (-0.161, 0.161).",
+            "description": "Two-sided confidence interval of absolute_difference as (lower, upper), at the response's confidence_level and not adjusted for multiple comparisons.  For a proportion, Newcombe's hybrid score interval, built from each variant's Wilson score interval; for a mean, the Welch-Satterthwaite interval.  is_significant is decided by statistical_test_used on adjusted_p_value (p_value when no correction applies), not by this interval: with two or more treatments under a correction the interval can exclude 0 on a variant that is not significant; for a proportion near the threshold the interval and Fisher's exact test can disagree either way; and for a mean the interval is Welch's while the test is the permutation test, so they can disagree either way, most often when the variants' sizes are very different.  relative_improvement_pct_ci and incremental_impact_ci, when not None, contain 0 exactly when this interval does.  None when absolute_difference is None; for a mean, also when neither variant's per-user values vary.  For a proportion with users in both variants it is never None: 0 of 20 against 0 of 20 gives (-0.161, 0.161).",
             "title": "Absolute Difference Ci"
           },
           "adjusted_p_value": {
@@ -19284,7 +19685,7 @@
             "type": "boolean"
           },
           "is_significant": {
-            "description": "True when the adjusted (or raw, if no correction) p-value is below the significance threshold 1 - confidence_level, the same level as confidence_interval.",
+            "description": "True when the adjusted (or raw, if no correction) p-value is below the significance threshold 1 - confidence_level, the same level as confidence_interval.  For a mean it follows the permutation test, not absolute_difference_ci.",
             "title": "Is Significant",
             "type": "boolean"
           },
@@ -19302,7 +19703,7 @@
                 "type": "null"
               }
             ],
-            "description": "Unadjusted p-value from the chosen statistical test.  None for the control variant.",
+            "description": "Unadjusted p-value from the chosen statistical test (statistical_test_used).  For a mean, the permutation test's: twice the smaller tail over the observed assignment and the permutations, a multiple of 2 / (permutations + 1), so at least 0.001 with one treatment.  None for the control variant.",
             "title": "P Value"
           },
           "power": {
@@ -19366,7 +19767,7 @@
                 "type": "null"
               }
             ],
-            "description": "The statistical test that produced p_value.  None for the control variant."
+            "description": "The statistical test that produced p_value: permutation_t_test for a mean in /results (welch_t_test before engine 1.13.0, and for a mean computed from per-variant sums alone, as a warehouse run is), fisher_exact for a proportion.  None for the control variant and for a variant that was not compared."
           },
           "std_dev": {
             "anyOf": [
@@ -20760,6 +21161,57 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/admin/app-users/erase": {
+      "post": {
+        "description": "Erase one app user's data (beta, superusers only).\n\nDeletes every row stored under one `user_id` your app sent: events\n(exposures included), flag-evaluation metrics, client errors, LLM\nevaluations, event dedup keys, assignments, global-holdout rows, id-list\nsegment memberships and flag overrides. The id is matched exactly. It does\nnot delete dashboard accounts (`DELETE /api/v1/admin/users/{user_id}`).\nThere is no undo.\n\nA call works for at most 20 seconds. `complete: false` means rows may be\nleft: send the same request again until it is `true`. An id with nothing\nstored answers 200 with every count 0. Each call writes two audit-log\nentries with `receipt_id` as their `entity_id`, one when it starts and one\nwhen it finishes; they hold counts only.",
+        "operationId": "erase_app_user_data_api_v1_admin_app_users_erase_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppUserEraseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppUserEraseResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "500": {
+            "description": "An unplanned failure. Nothing was erased if the start entry could not be written; otherwise part of the data may already be erased: send the request again."
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Erase App User Data",
+        "tags": [
+          "Administration"
+        ],
+        "x-stability": "beta"
+      }
+    },
     "/api/v1/admin/cache/clear": {
       "post": {
         "description": "Clear system cache.\n\nThis endpoint is only accessible by superusers and clears all Redis cache entries\nfor the application.",
@@ -27114,6 +27566,60 @@
           "Experiments",
           "Experiments"
         ]
+      }
+    },
+    "/api/v1/experiments/{experiment_id}/visual/editor-tickets": {
+      "post": {
+        "description": "Make the link that opens a visual draft in the visual editor, on the\nexperiment's own page.\n\nThe link is the experiment's editor page with\n`#controlvar-editor=<ticket>`; it works once, within 120 seconds, and is\nanswered once (only a hash of the ticket is stored). Making it ends every\neditor session of the experiment that is still open, whoever opened it.\n\nAccepted only from the dashboard: the request's `Origin` must be one of\nthe server's dashboard origins (DASHBOARD_ORIGINS, or PUBLIC_BASE_URL's).\nRefused, in this order: 422 when the server knows no dashboard origin;\n403 for any other `Origin`, or none; 404; 403 for a caller who may not\nchange experiments (READ and UPDATE); 400 when the experiment has no\nvisual settings, is not a draft, or has a start date; 422 when one of its\npages, or its editor page, is on a site this server does not accept\nrequests from (CORS_ORIGINS), or on the dashboard's own address, or when\nCORS_ORIGINS is `*`. Sent with `Cache-Control: no-store`.",
+        "operationId": "open_visual_editor_api_v1_experiments__experiment_id__visual_editor_tickets_post",
+        "parameters": [
+          {
+            "description": "The visual draft",
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "description": "The visual draft",
+              "format": "uuid",
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditorLinkOpened"
+                }
+              }
+            },
+            "description": "The editor link, shown once"
+          },
+          "400": {
+            "description": "The experiment has no visual settings, is not a draft, or has a start date"
+          },
+          "403": {
+            "description": "The request does not come from the dashboard, or the caller may not change experiments"
+          },
+          "404": {
+            "description": "No such experiment"
+          },
+          "422": {
+            "description": "The server does not know the dashboard's address, or a page of the experiment is on a site this server does not accept"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Open a visual draft in the visual editor (beta)",
+        "tags": [
+          "Experiments"
+        ],
+        "x-stability": "beta"
       }
     },
     "/api/v1/experiments/{experiment_id}/visual/preview-links": {
@@ -37492,6 +37998,244 @@
         "tags": [
           "Utilities"
         ]
+      }
+    },
+    "/api/v1/visual-editor/sessions": {
+      "post": {
+        "description": "Exchange the page's value for a visual editor session.\n\nSent by the visual editor's panel, from the dashboard, with the value the\npage handed it and that page's origin. The session belongs to the user\nwho made the editor link, lasts 4 hours and cannot be extended; its token\nworks only on the visual editor's session routes. The answer carries the\ntoken once, the experiment's sites the editor may run on, and the\ndraft's design.\n\nRefused, in this order: 403 when the request's `Origin` is not one of the\ndashboard's; 422 when the request is not in the documented form; 409 when\nthe value was already used, which also closes the editor it opened; 401\nwhen it is unknown, expired or ended; 403 when `page_origin` is not one of\nthe experiment's sites; 422, as opening the editor answers, when\nCORS_ORIGINS contains `*` or one of the experiment's pages is no longer\non a site this server accepts; 403 when the user is no longer active or\nmay no longer change experiments; 400 when the experiment is no longer a\ndraft, has a start date, or has no visual settings; then the same 409 or\n401 if the value has been ended or has expired meanwhile. After the 401\nevery refusal leaves the value spent. Sent with `Cache-Control: no-store`.",
+        "operationId": "open_editor_session_api_v1_visual_editor_sessions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimExchange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditorSessionOpened"
+                }
+              }
+            },
+            "description": "The session's token, shown once, and the draft"
+          },
+          "400": {
+            "description": "The experiment is no longer a draft, has a start date, or has no visual settings"
+          },
+          "401": {
+            "description": "The value is unknown, expired or ended"
+          },
+          "403": {
+            "description": "The request does not come from the dashboard, the page is not one of the experiment's sites, or the user may no longer change the experiment"
+          },
+          "409": {
+            "description": "The editor link was already used: the editor it opened is closed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start a visual editor session (beta)",
+        "tags": [
+          "Visual Editor"
+        ],
+        "x-stability": "beta"
+      }
+    },
+    "/api/v1/visual-editor/sessions/current": {
+      "delete": {
+        "description": "End the session: its token answers 401 `signed_out` from then on. The\nsaved design is kept. Only the first four checks of every session call\napply (the `Origin`, the token, the session's end and its expiry), so a\nsession signs out even once its user may no longer change experiments,\nand of a draft that has since been given a start date, or is no longer a\ndraft.",
+        "operationId": "sign_out_of_editor_api_v1_visual_editor_sessions_current_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditorSessionRefusal"
+                }
+              }
+            },
+            "description": "The session cannot be used; reason says why"
+          },
+          "403": {
+            "description": "The request does not come from the dashboard"
+          }
+        },
+        "summary": "Sign out of the visual editor (beta)",
+        "tags": [
+          "Visual Editor"
+        ],
+        "x-stability": "beta"
+      },
+      "get": {
+        "description": "The session's end, the experiment's sites the editor may run on, and the\ndraft's design as stored now: the session's answer without its token.\nSent with `Cache-Control: no-store`.",
+        "operationId": "read_editor_session_api_v1_visual_editor_sessions_current_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditorSessionState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "The experiment is no longer a draft, or has a start date"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditorSessionRefusal"
+                }
+              }
+            },
+            "description": "The session cannot be used; reason says why"
+          },
+          "403": {
+            "description": "The request does not come from the dashboard, or the user may no longer change the experiment"
+          },
+          "404": {
+            "description": "The experiment no longer exists"
+          }
+        },
+        "summary": "The visual editor session and its draft (beta)",
+        "tags": [
+          "Visual Editor"
+        ],
+        "x-stability": "beta"
+      }
+    },
+    "/api/v1/visual-editor/sessions/current/variants/{variant_id}/changes": {
+      "put": {
+        "description": "Replace one variant's page changes, keeping every other variant and its\nchanges as stored. It is the experiment update's own write, so it refuses\nwhat an update refuses (the control's changes among them), records one\n\"Experiment changed\" entry by the session's user with the reason\n`visual editor session <first 8 characters of the session's id>`, and\ndrops the cached experiment. The variants are saved again, so each gets a\nnew id; the answer is the session's, with the new ids. Sent with\n`Cache-Control: no-store`.",
+        "operationId": "save_variant_changes_api_v1_visual_editor_sessions_current_variants__variant_id__changes_put",
+        "parameters": [
+          {
+            "description": "One of the draft's variants",
+            "in": "path",
+            "name": "variant_id",
+            "required": true,
+            "schema": {
+              "description": "One of the draft's variants",
+              "format": "uuid",
+              "title": "Variant Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VisualChanges"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditorSessionState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "The experiment is no longer a draft, or has a start date"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditorSessionRefusal"
+                }
+              }
+            },
+            "description": "The session cannot be used; reason says why"
+          },
+          "403": {
+            "description": "The request does not come from the dashboard, or the user may no longer change the experiment"
+          },
+          "404": {
+            "description": "The experiment no longer exists, or has no variant with that id"
+          },
+          "422": {
+            "description": "The page changes are refused, as an experiment update refuses them"
+          }
+        },
+        "summary": "Save one variant's page changes from the visual editor (beta)",
+        "tags": [
+          "Visual Editor"
+        ],
+        "x-stability": "beta"
+      }
+    },
+    "/api/v1/visual-editor/tickets/claim": {
+      "post": {
+        "description": "Spend an editor link's ticket and store the page's value in its place.\n\nSent by the Controlvar script on the page the editor link opened, with no\nAPI key and no cookie. `claim` is 43 base64url characters the page drew;\nthe editor's panel then exchanges it for a session\n(`POST /api/v1/visual-editor/sessions`) within 120 seconds. The answer holds\nno credential.\n\nRefused, in this order: 422 when `claim` is not 43 base64url characters,\nor is already in use (the ticket is not spent); 409 when the ticket was\nalready used, which also closes the editor it opened; 401 when it is\nunknown, expired or ended; 403 when the request's `Origin` is not one of\nthe experiment's sites (the ticket stays spent); then the same 409 or 401\nif the link has been used again, ended or has expired meanwhile. Sent\nwith `Cache-Control: no-store`.",
+        "operationId": "claim_editor_link_api_v1_visual_editor_tickets_claim_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TicketClaim"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketClaimed"
+                }
+              }
+            },
+            "description": "The claim is stored; no credential comes back"
+          },
+          "401": {
+            "description": "The editor link is unknown, expired or ended"
+          },
+          "403": {
+            "description": "The request does not come from one of the experiment's sites"
+          },
+          "409": {
+            "description": "The editor link was already used: the editor it opened is closed"
+          },
+          "422": {
+            "description": "The request is not in the documented form, or the value sent with the link is already in use"
+          }
+        },
+        "summary": "Claim an editor link, from the page it opened (beta)",
+        "tags": [
+          "Visual Editor"
+        ],
+        "x-stability": "beta"
       }
     },
     "/api/v1/warehouse/analysis/connections": {

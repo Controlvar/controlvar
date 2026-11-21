@@ -44,6 +44,9 @@ export const ACTIONS: Readonly<Record<string, { label: string; group: ActionGrou
   experiment_complete: { label: 'Experiment completed', group: 'Experiments' },
   experiment_preview_link_create: { label: 'Preview link created', group: 'Experiments' },
   experiment_preview_links_revoke: { label: 'Preview links revoked', group: 'Experiments' },
+  visual_editor_session_opened: { label: 'Visual editor opened', group: 'Experiments' },
+  visual_editor_session_closed: { label: 'Visual editor closed', group: 'Experiments' },
+  visual_editor_ticket_reused: { label: 'Visual editor link used twice', group: 'Experiments' },
   user_create: { label: 'User created', group: 'Users and access' },
   user_delete: { label: 'User deleted', group: 'Users and access' },
   user_activate: { label: 'User reactivated', group: 'Users and access' },
@@ -63,6 +66,8 @@ export const ACTIONS: Readonly<Record<string, { label: string; group: ActionGrou
   user_login: { label: 'Signed in', group: 'Users and access' },
   api_key_create: { label: 'API key created', group: 'Users and access' },
   api_key_revoke: { label: 'API key revoked', group: 'Users and access' },
+  app_user_erase_started: { label: 'App user erase started', group: 'Users and access' },
+  app_user_erased: { label: 'App user data erased', group: 'Users and access' },
   holdout_create: { label: 'Holdout created', group: 'Holdouts, groups and segments' },
   holdout_update: { label: 'Holdout changed', group: 'Holdouts, groups and segments' },
   holdout_activate: { label: 'Holdout activated', group: 'Holdouts, groups and segments' },
@@ -112,6 +117,7 @@ export const ENTITY_LABELS: Readonly<Record<string, string>> = {
   mutual_exclusion_group: 'Exclusion group',
   segment: 'Segment',
   safety_config: 'Safety settings',
+  app_user: 'App user',
 };
 
 /** The label for an entity type; an unknown one shows as itself. */
@@ -130,6 +136,7 @@ export const SYSTEM_ACTORS: Readonly<Record<string, string>> = {
   'system:cognito-sync': 'Cognito sync',
   'system:sso-sync': 'SSO sync',
   'system:operator-cli': 'Operator command',
+  'system:visual-editor': 'Visual editor',
 };
 
 /**

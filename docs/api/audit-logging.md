@@ -6,8 +6,8 @@ flags and experiments, turning flags on and off, starting, pausing and completin
 experiments, rollout schedule changes, API keys, holdouts, mutual exclusion groups,
 segments, creating and deleting users, changes to a user's role, superuser flag or active
 status, signing in with a password or through Cognito (`POST /auth/token`; a sign-in
-through the Cognito Hosted UI does not pass through the API and is not recorded), and
-safety rollbacks and saves of the global safety settings. In the full profile it also records custom roles defined, changed,
+through the Cognito Hosted UI does not pass through the API and is not recorded),
+safety rollbacks and saves of the global safety settings, and erasing one app user's data. In the full profile it also records custom roles defined, changed,
 deleted, assigned and revoked, direct permissions granted and revoked, a workspace
 member's role changes, and single sign-on (SSO) sign-ins.
 [Action Types](#action-types) lists every action and when it is written.
@@ -123,7 +123,7 @@ Query the audit log with filters. The URL ends with a slash; without it the API 
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `entity_type` | string | `feature_flag`, `experiment`, `user`, `role`, `permission`, `safety_config`, `rollout_schedule`, `api_key`, `holdout`, `mutual_exclusion_group`, `segment` |
+| `entity_type` | string | `feature_flag`, `experiment`, `user`, `role`, `permission`, `safety_config`, `rollout_schedule`, `api_key`, `holdout`, `mutual_exclusion_group`, `segment`, `app_user` |
 | `entity_id` | UUID | Filter by specific entity ID |
 | `action_type` | string | Filter by action (see Action Types below) |
 | `user_id` | UUID | Filter by the user who performed the action |
@@ -280,7 +280,8 @@ says so and saves nothing.
 
 Every action below is written by the route or the part of the platform named. A route
 writes it with the signed-in user as the actor, after the change is saved, except a
-feature flag route, which writes it in the same transaction as the change; the
+feature flag or rollout schedule route, which writes it in the same transaction as the
+change; the
 [failure policy](#when-an-entry-can-be-missing) says what happens when an entry cannot be
 written. An update records only the fields that changed, as
 `old_value` and `new_value` JSON; a create records the new entity's identifying fields in
@@ -303,10 +304,14 @@ No entry holds a password, a token, any part of an API key, or a request body.
 | `toggle_enable`, `toggle_disable` | `feature_flag` | A flag is turned on or off (`/toggle`, `/enable`, `/disable`, or bulk `enable`/`disable`); `old_value` and `new_value` are the status |
 | `experiment_create` | `experiment` | `POST /experiments/`, `/clone` (`reason` names the source) |
 | `experiment_update` | `experiment` | `PUT /experiments/{id}`, `/schedule`, `/metadata`, `/archive`, `PUT /bandit/{id}/weights` (`reason` names the change, except for `PUT`) |
+| `experiment_update` | `experiment` | `PUT /visual-editor/sessions/current/variants/{variant_id}/changes` saves a variant's page changes from the visual editor, the actor being the session's user; `reason` is `visual editor session` and the first 8 characters of the session's id |
 | `experiment_delete` | `experiment` | `DELETE /experiments/{id}` |
 | `experiment_start`, `experiment_pause`, `experiment_complete` | `experiment` | `/start` (also a resume), `/pause`, `/complete` |
 | `experiment_preview_link_create` | `experiment` | `POST /experiments/{id}/visual/preview-links` makes a visual experiment's preview link; `new_value` is `{"variant_id", "expires_at"}`, never the link or its token |
 | `experiment_preview_links_revoke` | `experiment` | `DELETE /experiments/{id}/visual/preview-links` ends the experiment's live preview links; `new_value` is `{"revoked"}`, how many were ended |
+| `visual_editor_session_opened` | `experiment` | `POST /visual-editor/sessions` starts a visual editor session, the actor being the user who opened the editor link; `new_value` is `{"session_id"}`, never the session's token |
+| `visual_editor_session_closed` | `experiment` | A visual editor session ends; `new_value` is `{"reason", "session_id", "session_user_id"}`. `reason` is `reopened` when `POST /experiments/{id}/visual/editor-tickets` opened the editor again, the actor being whoever opened it; `ticket_reused` when the session's editor link came back after it was used, the actor being `system:visual-editor`; `signed_out` for `DELETE /visual-editor/sessions/current`, the actor being the session's user; and `started` when the experiment starts, the actor being whoever started it with `/start`, or `system:experiment-scheduler` |
+| `visual_editor_ticket_reused` | `experiment` | An editor link that was already used came back to `POST /visual-editor/tickets/claim` or `POST /visual-editor/sessions`, which closes the editor it opened; the actor is `system:visual-editor` and `new_value` is `{"link_user_id"}`, the user who opened the link |
 | `api_key_create`, `api_key_revoke` | `api_key` | `POST /api-keys`, `DELETE /api-keys/{id}` |
 | `holdout_create` | `holdout` | `POST /holdout`. With `is_active: true` it turns the active holdout off, and that holdout gets its own `holdout_deactivate` |
 | `holdout_update`, `holdout_activate`, `holdout_deactivate` | `holdout` | `PUT /holdout/{id}`, one entry per kind of change. Activating a holdout turns any other active one off, and that holdout gets its own `holdout_deactivate`. An activate or deactivate entry also carries the `activated_at` or `deactivated_at` it set |
@@ -321,6 +326,7 @@ No entry holds a password, a token, any part of an API key, or a request body.
 | `user_login` | `user` | Signing in through Cognito (`POST /auth/token` with the Cognito provider) as a user who already has an account; `new_value` is `{"provider": "cognito"}`. A user's first Cognito sign-in writes no `user_login`: their account is created by the first request they make with the token, which writes `user_create`. A sign-in through the Cognito Hosted UI does not pass through this API and writes nothing |
 | `safety_rollback` | `feature_flag` | A safety rollback, manual (`POST /safety/feature-flags/{id}/rollback`, by the calling user) or by the safety monitor. `new_value` is `{"trigger_type", "previous_percentage", "new_percentage", "deactivated", "paused_schedules"}`; `reason` is the rollback's reason. It appears in the flag's history |
 | `safety_config_update` | `safety_config` | `POST /safety/settings` saves the global safety settings; one entry per save, by the calling superuser, whether or not a value changed. `old_value` and `new_value` are `{"enable_automatic_rollbacks", "default_metrics"}`; `old_value` is empty when the save creates the settings. A refused or invalid save writes none. A flag's own safety config (`POST /safety/feature-flags/{id}/config`) writes none |
+| `app_user_erase_started`, `app_user_erased` | `app_user` | `POST /admin/app-users/erase` (beta), by the calling superuser: one entry when the call starts, before anything is deleted, and one when it finishes, both with the response's `receipt_id` as `entity_id` and `app user` as `entity_name`. `app_user_erased`'s `new_value` is `{"deleted", "ids_erased", "complete"}`: counts only, never the id. A start entry with no finish entry: the call did not finish; some rows may be gone, or none. See [Erase one app user's data](erase-user-data.md#the-record) |
 | `experiment_start`, `experiment_complete` | `experiment` | The experiment scheduler starts an experiment at its start date or scheduled resume, or completes it at its end date (also when `POST /experiments/schedules/process` runs it). `reason` is `scheduled start`, `scheduled resume` or `scheduled end` |
 | `feature_flag_update` | `feature_flag` | The rollout scheduler starts a rollout stage and sets the flag's rollout percentage. `reason` is `rollout schedule stage started` |
 | `user_create` | `user` | A user's first Cognito sign-in creates their account. The actor is the new user; `reason` is `first sign-in` |
@@ -366,12 +372,13 @@ these reserved values:
 
 | `user_email` | Written by |
 |--------------|------------|
-| `system:experiment-scheduler` | The experiment scheduler: scheduled starts, resumes and ends |
+| `system:experiment-scheduler` | The experiment scheduler: scheduled starts, resumes and ends, and each visual editor session a scheduled start closes |
 | `system:rollout-scheduler` | The rollout scheduler: each rollout stage it starts |
 | `system:safety-monitor` | The safety monitor: each automatic rollback |
 | `system:cognito-sync` | Cognito group sync: each role or superuser flag change |
 | `system:sso-sync` | SSO sign-in (full profile): each role change from a mapped group |
 | `system:operator-cli` | An operator's command, `python -m backend.app.db.two_factor_reset`: each account whose two-step sign-in it resets |
+| `system:visual-editor` | The visual editor's sign-in: each editor link that came back after it was used, and each editor session that closes because of it |
 
 An entry is automatic only when `user_id` is empty **and** `user_email` is one of these
 values. Deleting a user also empties `user_id` on their entries, but keeps their own
@@ -404,7 +411,7 @@ Whether a change is kept when its entry cannot be written depends on where it is
 | Where | If the entry cannot be written |
 |-------|--------------------------------|
 | A feature flag created, changed, deleted, activated, deactivated, unarchived, toggled, enabled or disabled, or a bulk toggle | Nothing is saved and the response is `500` with a request ID; a bulk toggle saves none of its flags. Resend it once the problem is fixed |
-| Rollout schedule and stage changes (recorded on the flag) | The change is kept and the response is `2xx`; there is no entry |
+| Rollout schedule and stage changes (recorded on the flag) | Nothing is saved and the response is `500`; resend it once the problem is fixed |
 | Any other route (the other route actions above) | The change is kept and the response is `2xx`; there is no entry |
 | A superuser's change to a user's role, superuser flag or active status | Nothing is saved and the response is `500`; resend it once the problem is fixed |
 | Two-step sign-in turned on or off, a recovery code used or renewed, or a reset by `python -m backend.app.db.two_factor_reset` | Nothing is saved: the change and its entry are kept or lost together. The reset command says `Nothing was changed.` and exits with status 2 |
@@ -438,13 +445,15 @@ later. The API also counts these failures in a Prometheus counter,
 `audit_write_failures_total`, but do not rely on it there: the AWS deployment does not
 collect it.
 
-A feature flag change refused because its entry cannot be written has no missing entry:
-it logs no `Failed to create audit log` line and does not count toward
-`experimentation-api-audit-write-failed-<env>` or `audit_write_failures_total`. The route
-logs `<operation> failed (AuditWriteFailed)` at ERROR instead, such as
+A feature flag or rollout schedule change refused because its entry cannot be written
+has no missing entry: it logs no `Failed to create audit log` line and does not count
+toward `experimentation-api-audit-write-failed-<env>` or `audit_write_failures_total`. The
+route logs `<operation> failed (AuditWriteFailed)` at ERROR instead, such as
 `Feature flag toggle failed (AuditWriteFailed)`, and a create or an update also logs
-`Error creating feature flag` or `Error updating feature flag` with the cause's type.
-`AuditWriteFailed` means only that the entry could not be written with the change: the
+`Error creating feature flag` or `Error updating feature flag` with the cause's type. A
+rollout schedule or stage route logs
+`Error <verb> rollout schedule: audit entry for feature_flag_update on feature_flag <flag id> could not be written (<cause type>)`
+at ERROR instead, with `rollout stage` for a stage. `AuditWriteFailed` means only that the entry could not be written with the change: the
 audit tables refused it, or the database stopped the request while it waited for a row
 that another change held. These lines count toward
 `experimentation-api-error-logs-<env>`, which goes into alarm at 10 error lines in 5

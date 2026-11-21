@@ -132,6 +132,7 @@ the SDK prefixes, then the default.
 | `/api/v1/ai/design` | 10 / min |
 | `/api/v1/ai/interpret/` (every experiment id shares one count) | 10 / min |
 | `/api/v1/tracking/assign/batch` (its own count) | 60 / min |
+| `/api/v1/visual-editor/tickets/claim`, `/api/v1/visual-editor/sessions` (the visual editor's sign-in, beta; each its own count) | 10 / min |
 | `/api/v1/tracking/`, `/api/v1/feature-flags/evaluate/`, `/api/v1/feature-flags/user/`, `/api/v1/sdk/` | `SDK_RATE_LIMIT_PER_MINUTE`, default **6000 / min** |
 | everything else | **300 / min** |
 

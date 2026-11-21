@@ -89,11 +89,13 @@ DEV_USER = Exempt(
 #: (module, function, kind) -> (how many times, classification).
 SITES: Dict[Tuple[str, str, str], Tuple[int, object]] = {
     # --- the experiment scheduler -------------------------------------------
+    # A scheduled start also closes the experiment's open visual editor
+    # sessions, one entry each (#1545).
     (
         "backend/app/core/scheduler.py",
         "ExperimentScheduler._process_due",
         "status=ACTIVE",
-    ): (1, Audited(A.EXPERIMENT_START)),
+    ): (1, Audited(A.EXPERIMENT_START, A.VISUAL_EDITOR_SESSION_CLOSED)),
     (
         "backend/app/core/scheduler.py",
         "ExperimentScheduler._process_due",

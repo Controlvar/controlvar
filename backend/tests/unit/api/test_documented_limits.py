@@ -284,9 +284,13 @@ def test_the_permission_check_reads_grants_only_through_the_capability():
 # ---------------------------------------------------------------------------
 # Data
 # ---------------------------------------------------------------------------
-def test_no_route_sets_retention_or_erases_a_users_data(routes):
+def test_one_route_erases_an_app_users_data_and_none_sets_retention(routes):
+    """The superuser erase (#2042) is the one route of its kind: an exact list
+    of one, so a second erase or a retention route fails here."""
     pattern = re.compile(r"retention|erase|erasure|gdpr|forget|purge", re.I)
-    assert [path for _, path in routes if pattern.search(path)] == []
+    assert sorted((m, p) for m, p in routes if pattern.search(p)) == [
+        ("POST", "/api/v1/admin/app-users/erase")
+    ]
     deletes = [
         path
         for method, path in routes

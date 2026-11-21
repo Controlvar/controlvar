@@ -5,9 +5,9 @@ assertion that a refusal changed nothing reads the row back. The rows of
 PLAN-v3.1's VERIFICATION held here, each with the defect that fails it:
 
 * V3/V4  every write path validates: each hostile payload of the corpus is
-         refused by create and by PUT, and a clone of a stored value that
-         fails its schema is refused (a clone that copies without checking
-         answers 201);
+         refused by create, by PUT and by the visual editor's save, and a
+         clone of a stored value that fails its schema is refused (a clone
+         that copies without checking answers 201);
 * V26    ADMIN and DEVELOPER may write a visual draft; ANALYST and VIEWER get 403;
 * V30    a save that changes visual_config names it in changed_fields, and
          never stores its contents;
@@ -304,6 +304,59 @@ def test_put_refuses_each_hostile_payload_and_keeps_the_stored_changes(
         response = client.put(
             f"{BASE}/{created['id']}",
             **_escaped_json(developer, {"variants": _variants(document)}),
+        )
+        if response.status_code != 422:
+            refused.append((case_id, response.status_code))
+    assert refused == []
+    assert _row(db_session, created["id"])["changes"] == {"Control": None, "B": CHANGES}
+
+
+def test_the_editor_save_refuses_each_corpus_payload_and_keeps_the_stored_changes(
+    client, db_session, developer, monkeypatch
+):
+    """The visual editor's save (``PUT /visual-editor/sessions/current/
+    variants/{variant_id}/changes``) is the third route that takes page
+    changes; it refuses each refused document of the corpus as create and
+    PUT do."""
+    shop, dashboard = "https://shop.example.com", "https://dash.example.com"
+    monkeypatch.setattr(settings, "BACKEND_CORS_ORIGINS", [])
+    monkeypatch.setattr(settings, "CORS_ORIGINS", [shop])
+    monkeypatch.setattr(settings, "DASHBOARD_ORIGINS", [dashboard])
+    monkeypatch.setattr(settings, "PUBLIC_BASE_URL", None)
+    created = _create(client, developer)
+    minted = client.post(
+        f"{BASE}/{created['id']}/visual/editor-tickets",
+        headers={**_auth(developer), "Origin": dashboard},
+    )
+    ticket = minted.json()["open_url"].partition("#controlvar-editor=")[2]
+    claim = uuid.uuid4().hex + uuid.uuid4().hex[:11]
+    _ok(
+        client.post(
+            "/api/v1/visual-editor/tickets/claim",
+            json={"ticket": ticket, "claim": claim},
+            headers={"Origin": shop},
+        ),
+        201,
+    )
+    token = _ok(
+        client.post(
+            "/api/v1/visual-editor/sessions",
+            json={"claim": claim, "page_origin": shop},
+            headers={"Origin": dashboard},
+        ),
+        201,
+    )["token"]
+    variant = next(v["id"] for v in created["variants"] if v["name"] == "B")
+    refused = []
+    for case_id, _, document in REFUSED:
+        response = client.put(
+            f"/api/v1/visual-editor/sessions/current/variants/{variant}/changes",
+            content=json.dumps(document),
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Origin": dashboard,
+                "Content-Type": "application/json",
+            },
         )
         if response.status_code != 422:
             refused.append((case_id, response.status_code))

@@ -223,6 +223,8 @@ NOT_DOCS_TESTS = {
     "backend/tests/smoke/test_audit_export_in_snapshot.py": "docs/api only",
     # Reads only docs/api/openapi-v1.stable.json (same reason as above).
     "backend/tests/smoke/test_assign_batch_route.py": "docs/api only",
+    # Reads only the two docs/api/ OpenAPI snapshots (same reason as above).
+    "backend/tests/smoke/test_app_user_erase_route_in_snapshot.py": "docs/api only",
     # Reads only the docs/api/ snapshots and frontend/src/tests/fixtures/openapi.json
     # (same reason as above).
     "backend/tests/smoke/test_alias_route_in_snapshot.py": "docs/api only",

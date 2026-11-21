@@ -22,6 +22,7 @@
 # of the full snapshot's 214, and 65 of config.py's 78 settings.
 
 routes = [
+  "/api/v1/admin/app-users/erase",
   "/api/v1/admin/users",
   "/api/v1/admin/users/{user_id}",
   "/api/v1/admin/users/{user_id}/2fa",
@@ -213,6 +214,8 @@ routes = [
   "/api/v1/users/me/password",
   "/api/v1/users/{user_id}",
   "/api/v1/utils/utils/sample-size",
+  "/api/v1/visual-editor/sessions",
+  "/api/v1/visual-editor/tickets/claim",
   "/api/v1/warehouse/analysis/connectors",
   "/api/v1/warehouse/analysis/experiments/{experiment_id}/runs",
   "/api/v1/workspaces/",

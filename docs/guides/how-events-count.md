@@ -61,11 +61,14 @@ SDK has an `event_id` option yet ([Limitations](../getting-started/limitations.m
 event that may be sent again to `POST /api/v1/tracking/track` or `POST /api/v1/tracking/batch`
 yourself.
 
-`event_dedup_keys` holds your app's user ids and keeps them when events are deleted. An operator
-erasing one person's events by hand must delete their keys too. An `event_id` is remembered for as
-long as its key is kept. When the person's ids are linked ([below](#ids-linked-as-one-person)),
-erase the rows of every one of their ids, because an event one id sends after the link can be
-stored under another, and delete their rows in `identity_aliases`, the links themselves.
+`event_dedup_keys` holds your app's user ids and keeps them when events are deleted. Erasing one
+app user's data ([Erase one app user's data](../api/erase-user-data.md)) deletes their keys with
+their events, so an `event_id` they send again after an erase is stored again. An `event_id` is
+remembered for as long as its key is kept.
+When the person's ids are linked ([below](#ids-linked-as-one-person)), the erase covers every
+one of their ids and their links in `identity_aliases`, because an event one id sends after the
+link can be stored under another
+([A user linked to other ids](../api/erase-user-data.md#a-user-linked-to-other-ids)).
 
 ### When sending fails
 

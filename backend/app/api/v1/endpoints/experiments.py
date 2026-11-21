@@ -1162,6 +1162,30 @@ async def update_experiment(
     A variant sent without `visual_changes` keeps the page changes stored
     for the variant of the same name; `visual_changes: null` removes them.
     """
+    return await _apply_experiment_update(
+        db, experiment_id, experiment_in, current_user, cache_control
+    )
+
+
+async def _apply_experiment_update(
+    db: Session,
+    experiment_id: UUID,
+    experiment_in: ExperimentUpdate,
+    current_user: User,
+    cache_control: Any,
+    audit_reason: Optional[str] = None,
+) -> ExperimentResponse:
+    """Apply *experiment_in* to the experiment as ``PUT /{experiment_id}``
+    does: its checks, refusals and answers, the compliance trail, one
+    ``experiment_update`` audit entry by *current_user* with *audit_reason*
+    as its reason, and the drop of the experiment's cached detail and lists.
+
+    The body of ``update_experiment``, moved here unchanged so that every
+    writer of a design goes through the same steps (#1545). Its callers are
+    the ``PUT /{experiment_id}`` route (reason ``None``) and the visual
+    editor's ``PUT /visual-editor/sessions/current/variants/{variant_id}/changes``
+    (reason ``visual editor session <8 hex>``); nothing else.
+    """
     try:
         # Get experiment. A request that sends visual_config reads the row
         # again, for update, once the role and state checks below have passed.
@@ -1362,7 +1386,12 @@ async def update_experiment(
             )
 
         record_experiment_change(
-            db, current_user, ActionType.EXPERIMENT_UPDATE, experiment_id, before_audit
+            db,
+            current_user,
+            ActionType.EXPERIMENT_UPDATE,
+            experiment_id,
+            before_audit,
+            reason=audit_reason,
         )
 
         await _invalidate_experiment_cache(cache_control, experiment_id)
@@ -1729,7 +1758,9 @@ async def start_experiment(
         # Start experiment. A start whose start date would not be before the
         # end date is refused before anything is written (#953).
         try:
-            started_experiment = experiment_service.start_experiment(experiment)
+            started_experiment = experiment_service.start_experiment(
+                experiment, actor=current_user
+            )
         except EndDatePassedError as err:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail=END_DATE_PASSED

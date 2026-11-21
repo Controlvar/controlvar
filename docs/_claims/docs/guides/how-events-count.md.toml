@@ -249,19 +249,19 @@ text = "event_dedup_keys holds your app's user ids and keeps them when events ar
 by = ["test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_a_key_outlives_its_event_and_is_remembered_while_it_is_kept"]
 
 [[unit]]
-text = "An operator erasing one person's events by hand must delete their keys too."
-by = ["exempt:instruction"]
+text = "Erasing one app user's data (Erase one app user's data) deletes their keys with their events, so an event_id they send again after an erase is stored again."
+by = ["test:backend/tests/integration/api/test_app_user_erase_api.py::test_an_event_sent_again_after_an_erase_is_stored_again"]
 
 [[unit]]
 text = "An event_id is remembered for as long as its key is kept."
 by = ["test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_a_key_outlives_its_event_and_is_remembered_while_it_is_kept"]
 
 [[unit]]
-text = "When the person's ids are linked (below), erase the rows of every one of their ids, because an event one id sends after the link can be stored under another, and delete their rows in identity_aliases, the links themselves."
+text = "When the person's ids are linked (below), the erase covers every one of their ids and their links in identity_aliases, because an event one id sends after the link can be stored under another (A user linked to other ids)."
 by = [
-    "test:backend/tests/integration/services/test_identity_aliases_service.py::test_every_id_of_a_star_gives_the_whole_person",
+    "test:backend/tests/integration/api/test_app_user_erase_identity_aliases.py::test_an_anonymous_ids_rows_held_for_the_person_are_erased",
+    "test:backend/tests/integration/api/test_app_user_erase_identity_aliases.py::test_links_naming_the_id_in_either_column_are_deleted",
     "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_known_ids_conversion_counts_for_its_persons_variant",
-    "test:backend/tests/integration/database/test_identity_aliases_migration.py::test_the_downgrade_drops_every_link_and_keeps_assignments_and_events",
 ]
 
 [[unit]]

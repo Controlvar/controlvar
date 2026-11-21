@@ -196,6 +196,25 @@ by = [
 ]
 
 [[unit]]
+text = "The visual editor, not yet available in the dashboard, opens only on sites listed here, and a draft is not opened in it while the list contains ."
+by = [
+    "test:backend/tests/unit/api/test_visual_editor_not_in_dashboard.py::test_the_dashboard_does_not_open_the_visual_editor_yet",
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_what_else_is_refused_before_a_link_is_made",
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_a_claim_from_a_page_outside_the_experiments_sites_is_refused_and_spends_the_ticket",
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_an_exchange_naming_a_page_outside_the_experiments_sites_is_refused_and_spends_the_claim",
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_no_draft_is_opened_while_cors_origins_holds_every_site",
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_a_link_made_before_cors_origins_held_every_site_opens_no_editor_after",
+]
+
+[[unit]]
+text = "It also needs the dashboard's address, as SSO sign-in does: DASHBOARD_ORIGINS, or PUBLIC_BASE_URL when the dashboard is served from it."
+by = [
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_a_test_server_with_no_dashboard_origin_refuses_before_the_origin_rule",
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_a_production_server_takes_its_public_address",
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_the_editor_is_opened_only_from_a_dashboard_origin",
+]
+
+[[unit]]
 text = "SDK_RATE_LIMIT_PER_MINUTE is the per-IP ceiling for SDK traffic (/api/v1/tracking/ and flag evaluation)."
 by = [
     "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitConfig::test_sdk_limit_is_configurable",
@@ -383,6 +402,15 @@ by = [
 [[unit]]
 text = "See Users' addresses behind a proxy."
 by = ["exempt:navigation"]
+
+[[unit]]
+text = "A proxy in front of Controlvar that removes the Origin header turns every visual editor write into a 403: the editor's routes refuse a write that carries none."
+by = [
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_the_session_routes_take_the_dashboards_origin",
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_the_editor_is_opened_only_from_a_dashboard_origin",
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_a_session_is_started_only_from_a_dashboard_origin",
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_a_claim_from_a_page_outside_the_experiments_sites_is_refused_and_spends_the_ticket",
+]
 
 [[unit]]
 text = "Demo mode"

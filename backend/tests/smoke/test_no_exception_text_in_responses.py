@@ -485,7 +485,7 @@ ALLOWED: Dict[Tuple[str, str, str], Tuple[int, str]] = {
         1,
         SERVICE_VALUEERROR,
     ),
-    (f"{E}/experiments.py", "update_experiment", "AnalysisConfigError"): (
+    (f"{E}/experiments.py", "_apply_experiment_update", "AnalysisConfigError"): (
         2,
         ANALYSIS_CONFIG,
     ),

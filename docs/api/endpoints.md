@@ -97,6 +97,7 @@ on for that user: `"new_dashboard_ui": true` and `"beta_features": true`.
    - Can manage all experiments
    - Can access admin endpoints
    - Can create other users
+   - Can erase one app user's data (beta)
 
 ## Usage Examples
 
@@ -913,7 +914,10 @@ is not significant. For a proportion, near the threshold, the interval and
 Fisher's exact test can disagree either way: 128 of 1,000 against 100 of
 1,000 is not significant (p 0.057) while its interval runs from +0.0001
 to +0.056, and 3 of 50 against 18 of 100 is significant (p 0.049) while its
-interval reaches +0.00003.
+interval reaches +0.00003. For a mean, the test is a permutation test of
+Welch's t (`statistical_test_used` `permutation_t_test`, engine 1.13.0) while
+the interval is Welch's, so the two can disagree either way, most often when
+the variants' sizes are very different.
 
 For a proportion, `relative_improvement_pct_ci` is null only when an arm has no
 users or the control has no conversions. The ratio is taken over values of 0
@@ -1459,6 +1463,22 @@ an id like any other, so send each visitor's own id.
 - **Response**: 204 No Content
 - **Errors**: 400 "Cannot delete your own user account" when the account is
   your own. 404 "User not found".
+
+### Erase One App User's Data (Admin, beta)
+- **Endpoint**: `POST /api/v1/admin/app-users/erase`
+- **Description**: Delete every row stored under one `user_id` your app sent
+  (superuser only); dashboard accounts are not touched.
+- **Headers**: Authorization: Bearer {token}
+- **Request Body**: `{"user_id": "user-to-erase"}`, 1 to 255 characters,
+  matched exactly; any other field answers 422.
+- **Response**: 200 with `receipt_id`, `complete`, `ids_erased` and `deleted`
+  (rows per table). `complete: false` means send the same request again.
+- **Errors**: 401 with no token or with an API key alone; 403 "Not enough
+  permissions" for anyone but a superuser; 422 for a body tracking could not
+  store; 500 when the erase could not be recorded (nothing erased) or failed
+  part way (send the request again).
+- See [Erase one app user's data](erase-user-data.md) for what is and is not
+  deleted, and what results look like afterwards.
 
 ## Error Responses
 

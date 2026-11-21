@@ -786,6 +786,57 @@ def test_start_hashes_the_row_not_the_cached_detail(
     assert started.status_code == 200, started.text
 
 
+def test_a_visual_editor_save_drops_the_cached_detail(
+    cached_superuser_client, redis_server, detail_key_prefix, monkeypatch
+):
+    """C5 (#1545): the visual editor's save is PUT's own write, so it drops
+    the cached detail too. With the detail cached (e1), a save through an
+    editor session is read back at once (e2); one that left the cache would
+    show e1 for an hour."""
+    shop, dashboard = "https://shop.example.com", "https://dash.example.com"
+    monkeypatch.setattr(settings, "BACKEND_CORS_ORIGINS", [])
+    monkeypatch.setattr(settings, "CORS_ORIGINS", [shop])
+    monkeypatch.setattr(settings, "DASHBOARD_ORIGINS", [dashboard])
+    monkeypatch.setattr(settings, "PUBLIC_BASE_URL", None)
+    client = cached_superuser_client
+    exp = _create_visual(client)
+    e1 = _warm(client, redis_server, exp["id"], detail_key_prefix)["design_etag"]
+    minted = client.post(
+        f"{BASE}/{exp['id']}/visual/editor-tickets", headers={"Origin": dashboard}
+    )
+    assert minted.status_code == 201, minted.text
+    ticket = minted.json()["open_url"].partition("#controlvar-editor=")[2]
+    claim = uuid.uuid4().hex + uuid.uuid4().hex[:11]
+    claimed = client.post(
+        "/api/v1/visual-editor/tickets/claim",
+        json={"ticket": ticket, "claim": claim},
+        headers={"Origin": shop},
+    )
+    assert claimed.status_code == 201, claimed.text
+    opened = client.post(
+        "/api/v1/visual-editor/sessions",
+        json={"claim": claim, "page_origin": shop},
+        headers={"Origin": dashboard},
+    )
+    assert opened.status_code == 201, opened.text
+    treatment = next(v["id"] for v in exp["variants"] if v["name"] == "Treatment")
+
+    saved = client.put(
+        f"/api/v1/visual-editor/sessions/current/variants/{treatment}/changes",
+        json={"version": 1, "changes": [{"op": "hide", "selector": ".promo"}]},
+        headers={
+            "Authorization": f"Bearer {opened.json()['token']}",
+            "Origin": dashboard,
+        },
+    )
+
+    assert saved.status_code == 200, saved.text
+    e2 = saved.json()["experiment"]["design_etag"]
+    assert e2 != e1
+    cached = _detail(client, exp["id"])["design_etag"]
+    assert cached == e2, f"cached {cached} != {e2}"
+
+
 @pytest.fixture
 def uncached_superuser_client(db_session, admin_user, monkeypatch):
     """The real ``get_cache_control`` with ``CACHE_ENABLED`` off, the default."""

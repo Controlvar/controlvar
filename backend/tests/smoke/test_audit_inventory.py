@@ -72,6 +72,10 @@ INVENTORY = {
     ("PUT", f"{V1}/admin/users/{{user_id}}"): ACCESS,
     # A superuser turning off someone else's two-step sign-in (#1812).
     ("DELETE", f"{V1}/admin/users/{{user_id}}/2fa"): Audited(A.USER_2FA_RESET),
+    # Erasing one app user's data (#2042): a start entry and a final entry.
+    ("POST", f"{V1}/admin/app-users/erase"): Audited(
+        A.APP_USER_ERASE_STARTED, A.APP_USER_ERASED
+    ),
     # --- AI design helpers ---------------------------------------------------
     ("POST", f"{V1}/ai/design"): CALCULATION,
     ("POST", f"{V1}/ai/interpret/{{experiment_id}}"): CALCULATION,
@@ -167,13 +171,21 @@ INVENTORY = {
     ("POST", f"{V1}/experiments/{{experiment_id}}/metadata"): EXP_UPDATE,
     ("POST", f"{V1}/experiments/{{experiment_id}}/pause"): Audited(A.EXPERIMENT_PAUSE),
     ("PUT", f"{V1}/experiments/{{experiment_id}}/schedule"): EXP_UPDATE,
-    ("POST", f"{V1}/experiments/{{experiment_id}}/start"): Audited(A.EXPERIMENT_START),
+    # A start also closes the experiment's open visual editor sessions (#1545).
+    ("POST", f"{V1}/experiments/{{experiment_id}}/start"): Audited(
+        A.EXPERIMENT_START, A.VISUAL_EDITOR_SESSION_CLOSED
+    ),
     # #1545: a visual experiment's preview links.
     ("POST", f"{V1}/experiments/{{experiment_id}}/visual/preview-links"): Audited(
         A.EXPERIMENT_PREVIEW_LINK_CREATE
     ),
     ("DELETE", f"{V1}/experiments/{{experiment_id}}/visual/preview-links"): Audited(
         A.EXPERIMENT_PREVIEW_LINKS_REVOKE
+    ),
+    # #1545: opening the visual editor closes the experiment's open editor
+    # sessions, one entry each.
+    ("POST", f"{V1}/experiments/{{experiment_id}}/visual/editor-tickets"): Audited(
+        A.VISUAL_EDITOR_SESSION_CLOSED
     ),
     # --- holdouts ------------------------------------------------------------
     # is_active true also ends the active holdout: one deactivate for it.
@@ -274,6 +286,23 @@ INVENTORY = {
     # #1545: the visual editor's browser script, with a key in the page.
     ("POST", f"{V1}/tracking/visual"): SDK,
     ("POST", f"{V1}/tracking/visual/preview"): READ_ONLY,
+    # --- the visual editor's sign-in (#1545) -----------------------------------
+    # A used editor link presented again ends the editor it opened.
+    ("POST", f"{V1}/visual-editor/tickets/claim"): Audited(
+        A.VISUAL_EDITOR_TICKET_REUSED, A.VISUAL_EDITOR_SESSION_CLOSED
+    ),
+    ("POST", f"{V1}/visual-editor/sessions"): Audited(
+        A.VISUAL_EDITOR_SESSION_OPENED,
+        A.VISUAL_EDITOR_TICKET_REUSED,
+        A.VISUAL_EDITOR_SESSION_CLOSED,
+    ),
+    ("DELETE", f"{V1}/visual-editor/sessions/current"): Audited(
+        A.VISUAL_EDITOR_SESSION_CLOSED
+    ),
+    # The editor's save is PUT /experiments/{id}'s own write and entry.
+    ("PUT", f"{V1}/visual-editor/sessions/current/variants/{{variant_id}}/changes"): (
+        EXP_UPDATE
+    ),
 }
 
 #: GET routes a reader could expect to be recorded, and why they are not.
@@ -324,7 +353,7 @@ def test_the_inventory_is_exact():
         f"unclassified: {sorted(found - set(INVENTORY))}; "
         f"gone: {sorted(set(INVENTORY) - found)}"
     )
-    assert len(INVENTORY) == 116
+    assert len(INVENTORY) == 122
 
 
 def test_every_mutating_route_is_under_backend_or_modules():

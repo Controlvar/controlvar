@@ -2,11 +2,13 @@
 
 A route whose request body can carry ``visual_config`` or ``visual_changes``
 stores it, so each must hold it to the schema and to the write rules: create
-and PUT do it in ``ExperimentCreate`` and in ``_refuse_visual_update``, and
-the clone (which copies stored values with no body) does it in
+and PUT do it in ``ExperimentCreate`` and in ``_refuse_visual_update``, the
+visual editor's save in its ``VisualChanges`` body and then PUT's own steps,
+and the clone (which copies stored values with no body) does it in
 ``clone_visual_problem``. The integration tests in
 ``backend/tests/integration/api/test_visual_experiment_api.py`` send each
-hostile payload through create and PUT and a planted one through clone. This
+refused document of the corpus through create, PUT and the editor's save,
+and a planted one through clone. This
 pins the list: a new route that accepts either model fails here until it is
 added to that test's routes.
 """
@@ -25,10 +27,13 @@ from backend.app.schemas.visual import VisualChanges, VisualConfig
 
 pytestmark = pytest.mark.smoke
 
-#: The operations whose body can carry a visual design, in every profile.
+#: The operations whose body can carry a visual design, in every profile. The
+#: visual editor's save sends its page changes to PUT /{experiment_id}'s own
+#: steps (``_apply_experiment_update``).
 EXPECTED = {
     ("POST", "/api/v1/experiments/"),
     ("PUT", "/api/v1/experiments/{experiment_id}"),
+    ("PUT", "/api/v1/visual-editor/sessions/current/variants/{variant_id}/changes"),
 }
 
 
