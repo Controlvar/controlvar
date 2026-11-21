@@ -288,6 +288,19 @@
 # superuser pass at this seed on that commit, which named them. The lists are
 # 117 for superuser, 191 for viewer and 9 for sdk.
 
+# Then #537 (#2082) removed the wizard operations, two of which were listed
+# for the superuser pass and two for the viewer pass: the lists were 115 for
+# superuser, 189 for viewer and 9 for sdk (counted from the parsed file).
+#
+# Then #2098 (#449) added POST /api/v1/tracking/alias, an SDK route that takes
+# an API key with the sdk:ruleset scope. The superuser and viewer passes send
+# a bearer token (401) and reach it in neither; the sdk pass reaches it (200
+# for a new link). It shifted no other operation's ids: a local run of the
+# three passes at this seed on the pull request's head (1ef5756c), read from
+# fuzz_check's evaluation, named it alone, unlisted in the superuser and viewer
+# passes, and the sdk pass was green. The lists are 116 for superuser, 190 for
+# viewer and 9 for sdk.
+
 # --- superuser: the seeded demo administrator's bearer token ----------------
 
 [[unreached]]
@@ -354,6 +367,11 @@ reason = "An id that is not a UUID answers 400 (#959), one that names no account
 pass = "superuser"
 operation = "DELETE /api/v1/experiments/{experiment_id}"
 reason = "The handler refuses the generated values (400); ids that name no stored row answer 404 and invalid requests answer 422."
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/tracking/alias"
+reason = "An SDK route: it takes an API key, and this pass sends a bearer token (401). The sdk pass fuzzes it."
 
 [[unreached]]
 pass = "superuser"
@@ -1010,6 +1028,11 @@ reason = "An SDK route: it takes an API key, and this pass sends a bearer token 
 [[unreached]]
 pass = "viewer"
 operation = "POST /api/v1/tracking/assign/batch"
+reason = "An SDK route: it takes an API key, and this pass sends a bearer token (401). The sdk pass fuzzes it."
+
+[[unreached]]
+pass = "viewer"
+operation = "POST /api/v1/tracking/alias"
 reason = "An SDK route: it takes an API key, and this pass sends a bearer token (401). The sdk pass fuzzes it."
 
 [[unreached]]
