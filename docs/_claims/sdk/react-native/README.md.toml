@@ -9,11 +9,11 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "Beta."
-by = ["test:backend/tests/smoke/test_sdk_release_react_native.py::test_the_react_native_package_is_first_published_at_0_1_0"]
+by = ["test:backend/tests/smoke/test_sdk_release_react_native.py::test_the_react_native_package_is_at_0_2_0"]
 
 [[unit]]
 text = "This is a 0.x release: pin the exact version you test against."
-by = ["test:backend/tests/smoke/test_sdk_release_react_native.py::test_the_react_native_package_is_first_published_at_0_1_0"]
+by = ["test:backend/tests/smoke/test_sdk_release_react_native.py::test_the_react_native_package_is_at_0_2_0"]
 
 [[unit]]
 text = "Feature flags, A/B experiment assignment and event tracking for React Native apps: a context provider, three hooks and a plain client, with an in-memory cache and an AsyncStorage-backed offline fallback."
@@ -169,6 +169,43 @@ text = "Map AsyncStorage to an in-memory mock as well: the Jest setup on the SDK
 by = ["exempt:navigation"]
 
 [[unit]]
+text = "Flag values"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A string, number or json flag serves its on value to the users it is on for, and its off value to everyone else."
+by = [
+    "test:sdk/react-native/__tests__/client.test.ts::each getter reads its type from GET /api/v1/feature-flags/evaluate/{key}, attributes as context",
+    "test:sdk/react-native/__tests__/client.test.ts::a flag that is off for the user answers its off value, not the default",
+]
+
+[[unit]]
+text = "Read the value with useFlagValue in a component, or with the client's getStringValue, getNumberValue or getJsonValue anywhere else:"
+by = [
+    "test:sdk/react-native/__tests__/valueVectors.test.ts::the typed getters and useFlagValue answer each value vector as the contract says",
+    "test:sdk/react-native/__tests__/hooks.test.tsx::starts with the default and loading true, then answers the value the server serves",
+]
+
+[[unit]]
+text = "Pass the flag's off value as your default."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "The hook never throws and a getter never rejects: when there is no value of that type to read (a failed request with no stored answer of that type, a server from before flag values, a flag of another type), each returns your default and calls onError once with the operation 'value'."
+by = [
+    "test:sdk/react-native/__tests__/client.test.ts::never rejects: a network error answers the default and is reported once",
+    "test:sdk/react-native/__tests__/client.test.ts::offline fallback: a failed request answers the stored value of that type, and still reports",
+    "test:sdk/react-native/__tests__/client.test.ts::an answer without a value (a server without flag values) answers the default, INVALID_RESPONSE",
+    "test:sdk/react-native/__tests__/client.test.ts::another type answers the default and reports one TYPE_MISMATCH with \"value\"",
+    "test:sdk/react-native/__tests__/hooks.test.tsx::a failed request: the default, REQUEST_FAILED with the request error as cause, never a throw",
+    "test:sdk/react-native/__tests__/hooks.test.tsx::another type: the default, a FlagValueError TYPE_MISMATCH, and one onError with \"value\"",
+]
+
+[[unit]]
+text = "Full details: Flag values."
+by = ["exempt:navigation"]
+
+[[unit]]
 text = "Event ids"
 by = ["exempt:label"]
 
@@ -178,10 +215,6 @@ by = [
     "test:sdk/react-native/__tests__/event-id.test.ts::track() with a key sends a generated lowercase UUID v4 as event_id",
     "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r1_a_purchase_sent_again_with_its_event_id_is_stored_and_counted_once",
 ]
-
-[[unit]]
-text = "Use this from the next published version, not from the version on npm now."
-by = ["exempt:instruction"]
 
 [[unit]]
 text = "It needs a Controlvar server that includes the event_id change (#1640, in the first platform release after it merged): an older server ignores the field."

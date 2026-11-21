@@ -351,7 +351,7 @@ The Java SDK and its Spring Boot starter are on
 <dependency>
   <groupId>com.controlvar</groupId>
   <artifactId>controlvar-sdk</artifactId>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
 </dependency>
 <!-- Spring Boot: use controlvar-spring-boot-starter instead -->
 ```

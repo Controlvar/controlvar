@@ -325,7 +325,7 @@ by = [
 ]
 
 [[unit]]
-text = "So are the React SDK (npm install @controlvar/react-sdk, 0.1.0, beta), the React Native SDK (npm install @controlvar/react-native-sdk, 0.1.0, beta) and the two OpenFeature providers (npm install @controlvar/openfeature-provider, 0.1.0, beta; pip install controlvar-openfeature, 0.1.0, beta)."
+text = "So are the React SDK (npm install @controlvar/react-sdk, 0.2.0, beta), the React Native SDK (npm install @controlvar/react-native-sdk, 0.2.0, beta) and the two OpenFeature providers (npm install @controlvar/openfeature-provider, 0.1.0, beta; pip install controlvar-openfeature, 0.1.0, beta)."
 by = ["mechanism:sdk-doc-versions", "mechanism:registry-availability"]
 
 [[unit]]

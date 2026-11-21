@@ -69,13 +69,30 @@ function Home() {
 }
 ```
 
+## Flag values
+
+A string, number or json flag serves its on value to the users it is on for, and its off value to
+everyone else. Read the value with `useFlagValue` in a component, or with the client's
+`getStringValue`, `getNumberValue` or `getJsonValue` anywhere else:
+
+```tsx
+const { value: label } = useFlagValue('checkout-button-label', 'string', 'Buy now');
+const limit = await client.getNumberValue('free-shipping-threshold', 'user-123', 50);
+```
+
+Pass the flag's off value as your default. The hook never throws and a getter never rejects: when
+there is no value of that type to read (a failed request with no stored answer of that type, a
+server from before flag values, a flag of another type), each returns your default and calls
+`onError` once with the operation `'value'`.
+
+Full details: [Flag values](https://github.com/Controlvar/controlvar/blob/main/docs/sdk/react-native.md#flag-values).
+
 ## Event ids
 
 Every event the SDK sends carries an `event_id`, so the server stores an event sent again with the
-same `event_id`, user, experiment, flag and event name only once. Use this from the next published
-version, not from the version on npm now. It needs a Controlvar server that includes the
-`event_id` change (#1640, in the first platform release after it merged): an older server ignores
-the field.
+same `event_id`, user, experiment, flag and event name only once. It needs a Controlvar server
+that includes the `event_id` change (#1640, in the first platform release after it merged): an
+older server ignores the field.
 
 - Without an `eventId` option, each `track()` call and each event of `trackBatch()` makes a new
   lowercase UUID v4. For an event your code may send again, make the id once, when the event
