@@ -32,6 +32,7 @@ from backend.app.services.experiment_service import (
 )
 from backend.app.services.notification_service import NotificationService
 from backend.app.services.visual import STARTED, revoke_editor_tokens
+from backend.app.services.visual_editor import live_sessions, session_closed_value
 
 logger = get_logger(__name__)
 
@@ -271,8 +272,19 @@ class ExperimentScheduler:
                     db.add(experiment)
                     db.flush()
                     # As POST /start does (#1545): a started experiment's
-                    # editor tickets and sessions end, in this savepoint.
-                    revoke_editor_tokens(db, experiment_id, STARTED)
+                    # editor tickets and sessions end, in this savepoint, and
+                    # each session that was open gets its closing entry.
+                    ended = revoke_editor_tokens(db, experiment_id, STARTED)
+                    for session in live_sessions(ended, current_time):
+                        AuditService.record_in_savepoint(
+                            db,
+                            actor=SYSTEM_EXPERIMENT_SCHEDULER,
+                            action=ActionType.VISUAL_EDITOR_SESSION_CLOSED,
+                            entity_type=EntityType.EXPERIMENT,
+                            entity_id=experiment_id,
+                            entity_name=experiment.name,
+                            after=session_closed_value(STARTED, session),
+                        )
                     self._record_transition(
                         db,
                         experiment,

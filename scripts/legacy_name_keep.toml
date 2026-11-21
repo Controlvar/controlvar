@@ -2416,6 +2416,18 @@ count = 3
 reason = "names objects in the live warehouse sandbox and its recorded evidence"
 
 [[keep]]
+path = "modules/backend/tests/unit/warehouse/recorded/redshift/real_missing_table.json"
+literal = "experimently_live_check_probe"
+count = 1
+reason = "the live check's probe table, as the green Redshift run recorded it; the fixture is kept byte for byte"
+
+[[keep]]
+path = "modules/backend/tests/unit/warehouse/test_redshift_recorded.py"
+literal = "experimently_live_check_probe"
+count = 1
+reason = "the replay asks for the probe table the recorded run named"
+
+[[keep]]
 path = "modules/backend/tests/unit/warehouse/test_live_check_harness.py"
 literal = "experimently"
 count = 7
@@ -2676,7 +2688,7 @@ reason = "the setting's name before the rename, still read when the new one is n
 [[keep]]
 path = "backend/tests/unit/scripts/test_run_live_contract.py"
 literal = "EXPERIMENTLY_LOCAL_API_KEY"
-count = 2
+count = 3
 reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
 
 [[keep]]
@@ -3436,6 +3448,12 @@ count = 2
 reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
 
 [[keep]]
+path = "sdk/js/examples/contract_smoke.mjs"
+literal = "EXPERIMENTLY_LOCAL_API_KEY"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
 path = "sdk/js/examples/local_eval_smoke.mjs"
 literal = "EXPERIMENTLY_API_URL"
 count = 1
@@ -3538,6 +3556,12 @@ count = 2
 reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
 
 [[keep]]
+path = "sdk/python/examples/contract_smoke.py"
+literal = "EXPERIMENTLY_LOCAL_API_KEY"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
 path = "sdk/python/examples/local_eval_smoke.py"
 literal = "EXPERIMENTLY_API_URL"
 count = 2
@@ -3562,6 +3586,12 @@ count = 3
 reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
 
 [[keep]]
+path = "sdk/python/tests/test_contract_smoke.py"
+literal = "EXPERIMENTLY_LOCAL_API_KEY"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
 path = "sdk/react-native/examples/contract_smoke.test.ts"
 literal = "EXPERIMENTLY_API_KEY"
 count = 1
@@ -3612,7 +3642,7 @@ reason = "the setting's name before the rename, still read when the new one is n
 [[keep]]
 path = "tests/sdk-contract/live/run_live_contract.py"
 literal = "EXPERIMENTLY_LOCAL_API_KEY"
-count = 2
+count = 3
 reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
 
 [[keep]]

@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from backend.app.api import deps
 from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.query_params import MAX_OFFSET, describe_as_int64
-from backend.app.core.logger import failure_detail
+from backend.app.core.logger import failure_detail, unexpected_failure
 from backend.app.core.permissions import (
     Action,
     can_act_on_feature_flag,
@@ -72,6 +72,8 @@ async def bulk_toggle_flags(
     Creates one audit log entry per successfully-processed flag.
     The operation is partial-success by design: if some flags fail,
     the endpoint still returns 200 with per-flag results.
+    The changes and their audit entries are saved together: if they cannot
+    be saved, no flag is changed and the endpoint returns 500.
 
     An archived flag is never turned on: with ``enable`` it is reported with
     ``success: false`` and left archived, and the other flags are processed.
@@ -80,8 +82,10 @@ async def bulk_toggle_flags(
     results = []
     audit_log_ids = []
     # (flag id, name, action, old status, new status) of each flag changed, to
-    # be recorded once the changes are committed.
+    # be recorded in the transaction that commits the changes.
     changed = []
+    # Read now: after a flag's write fails, the session cannot load it.
+    actor = AuditActor.of(current_user)
 
     for flag_id_str in request.flag_ids:
         try:
@@ -174,30 +178,41 @@ async def bulk_toggle_flags(
                 )
             )
 
+    # One entry per flag changed, in the same transaction as the changes: the
+    # commit keeps every change and every entry, or nothing (#1042). Any
+    # failure here, of an entry or of the commit, answers 500 with nothing
+    # saved, never a per-flag success that was not kept.
     try:
+        for flag_id, flag_name, action_type, old_status, new_status in changed:
+            with AuditService.audit_with_change(
+                db,
+                action=action_type,
+                entity_type=EntityType.FEATURE_FLAG,
+                entity_id=flag_id,
+            ):
+                entry = AuditService.record(
+                    db,
+                    actor=actor,
+                    action=action_type,
+                    entity_type=EntityType.FEATURE_FLAG,
+                    entity_id=flag_id,
+                    entity_name=flag_name,
+                    before=old_status,
+                    after=new_status,
+                    reason=request.reason,
+                )
+            audit_log_ids.append(str(entry.id))
         db.commit()
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error("Failed to commit bulk toggle transaction (%s)", type(e).__name__)
-        db.rollback()
-        changed = []
-
-    # One entry per flag, after the changes are committed. A failed audit
-    # write is logged and does not undo the change it describes.
-    actor = AuditActor.of(current_user)
-    for flag_id, flag_name, action_type, old_status, new_status in changed:
-        log_id = AuditService.record_after_commit(
-            db,
-            actor=actor,
-            action=action_type,
-            entity_type=EntityType.FEATURE_FLAG,
-            entity_id=flag_id,
-            entity_name=flag_name,
-            before=old_status,
-            after=new_status,
-            reason=request.reason,
+        raise unexpected_failure(
+            e,
+            "Bulk toggle",
+            "Could not change the feature flags",
+            db=db,
+            logger=logger,
         )
-        if log_id is not None:
-            audit_log_ids.append(str(log_id))
 
     succeeded = sum(1 for r in results if r.success)
     return BulkToggleResponse(

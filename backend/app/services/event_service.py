@@ -209,6 +209,7 @@ class EventService:
         event_id: Optional[str],
         *,
         allow_untagged: bool,
+        claim_user_id: Optional[str] = None,
     ) -> Tuple[UUID, bool, Optional[Event]]:
         """Store an event unless one with the same key is already stored (#1543).
 
@@ -229,12 +230,19 @@ class EventService:
         one commits this is a duplicate, when it rolls back this one stores.
         So a duplicate or a race raises nothing and logs nothing.
         ``allow_untagged`` is passed through to :meth:`build_event`.
+
+        The key is claimed for ``claim_user_id`` when given, else for the
+        event's user. The tracking routes give the id the request sent, which
+        differs from the event's user when the event is stored under the
+        holder of a linked id (#449): an event is stored once per user id as
+        sent.
         """
         if event_id is None:
             event = self.track_event(event_data, allow_untagged=allow_untagged)
             return event.id, True, event
         try:
             event = self.build_event(event_data, allow_untagged=allow_untagged)
+            claimant = claim_user_id if claim_user_id is not None else event.user_id
             key = dedup_key(
                 event.experiment_id,
                 event.feature_flag_id,
@@ -245,7 +253,7 @@ class EventService:
             claim_id = uuid.uuid4()
             claimed = self.db.execute(
                 pg_insert(keys)
-                .values(user_id=event.user_id, dedup_key=key, stored_event_id=claim_id)
+                .values(user_id=claimant, dedup_key=key, stored_event_id=claim_id)
                 .on_conflict_do_nothing(
                     index_elements=[keys.c.user_id, keys.c.dedup_key]
                 )
@@ -259,7 +267,7 @@ class EventService:
                 return event.id, True, event
             stored_id = self.db.execute(
                 select(keys.c.stored_event_id).where(
-                    keys.c.user_id == event.user_id, keys.c.dedup_key == key
+                    keys.c.user_id == claimant, keys.c.dedup_key == key
                 )
             ).scalar_one()
             self.db.rollback()

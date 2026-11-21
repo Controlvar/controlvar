@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { PageTitle } from '@/components/PageTitle';
 import { DemoNote } from '@/components/DemoNote';
+import { AuthenticatorKey } from '@/components/account/AuthenticatorKey';
+import { RecoveryCodesPanel } from '@/components/account/RecoveryCodesPanel';
 import { TwoStepCodeInput } from '@/components/account/TwoStepCodeInput';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { useDemoMode } from '@/contexts/AuthConfigContext';
@@ -9,22 +11,20 @@ import {
   ENROL_PASSWORD_MESSAGE,
   NOT_LOCAL_TWO_FACTOR,
   NO_PASSWORD_TWO_FACTOR,
-  QR_ALT,
+  REQUIRED_FOR_ROLE_MESSAGE,
   TwoFactorEnrolment,
   TwoFactorFailure,
   TwoFactorStatus,
   classifyTwoFactorError,
   confirmTwoFactor,
   disableTwoFactor,
-  groupKey,
-  groupRecoveryCode,
-  qrCodeDataUrl,
   readTwoFactorStatus,
-  recoveryCodesFileText,
   regenerateRecoveryCodes,
   startTwoFactorEnrolment,
   twoFactorFailureSentence,
 } from '@/services/twoFactor';
+
+export { CODES_SHOWN_ONCE } from '@/components/account/RecoveryCodesPanel';
 
 const TITLE = 'Two-step sign-in';
 
@@ -35,9 +35,9 @@ export const DISABLED_SENTENCE = 'Two-step sign-in is off. Signing in asks for y
 export const REGENERATED_SENTENCE = 'Your new recovery codes are ready. The ones you had before no longer work.';
 export const STATUS_LOAD_FAILED =
   'Your two-step sign-in could not be loaded. Reload the page to try again.';
-export const CODES_SHOWN_ONCE =
-  'These codes are shown once. Each signs in one time when your authenticator app is not at hand. ' +
-  'Keep them somewhere safe, such as a password manager.';
+/** Off, while your role requires it (LOCAL_AUTH_2FA_REQUIRED_ROLES). */
+export const REQUIRED_WHILE_OFF =
+  'Your role requires two-step sign-in. Set it up now, or your next sign-in asks you to set it up first.';
 
 type View = 'status' | 'enrol' | 'codes';
 type Action = 'regenerate' | 'disable' | null;
@@ -65,7 +65,9 @@ function recoveryCodesLeft(count: number): string {
  * Your own two-step sign-in (#1812; local sign-in only). Off: set it up in
  * three steps (add the key to an authenticator app by QR code or by typing it,
  * confirm with the app's first code, save the recovery codes). On: how many
- * recovery codes are left, a new set, or turn it off, each with a code.
+ * recovery codes are left, a new set, or turn it off, each with a code. When
+ * your role requires it (`required`), Turn off is not offered and the page
+ * says why.
  *
  * Every outcome is one of the fixed sentences in `@/services/twoFactor`; no
  * response text reaches the screen. The secret and the recovery codes live in
@@ -85,7 +87,6 @@ export default function TwoFactorPage() {
 
   const codeId = useId();
   const messageId = useId();
-  const savedId = useId();
   const passwordId = useId();
   const passwordHintId = useId();
 
@@ -93,13 +94,8 @@ export default function TwoFactorPage() {
   const [loadFailure, setLoadFailure] = useState<string | null>(null);
   const [view, setView] = useState<View>('status');
   const [enrolment, setEnrolment] = useState<TwoFactorEnrolment | null>(null);
-  // The QR image and the link it encodes: shown only beside that same secret,
-  // so a slow first load for an earlier secret can never stand in for this one.
-  const [qr, setQr] = useState<{ uri: string; src: string } | null>(null);
-  const shownUri = useRef<string | null>(null);
   const [codes, setCodes] = useState<string[] | null>(null);
   const [codesFrom, setCodesFrom] = useState<'confirm' | 'regenerate'>('confirm');
-  const [codesSaved, setCodesSaved] = useState(false);
   const [action, setAction] = useState<Action>(null);
   const [recovery, setRecovery] = useState(false);
   const [code, setCode] = useState('');
@@ -109,7 +105,6 @@ export default function TwoFactorPage() {
   const [noPassword, setNoPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<Message | null>(null);
-  const [copied, setCopied] = useState('');
 
   const headingRef = useRef<HTMLHeadingElement>(null);
   const messageRef = useRef<HTMLDivElement>(null);
@@ -168,7 +163,7 @@ export default function TwoFactorPage() {
 
   const fail = (failure: TwoFactorFailure) => {
     setMessage({ tone: 'error', text: twoFactorFailureSentence(failure) });
-    if (failure.outcome === 'changed' || failure.outcome === 'not-waiting') {
+    if (failure.outcome === 'changed' || failure.outcome === 'not-waiting' || failure.outcome === 'required') {
       // The page was out of date: show how it is now.
       setView('status');
       setAction(null);
@@ -191,21 +186,8 @@ export default function TwoFactorPage() {
     try {
       const started = await startTwoFactorEnrolment(password);
       setEnrolment(started);
-      setQr(null);
       setCode('');
-      setCopied('');
       setView('enrol');
-      // The QR library is loaded only now. Without it the key and the link
-      // still add the account.
-      const uri = started.otpauth_uri;
-      shownUri.current = uri;
-      qrCodeDataUrl(uri).then(
-        (src) => {
-          // A QR drawn for a secret that has since been replaced is dropped.
-          if (shownUri.current === uri) setQr({ uri, src });
-        },
-        () => undefined,
-      );
     } catch (err) {
       const failure = classifyTwoFactorError(err);
       if (failure.outcome === 'no-password') {
@@ -234,13 +216,9 @@ export default function TwoFactorPage() {
     try {
       const issued = await confirmTwoFactor(code);
       setEnrolment(null);
-      shownUri.current = null;
-      setQr(null);
       setCode('');
       setCodes(issued);
       setCodesFrom('confirm');
-      setCodesSaved(false);
-      setCopied('');
       setView('codes');
     } catch (err) {
       setCode('');
@@ -252,19 +230,15 @@ export default function TwoFactorPage() {
 
   const cancelEnrolment = () => {
     setEnrolment(null);
-    shownUri.current = null;
-    setQr(null);
     setCode('');
     setMessage(null);
     setView('status');
   };
 
+  // The panel calls this only once "I have saved these codes" is ticked.
   const finishCodes = () => {
-    if (!codesSaved) return;
     const sentence = codesFrom === 'confirm' ? ENABLED_SENTENCE : REGENERATED_SENTENCE;
     setCodes(null);
-    setCodesSaved(false);
-    setCopied('');
     setView('status');
     setMessage({ tone: 'ok', text: sentence });
     void loadStatus();
@@ -302,8 +276,6 @@ export default function TwoFactorPage() {
         setCode('');
         setCodes(issued);
         setCodesFrom('regenerate');
-        setCodesSaved(false);
-        setCopied('');
         setView('codes');
       }
     } catch (err) {
@@ -312,33 +284,6 @@ export default function TwoFactorPage() {
     } finally {
       setBusy(false);
     }
-  };
-
-  const copy = (text: string) => {
-    const clipboard = typeof navigator !== 'undefined' ? navigator.clipboard : undefined;
-    if (!clipboard) {
-      setCopied('Copying is not available here. Select the text and copy it.');
-      return;
-    }
-    clipboard.writeText(text).then(
-      () => setCopied('Copied.'),
-      () => setCopied('Copying is not available here. Select the text and copy it.'),
-    );
-  };
-
-  const download = (list: string[]) => {
-    if (typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') {
-      setCopied('Downloading is not available here. Copy the codes instead.');
-      return;
-    }
-    const url = URL.createObjectURL(new Blob([recoveryCodesFileText(list)], { type: 'text/plain' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'controlvar-recovery-codes.txt';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
   };
 
   const outcome = message && (
@@ -357,12 +302,6 @@ export default function TwoFactorPage() {
     </div>
   );
   const errorId = message?.tone === 'error' ? messageId : null;
-
-  const copyStatus = (
-    <p role="status" data-testid="two-factor-copy-status" className="text-sm text-slate-600 min-h-[1.25rem]">
-      {copied}
-    </p>
-  );
 
   let body: React.ReactNode;
   if (demo) {
@@ -394,44 +333,7 @@ export default function TwoFactorPage() {
 
         <div className="flex flex-col gap-3">
           <h3 className="text-base font-medium text-slate-900">1. Add Controlvar to your authenticator app</h3>
-          <p className="text-sm text-slate-600">Scan this QR code with the app, or type the key below into it.</p>
-          {qr && qr.uri === enrolment.otpauth_uri && (
-            <img
-              src={qr.src}
-              alt={QR_ALT}
-              width={192}
-              height={192}
-              data-testid="two-factor-qr"
-              className="h-48 w-48 border border-slate-200 bg-white [image-rendering:pixelated]"
-            />
-          )}
-          <div>
-            <p className="text-sm font-medium text-slate-700">Key</p>
-            <code
-              data-testid="two-factor-key"
-              className="mt-1 block break-all rounded-md bg-slate-100 px-3 py-2 font-mono text-sm tracking-wider text-slate-900 select-all"
-            >
-              {groupKey(enrolment.secret)}
-            </code>
-            <div className="mt-2 flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                data-testid="two-factor-copy-key"
-                onClick={() => copy(enrolment.secret)}
-                className={buttonSecondary}
-              >
-                Copy key
-              </button>
-              <a
-                href={enrolment.otpauth_uri}
-                data-testid="two-factor-otpauth-link"
-                className="text-sm font-medium text-blue-700 underline hover:text-blue-900"
-              >
-                Open in an authenticator app on this device
-              </a>
-            </div>
-            {copyStatus}
-          </div>
+          <AuthenticatorKey enrolment={enrolment} />
         </div>
 
         <form className="flex flex-col gap-3" onSubmit={confirm} noValidate data-testid="two-factor-confirm-form">
@@ -464,55 +366,7 @@ export default function TwoFactorPage() {
         <h2 ref={headingRef} tabIndex={-1} className="text-lg font-semibold text-slate-900 focus:outline-none">
           Save your recovery codes
         </h2>
-        <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-testid="recovery-codes-warning">
-          <strong>Important: </strong>
-          {CODES_SHOWN_ONCE}
-        </p>
-        <ol data-testid="recovery-codes" className="grid grid-cols-1 gap-x-8 gap-y-1 sm:grid-cols-2 list-decimal pl-6">
-          {codes.map((item) => (
-            <li key={item} className="font-mono text-sm tracking-wider text-slate-900">
-              <code>{groupRecoveryCode(item)}</code>
-            </li>
-          ))}
-        </ol>
-        <div className="flex flex-wrap gap-3">
-          <button type="button" data-testid="recovery-codes-download" onClick={() => download(codes)} className={buttonSecondary}>
-            Download as a text file
-          </button>
-          <button
-            type="button"
-            data-testid="recovery-codes-copy"
-            onClick={() => copy(codes.map(groupRecoveryCode).join('\n'))}
-            className={buttonSecondary}
-          >
-            Copy codes
-          </button>
-        </div>
-        {copyStatus}
-        <div className="flex items-center gap-2">
-          <input
-            id={savedId}
-            type="checkbox"
-            data-testid="recovery-codes-saved"
-            checked={codesSaved}
-            onChange={(event) => setCodesSaved(event.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-          />
-          <label htmlFor={savedId} className="text-sm font-medium text-slate-700">
-            I have saved these codes
-          </label>
-        </div>
-        <div>
-          <button
-            type="button"
-            data-testid="recovery-codes-done"
-            onClick={finishCodes}
-            disabled={!codesSaved}
-            className={buttonPrimary}
-          >
-            Done
-          </button>
-        </div>
+        <RecoveryCodesPanel codes={codes} onDone={finishCodes} />
       </section>
     );
   } else if (!current.enabled && noPassword) {
@@ -534,6 +388,11 @@ export default function TwoFactorPage() {
           Two-step sign-in is off
         </h2>
         {outcome}
+        {current.required && (
+          <p className="text-sm font-medium text-slate-800" data-testid="two-factor-required">
+            {REQUIRED_WHILE_OFF}
+          </p>
+        )}
         <p className="text-sm text-slate-600">
           When it is on, signing in asks for your password and then a 6-digit code from an authenticator app on
           your phone. If the phone is lost, a recovery code signs you in instead.
@@ -577,14 +436,21 @@ export default function TwoFactorPage() {
         <p className="text-sm text-slate-700" data-testid="recovery-codes-left">
           {recoveryCodesLeft(current.recovery_codes_remaining)}
         </p>
+        {current.required && (
+          <p className="text-sm text-slate-700" data-testid="two-factor-required">
+            {REQUIRED_FOR_ROLE_MESSAGE}
+          </p>
+        )}
         {action === null ? (
           <div className="flex flex-wrap gap-3">
             <button type="button" data-testid="two-factor-open-regenerate" onClick={() => openAction('regenerate')} className={buttonSecondary}>
               Make new recovery codes
             </button>
-            <button type="button" data-testid="two-factor-open-disable" onClick={() => openAction('disable')} className={buttonSecondary}>
-              Turn off two-step sign-in
-            </button>
+            {!current.required && (
+              <button type="button" data-testid="two-factor-open-disable" onClick={() => openAction('disable')} className={buttonSecondary}>
+                Turn off two-step sign-in
+              </button>
+            )}
           </div>
         ) : (
           <form className="flex flex-col gap-3" onSubmit={submitAction} noValidate data-testid="two-factor-action-form">

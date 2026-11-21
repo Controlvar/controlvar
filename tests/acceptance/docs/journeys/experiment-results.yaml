@@ -1139,8 +1139,9 @@ steps:
         metrics.0.variants.1.variant_name: Treatment
         metrics.0.variants.1.sample_size: 256
         metrics.0.variants.1.conversions: 112
-        metrics.0.variants.1.statistical_test_used: welch_t_test
+        metrics.0.variants.1.statistical_test_used: permutation_t_test
         metrics.0.variants.1.is_significant: true
+        summary.recommendation: SHIP_VARIANT
         summary.total_users: 512
         srm.warning: false
         srm.p_value: 1.0
@@ -1160,16 +1161,6 @@ steps:
             name: revenue_difference
             args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -20, step: 20, modulo: 6}
           rel: 0
-        metrics.0.variants.1.p_value:
-          oracle:
-            name: revenue_welch_p
-            args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -20, step: 20, modulo: 6}
-          rel: 1.0e-9
-        metrics.0.variants.1.adjusted_p_value:
-          oracle:
-            name: revenue_welch_p
-            args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -20, step: 20, modulo: 6}
-          rel: 1.0e-9
         metrics.0.variants.1.absolute_difference_ci.0:
           oracle:
             name: revenue_welch_interval
@@ -1180,7 +1171,7 @@ steps:
             name: revenue_welch_interval
             args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -20, step: 20, modulo: 6, confidence_level: 0.95, bound: upper}
           rel: 1.0e-9
-    fail: a revenue metric's mean is not its value per assigned user (non-buyers counted as 0, a refund subtracted), its buyers are not the users who sent the event, or its p-value or the difference's interval is not Welch's
+    fail: a revenue metric's mean is not its value per assigned user (non-buyers counted as 0, a refund subtracted), its buyers are not the users who sent the event, its difference's interval is not Welch's, or it is not significant by the permutation test
   - id: guardrail-listing
     doc: metric-comparison-table
     do:
@@ -1306,7 +1297,8 @@ steps:
         metrics.0.variants.0.conversions: 64
         metrics.0.variants.1.sample_size: 256
         metrics.0.variants.1.conversions: 112
-        metrics.0.variants.1.statistical_test_used: welch_t_test
+        metrics.0.variants.1.statistical_test_used: permutation_t_test
+        metrics.0.variants.1.is_significant: true
       computed:
         metrics.0.variants.0.mean:
           oracle:
@@ -1323,11 +1315,6 @@ steps:
             name: revenue_difference
             args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -40, step: 40, modulo: 6}
           rel: 0
-        metrics.0.variants.1.p_value:
-          oracle:
-            name: revenue_welch_p
-            args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -40, step: 40, modulo: 6}
-          rel: 1.0e-9
         metrics.0.variants.1.absolute_difference_ci.0:
           oracle:
             name: revenue_welch_interval
@@ -1338,7 +1325,7 @@ steps:
             name: revenue_welch_interval
             args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -40, step: 40, modulo: 6, confidence_level: 0.95, bound: upper}
           rel: 1.0e-9
-    fail: with every value doubled, the buyers change, the means and the difference are not doubled, or Welch's p-value moves
+    fail: with every value doubled, the buyers change, the means, the difference and its interval are not doubled, or the result stops being significant
   - id: cuped-new-users
     doc: cuped-reach-significance-faster
     do:

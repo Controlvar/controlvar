@@ -289,7 +289,7 @@ text = "Beta-Binomial posteriors and stopping rules"
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Guided setup in the dashboard, and the wizard API"
+text = "Guided setup in the dashboard, and sample size guidance"
 by = ["mechanism:docs-hub"]
 
 [[unit]]

@@ -340,6 +340,13 @@ text = "/api/v1/tracking/assign/batch (its own count) | 60 / min"
 by = ["test:backend/tests/unit/api/test_assign_batch_contract.py"]
 
 [[unit]]
+text = "/api/v1/visual-editor/tickets/claim, /api/v1/visual-editor/sessions (the visual editor's sign-in, beta; each its own count) | 10 / min"
+by = [
+    "test:backend/tests/unit/middleware/test_route_rate_limits.py::test_the_visual_editor_sign_in_routes_take_ten_a_minute",
+    "test:backend/tests/unit/middleware/test_visual_editor_rate_limits.py",
+]
+
+[[unit]]
 text = "/api/v1/tracking/, /api/v1/feature-flags/evaluate/, /api/v1/feature-flags/user/, /api/v1/sdk/ | SDK_RATE_LIMIT_PER_MINUTE, default 6000 / min"
 by = [
     "test:backend/tests/unit/api/test_assign_batch_contract.py",

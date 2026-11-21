@@ -125,6 +125,10 @@ by = [
 ]
 
 [[unit]]
+text = "The user is the user id the event was sent with, also when the event is stored under another id of a linked person (below)."
+by = ["test:backend/tests/integration/api/test_identity_alias_resolution.py::test_an_event_id_is_stored_once_per_id_as_sent"]
+
+[[unit]]
 text = "POST /api/v1/tracking/track and POST /api/v1/tracking/events answer it with 200, \"duplicate\": true and the stored event's id; POST /api/v1/tracking/batch counts it in success_count and in duplicate_count."
 by = [
     "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r1_a_purchase_sent_again_with_its_event_id_is_stored_and_counted_once",
@@ -245,12 +249,20 @@ text = "event_dedup_keys holds your app's user ids and keeps them when events ar
 by = ["test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_a_key_outlives_its_event_and_is_remembered_while_it_is_kept"]
 
 [[unit]]
-text = "An operator erasing one person's events by hand must delete their keys too."
-by = ["exempt:instruction"]
+text = "Erasing one app user's data (Erase one app user's data) deletes their keys with their events, so an event_id they send again after an erase is stored again."
+by = ["test:backend/tests/integration/api/test_app_user_erase_api.py::test_an_event_sent_again_after_an_erase_is_stored_again"]
 
 [[unit]]
 text = "An event_id is remembered for as long as its key is kept."
 by = ["test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_a_key_outlives_its_event_and_is_remembered_while_it_is_kept"]
+
+[[unit]]
+text = "When the person's ids are linked (below), the erase covers every one of their ids and their links in identity_aliases, because an event one id sends after the link can be stored under another (A user linked to other ids)."
+by = [
+    "test:backend/tests/integration/api/test_app_user_erase_identity_aliases.py::test_an_anonymous_ids_rows_held_for_the_person_are_erased",
+    "test:backend/tests/integration/api/test_app_user_erase_identity_aliases.py::test_links_naming_the_id_in_either_column_are_deleted",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_known_ids_conversion_counts_for_its_persons_variant",
+]
 
 [[unit]]
 text = "When sending fails"
@@ -320,6 +332,79 @@ by = [
     "test:backend/tests/integration/api/test_cuped_history_sent_by_tracking.py::test_history_is_matched_by_exact_id_and_dated_in_utc",
     "test:backend/tests/integration/api/test_holdout_results.py::TestWindow::test_an_event_received_before_first_seen_does_not_count",
 ]
+
+[[unit]]
+text = "Ids linked as one person"
+by = ["exempt:label"]
+
+[[unit]]
+text = "POST /api/v1/tracking/alias (beta) links an anonymous id to a known id of the same person; it needs a server-side key and is called from your backend (API endpoints)."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_link_is_stored_once_and_answered_again_with_created_false",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_the_route_refuses_each_key_as_batch_assignment_does",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_server_key_whose_owner_can_change_flags_is_accepted",
+]
+
+[[unit]]
+text = "From the link on:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "An event that names an experiment is stored under the id that holds the person's assignment in it, the one stored first among their ids, whichever of their ids sent it, and counts for that assignment's variant while the experiment is running."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_known_ids_conversion_counts_for_its_persons_variant",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_the_event_batch_stores_a_known_ids_events_under_its_person",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_an_event_by_ids_is_stored_under_its_person_with_the_variant_given",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_linked_ids_event_is_tagged_only_while_the_experiment_runs",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_the_earliest_assignment_wins_for_both_ids",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_link_made_through_the_route_is_the_one_the_tracking_routes_follow",
+]
+
+[[unit]]
+text = "The answer names the id that sent it."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_known_ids_conversion_counts_for_its_persons_variant",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_link_made_through_the_route_is_the_one_the_tracking_routes_follow",
+]
+
+[[unit]]
+text = "An event that names no experiment is stored under the id that sent it."
+by = ["test:backend/tests/integration/api/test_identity_alias_route.py::test_a_link_made_through_the_route_is_the_one_the_tracking_routes_follow"]
+
+[[unit]]
+text = "An event_id is remembered per user id as sent: the same event_id sent once under each of two linked ids is stored twice, and a revenue, duration or custom metric adds its value twice."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_an_event_id_is_stored_once_per_id_as_sent",
+    "test:backend/tests/integration/api/test_how_events_count.py::test_an_event_sent_again_is_stored_and_counted_again",
+]
+
+[[unit]]
+text = "Nothing recorded before the link is moved: those events keep the id and the variant they were stored with, and a person who already had an assignment under each id counts once for each of them."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_counting.py::test_linked_people_count_per_row_on_every_endpoint",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_link_racing_the_known_ids_first_assignment",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_row_a_release_without_links_wrote_is_answered_by_the_earliest",
+]
+
+[[unit]]
+text = "Holdout membership follows the person; holdout results do not: a linked person's conversions count only under the id the holdout first recorded."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_holdout_membership_comes_from_the_persons_first_population_row",
+    "test:backend/tests/integration/api/test_identity_alias_counting.py::test_holdout_results_count_a_linked_person_under_its_recorded_id",
+    "test:backend/tests/integration/api/test_identity_alias_counting.py::test_a_linked_persons_holdout_follows_the_first_recorded_row",
+]
+
+[[unit]]
+text = "Interaction detection, the audience preview and CUPED's history count each id on its own."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_counting.py::test_interaction_detection_counts_ids",
+    "test:backend/tests/integration/api/test_identity_alias_counting.py::test_the_audience_preview_counts_ids",
+    "test:backend/tests/integration/api/test_identity_alias_counting.py::test_cuped_history_is_read_per_id",
+]
+
+[[unit]]
+text = "Flags are not linked: each id is evaluated on its own."
+by = ["test:backend/tests/integration/api/test_identity_alias_resolution.py::test_flags_are_not_resolved_through_a_link"]
 
 [[unit]]
 text = "Timestamps"

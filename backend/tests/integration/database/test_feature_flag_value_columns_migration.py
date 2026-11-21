@@ -60,16 +60,17 @@ pytestmark = [pytest.mark.integration]
 #: This revision, and the core revision it extends.
 REVISION = "607c51a59bf5"
 PREVIOUS_CORE_HEAD = "4c2c09a2b3e8"
-#: The core head of this tree: ``t1812_user_totp`` (#1812), whose downgrade
-#: drops the table ``user_totp``, after ``4955571d232c`` (#1545), whose
-#: downgrade drops the table ``visual_tokens`` and two columns, after
-#: ``c448_balance_within``
+#: The core head of this tree: ``t449_identity_aliases`` (#449), whose
+#: downgrade drops the table ``identity_aliases``, after ``t1812_user_totp``
+#: (#1812), whose downgrade drops the table ``user_totp``, after
+#: ``4955571d232c`` (#1545), whose downgrade drops the table ``visual_tokens``
+#: and two columns, after ``c448_balance_within``
 #: (#448), whose downgrade drops the table ``balance_group_counters`` and four
 #: columns, after ``7b6b4b4fe246`` (#1528), whose downgrade drops
 #: ``rollout_stages.started_at`` and refuses nothing, after ``85dd4796bb8b``
 #: (#1543), the revision after this one, whose downgrade drops the table
 #: ``event_dedup_keys``.
-CORE_HEAD = "t1812_user_totp"
+CORE_HEAD = "t449_identity_aliases"
 #: Tables a later core revision's downgrade drops: a downgrade from the head to
 #: this test's target unapplies those revisions too.
 LATER_DOWNGRADE_TABLES = {
@@ -77,6 +78,7 @@ LATER_DOWNGRADE_TABLES = {
     "balance_group_counters",
     "visual_tokens",
     "user_totp",
+    "identity_aliases",
 }
 #: The modules branch's head in this tree, recorded on both sides of every
 #: step here: this file is about the core chain.

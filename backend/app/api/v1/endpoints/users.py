@@ -22,12 +22,20 @@ from backend.app.api.two_factor_answers import (
     NO_PENDING_SECRET_DETAIL,
     NOT_ENABLED_DETAIL,
     REFUSALS,
+    TWO_FACTOR_REQUIRED_FOR_ROLE,
     refusal_answer,
 )
+from backend.app.api.v1.endpoints.auth import user_to_me
 from backend.app.core.config import settings
-from backend.app.core.security import get_password_hash, unwrap_secret
+from backend.app.core.security import (
+    create_local_access_token,
+    get_password_hash,
+    unwrap_secret,
+)
+from backend.app.core.two_factor_policy import two_factor_required
 from backend.app.models.audit_log import ActionType, EntityType
 from backend.app.models.user import User, UserRole
+from backend.app.schemas.auth import LoginResponse
 from backend.app.schemas.two_factor import (
     RecoveryCodesResponse,
     TwoFactorCodeRequest,
@@ -56,6 +64,7 @@ from backend.app.services.local_auth_service import (
     CurrentPasswordMissingError,
     InvalidCredentialsError,
     NoLocalPasswordError,
+    account_may_sign_in,
     local_auth_service,
 )
 from backend.app.services.two_factor_service import (
@@ -694,12 +703,47 @@ def _check_own_password(
         )
 
 
+def _signs_in_with_password_alone(db: Session, user: User) -> bool:
+    """Whether a sign-in with the password would issue ``user`` an access token
+    at once, and the answer can describe the account: it may sign in, it has
+    no two-step sign-in on and its role does not require it, and it has both
+    an email address and a username (``UserMe`` needs both). Read from the row
+    as the database holds it after the change.
+
+    The same conditions ``auth._issue_local_login`` applies after the
+    password; ``test_password_change_ends_sessions.py`` compares the two
+    answers for each kind of account.
+    """
+    return (
+        account_may_sign_in(user)
+        and not two_factor_service.is_enabled(db, user.id)
+        and not two_factor_required(user)
+        and user.email is not None
+        and user.username is not None
+    )
+
+
 @router.post(
     "/me/password",
-    status_code=status.HTTP_204_NO_CONTENT,
-    response_class=Response,
+    response_model=LoginResponse,
     dependencies=[Depends(require_local_provider)],
     responses={
+        200: {
+            "description": (
+                "The password is changed. A new access token for this account, "
+                "as POST /api/v1/auth/login answers: every token issued before "
+                "the change is refused, the one that sent this request included."
+            )
+        },
+        204: {
+            "description": (
+                "The password is changed and every session of the account has "
+                "ended, this one too. The answer for an account that the "
+                "password alone does not sign in, such as one with two-step "
+                "sign-in on or required for its role: sign in again with the "
+                "new password."
+            )
+        },
         403: {
             "description": (
                 "The current password is missing or incorrect, or the account "
@@ -719,20 +763,26 @@ def change_own_password(
     body: PasswordChange,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_active_user),
-) -> Response:
+) -> Any:
     """
     Change your own password.
 
     Requires your current password. The new password must be at least 8
     characters and at most 72 bytes (UTF-8), with an upper-case letter, a
-    lower-case letter and a digit. Answers 204 with no body.
+    lower-case letter and a digit.
 
     A wrong current password answers 403 (not 401, which would read as a
     signed-out session) and counts toward the same lockout as sign-in; after
     too many failures both answer 423 until ``Retry-After`` has passed.
 
-    Changing the password does not end other sessions: a token issued before
-    the change keeps working until it expires.
+    Changing the password signs out every session of the account: every
+    access token issued before the change answers 401 from then on, the one
+    that sent this request included, and a sign-in waiting for its code
+    starts again. An account that signs in with its password alone gets 200
+    with a new access token and the profile, as ``POST /api/v1/auth/login``
+    answers; use that token from then on. Any other account, such as one with
+    two-step sign-in on or required for its role, gets 204 with no body and
+    signs in again with the new password.
     """
     _check_own_password(
         db,
@@ -750,7 +800,31 @@ def change_own_password(
         )
     user.hashed_password = get_password_hash(unwrap_secret(body.new_password))
     db.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    # The row as the database holds it after the change: the new token's
+    # stamp is computed from the new hash, and the gate reads the account as
+    # sign-in would now.
+    db.refresh(user)
+    if not _signs_in_with_password_alone(db, user):
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    answer = LoginResponse(
+        access_token=create_local_access_token(user),
+        token_type="bearer",
+        expires_in=settings.LOCAL_AUTH_TOKEN_TTL_MINUTES * 60,
+        user=user_to_me(user),
+    )
+    # A new access token is a sign-in: recorded as one, after the change has
+    # been committed (a failed audit write does not undo it). The 204 answer
+    # issues nothing and records nothing.
+    AuditService.record_after_commit(
+        db,
+        actor=user,
+        action=ActionType.USER_LOGIN,
+        entity_type=EntityType.USER,
+        entity_id=user.id,
+        entity_name=user.username or str(user.id),
+        after={"provider": "local", "via": "password_change"},
+    )
+    return answer
 
 
 # ---------------------------------------------------------------------------
@@ -788,12 +862,15 @@ def read_own_two_factor(
     """
     Whether your two-step sign-in is on, and how many recovery codes are left.
 
-    `required` is always false in this release.
+    `required` is true when your role must use two-step sign-in
+    (`LOCAL_AUTH_2FA_REQUIRED_ROLES`): it cannot be turned off, and a sign-in
+    asks you to set it up while it is off. It is false for an account that
+    signs in without a password of its own.
     """
     found = two_factor_service.status(db, current_user)
     return TwoFactorStatusResponse(
         enabled=found.enabled,
-        required=False,
+        required=two_factor_required(current_user),
         recovery_codes_remaining=found.recovery_codes_remaining,
     )
 
@@ -844,6 +921,13 @@ def confirm_own_two_factor(
     responses={
         409: {"description": NOT_ENABLED_DETAIL},
         **_TWO_FACTOR_CODE_REFUSALS,
+        403: {
+            "description": (
+                f"{WRONG_CODE_TEXT} (wrong, used or malformed); or "
+                f"{TWO_FACTOR_REQUIRED_FOR_ROLE} (LOCAL_AUTH_2FA_REQUIRED_ROLES "
+                "names your role; no code is checked or counted)"
+            )
+        },
         **_TWO_FACTOR_LOCAL_ONLY,
     },
 )
@@ -859,7 +943,14 @@ def disable_own_two_factor(
 
     Answers 204. Sign-in then asks for the password alone. A wrong code
     answers 403 and counts toward the same lockout as a wrong password.
+    When your role must use two-step sign-in (`LOCAL_AUTH_2FA_REQUIRED_ROLES`)
+    it answers 403 without checking the code; an administrator's reset is
+    the way to start again.
     """
+    if two_factor_required(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail=TWO_FACTOR_REQUIRED_FOR_ROLE
+        )
     try:
         two_factor_service.disable(
             db,

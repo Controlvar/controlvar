@@ -188,9 +188,7 @@ You will see "Free shipping on every order this week — no minimum." again.
 StreamPulse draws a phone in a web page with the React SDK, a web SDK that sends the device's
 attributes with every flag evaluation. The flag `streampulse_ai_search` is on for
 `os = iOS`, `os_version ≥ 17.0.0`, `region = US` and `tier = premium`, and its own rollout is
-0%. The native iOS, Android and Flutter SDKs do not send attributes on flag
-evaluation yet ([#438](https://github.com/Controlvar/controlvar/issues/438)), so a rule like
-this one would not match from them. The React Native SDK sends them, as the React SDK does.
+0%. The React Native SDK sends them, as the React SDK does.
 
 ### 1. Open StreamPulse {#device-open}
 
@@ -250,7 +248,8 @@ and the same nightly CI run walks them.
   instead.
 - **What an order is worth.** These examples count the users who pressed a button or ordered;
   [Concepts](../getting-started/concepts.md) says how a revenue metric is analysed.
-- **One visitor under two ids.** There is no identify or alias call, as
+- **One visitor under two ids.** Linking an anonymous id to a known id is a call your backend
+  makes with a server-side key, `POST /api/v1/tracking/alias` (beta), as
   [Limitations](../getting-started/limitations.md) says.
 - **How soon an open page sees a flag change.** StreamPulse asks for its flags when you pick a
   device or press Refresh now, and does not poll.

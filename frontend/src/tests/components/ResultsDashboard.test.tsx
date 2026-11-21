@@ -644,7 +644,10 @@ describe('the stored analysis settings', () => {
     ]);
 
     await userEvent.click(screen.getByRole('tab', { name: /breakdowns/i }));
-    await userEvent.selectOptions(screen.getByRole('combobox'), 'platform');
+    await userEvent.selectOptions(
+      screen.getByRole('combobox', { name: 'Break down by:' }),
+      'platform'
+    );
     await waitFor(() => expect(mockGetResults).toHaveBeenCalledTimes(2));
     expect(mockGetResults.mock.calls[1]).toEqual([
       'exp-1',

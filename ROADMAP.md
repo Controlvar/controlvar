@@ -20,10 +20,9 @@ to Next if something more urgent comes up.
   ([#448](https://github.com/Controlvar/controlvar/issues/448)).
 - **Dashboard sign-in when Controlvar uses Amazon Cognito**
   ([#708](https://github.com/Controlvar/controlvar/issues/708)).
-- **Warehouse analysis on Redshift, then Databricks**
-  ([#826](https://github.com/Controlvar/controlvar/issues/826),
-  [#1605](https://github.com/Controlvar/controlvar/issues/1605)). The Redshift connector type is
-  in 0.47.0, switched off ([#1943](https://github.com/Controlvar/controlvar/pull/1943)).
+- **Warehouse analysis on Databricks**
+  ([#1605](https://github.com/Controlvar/controlvar/issues/1605)). Amazon Redshift is available
+  ([#826](https://github.com/Controlvar/controlvar/issues/826)).
 - **SDKs that do the same things:** every SDK reads a flag's value, not only on or off
   ([#1810](https://github.com/Controlvar/controlvar/issues/1810)), and sends user attributes on
   flag evaluation ([#438](https://github.com/Controlvar/controlvar/issues/438),
@@ -74,7 +73,10 @@ install.
 - **SAML sign-in**, and Microsoft Entra ID over OIDC
   ([#123](https://github.com/Controlvar/controlvar/issues/123)).
 - **Identity aliasing:** a visitor who signs in keeps one assignment
-  ([#449](https://github.com/Controlvar/controlvar/issues/449)).
+  ([#449](https://github.com/Controlvar/controlvar/issues/449)). Its first part,
+  `POST /api/v1/tracking/alias` (beta), links a visitor's anonymous id to their account's id from
+  your backend ([the guide](docs/guides/identity.md)). The JavaScript and Python SDKs gain the call
+  in their next releases.
 - **Data retention by age**, and erasing one person's data.
 - **Moving in and out:** import flags from other flag tools, and export and import between
   Controlvar instances.
@@ -97,7 +99,7 @@ install.
 - Local evaluation in more server SDKs, including segments and the advanced operators.
 - Changes through the MCP server, under the same role checks, with a person approving risky ones
   ([#1607](https://github.com/Controlvar/controlvar/issues/1607)).
-- More integrations, such as Slack and PagerDuty, when people ask for them.
+- More Slack events, and PagerDuty, when people ask for them.
 - The one-command AWS installer out of beta
   ([#1299](https://github.com/Controlvar/controlvar/issues/1299)).
 - Scheduled flag changes beyond rollout schedules.

@@ -61,7 +61,7 @@ Statistical significance tells you whether a difference between control and trea
 
 A result is statistically significant when p < your chosen alpha threshold (usually 0.05).
 
-On zero-inflated, right-skewed revenue with a lopsided split, these rates did not hold at α = 0.05: A/A experiments (both variants the same) recommended shipping a variant that was no better more often than alpha says. See [Limitations](limitations.md#experiments-and-results) for what was measured.
+A revenue, count, duration or custom metric's p-value comes from a permutation test of Welch's t statistic, so these rates hold when both variants have the same distribution (an A/A test), at every split measured, a lopsided split on zero-inflated, right-skewed revenue included. A variant that is no better but changes the shape of the values is not covered: see [Limitations](limitations.md#experiments-and-results) for what was measured. A running experiment's p-value near 0.05 can move by about ±0.015 between refreshes as data arrives, because each new count re-draws the permutations. With the same data, every request, process and day gives the same p-value.
 
 **Important**: statistical significance does not tell you the effect is large or meaningful. Always check effect size alongside p-value.
 
@@ -96,7 +96,7 @@ A metric is the measurable outcome you use to evaluate whether a variant is bett
 | **Duration** | Time each user spends, added up, as duration per user | Seconds watched sent as the `value` of `watch_session` |
 | **Custom** | A number each user's events add up to, as value per user | Points sent as the `value` of `points_earned` |
 
-A conversion metric is analysed as the share of assigned users who sent its event. A revenue, count, duration or custom metric is analysed as its mean per assigned user, compared with Welch's t-test: for a count metric each user's value is the number of the metric's events they sent, whatever their `value`; for a revenue, duration or custom metric it is the total of those events' `value`; a user with none counts as 0. So a duration metric is time spent per assigned user, not the time one event takes. See [Limitations](limitations.md).
+A conversion metric is analysed as the share of assigned users who sent its event. A revenue, count, duration or custom metric is analysed as its mean per assigned user, compared with a permutation test of Welch's t: for a count metric each user's value is the number of the metric's events they sent, whatever their `value`; for a revenue, duration or custom metric it is the total of those events' `value`; a user with none counts as 0. So a duration metric is time spent per assigned user, not the time one event takes. See [Limitations](limitations.md).
 
 ### Primary vs Secondary Metrics
 
@@ -120,7 +120,7 @@ User bucketing is the process of assigning each user to a variant. The platform 
 
 The assignment is computed as a deterministic hash of `experiment_key + user_id`. This means:
 
-- The same `user_id` always gets the same variant for a given experiment (sticky assignment). A person known by two ids, such as a visitor who signs in, is two users: see [Limitations](limitations.md).
+- The same `user_id` always gets the same variant for a given experiment (sticky assignment). A person known by two ids, such as a visitor who signs in, is two users until your backend links the ids with `POST /api/v1/tracking/alias` (beta): see [Limitations](limitations.md).
 - The API stores each assignment, and a user who already has one gets it back unchanged, even if the weights have changed since
 - Sticky assignment survives server restarts, cache clears, and SDK reinitializations
 
@@ -217,7 +217,7 @@ Your SDK client is initialized with an API key, which is stored in the database 
 |------|-----------|
 | **A/B test** | Experiment comparing two variants (control and treatment) |
 | **A/B/n test** | Experiment comparing more than two variants |
-| **Alpha (α)** | The significance threshold; probability of a false positive you are willing to accept (typically 0.05). On zero-inflated, right-skewed revenue with a lopsided split, false positives were measured more often than α: see [Limitations](limitations.md#experiments-and-results) |
+| **Alpha (α)** | The significance threshold; probability of a false positive you are willing to accept (typically 0.05). For a revenue, count, duration or custom metric it holds when both variants have the same distribution (an A/A test), at every split measured; a variant that changes the shape of the values is not covered: see [Limitations](limitations.md#experiments-and-results) |
 | **Bucketing** | The process of assigning users to variants |
 | **Confidence interval** | Range of values within which the true effect size likely falls |
 | **Control** | The baseline variant; typically the existing experience |

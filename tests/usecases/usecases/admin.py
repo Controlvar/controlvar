@@ -13,7 +13,8 @@ change a flag, and evaluate it directly.
   helper: ``create_flag``, ``set_rollout`` (``PUT`` of the rollout
   percentage), ``toggle`` (with an empty JSON body: the route answers 422 to
   none, ``test_toggle_requires_json_body``), ``evaluate`` (``GET`` of the
-  evaluate route with the API key) and ``ruleset`` (``GET`` of the SDK
+  evaluate route with the API key, and the user's attributes as ``context``
+  when given) and ``ruleset`` (``GET`` of the SDK
   ruleset with the API key: the version the server serves now). Raw
   evaluations are paced at most 80 a second, 80% of the SDK routes' 6,000 a
   minute; everything else at most 4 a second, 80% of the other routes' 300 a
@@ -33,6 +34,7 @@ Imports httpx, the ground-truth driver and the standard library; nothing from
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Callable, Mapping
 from typing import Any
@@ -217,14 +219,25 @@ class Admin:
             headers={"X-API-Key": self._api_key},
         )
 
-    def evaluate(self, flag_key: str, user_id: str) -> dict[str, Any]:
+    def evaluate(
+        self,
+        flag_key: str,
+        user_id: str,
+        context: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """``GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=...`` with
-        the API key: the server's answer, as it is."""
+        the API key: the server's answer, as it is. With a *context*, the
+        request also carries ``context=<compact JSON>`` (the query parameter
+        the SDKs send user attributes in); without one the request is exactly
+        what it was before the argument existed."""
+        params = {"user_id": user_id}
+        if context is not None:
+            params["context"] = json.dumps(context, separators=(",", ":"))
         return self._send(
             "GET",
             EVALUATE.format(flag_key=flag_key),
             route=EVALUATE,
             kind="evaluate",
             headers={"X-API-Key": self._api_key},
-            params={"user_id": user_id},
+            params=params,
         )

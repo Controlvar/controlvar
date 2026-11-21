@@ -306,6 +306,10 @@ RATE_LIMIT_CONFIG: Dict[str, Tuple[int, int]] = {
     # The code step of two-step sign-in: limited like the password step it
     # follows. Its wrong codes also count toward the sign-in lockout.
     "/api/v1/auth/mfa/verify": (10, 60),
+    # Setting two-step sign-in up during a sign-in (a role that requires it):
+    # the same limit; wrong first codes count toward the lockout like the others.
+    "/api/v1/auth/mfa/enroll": (10, 60),
+    "/api/v1/auth/mfa/enroll/confirm": (10, 60),
     "/api/v1/auth/signup": (5, 60),
     # Where the 6-digit sign-up code is guessed; its own counter, apart from
     # sign-up's (#700).
@@ -329,6 +333,12 @@ RATE_LIMIT_CONFIG: Dict[str, Tuple[int, int]] = {
     # sign-in code into a session, limited like the password login. One call
     # per sign-in in real use.
     "/api/v1/auth/cognito/exchange": (10, 60),
+    # The visual editor's sign-in (#1545): public routes that turn an editor
+    # link into a claim, from the site's page, and a claim into an editor
+    # session, from the dashboard; limited like the SSO exchange. One call of
+    # each per opening of the editor in real use.
+    "/api/v1/visual-editor/tickets/claim": (10, 60),
+    "/api/v1/visual-editor/sessions": (10, 60),
     # Batch assignment: one request assigns up to 1,000 users, so it gets its
     # own counter rather than the SDK prefix's 6,000 a minute (60 x 1,000 =
     # 60,000 users a minute per address). The path is exact: a trailing slash

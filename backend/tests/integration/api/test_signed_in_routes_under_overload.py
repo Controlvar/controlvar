@@ -475,12 +475,13 @@ ROWS = [
     ),
     pytest.param(
         "POST /api/v1/users/me/password",
-        Row(_change_password, 204, True),
+        # 200: a change answers with a new access token (#501).
+        Row(_change_password, 200, True),
         id="provider-user-active-handler",
     ),
     pytest.param(
         "POST /api/v1/feature-flags/{flag_id}/toggle",
-        Row(_toggle, 200, False, later_begins_on_loop=2 * BURST),
+        Row(_toggle, 200, False, later_begins_on_loop=BURST),
         id="flag-switch",
     ),
     pytest.param("GET /api/v1/auth/me", Row(_auth_me, 200, True), id="auth-me"),

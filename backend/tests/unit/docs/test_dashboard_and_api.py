@@ -793,6 +793,16 @@ STALE: Tuple[Tuple[str, str], ...] = (
         "the experiment page's Weight history lists the bandit's past updates, "
         "as a table (#1958)",
     ),
+    # #1961: in the full profile the new-experiment form creates a split URL
+    # experiment.
+    (
+        r"create a split url experiment through the api",
+        "#1961: the new-experiment form creates one in the full profile",
+    ),
+    (
+        r"creating a split url experiment is an api call",
+        "#1961: the new-experiment form creates one in the full profile",
+    ),
 )
 
 _DROP = frozenset("*`")
@@ -911,6 +921,9 @@ def test_no_page_repeats_a_removed_dashboard_claim():
         "The dashboard shows the current weights only, with no history.",
         "- The dashboard shows the current weights only. It has no chart of how they changed over time",
         "not update by itself, and the dashboard has no chart of past weights. Then go to `/products`",
+        # #1961: user-guide.md, experiment-wizard.md and split-url.md.
+        "algorithm**. Create a split URL experiment through the API (`POST /api/v1/experiments/`).",
+        "Creating a split URL experiment is an API call, shown on this page.",
     ],
 )
 def test_the_sweep_catches_the_removed_wording(removed):

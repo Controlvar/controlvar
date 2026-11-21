@@ -106,6 +106,11 @@ api:
       memory: 1Gi
   # -- Extra environment (SSO, SMTP). ENVIRONMENT,
   # PUBLIC_BASE_URL, RUN_MIGRATIONS, SEED and SEED_FORCE are refused here.
+  # For example, to require two-step sign-in for the accounts of chosen roles
+  # (local sign-in; ADMIN, DEVELOPER, ANALYST or VIEWER, comma-separated):
+  #   extraEnv:
+  #     - name: LOCAL_AUTH_2FA_REQUIRED_ROLES
+  #       value: "ADMIN,DEVELOPER"
   extraEnv: []
   # -- ConfigMaps/Secrets to add as environment. Variables the chart sets as explicit env (ENVIRONMENT, PUBLIC_BASE_URL, RUN_MIGRATIONS, SEED, SEED_FORCE) cannot be overridden through it.
   extraEnvFrom: []

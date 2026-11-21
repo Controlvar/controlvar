@@ -6,7 +6,10 @@ converting users and the value totals of the users who have one into the
 metric's result: every assigned user is one unit, worth 0 without a value.
 ``welch_difference_intervals`` gives each treatment's difference from the
 control with its Welch-Satterthwaite interval.  Both are held to scipy on the
-per-user arrays, zeros included.
+per-user arrays, zeros included.  Each treatment's p-value comes from a
+permutation test of Welch's t (#2041, ``permutation_test.py``); it is held to
+scipy's exact permutation distribution of the same statistic, within the
+Monte Carlo error of the product's 1,999 permutations.
 
 The dataset is fixed, 10 users per arm:
 
@@ -36,9 +39,13 @@ from backend.app.services.sufficient_stats_analysis import (
 
 pytestmark = [pytest.mark.unit]
 
-CONTROL = BinomialVariant("c", "control", True)
-TREATMENT = BinomialVariant("t", "treatment", False)
-SECOND = BinomialVariant("u", "second", False)
+#: The permutation test's seed is built from these ids, so they are UUIDs.
+CONTROL_ID = "00000000-0439-4000-8000-0000000000c0"
+TREATMENT_ID = "00000000-0439-4000-8000-0000000000e1"
+SECOND_ID = "00000000-0439-4000-8000-0000000000e2"
+CONTROL = BinomialVariant(CONTROL_ID, "control", True)
+TREATMENT = BinomialVariant(TREATMENT_ID, "treatment", False)
+SECOND = BinomialVariant(SECOND_ID, "second", False)
 
 #: Value totals of the users who have one; everyone else in the arm has 0.
 CONTROL_TOTALS = [20.0, 35.5]
@@ -51,7 +58,10 @@ TREATMENT_BUYERS = 4
 
 def _metric(lower_is_better=None, metric_type="revenue"):
     metric = SimpleNamespace(
-        id="m", name="Order value", metric_type=metric_type, is_primary=True
+        id="00000000-0439-4000-8000-0000000000a1",
+        name="Order value",
+        metric_type=metric_type,
+        is_primary=True,
     )
     if lower_is_better is not None:
         metric.lower_is_better = lower_is_better
@@ -84,6 +94,13 @@ def _finite_json(result):
     return json.dumps(result, allow_nan=False)
 
 
+def _permutation_tolerance(p_exact, permutations=1_999):
+    """How far a p-value from ``permutations`` random permutations may be
+    from the exact one: 5 standard errors of twice a tail, plus one step."""
+    q = min(max(p_exact / 2, 1e-4), 0.5)
+    return 5 * 2 * math.sqrt(q * (1 - q) / (permutations + 1)) + 2 / (permutations + 1)
+
+
 # ---------------------------------------------------------------------------
 # The oracle: scipy on the per-user arrays
 # ---------------------------------------------------------------------------
@@ -94,6 +111,13 @@ def test_revenue_per_user_matches_scipy_on_the_per_user_values(confidence):
     control_y = _per_user(CONTROL_TOTALS, USERS)
     treatment_y = _per_user(TREATMENT_TOTALS, USERS)
     welch = stats.ttest_ind(treatment_y, control_y, equal_var=False)
+    # Every one of the 184,756 assignments of the 20 users.
+    exact = stats.ttest_ind(
+        treatment_y,
+        control_y,
+        equal_var=False,
+        method=stats.PermutationMethod(n_resamples=np.inf),
+    )
 
     result = _result(alpha=1 - confidence)
     control, treatment = _variants(result)
@@ -111,9 +135,11 @@ def test_revenue_per_user_matches_scipy_on_the_per_user_values(confidence):
         assert variant["confidence_interval"] == pytest.approx(
             (y.mean() - half, y.mean() + half), rel=1e-12
         )
-    # Welch's test, not a test on the share of buyers.
-    assert treatment["p_value"] == pytest.approx(welch.pvalue, rel=1e-9)
-    assert treatment["statistical_test_used"] == "welch_t_test"
+    # A permutation test of Welch's t, not a test on the share of buyers.
+    assert treatment["statistical_test_used"] == "permutation_t_test"
+    assert abs(treatment["p_value"] - exact.pvalue) <= _permutation_tolerance(
+        exact.pvalue
+    ), (treatment["p_value"], exact.pvalue)
     assert treatment["absolute_difference"] == pytest.approx(11.225, rel=1e-12)
     assert treatment["absolute_difference_ci"] == pytest.approx(
         tuple(welch.confidence_interval(confidence)), rel=1e-9
@@ -135,9 +161,12 @@ def test_revenue_per_user_matches_scipy_on_the_per_user_values(confidence):
 
 
 def test_the_numbers_from_the_scipy_run_are_the_documented_ones():
-    """The figures of the dataset above, so a change in scipy is visible."""
+    """The figures of the dataset above, so a change in scipy, in numpy's
+    random stream or in the permutation test is visible.  The p-value is the
+    permutation test's at these ids (scipy's exact one is 0.2601; Welch's
+    p-value was 0.230022); the interval is Welch's."""
     control, treatment = _variants(_result())
-    assert treatment["p_value"] == pytest.approx(0.230022, abs=5e-7)
+    assert treatment["p_value"] == 0.242
     low, high = treatment["absolute_difference_ci"]
     assert (low, high) == pytest.approx((-8.031377, 30.481377), abs=5e-7)
     assert treatment["relative_improvement_pct"] == pytest.approx(202.2523, abs=5e-5)
@@ -153,7 +182,7 @@ def test_the_difference_interval_is_welch_not_pooled():
     )
 
 
-def test_a_correction_adjusts_the_welch_p_values_and_not_the_difference():
+def test_a_correction_adjusts_the_p_values_and_not_the_difference():
     result = per_user_mean_metric_result(
         [
             (CONTROL, USERS, CONTROL_BUYERS, CONTROL_TOTALS),
@@ -195,7 +224,7 @@ def test_a_significant_rise_is_the_winner_when_higher_is_better():
     )
     _, treatment = _variants(result)
     assert treatment["is_significant"] is True
-    assert result["winning_variant_id"] == "t"
+    assert result["winning_variant_id"] == TREATMENT_ID
     assert result["has_significant_result"] is True
 
 
@@ -233,14 +262,14 @@ def test_both_arms_all_zero_give_a_null_interval_not_a_division_by_zero():
     intervals = welch_difference_intervals(
         [(CONTROL, 3, 0.0, 0.0), (TREATMENT, 3, 0.0, 0.0)], 0.05
     )
-    assert intervals == {"t": (0.0, None)}
+    assert intervals == {TREATMENT_ID: (0.0, None)}
 
 
 def test_a_difference_needs_2_units_in_both_arms_and_a_control():
     rows = [(CONTROL, 1, 0.0, 0.0), (TREATMENT, 5, 1.0, 4.0), (SECOND, 0, 0.0, 0.0)]
     assert welch_difference_intervals(rows, 0.05) == {
-        "t": (None, None),
-        "u": (None, None),
+        TREATMENT_ID: (None, None),
+        SECOND_ID: (None, None),
     }
     with pytest.raises(ValueError, match="control"):
         welch_difference_intervals(rows[1:], 0.05)
@@ -265,9 +294,10 @@ def test_an_arm_with_no_users_has_mean_0_and_no_nan_anywhere():
     assert second["confidence_interval"] == (0.0, 0.0)
     assert second["p_value"] is None
     assert second["absolute_difference"] is None
-    # The other treatment is still compared.
+    # The other treatment is still compared, the only one in the family, so
+    # with the same seed as without the empty arm.
     _, treatment = _variants(result)
-    assert treatment["p_value"] == pytest.approx(0.230022, abs=5e-7)
+    assert treatment["p_value"] == _variants(_result())[1]["p_value"]
 
 
 def test_an_arm_with_one_user_has_its_mean_and_no_comparison():
@@ -352,8 +382,10 @@ def test_an_arm_whose_users_all_have_one_value_has_no_spread():
     assert control["confidence_interval"] == (0.0, 0.0)
     y = _per_user([1e12, 10.0], 6)
     assert treatment["std_dev"] == pytest.approx(np.std(y, ddof=1), rel=1e-12)
-    welch = stats.ttest_ind(y, np.zeros(6), equal_var=False)
-    assert treatment["p_value"] == pytest.approx(welch.pvalue, rel=1e-9)
+    # Compared, by the permutation test.  (With a total of 1e12 in the
+    # metric, the 10.0 counts as 0 in the test only: at or below 1e-9 * M.)
+    assert treatment["statistical_test_used"] == "permutation_t_test"
+    assert treatment["p_value"] is not None
 
 
 def test_sums_the_estimator_refuses_leave_the_metric_uncompared(monkeypatch):
@@ -382,8 +414,19 @@ def test_values_offset_by_1e9_keep_their_precision():
     welch = stats.ttest_ind(
         np.array(treatment) - 1e9, np.array(control) - 1e9, equal_var=False
     )
+    without_offset = per_user_mean_metric_result(
+        [
+            (CONTROL, 3, 3, [v - 1e9 for v in control]),
+            (TREATMENT, 4, 4, [v - 1e9 for v in treatment]),
+        ],
+        0.05,
+        "none",
+        metric=_metric(),
+    )
     _, row = _variants(result)
-    assert row["p_value"] == pytest.approx(welch.pvalue, rel=1e-9)
+    # The same users, listed counts and ids give the same permutations, and
+    # the centred statistic does not see the offset.
+    assert row["p_value"] == _variants(without_offset)[1]["p_value"]
     assert row["absolute_difference"] == pytest.approx(2.875, rel=1e-9)
     assert row["absolute_difference_ci"] == pytest.approx(
         tuple(welch.confidence_interval(0.95)), rel=1e-9

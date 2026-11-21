@@ -1,6 +1,6 @@
 import React, { FormEvent, useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
-import { INACTIVE_ACCOUNT_MESSAGE, useAuth } from '@/contexts/AuthContext';
+import { INACTIVE_ACCOUNT_MESSAGE, SignInEnrolment, useAuth } from '@/contexts/AuthContext';
 import { useAuthConfig } from '@/contexts/AuthConfigContext';
 import { ApiError, safeNextPath, signInTimeoutMessage, unreachableMessage } from '@/services/api';
 import type { AuthConfig, DemoAccount } from '@/services/authConfig';
@@ -23,15 +23,21 @@ import {
 } from '@/services/hostedUi';
 import { PageTitle } from '@/components/PageTitle';
 import { Wordmark } from '@/components/Wordmark';
+import { AuthenticatorKey } from '@/components/account/AuthenticatorKey';
+import { RecoveryCodesPanel } from '@/components/account/RecoveryCodesPanel';
 import { TwoStepCodeInput } from '@/components/account/TwoStepCodeInput';
 import {
   CODE_STEP_LOCKED_TEXT,
+  CONFIRM_CLOCK_HINT,
+  ENROL_STEP_INTRO,
   LOST_DEVICE_HELP,
   SIGN_IN_TIMED_OUT_MESSAGE,
+  TwoFactorEnrolment,
   UNAVAILABLE_TEXT,
   WRONG_CODE_DETAIL,
   WRONG_CODE_MESSAGE,
   WRONG_RECOVERY_CODE_MESSAGE,
+  startSignInEnrolment,
 } from '@/services/twoFactor';
 // The SSO button and `/login?sso_error=` copy: the SSO module's; a core build
 // resolves this to a stub that renders nothing.
@@ -130,6 +136,31 @@ export function codeStepErrorMessage(err: unknown, recovery: boolean): string {
   }
   if (err instanceof Error && err.message) return err.message;
   return 'Something went wrong. Please try again.';
+}
+
+/** The set-up a sign-in asks for could not go on, and starts again at the password. */
+export const ENROL_RESTART_MESSAGE =
+  'Setting up two-step sign-in could not be finished. Enter your email and password again.';
+
+/**
+ * The set-up a sign-in asks for (`POST /auth/mfa/enroll[/confirm]`) has
+ * ended and sign-in starts again: the token expired, or the account changed
+ * (any 401 but a wrong code), or no secret is waiting any more (409).
+ */
+export function enrolStepEnded(err: unknown): boolean {
+  return codeStepExpired(err) || (err instanceof ApiError && err.status === 409);
+}
+
+/**
+ * Map a refused first code during that set-up to the copy in its alert. A
+ * wrong first code shows the phone's clock hint, where a wrong clock is first
+ * met; everything else reads as at the code step.
+ */
+export function enrolStepErrorMessage(err: unknown): string {
+  if (err instanceof ApiError && err.status === 401 && err.detail === WRONG_CODE_DETAIL) {
+    return CONFIRM_CLOCK_HINT;
+  }
+  return codeStepErrorMessage(err, false);
 }
 
 function firstQueryValue(value: string | string[] | undefined): string | undefined {
@@ -453,13 +484,15 @@ function HostedUiSignIn({ config }: { config: CognitoSignInConfig }) {
 
 /**
  * `/login` under the local provider: the email and password form, then, for an
- * account with two-step sign-in on (#1812), the code step in the same card.
- * The code step's `mfa_token` is held in this component's state only: a
- * reload, or "Back to sign-in", starts again at the password.
+ * account with two-step sign-in on (#1812), the code step in the same card;
+ * for an account whose role requires it and that has not set it up, the
+ * set-up (add the key to an app, its first code, the recovery codes) before
+ * the session starts. The `mfa_token` is held in this component's state only:
+ * a reload, or "Back to sign-in", starts again at the password.
  */
 function LocalSignIn() {
   const router = useRouter();
-  const { login, verifySecondStep, status, sessionError } = useAuth();
+  const { login, verifySecondStep, confirmSignInEnrolment, status, sessionError } = useAuth();
   const emailId = useId();
   const passwordId = useId();
   const errorId = useId();
@@ -486,8 +519,22 @@ function LocalSignIn() {
   // "Back to sign-in" gives focus back to the email field.
   const [backToPassword, setBackToPassword] = useState(0);
 
+  // The set-up a required role is asked for. `enrolToken` set means the
+  // password was right and two-step sign-in must be set up first; `enrolled`
+  // holds the recovery codes and the sign-in to finish once they are saved.
+  const enrolCodeId = useId();
+  const enrolErrorId = useId();
+  const [enrolToken, setEnrolToken] = useState<string | null>(null);
+  const [enrolment, setEnrolment] = useState<TwoFactorEnrolment | null>(null);
+  const [enrolCode, setEnrolCode] = useState('');
+  const [enrolError, setEnrolError] = useState<string | null>(null);
+  const [enrolled, setEnrolled] = useState<SignInEnrolment | null>(null);
+  const enrolHeadingRef = useRef<HTMLHeadingElement>(null);
+  const enrolCodeRef = useRef<HTMLInputElement>(null);
+
   const nextPath = safeNextPath(firstQueryValue(router.query.next), DEFAULT_AFTER_LOGIN);
   const codeStep = mfaToken !== null;
+  const enrolStep = enrolToken !== null || enrolled !== null;
 
   // Already signed in (e.g. the user typed /login by hand): go straight through.
   useEffect(() => {
@@ -511,11 +558,38 @@ function LocalSignIn() {
     if (codeStep) codeRef.current?.focus();
   }, [codeStep, recovery, codeError]);
 
+  // The set-up's heading gets focus when the key is shown and when the
+  // recovery codes are.
+  const enrolView = enrolled ? 'codes' : enrolment ? 'key' : null;
+  useEffect(() => {
+    if (enrolView) enrolHeadingRef.current?.focus();
+  }, [enrolView]);
+
+  // A refused first code gives focus back to the field, as at the code step.
+  useEffect(() => {
+    if (enrolError) enrolCodeRef.current?.focus();
+  }, [enrolError]);
+
   const leaveCodeStep = () => {
     setMfaToken(null);
     setRecovery(false);
     setCode('');
     setCodeError(null);
+  };
+
+  const leaveEnrolStep = () => {
+    setEnrolToken(null);
+    setEnrolment(null);
+    setEnrolCode('');
+    setEnrolError(null);
+    setEnrolled(null);
+  };
+
+  /** The set-up ended (expired, or the account changed): sign in again. */
+  const restartFromEnrolStep = (message: string) => {
+    leaveEnrolStep();
+    setFormState('idle');
+    setError(message);
   };
 
   const handleSsoError = useCallback((message: string | null, retry: (() => void) | null) => {
@@ -547,6 +621,27 @@ function LocalSignIn() {
         setCode('');
         setCodeError(null);
         setMfaToken(result.mfaToken);
+        setFormState('idle');
+        return;
+      }
+      if (result.status === 'enrol-step') {
+        // The password is not needed again: the set-up starts with a new
+        // secret for the authenticator app.
+        setPassword('');
+        setShowPassword(false);
+        setEnrolCode('');
+        setEnrolError(null);
+        setEnrolToken(result.mfaToken);
+        try {
+          setEnrolment(await startSignInEnrolment(result.mfaToken));
+        } catch (err) {
+          if (enrolStepEnded(err)) {
+            restartFromEnrolStep(SIGN_IN_TIMED_OUT_MESSAGE);
+            return;
+          }
+          leaveEnrolStep();
+          setError(codeStepErrorMessage(err, false));
+        }
         setFormState('idle');
         return;
       }
@@ -584,6 +679,48 @@ function LocalSignIn() {
     }
   };
 
+  const handleEnrolConfirm = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (formState === 'submitting' || enrolToken === null) return;
+    if (!enrolCode.trim()) {
+      setEnrolError('Enter the 6-digit code from your authenticator app.');
+      return;
+    }
+    setFormState('submitting');
+    setEnrolError(null);
+    try {
+      const done = await confirmSignInEnrolment(enrolToken, enrolCode);
+      // The token is spent: only the codes and the sign-in to finish remain.
+      setEnrolToken(null);
+      setEnrolment(null);
+      setEnrolCode('');
+      setEnrolled(done);
+      setFormState('idle');
+    } catch (err) {
+      if (enrolStepEnded(err)) {
+        restartFromEnrolStep(
+          err instanceof ApiError && err.status === 409 ? ENROL_RESTART_MESSAGE : SIGN_IN_TIMED_OUT_MESSAGE,
+        );
+        return;
+      }
+      setFormState('idle');
+      setEnrolCode('');
+      setEnrolError(enrolStepErrorMessage(err));
+    }
+  };
+
+  const finishEnrolment = async () => {
+    if (enrolled === null || formState === 'submitting') return;
+    setFormState('submitting');
+    try {
+      enrolled.finish();
+    } catch (err) {
+      restartFromEnrolStep(loginErrorMessage(err));
+      return;
+    }
+    await router.replace(nextPath);
+  };
+
   const switchCodeKind = () => {
     setRecovery((value) => !value);
     setCode('');
@@ -592,11 +729,131 @@ function LocalSignIn() {
 
   const backToSignIn = () => {
     leaveCodeStep();
+    leaveEnrolStep();
     setError(null);
     setBackToPassword((n) => n + 1);
   };
 
   const submitting = formState === 'submitting';
+
+  if (enrolStep) {
+    return (
+      <>
+        <PageTitle title="Sign in" />
+        <main className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4 py-12">
+          <div className="w-full max-w-sm">
+            <div className="flex justify-center mb-8">
+              <Wordmark href={null} />
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 sm:p-8">
+              {enrolled ? (
+                <section className="flex flex-col gap-4" data-testid="enrol-codes">
+                  <h1
+                    ref={enrolHeadingRef}
+                    tabIndex={-1}
+                    className="text-xl font-semibold text-slate-900 focus:outline-none"
+                    data-testid="enrol-heading"
+                  >
+                    Save your recovery codes
+                  </h1>
+                  <p className="text-sm text-slate-600">
+                    Two-step sign-in is on. From now on, signing in asks for a code from your authenticator app
+                    after your password.
+                  </p>
+                  <RecoveryCodesPanel
+                    codes={enrolled.recoveryCodes}
+                    onDone={() => void finishEnrolment()}
+                    busy={submitting}
+                  />
+                </section>
+              ) : (
+                <section className="flex flex-col gap-5" data-testid="enrol-step">
+                  <div>
+                    <h1
+                      ref={enrolHeadingRef}
+                      tabIndex={-1}
+                      className="text-xl font-semibold text-slate-900 mb-1 focus:outline-none"
+                      data-testid="enrol-heading"
+                    >
+                      Set up two-step sign-in
+                    </h1>
+                    <p className="text-sm text-slate-500" data-testid="enrol-intro">
+                      {ENROL_STEP_INTRO}
+                    </p>
+                  </div>
+
+                  {enrolment ? (
+                    <>
+                      <div className="flex flex-col gap-3">
+                        <h2 className="text-base font-medium text-slate-900">
+                          1. Add Controlvar to your authenticator app
+                        </h2>
+                        <AuthenticatorKey enrolment={enrolment} />
+                      </div>
+
+                      <form onSubmit={handleEnrolConfirm} noValidate data-testid="enrol-form" className="flex flex-col gap-3">
+                        <h2 className="text-base font-medium text-slate-900">2. Enter the code it shows</h2>
+                        {enrolError && (
+                          <div
+                            id={enrolErrorId}
+                            role="alert"
+                            data-testid="enrol-error"
+                            className="login-error rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+                          >
+                            {enrolError}
+                          </div>
+                        )}
+                        <TwoStepCodeInput
+                          ref={enrolCodeRef}
+                          id={enrolCodeId}
+                          label="Code from your authenticator app"
+                          value={enrolCode}
+                          onChange={setEnrolCode}
+                          errorId={enrolError ? enrolErrorId : null}
+                          readOnly={submitting}
+                          testId="enrol-code-input"
+                        />
+                        <button
+                          type="submit"
+                          data-testid="enrol-submit"
+                          disabled={submitting}
+                          aria-busy={submitting}
+                          className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                        >
+                          {submitting ? 'Turning on…' : 'Turn on two-step sign-in'}
+                        </button>
+                      </form>
+                    </>
+                  ) : (
+                    <p className="text-sm text-slate-600" data-testid="enrol-loading">
+                      Loading...
+                    </p>
+                  )}
+
+                  <div className="text-sm">
+                    <button
+                      type="button"
+                      data-testid="enrol-back"
+                      onClick={backToSignIn}
+                      disabled={submitting}
+                      className="text-slate-600 underline hover:text-slate-900 disabled:opacity-60"
+                    >
+                      Back to sign-in
+                    </button>
+                  </div>
+                </section>
+              )}
+            </div>
+
+            <p className="mt-6 text-center text-xs text-slate-500">
+              No public sign-up. Accounts are created by an administrator.
+            </p>
+          </div>
+        </main>
+      </>
+    );
+  }
 
   if (codeStep) {
     return (

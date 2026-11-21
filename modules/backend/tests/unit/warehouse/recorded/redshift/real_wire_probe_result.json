@@ -1,0 +1,56 @@
+{
+  "_provenance": {
+    "source": "real account",
+    "real_run_id": "wl-redshift-20261118T011715Z-6b77b53f",
+    "check": "rs_wire_probe",
+    "request": {
+      "service": "redshift-data",
+      "operation": "GetStatementResult"
+    },
+    "note": "Recorded by the warehouse_live check; see evidence.json."
+  },
+  "status": 200,
+  "body": {
+    "Records": [
+      [
+        {
+          "stringValue": "0.30000000000000004"
+        },
+        {
+          "stringValue": "UTC"
+        }
+      ]
+    ],
+    "ColumnMetadata": [
+      {
+        "isCaseSensitive": true,
+        "isCurrency": false,
+        "isSigned": false,
+        "label": "probe",
+        "name": "probe",
+        "nullable": 1,
+        "precision": 19,
+        "scale": 0,
+        "schemaName": "",
+        "tableName": "",
+        "typeName": "varchar",
+        "length": 0
+      },
+      {
+        "isCaseSensitive": true,
+        "isCurrency": false,
+        "isSigned": false,
+        "label": "tz",
+        "name": "tz",
+        "nullable": 1,
+        "precision": 65535,
+        "scale": 0,
+        "schemaName": "",
+        "tableName": "",
+        "typeName": "varchar",
+        "length": 0
+      }
+    ],
+    "TotalNumRows": 1
+  }
+}

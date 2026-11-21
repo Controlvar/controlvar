@@ -101,7 +101,7 @@ const REVENUE = {
       std_dev: 34.9,
       p_value: 0.16,
       relative_improvement_pct: 21.02,
-      statistical_test_used: 'welch_t_test',
+      statistical_test_used: 'permutation_t_test',
       absolute_difference: 1.19,
       absolute_difference_ci: [-0.47, 2.84],
     }),
@@ -349,7 +349,13 @@ describe('a revenue primary on the results page', () => {
   });
 
   it('reads a result from a server older than `analysis` from its test (welch_t_test is a mean)', async () => {
-    const older: Record<string, unknown> = { ...REVENUE };
+    // A server older than `analysis` ran Welch's t-test (engine before 1.13.0).
+    const older: Record<string, unknown> = {
+      ...REVENUE,
+      variants: REVENUE.variants.map((v) =>
+        v.is_control ? v : { ...v, statistical_test_used: 'welch_t_test' },
+      ),
+    };
     delete older.analysis;
     install(older);
     await renderLoaded();

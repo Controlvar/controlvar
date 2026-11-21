@@ -8,7 +8,7 @@ using consistent hashing for deterministic, stable user-to-experiment mapping.
 import hashlib
 import logging
 import struct
-from typing import List, Optional
+from typing import List, Optional, Sequence
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
@@ -331,7 +331,10 @@ class MutualExclusionService:
         return self.get_group(experiment.mutual_exclusion_group_id)
 
     def is_user_eligible_for_experiment(
-        self, user_id: str, experiment_id: UUID
+        self,
+        user_id: str,
+        experiment_id: UUID,
+        user_ids: Optional[Sequence[str]] = None,
     ) -> bool:
         """Check if a user is eligible for an experiment given mutual exclusion rules.
 
@@ -343,6 +346,10 @@ class MutualExclusionService:
         a user in one experiment when the group's active set changes: the hash
         divides users among the ACTIVE experiments only, so activating,
         pausing or resuming a sibling moves users between slots.
+
+        ``user_ids`` are the ids of a linked person (#449), whose holder is
+        ``user_id``: the hash is on ``user_id``, and a sibling assignment under
+        any of the ids excludes the person.
         """
         group = self.get_user_experiment_group(experiment_id)
         if not group:
@@ -356,7 +363,9 @@ class MutualExclusionService:
 
         # Only reached once the hash has picked this experiment, so the extra
         # query runs for users who would otherwise be enrolled.
-        if self.has_sibling_assignment(user_id, group.id, experiment_id):
+        # Passed for a linked person only, as by check_eligibility.
+        linked = {"user_ids": user_ids} if user_ids else {}
+        if self.has_sibling_assignment(user_id, group.id, experiment_id, **linked):
             logger.debug(
                 "Mutual exclusion group %s: user already enrolled in another "
                 "experiment of the group; not enrolling in %s",
@@ -367,7 +376,11 @@ class MutualExclusionService:
         return True
 
     def has_sibling_assignment(
-        self, user_id: str, group_id: UUID, experiment_id: UUID
+        self,
+        user_id: str,
+        group_id: UUID,
+        experiment_id: UUID,
+        user_ids: Optional[Sequence[str]] = None,
     ) -> bool:
         """Whether the user holds an assignment in another live experiment of the group.
 
@@ -375,13 +388,19 @@ class MutualExclusionService:
         ``mutual_exclusion_group_id`` is ``group_id`` and whose status is not
         COMPLETED or ARCHIVED -- so ACTIVE, PAUSED and DRAFT siblings all hold
         their users.  Completing a sibling, or removing it from the group,
-        releases them.
+        releases them.  With ``user_ids`` (a linked person's ids, #449), an
+        assignment under any of them counts; without, under ``user_id``.
         """
+        holders = (
+            Assignment.user_id.in_(user_ids)
+            if user_ids
+            else Assignment.user_id == user_id
+        )
         row = (
             self.db.query(Assignment.id)
             .join(Experiment, Experiment.id == Assignment.experiment_id)
             .filter(
-                Assignment.user_id == user_id,
+                holders,
                 Experiment.mutual_exclusion_group_id == group_id,
                 Experiment.id != experiment_id,
                 Experiment.status.notin_(

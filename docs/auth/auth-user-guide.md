@@ -124,9 +124,10 @@ Through the API, send your current password and the new one to
 - A wrong current password is refused with `403` and counts toward the same limit as
   failed logins.
 - The new password must meet the same requirements as registration.
-- Changing your password does **not** sign out your other sessions: a token issued before
-  the change keeps working until it expires. To end them straight away, an administrator
-  deactivates the account (sets `is_active` to `false`).
+- Changing your password signs out your other sessions. This one stays signed in. A script
+  holding an older token gets `401` and logs in again.
+- With two-step sign-in on, or required for your role, every session ends, this one too, and
+  you sign in again.
 - An administrator resets **another** user's password with `PUT /api/v1/admin/users/{id}`;
   nobody, administrators included, can change their own password that way.
 
@@ -205,7 +206,7 @@ superuser.
   page and search you were on.
 - **Permissions** (full profile) shows what the user can do: their role plus their custom
   roles and direct grants.
-- **Delete** removes the account after you confirm it.
+- **Delete** removes the account, and every API key it created, after you confirm it.
 
 The four roles are Admin, Developer, Analyst and Viewer. A legacy account with no
 role shows "No role" in the table; pick one in the Edit dialog. Custom roles in
@@ -223,7 +224,11 @@ Rules the page and the API both apply:
   on their next request, and nothing here stops that.
 - Deactivating a user stops them signing in, refuses requests with a token they
   already hold, and **stops the API keys they created, including keys your
-  applications use**. Check which keys a user created before deactivating them.
+  applications use**. When you clear **Active**, the Edit dialog lists the user's
+  active keys, with each key's scopes and when it was last used, before you save.
+  To keep an application running, switch it to a key created by an account that
+  is staying, then deactivate the user. Reactivating the user makes their keys
+  work again, unless they have expired.
 - With `AUTH_PROVIDER=cognito` and `SYNC_ROLES_ON_LOGIN` on (the default), roles
   come from Cognito groups and are rewritten on every request, so a role change
   is refused with "Roles on this deployment come from Cognito groups and are
@@ -243,7 +248,9 @@ deleted the account; closing the dialog refreshes the list.
 An account with [two-step sign-in](../api/auth.md#two-step-sign-in) that lost its
 authenticator app and its recovery codes cannot finish signing in. A superuser turns its
 two-step sign-in off with `DELETE /api/v1/admin/users/{user_id}/2fa`; the account then signs
-in with its password alone and can set two-step sign-in up again. No one can reset their own.
+in with its password alone and can set two-step sign-in up again. An account whose role
+`LOCAL_AUTH_2FA_REQUIRED_ROLES` names is asked to set it up at its next sign-in instead. No one
+can reset their own.
 
 When no superuser can sign in, or after `SECRET_KEY` has changed, reset accounts from where
 the API's database is reachable:
@@ -289,7 +296,7 @@ What the dashboard's sign-in form shows (`AUTH_PROVIDER=local`):
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| `401` "Could not validate credentials" | The access token has expired, or is malformed or altered | Log in again (under `cognito`, you can also refresh the token) |
+| `401` "Could not validate credentials" | The access token has expired, or is malformed or altered, or your password was changed after it was issued | Log in again (under `cognito`, you can also refresh the token) |
 
 ### Password Reset Errors
 
@@ -333,13 +340,13 @@ To keep your account secure:
 
 If you notice suspicious activity on your account:
 
-1. Ask an administrator to deactivate the account (`is_active` set to `false`). That ends
-   every session straight away; changing the password alone does not.
-2. Have the administrator reset your password, and reactivate the account once the tokens
-   issued before it was deactivated have expired (12 hours with the default
-   `LOCAL_AUTH_TOKEN_TTL_MINUTES`). A deactivated account's tokens are refused only while
-   it stays deactivated.
+1. Change your password (`POST /api/v1/users/me/password`), or ask an administrator to
+   reset it; that signs out your other sessions.
+2. To be sure every session has ended while you check, ask an administrator to deactivate
+   the account (`is_active` set to `false`). A deactivated account's tokens are refused only
+   while it stays deactivated.
 3. The audit log records sign-ins with a password, through Cognito (`POST /auth/token`) or
    through SSO, and an administrator's
-   changes to your account's role, superuser flag or active status. A password change and other changes
-   to your profile are not recorded (#502); keep the account deactivated while you check.
+   changes to your account's role, superuser flag or active status. A password change that
+   returns a new token is recorded as a sign-in; other password changes and profile changes
+   are not (#502); keep the account deactivated while you check.

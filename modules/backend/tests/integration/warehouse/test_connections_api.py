@@ -108,7 +108,7 @@ def test_the_connector_list_follows_the_enabled_set(wh):
         "bigquery": True,
         "snowflake": True,
         "athena": False,
-        "redshift": False,
+        "redshift": True,
     }
     assert {c["warehouse_type"]: c["name"] for c in shipped}["redshift"] == (
         "Amazon Redshift"
@@ -313,7 +313,7 @@ def test_a_connection_keeps_its_type(wh):
     assert regenerate.json()["detail"]["code"] == "not_applicable"
 
 
-# -- Amazon Redshift (#826): a known type, shipped disabled ------------------------
+# -- Amazon Redshift (#826): enabled once its real-account check passed -------------
 
 REDSHIFT_DISABLED = {
     "code": "connector_disabled",
@@ -332,26 +332,24 @@ def _connection_count(wh) -> int:
     return wh.db.query(WarehouseConnection).count()
 
 
-@pytest.mark.regression
 @pytest.mark.parametrize(
     "body", [REDSHIFT_BODY, REDSHIFT_CLUSTER], ids=["serverless", "provisioned"]
 )
-def test_as_shipped_a_redshift_connection_is_422_and_nothing_is_stored(wh, body):
-    """With no override, a valid Redshift body is refused by the connector
-    rule, not by the schema, and no row is written."""
+def test_as_shipped_a_redshift_connection_is_created_with_an_external_id(wh, body):
+    """With no override, a valid Redshift body is accepted: the connector is
+    enabled as shipped, one row is written, and it carries an external ID."""
     admin = wh.as_("ADMIN")
     app.dependency_overrides.pop(wa.get_enabled_connectors)
     before = _connection_count(wh)
 
-    refused = admin.post(f"{WA}/connections", json=body)
+    created = admin.post(f"{WA}/connections", json=body)
 
-    assert refused.status_code == 422, refused.text
-    assert refused.json()["detail"] == REDSHIFT_DISABLED
-    assert _connection_count(wh) == before
-    assert (
-        wh.db.query(WarehouseConnection).filter_by(warehouse_type="redshift").count()
-        == 0
-    )
+    assert created.status_code == 201, created.text
+    assert created.json()["enabled"] is True
+    assert re.fullmatch(r"exp-[0-9a-f]{32}", created.json()["external_id"])
+    assert _connection_count(wh) == before + 1
+    row = wh.db.get(WarehouseConnection, uuid.UUID(created.json()["id"]))
+    assert row.warehouse_type == "redshift"
 
 
 @pytest.mark.regression

@@ -43,11 +43,18 @@ pytestmark = [pytest.mark.unit]
 #: /tracking/visual/preview (VisualPreviewRequest) and a preview link's create
 #: (PreviewLinkCreate). #1812 added 3 to both: the bodies of /auth/mfa/verify
 #: (MfaVerifyRequest), /users/me/2fa/confirm and /recovery-codes
-#: (TwoFactorCodeRequest) and /users/me/2fa/disable (TwoFactorDisableRequest).
-#: Then 1 more to both: the current password at /users/me/2fa/enroll
-#: (TwoFactorEnrolRequest).
-CORE_MODEL_COUNT = 97
-FULL_MODEL_COUNT = 141
+#: (TwoFactorCodeRequest) and /users/me/2fa/disable (TwoFactorDisableRequest);
+#: its required roles 2 more to both: /auth/mfa/enroll (MfaEnrolRequest) and
+#: /auth/mfa/enroll/confirm (MfaEnrolConfirmRequest). Then 1 more to both: the
+#: current password at /users/me/2fa/enroll (TwoFactorEnrolRequest). #1545's
+#: visual editor sign-in added 2 to both: the bodies of
+#: /visual-editor/tickets/claim (TicketClaim) and /visual-editor/sessions
+#: (ClaimExchange). #537 removed 3 from both with the wizard routes:
+#: WizardDraftCreate, WizardStepUpdate and WizardValidationRequest. #2042
+#: added 1 to both: /admin/app-users/erase (AppUserEraseRequest). #449 added
+#: 1 to both: the body of /tracking/alias (AliasRequest).
+CORE_MODEL_COUNT = 100
+FULL_MODEL_COUNT = 144
 
 #: ``(model, field)`` pairs that a ``mode="before"`` field validator covers.
 CORE_BEFORE_COUNT = 46

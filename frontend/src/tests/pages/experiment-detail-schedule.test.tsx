@@ -673,6 +673,8 @@ describe('the form among the other controls', () => {
     fireEvent.click(screen.getByTestId('experiment-delete'));
     expect(screen.queryByTestId('experiment-schedule-form')).toBeNull();
     expect(screen.getByTestId('manage-delete-confirm')).toBeInTheDocument();
+    // The question opens on its safe answer (#1797).
+    expect(screen.getByTestId('manage-delete-cancel')).toHaveFocus();
   });
 
   it('it goes once the draft is started, with what was typed unsent', async () => {

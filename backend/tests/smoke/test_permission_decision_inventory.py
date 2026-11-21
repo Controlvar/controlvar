@@ -170,12 +170,6 @@ DECIDER_CALLS = {
     (E + "bulk_toggle.py", "get_flag_history", "can_read_all_audit_logs", ""),
     (E + "bulk_toggle.py", "stream_audit_logs", "can_read_all_audit_logs", ""),
     (
-        E + "experiment_wizard.py",
-        "submit_draft",
-        "check_permission",
-        "ResourceType.EXPERIMENT, Action.CREATE",
-    ),
-    (
         E + "experiments.py",
         "clone_experiment",
         "check_permission",
@@ -432,6 +426,11 @@ ROLE_READS = {
         "N",
         "puts the role in the token's claims",
     ),
+    ("core/two_factor_policy.py", "two_factor_required"): (
+        "B",
+        "LOCAL_AUTH_2FA_REQUIRED_ROLES names built-in roles whose accounts must "
+        "use two-step sign-in; no grantable pair names sign-in",
+    ),
     ("services/audit_service.py", "role_value"): (
         "N",
         "records the actor's role in an audit entry",
@@ -519,7 +518,7 @@ def test_every_role_read_is_classified():
 def test_the_computed_b_set():
     """The class-B decisions, as the PR reports them (PB91-7)."""
     b = sorted(f"{f}::{fn}" for (f, fn), (cls, _) in ROLE_READS.items() if cls == "B")
-    assert len(b) == 13, b
+    assert len(b) == 14, b
 
 
 def test_a_role_comparison_in_a_route_is_named():

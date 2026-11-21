@@ -48,7 +48,8 @@ public extension ExperimentationClientProtocol {
 ///   and `getAssignment` calls `POST /api/v1/tracking/assign`; no bucketing happens on device.
 /// - **Caching.** Successful results are cached in memory per user + key for `cacheTTL`
 ///   seconds (NSCache) and, when `enableOfflineFallback` is on, persisted to `UserDefaults`.
-///   Failures are never cached.
+///   Failures are never cached. A cached flag answer also remembers the attributes it was asked
+///   with, and only a call with exactly the same attributes is answered from it.
 /// - **Failure.** On a network or server error the cached value is returned when present;
 ///   otherwise the call throws (`flagNotFound` / `experimentNotFound` for HTTP 404, which never
 ///   falls back to a stale persisted value).
@@ -111,27 +112,40 @@ public class ExperimentationClient: ExperimentationClientProtocol {
     // MARK: - Feature flags
 
     /// Evaluates a feature flag for the given user via
-    /// `GET /api/v1/feature-flags/evaluate/{flagKey}?user_id={user.id}`.
+    /// `GET /api/v1/feature-flags/evaluate/{flagKey}?user_id={user.id}&context={attributes}`.
+    ///
+    /// `user.attributes` are sent as `context`: compact JSON with sorted keys, percent-encoded,
+    /// so the flag's targeting rules are evaluated against them. With no attributes, or an empty
+    /// map, no `context` is sent. A cached answer is used only for exactly the same attributes.
     ///
     /// - Returns: The server's decision (`enabled`) plus the flag's `config`.
     /// - Throws: `ExperimentationError.flagNotFound` when the flag key is unknown;
+    ///   `.invalidConfig("user.attributes cannot be sent as JSON")` when an attribute value
+    ///   cannot be written as JSON (a `Date`, a NaN), before anything is sent;
     ///   `.networkError` / `.serverError` / `.decodingError` when the request failed and no
     ///   cached value exists.
     public func evaluateFlag(_ flagKey: String, user: User) async throws -> EvalResult {
-        if let cached = flagCache.get(userId: user.id, key: flagKey) {
+        let context = try Self.flagContext(user.attributes)
+        if let cached = flagCache.get(userId: user.id, key: flagKey, context: context) {
             return cached
         }
 
-        return try await dedupeFlag(key: "\(user.id)\u{0}\(flagKey)") { [self] in
+        return try await dedupeFlag(key: "\(user.id)\u{0}\(flagKey)\u{0}\(context)") { [self] in
             do {
-                let path = "/api/v1/feature-flags/evaluate/\(HTTPClient.encodeComponent(flagKey))"
-                let response = try await http.get(path, query: ["user_id": user.id], as: EvalResult.self)
+                // Built here rather than through `query:`, which sorts its keys: `user_id`
+                // first, then `context`, as the other SDKs send them.
+                var path = "/api/v1/feature-flags/evaluate/\(HTTPClient.encodeComponent(flagKey))"
+                    + "?user_id=\(HTTPClient.encodeComponent(user.id))"
+                if !context.isEmpty {
+                    path += "&context=\(HTTPClient.encodeComponent(context))"
+                }
+                let response = try await http.get(path, as: EvalResult.self)
                 let result = EvalResult(
                     key: response.key.isEmpty ? flagKey : response.key,
                     enabled: response.enabled,
                     config: response.config
                 )
-                flagCache.set(userId: user.id, key: flagKey, value: result)
+                flagCache.set(userId: user.id, key: flagKey, value: result, context: context)
                 if config.enableOfflineFallback {
                     offlineStore.saveEvaluation(result, userId: user.id)
                 }
@@ -282,6 +296,22 @@ public class ExperimentationClient: ExperimentationClientProtocol {
 
     // MARK: - Private helpers
 
+    /// The `context` a flag evaluation sends: `attributes` as compact JSON with sorted keys, so
+    /// the same attributes always give the same string (the cache compares it), or `""` when
+    /// there are none or the map is empty. Throws `.invalidConfig` with a fixed text when they
+    /// cannot be written as JSON, so no attribute name or value reaches the error.
+    static func flagContext(_ attributes: [String: AnyCodable]?) throws -> String {
+        guard let attributes = attributes, !attributes.isEmpty else { return "" }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        guard let data = try? encoder.encode(attributes),
+              let json = String(data: data, encoding: .utf8)
+        else {
+            throw ExperimentationError.invalidConfig("user.attributes cannot be sent as JSON")
+        }
+        return json
+    }
+
     private struct AssignRequest: Encodable {
         let experimentKey: String
         let userId: String
@@ -322,7 +352,8 @@ public class ExperimentationClient: ExperimentationClientProtocol {
         return ok
     }
 
-    /// Share a single in-flight request between concurrent calls for the same user + flag.
+    /// Share a single in-flight request between concurrent calls for the same user + flag +
+    /// attributes (`key` ends with the `context`).
     private func dedupeFlag(key: String, _ run: @escaping () async throws -> EvalResult) async throws -> EvalResult {
         let (task, owner) = registerFlagTask(key: key, run)
         defer { if owner { unregisterFlagTask(key: key) } }

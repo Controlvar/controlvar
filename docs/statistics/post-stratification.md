@@ -13,6 +13,8 @@ An experiment that balances its split within groups has a size-weighted estimate
 
 ## REST API Reference
 
+This route is not listed in the API document.
+
 ### POST `/api/v1/results/{experiment_id}/post-stratification`
 
 Not available yet: answers **501** for every existing experiment, with

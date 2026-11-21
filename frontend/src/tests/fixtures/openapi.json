@@ -5,6 +5,12 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/admin/app-users/erase": {
+      "post": {
+        "operationId": "erase_app_user_data_api_v1_admin_app_users_erase_post",
+        "summary": "Erase App User Data"
+      }
+    },
     "/api/v1/admin/cache/clear": {
       "post": {
         "operationId": "clear_cache_api_v1_admin_cache_clear_post",
@@ -175,6 +181,18 @@
       "get": {
         "operationId": "get_user_info_api_v1_auth_me_get",
         "summary": "Get User Info"
+      }
+    },
+    "/api/v1/auth/mfa/enroll": {
+      "post": {
+        "operationId": "enrol_during_sign_in_api_v1_auth_mfa_enroll_post",
+        "summary": "Enrol During Sign In"
+      }
+    },
+    "/api/v1/auth/mfa/enroll/confirm": {
+      "post": {
+        "operationId": "confirm_enrolment_during_sign_in_api_v1_auth_mfa_enroll_confirm_post",
+        "summary": "Confirm Enrolment During Sign In"
       }
     },
     "/api/v1/auth/mfa/verify": {
@@ -469,6 +487,12 @@
       "post": {
         "operationId": "start_experiment_api_v1_experiments__experiment_id__start_post",
         "summary": "Start experiment"
+      }
+    },
+    "/api/v1/experiments/{experiment_id}/visual/editor-tickets": {
+      "post": {
+        "operationId": "open_visual_editor_api_v1_experiments__experiment_id__visual_editor_tickets_post",
+        "summary": "Open a visual draft in the visual editor (beta)"
       }
     },
     "/api/v1/experiments/{experiment_id}/visual/preview-links": {
@@ -1041,12 +1065,6 @@
         "summary": "Invalidate Results Cache"
       }
     },
-    "/api/v1/results/{experiment_id}/post-stratification": {
-      "post": {
-        "operationId": "compute_post_stratification_api_v1_results__experiment_id__post_stratification_post",
-        "summary": "Post-stratification variance reduction, not available yet (deprecated)"
-      }
-    },
     "/api/v1/results/{experiment_id}/sample-size": {
       "get": {
         "operationId": "get_sample_size_status_api_v1_results__experiment_id__sample_size_get",
@@ -1257,6 +1275,12 @@
         "summary": "Get Tracking"
       }
     },
+    "/api/v1/tracking/alias": {
+      "post": {
+        "operationId": "link_anonymous_id_api_v1_tracking_alias_post",
+        "summary": "Link an anonymous id to a known user id (beta)"
+      }
+    },
     "/api/v1/tracking/assign": {
       "post": {
         "operationId": "assign_user_to_experiment_api_v1_tracking_assign_post",
@@ -1407,6 +1431,34 @@
         "summary": "Calculate required sample size"
       }
     },
+    "/api/v1/visual-editor/sessions": {
+      "post": {
+        "operationId": "open_editor_session_api_v1_visual_editor_sessions_post",
+        "summary": "Start a visual editor session (beta)"
+      }
+    },
+    "/api/v1/visual-editor/sessions/current": {
+      "delete": {
+        "operationId": "sign_out_of_editor_api_v1_visual_editor_sessions_current_delete",
+        "summary": "Sign out of the visual editor (beta)"
+      },
+      "get": {
+        "operationId": "read_editor_session_api_v1_visual_editor_sessions_current_get",
+        "summary": "The visual editor session and its draft (beta)"
+      }
+    },
+    "/api/v1/visual-editor/sessions/current/variants/{variant_id}/changes": {
+      "put": {
+        "operationId": "save_variant_changes_api_v1_visual_editor_sessions_current_variants__variant_id__changes_put",
+        "summary": "Save one variant's page changes from the visual editor (beta)"
+      }
+    },
+    "/api/v1/visual-editor/tickets/claim": {
+      "post": {
+        "operationId": "claim_editor_link_api_v1_visual_editor_tickets_claim_post",
+        "summary": "Claim an editor link, from the page it opened (beta)"
+      }
+    },
     "/api/v1/warehouse/analysis/connections": {
       "get": {
         "operationId": "list_connections_api_v1_warehouse_analysis_connections_get",
@@ -1505,40 +1557,6 @@
       "post": {
         "operationId": "validate_source_api_v1_warehouse_analysis_sources__source_id__validate_post",
         "summary": "Check a source's table and columns against the warehouse's metadata"
-      }
-    },
-    "/api/v1/wizard/drafts": {
-      "get": {
-        "operationId": "list_drafts_api_v1_wizard_drafts_get",
-        "summary": "List wizard drafts for the current user (deprecated)"
-      },
-      "post": {
-        "operationId": "create_draft_api_v1_wizard_drafts_post",
-        "summary": "Create a new experiment wizard draft (deprecated)"
-      }
-    },
-    "/api/v1/wizard/drafts/{draft_id}": {
-      "get": {
-        "operationId": "get_draft_api_v1_wizard_drafts__draft_id__get",
-        "summary": "Get a wizard draft by ID (deprecated)"
-      }
-    },
-    "/api/v1/wizard/drafts/{draft_id}/step": {
-      "put": {
-        "operationId": "update_draft_step_api_v1_wizard_drafts__draft_id__step_put",
-        "summary": "Update a wizard draft with step data (deprecated)"
-      }
-    },
-    "/api/v1/wizard/drafts/{draft_id}/submit": {
-      "post": {
-        "operationId": "submit_draft_api_v1_wizard_drafts__draft_id__submit_post",
-        "summary": "Submit a completed wizard draft to create an experiment (deprecated)"
-      }
-    },
-    "/api/v1/wizard/validate": {
-      "post": {
-        "operationId": "validate_step_api_v1_wizard_validate_post",
-        "summary": "Validate wizard step data (deprecated)"
       }
     },
     "/api/v1/workspaces/": {

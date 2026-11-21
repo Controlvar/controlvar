@@ -7,12 +7,17 @@ import { launchOptions } from "./tests/e2e/launch";
 /**
  * Playwright configuration for the Controlvar dashboard.
  *
- * Six projects:
+ * Seven projects:
  *   - `journeys` — the fail-hard PR journeys (`*.journey.spec.ts`), the
  *     required `browser-e2e` gate. Run them with `--project=journeys`.
  *   - `sso` — sign in with SSO from the dashboard (`*.sso.spec.ts`, C2b). It
  *     needs its own API process and the fake OIDC provider, which the
  *     `browser-e2e` job starts as steps; see tests/e2e/sso-sign-in.sso.spec.ts.
+ *   - `required-roles` — two-step sign-in required for a role
+ *     (`*.required-roles.spec.ts`, #1812). It needs its own API process,
+ *     started with LOCAL_AUTH_2FA_REQUIRED_ROLES, which the `browser-e2e` job
+ *     starts as a step, with PLAYWRIGHT_API_URL and PLAYWRIGHT_PORT pointing
+ *     at it and at a second served export.
  *   - `site` — the public site (`*.site.spec.ts`, #1459): phone width, axe
  *     and keyboard focus over the MARKETING export, which Frontend Tests has
  *     just built when it runs `--project=site`. Locally: `npm run
@@ -24,6 +29,14 @@ import { launchOptions } from "./tests/e2e/launch";
  *     default launch turns both off). The other projects keep the default
  *     launch. Frontend Tests runs it right after the `site` step, over the
  *     same export; no other workflow step does.
+ *   - `page-runtime` — the visual experiments' browser script, sdk/visual
+ *     (`*.runtime.spec.ts`, #1545), under the same launch override as
+ *     `launch`. Its specs load the script from the packed package, so they
+ *     need VISUAL_PACKAGE_DIR: the `package/` directory of sdk/visual's
+ *     `npm pack` tarball, unpacked (see tests/e2e/runtime/runtime.fixture.ts),
+ *     and the framework sites under tests/e2e/runtime/fixtures built (`node
+ *     tests/e2e/runtime/fixtures/build.mjs`). Browser E2E runs it after the
+ *     journeys and checks its counts; no other workflow step does.
  *   - `extended` — everything else under tests/e2e (accessibility and the
  *     older specs); nightly territory, not a PR gate, but a failure there
  *     fails the night.
@@ -119,16 +132,27 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
     {
+      // #1812: an API that requires two-step sign-in for a role, which the
+      // `browser-e2e` job starts as a step; see
+      // tests/e2e/two-step-required-role.required-roles.spec.ts.
+      name: "required-roles",
+      testMatch: /\.required-roles\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"] },
+    },
+    {
       name: "extended",
       testMatch: /\.spec\.ts$/,
       // The visual spec has its own project below, until its baselines exist.
       // The site spec needs the marketing export, which nightly does not build.
-      // The launch specs run in `launch`, under its override, and only there.
+      // The launch specs run in `launch`, under its override, and only there;
+      // the page-runtime specs likewise in `page-runtime`.
       testIgnore: [
         /\.journey\.spec\.ts$/,
         /\.sso\.spec\.ts$/,
+        /\.required-roles\.spec\.ts$/,
         /\.site\.spec\.ts$/,
         /\.launch\.spec\.ts$/,
+        /\.runtime\.spec\.ts$/,
         /visual-regression\.spec\.ts$/,
       ],
       use: { ...devices["Desktop Chrome"] },
@@ -149,6 +173,17 @@ export default defineConfig({
       // disables either feature.
       name: "launch",
       testMatch: /\.launch\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], launchOptions },
+    },
+    {
+      // #1545: sdk/visual, packed, in the browser users run. launchOptions is
+      // the `launch` project's object, unchanged: Chromium applies only the
+      // last --disable-features= argument, so a second one here would undo
+      // the override, and the launch fixture fails every test when it sees
+      // one. Each spec imports `test` from tests/e2e/runtime/runtime.fixture.ts,
+      // which extends the launch fixture (a backend unit test pins both).
+      name: "page-runtime",
+      testMatch: /\.runtime\.spec\.ts$/,
       use: { ...devices["Desktop Chrome"], launchOptions },
     },
     {

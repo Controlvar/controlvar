@@ -46,6 +46,10 @@ container (``docker compose exec -T api python -m backend.scripts.seed_<app>``),
 which writes their key files to the ``demo_keys`` volume. The StreamPulse
 server key is read from there by ``exec -T api cat``, into this process only
 (``Children.capture``): never logged, written to a file, or put on an argv.
+
+Video 11's setup dates the flags it made back with one ``exec -T postgres
+psql`` (``date_flags``): the statements ``stack.dating_statements`` builds,
+in one transaction, and nothing else.
 """
 
 from __future__ import annotations
@@ -60,7 +64,14 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from showcase.capture import build, config, guard
 from showcase.capture.procs import Children
-from showcase.capture.stack import Ports, StackError, _get, wait_until
+from showcase.capture.stack import (
+    Ports,
+    StackError,
+    _get,
+    dated_keys,
+    psql_argv,
+    wait_until,
+)
 
 #: The compose file the Quick Start runs, at the tree's root.
 COMPOSE_FILE = "docker-compose.yml"
@@ -702,6 +713,27 @@ class QuickstartStack:
         if app != "streampulse":
             return None
         return self.read_in_api(f"{KEY_DIR_IN_API}/{app}/{config.SERVER_KEY_FILE}")
+
+    def date_flags(self, rows: Sequence[Tuple[str, int, int]]) -> List[str]:
+        """Off camera: video 11's flags dated back in the project's own
+        Postgres service (``stack.dating_statements``, one transaction, as
+        the Quick Start's user and database: compose is given neither, so
+        both are the compose file's defaults); the keys the statements
+        returned, in order. Refused (StackError) when psql exits non-zero."""
+        argv = psql_argv(
+            self._compose(
+                "exec",
+                "-T",
+                "postgres",
+                "psql",
+                "-U",
+                "postgres",
+                "-d",
+                "experimentation",
+            ),
+            rows,
+        )
+        return dated_keys(self.docker.out("date-flags", argv))
 
     def read_in_api(self, path: str) -> str:
         """A key file in the API container, stripped, into this process only (PE C7)."""

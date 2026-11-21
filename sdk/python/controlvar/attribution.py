@@ -74,6 +74,15 @@ class AttributedKeys:
             if not answers[0] and not answers[1]:
                 del self._users[user_id]
 
+    def copy_experiments(self, from_user_id: str, to_user_id: str) -> None:
+        """After ``alias(from_user_id, to_user_id)`` (#449): record for ``to_user_id`` each
+        experiment key ``keys(from_user_id)`` gives (within the horizon, and not draft, paused,
+        completed or archived), as answered now, so its horizon starts at the alias. Flag keys
+        are not copied: flags are not linked. ``from_user_id``'s own keys are kept."""
+        experiments, _flags = self.keys(from_user_id)
+        for experiment_key in experiments:
+            self.record_experiment(to_user_id, experiment_key)
+
     def keys(self, user_id: str) -> Tuple[List[str], List[str]]:
         """The user's experiment keys and flag keys within the horizon, each in the
         order they were first answered. Keys past the horizon are dropped here."""

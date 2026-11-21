@@ -404,20 +404,28 @@ text = "One deployment is one environment: run staging and production as separat
 by = ["test:backend/tests/unit/api/test_documented_limits.py::test_flags_experiments_and_keys_carry_no_environment"]
 
 [[unit]]
-text = "A local account can turn on two-step sign-in, but nothing can require it for a role yet, and SAML sign-in is not available (OIDC is, with the sso module)."
+text = "Two-step sign-in can be required for chosen roles on Docker Compose, Helm and AWS CDK installs; SAML sign-in is not available (OIDC is, with the sso module)."
 by = [
-    "test:backend/tests/unit/api/test_documented_limits.py::test_a_local_account_can_turn_on_two_step_sign_in_but_no_role_requires_it",
-    "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_every_role_manages_its_own_and_only_a_superuser_resets_others",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_role_can_require_two_step_sign_in_on_compose_helm_and_cdk",
+    "test:backend/tests/integration/api/test_two_factor_required_roles_api.py::test_a_required_role_sets_it_up_at_its_first_sign_in",
     "test:modules/backend/tests/integration/api/test_sso_provisioning_scope.py::test_a_saml_acs_token_is_still_not_a_session",
     "test:modules/backend/tests/unit/services/test_sso_service.py::TestNonceInTheAuthorizationURL::test_an_oidc_provider_gets_the_nonce",
 ]
 
 [[unit]]
-text = "Nothing deletes events, assignments or audit records by age, and no tool erases one person's data."
+text = "Nothing deletes events, assignments or audit records by age."
 by = [
     "test:backend/tests/unit/api/test_documented_limits.py::test_only_analysis_history_and_evaluation_counters_are_deleted_by_age",
     "test:backend/tests/unit/api/test_documented_limits.py::test_nothing_calls_the_event_purge",
-    "test:backend/tests/unit/api/test_documented_limits.py::test_no_route_sets_retention_or_erases_a_users_data",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_one_route_erases_an_app_users_data_and_none_sets_retention",
+]
+
+[[unit]]
+text = "A superuser can erase one app user's data through the API (beta); there is no dashboard control."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_one_route_erases_an_app_users_data_and_none_sets_retention",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_only_a_superuser_may_erase",
+    "test:backend/tests/unit/services/test_app_user_erase_inventory.py::test_the_dashboard_has_no_control_for_the_erase",
 ]
 
 [[unit]]

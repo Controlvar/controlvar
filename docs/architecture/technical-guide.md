@@ -175,17 +175,59 @@ The results engine computes:
 
 **Conversion metrics (Fisher's exact test):**
 - Only a conversion metric is analysed as a proportion; a revenue, count, duration or custom
-  metric is its mean per assigned user, compared with Welch's t-test
+  metric is its mean per assigned user, compared with a permutation test of Welch's t
 - For each treatment against the control: a 2×2 table of users who converted and users who did
   not, from the users assigned to each variant
 - Two-sided Fisher's exact test (`scipy.stats.fisher_exact`); the response's
   `statistical_test_used` is `fisher_exact`
 - Effect size: Cohen's h
 
-**Mean metrics (Welch's t-test):**
+**Mean metrics (a permutation test of Welch's t, engine 1.13.0):**
 - Used by the results for a revenue, count, duration or custom metric (its mean per assigned
-  user), and by warehouse analysis (beta, the `warehouse` module) for a metric that is a mean
-- Welch's t-test for unequal variances; `statistical_test_used` is `welch_t_test`
+  user); `statistical_test_used` is `permutation_t_test`
+- The statistic is Welch's t, the difference of the means over
+  `sqrt(v_t / n_t + v_c / n_c)` with each variance taken over every assigned user (0 for a user
+  with no value)
+- The users of the two variants are reassigned at random B times, each variant keeping its
+  number of users, and t is computed for each reassignment
+- The p-value is twice the smaller tail, counting the observed assignment:
+  `min(1, 2 * min(1 + #{t* >= t}, 1 + #{t* <= t}) / (B + 1))`; a reassignment's t within
+  1e-9 of the observed one (relative, at least 1e-9 absolute) counts in both tails
+- The test reads a user's total as 0 when it is within 1e-9 of 0, relative to the largest
+  total of the metric (at least 1e-9 absolute), so a total that sums to 0 in one order and to a
+  rounding residue in another gives the same p-value
+- When a metric's largest per-user total M is large, totals at or below 1e-9·M count as 0
+  only in the test: at M = 1e9 that is every total of 1 or less, at M = 1e12 every total of
+  1,000 or less. The reported mean, standard deviation, conversions and intervals use every
+  total.
+- A net-zero user whose individual events are much larger than M (about a million times or
+  more) can still count as listed or not, depending on summation order. Exact summation would
+  close this, and is not done.
+- B + 1 is `max(2000, 2000 * ceil(4k / (2000 * alpha)))`, with k the metric's treatments that
+  get a p-value and alpha 1 minus the confidence level, worked out in whole numbers on alpha
+  rounded to 9 decimal places, so B is 1,999 for one treatment at 0.95 and 3,999 for six at
+  0.99. So the smallest p-value, 2 / (B + 1) (0.001 at 1,999), stays significant after the
+  correction
+- The random draws are seeded from the comparison's identity and its counts, never from the
+  values or the day: the same data gives the same p-value in every request, process and day
+- A running experiment's p-value near 0.05 can move by about ±0.015 between refreshes as data
+  arrives, because each new count re-draws the permutations
+- The cost is linear in K, the users with a non-zero value (for a dense metric, every user),
+  and in B; the table is one Apple M5 Pro core; a Fargate vCPU is likely slower:
+
+| Users with a value (K) | 10/90 split | 50/50 split |
+|---|---|---|
+| 3,000 | 13 ms | 44 ms |
+| 30,000 | 37 ms | 0.12 s |
+| 300,000 | 0.46 s | 1.4 s |
+| 1,000,000 | 2.4 s | 8.5 s |
+
+- At 30,000 users with a value and a 50/50 split, 7,999 permutations take 0.48 s and 39,999
+  take 2.5 s
+- The interval on the difference stays Welch's, so it and `is_significant` can disagree, most
+  often at a lopsided split
+- Warehouse analysis (beta, the `warehouse` module) has only each variant's sums, so a mean
+  there is compared with Welch's t-test; its `statistical_test_used` is `welch_t_test`
 - Effect size: Cohen's d
 
 **Multiple comparisons correction:**
@@ -223,7 +265,7 @@ Five background jobs start with the API process (`lifespan` in `backend/app/main
 | Rollout scheduler | `ROLLOUT_CHECK_INTERVAL_MINUTES` (15) | Advances feature-flag rollout stages |
 | Metrics scheduler | 15 min | Aggregates raw metrics |
 | Safety monitor | `SAFETY_CHECK_INTERVAL_MINUTES` (5) | Checks each active feature flag against its safety thresholds; rolls one back when automatic rollbacks are on |
-| Bandit scheduler | `BANDIT_UPDATE_INTERVAL_MINUTES` (5) | Recomputes multi-armed bandit weights (DynamoDB counters when their pulls and successes are at least PostgreSQL's, else PostgreSQL) |
+| Bandit scheduler | `BANDIT_UPDATE_INTERVAL_MINUTES` (5) | Recomputes multi-armed bandit weights (PostgreSQL assignments + converting users; DynamoDB counters only when PostgreSQL has no assignments or cannot be read) |
 
 ### Experiment Scheduler (every `EXPERIMENT_SCHEDULER_INTERVAL_MINUTES`, default 15)
 

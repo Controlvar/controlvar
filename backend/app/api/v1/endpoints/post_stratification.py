@@ -4,7 +4,7 @@ Post-Stratification & BH FDR Correction endpoints — EP-043.
 Provides:
   POST /results/{experiment_id}/post-stratification
       Not available yet: answers 501 (no per-user stratum data exists).
-      Deprecated in the API document (#963).
+      Left out of the API document (#963).
 
   POST /results/{experiment_id}/fdr-correction
       Apply Benjamini-Hochberg FDR correction to a set of per-metric p-values.
@@ -67,8 +67,10 @@ def _get_experiment_or_404(experiment_id: UUID, db: Session) -> Experiment:
 # ---------------------------------------------------------------------------
 
 
+# #963: not in the API document until it is computed from an experiment's own data; it still answers 501
 @router.post(
     "/{experiment_id}/post-stratification",
+    include_in_schema=False,
     response_model=PostStratResultResponse,
     summary="Post-stratification variance reduction, not available yet (deprecated)",
     deprecated=True,

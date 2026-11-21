@@ -1,3 +1,8 @@
+---
+title: SDK Integration Guide, experiments, flags and events
+description: "How the Controlvar SDKs assign users to experiments, evaluate feature flags and track events with an API key: the endpoint contract and each SDK's status."
+---
+
 # SDK Integration Guide
 
 SDKs integrate experiment assignment, feature-flag evaluation and event tracking into your application.
@@ -20,11 +25,19 @@ No other SDK buckets locally, and experiments are always assigned by the server.
 | Track one event | `POST /api/v1/tracking/track` | `{event_type, event_name?, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?, event_id?}` | stored event, with `duplicate` and `event_id` |
 | Track up to 100 events | `POST /api/v1/tracking/batch` | `{events: [...]}` | `{success_count, failure_count, duplicate_count, errors}` |
 | A user's assignments | `GET /api/v1/tracking/assignments/{user_id}` | — | list |
+| Link an anonymous id to a known user id (beta) | `POST /api/v1/tracking/alias` | `{anonymous_id, user_id}` | `{anonymous_id, user_id, created}` |
 
 Each entry of the batch response's `errors` is `{index, event_type, user_id, error}`. `error` says
 why the item was refused (for example, a key that was given was not found), or reads
 `Could not store this event (request ID: <id>).` when the server failed to store it; quote that ID
 when you report the failure.
+
+[Linking two ids](guides/identity.md) needs a server-side key, one with the `sdk:ruleset` scope whose owner can change
+feature flags: call it from your backend
+([Link an Anonymous Id to a Known User Id](api/endpoints.md#link-an-anonymous-id-to-a-known-user-id-beta)).
+The JavaScript and Python SDKs have an `alias` method for it in the source tree only: it is not in
+the published packages, `@controlvar/js-sdk@0.3.0` and `controlvar==0.3.0`, and arrives with each
+package's next release. From any other SDK, and from those two until then, call the route itself.
 
 On `/tracking/track`, `/tracking/batch` and `/tracking/events` an event's `metadata` may be at most
 16,384 bytes as compact JSON in UTF-8 and nest at most 64 levels

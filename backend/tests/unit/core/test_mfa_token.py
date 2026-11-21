@@ -18,6 +18,8 @@ import pytest
 from backend.app.core import mfa_token
 from backend.app.core.config import settings
 from backend.app.core.mfa_token import (
+    ENROL_PURPOSE,
+    ENROL_TTL_SECONDS,
     MFA_TOKEN_ISSUER,
     VERIFY_PURPOSE,
     VERIFY_TTL_SECONDS,
@@ -67,11 +69,26 @@ def test_its_claims_are_exactly_these():
         algorithms=["HS256"],
         issuer=MFA_TOKEN_ISSUER,
     )
-    assert set(claims) == {"sub", "iss", "purpose", "iat", "exp", "jti"}
+    assert set(claims) == {"sub", "iss", "purpose", "iat", "exp", "jti", "pwv"}
     assert claims["sub"] == str(user.id)
     assert claims["purpose"] == "verify"
     assert claims["exp"] - claims["iat"] == VERIFY_TTL_SECONDS == 300
     assert len(claims["jti"]) == 32
+    # The account's password stamp (#501), the same value an access token
+    # for the account carries.
+    assert claims["pwv"] == decode_local_token(create_local_access_token(user))["pwv"]
+
+
+def test_a_token_without_the_password_stamp_is_still_accepted():
+    """``pwv`` is not a required claim (#501): a token made before it existed
+    still names its account, and the routes accept it until it expires."""
+    user = _user()
+    token = jwt.encode(_claims(sub=str(user.id)), mfa_token_key(), algorithm="HS256")
+    assert "pwv" not in jwt.decode(
+        token, mfa_token_key(), algorithms=["HS256"], issuer=MFA_TOKEN_ISSUER
+    )
+    assert decode_mfa_token(token) == user.id
+    assert "pwv" not in mfa_token.decode_mfa_token_claims(token)
 
 
 def test_it_is_not_signed_with_the_secret_key():
@@ -114,6 +131,33 @@ def test_a_token_of_another_purpose_is_refused():
     with pytest.raises(InvalidMfaToken):
         decode_mfa_token(token)
     assert decode_mfa_token(token, purpose="enrol")
+
+
+@pytest.mark.regression
+def test_the_enrol_purpose_lasts_ten_minutes_and_is_only_its_own():
+    """A role that requires two-step sign-in (#1812): ``enrol`` tokens, 600
+    seconds, refused where a verify token is read and the other way round."""
+    user = _user()
+    token = create_mfa_token(user, purpose=ENROL_PURPOSE, ttl_seconds=ENROL_TTL_SECONDS)
+    claims = jwt.decode(
+        token, mfa_token_key(), algorithms=["HS256"], issuer=MFA_TOKEN_ISSUER
+    )
+    assert (ENROL_PURPOSE, ENROL_TTL_SECONDS) == ("enrol", 600)
+    assert claims["purpose"] == "enrol"
+    assert claims["exp"] - claims["iat"] == 600
+    assert decode_mfa_token(token, purpose=ENROL_PURPOSE) == user.id
+    with pytest.raises(InvalidMfaToken):
+        decode_mfa_token(token, purpose=VERIFY_PURPOSE)
+    with pytest.raises(InvalidMfaToken):
+        decode_mfa_token(create_mfa_token(user), purpose=ENROL_PURPOSE)
+    with pytest.raises(InvalidTokenError):
+        decode_local_token(token)
+    past = datetime.now(timezone.utc) - timedelta(seconds=ENROL_TTL_SECONDS + 5)
+    expired = create_mfa_token(
+        user, purpose=ENROL_PURPOSE, ttl_seconds=ENROL_TTL_SECONDS, now=past
+    )
+    with pytest.raises(InvalidMfaToken):
+        decode_mfa_token(expired, purpose=ENROL_PURPOSE)
 
 
 def test_a_token_signed_with_another_key_is_refused():

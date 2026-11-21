@@ -3,6 +3,7 @@ import { PageTitle } from '@/components/PageTitle';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { useDemoMode } from '@/contexts/AuthConfigContext';
 import { DemoNote } from '@/components/DemoNote';
+import { setToken } from '@/services/api';
 import {
   NOT_LOCAL_SENTENCE,
   PASSWORD_RULES,
@@ -21,6 +22,17 @@ const inputClass =
  * Change your own password (local sign-in). Every outcome is shown as one of
  * the fixed sentences in `@/services/password`; no response text reaches the
  * screen.
+ *
+ * The change signs out every session of the account (#501), and this tab's
+ * session changes only through the AuthContext:
+ * - an answer with a new access token: the token is stored and the session
+ *   checked again (`refresh`), and only then does the page say it is done.
+ *   Re-checking, rather than storing alone, also brings this tab back if
+ *   another tab's sign-out cleared the stored token while the change was on
+ *   its way;
+ * - an answer without one: the page says every session has ended and offers
+ *   Sign in, which signs this tab out (`logout`) and so opens the sign-in
+ *   form. Nothing is cleared before that.
  */
 export default function ChangePasswordPage() {
   const auth = useOptionalAuth();
@@ -66,19 +78,32 @@ export default function ChangePasswordPage() {
     setSaving(true);
     setResult(null);
     try {
-      await changeOwnPassword(current, next);
+      let token: string | null;
+      try {
+        token = await changeOwnPassword(current, next);
+      } catch (err) {
+        setResult(classifyPasswordError(err));
+        return;
+      }
       setCurrent('');
       setNext('');
       setConfirm('');
-      setResult({ outcome: 'changed' });
-    } catch (err) {
-      setResult(classifyPasswordError(err));
+      if (token) {
+        // The session that sent the change has ended; this token continues it.
+        setToken(token);
+        await auth?.refresh();
+        setResult({ outcome: 'changed' });
+      } else {
+        setResult({ outcome: 'signed-out' });
+      }
     } finally {
       setSaving(false);
     }
   };
 
-  const changed = result?.outcome === 'changed';
+  const signedOut = result?.outcome === 'signed-out';
+  // Either way the password has been changed: a status, not an alert.
+  const done = result?.outcome === 'changed' || signedOut;
 
   return (
     <div className="flex-1 bg-slate-50" data-testid="change-password-page">
@@ -148,17 +173,30 @@ export default function ChangePasswordPage() {
               <div
                 ref={outcomeRef}
                 tabIndex={-1}
-                role={changed ? 'status' : 'alert'}
+                role={done ? 'status' : 'alert'}
                 data-testid="change-password-outcome"
                 data-outcome={result.outcome}
                 className={[
                   'rounded-md border px-3 py-2 text-sm focus:outline-none',
-                  changed
+                  done
                     ? 'border-green-200 bg-green-50 text-green-800'
                     : 'border-red-200 bg-red-50 text-red-800',
                 ].join(' ')}
               >
                 {passwordOutcomeSentence(result)}
+              </div>
+            )}
+
+            {signedOut && (
+              <div>
+                <button
+                  type="button"
+                  data-testid="change-password-sign-in"
+                  onClick={() => void auth?.logout()}
+                  className="px-4 py-2 rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700"
+                >
+                  Sign in
+                </button>
               </div>
             )}
 

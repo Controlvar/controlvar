@@ -23,7 +23,7 @@ export default {
   fetch: createDenoHandler(
     async (request: Request, client: DenoExperimentationClient): Promise<Response> => {
       const url = new URL(request.url);
-      const userId = request.headers.get('X-User-Id') ?? url.searchParams.get('userId') ?? 'anon';
+      const userId = request.headers.get('X-User-Id') ?? url.searchParams.get('userId') ?? crypto.randomUUID();
 
       if (url.pathname === '/health') {
         return new Response(
@@ -84,7 +84,8 @@ export async function manualHandler(request: Request): Promise<Response> {
     kvTtlMs: 300_000, // 5 minutes
   });
 
-  const userId = request.headers.get('X-User-Id') ?? 'anonymous';
+  // Keep the visitor's id in a cookie, so that each request does not store a fresh assignment
+  const userId = request.headers.get('X-User-Id') ?? crypto.randomUUID();
   const assignment = await client.getAssignment('checkout_flow', userId);
   const { enabled } = await client.evaluateFlag('my-feature', userId);
 

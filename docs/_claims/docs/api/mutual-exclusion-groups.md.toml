@@ -609,6 +609,14 @@ text = "The SDKs' key-less track() sends it for held-out users too."
 by = ["test:sdk/js/__tests__/client.test.ts"]
 
 [[unit]]
+text = "For an anonymous id and a known id linked as one person (POST /api/v1/tracking/alias, beta): holdout membership follows the person; holdout results do not: a linked person's conversions count only under the id the holdout first recorded."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_counting.py::test_holdout_results_count_a_linked_person_under_its_recorded_id",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_holdout_membership_comes_from_the_persons_first_population_row",
+    "test:backend/tests/integration/api/test_identity_alias_counting.py::test_a_linked_persons_holdout_follows_the_first_recorded_row",
+]
+
+[[unit]]
 text = "difference is \"not in holdout\" minus \"in holdout\": a positive value means the running experiments raised the metric."
 by = ["test:backend/tests/unit/services/test_holdout_results_estimator.py::test_a1_planted_lift_is_fisher_and_agresti_caffo"]
 

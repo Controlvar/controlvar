@@ -524,28 +524,31 @@ def test_the_segment_results_route_is_beta_and_adds_only_its_two_components(
 POST_STRATIFICATION_PATH = "/api/v1/results/{experiment_id}/post-stratification"
 
 
+FDR_CORRECTION_PATH = "/api/v1/results/{experiment_id}/fdr-correction"
+POST_STRATIFICATION_COMPONENTS = {
+    "PostStratificationRequest",
+    "PostStratResultResponse",
+}
+
+
 @pytest.mark.regression
-def test_the_post_stratification_route_is_deprecated_in_the_published_documents(
+def test_the_post_stratification_route_is_not_in_the_published_documents(
     stable_snapshot, full_snapshot, core_document
 ):
-    """#963: the post-stratification route is deprecated in both snapshots, as
-    the live core document serves it (a beta route's change only warns in the
-    comparison above, so this compares it exactly): ``"deprecated": true``, a
-    summary ending in "(deprecated)" and a description that says why, as the
-    API stability rules ask of a deprecated operation. It stays beta and still
-    documents its 501."""
-    live = core_document["paths"][POST_STRATIFICATION_PATH]["post"]
+    """#963: the post-stratification route is left out of both snapshots and
+    out of the live core document, with the two components only it used (a
+    beta route's change only warns in the comparison above, so this compares
+    it exactly). The route is still mounted and answers 501; the sibling
+    ``fdr-correction`` route on the same router stays listed, so the test
+    cannot pass because the whole router went missing."""
     for name, document in (
         ("openapi-v1.stable.json", stable_snapshot),
         ("openapi-v1.full.json", full_snapshot),
         ("the live core document", core_document),
     ):
-        operation = document["paths"][POST_STRATIFICATION_PATH]["post"]
-        assert operation.get("deprecated") is True, name
-        assert operation["summary"].endswith("(deprecated)"), name
-        assert operation["description"].startswith(
-            "**Deprecated**, because it is not available: this route answers 501"
-        ), name
-        assert operation.get("x-stability") == "beta", name
-        assert "501" in operation["responses"], name
-        assert operation == live, f"{name}: the post-stratification route differs"
+        assert POST_STRATIFICATION_PATH not in document["paths"], name
+        components = set(document.get("components", {}).get("schemas", {}))
+        assert not components & POST_STRATIFICATION_COMPONENTS, (
+            f"{name}: {sorted(components & POST_STRATIFICATION_COMPONENTS)}"
+        )
+        assert "post" in document["paths"][FDR_CORRECTION_PATH], name

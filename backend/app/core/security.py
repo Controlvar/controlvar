@@ -17,21 +17,34 @@ Security notes:
       remotely by ``CognitoAuthService``.  ``decode_token`` below is a stub
       that exists only so legacy tests can monkeypatch it; it MUST NOT be used
       for real validation.
+- A local access token, and the short token between the two steps of a
+  two-step sign-in (``core.mfa_token``), carry the account's password stamp
+  in the ``pwv`` claim (#501): a keyed digest of the account id and the
+  stored ``hashed_password`` (:func:`password_stamp`). A token whose stamp no
+  longer matches the account is refused (:func:`stamp_is_current`), so any
+  write to ``hashed_password`` signs out every session of that account, on
+  every path, raw SQL included. Two consequences: a rehash of passwords at
+  sign-in, or any bulk rewrite of ``hashed_password``, signs every account it
+  touches out, each time it runs; and the stamp's format (its ``info``
+  string, length and encoding) is part of the token format, so changing it
+  signs everyone out once.
 """
 
+import base64
 import hashlib
 import hmac
 import logging
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Mapping, Optional
 
 import bcrypt
 import jwt
 from fastapi.security import OAuth2PasswordBearer
 
 from backend.app.core.config import settings
+from backend.app.core.two_factor_keys import derive_key
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +57,14 @@ _BCRYPT_ROUNDS = 12
 # against the local provider.
 LOCAL_TOKEN_ISSUER = "experimently-local"
 LOCAL_TOKEN_ALGORITHM = "HS256"
+
+# The password stamp (#501). The claim's name, the ``info`` of the key it is
+# computed with (HKDF-SHA256 of SECRET_KEY, ``two_factor_keys.derive_key``),
+# and its length in characters: 16 bytes of HMAC-SHA256, base64url without
+# padding. All three are part of the token format.
+PASSWORD_STAMP_CLAIM = "pwv"
+PASSWORD_STAMP_INFO = b"controlvar-access-token-pwv-v1"
+PASSWORD_STAMP_LENGTH = 22
 
 # OAuth2 password bearer scheme.  ``auto_error=False`` so that the absence of
 # a token reaches ``deps.get_current_user``, which decides between the
@@ -131,6 +152,63 @@ def role_name(role: Any) -> str:
     return str(role).upper()
 
 
+def password_stamp(user: Any) -> str:
+    """
+    The password stamp of *user*: the value of the ``pwv`` claim.
+
+    The first 16 bytes of HMAC-SHA256 over the account's 16-byte UUID followed
+    by the UTF-8 bytes of its stored ``hashed_password`` (none when it has no
+    password), keyed with HKDF-SHA256 of ``SECRET_KEY`` for
+    ``PASSWORD_STAMP_INFO``; base64url without padding, 22 characters. The key
+    is derived on each call, as ``two_factor_keys`` does, so it follows
+    ``SECRET_KEY``. It changes exactly when the stored hash changes: bcrypt
+    salts every hash, so setting the same password again changes it too.
+
+    Args:
+        user: A ``User`` model instance (anything with ``id`` and
+            ``hashed_password``).
+
+    Returns:
+        The stamp, 22 ASCII characters.
+    """
+    key = derive_key(PASSWORD_STAMP_INFO)
+    stored = getattr(user, "hashed_password", None)
+    if not isinstance(stored, str):
+        stored = ""
+    message = uuid.UUID(str(user.id)).bytes + stored.encode("utf-8")
+    digest = hmac.new(key, message, hashlib.sha256).digest()[:16]
+    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+
+
+def stamp_is_current(claims: Mapping[str, Any], user: Any) -> bool:
+    """
+    Whether the ``pwv`` claim of a decoded token matches *user* as it is now.
+
+    * no ``pwv`` claim: ``True`` (see the comment below);
+    * a claim that is not a string of exactly ``PASSWORD_STAMP_LENGTH`` ASCII
+      characters: ``False``;
+    * otherwise the claim compared with :func:`password_stamp` in constant
+      time. A failure to compute the expected stamp is ``False``.
+    """
+    if PASSWORD_STAMP_CLAIM not in claims:
+        # Tokens minted before this release carry no stamp and are accepted
+        # until they expire. Requiring the claim is a separate, later change;
+        # it would refuse every token minted before it.
+        return True
+    claim = claims[PASSWORD_STAMP_CLAIM]
+    if (
+        not isinstance(claim, str)
+        or len(claim) != PASSWORD_STAMP_LENGTH
+        or not claim.isascii()
+    ):
+        return False
+    try:
+        expected = password_stamp(user)
+    except (TypeError, ValueError):
+        return False
+    return hmac.compare_digest(claim.encode("ascii"), expected.encode("ascii"))
+
+
 def create_local_access_token(
     user: Any, *, expires_minutes: Optional[int] = None
 ) -> str:
@@ -138,10 +216,12 @@ def create_local_access_token(
     Issue an HS256 JWT for *user* signed with ``settings.SECRET_KEY``.
 
     Claims: ``sub`` (user id as string UUID), ``email``, ``role``, ``iss``
-    (``experimently-local``), ``iat``, ``exp`` and a random ``jti``.
+    (``experimently-local``), ``iat``, ``exp``, a random ``jti`` and ``pwv``
+    (:func:`password_stamp`).
 
     Args:
-        user: A ``User`` model instance (anything with ``id``, ``email``, ``role``).
+        user: A ``User`` model instance (anything with ``id``, ``email``,
+            ``role`` and ``hashed_password``).
         expires_minutes: Override for ``LOCAL_AUTH_TOKEN_TTL_MINUTES``.
 
     Returns:
@@ -161,6 +241,7 @@ def create_local_access_token(
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(minutes=ttl)).timestamp()),
         "jti": uuid.uuid4().hex,
+        PASSWORD_STAMP_CLAIM: password_stamp(user),
     }
     return jwt.encode(claims, settings.SECRET_KEY, algorithm=LOCAL_TOKEN_ALGORITHM)
 

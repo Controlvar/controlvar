@@ -260,8 +260,10 @@ def _live_contract_sdks() -> list:
     return found[0]
 
 
-#: Directories under sdk/ that are not SDKs, so not counted as one.
-NOT_SDKS = {"mcp"}
+#: Directories under sdk/ that are not SDKs, so not counted as one: the MCP
+#: server, and the visual experiments' browser script (#1545), which a site
+#: loads with a script tag and which is not published.
+NOT_SDKS = {"mcp", "visual"}
 
 
 def test_thirteen_of_the_sixteen_sdks_run_the_live_contract():

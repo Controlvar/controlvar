@@ -98,6 +98,8 @@ interface Call {
 let calls: Call[];
 let keys: ApiKey[];
 let failNext: { method: string; status: number; detail: string } | null;
+/** While set, a DELETE waits for it: a revoke that is still in flight. */
+let holdDelete: Promise<void> | null;
 
 function respond(status: number, body?: unknown): Response {
   return {
@@ -149,6 +151,7 @@ function installApi(user: UserMe = VIEWER) {
       return respond(201, created);
     }
     if (path.startsWith(`${KEYS}/`) && method === 'DELETE') {
+      if (holdDelete) await holdDelete;
       const id = decodeURIComponent(path.slice(KEYS.length + 1));
       keys = keys.filter((k) => k.id !== id);
       return respond(204);
@@ -205,6 +208,7 @@ beforeEach(() => {
   calls = [];
   keys = [];
   failNext = null;
+  holdDelete = null;
   mockFetch.mockReset();
   mockReplace.mockClear();
   localStorage.clear();
@@ -534,14 +538,14 @@ describe('V-UI3: the keyboard reaches every control in order, and focus goes whe
     expect(revoke).toHaveFocus();
     expect(revoke).toHaveAccessibleName('Revoke old laptop');
 
-    // The confirmation takes focus, is named by its heading, and Escape
-    // closes it and returns focus to the button that opened it.
+    // The confirmation takes focus on Cancel, is named by its heading and
+    // described by its sentence, and Escape closes it and returns focus to the
+    // button that opened it.
     await user.keyboard('{Enter}');
     const confirm = screen.getByTestId('own-key-revoke-confirm');
-    expect(confirm).toHaveFocus();
-    expect(confirm).toHaveAccessibleName('Revoke old laptop?');
-    await user.tab();
     expect(screen.getByTestId('own-key-revoke-cancel')).toHaveFocus();
+    expect(confirm).toHaveAccessibleName('Revoke old laptop?');
+    expect(confirm).toHaveAccessibleDescription(/stops working at once/);
     await user.tab();
     expect(screen.getByTestId('own-key-revoke-yes')).toHaveFocus();
     await user.keyboard('{Escape}');
@@ -549,16 +553,16 @@ describe('V-UI3: the keyboard reaches every control in order, and focus goes whe
     expect(revoke).toHaveFocus();
     expect(keyCalls('DELETE')).toHaveLength(0);
 
-    // Cancel by keyboard returns focus too.
+    // Cancel by keyboard returns focus too: the question opens on Cancel, so
+    // Enter again presses it.
     await user.keyboard('{Enter}');
-    await user.tab();
     await user.keyboard('{Enter}');
     expect(screen.queryByTestId('own-key-revoke-confirm')).not.toBeInTheDocument();
     expect(revoke).toHaveFocus();
 
-    // Revoke by keyboard: focus goes to the list's heading, with the outcome.
+    // Revoke by keyboard: one Tab from Cancel reaches Revoke key, and focus
+    // goes to the list's heading, with the outcome.
     await user.keyboard('{Enter}');
-    await user.tab();
     await user.tab();
     await user.keyboard('{Enter}');
     await screen.findByTestId('own-key-revoked');
@@ -585,5 +589,67 @@ describe('V-UI3: the keyboard reaches every control in order, and focus goes whe
     await user.keyboard('{Enter}');
     expect(screen.queryByTestId('own-key-revealed')).not.toBeInTheDocument();
     expect(screen.getByTestId('own-key-name')).toHaveFocus();
+  });
+});
+
+describe('the revoke question moves focus and answers Escape (#1797)', () => {
+  it('Escape from the focused Cancel closes it, sends nothing, and returns focus to that key\'s button', async () => {
+    keys = [makeKey({ id: 'k-1', name: 'old laptop' }), makeKey({ id: 'k-2', name: 'ci' })];
+    await openPage();
+    fireEvent.click(await screen.findByTestId('own-key-revoke-k-2'));
+    const cancel = screen.getByTestId('own-key-revoke-cancel');
+    expect(cancel).toHaveFocus();
+    fireEvent.keyDown(cancel, { key: 'Escape' });
+    expect(screen.queryByTestId('own-key-revoke-confirm')).not.toBeInTheDocument();
+    expect(screen.getByTestId('own-key-revoke-k-2')).toHaveFocus();
+    expect(keyCalls('DELETE')).toHaveLength(0);
+  });
+
+  it('while the DELETE is in flight, two activations send one request and Cancel and Escape wait', async () => {
+    let release: () => void = () => undefined;
+    holdDelete = new Promise<void>((resolve) => (release = resolve));
+    keys = [makeKey({ id: 'k-1', name: 'old laptop' })];
+    await openPage();
+    fireEvent.click(await screen.findByTestId('own-key-revoke-k-1'));
+    const yes = screen.getByTestId('own-key-revoke-yes');
+    await act(async () => {
+      fireEvent.click(yes);
+    });
+    await waitFor(() => expect(keyCalls('DELETE')).toHaveLength(1));
+    // aria-disabled, not disabled: the button keeps focus and Escape still reaches the panel.
+    expect(yes).toHaveAttribute('aria-disabled', 'true');
+    expect(yes).not.toBeDisabled();
+    fireEvent.click(yes);
+    fireEvent.click(yes);
+    fireEvent.click(screen.getByTestId('own-key-revoke-cancel'));
+    // Cancel waits for the request: the question is still on screen.
+    expect(screen.queryByTestId('own-key-revoke-confirm')).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByTestId('own-key-revoke-cancel'), { key: 'Escape' });
+    expect(screen.getByTestId('own-key-revoke-confirm')).toBeInTheDocument();
+    expect(keyCalls('DELETE')).toHaveLength(1);
+    await act(async () => {
+      release();
+    });
+    await waitFor(() => expect(screen.queryByTestId('own-key-revoke-confirm')).not.toBeInTheDocument());
+    expect(keyCalls('DELETE')).toHaveLength(1);
+    expect(screen.getByTestId('own-key-revoked')).toHaveTextContent('Revoked old laptop.');
+  });
+
+  it('opener gone: when a reload drops the key under the open question, Escape lands on the first listed key', async () => {
+    keys = [makeKey({ id: 'k-1', name: 'old laptop' }), makeKey({ id: 'k-2', name: 'ci' })];
+    await openPage();
+    fireEvent.click(await screen.findByTestId('own-key-revoke-k-1'));
+    const cancel = screen.getByTestId('own-key-revoke-cancel');
+    // Another session revoked k-1; creating a key reloads the list.
+    keys = [keys[1]];
+    await createKey('desktop');
+    await waitFor(() => expect(screen.queryByTestId('own-key-revoke-k-1')).not.toBeInTheDocument());
+    await screen.findByTestId('own-key-revoke-k-new-2');
+    // The user tabs back to the question, which is still open, and presses Escape.
+    cancel.focus();
+    fireEvent.keyDown(cancel, { key: 'Escape' });
+    expect(screen.queryByTestId('own-key-revoke-confirm')).not.toBeInTheDocument();
+    expect(screen.getByTestId('own-key-revoke-k-new-2')).toHaveFocus();
+    expect(keyCalls('DELETE')).toHaveLength(0);
   });
 });

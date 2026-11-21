@@ -141,11 +141,11 @@ step: [Guided examples](docs/guides/guided-examples.md).
   allocation.
 - One deployment is one environment: run staging and production as separate deployments, each
   with its own API keys.
-- A local account can turn on two-step sign-in, but nothing can require it for a role yet, and
-  SAML sign-in is not available (OIDC is, with the `sso` module).
-- Nothing deletes events, assignments or audit records by age, and no tool erases one person's
-  data. The platform's own analysis history is purged after `ANALYSIS_HISTORY_RETENTION_DAYS`
-  (90 days by default).
+- Two-step sign-in can be required for chosen roles on Docker Compose, Helm and AWS CDK
+  installs; SAML sign-in is not available (OIDC is, with the `sso` module).
+- Nothing deletes events, assignments or audit records by age. A superuser can erase one app
+  user's data through the API (beta); there is no dashboard control. The platform's own
+  analysis history is purged after `ANALYSIS_HISTORY_RETENTION_DAYS` (90 days by default).
 
 [Limitations](docs/getting-started/limitations.md) lists these and the rest, with what happens
 instead.

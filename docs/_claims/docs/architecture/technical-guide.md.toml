@@ -262,7 +262,7 @@ text = "Conversion metrics (Fisher's exact test):"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Only a conversion metric is analysed as a proportion; a revenue, count, duration or custom metric is its mean per assigned user, compared with Welch's t-test"
+text = "Only a conversion metric is analysed as a proportion; a revenue, count, duration or custom metric is its mean per assigned user, compared with a permutation test of Welch's t"
 by = ["test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_every_type_but_conversion_as_a_mean"]
 
 [[unit]]
@@ -281,19 +281,124 @@ text = "Effect size: Cohen's h"
 by = ["test:backend/tests/unit/services/test_binomial_effect_size.py::test_every_metric_is_a_fisher_test_on_conversions_with_cohens_h"]
 
 [[unit]]
-text = "Mean metrics (Welch's t-test):"
-by = ["exempt:baseline"]
+text = "Mean metrics (a permutation test of Welch's t, engine 1.13.0):"
+by = ["exempt:label"]
 
 [[unit]]
-text = "Used by the results for a revenue, count, duration or custom metric (its mean per assigned user), and by warehouse analysis (beta, the warehouse module) for a metric that is a mean"
+text = "Used by the results for a revenue, count, duration or custom metric (its mean per assigned user); statistical_test_used is permutation_t_test"
 by = [
     "test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_every_type_but_conversion_as_a_mean",
-    "test:backend/tests/unit/services/test_mean_metric_result.py",
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_a_lopsided_split_names_a_false_winner_no_more_often_than_alpha",
 ]
 
 [[unit]]
-text = "Welch's t-test for unequal variances; statistical_test_used is welch_t_test"
-by = ["exempt:baseline"]
+text = "The statistic is Welch's t, the difference of the means over sqrt(v_t / n_t + v_c / n_c) with each variance taken over every assigned user (0 for a user with no value)"
+by = [
+    "test:backend/tests/unit/stats_validation/test_permutation_test.py::test_the_statistic_is_welchs_t_not_a_raw_difference",
+    "test:backend/tests/unit/stats_validation/test_permutation_test.py::test_ties_and_the_equal_tailed_rule_hold_in_exact_arithmetic",
+]
+
+[[unit]]
+text = "The users of the two variants are reassigned at random B times, each variant keeping its number of users, and t is computed for each reassignment"
+by = [
+    "test:backend/tests/unit/stats_validation/test_permutation_test.py::test_ties_and_the_equal_tailed_rule_hold_in_exact_arithmetic",
+    "test:backend/tests/unit/services/test_revenue_per_user.py::test_revenue_per_user_matches_scipy_on_the_per_user_values",
+]
+
+[[unit]]
+text = "The p-value is twice the smaller tail, counting the observed assignment: min(1, 2 min(1 + #{t >= t}, 1 + #{t <= t}) / (B + 1)); a reassignment's t within 1e-9 of the observed one (relative, at least 1e-9 absolute) counts in both tails"
+by = [
+    "test:backend/tests/unit/stats_validation/test_permutation_test.py::test_ties_and_the_equal_tailed_rule_hold_in_exact_arithmetic",
+    "test:backend/tests/unit/stats_validation/test_permutation_test.py::test_the_p_value_is_capped_at_1",
+]
+
+[[unit]]
+text = "The test reads a user's total as 0 when it is within 1e-9 of 0, relative to the largest total of the metric (at least 1e-9 absolute), so a total that sums to 0 in one order and to a rounding residue in another gives the same p-value"
+by = [
+    "test:backend/tests/unit/stats_validation/test_permutation_test.py::test_a_net_zero_user_counts_as_zero_in_every_summation_order",
+    "test:backend/tests/unit/stats_validation/test_permutation_test.py::test_the_zero_tolerance_scales_with_the_largest_total",
+]
+
+[[unit]]
+text = "When a metric's largest per-user total M is large, totals at or below 1e-9·M count as 0 only in the test: at M = 1e9 that is every total of 1 or less, at M = 1e12 every total of 1,000 or less."
+by = ["test:backend/tests/unit/stats_validation/test_permutation_test.py::test_a_total_of_1e9_makes_totals_of_1_or_less_count_as_0_in_the_test_only"]
+
+[[unit]]
+text = "The reported mean, standard deviation, conversions and intervals use every total."
+by = [
+    "test:backend/tests/unit/stats_validation/test_permutation_test.py::test_a_total_of_1e9_makes_totals_of_1_or_less_count_as_0_in_the_test_only",
+    "test:backend/tests/unit/stats_validation/test_permutation_test.py::test_every_estimate_and_interval_is_what_welch_gave",
+]
+
+[[unit]]
+text = "A net-zero user whose individual events are much larger than M (about a million times or more) can still count as listed or not, depending on summation order."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Exact summation would close this, and is not done."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "B + 1 is max(2000, 2000 ceil(4k / (2000 alpha))), with k the metric's treatments that get a p-value and alpha 1 minus the confidence level, worked out in whole numbers on alpha rounded to 9 decimal places, so B is 1,999 for one treatment at 0.95 and 3,999 for six at 0.99."
+by = ["test:backend/tests/unit/stats_validation/test_permutation_test.py::test_the_number_of_permutations_follows_the_integer_rule"]
+
+[[unit]]
+text = "So the smallest p-value, 2 / (B + 1) (0.001 at 1,999), stays significant after the correction"
+by = ["test:backend/tests/unit/stats_validation/test_permutation_test.py::test_the_number_of_permutations_follows_the_integer_rule"]
+
+[[unit]]
+text = "The random draws are seeded from the comparison's identity and its counts, never from the values or the day: the same data gives the same p-value in every request, process and day"
+by = [
+    "test:backend/tests/unit/stats_validation/test_permutation_test.py::test_two_processes_with_different_hash_seeds_give_the_same_p_value",
+    "test:backend/tests/unit/stats_validation/test_permutation_test.py::test_the_same_values_on_two_days_give_the_same_p_value",
+    "test:backend/tests/unit/stats_validation/test_permutation_test.py::test_moving_every_value_one_ulp_gives_the_same_p_value",
+]
+
+[[unit]]
+text = "A running experiment's p-value near 0.05 can move by about ±0.015 between refreshes as data arrives, because each new count re-draws the permutations"
+by = ["exempt:theory"]
+
+[[unit]]
+text = "The cost is linear in K, the users with a non-zero value (for a dense metric, every user), and in B; the table is one Apple M5 Pro core; a Fargate vCPU is likely slower:"
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Users with a value (K) | 10/90 split | 50/50 split"
+by = ["exempt:label"]
+
+[[unit]]
+text = "3,000 | 13 ms | 44 ms"
+by = ["exempt:example"]
+
+[[unit]]
+text = "30,000 | 37 ms | 0.12 s"
+by = ["exempt:example"]
+
+[[unit]]
+text = "300,000 | 0.46 s | 1.4 s"
+by = ["exempt:example"]
+
+[[unit]]
+text = "1,000,000 | 2.4 s | 8.5 s"
+by = ["exempt:example"]
+
+[[unit]]
+text = "At 30,000 users with a value and a 50/50 split, 7,999 permutations take 0.48 s and 39,999 take 2.5 s"
+by = ["exempt:example"]
+
+[[unit]]
+text = "The interval on the difference stays Welch's, so it and is_significant can disagree, most often at a lopsided split"
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_mean_interval_against_significance",
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_a_lopsided_split_names_a_false_winner_no_more_often_than_alpha",
+]
+
+[[unit]]
+text = "Warehouse analysis (beta, the warehouse module) has only each variant's sums, so a mean there is compared with Welch's t-test; its statistical_test_used is welch_t_test"
+by = [
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_a_mean_from_sums_alone_keeps_welchs_t_test",
+    "test:backend/tests/unit/services/test_mean_metric_result.py",
+]
 
 [[unit]]
 text = "Effect size: Cohen's d"
@@ -380,8 +485,8 @@ by = [
 ]
 
 [[unit]]
-text = "Bandit scheduler | BANDIT_UPDATE_INTERVAL_MINUTES (5) | Recomputes multi-armed bandit weights (DynamoDB counters when their pulls and successes are at least PostgreSQL's, else PostgreSQL)"
-by = ["test:backend/tests/unit/services/test_bandit_scheduler.py"]
+text = "Bandit scheduler | BANDIT_UPDATE_INTERVAL_MINUTES (5) | Recomputes multi-armed bandit weights (PostgreSQL assignments + converting users; DynamoDB counters only when PostgreSQL has no assignments or cannot be read)"
+by = ["test:backend/tests/unit/services/test_bandit_scheduler.py::TestDynamoDBCompleteness::test_postgres_wins_when_dynamodb_is_ahead_of_postgres", "test:backend/tests/unit/services/test_bandit_scheduler.py::TestDynamoDBCompleteness::test_dynamodb_used_when_postgres_has_no_pulls"]
 
 [[unit]]
 text = "Experiment Scheduler (every EXPERIMENT_SCHEDULER_INTERVAL_MINUTES, default 15)"

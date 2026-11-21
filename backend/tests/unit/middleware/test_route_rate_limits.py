@@ -30,6 +30,13 @@ def test_the_code_step_of_a_sign_in_takes_ten_a_minute():
     assert RATE_LIMIT_CONFIG["/api/v1/auth/mfa/verify"] == (10, MINUTE)
 
 
+def test_setting_it_up_during_a_sign_in_takes_ten_a_minute():
+    """A role that requires two-step sign-in (#1812): the two routes that set
+    it up before the session, each limited like the step they replace."""
+    assert RATE_LIMIT_CONFIG["/api/v1/auth/mfa/enroll"] == (10, MINUTE)
+    assert RATE_LIMIT_CONFIG["/api/v1/auth/mfa/enroll/confirm"] == (10, MINUTE)
+
+
 def test_sign_up_and_the_password_reset_routes_take_five_a_minute():
     for path in (
         "/api/v1/auth/signup",
@@ -60,6 +67,18 @@ def test_the_cognito_code_exchange_takes_ten_a_minute():
     assert RATE_LIMIT_CONFIG["/api/v1/auth/cognito/exchange"] == (10, MINUTE)
 
 
+def test_the_visual_editor_sign_in_routes_take_ten_a_minute():
+    """The editor link's claim and the editor session's exchange (#1545). The
+    keys are the routes' own paths, read from the application: a limit keyed
+    on any other path limits nothing."""
+    from backend.app.main import app
+    from backend.app.middleware.rate_limiter import resolve_rate_limit_bucket
+
+    for route in ("claim_editor_link", "open_editor_session"):
+        path = app.url_path_for(route)
+        assert resolve_rate_limit_bucket(path) == (path, (10, MINUTE)), route
+
+
 def test_the_audit_log_export_takes_ten_a_minute_on_its_own_count():
     assert RATE_LIMIT_CONFIG["/api/v1/audit-logs/export"] == (10, MINUTE)
 
@@ -73,6 +92,8 @@ def test_these_are_all_the_routes_with_a_limit_of_their_own():
         "/api/v1/auth/token",
         "/api/v1/auth/login",
         "/api/v1/auth/mfa/verify",
+        "/api/v1/auth/mfa/enroll",
+        "/api/v1/auth/mfa/enroll/confirm",
         "/api/v1/auth/signup",
         "/api/v1/auth/confirm",
         "/api/v1/auth/forgot-password",
@@ -82,6 +103,8 @@ def test_these_are_all_the_routes_with_a_limit_of_their_own():
         "/api/v1/auth/sso/exchange",
         "/api/v1/auth/sso/login",
         "/api/v1/auth/cognito/exchange",
+        "/api/v1/visual-editor/tickets/claim",
+        "/api/v1/visual-editor/sessions",
         "/api/v1/tracking/assign/batch",
         "/api/v1/audit-logs/export",
         "/api/v1/ai/design",

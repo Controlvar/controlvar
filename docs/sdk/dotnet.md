@@ -495,7 +495,7 @@ public class CheckoutController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> Get()
     {
-        var userId = User.FindFirst("sub")?.Value ?? "anonymous";
+        var userId = User.FindFirst("sub")?.Value ?? Request.Cookies["visitor_id"] ?? Guid.NewGuid().ToString();
         var newFlow = (await _experiments.EvaluateFlagAsync("new-checkout", userId)).Enabled;
         var assignment = await _experiments.GetAssignmentAsync("checkout-cta-test", userId);
         await _experiments.TrackAsync("checkout_view", userId);   // fans out to the assignment + flag above
@@ -503,6 +503,12 @@ public class CheckoutController : ControllerBase
     }
 }
 ```
+
+A visitor who has not signed in is assigned under an id of their own: the `visitor_id` cookie your
+site sets on their first visit, or a new id until it does. Never fall back to a placeholder such
+as `"anonymous"`: every visitor without the cookie would share it, and with it one assignment.
+When the visitor signs in, your backend links their `visitor_id` to their `sub`
+([Link a visitor's ids when they sign in](../guides/identity.md)).
 
 ```json
 {
