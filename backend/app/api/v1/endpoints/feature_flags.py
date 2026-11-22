@@ -26,6 +26,7 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps
 from backend.app.api.enum_filters import enum_filter
@@ -1273,6 +1274,36 @@ async def evaluate_feature_flag(
             and ``reason: "inactive"``.
         HTTPException 422: If ``context`` is not valid JSON object
     """
+    # Closes ``db`` before it returns: the evaluation runs in a worker thread
+    # on the same session, closed again when the work is done.
+    db.close()
+    return await run_in_threadpool(
+        _evaluate_get_in_worker, flag_key, user_id, context, db
+    )
+
+
+def _evaluate_get_in_worker(
+    flag_key: str, user_id: str, context: Optional[str], db: Session
+) -> Dict[str, Any]:
+    """:func:`evaluate_get_one` on *db*, in a worker thread; closes *db*."""
+    try:
+        return evaluate_get_one(flag_key, user_id, context, db)
+    finally:
+        db.close()
+
+
+def evaluate_get_one(
+    flag_key: str, user_id: str, context: Optional[str], db: Session
+) -> Dict[str, Any]:
+    """``GET /api/v1/feature-flags/evaluate/{flag_key}``'s answer for
+    *user_id*, with *context* as the query parameter was sent, worked out on
+    *db*, which is left open.
+
+    Synchronous: it reads and writes through *db* as it goes, so call it from
+    a worker thread, never from a coroutine on the event loop. Raises the
+    route's ``HTTPException`` for every refusal, with the route's status codes
+    and texts.
+    """
     # The limits of backend.app.core.context_limits, outside the evaluation:
     # its answer is the 422, and nothing about the request is recorded.
     check_context_text(context)
@@ -1319,6 +1350,33 @@ async def evaluate_feature_flag_post(
             and ``reason: "inactive"``.
         HTTPException 422: If the body is invalid
     """
+    # Closes ``db`` before it returns: the evaluation runs in a worker thread
+    # on the same session, closed again when the work is done.
+    db.close()
+    return await run_in_threadpool(_evaluate_post_in_worker, flag_key, request, db)
+
+
+def _evaluate_post_in_worker(
+    flag_key: str, request: FlagEvaluationRequest, db: Session
+) -> Dict[str, Any]:
+    """:func:`evaluate_post_one` on *db*, in a worker thread; closes *db*."""
+    try:
+        return evaluate_post_one(flag_key, request, db)
+    finally:
+        db.close()
+
+
+def evaluate_post_one(
+    flag_key: str, request: FlagEvaluationRequest, db: Session
+) -> Dict[str, Any]:
+    """``POST /api/v1/feature-flags/evaluate/{flag_key}``'s answer for
+    *request*, worked out on *db*, which is left open.
+
+    Synchronous: it reads and writes through *db* as it goes, so call it from
+    a worker thread, never from a coroutine on the event loop. Raises the
+    route's ``HTTPException`` for every refusal, with the route's status codes
+    and texts.
+    """
     # The limits of backend.app.core.context_limits, outside the evaluation.
     check_context(request.context)
     return _evaluate_flag_by_key(db, flag_key, request.user_id, request.context)
@@ -1359,6 +1417,34 @@ async def get_user_flags(
     Raises:
         HTTPException 401: If the API key is invalid
         HTTPException 422: If ``context`` is not a valid JSON object
+    """
+    # Closes ``db`` before it returns: the evaluations run in a worker thread
+    # on the same session, closed again when the work is done.
+    db.close()
+    return await run_in_threadpool(_user_flags_in_worker, user_id, context, db)
+
+
+def _user_flags_in_worker(
+    user_id: str, context: Optional[str], db: Session
+) -> Dict[str, bool]:
+    """:func:`user_flags_one` on *db*, in a worker thread; closes *db*."""
+    try:
+        return user_flags_one(user_id, context, db)
+    finally:
+        db.close()
+
+
+def user_flags_one(
+    user_id: str, context: Optional[str], db: Session
+) -> Dict[str, bool]:
+    """``GET /api/v1/feature-flags/user/{user_id}``'s answer for *user_id*,
+    with *context* as the query parameter was sent, worked out on *db*, which
+    is left open.
+
+    Synchronous: it reads and writes through *db* as it goes, so call it from
+    a worker thread, never from a coroutine on the event loop. Raises the
+    route's ``HTTPException`` for every refusal, with the route's status codes
+    and texts.
     """
     # The limits of backend.app.core.context_limits, outside the evaluation.
     check_context_text(context)

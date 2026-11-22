@@ -416,11 +416,9 @@ What decides throughput today:
 
 - Each API container runs one uvicorn worker process (`WEB_CONCURRENCY`, which defaults to `1`
   in the image, both compose files and the Helm chart; the AWS task definition does not set it).
-- In that process, the flag evaluation routes do their database work one request at a time
-  ([#823](https://github.com/Controlvar/controlvar/issues/823)).
-- So throughput grows with the number of API tasks or replicas, not with the number of
-  requests sent at once to one of them: on AWS the service's task count (its floor is
-  `API_DESIRED_COUNT` in `infrastructure/cdk/app.py`), with the Helm chart `api.replicaCount`.
+- So throughput grows with the number of API tasks or replicas: on AWS the service's task
+  count (its floor is `API_DESIRED_COUNT` in `infrastructure/cdk/app.py`), with the Helm
+  chart `api.replicaCount`.
 
 ---
 

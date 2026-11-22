@@ -35,6 +35,13 @@ rows that store something must have stored one row per event or report sent.
 The ``errors`` and ``errors-batch`` rows still send ``{}``, refused after the
 key check.
 
+The three flag evaluation rows (``GET`` and ``POST /feature-flags/evaluate``
+and ``GET /feature-flags/user``) send a new user each time. The request
+before the burst must be answered by the flag's rollout (``reason``
+``rollout``), or for the user's flags carry the fixture's flag, on, so each
+request runs the evaluation rather than a path that records nothing; after the
+burst, the flag's evaluations recorded must be one per answer.
+
 The two routes a web page calls (#1545) take a key with no scopes: the
 fixture gives them one, a running visual experiment whose page rule names a
 host of its own, and a live preview link of it. ``POST /tracking/visual``
@@ -81,7 +88,7 @@ from backend.app.models.experiment import (
 )
 from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
 from backend.app.models.global_holdout import GlobalHoldout
-from backend.app.models.metrics.metric import ErrorLog, RawMetric
+from backend.app.models.metrics.metric import ErrorLog, MetricType, RawMetric
 from backend.app.models.sdk_evaluation_count import (
     SdkEvaluationFlagCount,
     SdkEvaluationKeyCount,
@@ -532,6 +539,35 @@ def _evaluate(http: httpx.AsyncClient, sdk: SdkSetup):
     )
 
 
+def _evaluate_post(http: httpx.AsyncClient, sdk: SdkSetup):
+    return http.post(
+        f"/api/v1/feature-flags/evaluate/{sdk.flag_key}",
+        json={"user_id": _new_user()},
+        headers=sdk.headers,
+    )
+
+
+def _user_flags(http: httpx.AsyncClient, sdk: SdkSetup):
+    return http.get(f"/api/v1/feature-flags/user/{_new_user()}", headers=sdk.headers)
+
+
+def _every_evaluation_was_recorded(db_session, sdk: SdkSetup) -> None:
+    """After a flag evaluation row: one ``flag_evaluation`` row of the
+    fixture's flag for each answer, the burst's and the two around it."""
+    db_session.expire_all()
+    recorded = (
+        db_session.query(RawMetric)
+        .join(FeatureFlag, RawMetric.feature_flag_id == FeatureFlag.id)
+        .filter(
+            FeatureFlag.key == sdk.flag_key,
+            RawMetric.metric_type == MetricType.FLAG_EVALUATION.value,
+        )
+        .count()
+    )
+    sent = BURST + 2
+    assert recorded == sent, f"{recorded} evaluations of the flag recorded, want {sent}"
+
+
 def _assign_balanced(http: httpx.AsyncClient, sdk: SdkSetup):
     """A new user of the experiment that balances within ``tier``."""
     return http.post(
@@ -802,12 +838,35 @@ ROUTES = [
         id="split-url-routes",
         marks=pytest.mark.modules,
     ),
+    pytest.param(
+        "GET /api/v1/feature-flags/evaluate/{flag_key}",
+        _evaluate,
+        200,
+        _every_evaluation_was_recorded,
+        id="evaluate-get",
+    ),
+    pytest.param(
+        "POST /api/v1/feature-flags/evaluate/{flag_key}",
+        _evaluate_post,
+        200,
+        _every_evaluation_was_recorded,
+        id="evaluate-post",
+    ),
+    pytest.param(
+        "GET /api/v1/feature-flags/user/{user_id}",
+        _user_flags,
+        200,
+        _every_evaluation_was_recorded,
+        id="user-flags",
+    ),
 ]
 
 #: The ``reason`` the request before the burst must carry, by label.
 REASON_BEFORE = {
     "POST /api/v1/tracking/assign": "assigned",
     "POST /api/v1/tracking/split-url/assign": "assigned",
+    "GET /api/v1/feature-flags/evaluate/{flag_key}": "rollout",
+    "POST /api/v1/feature-flags/evaluate/{flag_key}": "rollout",
 }
 
 #: What the answer to the request before the burst must show, by label: that
@@ -822,6 +881,9 @@ CHECK_BEFORE = {
         _every_report_of_the_batch_stored
     ),
 }
+
+#: Rows whose answer before the burst must carry the fixture's flag, on.
+FLAG_ON_BEFORE = {"GET /api/v1/feature-flags/user/{user_id}"}
 
 
 @contextlib.asynccontextmanager
@@ -899,6 +961,11 @@ async def test_every_request_of_a_burst_is_answered(
                 )
             if label in CHECK_BEFORE:
                 CHECK_BEFORE[label](before, db_session, sdk)
+            if label in FLAG_ON_BEFORE:
+                assert before.json().get(sdk.flag_key) is True, (
+                    f"{label} before the burst: no {sdk.flag_key!r}: true in "
+                    f"{before.text}"
+                )
             watch.restart()
             outcomes = await _gather([send(http, sdk) for _ in range(BURST)])
             peak = watch.peak
