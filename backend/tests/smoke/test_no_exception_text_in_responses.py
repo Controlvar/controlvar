@@ -468,15 +468,15 @@ ALLOWED: Dict[Tuple[str, str, str], Tuple[int, str]] = {
     (f"{E}/auth.py", "refresh_token", "ValueError"): (1, COGNITO),
     (f"{E}/auth.py", "reset_password", "ValueError"): (1, COGNITO),
     (f"{E}/auth.py", "signup", "ValueError"): (1, COGNITO),
-    (f"{E}/client_errors.py", "report_client_error", "LookupError"): (1, KEY_NOT_FOUND),
-    (f"{E}/client_errors.py", "report_client_errors_batch", "LookupError|ValueError"): (
+    (f"{E}/client_errors.py", "report_batch_one", "LookupError|ValueError"): (
         1,
         KEY_NOT_FOUND,
     ),
-    (f"{E}/client_errors.py", "report_client_errors_batch", "ValidationError"): (
+    (f"{E}/client_errors.py", "report_batch_one", "ValidationError"): (
         1,
         FIELD_NAMES,
     ),
+    (f"{E}/client_errors.py", "report_one", "LookupError"): (1, KEY_NOT_FOUND),
     (f"{E}/experiments.py", "get_daily_experiment_results", "ValueError"): (
         1,
         SERVICE_VALUEERROR,
@@ -647,12 +647,12 @@ ALLOWED: Dict[Tuple[str, str, str], Tuple[int, str]] = {
     (f"{E}/segments.py", "update_segment", "ValueError"): (1, SERVICE_VALUEERROR),
     (f"{E}/tracking.py", "assign_one", "ValueError"): (1, SERVICE_VALUEERROR),
     (f"{E}/tracking.py", "link_anonymous_id", "AliasConflict"): (1, ALIAS_CONFLICT),
-    (f"{E}/tracking.py", "track_event", "ValidationError"): (1, FIELD_NAMES),
-    (f"{E}/tracking.py", "track_event", "ValueError"): (1, SERVICE_VALUEERROR),
-    (f"{E}/tracking.py", "track_event_by_ids", "ValidationError"): (1, FIELD_NAMES),
-    (f"{E}/tracking.py", "track_event_by_ids", "ValueError"): (1, SERVICE_VALUEERROR),
-    (f"{E}/tracking.py", "track_events_batch", "ValidationError"): (1, FIELD_NAMES),
-    (f"{E}/tracking.py", "track_events_batch", "ValueError"): (1, SERVICE_VALUEERROR),
+    (f"{E}/tracking.py", "track_batch_one", "ValidationError"): (1, FIELD_NAMES),
+    (f"{E}/tracking.py", "track_batch_one", "ValueError"): (1, SERVICE_VALUEERROR),
+    (f"{E}/tracking.py", "track_by_ids_one", "ValidationError"): (1, FIELD_NAMES),
+    (f"{E}/tracking.py", "track_by_ids_one", "ValueError"): (1, SERVICE_VALUEERROR),
+    (f"{E}/tracking.py", "track_one", "ValidationError"): (1, FIELD_NAMES),
+    (f"{E}/tracking.py", "track_one", "ValueError"): (1, SERVICE_VALUEERROR),
     (f"{E}/users.py", "apply_password_change", "ValueError"): (1, PASSWORD_RULE),
     # The current password's check, shared by POST /users/me/password and
     # POST /users/me/2fa/enroll.
