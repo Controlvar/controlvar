@@ -136,7 +136,7 @@ def test_each_way_an_install_line_moves_asyncstorage_is_found(
 def test_the_page_installs_the_tarball_alone() -> None:
     tarball = [c for c in install_commands(text(PAGE)) if ".tgz" in c]
     assert tarball == [
-        "npm install /path/to/controlvar/sdk/react-native/controlvar-react-native-sdk-0.1.0.tgz"
+        "npm install /path/to/controlvar/sdk/react-native/controlvar-react-native-sdk-0.2.0.tgz"
     ]
     assert [c for c in install_commands(text(PAGE)) if STORAGE in c] == [
         f"npm install {STORAGE}"

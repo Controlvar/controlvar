@@ -86,7 +86,8 @@ using var client = new ExperimentationClient(config, httpClient);   // never mut
 
 | Method | Backend call | Returns |
 |--------|--------------|---------|
-| `EvaluateFlagAsync(flagKey, userId, attributes?)` | `GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=…&context=…` (`attributes` sent as `context` on flag evaluation, as URL-encoded JSON; none sent when `null` or empty) | `FlagEvaluationResult { Key, Enabled, Config }`. Never throws; disabled on failure. |
+| `EvaluateFlagAsync(flagKey, userId, attributes?)` | `GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=…&context=…` (`attributes` sent as `context` on flag evaluation, as URL-encoded JSON; none sent when `null` or empty) | `FlagEvaluationResult { Key, Enabled, Config, Value, ValueType }`. Never throws; disabled on failure. |
+| `GetStringValueAsync(flagKey, userId, defaultValue, attributes?)`, `GetNumberValueAsync(...)`, `GetJsonValueAsync(...)` | the same request and cache as `EvaluateFlagAsync` | The value a string, number or json flag serves the user (`string`, `double`, `JsonElement`). Never throws; `defaultValue`, reported to `OnError`, when there is no value of that type to read. See [Flag values](https://github.com/Controlvar/controlvar/blob/main/docs/sdk/dotnet.md#flag-values). |
 | `GetAssignmentAsync(experimentKey, userId, attributes?)` | `POST /api/v1/tracking/assign` (`attributes` sent as `context`) | `Assignment? { ExperimentKey, UserId, VariantId, VariantName, IsControl, Configuration }`. Never throws; `null` on failure. |
 | `TrackAsync(eventName, userId, properties?, experimentKey?, featureFlagKey?, value?, eventType?, timestamp?, eventId?)` | `POST /api/v1/tracking/track` with a key, else `POST /api/v1/tracking/batch` fan-out | `bool` — `false` on any error. Never throws. |
 | `TrackAsync(TrackEvent)` | same rules | `bool` |
@@ -128,8 +129,8 @@ Every event this SDK sends carries an `event_id`, and the server stores an event
 the same `event_id`, user, experiment, flag and event name only once. Without an `eventId`
 argument (or `TrackEvent.EventId`) the SDK makes a lowercase UUID v4 for each event it sends; an
 event fanned out to several experiments and flags carries one id in every entry. Pass the same
-`eventId` each time you send an event your code may send again. Use this from the next published
-version, and with a server that includes the `event_id` change.
+`eventId` each time you send an event your code may send again. It needs a server that includes
+the `event_id` change.
 Full details: [Event ids](https://github.com/Controlvar/controlvar/blob/main/docs/sdk/dotnet.md#event-ids).
 
 ### `FeatureFlagEvaluator` (static)
@@ -174,7 +175,8 @@ Every request carries `X-API-Key` and `Accept: application/json`; POSTs carry
 
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
-| `EvaluateFlagAsync` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=…` | `context`: the attributes as URL-encoded JSON, only when there are any | `{key, enabled, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
+| `EvaluateFlagAsync` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=…` | `context`: the attributes as URL-encoded JSON, only when there are any | `{key, enabled, config, value, value_type}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
+| `GetStringValueAsync`, `GetNumberValueAsync`, `GetJsonValueAsync` | the request of `EvaluateFlagAsync`, or its cached answer | as `EvaluateFlagAsync` | `value`, `value_type` |
 | `GetAssignmentAsync` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `TrackAsync` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?, event_id}` | ignored |
 | `TrackAsync` without keys, `TrackBatchAsync` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored (status only) |
@@ -191,6 +193,12 @@ The public `ExperimentationClient` methods never throw on network or HTTP errors
 | HTTP 401 | `AuthException` |
 | Other 4xx / 5xx (404 unknown key, 422 validation, 429 rate limited) or undecodable body | `ApiException` (`.StatusCode`, `.ResponseBody`) |
 | Network / timeout | `NetworkException` |
+
+A typed getter never throws: when it returns your default it passes the reason to
+`SdkConfig.OnError` (`Action<ExperimentationException, string>`, operation `"value"`): the
+exception its request failed with (`ApiException`, `NetworkException` or `AuthException`), any
+other exception wrapped in a plain `ExperimentationException` whose `InnerException` is the
+original, or a `FlagValueException` whose `Code` is `"TYPE_MISMATCH"` or `"INVALID_RESPONSE"`.
 
 ---
 
@@ -276,7 +284,7 @@ sdk/dotnet/
     FeatureFlagEvaluator.cs               # HashUser utility
     IsExternalInit.cs                     # `init` accessor polyfill for netstandard2.1
     Models/                               # FlagEvaluationResult, Assignment, Exposure, TrackEvent
-    Exceptions/                           # ExperimentationException, NetworkException, ApiException, AuthException
+    Exceptions/                           # ExperimentationException, NetworkException, ApiException, AuthException, FlagValueException
   tests/Controlvar.Tests/    # xUnit (net8.0 + net10.0), fake HttpMessageHandler
   tests/Controlvar.Tests.NetStandard/     # the same tests against the netstandard2.1 build
   examples/BasicUsage/                    # Walk-through app (net8.0)

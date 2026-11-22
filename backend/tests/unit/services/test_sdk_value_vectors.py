@@ -39,7 +39,11 @@ pytestmark = pytest.mark.unit
 #: Pinned. A change here is a change to what every consuming SDK answers:
 #: regenerate the file and say why in the pull request. Each consumer asserts
 #: the total, 49 (sdk/js/__tests__/value-vectors.test.ts,
-#: sdk/python/tests/test_value_vectors.py).
+#: sdk/python/tests/test_value_vectors.py,
+#: sdk/react/src/__tests__/valueVectors.test.ts,
+#: sdk/react-native/__tests__/valueVectors.test.ts,
+#: sdk/java/core/src/test/java/com/controlvar/sdk/ValueVectorsTest.java,
+#: sdk/dotnet/tests/Controlvar.Tests/ValueVectorsTests.cs).
 EXPECTED_COUNTS = {"served": 35, "malformed": 14}
 
 FIELDS = ["name", "response", "getter", "default", "expect", "error_code", "reported"]

@@ -1,7 +1,7 @@
 """The React Native package's first release (Plan P, P1-RN), and where its app
 check runs (EMP-P-8).
 
-The package: 0.1.0 in the manifest and the lock's own fields (R1a), its
+The package: 0.2.0 in the manifest and the lock's own fields (R1a), its
 TypeScript source as ``types``, and ``@types/md5`` as a dependency.
 
 ``scripts/check_react_native_app.py`` installs the packed React Native SDK
@@ -79,14 +79,15 @@ def _manifest() -> dict:
 
 
 @pytest.mark.regression
-def test_the_react_native_package_is_first_published_at_0_1_0() -> None:
-    """R1a for React Native: its first release is 0.1.0, a 0.x beta, in the
-    manifest and the lock's own two fields. Edit this pin in the pull request
-    that bumps the version after 0.1.0 is on npm."""
+def test_the_react_native_package_is_at_0_2_0() -> None:
+    """R1a for React Native: its first release was 0.1.0, a 0.x beta, and
+    0.2.0 (#1810) adds useFlagValue and the typed getters, in the manifest and
+    the lock's own two fields. Edit this pin in the pull request that bumps
+    the version after 0.2.0."""
     lock = json.loads((SDK / "package-lock.json").read_text(encoding="utf-8"))
     assert _manifest()["name"] == "@controlvar/react-native-sdk"
-    assert _manifest()["version"] == "0.1.0"
-    assert (lock["version"], lock["packages"][""]["version"]) == ("0.1.0", "0.1.0")
+    assert _manifest()["version"] == "0.2.0"
+    assert (lock["version"], lock["packages"][""]["version"]) == ("0.2.0", "0.2.0")
 
 
 @pytest.mark.regression
