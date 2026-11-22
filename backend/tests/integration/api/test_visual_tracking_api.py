@@ -148,10 +148,10 @@ def client(db_session):
 @pytest.fixture
 def registering_client(client, db_session):
     """``client`` with an async ``get_db`` that registers its session as
-    ``deps.get_db`` does, so a balanced experiment's assignment ends that
-    session's transaction as in production (the shared override registers
-    nothing). ``client`` removes the override when it is torn down, after
-    this fixture."""
+    ``deps.get_db`` does, so the request's session is the one the page
+    answer's worker sees registered, as in production (the shared override
+    registers nothing). ``client`` removes the override when it is torn down,
+    after this fixture."""
     factory = sessionmaker(bind=db_session.get_bind(), autoflush=False)
 
     async def registering_get_db():
@@ -424,11 +424,11 @@ def test_the_host_is_matched_in_lower_case_without_its_port(client, developer, k
 def test_a_balanced_visual_experiment_gives_each_new_visitor_a_place(
     registering_client, db_session, developer, key, monkeypatch
 ):
-    """An experiment that balances within groups (#448), answered from the
-    page answer's private event loop: ``/tracking/assign``'s function ends the
-    transaction of the request's one session, then takes its worker trip on
-    that private loop. Each new visitor of the group takes the next place in
-    its blocks and gets their variant's changes."""
+    """An experiment that balances within groups (#448), assigned inside the
+    page answer's worker thread: ``tracking.assign_one``, ``/tracking/assign``'s
+    body, runs there on the page answer's private event loop, with the
+    request's one session. Each new visitor of the group takes the next place
+    in its blocks and gets their variant's changes."""
     client = registering_client
     host = _host()
     experiment = _running(
@@ -438,22 +438,17 @@ def test_a_balanced_visual_experiment_gives_each_new_visitor_a_place(
         control=50,
         balance_within={"attribute": "tier", "values": ["gold", "silver"]},
     )
-    released: List[List[bool]] = []
-    trip_loops: List[asyncio.AbstractEventLoop] = []
-    real_release = tracking_endpoints.release_request_sessions
-    real_trip = tracking_endpoints.run_in_threadpool
+    request_session: List[List[bool]] = []
+    assign_loops: List[asyncio.AbstractEventLoop] = []
+    real_assign = tracking_endpoints.assign_one
 
-    def release():
+    def assign(request, db):
         sessions = request_sessions.current()
-        real_release()
-        released.append([session.in_transaction() for session in sessions])
+        request_session.append([session is db for session in sessions])
+        assign_loops.append(asyncio.get_running_loop())
+        return real_assign(request, db)
 
-    async def trip(func, *args, **kwargs):
-        trip_loops.append(asyncio.get_running_loop())
-        return await real_trip(func, *args, **kwargs)
-
-    monkeypatch.setattr(tracking_endpoints, "release_request_sessions", release)
-    monkeypatch.setattr(tracking_endpoints, "run_in_threadpool", trip)
+    monkeypatch.setattr(tracking_endpoints, "assign_one", assign)
 
     names = []
     for _ in range(4):
@@ -466,10 +461,10 @@ def test_a_balanced_visual_experiment_gives_each_new_visitor_a_place(
 
     # Two blocks of a 50/50 split: two visitors in each variant.
     assert sorted(names) == ["B", "B", "Control", "Control"], names
-    # One session each time, its transaction ended before the trip.
-    assert released == [[False]] * 4, released
-    # Each trip ran on a private loop, closed once its answer was given.
-    assert len(trip_loops) == 4 and all(loop.is_closed() for loop in trip_loops)
+    # One session each time, the request's own, given to the assignment.
+    assert request_session == [[True]] * 4, request_session
+    # Each assignment ran on a private loop, closed once its answer was given.
+    assert len(assign_loops) == 4 and all(loop.is_closed() for loop in assign_loops)
     session = _session(db_session)
     try:
         rows = (
@@ -605,23 +600,21 @@ def test_one_experiment_that_cannot_be_answered_leaves_only_itself_out(
     host = _host()
     first = _running(client, developer, host)
     second = _running(client, developer, host)
-    real = tracking_endpoints.assign_user_to_experiment
+    real = tracking_endpoints.assign_one
 
-    async def fails_for_the_first(request, db, api_key_info):
+    def fails_for_the_first(request, db):
         if request.experiment_key == first["key"]:
             raise RuntimeError("planted")
-        return await real(request=request, db=db, api_key_info=api_key_info)
+        return real(request, db)
 
-    monkeypatch.setattr(
-        tracking_endpoints, "assign_user_to_experiment", fails_for_the_first
-    )
+    monkeypatch.setattr(tracking_endpoints, "assign_one", fails_for_the_first)
     body = _ask(client, key, host).json()
     assert [e["experiment_key"] for e in body["experiments"]] == [second["key"]]
 
-    async def always_fails(request, db, api_key_info):
+    def always_fails(request, db):
         raise RuntimeError("planted")
 
-    monkeypatch.setattr(tracking_endpoints, "assign_user_to_experiment", always_fails)
+    monkeypatch.setattr(tracking_endpoints, "assign_one", always_fails)
     failed = _ask(client, key, host, status=500)
     assert failed.json()["detail"].startswith(tracking_visual.PAGE_FAILURE_SENTENCE)
 
@@ -647,8 +640,9 @@ def test_a_database_failure_stops_the_answer(
     visitor = _visitor()
     tried: List[str] = []
     if where == "pool timeout in the assignment":
-        # Inside AssignmentService: /tracking/assign's function answers its
-        # own 500 from inside ``except``, with the timeout underneath.
+        # Inside AssignmentService: tracking.assign_one, /tracking/assign's
+        # body, answers its own 500 from inside ``except``, with the timeout
+        # underneath.
         field = "id"
         real_assign_user = AssignmentService.assign_user
 
@@ -661,19 +655,17 @@ def test_a_database_failure_stops_the_answer(
         monkeypatch.setattr(AssignmentService, "assign_user", times_out)
     else:
         field = "key"
-        real_assign = tracking_endpoints.assign_user_to_experiment
+        real_assign = tracking_endpoints.assign_one
 
-        async def database_gone(request, db, api_key_info):
+        def database_gone(request, db):
             tried.append(request.experiment_key)
             if len(tried) == fails_at:
                 raise sa_exc.OperationalError(
                     "SELECT 1", {}, Exception("planted: the server closed")
                 )
-            return await real_assign(request=request, db=db, api_key_info=api_key_info)
+            return real_assign(request, db)
 
-        monkeypatch.setattr(
-            tracking_endpoints, "assign_user_to_experiment", database_gone
-        )
+        monkeypatch.setattr(tracking_endpoints, "assign_one", database_gone)
 
     if fails_at == 1:
         failed = _ask(client, key, host, user_id=visitor, status=503)

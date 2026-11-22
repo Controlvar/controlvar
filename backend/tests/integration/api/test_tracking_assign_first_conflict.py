@@ -7,9 +7,9 @@ calls for the same user can land on different processes: both find nothing,
 both insert, and the unique index on ``(experiment_id, user_id)`` refuses the
 second. That request answered the fixed 500.
 
-One process cannot show it: the async handler runs one request's database
-work at a time, so an in-process concurrent test passes on the old code. The
-tests below force the interleaving instead. A hook on
+The tests below force the interleaving with a second session, as another
+process would make it (``test_tracking_assign_in_a_worker.py`` crosses two
+requests of one process). A hook on
 ``GlobalHoldoutService.is_user_in_holdout`` -- the first call after the
 existence check, before the holdout population row and the insert -- has a
 second session (the "other process") store the user's assignment and commit,

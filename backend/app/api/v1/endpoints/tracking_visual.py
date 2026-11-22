@@ -15,10 +15,11 @@ visitor gets on a page:
   script's ``format_version`` is left out, and so is one whose stored
   settings or page changes fail their schema; nobody is assigned to either.
 * Each is assigned exactly as ``POST /api/v1/tracking/assign`` assigns: this
-  route awaits that route's own function, so the eligibility checks, the
-  sticky answer, the assignment row and the exposure event (with the context,
-  on every matched page view) are that route's. A visitor who is not in the
-  experiment gets ``assigned: false`` and no changes or goals.
+  route calls that route's own body, ``tracking.assign_one``, so the
+  eligibility checks, the sticky answer, the assignment row and the exposure
+  event (with the context, on every matched page view) are that route's. A
+  visitor who is not in the experiment gets ``assigned: false`` and no changes
+  or goals.
 * The ``web_*`` website details in the context are cleaned first
   (``backend/app/schemas/visual_tracking.py``): a detail not in its documented
   form is dropped, never refused.
@@ -37,20 +38,18 @@ visitor gets on a page:
 
 The handler stays ``async`` and gives the request's database connection back
 before the answer starts (``db.close()``); the answer then runs in a worker
-thread, as ``POST /tracking/assign/batch`` does, on a private event loop
-(``asyncio.run``, as the rollout scheduler's tick does) because it awaits
-``/tracking/assign``'s function. Every connection it checks out, up to ten
-assignments' worth, is checked out there and never on the API's event loop
+thread, as ``POST /tracking/assign`` and ``POST /tracking/assign/batch`` do,
+on a private event loop (``asyncio.run``, as the rollout scheduler's tick
+does). It assigns through ``tracking.assign_one``, ``/tracking/assign``'s
+body, on the request's session in that thread, an experiment that balances
+its split within groups (#448) included (``test_visual_tracking_api.py``).
+Every connection it checks out, up to ten assignments' worth, is checked out
+there and never on the API's event loop
 (``test_api_key_routes_under_overload.py``), and the request holds none while
 it waits for the worker thread (#823; ``test_route_worker_steps.py``).
-The answer awaits only ``/tracking/assign``'s function. That function awaits
-one thing itself, for an experiment that balances its split within groups
-(#448): it ends the transaction of the request's session, which gives its
-connection back, then awaits a worker trip of its own, taken on the private
-loop (``test_visual_tracking_api.py``). Nothing bound to the API's event loop
-may be awaited here (the process-wide Redis pool in ``backend.app.api.deps``
-above all: made on the private loop, later requests would reuse it on a loop
-that has closed).
+Nothing bound to the API's event loop may be awaited here (the process-wide
+Redis pool in ``backend.app.api.deps`` above all: made on the private loop,
+later requests would reuse it on a loop that has closed).
 
 The page's host and path are used only to match page rules: neither is stored.
 
@@ -306,12 +305,11 @@ async def _answer(
     context: Optional[Dict[str, Any]],
 ) -> VisualExperimentAnswer:
     """Assign the visitor as ``/tracking/assign`` does, and the answer."""
-    assigned = await tracking.assign_user_to_experiment(
-        request=AssignmentRequest(
+    assigned = tracking.assign_one(
+        AssignmentRequest(
             experiment_key=candidate.key, user_id=user_id, context=context
         ),
-        db=db,
-        api_key_info=owner,
+        db,
     )
     shown = assigned.assigned
     return VisualExperimentAnswer(

@@ -20,7 +20,6 @@ from starlette.concurrency import run_in_threadpool
 from backend.app.api import deps
 from backend.app.api.off_loop_route import OffLoopRoute, release_request_sessions
 from backend.app.api.sdk_scope import require_batch_assign_key, require_sdk_ruleset_key
-from backend.app.core.balanced_blocks import balance_setting
 from backend.app.core.context_limits import check_context
 from backend.app.core.logger import failure_detail, unexpected_failure
 from backend.app.core.metrics import (
@@ -409,6 +408,33 @@ async def assign_user_to_experiment(
             control variant
         HTTPException 500: If there's an error during assignment
     """
+    # Closes ``db`` before it returns: the assignment runs in a worker thread
+    # on the same session, closed again when the work is done. A caller must
+    # not use ORM objects it loaded on ``db`` after this call (the split URL
+    # assign route uses only the answer).
+    db.close()
+    return await run_in_threadpool(_assign_in_worker, request, db)
+
+
+def _assign_in_worker(
+    request: AssignmentRequest, db: Session
+) -> VariantAssignmentResponse:
+    """:func:`assign_one` on *db*, in a worker thread; closes *db*."""
+    try:
+        return assign_one(request, db)
+    finally:
+        db.close()
+
+
+def assign_one(request: AssignmentRequest, db: Session) -> VariantAssignmentResponse:
+    """``POST /api/v1/tracking/assign``'s answer for *request*, worked out on
+    *db*, which is left open.
+
+    Synchronous: it reads and writes through *db* as it goes, so call it from
+    a worker thread, never from a coroutine on the event loop. Raises the
+    route's ``HTTPException`` for every refusal and failure, with the route's
+    status codes and fixed texts.
+    """
     # The limits of backend.app.core.context_limits, before anything is read
     # or written.
     check_context(request.context)
@@ -442,7 +468,7 @@ async def assign_user_to_experiment(
     )
 
     def assign_and_answer() -> VariantAssignmentResponse:
-        # A balanced experiment's release (below) expired it.
+        # Reads again only if a commit since the query expired it.
         _reread_without_visual_settings(db, experiment)
         # Attempt to assign the user
         assignment_data = assignment_service.assign_user(
@@ -494,19 +520,10 @@ async def assign_user_to_experiment(
         )
 
     try:
-        if balance_setting(experiment) is not None:
-            # A balanced experiment's new user takes a place from their
-            # group's counter row, which another request can be holding
-            # (#448), so the assignment runs in a worker thread, off the event
-            # loop. The request's sessions are released first: their
-            # transaction ends and the connection goes back to the pool while
-            # the request waits for a worker, and the session, whose objects
-            # stay attached, reads again inside it (one thread at a time).
-            # test_route_worker_steps.py and the balanced row of
-            # test_api_key_routes_under_overload.py pin both. Every other
-            # experiment is assigned here, as before.
-            release_request_sessions()
-            return await run_in_threadpool(assign_and_answer)
+        # Every experiment is assigned here, in the worker thread the route
+        # hands this to. That includes a balanced experiment, whose new user
+        # takes a place from their group's counter row, which another request
+        # can be holding (#448).
         return assign_and_answer()
     except ValidationError as e:
         # A response that does not build is not the caller's mistake, and
@@ -814,9 +831,9 @@ async def link_anonymous_id(
     backend.
     """
     # ``link`` waits for advisory locks another request can be holding, so it
-    # runs in a worker thread, off the event loop, as /assign does for a
-    # balanced experiment (#448): the request's sessions are released first,
-    # then the lock, read, decision, insert and commit take one trip.
+    # runs in a worker thread, off the event loop: the request's sessions are
+    # released first, then the lock, read, decision, insert and commit take
+    # one trip.
     release_request_sessions()
     try:
         created = await run_in_threadpool(

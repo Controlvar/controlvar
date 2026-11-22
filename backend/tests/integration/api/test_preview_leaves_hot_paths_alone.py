@@ -13,14 +13,14 @@ column, a new filter or a reordered clause fails too). COMMIT is not a cursor
 statement and is not seen. A change to these paths that is meant must
 re-record the lists, and say why in its pull request.
 
-An experiment that balances within groups (#448) is assigned in a worker
-thread after the route releases the request's sessions, and the release
-expires every object they loaded. Its case runs through a ``get_db`` that
-registers its session as ``deps.get_db`` does: the shared client's override
-is synchronous, so FastAPI runs it in a worker, the registration never
-reaches the route, and the release rolls nothing back. Its lists were
-recorded on main before #1545 (#1545 added two columns these paths must not
-read).
+An experiment that balances within groups (#448) is assigned, as every
+experiment is, in a worker thread after the route closes the request's
+session (#823). Its case runs through a ``get_db`` that registers its session
+as ``deps.get_db`` does, as in production. Its lists were recorded on main
+before #1545 (#1545 added two columns these paths must not read), when the
+route released the request's sessions only for a balanced experiment and read
+the experiment again after that release; #823 dropped that second read of
+``experiments`` from both lists and nothing else.
 """
 
 from __future__ import annotations
@@ -86,11 +86,10 @@ ASSIGN_STICKY_REPEAT = [
 ]
 
 #: A new user's ``/tracking/assign`` to an experiment that balances within
-#: ``tier``, with the request's session released before the worker runs.
+#: ``tier``.
 BALANCED_NEW_USER = [
     ("SET search_path TO test_experimentation", "ff5c96ca3f3a2d4d"),
     ("SELECT experiments", "deb03a6ac648343e"),
-    ("SELECT experiments", "dc0a2d5b8215565b"),
     ("SELECT experiments+variants", "92e5c9fa28954735"),
     ("SELECT identity_aliases", "057d9e83406ae342"),
     ("SELECT assignments", "9f4f07bfbdd34878"),
@@ -114,7 +113,6 @@ BALANCED_NEW_USER = [
 BALANCED_STICKY_REPEAT = [
     ("SET search_path TO test_experimentation", "ff5c96ca3f3a2d4d"),
     ("SELECT experiments", "deb03a6ac648343e"),
-    ("SELECT experiments", "dc0a2d5b8215565b"),
     ("SELECT experiments+variants", "92e5c9fa28954735"),
     ("SELECT identity_aliases", "057d9e83406ae342"),
     ("SELECT assignments", "9f4f07bfbdd34878"),
@@ -200,8 +198,7 @@ def no_active_holdout(db_session):
 @pytest.fixture
 def registering_client(admin_client, db_session):
     """``admin_client`` with an async ``get_db`` that registers its session as
-    ``deps.get_db`` does, so the balanced branch of ``/tracking/assign``
-    releases it before the worker runs, as in production."""
+    ``deps.get_db`` does, as in production."""
     factory = sessionmaker(
         bind=db_session.get_bind(), autocommit=False, autoflush=False
     )
@@ -313,8 +310,10 @@ def test_assign_runs_the_statements_it_ran_before(
 def test_a_balanced_assign_runs_the_statements_it_ran_before(
     registering_client, db_session, balanced_experiment, no_active_holdout
 ):
-    """The release expires the experiment, and the worker reads it again
-    (#1545: without the visual columns)."""
+    """A balanced assign runs the plain assign's statements plus its counter
+    step (SAVEPOINT ... RELEASE), and nothing reads the experiment again before
+    the assignment (#823); the read after the commit leaves out the visual
+    columns (#1545)."""
     new_user, sticky = _assign_twice(
         registering_client,
         db_session.get_bind(),
