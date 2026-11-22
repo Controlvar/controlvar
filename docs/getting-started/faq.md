@@ -77,8 +77,8 @@ dashboard shows.
 
 The JavaScript SDK is on npm (`npm install @controlvar/js-sdk`, 0.3.0, beta) and the
 Python SDK is on PyPI (`pip install controlvar`, 0.3.0, beta). So are the React SDK
-(`npm install @controlvar/react-sdk`, 0.1.0, beta), the React Native SDK
-(`npm install @controlvar/react-native-sdk`, 0.1.0, beta) and the two OpenFeature providers
+(`npm install @controlvar/react-sdk`, 0.2.0, beta), the React Native SDK
+(`npm install @controlvar/react-native-sdk`, 0.2.0, beta) and the two OpenFeature providers
 (`npm install @controlvar/openfeature-provider`, 0.1.0, beta; `pip install controlvar-openfeature`,
 0.1.0, beta). The Java SDK is on Maven Central and the .NET SDK on NuGet. The Go SDK installs by
 module path, and the other SDKs from a clone of this repository: each SDK's page

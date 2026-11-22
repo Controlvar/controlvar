@@ -1,6 +1,6 @@
 {
   "name": "@controlvar/react-sdk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "React hooks, a context provider and an SSR client for Controlvar feature flags and experiments",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

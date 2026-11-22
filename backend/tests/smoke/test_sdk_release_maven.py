@@ -51,7 +51,8 @@ pytestmark = pytest.mark.smoke
 JAVA = ROOT / "sdk" / "java"
 POM = {"m": "http://maven.apache.org/POM/4.0.0"}
 NAME = "com.controlvar:controlvar-sdk-parent"
-VERSION = "0.1.0"
+#: sdk/java/pom.xml's version: the version checks below copy the real POMs.
+VERSION = "0.2.0"
 BUNDLE = "central-bundle.zip"
 UUID = "28570f16-da32-4c14-bd2e-c1acc0782365"
 
@@ -1469,7 +1470,7 @@ def test_the_maven_version_and_name_come_from_the_parent_pom(tmp_path: Path) -> 
 def _child_parent_version(relative: str, text: str) -> str:
     if relative == "core/pom.xml":
         return text.replace(
-            f"<version>{VERSION}</version>", "<version>0.2.0</version>", 1
+            f"<version>{VERSION}</version>", "<version>9.8.7</version>", 1
         )
     return text
 
@@ -1480,7 +1481,7 @@ def _child_parent_version(relative: str, text: str) -> str:
         (
             "a module whose parent is another version",
             _child_parent_version,
-            f"sdk/java/pom.xml is {NAME}:{VERSION}, but module core's <parent> names {NAME}:0.2.0",
+            f"sdk/java/pom.xml is {NAME}:{VERSION}, but module core's <parent> names {NAME}:9.8.7",
         ),
         (
             "a module with another groupId",
@@ -1504,7 +1505,7 @@ def _child_parent_version(relative: str, text: str) -> str:
                 if r == "spring-boot-starter/pom.xml"
                 else t
             ),
-            "module spring-boot-starter sets version 9.9.9; the parent is 0.1.0",
+            f"module spring-boot-starter sets version 9.9.9; the parent is {VERSION}",
         ),
         (
             "a parent with no version",

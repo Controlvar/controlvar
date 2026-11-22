@@ -117,10 +117,14 @@ python -m backend.scripts.generate_value_vectors --check
   before flag values (neither `value` nor `value_type`), a value that does not match its
   `value_type`, an unknown `value_type`, a number beyond 2^53-1, a 503.
 
-The JavaScript SDK (`sdk/js/__tests__/value-vectors.test.ts`) and the Python SDK
-(`sdk/python/tests/test_value_vectors.py`) each answer every vector in one test that counts the
-vectors it answered and checked and requires 49, so an empty file fails instead of running
-nothing. They run in the `js` and `python` jobs of `SDK Unit Tests`. The Go SDK does not read this
+The JavaScript SDK (`sdk/js/__tests__/value-vectors.test.ts`), the Python SDK
+(`sdk/python/tests/test_value_vectors.py`), the React SDK (`sdk/react/src/__tests__/valueVectors.test.ts`),
+the React Native SDK (`sdk/react-native/__tests__/valueVectors.test.ts`), the Java SDK
+(`sdk/java/core/src/test/java/com/controlvar/sdk/ValueVectorsTest.java`) and the .NET SDK
+(`sdk/dotnet/tests/Controlvar.Tests/ValueVectorsTests.cs`) each answer every vector in one test
+that counts the vectors it answered and checked and requires 49, so an empty file fails instead
+of running nothing. They run in the `js`, `python`, `react`, `react-native`, `java` and `dotnet`
+jobs of `SDK Unit Tests` (the .NET one on all three of its test legs). The Go SDK does not read this
 file: its getters are methods of an evaluation result with no error channel, and it answers four of
 the malformed vectors differently (no `value_type`; a number beyond 2^53-1; json `7` and json `"x"`,
 decoded into an `any`), none of which a server sends.

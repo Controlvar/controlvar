@@ -58,15 +58,16 @@ MODULE_POMS = ("core/pom.xml", "spring-boot-starter/pom.xml")
 
 
 @pytest.mark.regression
-def test_first_publish_manifests_are_0_1_0():
-    """The Java SDK's first release on Maven Central is 0.1.0, a beta, like
-    the JavaScript and Python SDKs' (#1498). The POMs said 1.0.0, a number
-    never released. Edit this test with the version bump after 0.1.0: it pins
-    the first publish, not every release."""
-    assert pom(JAVA / "pom.xml").findtext("m:version", namespaces=NS) == "0.1.0"
+def test_the_manifests_are_0_2_0():
+    """The Java SDK's first release on Maven Central was 0.1.0, a beta, like
+    the JavaScript and Python SDKs' (#1498); the POMs had said 1.0.0, a
+    number never released. 0.2.0 (#1810) adds the typed getters. Edit this
+    test with the version bump after 0.2.0: the parent and both modules
+    move together."""
+    assert pom(JAVA / "pom.xml").findtext("m:version", namespaces=NS) == "0.2.0"
     for relative in MODULE_POMS:
         child = pom(JAVA / relative)
-        assert child.findtext("m:parent/m:version", namespaces=NS) == "0.1.0", relative
+        assert child.findtext("m:parent/m:version", namespaces=NS) == "0.2.0", relative
         assert child.find("m:version", NS) is None, (
             f"sdk/java/{relative} sets its own version; it takes the parent's"
         )
