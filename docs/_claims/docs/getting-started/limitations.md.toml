@@ -22,7 +22,7 @@ by = ["exempt:label"]
 [[unit]]
 text = "What you might expect | What happens instead"
 by = ["exempt:label"]
-count = 7
+count = 8
 
 [[unit]]
 text = "A flag that serves one of several values | A flag serves two values: its on value to the users it is on for (a matching targeting rule's percentage, or the rollout percentage), and its off value to everyone else and to everyone while it is off. No rule or rollout splits users among three or more values. GET /api/v1/feature-flags/user/{user_id} answers every flag as on or off. For three or more experiences, run a multivariate experiment: each variant carries a configuration, which POST /api/v1/tracking/assign returns."
@@ -174,20 +174,28 @@ by = [
 ]
 
 [[unit]]
-text = "A variant that is no better recommended to ship no more often than α says, whatever the split | On zero-inflated, right-skewed revenue (most users spend nothing, a few spend a lot), a lopsided split recommended shipping a variant that was no better more often than α says. Measured in 2,000 A/A experiments (both variants the same) at each split, at α = 0.05, with 5% of users buying, order values lognormal and repeat purchases: with 600 users in the control and 5,400 in the treatment, the treatment was recommended to ship in 150 (7.5%), where about 50 (2.5%) are expected in that direction, and there the larger variant was the one wrongly named; with 3,000 users in each, in 46, within the expected rate. These are the sizes measured; no size is known at which a lopsided split meets α."
+text = "A variant that is no better recommended to ship no more often than α says, whatever the split | On zero-inflated, right-skewed revenue (most users spend nothing, a few spend a lot), measured in 2,000 experiments at each split, at α = 0.05, with 5% of users buying, order values lognormal and repeat purchases. When both variants have the same distribution (an A/A test) it holds: with 600 users in the control and 5,400 in the treatment, the treatment was recommended to ship in 48 and the control kept in 52, about 50 expected in each direction (before engine 1.13.0, which compared means with Welch's t-test, 150 and 12). A variant that changes the shape of the values without changing the mean is not covered: with 5,400 users in the control and 600 in the treatment, 12.5% of the treatment's users buying and each of their orders 0.4 times the size, 71 of 2,000 such experiments recommended shipping it, where about 50 are expected. The interval on the difference is Welch's and is unchanged: in the same A/A experiments at 600/5,400 it excluded 0 in 162 of 2,000, where about 100 are expected."
 by = [
-    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_an_uneven_split_recommends_a_false_winner_above_the_band",
-    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_an_equal_split_recommends_a_false_winner_within_the_band",
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_a_lopsided_split_names_a_false_winner_no_more_often_than_alpha",
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_a_shape_change_at_5400_600_is_held_as_measured",
     "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_the_band_is_the_central_99_9_percent_of_one_direction",
 ]
 
 [[unit]]
-text = "Intervals on a treatment's difference adjusted for the experiment's correction | The intervals on a treatment's difference from the control, on its relative change and on its impact are not adjusted for comparing several treatments with the control, while is_significant is (Benjamini-Hochberg by default). With two or more treatments an interval can exclude 0 on a treatment that is not significant. For a metric analysed as a share of users, the interval and Fisher's exact test can also disagree near the threshold, either way."
+text = "Intervals on a treatment's difference adjusted for the experiment's correction | The intervals on a treatment's difference from the control, on its relative change and on its impact are not adjusted for comparing several treatments with the control, while is_significant is (Benjamini-Hochberg by default). With two or more treatments an interval can exclude 0 on a treatment that is not significant. For a metric analysed as a share of users, the interval and Fisher's exact test can also disagree near the threshold, either way. For a metric analysed as a mean, the interval is Welch's while is_significant follows the permutation test, so the two can disagree either way, most often at a lopsided split: in 2,000 A/A experiments with 600 users in the control and 5,400 in the treatment they disagreed in 142 (7.1%)."
 by = [
     "test:backend/tests/unit/services/test_difference_intervals.py::test_b5_an_adjusted_treatment_is_not_significant_although_its_interval_excludes_0",
     "test:backend/tests/unit/services/test_difference_intervals.py::test_the_mean_interval_against_significance",
     "test:backend/tests/unit/services/test_difference_intervals.py::test_the_proportion_interval_against_significance",
     "test:backend/tests/unit/services/test_difference_intervals.py::test_named_boundary_tables",
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_a_lopsided_split_names_a_false_winner_no_more_often_than_alpha",
+]
+
+[[unit]]
+text = "A mean metric tested by the permutation test everywhere | A warehouse analysis has only each variant's sums, so a mean metric there keeps Welch's t-test (welch_t_test), which on zero-inflated, right-skewed values at a lopsided split names a variant that is no better more often than α says: 150 of 2,000 A/A experiments with 600 users in the control and 5,400 in the treatment recommended shipping it. An LLM experiment compares its variants with its own Welch's t-test."
+by = [
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_a_mean_from_sums_alone_keeps_welchs_t_test",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestWelchPValueIsExact::test_p_value_matches_scipy_welch",
 ]
 
 [[unit]]
@@ -242,9 +250,14 @@ by = [
 ]
 
 [[unit]]
-text = "One user known by two ids, such as a visitor who signs in | No identify or alias call: a user who signs in under a new id mid-funnel gets a second assignment. Assign with the id you will track purchases with."
+text = "One user known by two ids, such as a visitor who signs in | There is no identify call. POST /api/v1/tracking/alias (beta) links an anonymous id to a known id; it needs a server-side key and is called from your backend. From the link on, both ids get one assignment per experiment, and an event either sends to an experiment counts for it. Until the ids are linked, a user who signs in under a new id mid-funnel gets a second assignment, and nothing recorded before the link is merged. Assign with the id you will track purchases with."
 by = [
-    "test:backend/tests/unit/api/test_documented_limits.py::test_no_call_says_that_two_user_ids_are_one_user",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_alias_route_is_the_one_call_that_links_two_user_ids",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_the_route_refuses_each_key_as_batch_assignment_does",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_link_made_through_the_route_is_the_one_the_tracking_routes_follow",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_known_id_answers_the_variant_its_anonymous_id_holds",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_known_ids_conversion_counts_for_its_persons_variant",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_row_a_release_without_links_wrote_is_answered_by_the_earliest",
     "test:backend/tests/unit/api/test_documented_limits.py::test_assignment_hashes_the_experiment_key_and_the_user",
     "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_assigns_user_to_a_variant_and_is_sticky",
 ]
@@ -277,9 +290,11 @@ text = "Sign-in and access"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Requiring two-step sign-in for a role on an AWS CDK install | Not available yet: the CDK app cannot set LOCAL_AUTH_2FA_REQUIRED_ROLES, so each local account turns two-step sign-in on or off for itself there. Docker Compose and the Helm chart can set it. See Requiring it for a role."
+text = "Requiring two-step sign-in for a role on an AWS CDK install | Give cdk deploy the context -c local_auth_2fa_required_roles=ADMIN,DEVELOPER: the API task then has LOCAL_AUTH_2FA_REQUIRED_ROLES. It applies to local accounts only, so the CDK app refuses it together with -c cognito_hosted_ui=true, where sign-in goes through Cognito. Without the context, each local account turns two-step sign-in on or off for itself. Docker Compose and the Helm chart can set it too. See Requiring it for a role."
 by = [
-    "test:backend/tests/unit/api/test_documented_limits.py::test_a_role_can_require_two_step_sign_in_on_compose_and_helm_not_cdk_yet",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_role_can_require_two_step_sign_in_on_compose_helm_and_cdk",
+    "test:infrastructure/tests/test_two_step_roles_context.py::test_set_the_api_task_has_exactly_that_value",
+    "test:infrastructure/tests/test_two_step_roles_context.py::test_with_the_hosted_ui_on_it_is_refused_rather_than_ignored",
     "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_every_role_manages_its_own_and_only_a_superuser_resets_others",
     "test:backend/tests/unit/infrastructure/test_production_compose.py::TestTwoStepRoles",
     "test:backend/tests/unit/chart/test_chart_render.py::test_the_two_step_roles_example_reaches_both_api_containers",
@@ -314,14 +329,23 @@ text = "Data"
 by = ["exempt:label"]
 
 [[unit]]
-text = "A retention policy, or a tool that erases one person's data | Neither exists. Nothing deletes events, assignments or audit records by age, and no route deletes the events of one of your app's users. One setting purges the platform's own analysis history: ANALYSIS_HISTORY_RETENTION_DAYS (default 90) deletes analysis snapshots and bandit-state history older than that, each time the metrics scheduler runs."
+text = "A retention policy | None exists. Nothing deletes events, assignments or audit records by age. One setting purges the platform's own analysis history: ANALYSIS_HISTORY_RETENTION_DAYS (default 90) deletes analysis snapshots and bandit-state history older than that, each time the metrics scheduler runs."
 by = [
-    "test:backend/tests/unit/api/test_documented_limits.py::test_no_route_sets_retention_or_erases_a_users_data",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_one_route_erases_an_app_users_data_and_none_sets_retention",
     "test:backend/tests/unit/api/test_documented_limits.py::test_nothing_calls_the_event_purge",
     "test:backend/tests/unit/api/test_documented_limits.py::test_only_analysis_history_and_evaluation_counters_are_deleted_by_age",
     "test:backend/tests/unit/core/test_documented_defaults.py::test_analysis_history_is_kept_90_days",
     "test:backend/tests/unit/core/test_documented_defaults.py::test_the_metrics_tick_purges_the_analysis_history",
     "test:backend/tests/integration/services/test_analysis_history_retention.py::TestPurgeExpiredHistory::test_deletes_rows_older_than_the_window_and_keeps_newer",
+]
+
+[[unit]]
+text = "Erasing one person's data from the dashboard | A superuser erases one app user's data with the API (beta): Erase one app user's data. The dashboard has no control for it, and copies already exported to a warehouse or a backup are not touched."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_one_route_erases_an_app_users_data_and_none_sets_retention",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_only_a_superuser_may_erase",
+    "test:backend/tests/unit/services/test_app_user_erase_inventory.py::test_the_dashboard_has_no_control_for_the_erase",
+    "test:backend/tests/unit/services/test_app_user_erase_inventory.py::test_the_erase_touches_no_cache_and_no_other_store",
 ]
 
 [[unit]]
@@ -386,19 +410,6 @@ text = "SDKs"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Flag targeting from a native mobile SDK | iOS, Android and Flutter send only the user id on flag evaluation, so rules on attributes do not match (#438). Experiment assignment sends them. React Native sends them on flag evaluation too."
-by = [
-    "test:backend/tests/unit/api/test_documented_limits.py::test_the_native_sdks_send_no_context_on_flag_evaluation",
-    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_no_context_keeps_existing_behaviour",
-    "test:sdk/ios/Tests/ControlvarTests/ExperimentationClientTests.swift::testGetAssignment_postsExperimentKeyUserIdAndContext",
-    "test:sdk/android/sdk/src/test/kotlin/ExperimentationClientTest.kt::getAssignment sends POST tracking assign with experiment_key, user_id and context",
-    "test:sdk/react-native/__tests__/client.test.ts::sends the user attributes as `context`",
-    "test:sdk/react-native/__tests__/hooks.test.tsx::regression #1520: useFlag puts the attributes on the wire",
-    "test:sdk/react-native/__tests__/client.test.ts::getAllFlags sends ?context= and nothing for {} or undefined",
-    "test:sdk/flutter/test/client_test.dart::POSTs experiment_key, user_id and context to /api/v1/tracking/assign",
-]
-
-[[unit]]
 text = "Every SDK on a package registry | The JavaScript, React and React Native SDKs and the OpenFeature provider for Node are on npm; the Python SDK and the OpenFeature provider for Python are on PyPI; the Java SDK and its Spring Boot starter are on Maven Central; the .NET SDK is on NuGet. The Go SDK installs by module path, and every other SDK installs from a clone of this repository."
 by = [
     "mechanism:registry-availability",
@@ -408,7 +419,7 @@ by = [
 ]
 
 [[unit]]
-text = "An event_id sent by the SDK, so that an event sent again is stored once | The Java SDK sends one with every event (Event ids). The JavaScript SDK sends the eventId you give it and the Python SDK the event_id you give it (JavaScript, Python). The React and React Native SDKs send an event_id with every event, from their next published version (React, React Native). The .NET SDK sends an event_id with every event, from its next published version (.NET). The Android SDK, which you build from a clone of this repository, sends an event_id with every event (Android). No other SDK has an event_id option yet: not the edge, Go, iOS, Flutter, PHP, Ruby or Elixir SDK, nor the OpenFeature providers. Send an event that may be sent again to POST /api/v1/tracking/track or POST /api/v1/tracking/batch with its event_id (#1543)."
+text = "An event_id sent by the SDK, so that an event sent again is stored once | The Java SDK sends one with every event (Event ids). The JavaScript SDK sends the eventId you give it and the Python SDK the event_id you give it (JavaScript, Python). The React and React Native SDKs send an event_id with every event, from version 0.2.0 (React, React Native). The .NET SDK sends an event_id with every event, from version 0.2.0 (.NET). The Android SDK, which you build from a clone of this repository, sends an event_id with every event (Android). No other SDK has an event_id option yet: not the edge, Go, iOS, Flutter, PHP, Ruby or Elixir SDK, nor the OpenFeature providers. Send an event that may be sent again to POST /api/v1/tracking/track or POST /api/v1/tracking/batch with its event_id (#1543)."
 by = [
     "test:sdk/react/src/__tests__/event-id.test.ts::sends a generated lowercase UUID v4 as event_id on a keyed track",
     "test:sdk/react-native/__tests__/event-id.test.ts::track() with a key sends a generated lowercase UUID v4 as event_id",
@@ -502,4 +513,46 @@ by = [
     "test:backend/tests/integration/api/test_balanced_assignment.py::test_a_held_counter_row_holds_up_nothing_else",
     "test:backend/tests/integration/api/test_balanced_assignment.py::test_a_held_counter_row_is_answered_by_hash",
     "test:backend/tests/integration/database/test_balance_within_migration.py::test_the_previous_releases_statements_run_on_this_schema",
+]
+
+[[unit]]
+text = "Visual experiments (not yet available)"
+by = ["mechanism:visual-limitations-heading"]
+
+[[unit]]
+text = "The visual editor is not yet available."
+by = ["mechanism:visual-limitations-heading"]
+
+[[unit]]
+text = "These lines are about the browser script and the sign-in it will use."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "A text change on a page React renders on the server, with no error | On a site whose pages React renders on the server (Next.js and others), a text change makes React report at least one hydration error per page view (several on React 18), which your error monitoring will record. The change still shows."
+by = ["test:frontend/tests/e2e/runtime/hydration.runtime.spec.ts::on 25 targets is kept through hydration"]
+
+[[unit]]
+text = "A change to a text the page keeps updating | Do not change a text your site keeps updating while the page is open (a cart count, a timer, a price that loads late): once changed, either it stops showing your site's updates or your site's update replaces the change."
+by = ["test:frontend/tests/e2e/runtime/keep.runtime.spec.ts::a page that resets a text every 100 ms gets the change back each time until the bound, then keeps its own"]
+
+[[unit]]
+text = "A visual experiment on a site that routes after # | On a site that routes with the part of the address after # (hash routing), the visual editor always opens the site's default route, and page rules treat every route as one page."
+by = [
+    "test:frontend/tests/e2e/runtime/editor-link.runtime.spec.ts::is removed from the address, claimed once, and handed to the panel after hello",
+    "test:frontend/tests/e2e/runtime/spa.runtime.spec.ts::each kind of change after # re-evaluates exactly once, with no call and no page view",
+]
+
+[[unit]]
+text = "A revenue, count, duration or custom metric whose variants have the same distribution: the p-value comes from a permutation test that holds α at every split measured; 2,000 A/A experiments at 600/5,400 and at 3,000/3,000 recommended shipping the treatment in 48 and 46 and keeping the control in 52 and 45, about 50 expected in each direction."
+by = [
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_a_lopsided_split_names_a_false_winner_no_more_often_than_alpha",
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_an_equal_split_recommends_a_false_winner_within_the_band",
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_the_mirrored_split_names_neither_arm_beyond_the_band",
+]
+
+[[unit]]
+text = "An editor sign-in that can be extended | The visual editor's sign-in on your page lasts 4 hours and cannot be extended there. Every saved change is kept, and you go on by opening the editor again from the experiment's page. This does not meet WCAG 2.1 success criterion 2.2.1 (Timing Adjustable)."
+by = [
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_each_credential_lasts_its_time",
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_the_editor_routes_are_exactly_these",
 ]

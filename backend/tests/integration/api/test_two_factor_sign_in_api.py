@@ -384,7 +384,9 @@ def _prove_password(client, user, route, password):
 @pytest.mark.parametrize(
     "two_step, route, status, left",
     [
-        (False, "password", 204, 0),
+        # A change answers 200 with a new token for an account without two-step
+        # sign-in, 204 for one with it (#501).
+        (False, "password", 200, 0),
         (True, "password", 204, 9),
         (False, "enroll", 200, 0),
         (True, "enroll", 409, 9),

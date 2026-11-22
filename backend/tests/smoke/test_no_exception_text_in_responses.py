@@ -425,7 +425,6 @@ LOCKED = "AccountLockedError: the lockout sentence and Retry-After the service w
 AUDIT_PAGE = "the audit service's page/limit refusals; ValidationError is caught first"
 KEY_NOT_FOUND = "LookupError naming the key the caller sent ('... not found')"
 FIELD_NAMES = "ValidationError reduced to the names of the refused fields"
-WIZARD_STEP = "WizardStepDataError: the wizard's authored step refusal"
 ANALYSIS_CONFIG = "AnalysisConfigError: the authored field name and sentence (422)"
 GEMINI = (
     "GeminiError: the Gemini client's own sentences (HTTP status, finish "
@@ -433,10 +432,6 @@ GEMINI = (
 )
 POWER = "the power calculator's authored range refusals for the caller's numbers"
 PASSWORD_RULE = "check_password_strength's fixed sentences; none carries the value"
-WIZARD_SUBMIT = (
-    "loc and msg of the caller's own wizard payload (no input values); the "
-    "payload itself is returned alongside"
-)
 PATTERN = "PatternUnevaluable's str() is a fixed sentence with no pattern or value"
 TIME_WINDOW = "TimeWindowUnreadable's str() is a fixed sentence with no rule or value"
 HIPAA_CONFIG = "RuntimeError: the HIPAA service's configuration sentence (503)"
@@ -449,6 +444,12 @@ SEGMENT_CHANGE_REFUSED = (
     "(kind, archived, the member cap with counts), or the segment_in_use "
     "detail (the referencing flags' and experiments' ids, keys and names, "
     "which the caller may read); never a request value"
+)
+
+ALIAS_CONFLICT = (
+    "AliasConflict (#449): only its reason name is read, to pick one of the "
+    "route's four fixed 409 texts (ALIAS_CONFLICT_DETAILS); the reason names a "
+    "rule, never an id"
 )
 
 ROLLOUT_RULE_CONFLICT = (
@@ -476,14 +477,6 @@ ALLOWED: Dict[Tuple[str, str, str], Tuple[int, str]] = {
         1,
         FIELD_NAMES,
     ),
-    (f"{E}/experiment_wizard.py", "create_draft", "WizardStepDataError"): (
-        1,
-        WIZARD_STEP,
-    ),
-    (f"{E}/experiment_wizard.py", "update_draft_step", "WizardStepDataError"): (
-        1,
-        WIZARD_STEP,
-    ),
     (f"{E}/experiments.py", "get_daily_experiment_results", "ValueError"): (
         1,
         SERVICE_VALUEERROR,
@@ -492,7 +485,7 @@ ALLOWED: Dict[Tuple[str, str, str], Tuple[int, str]] = {
         1,
         SERVICE_VALUEERROR,
     ),
-    (f"{E}/experiments.py", "update_experiment", "AnalysisConfigError"): (
+    (f"{E}/experiments.py", "_apply_experiment_update", "AnalysisConfigError"): (
         2,
         ANALYSIS_CONFIG,
     ),
@@ -652,10 +645,8 @@ ALLOWED: Dict[Tuple[str, str, str], Tuple[int, str]] = {
         SERVICE_VALUEERROR,
     ),
     (f"{E}/segments.py", "update_segment", "ValueError"): (1, SERVICE_VALUEERROR),
-    (f"{E}/tracking.py", "assign_user_to_experiment", "ValueError"): (
-        1,
-        SERVICE_VALUEERROR,
-    ),
+    (f"{E}/tracking.py", "assign_one", "ValueError"): (1, SERVICE_VALUEERROR),
+    (f"{E}/tracking.py", "link_anonymous_id", "AliasConflict"): (1, ALIAS_CONFLICT),
     (f"{E}/tracking.py", "track_event", "ValidationError"): (1, FIELD_NAMES),
     (f"{E}/tracking.py", "track_event", "ValueError"): (1, SERVICE_VALUEERROR),
     (f"{E}/tracking.py", "track_event_by_ids", "ValidationError"): (1, FIELD_NAMES),
@@ -666,11 +657,6 @@ ALLOWED: Dict[Tuple[str, str, str], Tuple[int, str]] = {
     # The current password's check, shared by POST /users/me/password and
     # POST /users/me/2fa/enroll.
     (f"{E}/users.py", "_check_own_password", "AccountLockedError"): (1, LOCKED),
-    (
-        "backend/app/services/experiment_wizard_service.py",
-        "ExperimentWizardService.validate_and_submit",
-        "ValidationError",
-    ): (1, WIZARD_SUBMIT),
     (
         "backend/app/services/rules_evaluation_service.py",
         "RulesEvaluationService.evaluate",

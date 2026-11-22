@@ -99,6 +99,10 @@ SDK_RATE_LIMIT_PER_MINUTE=6000
   staging or production is accepted, allows every origin without credentials, and is
   reported with a WARNING at start-up; every staging or production start-up logs the
   effective list in one INFO line.
+- The visual editor, not yet available in the dashboard, opens only on sites listed
+  here, and a draft is not opened in it while the list contains `*`. It also needs the
+  dashboard's address, as SSO sign-in does: `DASHBOARD_ORIGINS`, or `PUBLIC_BASE_URL`
+  when the dashboard is served from it.
 - `SDK_RATE_LIMIT_PER_MINUTE` is the per-IP ceiling for SDK traffic (`/api/v1/tracking/*`
   and flag evaluation). The default is 6000 a minute.
 
@@ -109,6 +113,9 @@ addition to 127.0.0.1, ::1 and the networks its container is attached to: IP add
 and networks, separated by commas. The container's entrypoint reads it from the
 environment, not from `.env.prod`. See
 [Users' addresses behind a proxy](../self-hosting/proxies.md).
+
+A proxy in front of Controlvar that removes the `Origin` header turns every visual editor
+write into a 403: the editor's routes refuse a write that carries none.
 
 #### Demo mode
 

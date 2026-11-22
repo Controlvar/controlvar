@@ -16,8 +16,9 @@ text = "No API edits or deletes an entry."
 by = ["test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact"]
 
 [[unit]]
-text = "It records the changes people make through the API: creating, changing and deleting feature flags and experiments, turning flags on and off, starting, pausing and completing experiments, rollout schedule changes, API keys, holdouts, mutual exclusion groups, segments, creating and deleting users, changes to a user's role, superuser flag or active status, signing in with a password or through Cognito (POST /auth/token; a sign-in through the Cognito Hosted UI does not pass through the API and is not recorded), and safety rollbacks and saves of the global safety settings."
+text = "It records the changes people make through the API: creating, changing and deleting feature flags and experiments, turning flags on and off, starting, pausing and completing experiments, rollout schedule changes, API keys, holdouts, mutual exclusion groups, segments, creating and deleting users, changes to a user's role, superuser flag or active status, signing in with a password or through Cognito (POST /auth/token; a sign-in through the Cognito Hosted UI does not pass through the API and is not recorded), safety rollbacks and saves of the global safety settings, and erasing one app user's data."
 by = [
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_an_app_user_erase_writes_a_start_and_a_final_entry",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_saving_the_global_safety_settings_writes_one_entry",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_create",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_update_records_only_what_changed",
@@ -99,6 +100,14 @@ by = ["exempt:baseline"]
 [[unit]]
 text = "Each flag succeeds or fails on its own: the call answers 200 with a result per flag, even when some of them fail."
 by = ["docex:docs/api/audit-logging.md#\"total\": 3"]
+
+[[unit]]
+text = "The changes and their audit entries are saved together: if they cannot be saved, no flag is changed and the call answers 500."
+by = [
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_a_refused_entry_saves_nothing_and_answers_500",
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_bulk_toggle_answers_500_when_its_commit_fails",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_bulk_toggle_keeps_nothing_when_the_audit_write_fails",
+]
 
 [[unit]]
 text = "These two flags give the call something to change."
@@ -187,7 +196,7 @@ text = "Parameter | Type | Description"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "entity_type | string | feature_flag, experiment, user, role, permission, safety_config, rollout_schedule, api_key, holdout, mutual_exclusion_group, segment"
+text = "entity_type | string | feature_flag, experiment, user, role, permission, safety_config, rollout_schedule, api_key, holdout, mutual_exclusion_group, segment, app_user"
 by = ["test:backend/tests/unit/services/test_audit_log_rules.py::test_the_entity_types"]
 
 [[unit]]
@@ -450,8 +459,13 @@ text = "Every action below is written by the route or the part of the platform n
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "A route writes it after the change is saved, with the signed-in user as the actor; the failure policy says what happens when an entry cannot be written."
-by = ["test:backend/tests/integration/api/test_audit_route_events.py::test_route_site_keeps_the_change_when_the_audit_write_fails"]
+text = "A route writes it with the signed-in user as the actor, after the change is saved, except a feature flag or rollout schedule route, which writes it in the same transaction as the change; the failure policy says what happens when an entry cannot be written."
+by = [
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_route_site_keeps_the_change_when_the_audit_write_fails",
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_a_refused_entry_saves_nothing_and_answers_500",
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_a_refused_entry_saves_no_rollout_change_and_answers_500",
+    "test:backend/tests/smoke/test_flag_audit_strict_sites.py::test_every_entry_is_written_inside_an_audit_with_change_block",
+]
 
 [[unit]]
 text = "An update records only the fields that changed, as old_value and new_value JSON; a create records the new entity's identifying fields in new_value, and a delete the old ones in old_value."
@@ -540,12 +554,11 @@ by = [
 ]
 
 [[unit]]
-text = "experiment_create | experiment | POST /experiments/, /clone (reason names the source), wizard submit"
+text = "experiment_create | experiment | POST /experiments/, /clone (reason names the source)"
 by = [
     "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_experiment_create_update_delete",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_experiment_schedule_metadata_and_clone",
-    "test:backend/tests/integration/api/test_audit_route_events.py::test_wizard_submit_records_the_created_experiment",
 ]
 
 [[unit]]
@@ -554,6 +567,13 @@ by = [
     "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_experiment_schedule_metadata_and_clone",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_bandit_weights_override",
+]
+
+[[unit]]
+text = "experiment_update | experiment | PUT /visual-editor/sessions/current/variants/{variant_id}/changes saves a variant's page changes from the visual editor, the actor being the session's user; reason is visual editor session and the first 8 characters of the session's id"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_a_save_is_one_experiment_change_by_the_editors_user",
 ]
 
 [[unit]]
@@ -582,6 +602,32 @@ text = "experiment_preview_links_revoke | experiment | DELETE /experiments/{id}/
 by = [
     "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
     "test:backend/tests/integration/api/test_visual_preview_links_api.py::test_making_and_revoking_are_audited",
+]
+
+[[unit]]
+text = "visual_editor_session_opened | experiment | POST /visual-editor/sessions starts a visual editor session, the actor being the user who opened the editor link; new_value is {\"session_id\"}, never the session's token"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_each_case_writes_exactly_its_audit_entries",
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_no_log_line_or_stored_entry_holds_a_credential",
+]
+
+[[unit]]
+text = "visual_editor_session_closed | experiment | A visual editor session ends; new_value is {\"reason\", \"session_id\", \"session_user_id\"}. reason is reopened when POST /experiments/{id}/visual/editor-tickets opened the editor again, the actor being whoever opened it; ticket_reused when the session's editor link came back after it was used, the actor being system:visual-editor; signed_out for DELETE /visual-editor/sessions/current, the actor being the session's user; and started when the experiment starts, the actor being whoever started it with /start, or system:experiment-scheduler"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_each_case_writes_exactly_its_audit_entries",
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_a_reopen_closing_entry_names_who_opened_again_and_whose_session_closed",
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_signing_out_closes_the_session_with_its_entry",
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_a_started_experiments_session_says_started_and_is_recorded",
+]
+
+[[unit]]
+text = "visual_editor_ticket_reused | experiment | An editor link that was already used came back to POST /visual-editor/tickets/claim or POST /visual-editor/sessions, which closes the editor it opened; the actor is system:visual-editor and new_value is {\"link_user_id\"}, the user who opened the link"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_each_case_writes_exactly_its_audit_entries",
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_a_used_link_presented_again_ends_the_session_it_opened",
 ]
 
 [[unit]]
@@ -669,13 +715,16 @@ by = [
 ]
 
 [[unit]]
-text = "user_login | user | Signing in with a password (POST /auth/login, or POST /auth/token with AUTH_PROVIDER=local); new_value is {\"provider\": \"local\"}. For an account with two-step sign-in on, the entry is written by the code step, POST /auth/mfa/verify, and new_value is {\"provider\": \"local\", \"second_step\"}, totp or recovery"
+text = "user_login | user | Signing in with a password (POST /auth/login, or POST /auth/token with AUTH_PROVIDER=local); new_value is {\"provider\": \"local\"}. For an account with two-step sign-in on, the entry is written by the code step, POST /auth/mfa/verify, and new_value is {\"provider\": \"local\", \"second_step\"}, totp or recovery. A password change through POST /users/me/password that answers a new access token writes one too, with new_value {\"provider\": \"local\", \"via\": \"password_change\"}; a change that answers 204 writes none"
 by = [
     "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_local_sign_in",
     "test:backend/tests/unit/api/test_two_factor_routes.py::test_the_password_step_answers_mfa_required_and_no_access_token",
     "test:backend/tests/unit/api/test_two_factor_routes.py::test_the_code_step_signs_in_and_records_the_second_step",
     "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_a_recovery_code_signs_in_once",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_a_password_change_that_answers_a_token_is_recorded_as_a_sign_in",
+    "test:backend/tests/integration/api/test_password_change_ends_sessions.py::test_the_answer_with_a_token_is_recorded_as_one_sign_in",
+    "test:backend/tests/integration/api/test_password_change_ends_sessions.py::test_the_answer_without_a_token_records_no_sign_in",
 ]
 
 [[unit]]
@@ -838,6 +887,16 @@ by = [
 ]
 
 [[unit]]
+text = "app_user_erase_started, app_user_erased | app_user | POST /admin/app-users/erase (beta), by the calling superuser: one entry when the call starts, before anything is deleted, and one when it finishes, both with the response's receipt_id as entity_id and app user as entity_name. app_user_erased's new_value is {\"deleted\", \"ids_erased\", \"complete\"}: counts only, never the id. A start entry with no finish entry: the call did not finish; some rows may be gone, or none. See Erase one app user's data"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_an_app_user_erase_writes_a_start_and_a_final_entry",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_each_call_writes_a_start_and_a_final_entry_with_counts_only",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_no_start_entry_erases_nothing",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_a_failed_final_transaction_is_a_500_with_the_start_entry_only",
+]
+
+[[unit]]
 text = "You can filter on them, but nothing in this release writes them."
 by = [
     "test:backend/tests/smoke/test_audit_inventory.py::test_written_action_types_are_what_the_inventory_writes",
@@ -864,45 +923,53 @@ text = "user_email | Written by"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "system:experiment-scheduler | The experiment scheduler: scheduled starts, resumes and ends"
+text = "system:experiment-scheduler | The experiment scheduler: scheduled starts, resumes and ends, and each visual editor session a scheduled start closes"
 by = [
-    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_six",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_these",
     "test:backend/tests/integration/services/test_audit_service_sites.py::test_scheduled_start_is_recorded_by_the_experiment_scheduler",
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_a_started_experiments_session_says_started_and_is_recorded",
 ]
 
 [[unit]]
 text = "system:rollout-scheduler | The rollout scheduler: each rollout stage it starts"
 by = [
-    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_six",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_these",
     "test:backend/tests/integration/services/test_audit_service_sites.py::test_stage_start_is_recorded_by_the_rollout_scheduler",
 ]
 
 [[unit]]
 text = "system:safety-monitor | The safety monitor: each automatic rollback"
 by = [
-    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_six",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_these",
     "test:backend/tests/integration/services/test_audit_service_sites.py::test_monitor_rollback_is_recorded_by_the_safety_monitor",
 ]
 
 [[unit]]
 text = "system:cognito-sync | Cognito group sync: each role or superuser flag change"
 by = [
-    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_six",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_these",
     "test:backend/tests/integration/services/test_audit_service_sites.py::test_group_role_change_is_recorded_by_cognito_sync",
 ]
 
 [[unit]]
 text = "system:sso-sync | SSO sign-in (full profile): each role change from a mapped group"
 by = [
-    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_six",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_these",
     "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_an_sso_role_change_writes_one_role_assign_by_sso_sync",
 ]
 
 [[unit]]
 text = "system:operator-cli | An operator's command, python -m backend.app.db.two_factor_reset: each account whose two-step sign-in it resets"
 by = [
-    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_six",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_these",
     "test:backend/tests/integration/services/test_two_factor_reset_cli.py::test_one_account_by_its_address_in_any_case",
+]
+
+[[unit]]
+text = "system:visual-editor | The visual editor's sign-in: each editor link that came back after it was used, and each editor session that closes because of it"
+by = [
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_these",
+    "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_each_case_writes_exactly_its_audit_entries",
 ]
 
 [[unit]]
@@ -990,10 +1057,24 @@ text = "Where | If the entry cannot be written"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "A route (all the route actions above) | The change is kept and the response is 2xx; there is no entry"
+text = "A feature flag created, changed, deleted, activated, deactivated, unarchived, toggled, enabled or disabled, or a bulk toggle | Nothing is saved and the response is 500 with a request ID; a bulk toggle saves none of its flags. Resend it once the problem is fixed"
+by = [
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_a_refused_entry_saves_nothing_and_answers_500",
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_a_refused_compliance_event_saves_nothing_and_answers_500",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_bulk_toggle_keeps_nothing_when_the_audit_write_fails",
+]
+
+[[unit]]
+text = "Rollout schedule and stage changes (recorded on the flag) | Nothing is saved and the response is 500; resend it once the problem is fixed"
+by = [
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_a_refused_entry_saves_no_rollout_change_and_answers_500",
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_rollout_change_keeps_nothing_when_the_audit_write_fails",
+]
+
+[[unit]]
+text = "Any other route (the other route actions above) | The change is kept and the response is 2xx; there is no entry"
 by = [
     "test:backend/tests/integration/api/test_audit_route_events.py::test_route_site_keeps_the_change_when_the_audit_write_fails",
-    "test:backend/tests/integration/api/test_audit_route_events.py::test_bulk_toggle_keeps_the_change_when_the_audit_write_fails",
     "test:backend/tests/integration/api/test_change_audit_saved.py::test_failed_audit_write_keeps_the_answer_and_the_change",
 ]
 
@@ -1047,7 +1128,15 @@ text = "SSO sign-in changing a role | The role change is kept and the sign-in su
 by = ["test:modules/backend/tests/integration/api/test_audit_module_events.py::test_a_refused_entry_still_applies_the_sso_role_change"]
 
 [[unit]]
-text = "Each entry that cannot be written logs one ERROR line from the API:"
+text = "While feature flag changes are refused this way, a superuser can still turn a flag off with POST /api/v1/safety/feature-flags/{feature_flag_id}/rollback?percentage=0, and the rollback is kept even when its entry cannot be written."
+by = [
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_a_refused_entry_never_blocks_a_rollback",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_a_refused_monitor_entry_never_blocks_a_rollback",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p1_a_rule_matched_user_is_off_after_a_rollback_to_0",
+]
+
+[[unit]]
+text = "Each entry that cannot be written while its change is kept logs one ERROR line from the API:"
 by = [
     "test:backend/tests/integration/services/test_audit_service_sites.py",
     "test:modules/backend/tests/integration/api/test_audit_module_events.py",
@@ -1087,6 +1176,37 @@ text = "The API also counts these failures in a Prometheus counter, audit_write_
 by = [
     "test:backend/tests/unit/services/test_audit_log_rules.py::test_a_failed_write_logs_one_error_line_and_counts_it",
     "test:infrastructure/tests/test_api_task_and_data_resources.py::test_nothing_collects_the_apis_prometheus_metrics",
+]
+
+[[unit]]
+text = "A feature flag or rollout schedule change refused because its entry cannot be written has no missing entry: it logs no Failed to create audit log line and does not count toward experimentation-api-audit-write-failed-<env> or audit_write_failures_total."
+by = [
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_a_refused_entry_saves_nothing_and_answers_500",
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_a_refused_entry_saves_no_rollout_change_and_answers_500",
+    "test:backend/tests/unit/services/test_audit_with_change.py::test_it_never_commits_never_rolls_back_and_counts_no_lost_entry",
+    "test:backend/tests/unit/services/test_audit_write_failed_line.py::test_the_filter_does_not_count_a_written_entry_or_another_loggers_error",
+]
+
+[[unit]]
+text = "The route logs <operation> failed (AuditWriteFailed) at ERROR instead, such as Feature flag toggle failed (AuditWriteFailed), and a create or an update also logs Error creating feature flag or Error updating feature flag with the cause's type."
+by = ["test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_a_refused_entry_saves_nothing_and_answers_500"]
+
+[[unit]]
+text = "A rollout schedule or stage route logs Error <verb> rollout schedule: audit entry for feature_flag_update on feature_flag <flag id> could not be written (<cause type>) at ERROR instead, with rollout stage for a stage."
+by = ["test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_a_refused_entry_saves_no_rollout_change_and_answers_500"]
+
+[[unit]]
+text = "AuditWriteFailed means only that the entry could not be written with the change: the audit tables refused it, or the database stopped the request while it waited for a row that another change held."
+by = [
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_a_refused_entry_saves_nothing_and_answers_500",
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_waiting_for_a_row_another_change_holds_saves_nothing",
+]
+
+[[unit]]
+text = "These lines count toward experimentation-api-error-logs-<env>, which goes into alarm at 10 error lines in 5 minutes, not on each refusal."
+by = [
+    "test:infrastructure/tests/test_standing_alarms.py::test_the_error_filter_is_on_the_api_tasks_log_group",
+    "test:infrastructure/tests/test_standing_alarms.py::test_the_error_log_alarm_fires_on_10_lines_in_5_minutes",
 ]
 
 [[unit]]

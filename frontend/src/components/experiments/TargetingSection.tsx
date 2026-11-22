@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { TargetingRuleBuilder } from '@/components/targeting';
+import { InlineConfirm } from '@/components/ui/InlineConfirm';
 import { docsUrl } from '@/services/docs';
 import { ExperimentsService } from '@/services/experiments';
 import { Experiment } from '@/types/experiments';
@@ -108,6 +109,25 @@ export function TargetingSection({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<TargetingSaveError | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
+  // Where focus goes after a confirmed answer (#1797). Set with the state
+  // change, applied in an effect: the target renders in that same commit.
+  const [focusAfter, setFocusAfter] = useState<{ target: 'add-group' | 'edit' } | null>(null);
+
+  const editButton = useRef<HTMLButtonElement>(null);
+  const replaceButton = useRef<HTMLButtonElement>(null);
+  const rawDocsLink = useRef<HTMLAnchorElement>(null);
+  const editor = useRef<HTMLDivElement>(null);
+  const saveButton = useRef<HTMLButtonElement>(null);
+  const editCancelButton = useRef<HTMLButtonElement>(null);
+  const replaceTextId = useId();
+  const pausedTextId = useId();
+
+  useEffect(() => {
+    if (!focusAfter) return;
+    if (focusAfter.target === 'edit') editButton.current?.focus();
+    // An empty builder (createEmptyRules has no groups) has one control.
+    else editor.current?.querySelector<HTMLElement>('[data-testid="add-group"]')?.focus();
+  }, [focusAfter]);
 
   const editing = rules !== null;
 
@@ -125,7 +145,8 @@ export function TargetingSection({
     setConfirmingSave(false);
   };
 
-  const send = async () => {
+  /** `confirmed`: sent from the paused-save question, whose answer then owns focus. */
+  const send = async (confirmed = false) => {
     if (!rules) return;
     setConfirmingSave(false);
     setSaving(true);
@@ -140,6 +161,9 @@ export function TargetingSection({
           ? 'Saved. The new rules apply when you resume the experiment.'
           : 'Saved. The new rules apply when the experiment starts.',
       );
+      // The editor closes: Edit is where the next change starts. A refusal
+      // needs nothing here, since SaveAlert takes focus itself.
+      if (confirmed) setFocusAfter({ target: 'edit' });
       onSaved(updated);
     } catch (err) {
       setError(describeTargetingSaveError(err));
@@ -209,6 +233,7 @@ export function TargetingSection({
         </h2>
         {canAct && editable && !editing && (
           <button
+            ref={editButton}
             type="button"
             onClick={() => startEdit(jsonToRules(empty ? null : (stored as object)))}
             className="px-3 py-1.5 rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700"
@@ -219,6 +244,7 @@ export function TargetingSection({
         )}
         {canAct && !editable && !editing && !confirmingReplace && (
           <button
+            ref={replaceButton}
             type="button"
             onClick={() => {
               setSaved(null);
@@ -245,6 +271,7 @@ export function TargetingSection({
               <p className="text-sm text-amber-900 mb-2" data-testid="targeting-raw-note">
                 {OUTSIDE_BUILDER_NOTE}{' '}
                 <a
+                  ref={rawDocsLink}
                   href={docsUrl('api/endpoints', 'targeting-rules')}
                   className="text-blue-600 hover:underline"
                   target="_blank"
@@ -265,13 +292,20 @@ export function TargetingSection({
       {reason && <div className="mt-3">{reason}</div>}
 
       {confirmingReplace && (
-        <div
-          role="dialog"
-          aria-label="Replace rules"
-          className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3"
-          data-testid="targeting-replace-confirm"
+        // Replace rules goes while this is open and comes back on Cancel, so
+        // focus returns through its ref. "Start with no rules" opens the
+        // editor, which then owns focus (the effect above, + Add Group).
+        <InlineConfirm
+          label="Replace rules"
+          describedBy={replaceTextId}
+          onCancel={() => setConfirmingReplace(false)}
+          returnFocus={replaceButton}
+          fallbackFocus={rawDocsLink}
+          tone="warning"
+          className="mt-3 rounded-lg border p-3"
+          testId="targeting-replace-confirm"
         >
-          <p className="text-sm text-amber-900">
+          <p id={replaceTextId} className="text-sm text-amber-900">
             These rules will be discarded when you save new ones. Until you save, nothing changes.
           </p>
           <pre className="mt-2 bg-white border border-amber-200 text-xs text-slate-800 rounded-md p-3 overflow-x-auto">
@@ -280,6 +314,7 @@ export function TargetingSection({
           <div className="mt-3 flex gap-2">
             <button
               type="button"
+              data-autofocus
               onClick={() => setConfirmingReplace(false)}
               className="px-3 py-1.5 rounded-md text-sm font-medium text-slate-600 border border-slate-300 bg-white hover:bg-slate-50"
               data-testid="targeting-replace-cancel"
@@ -288,30 +323,44 @@ export function TargetingSection({
             </button>
             <button
               type="button"
-              onClick={() => startEdit(createEmptyRules())}
+              onClick={() => {
+                startEdit(createEmptyRules());
+                setFocusAfter({ target: 'add-group' });
+              }}
               className="px-3 py-1.5 rounded-md text-sm font-medium bg-amber-600 text-white hover:bg-amber-700"
               data-testid="targeting-replace-yes"
             >
               Start with no rules
             </button>
           </div>
-        </div>
+        </InlineConfirm>
       )}
 
       {editing && rules && (
-        <div data-testid="targeting-editor">
+        <div ref={editor} data-testid="targeting-editor">
           <TargetingRuleBuilder value={rules} onChange={setRules} />
           {confirmingSave ? (
-            <div
-              role="dialog"
-              aria-label="Save rules while paused"
-              className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3"
-              data-testid="targeting-paused-confirm"
+            // This stands in for the Save rules row, which comes back on Keep
+            // editing: focus returns through Save rules' ref. While the save
+            // runs both of that row's buttons are disabled, so nothing takes
+            // focus until the answer: Edit (above) or SaveAlert (its own).
+            <InlineConfirm
+              label="Save rules while paused"
+              describedBy={pausedTextId}
+              onCancel={() => setConfirmingSave(false)}
+              returnFocus={saveButton}
+              fallbackFocus={editCancelButton}
+              tone="warning"
+              className="mt-3 rounded-lg border p-3"
+              testId="targeting-paused-confirm"
             >
-              <p className="text-sm text-amber-900">{PAUSED_SAVE_NOTICE}</p>
+              <p id={pausedTextId} className="text-sm text-amber-900">
+                {PAUSED_SAVE_NOTICE}
+              </p>
               <div className="mt-3 flex gap-2">
                 <button
                   type="button"
+                  data-autofocus
                   onClick={() => setConfirmingSave(false)}
                   className="px-3 py-1.5 rounded-md text-sm font-medium text-slate-600 border border-slate-300 bg-white hover:bg-slate-50"
                   data-testid="targeting-paused-cancel"
@@ -320,17 +369,18 @@ export function TargetingSection({
                 </button>
                 <button
                   type="button"
-                  onClick={() => void send()}
+                  onClick={() => void send(true)}
                   className="px-3 py-1.5 rounded-md text-sm font-medium bg-amber-600 text-white hover:bg-amber-700"
                   data-testid="targeting-paused-yes"
                 >
                   Save rules
                 </button>
               </div>
-            </div>
+            </InlineConfirm>
           ) : (
             <div className="mt-4 flex gap-2">
               <button
+                ref={editCancelButton}
                 type="button"
                 onClick={cancelEdit}
                 disabled={saving}
@@ -340,6 +390,7 @@ export function TargetingSection({
                 Cancel
               </button>
               <button
+                ref={saveButton}
                 type="button"
                 onClick={onSave}
                 disabled={saving}

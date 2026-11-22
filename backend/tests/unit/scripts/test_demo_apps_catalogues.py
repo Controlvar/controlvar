@@ -503,13 +503,14 @@ def test_each_app_defaults_to_the_local_api_and_dashboard(app):
     assert "process.env[" not in env
 
 
-def test_the_react_sdk_is_0_1_0_with_the_hooks_the_apps_use():
-    """The version both demo READMEs name: 0.1.0, its first release. The
-    manifest said 1.1.0 before then, a version never published."""
+def test_the_react_sdk_is_0_2_0_with_the_hooks_the_apps_use():
+    """The version the demo READMEs name: ShopLab's 0.2.0, and StreamPulse's
+    "0.1.0 or later". Its first release was 0.1.0; the manifest said 1.1.0
+    before then, a version never published."""
     package = json.loads(
         (REPO_ROOT / "sdk" / "react" / "package.json").read_text(encoding="utf-8")
     )
-    assert package["version"] == "0.1.0"
+    assert package["version"] == "0.2.0"
     index = (REPO_ROOT / "sdk" / "react" / "src" / "index.ts").read_text(
         encoding="utf-8"
     )

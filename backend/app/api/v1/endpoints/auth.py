@@ -38,6 +38,7 @@ unaffected by that setting.
 
 import logging
 from typing import Any, Dict, List, Optional, Union
+from uuid import UUID
 
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -59,9 +60,13 @@ from backend.app.core.mfa_token import (
     VERIFY_TTL_SECONDS,
     InvalidMfaToken,
     create_mfa_token,
-    decode_mfa_token,
+    decode_mfa_token_claims,
 )
-from backend.app.core.security import create_local_access_token, oauth2_scheme
+from backend.app.core.security import (
+    create_local_access_token,
+    oauth2_scheme,
+    stamp_is_current,
+)
 from backend.app.core.two_factor_policy import two_factor_required
 from backend.app.models.audit_log import ActionType, EntityType
 from backend.app.models.user import User
@@ -98,6 +103,7 @@ from backend.app.services.audit_service import AuditService
 from backend.app.services.auth_service import (
     CognitoAuthService,
     CognitoTokenRefused,
+    CognitoUnavailable,
     configured_pool_and_client,
     log_token_refused,
     sign_in_logger,
@@ -404,6 +410,9 @@ def _sign_out_of_cognito(token: Optional[str]) -> None:
     except CognitoTokenRefused as refusal:
         log_token_refused(refusal, "/auth/logout")
         raise _credentials_refused()
+    except CognitoUnavailable:
+        # Cognito did not answer: not a refused token (auth_service logged why).
+        raise deps.cognito_unavailable_exception()
     except ValueError:
         raise _credentials_refused()
     try:
@@ -498,11 +507,15 @@ def verify_mfa(
     client address.
     """
     try:
-        user_id = decode_mfa_token(body.mfa_token)
+        claims = decode_mfa_token_claims(body.mfa_token)
     except InvalidMfaToken:
         raise _sign_in_expired()
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).filter(User.id == UUID(str(claims["sub"]))).first()
     if user is None or not account_may_sign_in(user):
+        raise _sign_in_expired()
+    # A password step taken before the account's password changed starts
+    # again (#501), before any code is checked or counted.
+    if not stamp_is_current(claims, user):
         raise _sign_in_expired()
     try:
         result = two_factor_service.verify_sign_in(
@@ -541,15 +554,18 @@ def _enrolling_account(db: Session, mfa_token: str) -> User:
     Anything else answers 401 "Sign-in expired. Start again.": the token is
     expired, forged or of the verify purpose; the account is gone, deactivated
     or (in demo mode) not a viewer; its role no longer requires two-step
-    sign-in; or it is already on (set up elsewhere since the password step).
-    Signing in again then answers what the account needs now.
+    sign-in; its password has changed since the password step (#501); or it
+    is already on (set up elsewhere since the password step). Signing in
+    again then answers what the account needs now.
     """
     try:
-        user_id = decode_mfa_token(mfa_token, purpose=ENROL_PURPOSE)
+        claims = decode_mfa_token_claims(mfa_token, purpose=ENROL_PURPOSE)
     except InvalidMfaToken:
         raise _sign_in_expired()
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).filter(User.id == UUID(str(claims["sub"]))).first()
     if user is None or not account_may_sign_in(user) or not two_factor_required(user):
+        raise _sign_in_expired()
+    if not stamp_is_current(claims, user):
         raise _sign_in_expired()
     if two_factor_service.is_enabled(db, user.id):
         raise _sign_in_expired()
@@ -915,6 +931,9 @@ def get_user_info(
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    except CognitoUnavailable:
+        # Cognito did not answer: not a refused token (auth_service logged why).
+        raise deps.cognito_unavailable_exception()
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

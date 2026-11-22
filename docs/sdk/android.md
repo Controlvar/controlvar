@@ -10,11 +10,13 @@ Flag evaluation and experiment assignment are decided **by the server**: every c
 public API with your `X-API-Key`, the server buckets the user (sticky per user + experiment), and
 the SDK caches the answer per user + key. Nothing is bucketed locally.
 
-> **Flag evaluation sends only the user id.** `GET /api/v1/feature-flags/evaluate/{key}?user_id=…`
-> carries none of the user's attributes, so the server evaluates a flag's targeting rules against
-> an empty context. Experiment assignment sends them: `getAssignment`, with `user.attributes`, sends the attributes as
-> `context`. To evaluate a flag with attributes, call the evaluate endpoint with a `context`
-> query parameter (a URL-encoded JSON object of the attributes).
+> **Flag evaluation sends the user's attributes.** `evaluateFlag(flagKey, user)` sends `user.attributes`
+> as `context` on `GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=<URL-encoded JSON object>`,
+> so the flag's targeting rules are evaluated against them. With no attributes, or an empty map,
+> no `context` is sent and the request carries the user id alone. The change is in this
+> repository ([#438](https://github.com/Controlvar/controlvar/issues/438)); it reaches a registry
+> at this SDK's first publish, so a build from a clone of `main` has it and a copy installed
+> earlier does not.
 
 Source: `sdk/android` (module `sdk/android/sdk`, Compose example in `sdk/android/examples`).
 
@@ -144,9 +146,9 @@ val user = User(
 )
 ```
 
-`attributes` are sent as the assignment `context` (targeting rules). Values may be `String`,
-`Int`, `Long`, `Double`, `Boolean`, nested `Map`/`List` or `null`. Flag evaluation sends the
-user id only (see the note at the top of this page).
+`attributes` are sent as `context` on assignment and on flag evaluation (targeting rules). Values
+may be `String`, `Int`, `Long`, `Double`, `Boolean`, nested `Map`/`List` or `null`; a value of
+another type is sent as its `toString()`, on both calls.
 
 ---
 
@@ -154,7 +156,10 @@ user id only (see the note at the top of this page).
 
 ### `suspend fun evaluateFlag(flagKey: String, user: User): EvalResult`
 
-Calls `GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=…` (both values percent-encoded).
+Calls `GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=…&context=…` (every value percent-encoded).
+`context` is `user.attributes` as compact JSON, with the keys of every map sorted
+(`{"plan":"pro"}` travels as `context=%7B%22plan%22%3A%22pro%22%7D`), and is left out when there
+are none.
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -171,12 +176,22 @@ if (result.enabled) {
 }
 ```
 
-Resolution order: the in-memory cache for this user + flag, then the API, then (on failure) the
-offline store's last successful evaluation for this user + flag. Failures are never cached; an
-offline fallback is returned without being re-cached, so the next call retries the server. With
-no offline value the call **throws** — `FlagNotFoundException` on 404 (an unknown flag key; a
-flag that is not ACTIVE is not an error, it answers `enabled: false`), `ServerException` on another non-2xx status, `NetworkException` on IO errors — which is
-what the SDK did before the rewire.
+Resolution order: the in-memory cache for this user + flag, then the API, then (on a failure
+other than a 404) the offline store's last successful evaluation for this user + flag. The SDK
+keeps one cached answer per user and flag, together with the attributes it was asked with. A later
+call is answered from the cache only if its attributes are exactly the same; otherwise the SDK asks
+the server, and the new answer replaces the cached one. So two calls that differ only in
+attributes get two answers. The attributes are written with their keys sorted, so the same
+attributes always find the same cached answer. The SDK stores the last answer the server gave for
+each user and flag, whatever attributes it was asked with, and serves it only when the server
+cannot answer. A 404 removes the stored answer, and the call throws `FlagNotFoundException`. If the attributes cannot be written as JSON (a NaN or an
+infinite number, at any depth), `evaluateFlag` throws `IllegalArgumentException`
+("user.attributes cannot be sent as JSON") and sends nothing.
+Failures are never cached; an offline fallback is returned without being re-cached, so the next
+call retries the server. With no offline value the call **throws** — `FlagNotFoundException` on
+404 (an unknown flag key; a flag that is not ACTIVE is not an error, it answers `enabled: false`),
+`ServerException` on another non-2xx status, `NetworkException` on IO errors — which is what the
+SDK did before the rewire.
 
 ---
 
@@ -302,7 +317,8 @@ Maven Central yet, so this is in the build you make from a clone of this reposit
 | `getCacheSize(): Int` | Cached evaluations plus assignments |
 
 The in-memory caches are thread-safe LRU maps (`ResultCache`) keyed by `userId`, a NUL
-separator and the flag/experiment `key`.
+separator and the flag/experiment `key`; a flag's entry also remembers the attributes it was
+answered for (`ResultCache.get(key, context)` returns it only for the same ones).
 The offline store keys are `ep_flag_<len>_<userId>_<key>` / `ep_assign_<len>_<userId>_<key>`.
 
 ---
@@ -313,7 +329,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
-| `evaluateFlag` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
+| `evaluateFlag` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=…` | `context`: the user's attributes as JSON, left out when there are none | `{key, enabled, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
 | `getAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?, event_id}` | ignored |
 | `track` without keys, `trackBatch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored |
@@ -334,14 +350,14 @@ fails and no offline value exists; `track`/`trackBatch` never throw.
 |-------|------|
 | `ExperimentationException.NetworkException(message, cause)` | OkHttp IO failure or timeout |
 | `ExperimentationException.ServerException(statusCode, message)` | Non-2xx response: 401 bad key, 404 on an assignment (no experiment has the key, or a draft with no control variant), 422 invalid event, 429 rate limited; `message` carries the API's `detail` |
-| `ExperimentationException.FlagNotFoundException(flagKey)` | `evaluateFlag` got a 404 and nothing is stored offline |
+| `ExperimentationException.FlagNotFoundException(flagKey)` | `evaluateFlag` got a 404; the stored offline answer, if any, is removed and not served |
 | `ExperimentationException.InvalidConfigException(message)` | Reserved for configuration errors |
 
 ```kotlin
 try {
     val result = client.evaluateFlag("my-flag", user)
 } catch (e: ExperimentationException.FlagNotFoundException) {
-    // unknown flag key → treat as off
+    // unknown flag key (the stored answer, if any, was removed) → treat as off
 } catch (e: ExperimentationException.NetworkException) {
     // offline and nothing stored → treat as off
 } catch (e: ExperimentationException.ServerException) {

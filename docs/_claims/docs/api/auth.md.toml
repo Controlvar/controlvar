@@ -201,8 +201,12 @@ text = "POST /api/v1/auth/logout answers 204 so a client can discard its token."
 by = ["test:backend/tests/unit/api/test_local_auth.py::TestMeAndLogoutEndpoints::test_logout_204"]
 
 [[unit]]
-text = "The token itself stays valid until it expires, because nothing is revoked on the server."
-by = ["test:backend/tests/unit/api/test_route_surface_rules.py::test_signing_out_revokes_nothing"]
+text = "Logging out revokes nothing on the server: a token is refused once it expires, or once the account's password changes (Change Your Own Password)."
+by = [
+    "test:backend/tests/unit/api/test_route_surface_rules.py::test_signing_out_revokes_nothing",
+    "test:backend/tests/unit/api/test_local_auth.py::TestGetCurrentUserLocal::test_expired_token_is_401",
+    "test:backend/tests/integration/api/test_own_password_change.py::test_a_token_issued_before_the_change_is_refused",
+]
 
 [[unit]]
 text = "With AUTH_PROVIDER=cognito, the login also returns a refresh token, and POST /api/v1/auth/refresh with {\"refresh_token\": \"...\"} exchanges it for a new access token."
@@ -531,26 +535,50 @@ text = "Wrong current passwords count toward the same limit as failed logins, so
 by = ["test:backend/tests/integration/api/test_own_password_change.py::test_repeated_wrong_current_passwords_lock_the_account"]
 
 [[unit]]
-text = "With the right one, the password changes and the response is an empty 204:"
+text = "With the right one, the password changes, and the answer is the one POST /api/v1/auth/login gives, with a new access_token."
 by = [
-    "docex:docs/api/auth.md#204",
+    "docex:docs/api/auth.md#401 200",
     "test:backend/tests/integration/api/test_own_password_change.py::test_correct_current_password_changes_it",
+    "test:backend/tests/integration/api/test_password_change_ends_sessions.py::test_the_answer_carries_a_new_token_and_the_sending_token_is_refused",
 ]
 
 [[unit]]
-text = "It prints 204."
-by = ["docex:docs/api/auth.md#204"]
+text = "Keep it, and check both tokens:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints 401 200."
+by = ["docex:docs/api/auth.md#401 200"]
+
+[[unit]]
+text = "Changing the password signs out every session of the account: every token issued before the change answers 401, the one that sent the change included, and the new token carries on."
+by = [
+    "docex:docs/api/auth.md#401 200",
+    "test:backend/tests/integration/api/test_own_password_change.py::test_a_token_issued_before_the_change_is_refused",
+    "test:backend/tests/integration/api/test_password_change_ends_sessions.py::test_the_answer_carries_a_new_token_and_the_sending_token_is_refused",
+    "test:backend/tests/integration/api/test_stale_token_on_every_path.py::test_a_stale_token_is_refused_on_every_signed_in_path",
+]
+
+[[unit]]
+text = "For an account with two-step sign-in on, or required for its role, the answer is an empty 204 instead: every session has ended, this one too, and it signs in again with the new password and then its code."
+by = [
+    "test:backend/tests/integration/api/test_password_change_ends_sessions.py::test_an_account_that_signs_in_with_a_second_step_gets_204_and_signs_in_again",
+    "test:backend/tests/integration/api/test_password_change_ends_sessions.py::test_the_change_issues_a_token_exactly_when_sign_in_would",
+]
+
+[[unit]]
+text = "A sign-in that has not finished when the password changes starts again."
+by = [
+    "test:backend/tests/integration/api/test_password_change_ends_sessions.py::test_a_code_step_begun_before_the_change_starts_again",
+    "test:backend/tests/integration/api/test_password_change_ends_sessions.py::test_setting_two_step_up_begun_before_the_change_starts_again",
+]
 
 [[unit]]
 text = "The new password follows the same rules as a new account's."
 by = ["test:backend/tests/integration/api/test_own_password_change.py::test_a_weak_new_password_is_422"]
 
 [[unit]]
-text = "Changing it doesn't sign out other sessions: a token issued before the change keeps working until it expires."
-by = ["test:backend/tests/integration/api/test_own_password_change.py::test_a_token_issued_before_the_change_keeps_working"]
-
-[[unit]]
-text = "To end them straight away, an administrator deactivates the account (\"is_active\": false)."
+text = "An administrator can also end every session of an account by deactivating it (\"is_active\": false)."
 by = ["test:backend/tests/integration/api/test_local_auth_path.py::TestLoginFlow::test_deactivated_after_login_gets_400"]
 
 [[unit]]
@@ -804,10 +832,11 @@ text = "It answers an empty 204:"
 by = ["test:backend/tests/unit/api/test_two_factor_routes.py::test_the_answers_that_succeed"]
 
 [[unit]]
-text = "$VIEWER_TOKEN was issued before two-step sign-in was turned on, and it kept working throughout: a token stays valid until it expires."
+text = "$VIEWER_TOKEN was issued before two-step sign-in was turned on, and it kept working throughout: turning two-step sign-in on or off ends no session."
 by = [
     "docex:docs/api/auth.md#{\"enabled\":true,\"required\":false,\"recovery_codes_remaining\":9}",
     "docex:docs/api/auth.md#{\"enabled\":false,\"required\":false,\"recovery_codes_remaining\":0}",
+    "test:backend/tests/integration/api/test_password_change_ends_sessions.py::test_other_changes_to_the_account_leave_its_sessions",
 ]
 
 [[unit]]
@@ -1125,8 +1154,12 @@ by = [
 ]
 
 [[unit]]
-text = "The AWS CDK app cannot set it yet."
-by = ["test:backend/tests/unit/api/test_documented_limits.py::test_a_role_can_require_two_step_sign_in_on_compose_and_helm_not_cdk_yet"]
+text = "The AWS CDK app takes it as the context -c local_auth_2fa_required_roles=ADMIN,DEVELOPER on cdk deploy, and refuses it together with -c cognito_hosted_ui=true."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_role_can_require_two_step_sign_in_on_compose_helm_and_cdk",
+    "test:infrastructure/tests/test_two_step_roles_context.py::test_set_the_api_task_has_exactly_that_value",
+    "test:infrastructure/tests/test_two_step_roles_context.py::test_with_the_hosted_ui_on_it_is_refused_rather_than_ignored",
+]
 
 [[unit]]
 text = "Signing in with SSO (the sso module) asks for no code, for these roles too."

@@ -96,8 +96,9 @@ answers `307 Temporary Redirect`, which `curl` doesn't follow, so nothing is pri
 
 With the `local` provider there is no refresh token: when a token expires, requests answer
 `401` and the user logs in again. `POST /api/v1/auth/logout` answers `204` so a client can
-discard its token. The token itself stays valid until it expires, because nothing is
-revoked on the server.
+discard its token. Logging out revokes nothing on the server: a token is refused once it
+expires, or once the account's password changes
+([Change Your Own Password](#change-your-own-password)).
 
 With `AUTH_PROVIDER=cognito`, the login also returns a refresh token, and
 `POST /api/v1/auth/refresh` with `{"refresh_token": "..."}` exchanges it for a new access
@@ -261,19 +262,30 @@ It answers `403` with `{"detail":"The current password is incorrect."}`. That is
 `401`: the session is still signed in. Wrong current passwords count toward the same limit as
 failed logins, so after 10 of them within 15 minutes both answer `423`.
 
-With the right one, the password changes and the response is an empty `204`:
+With the right one, the password changes, and the answer is the one `POST /api/v1/auth/login`
+gives, with a new `access_token`. Keep it, and check both tokens:
 
 ```{.bash exec}
-curl -s -o /dev/null -w '%{http_code}\n' -X POST localhost:8000/api/v1/users/me/password \
-  -H "Authorization: Bearer $VIEWER_TOKEN" \
+EARLIER_TOKEN=$VIEWER_TOKEN
+VIEWER_TOKEN=$(curl -s -X POST localhost:8000/api/v1/users/me/password \
+  -H "Authorization: Bearer $EARLIER_TOKEN" \
   -H 'content-type: application/json' \
-  -d '{"current_password": "Viewer1234!", "new_password": "Viewer5678!"}'
-```
-<!-- expect: 204 -->
+  -d '{"current_password": "Viewer1234!", "new_password": "Viewer5678!"}' | jq -r .access_token)
 
-It prints `204`. The new password follows the same rules as a new account's. Changing it
-doesn't sign out other sessions: a token issued before the change keeps working until it
-expires. To end them straight away, an administrator deactivates the account
+curl -s -o /dev/null -w '%{http_code} ' localhost:8000/api/v1/auth/me \
+  -H "Authorization: Bearer $EARLIER_TOKEN"
+curl -s -o /dev/null -w '%{http_code}\n' localhost:8000/api/v1/auth/me \
+  -H "Authorization: Bearer $VIEWER_TOKEN"
+```
+<!-- expect: 401 200 -->
+
+It prints `401 200`. Changing the password signs out every session of the account: every
+token issued before the change answers `401`, the one that sent the change included, and the
+new token carries on. For an account with two-step sign-in on, or required for its role, the
+answer is an empty `204` instead: every session has ended, this one too, and it signs in
+again with the new password and then its code. A sign-in that has not finished when the
+password changes starts again. The new password follows the same rules as a new account's.
+An administrator can also end every session of an account by deactivating it
 (`"is_active": false`).
 
 Sending your own `password` to `PUT /api/v1/users/{id}` or `PUT /api/v1/admin/users/{id}` is
@@ -383,7 +395,7 @@ curl -s localhost:8000/api/v1/users/me/2fa -H "Authorization: Bearer $VIEWER_TOK
 <!-- expect: {"enabled":false,"required":false,"recovery_codes_remaining":0} -->
 
 `$VIEWER_TOKEN` was issued before two-step sign-in was turned on, and it kept working
-throughout: a token stays valid until it expires.
+throughout: turning two-step sign-in on or off ends no session.
 
 | Route | What it does |
 |---|---|
@@ -462,7 +474,9 @@ as part of signing in. From then on the account signs in with a code, and
 the next sign-in asks for set-up again.
 
 The Docker Compose file passes it from `.env`, and the Helm chart takes it in `api.extraEnv`
-(the chart's `values.yaml` shows how). The AWS CDK app cannot set it yet. Signing in with SSO
+(the chart's `values.yaml` shows how). The AWS CDK app takes it as the context
+`-c local_auth_2fa_required_roles=ADMIN,DEVELOPER` on `cdk deploy`, and refuses it together
+with `-c cognito_hosted_ui=true`. Signing in with SSO
 (the `sso` module) asks for no code, for these roles too.
 
 #### Password sign-ins in this repository

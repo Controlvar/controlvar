@@ -58,7 +58,7 @@ The platform supports a range of statistical approaches:
 
 | Method | Description |
 |--------|-------------|
-| Frequentist (Fisher's exact test) | Each treatment against the control: a two-sided Fisher's exact test on the users who converted and the users who did not. A revenue, count, duration or custom metric is compared on its mean per assigned user with Welch's t-test instead; warehouse analysis (beta) compares a mean metric with Welch's t-test |
+| Frequentist (Fisher's exact test) | Each treatment against the control: a two-sided Fisher's exact test on the users who converted and the users who did not. A revenue, count, duration or custom metric is compared on its mean per assigned user with a permutation test of Welch's t instead; warehouse analysis (beta) compares a mean metric with Welch's t-test |
 | Sequential testing (mSPRT) | Continuous monitoring with valid p-values at any sample size |
 | Always-valid confidence intervals | Confidence sequences that are valid at every look |
 | Alpha spending (O'Brien-Fleming, Pocock) | Not computed yet: the response's `alpha_spending` is empty; use the mSPRT, which is valid under continuous monitoring |
@@ -77,8 +77,8 @@ dashboard shows.
 
 The JavaScript SDK is on npm (`npm install @controlvar/js-sdk`, 0.3.0, beta) and the
 Python SDK is on PyPI (`pip install controlvar`, 0.3.0, beta). So are the React SDK
-(`npm install @controlvar/react-sdk`, 0.1.0, beta), the React Native SDK
-(`npm install @controlvar/react-native-sdk`, 0.1.0, beta) and the two OpenFeature providers
+(`npm install @controlvar/react-sdk`, 0.2.0, beta), the React Native SDK
+(`npm install @controlvar/react-native-sdk`, 0.2.0, beta) and the two OpenFeature providers
 (`npm install @controlvar/openfeature-provider`, 0.1.0, beta; `pip install controlvar-openfeature`,
 0.1.0, beta). The Java SDK is on Maven Central and the .NET SDK on NuGet. The Go SDK installs by
 module path, and the other SDKs from a clone of this repository: each SDK's page

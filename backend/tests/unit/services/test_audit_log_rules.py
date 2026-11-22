@@ -57,7 +57,9 @@ def test_a_flag_the_caller_may_not_change_is_refused_and_left_as_it_was(role):
     app.dependency_overrides[deps.get_current_active_user] = lambda: user
     app.dependency_overrides[deps.get_db] = lambda: db
     try:
-        with patch.object(AuditService, "record_after_commit") as recorded:
+        # Bulk toggle writes its entries with ``AuditService.record`` in the
+        # transaction of its changes (#1042).
+        with patch.object(AuditService, "record") as recorded:
             response = TestClient(app).post(
                 "/api/v1/feature-flags/bulk-toggle",
                 json={"flag_ids": [str(flag.id)], "action": "disable"},
@@ -86,6 +88,7 @@ def test_the_entity_types():
         "holdout",
         "mutual_exclusion_group",
         "segment",
+        "app_user",
     }
 
 

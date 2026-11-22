@@ -70,6 +70,7 @@ def honest_results(scenario, experiment, *, compare=reference.compare):
                 analysis,
                 scenario.correction_method,
                 scenario.confidence_level,
+                rng=reference.permutation_rng(SEED, scenario.name, metric.name),
             )
         }
         variants = []
@@ -140,7 +141,7 @@ def test_a_correct_server_passes_every_gate(honest):
     assert suite.g0_findings(experiment) == []
     assert suite.plan_findings(plan, experiment) == []
     assert suite.g1_findings(scenario, experiment, results) == []
-    assert suite.g2_findings(scenario, experiment, results) == []
+    assert suite.g2_findings(scenario, experiment, results, seed=SEED) == []
 
 
 # ---------------------------------------------------------------------------
@@ -262,35 +263,43 @@ def test_g1_a_float32_value_total_moves_nothing_under_quantisation():
 
 
 def test_g2_a_pooled_t_test_at_30_70_is_refused():
-    """Welch with ``equal_var=True`` on S3: the p-values move."""
+    """Student's t (``equal_var=True``) on S3, its p-value and its interval.
+
+    A mean's p-value comes from a permutation test (engine 1.13.0), which G2
+    compares within two permutation tests' Monte Carlo error: here the pooled
+    p-value (0.089 against the reference's 0.079) is within it (0.049).  The
+    interval, Welch's at ``REL``, is what refuses the pooled test."""
     scenario = SCENARIOS["S3"]
     _, _, experiment = _replayed(scenario)
 
-    def pooled(per_user, analysis, method, level):
-        found = reference.compare(per_user, analysis, method, level)
+    def pooled(per_user, analysis, method, level, rng=None):
+        found = reference.compare(per_user, analysis, method, level, rng=rng)
         if analysis != "mean":
             return found
         (control, values), *_ = per_user.items()
         out = []
         for c in found:
-            p = float(
-                stats.ttest_ind(per_user[c.variant], values, equal_var=True).pvalue
-            )
+            test = stats.ttest_ind(per_user[c.variant], values, equal_var=True)
+            p = float(test.pvalue)
+            interval = test.confidence_interval(level)
             out.append(
                 reference.Comparison(
                     c.variant,
                     p,
                     p,
                     c.absolute_difference,
-                    c.absolute_difference_ci,
+                    (float(interval.low), float(interval.high)),
                     p < 0.05,
                 )
             )
         return out
 
     results = honest_results(scenario, experiment, compare=pooled)
-    findings = suite.g2_findings(scenario, experiment, results)
-    assert any("'p_value'" in f.where and "revenue" in f.where for f in findings)
+    findings = suite.g2_findings(scenario, experiment, results, seed=SEED)
+    assert any(
+        "'absolute_difference_ci'" in f.where and "revenue" in f.where for f in findings
+    )
+    assert not any("'p_value'" in f.where for f in findings)
 
 
 def test_g2_benjamini_hochberg_dropped_in_s4_is_refused():
@@ -300,7 +309,7 @@ def test_g2_benjamini_hochberg_dropped_in_s4_is_refused():
     for name in experiment.variants[1:]:
         entry = _variant(results, "clicks", name)
         entry["adjusted_p_value"] = entry["p_value"]
-    findings = suite.g2_findings(scenario, experiment, results)
+    findings = suite.g2_findings(scenario, experiment, results, seed=SEED)
     assert any("'adjusted_p_value'" in f.where for f in findings)
 
 
@@ -325,7 +334,7 @@ def _g2(s3, mutate):
     scenario, experiment = s3
     results = honest_results(scenario, experiment)
     mutate(results)
-    return suite.g2_findings(scenario, experiment, results)
+    return suite.g2_findings(scenario, experiment, results, seed=SEED)
 
 
 def test_g1_a_mean_is_exact(s3):
@@ -380,16 +389,46 @@ def test_g1_a_missing_metric_is_named(s3):
 
 
 @pytest.mark.parametrize("field", ["p_value", "adjusted_p_value"])
-def test_g2_a_p_value_at_rel_1e_9(s3, field):
-    def within(results):
-        _variant(results, "revenue", "treatment")[field] *= 1 + 1e-10
+def test_g2_a_proportion_s_p_value_at_rel_1e_9(field):
+    scenario = SCENARIOS["S1"]
+    _, _, experiment = _replayed(scenario)
 
-    def beyond(results):
-        _variant(results, "revenue", "treatment")[field] *= 1 + 1e-7
+    def g2(factor):
+        results = honest_results(scenario, experiment)
+        _variant(results, "signups", "treatment")[field] *= factor
+        return suite.g2_findings(scenario, experiment, results, seed=SEED)
 
-    assert _g2(s3, within) == []
-    (finding,) = _g2(s3, beyond)
-    assert finding.where == f"variant 'treatment', metric 'revenue', field {field!r}"
+    assert g2(1 + 1e-10) == []
+    (finding,) = g2(1 + 1e-7)
+    assert finding.where == f"variant 'treatment', metric 'signups', field {field!r}"
+    assert finding.tolerance == "rel 1e-09, abs 1e-300"
+
+
+@pytest.mark.parametrize("field", ["p_value", "adjusted_p_value"])
+def test_g2_a_mean_s_p_value_within_two_permutation_tests_error(s3, field):
+    """A mean's p-value passes within ``reference.permutation_tolerance`` of
+    the reference's and fails beyond it, either side."""
+    scenario, experiment = s3
+    honest = _variant(honest_results(scenario, experiment), "revenue", "treatment")
+    p = honest[field]
+    resamples = reference.product_resamples(1, scenario.confidence_level)
+
+    def moved_to(value):
+        def mutate(results):
+            _variant(results, "revenue", "treatment")[field] = value
+
+        return mutate
+
+    half = reference.permutation_tolerance(p, p, resamples) / 2
+    assert _g2(s3, moved_to(p + half)) == []
+    assert _g2(s3, moved_to(p - half)) == []
+    for wrong in (min(1.0, p + 0.25), p / 10):
+        assert abs(wrong - p) > reference.permutation_tolerance(wrong, p, resamples)
+        (finding,) = _g2(s3, moved_to(wrong))
+        assert finding.where == (
+            f"variant 'treatment', metric 'revenue', field {field!r}"
+        )
+        assert "two permutation tests" in finding.tolerance
 
 
 def test_g2_a_difference_near_0_has_an_absolute_floor(s3):
@@ -711,3 +750,33 @@ def test_the_step_summary_carries_the_seed_and_counts_only():
         in text
     )
     assert f"| `{ledger.TRACK}` | 10 | 0 | 0 | 0.5 | 20.0 |" in text
+
+
+def test_the_step_summary_names_a_skipped_significance_comparison(
+    tmp_path, monkeypatch
+):
+    """A treatment whose ``is_significant`` G2 did not compare is named in the
+    step summary, not only in the log; with none skipped the summary is the
+    text alone, and without ``GITHUB_STEP_SUMMARY`` nothing is written."""
+    target = tmp_path / "summary.md"
+    monkeypatch.setattr(suite, "SIGNIFICANCE_SKIPPED", {"S3": ["Treatment B"]})
+    suite.write_step_summary(
+        "### Ground-truth replay\n", {"GITHUB_STEP_SUMMARY": str(target)}
+    )
+    written = target.read_text(encoding="utf-8")
+    assert written.startswith("### Ground-truth replay\n"), written
+    assert (
+        "G2: is_significant not compared, a mean's p-value within tolerance of "
+        "alpha: S3 Treatment B"
+    ) in written, written
+
+    monkeypatch.setattr(suite, "SIGNIFICANCE_SKIPPED", {"S3": []})
+    clean = tmp_path / "clean.md"
+    suite.write_step_summary("text\n", {"GITHUB_STEP_SUMMARY": str(clean)})
+    assert clean.read_text(encoding="utf-8") == "text\n"
+
+    suite.write_step_summary("text\n", {})
+    assert sorted(path.name for path in tmp_path.iterdir()) == [
+        "clean.md",
+        "summary.md",
+    ]

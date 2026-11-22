@@ -29,6 +29,7 @@ CORE_BETA_OPERATIONS = (
     ("post", "/api/v1/segments/{segment_id}/members/remove"),
     ("get", "/api/v1/audit-logs/export"),
     ("get", "/api/v1/sdk/ruleset"),
+    ("post", "/api/v1/admin/app-users/erase"),
 )
 
 MODULE_BETA_OPERATIONS = (

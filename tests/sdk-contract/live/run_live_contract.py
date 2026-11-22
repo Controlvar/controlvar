@@ -16,7 +16,12 @@ exposure hook received, and no other SDK may report it. An SDK listed in
 reason ``targeting_rule``, and off. No other SDK may report it. An SDK listed
 in ``VALUE_SDKS`` must also report what its typed getters returned for the
 seed's string, number and json flags, each on at 100%: exactly their on
-values. No other SDK may report them.
+values. No other SDK may report them. An SDK listed in ``ALIAS_SDKS`` must also
+link a fresh anonymous id to a fresh known id with its ``alias`` method, using
+the seed's ``sdk:ruleset`` key, which every smoke is given: the runner then
+requires one assignment row among the two ids, the anonymous id's, and the
+key-less event sent under the known id stored under the anonymous id with the
+experiment and its variant. No other SDK may report it.
 
 After the react row, the React SDK's bootstrap runs for one new user
 (``BOOTSTRAP_SMOKE``): the documented ``ServerClient.bootstrap()`` call and a
@@ -267,6 +272,34 @@ EVENT_ID_SDKS: frozenset[str] = frozenset(
     ]
 )
 
+# The SDKs whose contract smoke must link two ids with alias (#449). The runner
+# gives every smoke the seed's sdk:ruleset key as CONTROLVAR_LOCAL_API_KEY (the
+# route needs a server-side key). A listed SDK's smoke is to build a NEW client
+# with that key, assign a fresh anonymous id to the contract experiment, link it
+# to a fresh known id twice (stored, then already stored), send one key-less
+# event under the known id before anything assigned it, then assign the known
+# id, and report
+#   "alias": {"anonymous_id": <id>, "user_id": <id>, "created": [true, false],
+#             "variant_before": <the anonymous id's>, "variant_after": <the known id's>,
+#             "event_name": <the key-less event's>}
+# validate() checks the shape and that the known id was answered the anonymous
+# id's variant; run_one() then reads the database and requires exactly one
+# assignment row among the two ids, held by the anonymous id, and exactly one
+# row for the event, stored under the anonymous id with the experiment and that
+# row's variant. An SDK that does not copy the anonymous id's keys to the known
+# id stores the event untagged (``alias: 0 tagged events (experiment_id NULL)``);
+# a server that does not follow the link at receipt stores it with no variant
+# (``alias: event variant NULL``). The check runs both ways, as EXPOSURE_SDKS
+# does. The pull request that gives an SDK an alias method is to add its line
+# here and its step to the smoke.
+ALIAS_SDKS: frozenset[str] = frozenset(
+    [
+        # One line per SDK, in the form "js",
+        "js",
+        "python",
+    ]
+)
+
 
 def backend_healthy(api_url: str) -> bool:
     try:
@@ -298,6 +331,36 @@ def validate(sdk: str, payload: dict, experiment_key: str = "sdk_contract_ab") -
     problems.extend(_targeting_problems(sdk, payload))
     problems.extend(_event_id_problems(sdk, payload))
     problems.extend(_value_problems(sdk, payload))
+    problems.extend(_alias_problems(sdk, payload))
+    return problems
+
+
+def _alias_problems(sdk: str, payload: dict) -> list[str]:
+    """What is wrong with the smoke's ``alias`` report (see ``ALIAS_SDKS``)."""
+    if sdk not in ALIAS_SDKS:
+        return [f"alias reported but {sdk} is not in ALIAS_SDKS"] if "alias" in payload else []
+    report = payload.get("alias")
+    if not isinstance(report, dict):
+        return [f"alias missing ({sdk} is in ALIAS_SDKS)"]
+    problems: list[str] = []
+    for field in ("anonymous_id", "user_id", "event_name"):
+        value = report.get(field)
+        if not isinstance(value, str) or not value:
+            problems.append(f"alias.{field}={value!r} (expected a non-empty string)")
+    if report.get("user_id") and report.get("user_id") == report.get("anonymous_id"):
+        problems.append("alias.user_id is alias.anonymous_id (two different ids are to be linked)")
+    created = report.get("created")
+    # JSON 1 and 0 are not true and false.
+    if not isinstance(created, list) or [type(c) for c in created] != [bool, bool] or created != [True, False]:
+        problems.append(f"alias.created={created!r} (expected [true, false]: stored, then already stored)")
+    before, after = report.get("variant_before"), report.get("variant_after")
+    if before not in EXPECTED_VARIANTS:
+        problems.append(f"alias.variant_before={before!r} (expected control or treatment)")
+    elif after != before:
+        problems.append(
+            f"alias.variant_after={after!r} != alias.variant_before={before!r} "
+            "(the known id is to be answered the anonymous id's variant)"
+        )
     return problems
 
 
@@ -370,6 +433,86 @@ def _stored_once_problems(sdk: str, payload: dict) -> list[str]:
             f"for user {report['user_id']!r}, expected 1"
         ]
     return []
+
+
+def _alias_rows(anonymous_id: str, user_id: str, event_name: str, experiment_key: str) -> dict:
+    """What the server stored for the smoke's alias step: who holds the
+    experiment's assignment rows among the two ids, and each row of the
+    key-less event under either id (its user id, whether it names the
+    experiment, and its variant's name)."""
+    sys.path.insert(0, str(REPO_ROOT))
+    from backend.app.db.session import SessionLocal
+    from backend.app.models import register_core_models
+    from backend.app.models.assignment import Assignment
+    from backend.app.models.event import Event
+    from backend.app.models.experiment import Experiment, Variant
+
+    register_core_models()
+    ids = [anonymous_id, user_id]
+    db = SessionLocal()
+    try:
+        experiment = db.query(Experiment).filter(Experiment.key == experiment_key).first()
+        if experiment is None:
+            raise RuntimeError(f"experiment {experiment_key!r} is not in the database")
+        names = {v.id: v.name for v in db.query(Variant).filter(Variant.experiment_id == experiment.id)}
+        holders = (
+            db.query(Assignment.user_id)
+            .filter(Assignment.experiment_id == experiment.id, Assignment.user_id.in_(ids))
+            .order_by(Assignment.user_id)
+        )
+        events = db.query(Event).filter(Event.user_id.in_(ids), Event.event_type == event_name)
+        return {
+            "assignments": [row.user_id for row in holders],
+            "events": [
+                {
+                    "user_id": row.user_id,
+                    "tagged": row.experiment_id == experiment.id,
+                    "variant": names.get(row.variant_id),
+                }
+                for row in events
+            ],
+        }
+    finally:
+        db.close()
+
+
+def _alias_stored_problems(sdk: str, payload: dict, experiment_key: str) -> list[str]:
+    """The database half of the alias step (see ``ALIAS_SDKS``)."""
+    if sdk not in ALIAS_SDKS:
+        return []
+    report = payload["alias"]
+    anonymous_id = report["anonymous_id"]
+    try:
+        stored = _alias_rows(anonymous_id, report["user_id"], report["event_name"], experiment_key)
+    except Exception as exc:  # the backend package or its database is not reachable
+        return [f"cannot read the stored alias rows: {exc}"]
+    problems: list[str] = []
+    if stored["assignments"] != [anonymous_id]:
+        problems.append(
+            f"alias: the assignment rows among the two ids are held by {stored['assignments']!r},"
+            " expected one, held by the anonymous id"
+        )
+    events = stored["events"]
+    if len(events) != 1:
+        problems.append(f"alias: {len(events)} stored row(s) for the key-less event, expected 1")
+        return problems
+    (event,) = events
+    if not event["tagged"]:
+        problems.append("alias: 0 tagged events (experiment_id NULL)")
+        return problems
+    if event["variant"] is None:
+        problems.append("alias: event variant NULL")
+    elif event["variant"] != report["variant_before"]:
+        problems.append(
+            f"alias: the event counts for {event['variant']!r}, the anonymous id holds"
+            f" {report['variant_before']!r}"
+        )
+    if event["user_id"] != anonymous_id:
+        problems.append(
+            "alias: the event is stored under the known id, expected under the anonymous id"
+            " that holds the assignment"
+        )
+    return problems
 
 
 def _targeting_problems(sdk: str, payload: dict) -> list[str]:
@@ -922,6 +1065,7 @@ def run_one(sdk: str, command: str, env: dict[str, str], timeout: int) -> tuple[
     problems = validate(sdk, payload, env["CONTRACT_EXPERIMENT_KEY"])
     if not problems:
         problems = _stored_once_problems(sdk, payload)
+        problems += _alias_stored_problems(sdk, payload, env["CONTRACT_EXPERIMENT_KEY"])
     if problems:
         return "FAIL", "; ".join(problems)
     return "PASS", f"{payload['assign']['variant_name']} in {detail}"
@@ -989,13 +1133,18 @@ def main() -> int:
     results.append(("ruleset (server)", status, detail))
     print(f"{status:4} {'ruleset (server)':<20} {detail}", flush=True)
 
+    # Every smoke also gets the sdk:ruleset key, under the new name only (the decoy under the
+    # former one): the alias step needs a server-side key (ALIAS_SDKS), and a smoke that links ids
+    # without being listed then reports it, and fails.
+    smoke_env = dict(env, CONTROLVAR_LOCAL_API_KEY=local_key, EXPERIMENTLY_LOCAL_API_KEY=DECOY_KEY) if local_key else env
+
     for sdk in selected:
         command, tools = MANIFEST[sdk]
         missing = [t for t in tools if shutil.which(t) is None]
         if missing:
             results.append((sdk, "FAIL" if args.strict else "SKIP", f"missing toolchain: {', '.join(missing)}"))
             continue
-        status, detail = run_one(sdk, command, env, args.timeout)
+        status, detail = run_one(sdk, command, smoke_env, args.timeout)
         results.append((sdk, status, detail))
         print(f"{status:4} {sdk:<20} {detail}", flush=True)
         if sdk == "react":

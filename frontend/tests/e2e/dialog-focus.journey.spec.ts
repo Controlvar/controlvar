@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import type { Locator, Page } from "@playwright/test";
 import { test, expect } from "./fixtures/auth.fixture";
 import { API_URL, TOKEN_STORAGE_KEY } from "./env";
+import { RATE_LIMIT_RETRY_MS } from "./pages/login.page";
 
 /**
  * Journey: a dialog keeps focus inside and gives it back (#369).
@@ -104,6 +105,26 @@ async function expectNoSeriousViolationsIn(page: Page, selector: string, where: 
   expect(named.passes.map((p) => p.id), `aria-dialog-name ran on ${where}`).toContain("aria-dialog-name");
 }
 
+/**
+ * `POST /auth/login` as another account, for its bearer token. It shares the
+ * limiter's 10-a-minute bucket per IP with every sign-in the journeys make
+ * through the UI, so a 429 is waited out the way `LoginPage.submitResilient`
+ * and the two-step journey do.
+ */
+async function bearerFor(page: Page, email: string, password: string): Promise<Record<string, string>> {
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    const response = await page.request.post(`${API_URL}/api/v1/auth/login`, { data: { email, password } });
+    if (response.status() === 429 && attempt < 5) {
+      await page.waitForTimeout(RATE_LIMIT_RETRY_MS);
+      continue;
+    }
+    expect(response.status(), `signing in as ${email}: ${await response.text()}`).toBe(200);
+    const { access_token } = (await response.json()) as { access_token: string };
+    return { Authorization: `Bearer ${access_token}` };
+  }
+  throw new Error("the sign-in stayed rate-limited");
+}
+
 /** Open the dialog from its row's Edit button, by keyboard, so the button is focused first. */
 async function openFrom(page: Page, editButton: Locator): Promise<Locator> {
   await editButton.focus();
@@ -191,6 +212,16 @@ test.describe("Journey: a dialog keeps focus inside and gives it back", () => {
       expect(created.status(), await created.text()).toBe(201);
       userId = ((await created.json()) as { id: string }).id;
 
+      // The user holds an API key (#657): the dialog names it when Active is
+      // cleared. Deleting the user in the `finally` removes the key with it.
+      const keyName = `e2e_key_${stamp}`;
+      const userHeaders = await bearerFor(page, `${username}@example.com`, `Journey${stamp}x`);
+      const madeKey = await page.request.post(`${API_URL}/api/v1/api-keys`, {
+        headers: userHeaders,
+        data: { name: keyName, scopes: ["read"] },
+      });
+      expect(madeKey.status(), await madeKey.text()).toBe(201);
+
       await page.getByTestId("user-search").fill(username);
       const editButton = page.getByTestId(`edit-user-${userId}`);
       await expect(editButton).toBeVisible({ timeout: 15_000 });
@@ -229,6 +260,19 @@ test.describe("Journey: a dialog keeps focus inside and gives it back", () => {
       await expect(editButton).toBeFocused();
       expect(await appRootIsInert(page)).toBe(false);
       expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).not.toBe("hidden");
+
+      // --- Clear Active: the dialog names the user's key, and axe finds
+      // nothing serious in it with the list shown (the real API's answer,
+      // wcag2aa colour contrast included). Cancel: nothing is saved.
+      const deactivating = await openFrom(page, editButton);
+      await deactivating.getByTestId("edit-active-toggle").uncheck();
+      await expect(deactivating.getByTestId("deactivate-keys-list")).toContainText(keyName, {
+        timeout: 15_000,
+      });
+      await expectNoSeriousViolationsIn(page, '[role="dialog"]', "the edit-user dialog listing a key");
+      await deactivating.getByTestId("edit-cancel-button").click();
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await expect(editButton).toBeFocused();
 
       // --- At 320 px: the dialog fits the width and scrolls inside itself.
       await page.setViewportSize({ width: 320, height: 480 });

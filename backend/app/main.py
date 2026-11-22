@@ -17,6 +17,10 @@ from fastapi.openapi.utils import get_openapi
 # Import routers and settings
 from backend.app.api.api import api_router, tags_metadata
 from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.v1.endpoints.visual_editor import (
+    EditorSessionClosed,
+    editor_session_closed_handler,
+)
 from backend.app.core.bandit_scheduler import bandit_scheduler_runner
 from backend.app.core.config import cors_start_up_messages, settings
 from backend.app.core.finite_json import refuse_non_finite_json
@@ -198,6 +202,9 @@ app.router.route_class = OffLoopRoute
 # and ctx, and without the submitted values (#500). Every route included below,
 # core and module alike, gets it; see backend/app/core/validation_errors.py.
 app.add_exception_handler(RequestValidationError, request_validation_error_handler)
+# A visual editor session that cannot be used answers 401 with the reason as
+# well as the text (#1545), so the editor can say why it closed.
+app.add_exception_handler(EditorSessionClosed, editor_session_closed_handler)
 
 # ---------------------------------------------------------------------------
 # Middleware stack

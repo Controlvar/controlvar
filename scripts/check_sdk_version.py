@@ -65,6 +65,9 @@ ECOSYSTEMS: dict[str, str] = {
     "flutter": "unwired",
     "android": "unwired",
     "ios": "unwired",
+    # The visual experiments' browser script, @controlvar/visual: built and
+    # tested here, not published. A smoke test pins this value.
+    "visual": "unwired",
 }
 
 

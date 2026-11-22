@@ -24,6 +24,7 @@ from backend.app.core.security import (
     decode_local_token,
     hash_api_key,
     oauth2_scheme,
+    stamp_is_current,
 )
 from backend.app.db import request_sessions
 from backend.app.db.session import SessionLocal
@@ -34,6 +35,7 @@ from backend.app.models.report import Report
 from backend.app.models.user import User, UserRole
 from backend.app.services.auth_service import (
     CognitoTokenRefused,
+    CognitoUnavailable,
     auth_service,
     log_token_refused,
 )
@@ -206,11 +208,27 @@ def _credentials_exception(
     )
 
 
+COGNITO_UNAVAILABLE_DETAIL = "Sign-in service is not answering. Try again in a moment."
+
+
+def cognito_unavailable_exception() -> HTTPException:
+    """503 for a request whose token Cognito could not check (it did not
+    answer). Not a 401: the token may be fine, so the client keeps it."""
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=COGNITO_UNAVAILABLE_DETAIL,
+        headers={"Retry-After": "2"},
+    )
+
+
 def _authenticate_local_token(token: str, db: Session) -> User:
     """
     Resolve a locally issued JWT to its ``User`` row.
 
-    401 for any decode/lookup failure, 400 when the account is inactive.
+    401 for any decode/lookup failure, 400 when the account is inactive, and
+    401 for a token issued before the account's password last changed (its
+    ``pwv`` stamp no longer matches, ``security.stamp_is_current``; #501).
+    That check comes last, so every answer reachable before it is unchanged.
     """
     try:
         claims = decode_local_token(token)
@@ -231,6 +249,13 @@ def _authenticate_local_token(token: str, db: Session) -> User:
         raise _credentials_exception()
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
+    if not stamp_is_current(claims, user):
+        # The reason and the account only: never the token or its claims.
+        logger.info(
+            "Local token refused: the account's password changed after it was "
+            f"issued (user {user.id})"
+        )
+        raise _credentials_exception()
     return user
 
 
@@ -252,7 +277,9 @@ def get_current_user(
        the account linked to the Cognito user ID, or create it on a first
        sign-in (``services.cognito_accounts.resolve_cognito_user``). Every
        refusal is the same 401; its reason goes to the
-       ``backend.app.auth.cognito_sign_in`` logger.
+       ``backend.app.auth.cognito_sign_in`` logger. When Cognito does not
+       answer (timeout, connection failure, throttle, server error) the answer
+       is 503 with ``Retry-After``, not 401: the token may be fine.
 
     Args:
         token (str): Bearer access token (may be None)
@@ -286,6 +313,11 @@ def get_current_user(
     except CognitoTokenRefused as refusal:
         log_token_refused(refusal, "sign-in")
         raise _credentials_exception()
+    except CognitoUnavailable as unavailable:
+        # Cognito did not answer: not a bad token, so 503 and the client
+        # keeps its stored sign-in. The class only, never a message.
+        logger.error(f"Cognito did not answer: {unavailable}")
+        raise cognito_unavailable_exception()
     except Exception as e:
         # The type only: the message can carry what the caller sent.
         logger.error(f"Cognito token not accepted: {type(e).__name__}")

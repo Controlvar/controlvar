@@ -73,6 +73,8 @@ from backend.app.schemas.storable_text import storable_text_param
 from backend.app.services.audit_log_service import AuditLogService
 from backend.app.services.audit_service import (
     AuditService,
+    AuditWriteFailed,
+    _as_audit_text,
     audit_changes,
     audit_identity,
     audit_snapshot,
@@ -424,13 +426,46 @@ async def create_feature_flag(
     # Every segment the rules name exists and is active (#440).
     refuse_unusable_segments(db, feature_flag_in.targeting_rules)
 
+    def record(flag: FeatureFlag) -> None:
+        # The audit entries, in the create's own transaction (#1042): the
+        # service commits the flag and both entries together, or none of them.
+        with AuditService.audit_with_change(
+            db,
+            action=ActionType.FEATURE_FLAG_CREATE,
+            entity_type=EntityType.FEATURE_FLAG,
+            entity_id=flag.id,
+        ):
+            created = FeatureFlagRead.model_validate(flag)
+            audit = AuditLogService(db)
+            audit.log(
+                action=AuditAction.CREATE,
+                resource_type="feature_flag",
+                outcome=AuditOutcome.SUCCESS,
+                resource_id=str(created.id),
+                actor_id=str(current_user.id) if current_user else None,
+                new_value={
+                    "key": created.key,
+                    "name": created.name,
+                    "value_type": created.value_type,
+                },
+            )
+            AuditService.record(
+                db,
+                actor=current_user,
+                action=ActionType.FEATURE_FLAG_CREATE,
+                entity_type=EntityType.FEATURE_FLAG,
+                entity_id=created.id,
+                entity_name=created.name,
+                after=audit_identity(audit_snapshot(EntityType.FEATURE_FLAG, flag)),
+            )
+
     # Create feature flag
     try:
         # The creator is the owner.  It is set by the service on the stored row,
         # not through the request schema, which has no owner field (and must not:
         # a client could otherwise create a flag in someone else's name).
         feature_flag = feature_flag_service.create_feature_flag(
-            flag_data=feature_flag_in, owner_id=current_user.id
+            flag_data=feature_flag_in, owner_id=current_user.id, record=record
         )
     except FlagStatusReadOnly:
         raise _status_read_only() from None
@@ -438,50 +473,20 @@ async def create_feature_flag(
         # A concurrent create took the key after the pre-check above.
         _raise_if_key_conflict(db, e, feature_flag_in.key, None)
         raise
+    except AuditWriteFailed as e:
+        raise unexpected_failure(
+            e,
+            "Feature flag create",
+            "Could not create the feature flag",
+            db=db,
+            logger=logger,
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     # Built outside the ``except ValueError`` above: a ValidationError is a
     # ValueError, and its text would carry stored values into a 400.
-    created = FeatureFlagRead.model_validate(feature_flag)
-
-    # Compliance audit logging (non-fatal — do not fail the request if this fails)
-    try:
-        audit = AuditLogService(db)
-        audit.log(
-            action=AuditAction.CREATE,
-            resource_type="feature_flag",
-            outcome=AuditOutcome.SUCCESS,
-            resource_id=str(created.id),
-            actor_id=str(current_user.id) if current_user else None,
-            new_value={
-                "key": created.key,
-                "name": created.name,
-                "value_type": created.value_type,
-            },
-        )
-        # log() only flushes, and the create above has already committed, so
-        # without this the record is rolled back when the session closes.
-        db.commit()
-    except Exception as audit_error:
-        db.rollback()
-        logger.warning(
-            "Compliance audit logging failed for feature_flag create (%s)",
-            type(audit_error).__name__,
-        )
-
-    # The flag is committed above; a failed audit write does not undo it.
-    AuditService.record_after_commit(
-        db,
-        actor=current_user,
-        action=ActionType.FEATURE_FLAG_CREATE,
-        entity_type=EntityType.FEATURE_FLAG,
-        entity_id=created.id,
-        entity_name=created.name,
-        after=audit_identity(audit_snapshot(EntityType.FEATURE_FLAG, feature_flag)),
-    )
-
-    return created
+    return FeatureFlagRead.model_validate(feature_flag)
 
 
 @router.get(
@@ -642,9 +647,52 @@ async def update_feature_flag(
     if "targeting_rules" in feature_flag_in.model_fields_set:
         refuse_unusable_segments(db, feature_flag_in.targeting_rules)
 
+    def record(updated_row: FeatureFlag) -> None:
+        # The audit entries, in the update's own transaction (#1042), read
+        # from the row with the change applied.
+        with AuditService.audit_with_change(
+            db,
+            action=ActionType.FEATURE_FLAG_UPDATE,
+            entity_type=EntityType.FEATURE_FLAG,
+            entity_id=flag_id,
+        ):
+            updated_flag = FeatureFlagRead.model_validate(updated_row)
+            new_flag_snapshot = {
+                "key": updated_flag.key,
+                "name": updated_flag.name,
+                "status": updated_flag.status,
+                "rollout_percentage": updated_flag.rollout_percentage,
+                "value_type": updated_flag.value_type,
+            }
+            audit = AuditLogService(db)
+            audit.log(
+                action=AuditAction.UPDATE,
+                resource_type="feature_flag",
+                outcome=AuditOutcome.SUCCESS,
+                resource_id=str(flag_id),
+                actor_id=str(current_user.id) if current_user else None,
+                old_value=old_flag_snapshot,
+                new_value=new_flag_snapshot,
+            )
+            old_value, new_value = audit_changes(
+                before_audit, audit_snapshot(EntityType.FEATURE_FLAG, updated_row)
+            )
+            AuditService.record(
+                db,
+                actor=current_user,
+                action=ActionType.FEATURE_FLAG_UPDATE,
+                entity_type=EntityType.FEATURE_FLAG,
+                entity_id=flag_id,
+                entity_name=updated_flag.name,
+                before=old_value,
+                after=new_value,
+            )
+
     # Update feature flag
     try:
-        updated_row = feature_flag_service.update_feature_flag(flag, feature_flag_in)
+        updated_row = feature_flag_service.update_feature_flag(
+            flag, feature_flag_in, record=record
+        )
     except FlagStatusReadOnly:
         raise _status_read_only() from None
     except FlagValuesRefused as refused:
@@ -655,56 +703,19 @@ async def update_feature_flag(
         # A concurrent write took the key after the check above.
         _raise_if_key_conflict(db, e, feature_flag_in.key, flag_id)
         raise
+    except AuditWriteFailed as e:
+        raise unexpected_failure(
+            e,
+            "Feature flag update",
+            "Could not update the feature flag",
+            db=db,
+            logger=logger,
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     # Built outside the ``except ValueError`` above (see create).
-    updated_flag = FeatureFlagRead.model_validate(updated_row)
-
-    # Compliance audit logging (non-fatal)
-    try:
-        new_flag_snapshot = {
-            "key": updated_flag.key,
-            "name": updated_flag.name,
-            "status": updated_flag.status,
-            "rollout_percentage": updated_flag.rollout_percentage,
-            "value_type": updated_flag.value_type,
-        }
-        audit = AuditLogService(db)
-        audit.log(
-            action=AuditAction.UPDATE,
-            resource_type="feature_flag",
-            outcome=AuditOutcome.SUCCESS,
-            resource_id=str(flag_id),
-            actor_id=str(current_user.id) if current_user else None,
-            old_value=old_flag_snapshot,
-            new_value=new_flag_snapshot,
-        )
-        # log() only flushes, and the update above has already committed, so
-        # without this the record is rolled back when the session closes.
-        db.commit()
-    except Exception as audit_error:
-        db.rollback()
-        logger.warning(
-            "Compliance audit logging failed for feature_flag update (%s)",
-            type(audit_error).__name__,
-        )
-
-    old_value, new_value = audit_changes(
-        before_audit, audit_snapshot(EntityType.FEATURE_FLAG, updated_row)
-    )
-    AuditService.record_after_commit(
-        db,
-        actor=current_user,
-        action=ActionType.FEATURE_FLAG_UPDATE,
-        entity_type=EntityType.FEATURE_FLAG,
-        entity_id=flag_id,
-        entity_name=updated_flag.name,
-        before=old_value,
-        after=new_value,
-    )
-
-    return updated_flag
+    return FeatureFlagRead.model_validate(updated_row)
 
 
 @router.delete(
@@ -761,7 +772,8 @@ async def delete_feature_flag(
     Deleting a feature flag has the following effects:
     - The feature flag and its related data are permanently removed, except
       its events: those are kept, with `feature_flag_id` set to null
-    - An audit record of the deletion is written (if that fails, the delete still stands)
+    - An audit record of the deletion is written with it: if the record cannot
+      be written, nothing is deleted and the request answers 500
 
     **Note**: This operation cannot be undone. For active feature flags, consider
     changing the status to 'archived' instead.
@@ -772,6 +784,7 @@ async def delete_feature_flag(
     Raises:
         HTTPException 403: If the user doesn't have permission to delete this feature flag
         HTTPException 404: If the feature flag doesn't exist
+        HTTPException 500: The audit record could not be written; nothing was deleted
     """
     # Get feature flag
     flag = db.query(FeatureFlag).filter(FeatureFlag.id == flag_id).first()
@@ -803,39 +816,45 @@ async def delete_feature_flag(
     # Create feature flag service
     feature_flag_service = FeatureFlagService(db)
 
+    def record(_deleted: FeatureFlag) -> None:
+        # The audit entries, in the delete's own transaction (#1042), from
+        # the snapshots taken above.
+        with AuditService.audit_with_change(
+            db,
+            action=ActionType.FEATURE_FLAG_DELETE,
+            entity_type=EntityType.FEATURE_FLAG,
+            entity_id=flag_id,
+        ):
+            audit = AuditLogService(db)
+            audit.log(
+                action=AuditAction.DELETE,
+                resource_type="feature_flag",
+                outcome=AuditOutcome.SUCCESS,
+                resource_id=deleted_flag_id,
+                actor_id=str(current_user.id) if current_user else None,
+                old_value=deleted_flag_snapshot,
+            )
+            AuditService.record(
+                db,
+                actor=current_user,
+                action=ActionType.FEATURE_FLAG_DELETE,
+                entity_type=EntityType.FEATURE_FLAG,
+                entity_id=flag_id,
+                entity_name=deleted_flag_name,
+                before=deleted_audit,
+            )
+
     # Delete feature flag
-    feature_flag_service.delete_feature_flag(flag)
-
-    # Compliance audit logging (non-fatal)
     try:
-        audit = AuditLogService(db)
-        audit.log(
-            action=AuditAction.DELETE,
-            resource_type="feature_flag",
-            outcome=AuditOutcome.SUCCESS,
-            resource_id=deleted_flag_id,
-            actor_id=str(current_user.id) if current_user else None,
-            old_value=deleted_flag_snapshot,
+        feature_flag_service.delete_feature_flag(flag, record=record)
+    except AuditWriteFailed as e:
+        raise unexpected_failure(
+            e,
+            "Feature flag delete",
+            "Could not delete the feature flag",
+            db=db,
+            logger=logger,
         )
-        # log() only flushes, and the delete above has already committed, so
-        # without this the record is rolled back when the session closes.
-        db.commit()
-    except Exception as audit_error:
-        db.rollback()
-        logger.warning(
-            "Compliance audit logging failed for feature_flag delete (%s)",
-            type(audit_error).__name__,
-        )
-
-    AuditService.record_after_commit(
-        db,
-        actor=current_user,
-        action=ActionType.FEATURE_FLAG_DELETE,
-        entity_type=EntityType.FEATURE_FLAG,
-        entity_id=flag_id,
-        entity_name=deleted_flag_name,
-        before=deleted_audit,
-    )
 
     # Return 204 No Content
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -897,24 +916,39 @@ async def activate_feature_flag(
     # Create feature flag service
     feature_flag_service = FeatureFlagService(db)
 
+    def record(changed: FeatureFlag) -> None:
+        # The entry, in the change's own transaction (#1042).
+        with AuditService.audit_with_change(
+            db,
+            action=ActionType.FEATURE_FLAG_ACTIVATE,
+            entity_type=EntityType.FEATURE_FLAG,
+            entity_id=flag_id,
+        ):
+            old_value, new_value = audit_changes(
+                before_audit, audit_snapshot(EntityType.FEATURE_FLAG, changed)
+            )
+            AuditService.record(
+                db,
+                actor=current_user,
+                action=ActionType.FEATURE_FLAG_ACTIVATE,
+                entity_type=EntityType.FEATURE_FLAG,
+                entity_id=flag_id,
+                entity_name=before_audit["name"],
+                before=old_value,
+                after=new_value,
+            )
+
     # Activate feature flag
-    activated_flag = feature_flag_service.activate_feature_flag(flag)
-
-    old_value, new_value = audit_changes(
-        before_audit, audit_snapshot(EntityType.FEATURE_FLAG, flag)
-    )
-    AuditService.record_after_commit(
-        db,
-        actor=current_user,
-        action=ActionType.FEATURE_FLAG_ACTIVATE,
-        entity_type=EntityType.FEATURE_FLAG,
-        entity_id=flag_id,
-        entity_name=before_audit["name"],
-        before=old_value,
-        after=new_value,
-    )
-
-    return activated_flag
+    try:
+        return feature_flag_service.activate_feature_flag(flag, record=record)
+    except AuditWriteFailed as e:
+        raise unexpected_failure(
+            e,
+            "Feature flag activate",
+            "Could not activate the feature flag",
+            db=db,
+            logger=logger,
+        )
 
 
 @router.post(
@@ -965,24 +999,39 @@ async def deactivate_feature_flag(
     # Create feature flag service
     feature_flag_service = FeatureFlagService(db)
 
+    def record(changed: FeatureFlag) -> None:
+        # The entry, in the change's own transaction (#1042).
+        with AuditService.audit_with_change(
+            db,
+            action=ActionType.FEATURE_FLAG_DEACTIVATE,
+            entity_type=EntityType.FEATURE_FLAG,
+            entity_id=flag_id,
+        ):
+            old_value, new_value = audit_changes(
+                before_audit, audit_snapshot(EntityType.FEATURE_FLAG, changed)
+            )
+            AuditService.record(
+                db,
+                actor=current_user,
+                action=ActionType.FEATURE_FLAG_DEACTIVATE,
+                entity_type=EntityType.FEATURE_FLAG,
+                entity_id=flag_id,
+                entity_name=before_audit["name"],
+                before=old_value,
+                after=new_value,
+            )
+
     # Deactivate feature flag
-    deactivated_flag = feature_flag_service.deactivate_feature_flag(flag)
-
-    old_value, new_value = audit_changes(
-        before_audit, audit_snapshot(EntityType.FEATURE_FLAG, flag)
-    )
-    AuditService.record_after_commit(
-        db,
-        actor=current_user,
-        action=ActionType.FEATURE_FLAG_DEACTIVATE,
-        entity_type=EntityType.FEATURE_FLAG,
-        entity_id=flag_id,
-        entity_name=before_audit["name"],
-        before=old_value,
-        after=new_value,
-    )
-
-    return deactivated_flag
+    try:
+        return feature_flag_service.deactivate_feature_flag(flag, record=record)
+    except AuditWriteFailed as e:
+        raise unexpected_failure(
+            e,
+            "Feature flag deactivate",
+            "Could not deactivate the feature flag",
+            db=db,
+            logger=logger,
+        )
 
 
 @router.post(
@@ -1034,26 +1083,36 @@ async def unarchive_feature_flag(
     if new_status == old_status:
         return FeatureFlagRead.model_validate(flag)
 
-    flag.status = new_status
-    db.commit()
-    db.refresh(flag)
-
-    # The change is committed above. log_action does not raise: if the audit
-    # write fails it rolls its own insert back and logs an ERROR, and the
-    # route still answers 200 with the change in place.
-    await AuditService.log_action(
-        db=db,
-        user_id=current_user.id,
-        user_email=current_user.email,
-        username=current_user.username,
-        action_type=ActionType.FEATURE_FLAG_UPDATE,
-        entity_type=EntityType.FEATURE_FLAG,
-        entity_id=flag.id,
-        entity_name=flag.name,
-        old_value=old_status,
-        new_value=new_status,
-        reason="unarchive",
-    )
+    # The change and its entry are committed together, or neither (#1042).
+    try:
+        flag.status = new_status
+        with AuditService.audit_with_change(
+            db,
+            action=ActionType.FEATURE_FLAG_UPDATE,
+            entity_type=EntityType.FEATURE_FLAG,
+            entity_id=flag.id,
+        ):
+            AuditService.record(
+                db,
+                actor=current_user,
+                action=ActionType.FEATURE_FLAG_UPDATE,
+                entity_type=EntityType.FEATURE_FLAG,
+                entity_id=flag.id,
+                entity_name=flag.name,
+                before=_as_audit_text(old_status),
+                after=_as_audit_text(new_status),
+                reason="unarchive",
+            )
+        db.commit()
+        db.refresh(flag)
+    except Exception as e:
+        raise unexpected_failure(
+            e,
+            "Feature flag unarchive",
+            "Could not unarchive the feature flag",
+            db=db,
+            logger=logger,
+        )
 
     return FeatureFlagRead.model_validate(flag)
 
@@ -1340,8 +1399,9 @@ async def toggle_feature_flag(
     The toggle operation includes:
     - Status change (ACTIVE ↔ INACTIVE). An archived flag would be turned on,
       so it answers 400 and stays archived: unarchive it first
-    - One audit entry with user information and optional reason; a failed
-      audit write does not fail the request
+    - One audit entry with user information and optional reason, saved with
+      the change: if the entry cannot be written, nothing is changed and the
+      request answers 500
     - Response with new status and audit log ID
 
     **Authentication**: Requires valid user authentication.
@@ -1387,33 +1447,28 @@ async def toggle_feature_flag(
         raise _archived_refusal() from None
 
     try:
-        # Update feature flag status
+        # Update feature flag status, and write its entry in the same
+        # transaction: both are committed, or neither (#1042).
         flag.status = new_status
-        db.commit()
-        db.refresh(flag)
-
-        # Log the toggle operation (don't fail if audit logging fails)
-        audit_log_id = None
-        try:
-            audit_log_id = await AuditService.log_action(
-                db=db,
-                user_id=current_user.id,
-                user_email=current_user.email,
-                username=current_user.username,
-                action_type=action_type,
+        with AuditService.audit_with_change(
+            db,
+            action=action_type,
+            entity_type=EntityType.FEATURE_FLAG,
+            entity_id=flag.id,
+        ):
+            audit_log_id = AuditService.record(
+                db,
+                actor=current_user,
+                action=action_type,
                 entity_type=EntityType.FEATURE_FLAG,
                 entity_id=flag.id,
                 entity_name=flag.name,
-                old_value=old_status,
-                new_value=new_status,
+                before=_as_audit_text(old_status),
+                after=_as_audit_text(new_status),
                 reason=toggle_request.reason,
-            )
-        except Exception as audit_error:
-            # Log audit error but don't fail the toggle operation
-            logger.warning(
-                "Audit logging failed for toggle operation (%s)",
-                type(audit_error).__name__,
-            )
+            ).id
+        db.commit()
+        db.refresh(flag)
 
         return ToggleResponse(
             id=flag.id,
@@ -1456,8 +1511,8 @@ async def enable_feature_flag(
     This endpoint explicitly enables a feature flag. An archived flag answers
     400 and stays archived: unarchive it first.
     Writes one audit entry with user information and optional reason, also
-    when the flag already has that status; a failed audit write does not fail
-    the request.
+    when the flag already has that status. The entry is saved with the change:
+    if it cannot be written, nothing is changed and the request answers 500.
 
     **Authentication**: Requires valid user authentication.
     **Permissions**: Needs the feature_flag (update) permission, which ADMIN
@@ -1495,25 +1550,28 @@ async def enable_feature_flag(
         raise _archived_refusal() from None
 
     try:
-        # Update feature flag status
+        # Update feature flag status, and write its entry in the same
+        # transaction: both are committed, or neither (#1042).
         flag.status = new_status
-        db.commit()
-        db.refresh(flag)
-
-        # Log the enable operation
-        audit_log_id = await AuditService.log_action(
-            db=db,
-            user_id=current_user.id,
-            user_email=current_user.email,
-            username=current_user.username,
-            action_type=ActionType.TOGGLE_ENABLE,
+        with AuditService.audit_with_change(
+            db,
+            action=ActionType.TOGGLE_ENABLE,
             entity_type=EntityType.FEATURE_FLAG,
             entity_id=flag.id,
-            entity_name=flag.name,
-            old_value=old_status,
-            new_value=new_status,
-            reason=toggle_request.reason,
-        )
+        ):
+            audit_log_id = AuditService.record(
+                db,
+                actor=current_user,
+                action=ActionType.TOGGLE_ENABLE,
+                entity_type=EntityType.FEATURE_FLAG,
+                entity_id=flag.id,
+                entity_name=flag.name,
+                before=_as_audit_text(old_status),
+                after=_as_audit_text(new_status),
+                reason=toggle_request.reason,
+            ).id
+        db.commit()
+        db.refresh(flag)
 
         return ToggleResponse(
             id=flag.id,
@@ -1555,8 +1613,8 @@ async def disable_feature_flag(
     This endpoint explicitly disables a feature flag. An archived flag is
     already off: it answers 200 and stays archived.
     Writes one audit entry with user information and optional reason, also
-    when the flag already has that status; a failed audit write does not fail
-    the request.
+    when the flag already has that status. The entry is saved with the change:
+    if it cannot be written, nothing is changed and the request answers 500.
 
     **Authentication**: Requires valid user authentication.
     **Permissions**: Needs the feature_flag (update) permission, which ADMIN
@@ -1589,26 +1647,30 @@ async def disable_feature_flag(
         old_status = flag.status
         new_status = transition(old_status, FlagVerb.OFF).value
 
-        # An archived flag stays archived, and is not written.
+        # An archived flag stays archived, and is not written. The entry is
+        # written either way, in the change's transaction: both are
+        # committed, or neither (#1042).
         if flag_status_name(old_status) != new_status:
             flag.status = new_status
-            db.commit()
-            db.refresh(flag)
-
-        # Log the disable operation
-        audit_log_id = await AuditService.log_action(
-            db=db,
-            user_id=current_user.id,
-            user_email=current_user.email,
-            username=current_user.username,
-            action_type=ActionType.TOGGLE_DISABLE,
+        with AuditService.audit_with_change(
+            db,
+            action=ActionType.TOGGLE_DISABLE,
             entity_type=EntityType.FEATURE_FLAG,
             entity_id=flag.id,
-            entity_name=flag.name,
-            old_value=old_status,
-            new_value=new_status,
-            reason=toggle_request.reason,
-        )
+        ):
+            audit_log_id = AuditService.record(
+                db,
+                actor=current_user,
+                action=ActionType.TOGGLE_DISABLE,
+                entity_type=EntityType.FEATURE_FLAG,
+                entity_id=flag.id,
+                entity_name=flag.name,
+                before=_as_audit_text(old_status),
+                after=_as_audit_text(new_status),
+                reason=toggle_request.reason,
+            ).id
+        db.commit()
+        db.refresh(flag)
 
         return ToggleResponse(
             id=flag.id,

@@ -599,6 +599,81 @@ test.describe("Journey: RBAC", () => {
     }
   });
 
+  // #1961: an ordinary DEVELOPER creates a split URL experiment from guided
+  // setup against the real full-profile API. The create's own answer is the
+  // evidence: 201, a split_url experiment whose stored addresses are the typed
+  // ones exactly, not the form `new URL()` would write. No start: a started
+  // split URL experiment claims its control URL across the journey database.
+  // The first assertion is that this API lists split_url, and it fails rather
+  // than skips: without it the form would not offer the type and the journey
+  // would say nothing about the full profile. The draft is deleted at the end.
+  test("developer creates a split URL experiment from guided setup", async ({ sessions }) => {
+    const page = await (await sessions("developer")).newPage();
+    const experiments = new ExperimentsPage(page);
+    const stamp = Date.now();
+    const name = `j1961-split-url-${stamp}`;
+    // Addresses `new URL().href` changes (an upper-case scheme and host), each with this run's own path.
+    const controlUrl = `HTTPS://Shop.Example.com/j1961-${stamp}`;
+    const treatmentUrl = `https://shop.example.com/j1961-${stamp}-b`;
+    let createdId: string | null = null;
+    try {
+      const modules = await page.request.get(`${API_URL}/api/v1/modules`);
+      expect(modules.status(), "GET /api/v1/modules").toBe(200);
+      const listed = ((await modules.json()) as { modules: string[] }).modules;
+      expect(listed, "the journey API is the full profile and lists split_url").toContain("split_url");
+      // Not vacuous: the typed address is one the URL parser would write differently.
+      expect(new URL(controlUrl).href).not.toBe(controlUrl);
+
+      await experiments.gotoGuided();
+      await expect(experiments.stepHeading).toHaveText("What kind of experiment?", { timeout: 15_000 });
+      await page.getByTestId("wizard-type-split_url").check({ timeout: 15_000 });
+      await experiments.nextStep("Name it and choose what to measure");
+      await experiments.nameInput.fill(name);
+      await experiments.nextStep("Set up the versions users will see");
+      await expect(page.getByTestId("split-url-config")).toBeVisible();
+      await expect(page.getByTestId("balance-unavailable")).toBeVisible();
+      await page.getByTestId("split-url-variant-url-0").fill(controlUrl);
+      await page.getByTestId("split-url-variant-url-1").fill(treatmentUrl);
+      await experiments.nextStep(ESTIMATE_STEP_HEADING);
+      await experiments.nextStep("Check and create");
+      await expect(page.getByTestId("review-type")).toHaveText("Split URL");
+      await expect(page.getByTestId("review-variant-page-0")).toHaveText(controlUrl);
+
+      const answer = page.waitForResponse(
+        (response) =>
+          response.request().method() === "POST" &&
+          /^\/api\/v1\/experiments\/?$/.test(new URL(response.url()).pathname) &&
+          (response.status() < 300 || response.status() >= 400),
+        { timeout: 20_000 },
+      );
+      await experiments.createStepButton.click();
+      const response = await answer;
+      expect(response.status(), "POST /api/v1/experiments/ creates the split URL experiment").toBe(201);
+      const created = (await response.json()) as {
+        id: string;
+        experiment_type: string;
+        split_url_config: { variants: Array<{ name: string; url: string }> };
+      };
+      createdId = created.id;
+      expect(created.experiment_type).toBe("split_url");
+      expect(created.split_url_config.variants.map((v) => v.url)).toEqual([controlUrl, treatmentUrl]);
+
+      await page.waitForURL((url) => url.pathname === `/experiments/${created.id}`, { timeout: 15_000 });
+      await expect(experiments.detail).toBeVisible({ timeout: 15_000 });
+      await expect(experiments.detailName).toContainText(name);
+    } finally {
+      if (createdId) {
+        const token = await page.evaluate((key) => window.localStorage.getItem(key), TOKEN_STORAGE_KEY);
+        const removed = await page.request.delete(
+          `${API_URL}/api/v1/experiments/${createdId}?experiment_key=${createdId}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        expect.soft(removed.status(), `DELETE the journey's split URL experiment ${createdId}`).toBe(204);
+      }
+      await page.close();
+    }
+  });
+
   // #1449 (plan-1449 #14): the experiment page's read-only settings against
   // the real API, as an ordinary DEVELOPER (the seeded admin is a superuser,
   // so its cell would prove nothing about the role). The journey database is

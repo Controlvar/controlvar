@@ -117,10 +117,14 @@ python -m backend.scripts.generate_value_vectors --check
   before flag values (neither `value` nor `value_type`), a value that does not match its
   `value_type`, an unknown `value_type`, a number beyond 2^53-1, a 503.
 
-The JavaScript SDK (`sdk/js/__tests__/value-vectors.test.ts`) and the Python SDK
-(`sdk/python/tests/test_value_vectors.py`) each answer every vector in one test that counts the
-vectors it answered and checked and requires 49, so an empty file fails instead of running
-nothing. They run in the `js` and `python` jobs of `SDK Unit Tests`. The Go SDK does not read this
+The JavaScript SDK (`sdk/js/__tests__/value-vectors.test.ts`), the Python SDK
+(`sdk/python/tests/test_value_vectors.py`), the React SDK (`sdk/react/src/__tests__/valueVectors.test.ts`),
+the React Native SDK (`sdk/react-native/__tests__/valueVectors.test.ts`), the Java SDK
+(`sdk/java/core/src/test/java/com/controlvar/sdk/ValueVectorsTest.java`) and the .NET SDK
+(`sdk/dotnet/tests/Controlvar.Tests/ValueVectorsTests.cs`) each answer every vector in one test
+that counts the vectors it answered and checked and requires 49, so an empty file fails instead
+of running nothing. They run in the `js`, `python`, `react`, `react-native`, `java` and `dotnet`
+jobs of `SDK Unit Tests` (the .NET one on all three of its test legs). The Go SDK does not read this
 file: its getters are methods of an evaluation result with no error channel, and it answers four of
 the malformed vectors differently (no `value_type`; a number beyond 2^53-1; json `7` and json `"x"`,
 decoded into an `any`), none of which a server sends.
@@ -210,6 +214,18 @@ seed's plain key and requires that it is stored but not counted (`error_count` +
 `uncounted_error_count` +1): only reports sent with a server-side key count toward automatic
 rollback. The runner therefore needs the backend's Python environment and `POSTGRES_*`.
 
+The runner also gives every smoke that `sdk:ruleset` key as `CONTROLVAR_LOCAL_API_KEY` (and a decoy
+under the former name), because `POST /api/v1/tracking/alias` needs a server-side key. With it the
+smokes of the SDKs in `ALIAS_SDKS` (`js` and `python`, #449) link two ids: a new client assigns a
+fresh anonymous id, links it to a fresh known id twice (`created` true, then false), sends one
+key-less event under the known id before anything assigned it, then assigns the known id, which must
+be answered the anonymous id's variant. The runner then reads the database and requires one
+assignment row among the two ids, held by the anonymous id, and the event stored once, under the
+anonymous id, with the experiment and that variant. An SDK that does not copy the anonymous id's
+keys to the known id fails with `alias: 0 tagged events (experiment_id NULL)`, and a server that
+does not follow the link when it receives the event with `alias: event variant NULL`. As with
+`EXPOSURE_SDKS`, an SDK not listed may not report it.
+
 Last come the published releases (`PUBLISHED_LOCAL`: the `js 0.2.0 (published, local)` and
 `python 0.2.0 (published, local)` rows, #1497). Each is downloaded and checked by digest as in
 section 2, and its own client runs in local mode against this server
@@ -238,6 +254,7 @@ Each SDK documents its smoke command in its README; the runner's `MANIFEST` list
 toolchains are skipped (reported as `SKIP`) unless `--strict` is given. The seeded API key can be
 overridden with `CONTROLVAR_API_KEY`, the backend with `CONTROLVAR_API_URL` (the runner still reads
 the former names, `EXPERIMENTLY_API_KEY` and `EXPERIMENTLY_API_URL`, when these are not set).
+A local run of the runner needs the seed's scoped key (`live/.api_key_local`); without it the `js` and `python` rows fail on `alias`.
 
 Three entries need no toolchain beyond node or a JVM, but get there differently from the rest:
 

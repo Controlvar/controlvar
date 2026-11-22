@@ -16,6 +16,7 @@ from backend.app.core.targeting_adapter import (
     buckets_on_rule_id,
     stored_rule_id,
 )
+from backend.app.models.audit_log import ActionType, EntityType
 from backend.app.models.experiment import (
     Experiment,
     ExperimentStatus,
@@ -32,6 +33,7 @@ from backend.app.schemas.experiment import (
 )
 from backend.app.schemas.split_url_config import split_url_config_problem
 from backend.app.schemas.variance_reduction import VarianceReductionConfig
+from backend.app.services.audit_service import AuditService
 from backend.app.services.visual import (
     STARTED,
     design_etag,
@@ -39,6 +41,7 @@ from backend.app.services.visual import (
     visual_config_of,
     visual_start_problem,
 )
+from backend.app.services.visual_editor import live_sessions, session_closed_value
 
 logger = logging.getLogger(__name__)
 
@@ -934,7 +937,9 @@ class ExperimentService:
         logger.info(f"Updated experiment {experiment.id}: {experiment.name}")
         return self._experiment_to_dict(experiment)
 
-    def start_experiment(self, experiment: Experiment) -> Dict[str, Any]:
+    def start_experiment(
+        self, experiment: Experiment, actor: Any = None
+    ) -> Dict[str, Any]:
         """
         Start an experiment by changing its status to ACTIVE.
 
@@ -944,8 +949,13 @@ class ExperimentService:
         (#974). A start date that has passed is kept, and so is a paused
         experiment's (when it first started).
 
+        Every visual editor session of the experiment ends with the start;
+        each one that was still open gets a ``visual_editor_session_closed``
+        entry (reason ``started``) by *actor*, in the start's transaction.
+
         Args:
             experiment: Experiment model object to start
+            actor: Who starts it: ``POST /start`` passes the signed-in user
 
         Returns:
             Dictionary containing the updated experiment data
@@ -993,8 +1003,19 @@ class ExperimentService:
         experiment.updated_at = datetime.now(timezone.utc)
 
         # A started experiment has no editor (#1545): its tickets and sessions
-        # end in the start's own transaction.
-        revoke_editor_tokens(self.db, experiment.id, STARTED)
+        # end in the start's own transaction, and so do the entries for the
+        # sessions that were open.
+        ended = revoke_editor_tokens(self.db, experiment.id, STARTED)
+        for session in live_sessions(ended, now):
+            AuditService.record_in_savepoint(
+                self.db,
+                actor=actor,
+                action=ActionType.VISUAL_EDITOR_SESSION_CLOSED,
+                entity_type=EntityType.EXPERIMENT,
+                entity_id=experiment.id,
+                entity_name=experiment.name,
+                after=session_closed_value(STARTED, session),
+            )
 
         self.db.commit()
         self.db.refresh(experiment)

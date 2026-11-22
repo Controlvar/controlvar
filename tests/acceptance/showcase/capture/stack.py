@@ -21,17 +21,24 @@
 
 Every Python child starts through ``procs.LAUNCHER`` from the copy. After the
 API answers, ``/api/v1/modules`` must report the profile asked for.
+
+Video 11's setup dates its flags back (S1 of the V11-V13 plan): one ``psql``
+in the stack's own Postgres container (``date_flags``, on either stack), its
+statements built here from a key and two whole numbers each
+(``dating_statements``), all of them in one transaction that stops at the
+first error. Nothing else is ever sent to the database.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import time
 import urllib.error
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Mapping, Optional
+from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 from showcase.capture import build, config, guard
 from showcase.capture.procs import Children
@@ -39,6 +46,65 @@ from showcase.capture.procs import Children
 
 class StackError(RuntimeError):
     pass
+
+
+#: A key the dating step puts in its SQL: the API's rule within 64 characters
+#: (``storyboard.SETUP_FLAG_KEY``), so no quote or space can reach a statement.
+DATED_KEY = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}")
+#: The most days a flag is dated back (``storyboard.FlagSetup``).
+DATED_DAYS_MAX = 3650
+#: psql's options for the dating step: stop at the first error, every statement
+#: in one transaction (rolled back on an error), and nothing printed but the
+#: rows the statements return, one per line.
+PSQL_OPTIONS: Tuple[str, ...] = (
+    "-v",
+    "ON_ERROR_STOP=1",
+    "--single-transaction",
+    "-q",
+    "-A",
+    "-t",
+)
+
+
+def dating_statements(rows: Sequence[Tuple[str, int, int]]) -> List[str]:
+    """One ``UPDATE ... RETURNING key`` for each ``(key, created days ago,
+    updated days ago)``: the columns are naive UTC, so each is set from
+    ``now() AT TIME ZONE 'UTC'``. Refused (StackError) for no row, a key that
+    is not ``DATED_KEY``, or a count of days that is not a whole number from 0
+    to ``DATED_DAYS_MAX``: only those values ever reach the SQL."""
+    if not rows:
+        raise StackError("the dating step has no flag to date")
+    statements = []
+    for key, created, updated in rows:
+        if not isinstance(key, str) or not DATED_KEY.fullmatch(key):
+            raise StackError(f"the dating step refuses the key {key!r}")
+        for days in (created, updated):
+            if type(days) is not int or not 0 <= days <= DATED_DAYS_MAX:
+                raise StackError(
+                    f"the dating step refuses {days!r} days for {key}: a whole"
+                    f" number from 0 to {DATED_DAYS_MAX}"
+                )
+        statements.append(
+            "UPDATE experimentation.feature_flags SET"
+            f" created_at = (now() AT TIME ZONE 'UTC') - make_interval(days => {created}),"
+            f" updated_at = (now() AT TIME ZONE 'UTC') - make_interval(days => {updated})"
+            f" WHERE key = '{key}' RETURNING key"
+        )
+    return statements
+
+
+def psql_argv(prefix: Sequence[str], rows: Sequence[Tuple[str, int, int]]) -> List[str]:
+    """*prefix* (how the container's psql is reached), ``PSQL_OPTIONS`` and
+    each dating statement as its own ``-c``."""
+    argv = [*prefix, *PSQL_OPTIONS]
+    for statement in dating_statements(rows):
+        argv += ["-c", statement]
+    return argv
+
+
+def dated_keys(output: str) -> List[str]:
+    """The keys the dating step's statements returned, in order, one a line."""
+    return [line.strip() for line in output.splitlines() if line.strip()]
 
 
 @dataclass(frozen=True)
@@ -291,6 +357,41 @@ class Stack:
 
     def stop_postgres(self) -> None:
         self._docker("rm", "-f", self.container, timeout=120)
+
+    def date_flags(self, rows: Sequence[Tuple[str, int, int]]) -> List[str]:
+        """Off camera: video 11's flags dated back in this stack's Postgres
+        (``dating_statements``, one transaction); the keys the statements
+        returned, in order. Refused (StackError) when psql exits non-zero."""
+        argv = psql_argv(
+            [
+                "docker",
+                "exec",
+                self.container,
+                "psql",
+                "-U",
+                "postgres",
+                "-d",
+                "experimentation",
+                "-h",
+                "127.0.0.1",
+                "-p",
+                str(self.ports.postgres),
+            ],
+            rows,
+        )
+        status, output = self.children.capture(
+            "date-flags",
+            argv,
+            cwd=self.tree,
+            env=self.docker_env,
+            log=self.logs / "date-flags.log",
+            kind="docker",
+        )
+        if status != 0:
+            raise StackError(
+                f"the dating step's psql exited {status}; see {self.logs}/date-flags.log"
+            )
+        return dated_keys(output)
 
     # -- the API -------------------------------------------------------------
 

@@ -1,0 +1,15 @@
+{
+  "description": "Page-change documents at the server's size limits, built with characters that take more than one byte or more than one UTF-16 unit. Each side builds a case from its description (backend/tests/unit/schemas/test_visual_limit_cases.py for the server, validate.test.ts for the script) and must reach `accepted`. `build` is text (one set_text whose text is `count` copies of `unit`), changes (`count` hide changes) or bytes (set_text changes whose compact UTF-8 JSON is exactly `count` bytes; see either test for the recipe).",
+  "cases": [
+    { "id": "text-2000-astral", "build": "text", "unit": "😀", "count": 2000, "accepted": true },
+    { "id": "text-2001-astral", "build": "text", "unit": "😀", "count": 2001, "accepted": false },
+    { "id": "text-2000-two-byte", "build": "text", "unit": "é", "count": 2000, "accepted": true },
+    { "id": "text-2001-two-byte", "build": "text", "unit": "é", "count": 2001, "accepted": false },
+    { "id": "changes-100", "build": "changes", "count": 100, "accepted": true },
+    { "id": "changes-101", "build": "changes", "count": 101, "accepted": false },
+    { "id": "bytes-65536", "build": "bytes", "unit": "é", "count": 65536, "accepted": true },
+    { "id": "bytes-65537", "build": "bytes", "unit": "é", "count": 65537, "accepted": false },
+    { "id": "bytes-65536-astral", "build": "bytes", "unit": "😀", "count": 65536, "accepted": true },
+    { "id": "bytes-65537-astral", "build": "bytes", "unit": "😀", "count": 65537, "accepted": false }
+  ]
+}

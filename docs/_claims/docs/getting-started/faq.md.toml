@@ -243,7 +243,7 @@ text = "Method | Description"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Frequentist (Fisher's exact test) | Each treatment against the control: a two-sided Fisher's exact test on the users who converted and the users who did not. A revenue, count, duration or custom metric is compared on its mean per assigned user with Welch's t-test instead; warehouse analysis (beta) compares a mean metric with Welch's t-test"
+text = "Frequentist (Fisher's exact test) | Each treatment against the control: a two-sided Fisher's exact test on the users who converted and the users who did not. A revenue, count, duration or custom metric is compared on its mean per assigned user with a permutation test of Welch's t instead; warehouse analysis (beta) compares a mean metric with Welch's t-test"
 by = [
     "test:backend/tests/unit/services/test_binomial_metric_result_characterisation.py::test_binomial_metric_result_characterisation",
     "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_a_revenue_metric_is_analysed_per_assigned_user",
@@ -325,7 +325,7 @@ by = [
 ]
 
 [[unit]]
-text = "So are the React SDK (npm install @controlvar/react-sdk, 0.1.0, beta), the React Native SDK (npm install @controlvar/react-native-sdk, 0.1.0, beta) and the two OpenFeature providers (npm install @controlvar/openfeature-provider, 0.1.0, beta; pip install controlvar-openfeature, 0.1.0, beta)."
+text = "So are the React SDK (npm install @controlvar/react-sdk, 0.2.0, beta), the React Native SDK (npm install @controlvar/react-native-sdk, 0.2.0, beta) and the two OpenFeature providers (npm install @controlvar/openfeature-provider, 0.1.0, beta; pip install controlvar-openfeature, 0.1.0, beta)."
 by = ["mechanism:sdk-doc-versions", "mechanism:registry-availability"]
 
 [[unit]]

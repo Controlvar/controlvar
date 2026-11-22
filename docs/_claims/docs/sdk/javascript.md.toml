@@ -226,6 +226,21 @@ text = "UserContext"
 by = ["exempt:label"]
 
 [[unit]]
+text = "Keep userId the same for one person: the server buckets on it, and an id it has not seen is a new user to every experiment."
+by = [
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_assigns_user_to_a_variant_and_is_sticky",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_alias_route_is_the_one_call_that_links_two_user_ids",
+]
+
+[[unit]]
+text = "If a visitor is anonymous until they sign in, give them an anonymous id of their own, and when they sign in, link it to their known id from your backend with alias: a known id with no assignment of its own is then answered the variant the anonymous id holds."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_link_made_through_the_route_is_the_one_the_tracking_routes_follow",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_known_id_answers_the_variant_its_anonymous_id_holds",
+    "test:sdk/js/__tests__/alias.test.ts::sends one POST /api/v1/tracking/alias with the two ids in the body and the client key",
+]
+
+[[unit]]
 text = "Targeting context"
 by = ["exempt:label"]
 
@@ -390,6 +405,15 @@ by = [
 [[unit]]
 text = "fetchAssignments | (userId, { activeOnly?: boolean } = { activeOnly: true }) => Promise<AssignmentRecord[]> | Server-side assignment rows (raw objects); not cached | Rejects"
 by = ["test:sdk/js/__tests__/client.test.ts::fetchAssignments GETs /api/v1/tracking/assignments/{user_id}?active_only=true"]
+
+[[unit]]
+text = "alias | (anonymousId, userId) => Promise<boolean> | true when this call stored the link, false when it was already stored; in the source tree only, see Linking an anonymous id to a known user id | Rejects with ExperimentationError, with the server's status and body"
+by = [
+    "test:sdk/js/__tests__/alias.test.ts::resolves created as the server answered it: true, then false for the same link",
+    "test:sdk/js/__tests__/alias.test.ts::rejects a %s with ExperimentationError carrying the status and the server body",
+    "test:tests/sdk-contract/test_published_alias.py::test_both_clients_in_this_tree_define_alias",
+    "test:tests/sdk-contract/test_published_alias.py::test_no_published_release_defines_alias",
+]
 
 [[unit]]
 text = "getAssignments | (userId) => Assignment[] | Cached, unexpired assignments in assignment order (no network) | —"
@@ -759,6 +783,120 @@ by = [
 ]
 
 [[unit]]
+text = "Linking an anonymous id to a known user id: alias"
+by = ["exempt:label"]
+
+[[unit]]
+text = "alias is in the source tree only: it is not in the published @controlvar/js-sdk 0.3.0, and arrives with the package's next release."
+by = [
+    "mechanism:sdk-doc-versions",
+    "test:tests/sdk-contract/test_published_alias.py::test_both_clients_in_this_tree_define_alias",
+    "test:tests/sdk-contract/test_published_alias.py::test_no_published_release_defines_alias",
+]
+
+[[unit]]
+text = "Until then, call POST /api/v1/tracking/alias from your backend, or install the SDK from a clone of this repository (see Installation)."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "alias(anonymousId, userId) sends one POST /api/v1/tracking/alias (beta): the anonymous id a visitor was assigned under and the user id they signed in with are one person."
+by = [
+    "test:sdk/js/__tests__/alias.test.ts::sends one POST /api/v1/tracking/alias with the two ids in the body and the client key",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_link_is_stored_once_and_answered_again_with_created_false",
+]
+
+[[unit]]
+text = "From then on, in each experiment, the assignment stored first among the two ids answers for both, so a user id with no assignment of its own is answered the variant the anonymous id holds, and its events for that experiment count toward it."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_the_earliest_assignment_wins_for_both_ids",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_known_id_answers_the_variant_its_anonymous_id_holds",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_known_ids_conversion_counts_for_its_persons_variant",
+]
+
+[[unit]]
+text = "The rules and every answer are in Link an anonymous id to a known user id."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "It needs a server-side key: one with the sdk:ruleset scope, created by a user who can change feature flags."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_the_route_refuses_each_key_as_batch_assignment_does",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_server_key_whose_owner_can_change_flags_is_accepted",
+]
+
+[[unit]]
+text = "Call it from your backend."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "It resolves true when this call stored the link and false when the link was already stored."
+by = [
+    "test:sdk/js/__tests__/alias.test.ts::resolves created as the server answered it: true, then false for the same link",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_link_is_stored_once_and_answered_again_with_created_false",
+]
+
+[[unit]]
+text = "Any other answer rejects with ExperimentationError, as getAssignment does, with the server's status and body: 404 from a server without the route, 403 for a key that is not a server-side key, 409 when a rule refuses the link (the anonymous id is already linked to another user id, for one), and 422 for an id the server refuses (the two ids equal, for one)."
+by = [
+    "test:sdk/js/__tests__/alias.test.ts::rejects a %s with ExperimentationError carrying the status and the server body",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_an_anonymous_id_linked_to_one_known_id_is_not_moved",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_two_equal_ids_are_refused",
+]
+
+[[unit]]
+text = "A network failure or a timeout rejects with no status."
+by = [
+    "test:sdk/js/__tests__/alias.test.ts::rejects a network failure with NETWORK_ERROR and no status, and does not send it again",
+    "test:sdk/js/__tests__/alias.test.ts::rejects a timeout with TIMEOUT and no status",
+]
+
+[[unit]]
+text = "A 429 is retried once, as for every call."
+by = [
+    "test:sdk/js/__tests__/alias.test.ts::retries a 429 once, as every call does, and resolves the answer to the retry",
+    "test:sdk/js/__tests__/alias.test.ts::rejects a 429 that is still a 429 after its one retry",
+]
+
+[[unit]]
+text = "A failed alias is yours to call again: the client keeps nothing of it."
+by = ["test:sdk/js/__tests__/alias.test.ts::keeps nothing of a failed alias: calling it again sends it again, and nothing was copied"]
+
+[[unit]]
+text = "Until it succeeds, the server may give the user id an assignment of its own."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_alias_route_is_the_one_call_that_links_two_user_ids",
+    "test:sdk/js/__tests__/alias.test.ts::drops nothing when the alias fails: the known id's cached assignment is still served",
+]
+
+[[unit]]
+text = "On success the client sends a key-less track(userId, …) to each experiment a key-less track(anonymousId, …) would reach (see the fan-out rule), for 24 hours from the alias, and not to the anonymous id's flags: flags are not linked."
+by = [
+    "test:sdk/js/__tests__/alias.test.ts::after alias, a key-less track for the known id carries the experiment key the anonymous id was assigned",
+    "test:sdk/js/__tests__/alias.test.ts::copies what keys() gives: not an experiment whose latest answer was paused, nor one past its 24 hours",
+    "test:sdk/js/__tests__/alias.test.ts::the copied key's 24 hours start at the alias, not at the anonymous id's answer",
+    "test:sdk/js/__tests__/alias.test.ts::copies experiment keys only, never flag keys: flags are not linked",
+]
+
+[[unit]]
+text = "It also drops the user id's cached assignments, so its next getAssignment asks the server."
+by = [
+    "test:sdk/js/__tests__/alias.test.ts::drops the known id's cached assignments, so its next getAssignment asks the server",
+    "test:sdk/js/__tests__/alias.test.ts::keeps the anonymous id's cached assignments and the known id's cached flags",
+]
+
+[[unit]]
+text = "The anonymous id's own events keep the anonymous id: nothing already sent, or sent later under it, is changed."
+by = ["test:sdk/js/__tests__/alias.test.ts::after alias, the anonymous id's own events keep the anonymous id and its experiment"]
+
+[[unit]]
+text = "The copy helps only on the client that assigned the anonymous id."
+by = ["test:sdk/js/__tests__/alias.test.ts::helps only the client that assigned the anonymous id: on another client, getAssignment(known) first"]
+
+[[unit]]
+text = "After a browser assigned it and your backend called alias, the backend's client holds nothing for the anonymous id: call getAssignment(experimentKey, { userId }) there before a key-less track(userId, …)."
+by = ["test:sdk/js/__tests__/alias.test.ts::helps only the client that assigned the anonymous id: on another client, getAssignment(known) first"]
+
+[[unit]]
 text = "Caching, shared requests and retries"
 by = ["exempt:label"]
 
@@ -790,11 +928,12 @@ text = "Errors"
 by = ["exempt:label"]
 
 [[unit]]
-text = "getAssignment, evaluateFlag, getAllFlags and fetchAssignments reject with ExperimentationError (name === 'ExperimentationError'):"
+text = "getAssignment, evaluateFlag, getAllFlags, fetchAssignments and alias reject with ExperimentationError (name === 'ExperimentationError'):"
 by = [
     "test:sdk/js/__tests__/client.test.ts::throws ExperimentationError with status 404 when no experiment has the key",
     "test:sdk/js/__tests__/client.test.ts::throws ExperimentationError with status 404 when no flag has the key",
     "test:sdk/js/__tests__/client.test.ts::throws on a non-2xx response and does not populate the evaluation cache",
+    "test:sdk/js/__tests__/alias.test.ts::rejects a %s with ExperimentationError carrying the status and the server body",
 ]
 
 [[unit]]
@@ -1130,6 +1269,14 @@ by = [
 ]
 
 [[unit]]
+text = "alias | POST /api/v1/tracking/alias (beta; a server-side key) | {\"anonymous_id\",\"user_id\"} | {\"anonymous_id\",\"user_id\",\"created\"}"
+by = [
+    "test:sdk/js/__tests__/alias.test.ts::sends one POST /api/v1/tracking/alias with the two ids in the body and the client key",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_the_route_refuses_each_key_as_batch_assignment_does",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
 text = "local mode: ruleset refresh | GET /api/v1/sdk/ruleset (beta) | If-None-Match: \"<version>\" | the ruleset, ETag; 304 when unchanged"
 by = [
     "test:sdk/js/__tests__/local.test.ts::polls send the ETag, and a 304 keeps the ruleset",
@@ -1370,6 +1517,18 @@ text = "That also runs examples/local_eval_smoke.mjs with the seed's sdk:ruleset
 by = [
     "test:backend/tests/unit/scripts/test_run_live_contract.py::test_each_sdk_runs_its_own_contract_smoke",
     "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestContractSeed::test_the_seed_writes_a_plain_and_a_scoped_key",
+]
+
+[[unit]]
+text = "The runner gives the smoke the seed's sdk:ruleset key as CONTROLVAR_LOCAL_API_KEY."
+by = ["test:backend/tests/unit/scripts/test_run_live_contract.py::test_the_smokes_are_given_the_sdk_ruleset_key_and_a_decoy_under_its_former_name"]
+
+[[unit]]
+text = "With it the smoke also links a new anonymous id to a new known id with alias and reports them as alias, and the runner checks in the database that the two ids hold one assignment row, the anonymous id's, and that the key-less event the smoke sent under the known id is stored under the anonymous id with the experiment and its variant."
+by = [
+    "test:sdk/js/__tests__/contract-smoke.test.ts::with the sdk:ruleset key it links a new anonymous id to a new known id on one new client, and reports it",
+    "test:backend/tests/unit/scripts/test_run_live_contract.py::test_the_alias_step_is_judged_by_what_the_database_holds",
+    "test:backend/tests/unit/scripts/test_run_live_contract.py::test_each_wrong_stored_alias_state_fails_the_sdk_with_its_problem",
 ]
 
 [[unit]]

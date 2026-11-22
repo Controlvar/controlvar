@@ -8,10 +8,11 @@ for compliance, debugging, and analysis purposes.
 
 import json
 import logging
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 from uuid import UUID, uuid4
 
 from sqlalchemy import and_, desc, func
@@ -198,6 +199,9 @@ WRITTEN_ACTION_TYPES: frozenset = frozenset(
         ActionType.EXPERIMENT_COMPLETE,
         ActionType.EXPERIMENT_PREVIEW_LINK_CREATE,
         ActionType.EXPERIMENT_PREVIEW_LINKS_REVOKE,
+        ActionType.VISUAL_EDITOR_SESSION_OPENED,
+        ActionType.VISUAL_EDITOR_SESSION_CLOSED,
+        ActionType.VISUAL_EDITOR_TICKET_REUSED,
         ActionType.USER_CREATE,
         ActionType.USER_DELETE,
         ActionType.USER_LOGIN,
@@ -223,6 +227,8 @@ WRITTEN_ACTION_TYPES: frozenset = frozenset(
         ActionType.SEGMENT_ARCHIVE,
         ActionType.SAFETY_ROLLBACK,
         ActionType.SAFETY_CONFIG_UPDATE,
+        ActionType.APP_USER_ERASE_STARTED,
+        ActionType.APP_USER_ERASED,
     }
 )
 
@@ -278,6 +284,10 @@ SYSTEM_SSO_SYNC = AuditActor(id=None, email="system:sso-sync")
 #: An operator's command run where the database is reachable, such as
 #: ``python -m backend.app.db.two_factor_reset`` (#1812): nobody is signed in.
 SYSTEM_OPERATOR_CLI = AuditActor(id=None, email="system:operator-cli")
+#: The visual editor's sign-in ending the editor an editor link opened, when
+#: that link is presented again after it was used (#1545): nobody signed in
+#: sends that request.
+SYSTEM_VISUAL_EDITOR = AuditActor(id=None, email="system:visual-editor")
 
 #: The reserved ``user_email`` values of the system actors.
 SYSTEM_ACTOR_EMAILS: frozenset = frozenset(
@@ -289,6 +299,7 @@ SYSTEM_ACTOR_EMAILS: frozenset = frozenset(
         SYSTEM_COGNITO_SYNC,
         SYSTEM_SSO_SYNC,
         SYSTEM_OPERATOR_CLI,
+        SYSTEM_VISUAL_EDITOR,
     )
 )
 
@@ -419,6 +430,31 @@ def _value_text(value: Any) -> Optional[str]:
 
 def _cut(text: Any, limit: int) -> Any:
     return text[:limit] if isinstance(text, str) else text
+
+
+class AuditWriteFailed(Exception):
+    """An audit entry written with its change could not be written (#1042).
+
+    Raised by ``AuditService.audit_with_change``; the caller rolls back, so
+    the change is not saved either. A direct ``Exception`` subclass, never a
+    ``ValueError``, ``IntegrityError`` or ``HTTPException``, so no route answers
+    it as a refusal of the request. Its text names the action, the entity and
+    the cause's type, never a value or the cause's own text, which can carry
+    the row.
+    """
+
+    def __init__(
+        self, action: Any, entity_type: Any, entity_id: Any, cause: BaseException
+    ) -> None:
+        super().__init__(
+            "audit entry for %s on %s %s could not be written (%s)"
+            % (
+                getattr(action, "value", action),
+                getattr(entity_type, "value", entity_type),
+                entity_id,
+                type(cause).__name__,
+            )
+        )
 
 
 class AuditService:
@@ -592,6 +628,39 @@ class AuditService:
             return None
         AuditService._written(row.action_type, row.entity_type, row.entity_id)
         return row
+
+    @staticmethod
+    @contextmanager
+    def audit_with_change(
+        db: Session, *, action: Any, entity_type: Any, entity_id: Any
+    ) -> Iterator[None]:
+        """Write a change's audit entries in the change's own transaction.
+
+        For a change that must not be saved without its entries (#1042)::
+
+            with AuditService.audit_with_change(db, action=..., entity_type=...,
+                                                entity_id=...):
+                AuditService.record(db, ...)
+
+        The caller's pending change is flushed first, outside the guard: if
+        that flush fails it is the caller's own failure (a key conflict, a
+        check) and is raised as it is. The block then adds the entries
+        (``AuditService.record``, and ``AuditLogService(db).log`` for the
+        compliance trail) and they are flushed. Any exception from the block
+        or that flush is raised as ``AuditWriteFailed`` from None, so the
+        driver's text, which can carry the row, is in no traceback.
+
+        It never commits and never rolls back: the caller commits the change
+        and its entries together, and rolls back when this raises. It logs
+        nothing and counts nothing in ``audit_write_failures_total``: a
+        change refused this way has lost no entry.
+        """
+        db.flush()
+        try:
+            yield
+            db.flush()
+        except Exception as error:
+            raise AuditWriteFailed(action, entity_type, entity_id, error) from None
 
     @staticmethod
     def _written(action: Any, entity_type: Any, entity_id: Any) -> None:

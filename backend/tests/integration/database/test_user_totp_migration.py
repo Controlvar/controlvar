@@ -35,8 +35,12 @@ pytestmark = [pytest.mark.integration]
 #: This revision, and the core revision it extends.
 REVISION = "t1812_user_totp"
 PREVIOUS_CORE_HEAD = "4955571d232c"
-#: The core head of this tree.
-CORE_HEAD = "t1812_user_totp"
+#: The core head of this tree: ``t449_identity_aliases`` (#449), the revision
+#: after this one.
+CORE_HEAD = "t449_identity_aliases"
+#: Tables a later core revision's downgrade drops: a downgrade from the head to
+#: this test's target unapplies ``t449_identity_aliases`` too.
+LATER_DOWNGRADE_TABLES = {"identity_aliases"}
 MODULES_HEAD = "modules_0005_redshift"
 
 PREVIOUS_ROWS = {
@@ -267,7 +271,7 @@ def test_the_downgrade_drops_the_table_only(profile, test_db, scratch_schema, tm
     _report(profile, "after downgrade", test_db, scratch_schema)
 
     assert _rows(test_db, scratch_schema) == PREVIOUS_ROWS[profile]
-    assert _tables(test_db, scratch_schema) == tables - {TABLE}
+    assert _tables(test_db, scratch_schema) == tables - {TABLE} - LATER_DOWNGRADE_TABLES
     assert _users(test_db, scratch_schema) == stored
 
     _upgrade(tree, scratch_schema)

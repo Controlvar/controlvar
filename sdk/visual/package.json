@@ -1,0 +1,65 @@
+{
+  "name": "@controlvar/visual",
+  "version": "0.1.0",
+  "description": "The browser script for Controlvar's visual experiments: it applies a variant's page changes before the page shows (not published)",
+  "main": "dist/index.mjs",
+  "module": "dist/index.mjs",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs"
+    },
+    "./classic": "./dist/controlvar-visual.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "test": "jest"
+  },
+  "keywords": [
+    "experimentation",
+    "ab-testing",
+    "visual-editor"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Controlvar/controlvar.git",
+    "directory": "sdk/visual"
+  },
+  "homepage": "https://github.com/Controlvar/controlvar/tree/main/sdk/visual#readme",
+  "bugs": {
+    "url": "https://github.com/Controlvar/controlvar/issues"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/jsdom": "^21.1.7",
+    "@types/node": "^20.0.0",
+    "esbuild": "^0.28.2",
+    "jest": "^30.5.2",
+    "jsdom": "^26.1.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "ts-jest": "^29.4.14",
+    "typescript": "^5.4.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "globalSetup": "<rootDir>/scripts/test-build.js",
+    "testMatch": [
+      "**/__tests__/**/*.test.ts"
+    ],
+    "transform": {
+      "^.+\\.ts$": [
+        "ts-jest",
+        {
+          "tsconfig": "tsconfig.test.json"
+        }
+      ]
+    }
+  }
+}

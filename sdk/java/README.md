@@ -13,24 +13,24 @@ Modules: `core/` (`controlvar-sdk`) and `spring-boot-starter/`
 ## Installation
 
 `com.controlvar:controlvar-sdk` and the Spring Boot starter are on
-[Maven Central](https://central.sonatype.com/artifact/com.controlvar/controlvar-sdk). 0.1.0 is a
+[Maven Central](https://central.sonatype.com/artifact/com.controlvar/controlvar-sdk). 0.2.0 is a
 beta release.
 
 ```xml
 <dependency>
     <groupId>com.controlvar</groupId>
     <artifactId>controlvar-sdk</artifactId>          <!-- core client -->
-    <version>0.1.0</version>
+    <version>0.2.0</version>
 </dependency>
 <!-- or, for Spring Boot: -->
 <dependency>
     <groupId>com.controlvar</groupId>
     <artifactId>controlvar-spring-boot-starter</artifactId> <!-- pulls in the core -->
-    <version>0.1.0</version>
+    <version>0.2.0</version>
 </dependency>
 ```
 
-With Gradle, add `implementation 'com.controlvar:controlvar-sdk:0.1.0'`, with `mavenCentral()` in
+With Gradle, add `implementation 'com.controlvar:controlvar-sdk:0.2.0'`, with `mavenCentral()` in
 `repositories`.
 
 To work on the SDK itself, build it from a clone of this repository instead:
@@ -117,6 +117,7 @@ bean suppresses the auto-configured one.
 | `cacheTtlMs(long)` | `cache-ttl-seconds` | `300000` ms / `300` s | Lifetime of a cached evaluation/assignment |
 | `cacheSize(int)` | `cache-size` | `1000` | Max entries per cache (flags and assignments each), LRU |
 | `exposureListener(ExposureListener)` | an `ExposureListener` bean | none | Called once each time the server enrols the user and the answer is not cached; `null` sets none; see [Exposure hook](#exposure-hook) |
+| `errorListener(ErrorListener)` | none (define your own client bean) | none | Called once each time a typed getter returns your default, with the reason (`void onError(ExperimentationException error, String operation)`, operation `"value"`); `null` sets none; see [Flag values](../../docs/sdk/java.md#flag-values) |
 
 ## API
 
@@ -124,6 +125,7 @@ bean suppresses the auto-configured one.
 |---|---|---|
 | `evaluateFeatureFlag(User, flagKey)` | `FlagEvaluation` | throws `ExperimentationException` (`getStatusCode()` = 401/404/…, `0` for network) |
 | `isFeatureEnabled(User, flagKey)` | `boolean` | `false` |
+| `getStringValue(User, flagKey, String default)` / `getNumberValue(User, flagKey, double default)` / `getJsonValue(User, flagKey, Object default)` | the value a string, number or json flag serves the user: `String` / `double` / `Map` or `List` (a new copy) | never throws; the default, reported to the error listener ([Flag values](../../docs/sdk/java.md#flag-values)) |
 | `getExperimentAssignment(User, experimentKey)` | `ExperimentAssignment` (never null) | throws `ExperimentationException` |
 | `trackEvent(TrackEvent)` / `trackEvent(userId, name, props)` / `trackEvent(userId, name, props, experimentKey, flagKey, value)` | `void`, async | never throws |
 | `trackBatch(List<TrackEvent>)` | `void`, async | never throws; 100 events per request |
@@ -134,7 +136,11 @@ bean suppresses the auto-configured one.
 | `ConsistentHash.compute(userId, key)` | `double` in `[0, 1)` | pure (parity utility) |
 
 Model fields: `FlagEvaluation` → `getKey()`, `isEnabled()`, `getConfig()` (`Object`: Map / List /
-scalar / null), `getConfigMap()`. `ExperimentAssignment` → `getExperimentKey()`, `getUserId()`,
+scalar / null), `getConfigMap()`, `getValue()` (a new copy, or `null` when the server sent none),
+`getValueType()`. `FlagValueException` → `getCode()` (`"TYPE_MISMATCH"` or `"INVALID_RESPONSE"`):
+what the error listener receives when a typed getter returns your default for any reason but a
+failed request (which arrives as the request's `ExperimentationException`).
+`ExperimentAssignment` → `getExperimentKey()`, `getUserId()`,
 `getVariantId()`, `getVariantName()`, `isControl()`, `getConfiguration()` (`Map<String,Object>`).
 `TrackEvent.builder(userId, eventName)` → `.eventType()` (defaults to the name), `.experimentKey()`,
 `.featureFlagKey()`, `.value(Double)`, `.property(k, v)` / `.properties(Map)` (sent as `metadata`),
@@ -223,7 +229,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
-| `evaluateFeatureFlag`, `isFeatureEnabled` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=…` | `context`: the user's attributes as JSON, left out when there are none | `{key, enabled, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
+| `evaluateFeatureFlag`, `isFeatureEnabled`, `get{String,Number,Json}Value` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=…` | `context`: the user's attributes as JSON, left out when there are none | `{key, enabled, config, value, value_type}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
 | `getExperimentAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `trackEvent` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?, event_id}` | ignored |
 | `trackEvent` without keys, `trackBatch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored |

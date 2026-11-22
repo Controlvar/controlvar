@@ -39,7 +39,7 @@ Superusers (`is_superuser=True`) pass every permission check.
 
 | Permission | What a custom role or direct grant of it allows |
 |---|---|
-| `experiment (create)` | Create and clone experiments, including through the experiment wizard and LLM experiments. Also: read the global holdout, and manage exclusion groups (list, create, view, change other than their status, add and remove experiments). Create segments. |
+| `experiment (create)` | Create and clone experiments, including through LLM experiments. Also: read the global holdout, and manage exclusion groups (list, create, view, change other than their status, add and remove experiments). Create segments. |
 | `experiment (read)` | Every built-in role already has it. |
 | `experiment (update)` | Change, schedule, start, pause, complete, archive and annotate any experiment; trigger a bandit update; change LLM experiments; change segments and their members; in the full profile, write the real-time counters. |
 | `experiment (delete)` | Delete draft experiments, and archive segments. |
@@ -55,7 +55,7 @@ Superusers (`is_superuser=True`) pass every permission check.
 
 A custom role or direct grant holds only the eleven permissions above and only adds to the built-in role. Whatever a user's roles and grants hold, these stay with the built-in role or the superuser flag:
 
-- **Administration:** managing users; defining custom roles, assigning them and making grants (ADMIN); other users' API keys; creating, activating and ending global holdouts, and archiving or unarchiving exclusion groups (ADMIN); safety settings; and the optional modules' administration (ETL, HIPAA, integrations, SSO, resetting counters).
+- **Administration:** managing users; defining custom roles, assigning them and making grants (ADMIN); other users' API keys; creating, activating and ending global holdouts, and archiving or unarchiving exclusion groups (ADMIN); erasing one app user's data (superuser); safety settings; and the optional modules' administration (ETL, HIPAA, integrations, SSO, resetting counters).
 - **The compliance audit trail:** the compliance audit events (`GET /api/v1/compliance/audit-events`) and reports (`GET /api/v1/compliance/reports/{standard}`) need ADMIN or ANALYST, and the compliance export (`GET /api/v1/compliance/export`) needs ADMIN; a superuser reads all three. `audit_log (read)` reads the audit log, not this trail.
 - **Other built-in-role decisions:** the split-URL preview, interaction analysis, notifications and the warehouse analysis roles.
 

@@ -57,7 +57,7 @@ by = [
 ]
 
 [[unit]]
-text = "conversions is still the number of users who sent the metric's event, and p_value is the p-value of Welch's t-test that /results reports."
+text = "conversions is still the number of users who sent the metric's event, and p_value is the p-value of the permutation test of Welch's t that /results reports."
 by = ["test:backend/tests/integration/api/test_revenue_per_user_results.py::test_the_export_leaves_the_rate_empty_for_a_revenue_primary"]
 
 [[unit]]

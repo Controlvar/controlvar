@@ -24,9 +24,11 @@ from backend.app.api.v1.endpoints import users as users_endpoints
 
 pytestmark = [pytest.mark.unit]
 
-#: Each route that reads the row for update, and the service call that commits.
+#: Each function that reads the row for update, and the service call that
+#: commits. PUT /experiments/{id}'s steps are in ``_apply_experiment_update``,
+#: which the visual editor's save calls too (#1545).
 ROUTES = {
-    "update_experiment": "update_experiment",
+    "_apply_experiment_update": "update_experiment",
     "update_experiment_schedule": "update_experiment_schedule",
 }
 

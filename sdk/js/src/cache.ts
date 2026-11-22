@@ -45,6 +45,11 @@ export class UserKeyCache<T> {
     return live;
   }
 
+  /** Drop every entry of one user. */
+  forget(userId: string): void {
+    this.users.delete(userId);
+  }
+
   clear(): void {
     this.users.clear();
   }

@@ -8,22 +8,30 @@ pointed at a small QueuePool engine on the test database (2 + 2 connections,
 ``pool_timeout`` 1 s), and the event loop's default worker limit is set to 4
 for the test, inside the running loop. A burst of 24 concurrent requests is
 more than that serves at once: each route must give every request its normal
-answer. ``/tracking/assign`` is driven for an experiment that balances its
-split within groups (#448), where the assignment runs in a worker: a balanced
-burst is answered, and every user of it takes a place in their group's blocks.
+answer. ``/tracking/assign`` is also driven for an experiment that balances
+its split within groups (#448): a balanced burst is answered, and every user
+of it takes a place in their group's blocks.
 
 Listeners on the engine count checkouts and checkins. Their peak shows that
 the burst used every connection, and they record the thread of each checkout:
-none of these routes checks out on the event loop's thread.
+none of these routes checks out on the event loop's thread. They see
+checkouts only: a query on a connection the request already holds is not
+counted, wherever it runs, so a route that only reads passes this count
+whatever thread its queries run on. The split URL assign route's own reads,
+before it asks for the assignment, are such queries.
+
+The two assign rows send a new user each time, and the request before the
+burst must be answered on the assigned path (``reason`` ``assigned``), so the
+burst stores an assignment and a view per request rather than taking a path
+that records nothing.
 
 The two routes a web page calls (#1545) take a key with no scopes: the
 fixture gives them one, a running visual experiment whose page rule names a
 host of its own, and a live preview link of it. ``POST /tracking/visual``
 assigns a new visitor on every call, so each call commits and reads again. It
-is also driven for a visual experiment that balances within groups, where
-``/tracking/assign``'s function takes its own worker trip from inside the page
-answer's worker: that burst is answered too, and every visitor of it takes a
-place in their group's blocks.
+is also driven for a visual experiment that balances within groups, assigned
+inside the page answer's worker: that burst is answered too, and every
+visitor of it takes a place in their group's blocks.
 """
 
 from __future__ import annotations
@@ -132,6 +140,13 @@ class SdkSetup:
     #: The host of a running visual experiment that balances within ``tier``.
     balanced_visual_host: str
     balanced_visual_id: Any
+    #: An ACTIVE split URL experiment whose entry is on a host of its own.
+    split_url_key: str
+    split_url_host: str
+
+
+#: The split URL experiment's entry path; its other variant is on ``-v2``.
+SPLIT_URL_PATH = "/overload"
 
 
 @pytest.fixture
@@ -198,12 +213,24 @@ def no_active_holdout(db_session):
 
 
 def _experiment(
-    db_session, admin_user, balance_within=None, visual_host=None
+    db_session, admin_user, balance_within=None, visual_host=None, split_url_host=None
 ) -> Experiment:
     """An ACTIVE 50/50 experiment with two variants, committed. With
     *visual_host*, a visual experiment whose page rule names that host, and
-    whose treatment hides an element."""
+    whose treatment hides an element. With *split_url_host*, a split URL
+    experiment whose entry is :data:`SPLIT_URL_PATH` on that host and whose
+    other variant is on ``-v2``."""
     suffix = uuid.uuid4().hex[:8]
+    experiment_type, split_url_config = ExperimentType.A_B, None
+    if split_url_host is not None:
+        entry = f"https://{split_url_host}{SPLIT_URL_PATH}"
+        experiment_type = ExperimentType.SPLIT_URL
+        split_url_config = {
+            "variants": [
+                {"name": "control", "url": entry, "traffic_allocation": 50},
+                {"name": "treatment", "url": f"{entry}-v2", "traffic_allocation": 50},
+            ]
+        }
     visual_config = changes = None
     if visual_host is not None:
         page = {"match": "prefix", "url": f"https://{visual_host}/"}
@@ -220,10 +247,11 @@ def _experiment(
         description="created by test_api_key_routes_under_overload",
         hypothesis="every request of a burst is answered",
         status=ExperimentStatus.ACTIVE,
-        experiment_type=ExperimentType.A_B,
+        experiment_type=experiment_type,
         owner_id=admin_user.id,
         balance_within=balance_within,
         visual_config=visual_config,
+        split_url_config=split_url_config,
     )
     db_session.add(experiment)
     db_session.commit()
@@ -251,7 +279,8 @@ def sdk(db_session, developer_user, make_feature_flag, admin_user):
     split within ``tier``; and for the page routes, the same developer's key
     with no scopes, an ACTIVE visual experiment on a host of its own, a live
     preview link of its treatment, and an ACTIVE visual experiment that
-    balances within ``tier`` on another host."""
+    balances within ``tier`` on another host; and an ACTIVE split URL
+    experiment with two URL variants whose entry is on a host of its own."""
     key, plaintext = APIKey.create_for_user(
         db_session,
         developer_user.id,
@@ -274,6 +303,8 @@ def sdk(db_session, developer_user, make_feature_flag, admin_user):
     balanced_visual = _experiment(
         db_session, admin_user, balance_within=TIER, visual_host=balanced_host
     )
+    split_url_host = f"overload-{uuid.uuid4().hex[:8]}.example.com"
+    split_url = _experiment(db_session, admin_user, split_url_host=split_url_host)
     preview_token = secrets.token_urlsafe(32)
     db_session.add(
         VisualToken(
@@ -297,9 +328,11 @@ def sdk(db_session, developer_user, make_feature_flag, admin_user):
         preview_token=preview_token,
         balanced_visual_host=balanced_host,
         balanced_visual_id=balanced_visual.id,
+        split_url_key=split_url.key,
+        split_url_host=split_url_host,
     )
     db_session.rollback()
-    for created in (experiment, balanced, visual, balanced_visual):
+    for created in (experiment, balanced, visual, balanced_visual, split_url):
         for model in (Event, Assignment, Variant, VisualToken):
             db_session.query(model).filter(model.experiment_id == created.id).delete()
         db_session.query(Experiment).filter(Experiment.id == created.id).delete()
@@ -331,6 +364,32 @@ def _evaluations(http: httpx.AsyncClient, sdk: SdkSetup):
     return http.post(
         "/api/v1/tracking/evaluations",
         json={"evaluations": [entry]},
+        headers=sdk.headers,
+    )
+
+
+def _new_user() -> str:
+    return f"u-{uuid.uuid4().hex[:12]}"
+
+
+def _assign(http: httpx.AsyncClient, sdk: SdkSetup):
+    return http.post(
+        "/api/v1/tracking/assign",
+        json={"experiment_key": sdk.experiment_key, "user_id": _new_user()},
+        headers=sdk.headers,
+    )
+
+
+def _split_url_assign(http: httpx.AsyncClient, sdk: SdkSetup):
+    return http.post(
+        "/api/v1/tracking/split-url/assign",
+        json={
+            "experiment_key": sdk.split_url_key,
+            "user_id": _new_user(),
+            "host": sdk.split_url_host,
+            "path": SPLIT_URL_PATH,
+            "user_agent": "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Firefox/128.0",
+        },
         headers=sdk.headers,
     )
 
@@ -427,8 +486,7 @@ def _visual_preview(http: httpx.AsyncClient, sdk: SdkSetup):
 
 def _visual_balanced(http: httpx.AsyncClient, sdk: SdkSetup):
     """A new visitor in ``tier`` gold on the balanced visual experiment's page:
-    ``/tracking/assign``'s function takes its own worker trip from the page
-    answer's private event loop."""
+    assigned inside the page answer's worker thread."""
     return http.post(
         "/api/v1/tracking/visual",
         json={
@@ -460,6 +518,15 @@ ROUTES = [
         201,
         None,
         id="evaluations",
+    ),
+    pytest.param("POST /api/v1/tracking/assign", _assign, 200, None, id="assign"),
+    pytest.param(
+        "POST /api/v1/tracking/split-url/assign",
+        _split_url_assign,
+        200,
+        None,
+        id="split-url-assign",
+        marks=pytest.mark.modules,
     ),
     pytest.param(
         "POST /api/v1/tracking/assign/batch",
@@ -507,6 +574,12 @@ ROUTES = [
         marks=pytest.mark.modules,
     ),
 ]
+
+#: The ``reason`` the request before the burst must carry, by label.
+REASON_BEFORE = {
+    "POST /api/v1/tracking/assign": "assigned",
+    "POST /api/v1/tracking/split-url/assign": "assigned",
+}
 
 
 @contextlib.asynccontextmanager
@@ -576,6 +649,12 @@ async def test_every_request_of_a_burst_is_answered(
             assert before.status_code == status, (
                 f"{label} before the burst: {before.status_code} {before.text}"
             )
+            if label in REASON_BEFORE:
+                reason = before.json().get("reason")
+                assert reason == REASON_BEFORE[label], (
+                    f"{label} before the burst: reason {reason!r}, want "
+                    f"{REASON_BEFORE[label]!r}: {before.text}"
+                )
             watch.restart()
             outcomes = await _gather([send(http, sdk) for _ in range(BURST)])
             peak = watch.peak

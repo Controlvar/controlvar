@@ -156,11 +156,10 @@ by = [
 ]
 
 [[unit]]
-text = "POST /api/v1/results/{id}/post-stratification is beta as well (#443), and deprecated (#963): it answers 501 rather than report numbers that do not come from an experiment's own assignments and events, and it may be removed in a later release."
+text = "POST /api/v1/results/{id}/post-stratification is beta as well (#443), and is in neither API document (#963): it answers 501 for every existing experiment, 404 for an unknown one and 422 for a malformed body, rather than report numbers that do not come from an experiment's own assignments and events."
 by = [
     "test:backend/tests/integration/api/test_post_strat_api.py",
-    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
-    "test:backend/tests/smoke/test_openapi_snapshot.py::test_the_post_stratification_route_is_deprecated_in_the_published_documents",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_the_post_stratification_route_is_not_in_the_published_documents",
 ]
 
 [[unit]]
@@ -175,6 +174,13 @@ text = "GET /api/v1/results/{id}/segments/{segment_id} is beta too (#1933): it a
 by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_the_segment_results_route_is_beta_and_adds_only_its_two_components",
     "test:backend/tests/integration/api/test_segment_results_api.py::test_fixture_m_matches_the_hand_counts",
+]
+
+[[unit]]
+text = "POST /api/v1/admin/app-users/erase is beta too (#2042): it erases one app user's data for a superuser, and its response may still change (Erase one app user's data)."
+by = [
+    "test:backend/tests/unit/api/test_capabilities_beta_operations.py::test_a_core_operation_the_page_calls_beta_is_beta",
+    "test:backend/tests/integration/api/test_app_user_erase_api.py::test_only_a_superuser_may_erase",
 ]
 
 [[unit]]
@@ -517,6 +523,12 @@ by = [
 ]
 
 [[unit]]
+text = "POST /api/v1/wizard/drafts, GET /api/v1/wizard/drafts, GET /api/v1/wizard/drafts/{draft_id}, PUT /api/v1/wizard/drafts/{draft_id}/step, POST /api/v1/wizard/drafts/{draft_id}/submit, POST /api/v1/wizard/validate | #530 | the release after 0.47.0 (#537) | POST /api/v1/experiments/, which the dashboard's guided setup sends, to create the experiment as a draft; GET /api/v1/experiments/analysis/sample-size for the sample-size estimate"
+by = [
+    "test:backend/tests/smoke/test_wizard_routes_removed.py",
+]
+
+[[unit]]
 text = "Beta numbers on a stable route"
 by = ["exempt:baseline"]
 
@@ -558,27 +570,6 @@ by = [
 ]
 
 [[unit]]
-text = "POST /api/v1/wizard/drafts, PUT /api/v1/wizard/drafts/{draft_id}/step | #2024 | A user keeps at most 20 drafts: creating one more drops that user's oldest, and the create still answers 201. All users together keep at most 350; the oldest is dropped first. A step field larger than its limit answers 422 at POST /drafts (for experiment_type) or PUT .../step with a fixed message that names the field and the limit, and the draft is left unchanged. The OpenAPI document does not change. See Guided experiment builder."
-by = [
-    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_the_draft_after_the_limit_drops_the_users_oldest",
-    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_a_text_field_over_its_limit_is_refused_and_not_stored",
-    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_a_list_field_over_its_limit_is_refused_and_not_stored",
-    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_a_create_with_an_over_long_experiment_type_is_refused_and_stores_nothing",
-    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_drafts_of_all_users_together_are_capped_oldest_first",
-    "test:backend/tests/unit/api/test_wizard_draft_limits.py::test_the_numbers_the_docs_state_are_the_limits",
-    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
-]
-
-[[unit]]
-text = "POST /api/v1/wizard/drafts/{draft_id}/submit | #1257 | The experiment it creates carries the draft's mde as its primary metric's expected_effect, which the results page plans the sample for; the mde used to be dropped, leaving expected_effect null. The guardrail metrics carry none, and a draft with no mde creates the experiment as before. The OpenAPI document does not change. See Guided experiment builder."
-by = [
-    "test:backend/tests/integration/api/test_wizard_submit_builds.py::test_a_submitted_draft_creates_the_documented_experiment",
-    "test:backend/tests/unit/services/test_experiment_wizard_service.py::TestWizardExperimentCreation::test_payload_saves_the_planned_effect_on_the_primary_metric_only",
-    "test:backend/tests/unit/services/test_experiment_wizard_service.py::TestWizardExperimentCreation::test_payload_without_a_sample_size_step_plans_nothing",
-    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
-]
-
-[[unit]]
 text = "GET /api/v1/results/{experiment_id}, GET /api/v1/experiments/{experiment_id}/results, GET /api/v1/results/{experiment_id}/bayesian, GET /api/v1/export/experiments, GET /api/v1/export/reports/experiments/{experiment_id} | #1377 | For a metric whose lower_is_better is true, a significant decrease is the improvement: the metric's winning_variant_id, the summary's has_winner, winning_variant_id and recommendation, and the Bayesian decision (which reads the primary metric) follow it. A significant increase used to win whatever the setting. relative_improvement_pct is still the raw signed change. Results for a metric whose lower_is_better is false or not set are unchanged apart from the new field and the engine version. Each metric result carries lower_is_better; the OpenAPI document gains it and changes the descriptions of winning_variant_id and relative_improvement_pct and the engine_version default. The engine version becomes 1.5.0, so the results routes do not serve an answer cached before the upgrade."
 by = [
     "test:backend/tests/integration/api/test_results_lower_is_better.py",
@@ -589,7 +580,7 @@ by = [
 ]
 
 [[unit]]
-text = "GET /api/v1/results/{experiment_id}, GET /api/v1/experiments/{experiment_id}/results, GET /api/v1/export/variants, GET /api/v1/export/experiments, GET /api/v1/export/reports/experiments/{experiment_id} | #439 | A metric of type revenue is analysed as its mean value per assigned user, where it was analysed as a conversion: each user's event values are added up, a user with none counts as 0, and the variants are compared with Welch's t-test. For such a metric mean is that value per user (it was the share of users who sent the event), statistical_test_used is welch_t_test, each treatment carries absolute_difference and absolute_difference_ci, and the winner and the recommendation follow the means. conversions is still the number of users who sent the event. Every metric result carries analysis: mean for a revenue metric, proportion for every other type, which is analysed as before. The export's conversion_rate is empty when the primary metric is a revenue metric. The OpenAPI document changes in the new fields and the descriptions. See Data export."
+text = "GET /api/v1/results/{experiment_id}, GET /api/v1/experiments/{experiment_id}/results, GET /api/v1/export/variants, GET /api/v1/export/experiments, GET /api/v1/export/reports/experiments/{experiment_id} | #439 | A metric of type revenue is analysed as its mean value per assigned user, where it was analysed as a conversion: each user's event values are added up, a user with none counts as 0, and the variants are compared with Welch's t-test (to engine 1.12.0). For such a metric mean is that value per user (it was the share of users who sent the event), statistical_test_used is welch_t_test (to engine 1.12.0), each treatment carries absolute_difference and absolute_difference_ci, and the winner and the recommendation follow the means. conversions is still the number of users who sent the event. Every metric result carries analysis: mean for a revenue metric, proportion for every other type, which is analysed as before. The export's conversion_rate is empty when the primary metric is a revenue metric. The OpenAPI document changes in the new fields and the descriptions. See Data export."
 by = [
     "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_a_revenue_metric_is_analysed_per_assigned_user",
     "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_the_export_leaves_the_rate_empty_for_a_revenue_primary",
@@ -609,7 +600,7 @@ by = [
 ]
 
 [[unit]]
-text = "GET /api/v1/results/{experiment_id}, GET /api/v1/experiments/{experiment_id}/results, GET /api/v1/export/variants, GET /api/v1/export/experiments, GET /api/v1/export/reports/experiments/{experiment_id}, GET/POST /api/v1/experiments/, GET/PUT /api/v1/experiments/{experiment_id}, POST /api/v1/experiments/{experiment_id}/start, POST /api/v1/experiments/{experiment_id}/pause, POST /api/v1/experiments/{experiment_id}/complete, POST /api/v1/experiments/{experiment_id}/archive, POST /api/v1/experiments/{experiment_id}/clone, PUT /api/v1/experiments/{experiment_id}/schedule, GET /api/v1/results/{experiment_id}/bayesian, GET /api/v1/bandit/{experiment_id}, POST /api/v1/bandit/{experiment_id}/update, PUT /api/v1/bandit/{experiment_id}/weights | #439 (count, duration and custom) | A metric of type count, duration or custom is analysed as its mean per assigned user, as a revenue metric is: for count each user's value is the number of the metric's events they sent, whatever their value; for duration and custom it is the total of those events' value; a user with none counts as 0. Such a metric's analysis is mean, mean is that value per user (it was the share of users who sent the event), statistical_test_used is welch_t_test, each treatment carries absolute_difference and absolute_difference_ci, and the winner and the recommendation follow the means. Experiments already running or completed show the new numbers from the upgrade on, and their winner and recommendation can change. conversions is still the number of users who sent the event. The export's conversion_rate is empty when the primary metric is of one of these types. aggregation_method and event_value_path are still accepted, stored and returned, and are described as not read; no analysis has read them. The engine version becomes 1.7.0, so the results routes do not serve an answer cached before the upgrade. The OpenAPI document changes only in descriptions, the two examples and the engine_version default. See Data export."
+text = "GET /api/v1/results/{experiment_id}, GET /api/v1/experiments/{experiment_id}/results, GET /api/v1/export/variants, GET /api/v1/export/experiments, GET /api/v1/export/reports/experiments/{experiment_id}, GET/POST /api/v1/experiments/, GET/PUT /api/v1/experiments/{experiment_id}, POST /api/v1/experiments/{experiment_id}/start, POST /api/v1/experiments/{experiment_id}/pause, POST /api/v1/experiments/{experiment_id}/complete, POST /api/v1/experiments/{experiment_id}/archive, POST /api/v1/experiments/{experiment_id}/clone, PUT /api/v1/experiments/{experiment_id}/schedule, GET /api/v1/results/{experiment_id}/bayesian, GET /api/v1/bandit/{experiment_id}, POST /api/v1/bandit/{experiment_id}/update, PUT /api/v1/bandit/{experiment_id}/weights | #439 (count, duration and custom) | A metric of type count, duration or custom is analysed as its mean per assigned user, as a revenue metric is: for count each user's value is the number of the metric's events they sent, whatever their value; for duration and custom it is the total of those events' value; a user with none counts as 0. Such a metric's analysis is mean, mean is that value per user (it was the share of users who sent the event), statistical_test_used is welch_t_test (to engine 1.12.0), each treatment carries absolute_difference and absolute_difference_ci, and the winner and the recommendation follow the means. Experiments already running or completed show the new numbers from the upgrade on, and their winner and recommendation can change. conversions is still the number of users who sent the event. The export's conversion_rate is empty when the primary metric is of one of these types. aggregation_method and event_value_path are still accepted, stored and returned, and are described as not read; no analysis has read them. The engine version becomes 1.7.0, so the results routes do not serve an answer cached before the upgrade. The OpenAPI document changes only in descriptions, the two examples and the engine_version default. See Data export."
 by = [
     "test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_every_type_but_conversion_as_a_mean",
     "test:backend/tests/integration/api/test_value_metrics_results.py::test_a_count_metric_counts_events_sent_with_no_value",
@@ -645,7 +636,7 @@ by = [
 ]
 
 [[unit]]
-text = "GET /api/v1/results/{experiment_id}, GET /api/v1/experiments/{experiment_id}/results, GET /api/v1/results/{experiment_id}/bayesian, GET /api/v1/bandit/{experiment_id}, POST /api/v1/bandit/{experiment_id}/update, PUT /api/v1/bandit/{experiment_id}/weights | #1496 | Each treatment of a metric analysed as a proportion carries absolute_difference (the difference of the shares of users who converted, from the counts) and absolute_difference_ci (Newcombe's interval, from each variant's Wilson score interval), where they were null. Every treatment of every metric carries relative_improvement_pct_ci (the MOVER-R interval of the relative change: for a proportion over ratios of 0 and above, never below -100% and null only when an arm has no users or the control has no conversions; for a mean Fieller's, null when the control's mean plus or minus its margin reaches 0), incremental_impact and incremental_impact_ci (the difference and its interval times the treatment's sample_size, a plain number with no currency or unit). The control's are null. The intervals are at the response's confidence_level and are not adjusted for multiple comparisons. is_significant, the winner and the recommendation are decided as before, and a mean metric's absolute_difference and absolute_difference_ci do not change. For a mean with one treatment, or with no correction, is_significant is true exactly when absolute_difference_ci excludes 0; for a proportion, whose is_significant comes from Fisher's exact test, the two can disagree near the threshold. Every other field is unchanged, and so is the export. The engine version becomes 1.8.0, so the results routes do not serve an answer cached before the upgrade; the Bayesian and bandit operations change only in the OpenAPI engine_version default. The OpenAPI document gains the three properties and changes the descriptions of VariantResult, absolute_difference and absolute_difference_ci and the engine_version default."
+text = "GET /api/v1/results/{experiment_id}, GET /api/v1/experiments/{experiment_id}/results, GET /api/v1/results/{experiment_id}/bayesian, GET /api/v1/bandit/{experiment_id}, POST /api/v1/bandit/{experiment_id}/update, PUT /api/v1/bandit/{experiment_id}/weights | #1496 | Each treatment of a metric analysed as a proportion carries absolute_difference (the difference of the shares of users who converted, from the counts) and absolute_difference_ci (Newcombe's interval, from each variant's Wilson score interval), where they were null. Every treatment of every metric carries relative_improvement_pct_ci (the MOVER-R interval of the relative change: for a proportion over ratios of 0 and above, never below -100% and null only when an arm has no users or the control has no conversions; for a mean Fieller's, null when the control's mean plus or minus its margin reaches 0), incremental_impact and incremental_impact_ci (the difference and its interval times the treatment's sample_size, a plain number with no currency or unit). The control's are null. The intervals are at the response's confidence_level and are not adjusted for multiple comparisons. is_significant, the winner and the recommendation are decided as before, and a mean metric's absolute_difference and absolute_difference_ci do not change. For a mean with one treatment, or with no correction, is_significant was true exactly when absolute_difference_ci excluded 0 (engine 1.8.0 to 1.12.0); for a proportion, whose is_significant comes from Fisher's exact test, the two can disagree near the threshold. Every other field is unchanged, and so is the export. The engine version becomes 1.8.0, so the results routes do not serve an answer cached before the upgrade; the Bayesian and bandit operations change only in the OpenAPI engine_version default. The OpenAPI document gains the three properties and changes the descriptions of VariantResult, absolute_difference and absolute_difference_ci and the engine_version default."
 by = [
     "test:backend/tests/unit/services/test_difference_intervals.py",
     "test:backend/tests/integration/api/test_results_difference_intervals.py",
@@ -793,10 +784,9 @@ by = [
 ]
 
 [[unit]]
-text = "POST /api/v1/segments/{segment_id}/preview, POST /api/v1/wizard/drafts/{draft_id}/submit | #1204 | The words of the row above are refused here too. The preview takes a segment's body and answers 422 at [\"body\", \"rules\"] with the msg a segment save gives, where it used to estimate the audience with that condition never holding. The wizard's submit answers success: false with the message in errors, as targeting_rules: Value error, <path>: <reason>, and creates no experiment. The OpenAPI document does not change."
+text = "POST /api/v1/segments/{segment_id}/preview | #1204 | The words of the row above are refused here too. The preview takes a segment's body and answers 422 at [\"body\", \"rules\"] with the msg a segment save gives, where it used to estimate the audience with that condition never holding. The OpenAPI document does not change."
 by = [
     "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_segment_create_update_and_preview_refuse_an_unknown_unit",
-    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_the_wizard_launch_reports_the_refusal_and_creates_nothing",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
@@ -824,14 +814,13 @@ by = [
 ]
 
 [[unit]]
-text = "POST /api/v1/feature-flags/, PUT /api/v1/feature-flags/{flag_id}, POST /api/v1/experiments/, PUT /api/v1/experiments/{experiment_id}, POST /api/v1/segments, PUT /api/v1/segments/{segment_id}, POST /api/v1/segments/{segment_id}/preview, POST /api/v1/wizard/drafts/{draft_id}/submit | #1525, #1526 | Targeting rules with a value the evaluator cannot use answer 422 at [\"body\", \"targeting_rules\"] (segments and the preview: [\"body\", \"rules\"]), where they used to be accepted and then never held, held where they said they did not, or abandoned the ruleset. The values are: a before or after value that cannot be read as an ISO 8601 date or a Unix timestamp a date can hold; an array_length value that cannot be read as a whole number, or between without whole-number min and max; a geo_distance radius that is missing, below 0 or not a number; a percentage_bucket value that cannot be read as a number (experiments); a native gt, gte, lt or lte value that cannot be read as a number; and, in the dashboard shape, a geo comparison other than lte in the object, or any fifth item of the list or the text, which was dropped when the rule was applied, so the rule meant within the radius. The msg names the place and the reason, for example Value error, rules[0].rule.conditions[1].value: not a date; use an ISO 8601 date such as 2030-01-31 or 2030-01-31T09:00:00Z, or a Unix timestamp, and nothing is written. The wizard's submit answers success: false with the message in errors, as in the #1204 row. A request that does not send the rules is unaffected, but one that sends back stored rules using such a value answers 422 until they are corrected. Stored rules are evaluated as before, and python -m backend.scripts.check_targeting_rules lists them. The OpenAPI document does not change. See Targeting Rules: Operator Reference."
+text = "POST /api/v1/feature-flags/, PUT /api/v1/feature-flags/{flag_id}, POST /api/v1/experiments/, PUT /api/v1/experiments/{experiment_id}, POST /api/v1/segments, PUT /api/v1/segments/{segment_id}, POST /api/v1/segments/{segment_id}/preview | #1525, #1526 | Targeting rules with a value the evaluator cannot use answer 422 at [\"body\", \"targeting_rules\"] (segments and the preview: [\"body\", \"rules\"]), where they used to be accepted and then never held, held where they said they did not, or abandoned the ruleset. The values are: a before or after value that cannot be read as an ISO 8601 date or a Unix timestamp a date can hold; an array_length value that cannot be read as a whole number, or between without whole-number min and max; a geo_distance radius that is missing, below 0 or not a number; a percentage_bucket value that cannot be read as a number (experiments); a native gt, gte, lt or lte value that cannot be read as a number; and, in the dashboard shape, a geo comparison other than lte in the object, or any fifth item of the list or the text, which was dropped when the rule was applied, so the rule meant within the radius. The msg names the place and the reason, for example Value error, rules[0].rule.conditions[1].value: not a date; use an ISO 8601 date such as 2030-01-31 or 2030-01-31T09:00:00Z, or a Unix timestamp, and nothing is written. A request that does not send the rules is unaffected, but one that sends back stored rules using such a value answers 422 until they are corrected. Stored rules are evaluated as before, and python -m backend.scripts.check_targeting_rules lists them. The OpenAPI document does not change. See Targeting Rules: Operator Reference."
 by = [
     "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_flag_create_refuses_the_word",
     "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_flag_update_refuses_the_word_and_writes_nothing",
     "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_experiment_create_refuses_the_word",
     "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_experiment_update_refuses_the_word_and_writes_nothing",
     "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_segment_create_update_and_preview_refuse_an_unreadable_value",
-    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_the_wizard_launch_reports_a_dashboard_comparison_and_creates_nothing",
     "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_a_stored_flag_with_an_unreadable_value_keeps_its_answer_and_cannot_be_sent_back",
     "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_the_check_script_lists_a_value_a_save_now_refuses",
     "test:backend/tests/unit/core/test_targeting_values.py::test_a_value_is_refused_with_fixed_text",
@@ -844,14 +833,13 @@ by = [
 ]
 
 [[unit]]
-text = "POST /api/v1/feature-flags/, PUT /api/v1/feature-flags/{flag_id}, POST /api/v1/experiments/, PUT /api/v1/experiments/{experiment_id}, POST /api/v1/segments, PUT /api/v1/segments/{segment_id}, POST /api/v1/segments/{segment_id}/preview, POST /api/v1/wizard/drafts/{draft_id}/submit | #1666, #1669, #1672, #1673 | Targeting rules answer 422 at [\"body\", \"targeting_rules\"] (segments and the preview: [\"body\", \"rules\"]; the wizard's submit answers 200 with success: false and the message in errors) for a native between whose bounds are not two numbers or two dates with the same time-zone form (flags and experiments), and, in the dashboard shape (flags, experiments, the wizard, segments and the preview), for a time_window the engine cannot read and for a greater_than, greater_than_or_equal, less_than or less_than_or_equal value that is NaN or an integer too large for a floating-point number, where they used to be accepted and then never matched or answered error. A geo latitude, longitude or dashboard radius holding an integer too large for a floating-point number answers 422 with the same message a value that is not a number gets, where it answered 500. The msg names the place and the reason, and nothing is written. A request that sends back such stored rules answers 422 until they are corrected; stored rules are evaluated as before, and python -m backend.scripts.check_targeting_rules lists them. A between with no additional_value still answers not valid. The OpenAPI document does not change."
+text = "POST /api/v1/feature-flags/, PUT /api/v1/feature-flags/{flag_id}, POST /api/v1/experiments/, PUT /api/v1/experiments/{experiment_id}, POST /api/v1/segments, PUT /api/v1/segments/{segment_id}, POST /api/v1/segments/{segment_id}/preview | #1666, #1669, #1672, #1673 | Targeting rules answer 422 at [\"body\", \"targeting_rules\"] (segments and the preview: [\"body\", \"rules\"]) for a native between whose bounds are not two numbers or two dates with the same time-zone form (flags and experiments), and, in the dashboard shape (flags, experiments, segments and the preview), for a time_window the engine cannot read and for a greater_than, greater_than_or_equal, less_than or less_than_or_equal value that is NaN or an integer too large for a floating-point number, where they used to be accepted and then never matched or answered error. A geo latitude, longitude or dashboard radius holding an integer too large for a floating-point number answers 422 with the same message a value that is not a number gets, where it answered 500. The msg names the place and the reason, and nothing is written. A request that sends back such stored rules answers 422 until they are corrected; stored rules are evaluated as before, and python -m backend.scripts.check_targeting_rules lists them. A between with no additional_value still answers not valid. The OpenAPI document does not change."
 by = [
     "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_flag_create_refuses_the_word",
     "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_flag_update_refuses_the_word_and_writes_nothing",
     "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_experiment_create_refuses_the_word",
     "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_experiment_update_refuses_the_word_and_writes_nothing",
     "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_segment_create_update_and_preview_refuse_an_unreadable_value",
-    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_the_wizard_launch_reports_the_addendums_refusals_and_creates_nothing",
     "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_the_check_script_lists_the_addendums_refusals",
     "test:backend/tests/unit/core/test_targeting_values.py::test_a_value_is_refused_with_fixed_text",
     "test:backend/tests/unit/core/test_targeting_values.py::test_every_value_is_refused_or_can_match",
@@ -900,8 +888,9 @@ by = [
 ]
 
 [[unit]]
-text = "GET /api/v1/experiments/{experiment_id}/split-url/preview | #1615 | The preview answers what POST /api/v1/tracking/split-url/assign gives the visitor id now, without recording anything: their stored assignment's variant if they have one, else the variant a new visitor with that id gets, by the bandit weights for a bandit experiment and otherwise by the hash of the id and the experiment's key that POST /api/v1/tracking/assign uses. It used to answer an MD5 hash of the id and the experiment's id, which matched the variant a visitor is assigned for only about half of the ids. It checks no eligibility rule. A stored configuration that does not match the experiment's variants answers 409 with the detail split_url_config is not valid; update it with PUT /api/v1/experiments/{id}, where it answered 200. The fields of the answer are unchanged. The OpenAPI document changes only in the operation's description, its response description and the description of user_id. See Split URL preview."
+text = "GET /api/v1/experiments/{experiment_id}/split-url/preview | #1615 | For a visitor id never linked to another, the preview answers what POST /api/v1/tracking/split-url/assign gives it now, without recording anything: their stored assignment's variant if they have one, else the variant a new visitor with that id gets, by the bandit weights for a bandit experiment and otherwise by the hash of the id and the experiment's key that POST /api/v1/tracking/assign uses. It used to answer an MD5 hash of the id and the experiment's id, which matched the variant a visitor is assigned for only about half of the ids. It checks no eligibility rule. A stored configuration that does not match the experiment's variants answers 409 with the detail split_url_config is not valid; update it with PUT /api/v1/experiments/{id}, where it answered 200. The fields of the answer are unchanged. The OpenAPI document changes only in the operation's description, its response description and the description of user_id. For an id linked to another by POST /api/v1/tracking/alias (#449), the preview reads the id it is sent, its own stored assignment or its own hash, not its person's. See Split URL preview."
 by = [
+    "test:modules/backend/tests/integration/split_url/test_split_url_identity_aliases.py::test_the_preview_of_a_linked_id_reads_its_own_row_or_hash",
     "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_the_preview_agrees_with_the_route_and_records_nothing",
     "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_the_preview_of_a_bandit_agrees_with_the_route",
     "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_the_preview_answers_a_stored_assignment",
@@ -1384,6 +1373,22 @@ by = [
 ]
 
 [[unit]]
+text = "GET /api/v1/results/{experiment_id}, GET /api/v1/experiments/{experiment_id}/results, GET /api/v1/export/variants, GET /api/v1/export/experiments, GET /api/v1/export/reports/overview, GET /api/v1/export/reports/experiments/{experiment_id}, GET /api/v1/results/{experiment_id}/bayesian, GET /api/v1/bandit/{experiment_id}, POST /api/v1/bandit/{experiment_id}/update, PUT /api/v1/bandit/{experiment_id}/weights | #2041 (engine 1.13.0) | A revenue, count, duration or custom metric's p_value comes from a permutation test of Welch's t statistic over each assigned user's value, twice the smaller tail, where it was Welch's t-test's, and its statistical_test_used is permutation_t_test, a new value. adjusted_p_value, is_significant, the metric's winning_variant_id and, on the primary metric, the summary's winner and recommendation follow it, so running and completed experiments can change their recommendation at the upgrade: in 2,000 A/A experiments with 600 users in the control and 5,400 in the treatment SHIP_VARIANT fell from 150 to 48, and with 5,400 and 600 KEEP_CONTROL fell from 159 to 49. A mean's is_significant no longer follows absolute_difference_ci, which is still Welch's, as is every other interval and estimate. The smallest p-value is 2 over the permutations plus one, 0.001 with one treatment, so a strong effect's recommendation_reason reads p=0.0010. A warehouse analysis of a mean keeps Welch's t-test, and analysis snapshots keep the engine version they were computed with. The engine version becomes 1.13.0, so /results serves no answer cached before the upgrade; the Bayesian and bandit operations change only in the OpenAPI engine_version default. The OpenAPI document changes in the engine_version defaults, the new StatisticalTest value and the descriptions of StatisticalTest, p_value, is_significant, statistical_test_used, absolute_difference_ci and MetricResult.analysis, in both snapshots. See Technical guide."
+by = [
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_a_lopsided_split_names_a_false_winner_no_more_often_than_alpha",
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_the_mirrored_split_names_neither_arm_beyond_the_band",
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_a_mean_from_sums_alone_keeps_welchs_t_test",
+    "test:backend/tests/unit/stats_validation/test_permutation_test.py::test_every_estimate_and_interval_is_what_welch_gave",
+    "test:backend/tests/unit/stats_validation/test_permutation_test.py::test_the_number_of_permutations_follows_the_integer_rule",
+    "test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_every_type_but_conversion_as_a_mean",
+    "test:backend/tests/unit/services/test_sufficient_stats_fingerprint.py::test_sufficient_stats_fingerprint",
+    "test:backend/tests/unit/services/test_engine_versions_frozen.py",
+    "test:backend/tests/unit/scripts/test_openapi_dump_and_stability.py::test_the_results_cache_key_names_the_engine_and_a_finished_answer_lasts_a_day",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
 text = "POST /api/v1/auth/login, POST /api/v1/auth/token | #1812 | For an account with two-step sign-in on, the right password answers 200 with {\"mfa_required\": true, \"mfa_token\", \"enrol\": false, \"expires_in\": 300} and no access_token; the access token comes from POST /api/v1/auth/mfa/verify. For an account whose role LOCAL_AUTH_2FA_REQUIRED_ROLES names and that has not set it up, it answers {\"mfa_required\": true, \"mfa_token\", \"enrol\": true, \"expires_in\": 600} and no access_token; the access token comes from POST /api/v1/auth/mfa/enroll/confirm. Every other account gets the answer it got before. The OpenAPI document changes: each 200 answer is an anyOf that adds MfaRequiredResponse, and the descriptions say so. See Two-step sign-in."
 by = [
     "test:backend/tests/unit/api/test_two_factor_routes.py::test_the_password_step_answers_mfa_required_and_no_access_token",
@@ -1399,6 +1404,74 @@ by = [
 text = "GET /api/v1/admin/users, GET/PUT /api/v1/admin/users/{user_id}, GET /api/v1/users/, GET /api/v1/users/me, GET/PUT /api/v1/users/{user_id} | #1812 | Each user carries totp_enabled, whether the account has two-step sign-in on. The OpenAPI document changes: UserResponse gains the required totp_enabled."
 by = [
     "test:backend/tests/integration/api/test_two_factor_sign_in_api.py::test_the_admin_list_says_who_has_two_step_sign_in_on",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "POST /api/v1/feature-flags/, PUT/DELETE /api/v1/feature-flags/{flag_id}, POST /api/v1/feature-flags/{flag_id}/activate, POST /api/v1/feature-flags/{flag_id}/deactivate, POST /api/v1/feature-flags/{flag_id}/unarchive, POST /api/v1/feature-flags/{flag_id}/toggle, POST /api/v1/feature-flags/{flag_id}/enable, POST /api/v1/feature-flags/{flag_id}/disable, POST /api/v1/feature-flags/bulk-toggle | #1042 | A change is saved together with its audit-log entry, and for create, update and delete with its compliance event. When an entry cannot be written, nothing is saved and the operation answers 500 with the request ID; it used to keep the change and answer 2xx with no entry. Bulk toggle saves all of its changes or none: when they cannot be saved it answers 500, where it used to answer 200 and report flags as changed that were not saved. A change whose entries are written answers as before. The OpenAPI document changes only in the descriptions of toggle, enable, disable, delete and bulk toggle, and of the Compliance tag. See When an entry can be missing."
+by = [
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_a_refused_entry_saves_nothing_and_answers_500",
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_a_refused_compliance_event_saves_nothing_and_answers_500",
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_bulk_toggle_answers_500_when_its_commit_fails",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_status_verbs",
+    "test:backend/tests/unit/services/test_compliance_trail_writers.py::test_the_compliance_tag_says_what_writes_an_event",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "POST /api/v1/users/me/password | #501 | A change signs out every session of the account: every access token issued before it, the one that sent the request included, answers 401 from then on, and a sign-in that has not finished starts again. For an account that signs in with its password alone the operation answers 200 with what POST /api/v1/auth/login answers (access_token, token_type, expires_in and user), where it answered an empty 204; for an account with two-step sign-in on, or required for its role, it still answers 204. The answer with a token is recorded as a user_login audit entry. The OpenAPI document changes: the operation's description, and its 200 response, now the LoginResponse schema, beside a 204 response."
+by = [
+    "test:backend/tests/integration/api/test_own_password_change.py::test_a_token_issued_before_the_change_is_refused",
+    "test:backend/tests/integration/api/test_password_change_ends_sessions.py::test_the_answer_carries_a_new_token_and_the_sending_token_is_refused",
+    "test:backend/tests/integration/api/test_password_change_ends_sessions.py::test_an_account_that_signs_in_with_a_second_step_gets_204_and_signs_in_again",
+    "test:backend/tests/integration/api/test_password_change_ends_sessions.py::test_a_code_step_begun_before_the_change_starts_again",
+    "test:backend/tests/integration/api/test_password_change_ends_sessions.py::test_the_answer_with_a_token_is_recorded_as_one_sign_in",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "POST /api/v1/rollout-schedules/, PUT/DELETE /api/v1/rollout-schedules/{schedule_id}, POST /api/v1/rollout-schedules/{schedule_id}/activate, POST /api/v1/rollout-schedules/{schedule_id}/pause, POST /api/v1/rollout-schedules/{schedule_id}/cancel, POST /api/v1/rollout-schedules/{schedule_id}/stages, PUT/DELETE /api/v1/rollout-schedules/stages/{stage_id}, POST /api/v1/rollout-schedules/stages/{stage_id}/advance | #1042 | A schedule or stage change is saved together with its audit-log entry on the schedule's flag. When the entry cannot be written, nothing is saved and the operation answers 500 with its existing message; it used to keep the change and answer 2xx with no entry. A change whose entry is written answers as before. The OpenAPI document does not change. See When an entry can be missing."
+by = [
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_a_refused_entry_saves_no_rollout_change_and_answers_500",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_rollout_schedule_routes_record_on_the_flag",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "POST /api/v1/tracking/alias (beta) | #449 | A new beta operation: it links an anonymous id to the known user id of the same person, and needs a server-side key (the sdk:ruleset scope, with an owner who can change feature flags) called from a backend. It answers 200 with the two ids and created (false when the link already existed), 409 when a rule refuses the link, and 422 for two equal ids, for exactly anonymous or anon in either field, and for an id missing, empty, over 255 characters or not storable. Its shape may still change. The OpenAPI documents gain the operation and its AliasRequest and AliasResponse schemas. See Link an Anonymous Id to a Known User Id."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_link_is_stored_once_and_answered_again_with_created_false",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_the_route_refuses_each_key_as_batch_assignment_does",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_server_key_whose_owner_can_change_flags_is_accepted",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_an_anonymous_id_linked_to_one_known_id_is_not_moved",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_known_id_takes_100_anonymous_ids_and_not_the_101st",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_two_equal_ids_are_refused",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_shared_placeholder_is_refused_in_either_field",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_missing_empty_or_too_long_field_is_refused",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_text_the_database_cannot_store_is_refused",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "POST /api/v1/tracking/assign, POST /api/v1/tracking/assign/batch (beta), POST /api/v1/tracking/track, POST /api/v1/tracking/batch, POST /api/v1/tracking/events, GET /api/v1/tracking/assignments/{user_id}, POST /api/v1/tracking/visual (beta), POST /api/v1/tracking/split-url/assign (beta, full profile) | #449 | An id linked to another by POST /api/v1/tracking/alias is answered as its person: in each experiment the assignment stored first among the person's ids answers for every one of them, and an id with none of its own gets no second one. An event that names an experiment is stored under the id holding that assignment, tagged with its variant while the experiment runs, and its event_id is still kept per id as sent. The assignments list holds the person's assignments, one per experiment, each with user_id the id in the path. Every answer names the id that was sent, and an id never linked is answered and stored as before. The OpenAPI documents of these operations do not change. See How events count."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_known_id_answers_the_variant_its_anonymous_id_holds",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_the_earliest_assignment_wins_for_both_ids",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_person_with_no_row_is_assigned_once_under_the_known_id",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_the_batch_answers_a_linked_id_with_its_persons_variant",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_known_ids_conversion_counts_for_its_persons_variant",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_the_event_batch_stores_a_known_ids_events_under_its_person",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_an_event_by_ids_is_stored_under_its_person_with_the_variant_given",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_linked_ids_event_is_tagged_only_while_the_experiment_runs",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_an_event_id_is_stored_once_per_id_as_sent",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_the_assignments_list_answers_a_linked_id_with_one_row_per_experiment",
+    "test:backend/tests/integration/api/test_visual_tracking_api.py::test_a_linked_visitor_gets_the_variant_its_person_holds",
+    "test:modules/backend/tests/integration/split_url/test_split_url_identity_aliases.py::test_a_linked_visitor_is_sent_where_its_person_was",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]

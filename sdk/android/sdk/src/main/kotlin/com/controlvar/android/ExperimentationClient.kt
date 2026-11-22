@@ -6,6 +6,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import okhttp3.HttpUrl
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 import java.util.UUID
 
@@ -52,38 +53,53 @@ class ExperimentationClient(
 
     /**
      * Evaluates a feature flag for the given user via
-     * `GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=...`.
+     * `GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=...&context=...`.
+     *
+     * `user.attributes` are sent as `context`: compact JSON with sorted keys, percent-encoded,
+     * so the flag's targeting rules are evaluated against them. With no attributes, or an empty
+     * map, no `context` is sent. A cached answer is used only for exactly the same attributes.
      *
      * Resolution order:
-     *   1. In-memory cache for this user + flag (fast path, ~O(1))
+     *   1. In-memory cache for this user + flag, if it was answered for the same attributes
+     *      (fast path, ~O(1))
      *   2. API call; the result is cached and persisted to the offline store
-     *   3. On failure: the offline store's last successful evaluation, if any
+     *   3. On failure other than a 404: the offline store's last successful evaluation for this
+     *      user + flag, whatever attributes it was asked with, if any
      *
      * @param flagKey the feature flag's unique key
      * @param user    the user to evaluate the flag for
      * @return EvalResult with the flag key, enabled state and config
+     * @throws IllegalArgumentException if an attribute value cannot be written as JSON (a NaN or
+     *         an infinite number, at any depth); nothing is cached, stored or sent
      * @throws ExperimentationException.FlagNotFoundException if the flag key is unknown
-     *         (HTTP 404; a flag that is not ACTIVE answers 200 with `enabled: false`) and no
-     *         offline value exists
+     *         (HTTP 404; a flag that is not ACTIVE answers 200 with `enabled: false`), whatever
+     *         is stored offline
      * @throws ExperimentationException.ServerException on another non-2xx response with no offline value
      * @throws ExperimentationException.NetworkException on network failure with no offline value
      */
     suspend fun evaluateFlag(flagKey: String, user: User): EvalResult {
         require(flagKey.isNotEmpty()) { "flagKey must not be empty" }
         require(user.id.isNotEmpty()) { "user.id must not be empty" }
+        // Before the cache, the offline store and the request: attributes that cannot be sent
+        // fail here with fixed text, and nothing is read or written.
+        val context = flagContext(user.attributes)
 
         val cacheKey = ResultCache.key(user.id, flagKey)
-        flagCache.get(cacheKey)?.let { return it }
+        flagCache.get(cacheKey, context)?.let { return it }
 
         val response = try {
-            httpClient.get(evaluateFlagPath(flagKey, user.id))
+            httpClient.get(evaluateFlagPath(flagKey, user.id, context))
         } catch (e: ExperimentationException) {
-            // Offline fallback: the last successful evaluation, if any. Not re-cached in
-            // memory so the next call retries the server.
+            // A 404 means the server has no such flag, so the stored answer is stale: remove
+            // it and report not-found without reading it.
+            if (e is ExperimentationException.ServerException && e.statusCode == 404) {
+                offlineStore.removeFlag(user.id, flagKey)
+                throw ExperimentationException.FlagNotFoundException(flagKey)
+            }
+            // Offline fallback for every other failure: the last successful evaluation, if
+            // any. Not re-cached in memory so the next call retries the server.
             offlineStore.loadFlag(user.id, flagKey)?.let { return it }
             throw when {
-                e is ExperimentationException.ServerException && e.statusCode == 404 ->
-                    ExperimentationException.FlagNotFoundException(flagKey)
                 e is ExperimentationException.NetworkException ->
                     ExperimentationException.NetworkException(
                         "Failed to evaluate flag '$flagKey' and no offline data available", e
@@ -94,7 +110,7 @@ class ExperimentationClient(
 
         val parsed = EvalResult.fromJson(response)
         val result = if (parsed.key.isEmpty()) parsed.copy(key = flagKey) else parsed
-        flagCache.set(cacheKey, result)
+        flagCache.set(cacheKey, result, context)
         offlineStore.saveFlag(user.id, result)
         return result
     }
@@ -245,15 +261,20 @@ class ExperimentationClient(
 
     // ---- Private helpers ----
 
-    /** Builds `/api/v1/feature-flags/evaluate/{key}?user_id=...` with both values percent-encoded. */
-    private fun evaluateFlagPath(flagKey: String, userId: String): String {
-        val url = HttpUrl.Builder()
+    /**
+     * Builds `/api/v1/feature-flags/evaluate/{key}?user_id=...&context=...` with every value
+     * percent-encoded by OkHttp, `user_id` first. [context] is [flagContext]'s text, left
+     * out when empty.
+     */
+    private fun evaluateFlagPath(flagKey: String, userId: String, context: String): String {
+        val builder = HttpUrl.Builder()
             .scheme("http")
             .host("localhost")
             .addEncodedPathSegments("api/v1/feature-flags/evaluate")
             .addPathSegment(flagKey)
             .addQueryParameter("user_id", userId)
-            .build()
+        if (context.isNotEmpty()) builder.addQueryParameter("context", context)
+        val url = builder.build()
         return "${url.encodedPath}?${url.encodedQuery}"
     }
 
@@ -309,4 +330,50 @@ class ExperimentationClient(
         /** Maximum events per `POST /api/v1/tracking/batch` request. */
         const val BATCH_LIMIT = 100
     }
+}
+
+/**
+ * The `context` a flag evaluation sends: [attributes] as compact JSON with the keys of every
+ * map sorted, so the same attributes always give the same text (the cache compares it), or
+ * `""` when the map is empty.
+ *
+ * The values are converted by [kotlinToJson], the writer of the assignment's `context`, so a
+ * user's attributes read the same on both calls. Unencodable means a NaN or an infinite number,
+ * at any depth, and nothing else: a value of another type is written as its `toString()`, as
+ * the assignment writes it. That throws [IllegalArgumentException] with a fixed text that names
+ * no key or value.
+ */
+internal fun flagContext(attributes: Map<String, Any?>): String {
+    if (attributes.isEmpty()) return ""
+    return try {
+        sortedJsonText(kotlinToJson(attributes))
+    } catch (e: JSONException) {
+        throw IllegalArgumentException("user.attributes cannot be sent as JSON")
+    }
+}
+
+/**
+ * Writes an org.json value tree as compact JSON text with the keys of every object sorted.
+ * org.json's own `toString()` orders keys by the platform (a HashMap on the JVM, insertion order
+ * on Android), which would make one map cost an extra request on one and not the other. Strings
+ * and numbers go through org.json's own `quote` and `numberToString`.
+ */
+private fun sortedJsonText(value: Any?): String = when (value) {
+    null, JSONObject.NULL -> "null"
+    is JSONObject -> {
+        val keys = mutableListOf<String>()
+        val iterator = value.keys()
+        while (iterator.hasNext()) keys.add(iterator.next())
+        keys.sorted().joinToString(",", "{", "}") { key ->
+            JSONObject.quote(key) + ":" + sortedJsonText(value.opt(key))
+        }
+    }
+    is JSONArray -> (0 until value.length()).joinToString(",", "[", "]") { sortedJsonText(value.opt(it)) }
+    is String -> JSONObject.quote(value)
+    is Number -> {
+        // Not left to the platform: Android's JSONArray.put(Object) accepts a NaN.
+        if (value is Double && !value.isFinite()) throw JSONException("non-finite number")
+        JSONObject.numberToString(value)
+    }
+    else -> value.toString()
 }
