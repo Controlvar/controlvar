@@ -25,6 +25,16 @@ burst must be answered on the assigned path (``reason`` ``assigned``), so the
 burst stores an assignment and a view per request rather than taking a path
 that records nothing.
 
+The event tracking and error report rows send valid bodies, each event with
+an ``event_id`` of its own, and the request before the burst must show that
+the route did its normal work: a ``/track`` event carries the variant of the
+user the fixture assigned, a batch stores every event in it, the user's
+assignments list the experiment, and a stored error report is stamped
+``"server"`` (the fixture's key has ``sdk:ruleset``). After the burst, the
+rows that store something must have stored one row per event or report sent.
+The ``errors`` and ``errors-batch`` rows still send ``{}``, refused after the
+key check.
+
 The two routes a web page calls (#1545) take a key with no scopes: the
 fixture gives them one, a running visual experiment whose page rule names a
 host of its own, and a live preview link of it. ``POST /tracking/visual``
@@ -127,7 +137,12 @@ class SdkSetup:
 
     headers: dict
     flag_key: str
+    flag_id: Any
     experiment_key: str
+    experiment_id: Any
+    #: A user assigned to the experiment's treatment, and that variant.
+    assigned_user: str
+    assigned_variant_id: Any
     #: An ACTIVE experiment that balances its split within ``tier`` (#448).
     balanced_experiment_key: str
     balanced_experiment_id: Any
@@ -275,8 +290,9 @@ def _experiment(
 @pytest.fixture
 def sdk(db_session, developer_user, make_feature_flag, admin_user):
     """A key with ``sdk:ruleset`` of an active developer, an ACTIVE flag, an
-    ACTIVE experiment with two variants and an ACTIVE one that balances its
-    split within ``tier``; and for the page routes, the same developer's key
+    ACTIVE experiment with two variants and a user assigned to its treatment,
+    and an ACTIVE one that balances its split within ``tier``; and for the
+    page routes, the same developer's key
     with no scopes, an ACTIVE visual experiment on a host of its own, a live
     preview link of its treatment, and an ACTIVE visual experiment that
     balances within ``tier`` on another host; and an ACTIVE split URL
@@ -296,6 +312,18 @@ def sdk(db_session, developer_user, make_feature_flag, admin_user):
         rollout_percentage=100,
     )
     experiment = _experiment(db_session, admin_user)
+    treatment = (
+        db_session.query(Variant)
+        .filter(Variant.experiment_id == experiment.id, Variant.is_control.is_(False))
+        .one()
+    )
+    assigned_user = _new_user()
+    db_session.add(
+        Assignment(
+            experiment_id=experiment.id, variant_id=treatment.id, user_id=assigned_user
+        )
+    )
+    db_session.commit()
     balanced = _experiment(db_session, admin_user, balance_within=TIER)
     host = f"overload-{uuid.uuid4().hex[:8]}.example.com"
     visual = _experiment(db_session, admin_user, visual_host=host)
@@ -320,7 +348,11 @@ def sdk(db_session, developer_user, make_feature_flag, admin_user):
     yield SdkSetup(
         headers={"X-API-Key": plaintext},
         flag_key=flag.key,
+        flag_id=flag.id,
         experiment_key=experiment.key,
+        experiment_id=experiment.id,
+        assigned_user=assigned_user,
+        assigned_variant_id=treatment.id,
         balanced_experiment_key=balanced.key,
         balanced_experiment_id=balanced.id,
         page_headers={"X-API-Key": page_plaintext},
@@ -411,6 +443,81 @@ def _errors(http: httpx.AsyncClient, sdk: SdkSetup):
 
 def _errors_batch(http: httpx.AsyncClient, sdk: SdkSetup):
     return http.post("/api/v1/tracking/errors/batch", json={}, headers=sdk.headers)
+
+
+#: Events each ``tracking-batch`` request sends, and reports each
+#: ``errors-batch-valid`` request sends.
+BATCH_EVENTS = 5
+BATCH_REPORTS = 2
+
+
+def _new_event_id() -> str:
+    return f"e-{uuid.uuid4().hex}"
+
+
+def _event(sdk: SdkSetup) -> dict:
+    """An event of the user the fixture assigned, with an event_id of its own."""
+    return {
+        "event_type": "overload",
+        "user_id": sdk.assigned_user,
+        "experiment_key": sdk.experiment_key,
+        "event_id": _new_event_id(),
+    }
+
+
+def _track(http: httpx.AsyncClient, sdk: SdkSetup):
+    return http.post("/api/v1/tracking/track", json=_event(sdk), headers=sdk.headers)
+
+
+def _events(http: httpx.AsyncClient, sdk: SdkSetup):
+    """An event by ids, of a new user, naming the experiment and its treatment."""
+    return http.post(
+        "/api/v1/tracking/events",
+        json={
+            "event_name": "overload",
+            "event_type": "overload",
+            "user_id": _new_user(),
+            "experiment_id": str(sdk.experiment_id),
+            "variant_id": str(sdk.assigned_variant_id),
+            "event_id": _new_event_id(),
+        },
+        headers=sdk.headers,
+    )
+
+
+def _tracking_batch(http: httpx.AsyncClient, sdk: SdkSetup):
+    return http.post(
+        "/api/v1/tracking/batch",
+        json={"events": [_event(sdk) for _ in range(BATCH_EVENTS)]},
+        headers=sdk.headers,
+    )
+
+
+def _user_assignments(http: httpx.AsyncClient, sdk: SdkSetup):
+    return http.get(
+        f"/api/v1/tracking/assignments/{sdk.assigned_user}", headers=sdk.headers
+    )
+
+
+def _report(sdk: SdkSetup) -> dict:
+    return {
+        "feature_flag_key": sdk.flag_key,
+        "user_id": _new_user(),
+        "error_type": "overload",
+        "message": "reported in a burst",
+    }
+
+
+def _errors_valid(http: httpx.AsyncClient, sdk: SdkSetup):
+    return http.post("/api/v1/tracking/errors", json=_report(sdk), headers=sdk.headers)
+
+
+def _errors_batch_valid(http: httpx.AsyncClient, sdk: SdkSetup):
+    return http.post(
+        "/api/v1/tracking/errors/batch",
+        json={"errors": [_report(sdk) for _ in range(BATCH_REPORTS)]},
+        headers=sdk.headers,
+    )
 
 
 def _split_url_routes(http: httpx.AsyncClient, sdk: SdkSetup):
@@ -505,11 +612,91 @@ def _every_visitor_took_a_place_in_the_blocks(db_session, sdk: SdkSetup) -> None
     _every_user_took_a_place_in_the_blocks(db_session, sdk, sdk.balanced_visual_id)
 
 
+def _one_event_stored_per_event_sent(per_request: int):
+    """After an event row: the experiment's stored events, one per event sent
+    (each request before, in and after the burst sends *per_request*)."""
+
+    def check(db_session, sdk: SdkSetup) -> None:
+        db_session.expire_all()
+        stored = (
+            db_session.query(Event)
+            .filter(Event.experiment_id == sdk.experiment_id)
+            .count()
+        )
+        want = (BURST + 2) * per_request
+        assert stored == want, f"{stored} events stored, want {want}"
+
+    return check
+
+
+def _one_report_stored_per_report_sent(per_request: int):
+    """After an error report row: the flag's stored reports, one per report
+    sent, each stamped ``"server"``."""
+
+    def check(db_session, sdk: SdkSetup) -> None:
+        db_session.expire_all()
+        sources = Counter(
+            (row.request_data or {}).get("source")
+            for row in db_session.query(ErrorLog).filter(
+                ErrorLog.feature_flag_id == sdk.flag_id
+            )
+        )
+        want = (BURST + 2) * per_request
+        assert sources == {"server": want}, (
+            f"stored reports by source {dict(sources)}, want {{'server': {want}}}"
+        )
+
+    return check
+
+
+def _tagged_with_the_assigned_variant(before: httpx.Response, db_session, sdk):
+    variant, want = before.json().get("variant_id"), str(sdk.assigned_variant_id)
+    assert variant == want, (
+        f"the event's variant_id {variant!r}, want the assigned user's {want!r}"
+    )
+
+
+def _stored_by_ids(before: httpx.Response, db_session, sdk):
+    answer, want = before.json(), str(sdk.experiment_id)
+    assert answer.get("experiment_id") == want, answer
+    assert answer.get("duplicate") is False, answer
+
+
+def _every_event_of_the_batch_stored(before: httpx.Response, db_session, sdk):
+    counts = {
+        name: before.json().get(name)
+        for name in ("success_count", "failure_count", "duplicate_count")
+    }
+    want = {"success_count": BATCH_EVENTS, "failure_count": 0, "duplicate_count": 0}
+    assert counts == want, f"{counts}, want {want}: {before.text}"
+
+
+def _the_experiment_is_listed(before: httpx.Response, db_session, sdk):
+    listed = [entry.get("experiment_id") for entry in before.json()]
+    want = [str(sdk.experiment_id)]
+    assert listed == want, f"the assigned user's experiments {listed}, want {want}"
+
+
+def _stored_as_a_server_report(before: httpx.Response, db_session, sdk):
+    row = db_session.get(ErrorLog, uuid.UUID(before.json()["id"]))
+    source = (row.request_data or {}).get("source") if row is not None else None
+    assert source == "server", f"the stored report's source {source!r}, want 'server'"
+
+
+def _every_report_of_the_batch_stored(before: httpx.Response, db_session, sdk):
+    counts = {
+        name: before.json().get(name) for name in ("success_count", "failure_count")
+    }
+    want = {"success_count": BATCH_REPORTS, "failure_count": 0}
+    assert counts == want, f"{counts}, want {want}: {before.text}"
+
+
 #: (label, request, the route's normal status, a check after the burst or
-#: None). The two error report routes get ``{}``: the key is checked before
-#: the body is refused. ``assign-balanced`` sends new users of an experiment
-#: that balances within groups (#448): a balanced burst is answered, and every
-#: user of it takes a place in their group's blocks.
+#: None). The ``errors`` and ``errors-batch`` rows send ``{}``, refused after
+#: the key check; ``errors-valid`` and ``errors-batch-valid`` send valid
+#: reports, which are stored. ``assign-balanced`` sends new users of an
+#: experiment that balances within groups (#448): a balanced burst is
+#: answered, and every user of it takes a place in their group's blocks.
 ROUTES = [
     pytest.param("GET /api/v1/sdk/ruleset", _ruleset, 200, None, id="ruleset"),
     pytest.param(
@@ -550,6 +737,48 @@ ROUTES = [
         None,
         id="errors-batch",
     ),
+    pytest.param(
+        "POST /api/v1/tracking/track",
+        _track,
+        200,
+        _one_event_stored_per_event_sent(1),
+        id="track",
+    ),
+    pytest.param(
+        "POST /api/v1/tracking/events",
+        _events,
+        200,
+        _one_event_stored_per_event_sent(1),
+        id="events",
+    ),
+    pytest.param(
+        "POST /api/v1/tracking/batch",
+        _tracking_batch,
+        200,
+        _one_event_stored_per_event_sent(BATCH_EVENTS),
+        id="tracking-batch",
+    ),
+    pytest.param(
+        "GET /api/v1/tracking/assignments/{user_id}",
+        _user_assignments,
+        200,
+        None,
+        id="assignments",
+    ),
+    pytest.param(
+        "POST /api/v1/tracking/errors (a valid report)",
+        _errors_valid,
+        201,
+        _one_report_stored_per_report_sent(1),
+        id="errors-valid",
+    ),
+    pytest.param(
+        "POST /api/v1/tracking/errors/batch (valid reports)",
+        _errors_batch_valid,
+        200,
+        _one_report_stored_per_report_sent(BATCH_REPORTS),
+        id="errors-batch-valid",
+    ),
     pytest.param("POST /api/v1/tracking/visual", _visual, 200, None, id="visual"),
     pytest.param(
         "POST /api/v1/tracking/visual/preview",
@@ -579,6 +808,19 @@ ROUTES = [
 REASON_BEFORE = {
     "POST /api/v1/tracking/assign": "assigned",
     "POST /api/v1/tracking/split-url/assign": "assigned",
+}
+
+#: What the answer to the request before the burst must show, by label: that
+#: the route did its normal work rather than an early answer.
+CHECK_BEFORE = {
+    "POST /api/v1/tracking/track": _tagged_with_the_assigned_variant,
+    "POST /api/v1/tracking/events": _stored_by_ids,
+    "POST /api/v1/tracking/batch": _every_event_of_the_batch_stored,
+    "GET /api/v1/tracking/assignments/{user_id}": _the_experiment_is_listed,
+    "POST /api/v1/tracking/errors (a valid report)": _stored_as_a_server_report,
+    "POST /api/v1/tracking/errors/batch (valid reports)": (
+        _every_report_of_the_batch_stored
+    ),
 }
 
 
@@ -655,6 +897,8 @@ async def test_every_request_of_a_burst_is_answered(
                     f"{label} before the burst: reason {reason!r}, want "
                     f"{REASON_BEFORE[label]!r}: {before.text}"
                 )
+            if label in CHECK_BEFORE:
+                CHECK_BEFORE[label](before, db_session, sdk)
             watch.restart()
             outcomes = await _gather([send(http, sdk) for _ in range(BURST)])
             peak = watch.peak

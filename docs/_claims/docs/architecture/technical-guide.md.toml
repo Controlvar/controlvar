@@ -698,7 +698,7 @@ by = [
 ]
 
 [[unit]]
-text = "In that process, most SDK routes (event tracking and flag evaluation) do their database work one request at a time (#823)."
+text = "In that process, the flag evaluation routes do their database work one request at a time (#823)."
 by = ["test:backend/tests/unit/api/test_sdk_routes_run_on_the_event_loop.py::test_each_route_is_a_coroutine_that_takes_the_synchronous_session"]
 
 [[unit]]
