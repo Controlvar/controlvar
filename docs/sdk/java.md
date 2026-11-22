@@ -1,6 +1,6 @@
 # Java SDK
 
-`com.controlvar:controlvar-sdk` (v0.1.0) is a Java 11+ client for feature
+`com.controlvar:controlvar-sdk` (v0.2.0) is a Java 11+ client for feature
 flags, experiment assignment and event tracking, built on OkHttp 4 and Jackson.
 `controlvar-spring-boot-starter` adds Spring Boot auto-configuration (built and tested
 against Spring Boot 3.5.16, which needs Java 17+ at runtime).
@@ -16,7 +16,7 @@ Source: `sdk/java` (`core/`, `spring-boot-starter/`).
 ## Installation
 
 `com.controlvar:controlvar-sdk` and the Spring Boot starter are on
-[Maven Central](https://central.sonatype.com/artifact/com.controlvar/controlvar-sdk). 0.1.0 is a
+[Maven Central](https://central.sonatype.com/artifact/com.controlvar/controlvar-sdk). 0.2.0 is a
 beta release.
 
 ```xml
@@ -24,18 +24,18 @@ beta release.
 <dependency>
     <groupId>com.controlvar</groupId>
     <artifactId>controlvar-sdk</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
 </dependency>
 
 <!-- Spring Boot: the starter depends on the core, so add only this -->
 <dependency>
     <groupId>com.controlvar</groupId>
     <artifactId>controlvar-spring-boot-starter</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
 </dependency>
 ```
 
-With Gradle, add `implementation 'com.controlvar:controlvar-sdk:0.1.0'` (or the starter), with
+With Gradle, add `implementation 'com.controlvar:controlvar-sdk:0.2.0'` (or the starter), with
 `mavenCentral()` in `repositories`.
 
 To work on the SDK itself, build it from a clone of this repository instead:
@@ -105,6 +105,7 @@ non-positive values with `IllegalArgumentException`.
 | `cacheTtlMs(long)` | `300000` (5 min) | Lifetime of a cached evaluation or assignment |
 | `cacheSize(int)` | `1000` | Max entries in **each** of the two caches (flags, assignments), LRU eviction |
 | `exposureListener(ExposureListener)` | none | Called once each time the server enrols the user and the answer is not cached; `null` sets none; see [Exposure hook](#exposure-hook) |
+| `errorListener(ErrorListener)` | none | Called once each time a typed getter returns your default, with the reason; `null` sets none; see [Flag values](#flag-values) |
 
 For tests, the package-private constructor `ExperimentationClient(SdkConfig, OkHttpClient)`
 accepts a custom `OkHttpClient` (used with `MockWebServer`).
@@ -117,6 +118,7 @@ accepts a custom `OkHttpClient` (used with `MockWebServer`).
 |---|---|---|---|
 | `evaluateFeatureFlag(User, String flagKey)` | `GET /feature-flags/evaluate/{key}?user_id=…&context=…` | `FlagEvaluation` | throws `ExperimentationException` |
 | `isFeatureEnabled(User, String flagKey)` | same (via cache) | `boolean` | `false` |
+| `getStringValue(User, String flagKey, String defaultValue)`, `getNumberValue(User, String flagKey, double defaultValue)`, `getJsonValue(User, String flagKey, Object defaultValue)` | same (via cache) | `String` / `double` / `Object` | `defaultValue`, reported to the error listener (see [Flag values](#flag-values)) |
 | `getExperimentAssignment(User, String experimentKey)` | `POST /tracking/assign` | `ExperimentAssignment` (never null) | throws `ExperimentationException` |
 | `trackEvent(TrackEvent)` | `/tracking/track` or `/tracking/batch` | `void` (async) | swallowed |
 | `trackEvent(String userId, String eventName, Map props)` | `/tracking/batch` (fan-out) | `void` (async) | swallowed; invalid args ignored |
@@ -134,12 +136,72 @@ accepts a custom `OkHttpClient` (used with `MockWebServer`).
 | Class | Accessors |
 |---|---|
 | `User.builder(userId).attribute(k, v).attributes(map).build()` | `getUserId()`, `getAttributes()` (unmodifiable), `getAttribute(k)` |
-| `FlagEvaluation` | `getKey()`, `isEnabled()`, `getConfig()` (`Object`: `Map`, `List`, scalar or `null`), `getConfigMap()` (`Map` or `null`) |
+| `FlagEvaluation` | `getKey()`, `isEnabled()`, `getConfig()` (`Object`: `Map`, `List`, scalar or `null`), `getConfigMap()` (`Map` or `null`), `getValue()` (the served value, a new copy on every call, or `null` when the server sent none), `getValueType()` (`"boolean"`, `"string"`, `"number"`, `"json"` or `null`) |
 | `ExperimentAssignment` | `getExperimentKey()`, `getUserId()`, `getVariantId()` (UUID), `getVariantName()`, `isControl()`, `getConfiguration()` (`Map<String,Object>` or `null`); `getVariantKey()` is a deprecated alias |
 | `TrackEvent.builder(userId, eventName)` | `.eventType(s)` (defaults to `eventName`), `.experimentKey(s)`, `.featureFlagKey(s)`, `.value(Double)`, `.property(k, v)` / `.properties(map)` (sent as `metadata`), `.timestamp(Instant)` (ISO-8601), `.eventId(s)` (sent as `event_id`, see [Event ids](#event-ids)); `getEventId()`, `hasKey()`, `toBody()` |
 | `ExperimentationException` (`RuntimeException`) | `getStatusCode()` (HTTP status, `0` for network/serialization), `isApiError()` |
+| `FlagValueException` (an `ExperimentationException`, never thrown) | `getCode()`: `"TYPE_MISMATCH"` or `"INVALID_RESPONSE"`; what the error listener receives when a typed getter returns your default for any reason but a failed request (see [Flag values](#flag-values)) |
+| `ErrorListener` (functional interface) | `void onError(ExperimentationException error, String operation)` |
 | `Exposure` (final, immutable) | `getExperimentKey()`, `getUserId()`, `getVariantId()` (`null` when the server sends none), `getVariantName()`: what an `ExposureListener` receives (see [Exposure hook](#exposure-hook)) |
 | `ExposureListener` (functional interface) | `void onExposure(Exposure exposure)` |
+
+---
+
+## Flag values
+
+A flag serves two values: its on value to the users it is on for, and its off value to everyone
+else, and to everyone while it is turned off. For a string, number or json flag, read the value
+with the getter of its type: `getStringValue`, `getNumberValue` or `getJsonValue`.
+
+```java
+String label = client.getStringValue(user, "checkout-button-label", "Buy now");
+double limit = client.getNumberValue(user, "free-shipping-threshold", 50);
+Object theme = client.getJsonValue(user, "checkout-theme", Map.of("color", "gray"));
+```
+
+Pass the flag's off value as your default, so that a flag your code cannot reach behaves as off.
+Each getter takes the user, the flag key, then the default: the user first, as in
+`evaluateFeatureFlag`.
+
+A getter never throws. It returns your default, and passes the reason to the error listener with
+the operation `"value"`, when the request fails (the `ExperimentationException` it failed with:
+`getStatusCode()` is the HTTP status, 404 for a flag the server does not know, or `0` for a network
+error; any other exception, such as OkHttp's for a base URL it cannot read, arrives wrapped in a
+plain `ExperimentationException` whose `getCause()` is the original), when the server's answer
+carries no value (a server from before flag values: a `FlagValueException` whose `getCode()` is
+`"INVALID_RESPONSE"`), or when the flag serves another type (`"TYPE_MISMATCH"`, with a message such as
+`Flag 'checkout-button-label' serves a string; getNumberValue returned your default`). A boolean
+flag is another type; read it with `isFeatureEnabled`. Nothing is coerced: `"10"` is not a number.
+Unlike `evaluateFeatureFlag`, a getter given a `null` user or an empty flag key throws no
+`IllegalArgumentException`: it sends nothing, returns your default and reports `"INVALID_RESPONSE"`.
+
+`getNumberValue` returns a `double` (`10` comes back as `10.0`). `getJsonValue` returns a
+`Map<String, Object>` or a `List<Object>`, checked to be a JSON object or array, and a new copy on
+every call; when it falls back, it returns your default object itself.
+
+A getter is evaluated as `evaluateFeatureFlag` is, with the same request and cache:
+`isFeatureEnabled` then a getter for the same user and flag asks the server once.
+`evaluateFeatureFlag` returns the same answer, with `getValue()` and `getValueType()`. A
+`FlagEvaluation` built with its three-argument constructor has neither, so it never equals a
+server's answer that carries them. Reading a value records no exposure.
+
+`errorListener(...)` on `SdkConfig.Builder` sets the error listener, an `ErrorListener`:
+`void onError(ExperimentationException error, String operation)`. The listener runs on the calling
+thread, before the getter returns, possibly on several threads at once, and reports getter
+fallbacks only: `evaluateFeatureFlag` and `getExperimentAssignment` still throw, and
+`isFeatureEnabled` still returns `false`, without calling it. If it throws, the client catches it
+and the getter still returns your default; a `VirtualMachineError` is not caught, and a thrown
+`InterruptedException` sets the thread's interrupt flag again.
+
+```java
+SdkConfig config = SdkConfig.builder(System.getenv("CONTROLVAR_API_KEY"), "http://localhost:8000")
+        .errorListener((error, operation) -> System.err.println(operation + " fell back: " + error.getMessage()))
+        .build();
+```
+
+The Spring Boot starter gives the client it creates an `ExposureListener` bean but no
+`ErrorListener`: to set one, define your own `ExperimentationClient` bean with it on its
+`SdkConfig`.
 
 ---
 
@@ -233,7 +295,7 @@ same `event_id`, user, experiment, flag and event name only once (see
 when `ExperimentationClient` is on the classpath **and** `experimentation.api-key` is set. It
 registers one `ExperimentationClient` bean (`@ConditionalOnMissingBean`, so your own bean wins).
 An `ExposureListener` bean, if you declare one, becomes that client's exposure listener (see
-[Exposure hook](#exposure-hook)).
+[Exposure hook](#exposure-hook)); an `ErrorListener` bean does not (see [Flag values](#flag-values)).
 `@EnableExperimentation` is an optional `@Import` for plain-Spring or self-documenting setups.
 
 ```yaml
@@ -379,7 +441,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
-| `evaluateFeatureFlag`, `isFeatureEnabled` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=…` | `context`: the user's attributes as JSON, left out when there are none | `{key, enabled, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
+| `evaluateFeatureFlag`, `isFeatureEnabled`, `getStringValue`, `getNumberValue`, `getJsonValue` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=…` | `context`: the user's attributes as JSON, left out when there are none | `{key, enabled, config, value, value_type}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
 | `getExperimentAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `trackEvent` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?, event_id}` | ignored |
 | `trackEvent` without keys, `trackBatch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored |

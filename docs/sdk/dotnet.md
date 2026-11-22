@@ -1,6 +1,6 @@
 # .NET SDK
 
-`Controlvar.SDK` (v0.1.0) provides feature flag evaluation, experiment assignment and
+`Controlvar.SDK` (v0.2.0) provides feature flag evaluation, experiment assignment and
 event tracking for .NET applications. It targets `net8.0` and `netstandard2.1`, uses
 `System.Text.Json` and `HttpClient`, and has no other dependencies.
 
@@ -26,11 +26,11 @@ Source: `sdk/dotnet`.
 
 ## Installation
 
-The `Controlvar.SDK` package is on [NuGet](https://www.nuget.org/packages/Controlvar.SDK). 0.1.0 is
+The `Controlvar.SDK` package is on [NuGet](https://www.nuget.org/packages/Controlvar.SDK). 0.2.0 is
 a beta release.
 
 ```bash
-dotnet add package Controlvar.SDK --version 0.1.0
+dotnet add package Controlvar.SDK --version 0.2.0
 ```
 
 To work on the SDK itself, reference the project in `sdk/dotnet/src/Controlvar` of a clone of this
@@ -95,6 +95,7 @@ using var client2 = new ExperimentationClient(config, httpClient);
 | `TimeoutSeconds` | `int` | `10` | `HttpClient.Timeout` for the client the SDK creates (an injected `HttpClient` keeps its own) |
 | `MaxCacheSize` | `int` | `1000` | Maximum entries in each of the two caches (evaluations, assignments) |
 | `OnExposure` | `Action<Exposure>?` | `null` | Called once each time the server enrols the user and the answer is not cached; see [Exposure hook](#exposure-hook) |
+| `OnError` | `Action<ExperimentationException, string>?` | `null` | Called once each time a typed getter returns your default, with the reason; see [Flag values](#flag-values) |
 
 `SdkConfig` throws `ArgumentException` for an empty `baseUrl`/`apiKey`. `ExperimentationClient`
 is thread-safe and meant to be shared (one instance per process). Dispose it to release the
@@ -123,6 +124,8 @@ whatever its attributes. Call `ClearCache()` after changing a user's attributes.
 | `Key` | `string` | The flag key you asked for |
 | `Enabled` | `bool` | Server decision for this user (`false` on any failure) |
 | `Config` | `JsonElement?` | Always `null`: the evaluate endpoint returns `config: null` for every flag |
+| `Value` | `JsonElement?` | The value the flag serves this user (its on value when `Enabled`, its off value otherwise); `null` when the server sent none. Read it with a [typed getter](#flag-values) |
+| `ValueType` | `string?` | `"boolean"`, `"string"`, `"number"` or `"json"`; `null` when the server sent none |
 
 ```csharp
 var flag = await client.EvaluateFlagAsync("dark-mode", "user-456");
@@ -136,6 +139,62 @@ Never throws. A flag that is not ACTIVE is not a failure: it answers `Enabled: f
 evaluation is returned before any request is made; on a network/HTTP failure (a 404 is an unknown
 flag key) the result is disabled (`FlagEvaluationResult.Disabled(flagKey)`). Failures are never
 cached, so the next call retries.
+
+---
+
+## Flag values
+
+A flag serves two values: its on value to the users it is on for, and its off value to everyone
+else, and to everyone while it is turned off. For a string, number or json flag, read the value
+with the getter of its type: `GetStringValueAsync`, `GetNumberValueAsync` or `GetJsonValueAsync`.
+
+```csharp
+string label = await client.GetStringValueAsync("checkout-button-label", "user-123", "Buy now");
+double limit = await client.GetNumberValueAsync("free-shipping-threshold", "user-123", 50);
+JsonElement theme = await client.GetJsonValueAsync("checkout-theme", "user-123",
+    JsonSerializer.SerializeToElement(new { color = "gray" }));
+```
+
+Pass the flag's off value as your default, so that a flag your code cannot reach behaves as off.
+Each getter takes the flag key, the user id, the default, then optional `attributes` (sent as
+`EvaluateFlagAsync` sends them): the order of `EvaluateFlagAsync`.
+
+A getter never throws. It returns your default, and passes the reason to `OnError` with the
+operation `"value"`, when the request fails (the exception it failed with: an `ApiException` whose
+`StatusCode` is the HTTP status, 404 for a flag the server does not know, a `NetworkException` or
+an `AuthException`; any other exception, such as a base URL that is no URL or attributes that
+cannot be serialised, arrives wrapped in a plain `ExperimentationException` whose
+`InnerException` is the original), when the server's answer carries no value (a server from
+before flag values: a `FlagValueException` whose `Code` is `"INVALID_RESPONSE"`), or when the flag
+serves another type (`"TYPE_MISMATCH"`, with a message such as
+`Flag 'checkout-button-label' serves a string; GetNumberValueAsync returned your default`). A
+boolean flag is another type; read it with `EvaluateFlagAsync`. Nothing is coerced: `"10"` is not a
+number. A `null` or empty user id or flag key sends nothing: the getter returns your default and
+reports `"INVALID_RESPONSE"`.
+
+`GetNumberValueAsync` returns a `double` (`10` comes back as `10.0`). `GetJsonValueAsync` returns a
+`JsonElement` whose `ValueKind` is `Object` or `Array`; a `JsonElement` is read-only, so nothing done
+with it changes the answer the client keeps.
+
+A getter is evaluated as `EvaluateFlagAsync` is, with the same request, attributes and cache:
+`EvaluateFlagAsync` then a getter for the same user and flag asks the server once.
+`EvaluateFlagAsync` returns the same answer, with `Value` and `ValueType`. Reading a value records
+no exposure.
+
+`OnError` (`Action<ExperimentationException, string>?`) on `SdkConfig` receives the reason and the
+operation. The listener runs on the continuation's thread (do not assume a UI thread), before the
+getter's `Task` completes, possibly on several threads at once, and reports getter fallbacks only:
+`EvaluateFlagAsync`, `GetAssignmentAsync` and the track calls do not call it. If it throws, the
+getter still returns your default; each function combined into the delegate (`+=`) is called in its
+own `try`, so one that throws does not stop the next. An async lambda or `async` method is refused
+with `ArgumentException` when you set it, as `OnExposure` refuses one.
+
+```csharp
+var config = new SdkConfig("http://localhost:8000", Environment.GetEnvironmentVariable("CONTROLVAR_API_KEY")!)
+{
+    OnError = (error, operation) => Console.Error.WriteLine($"{operation} fell back: {error.Message}"),
+};
+```
 
 ---
 
@@ -231,10 +290,10 @@ bool ok = await client.TrackBatchAsync(new[]
 
 Every event this SDK sends carries an `event_id`. The server stores an event sent again with the
 same `event_id`, user, experiment, flag and event name only once (see
-[How events count](../guides/how-events-count.md#sending-an-event-again)). Use this from the next
-published version of this package, not from the version on NuGet now. It also needs a Controlvar
-server that includes the `event_id` change ([#1640](https://github.com/Controlvar/controlvar/pull/1640)):
-an older server ignores the field and stores an event sent again a second time.
+[How events count](../guides/how-events-count.md#sending-an-event-again)). This package sends it
+from version 0.2.0. It also needs a Controlvar server that includes the `event_id` change
+([#1640](https://github.com/Controlvar/controlvar/pull/1640)): an older server ignores the field and
+stores an event sent again a second time.
 
 - Without an `eventId`, each `TrackAsync` call, and each event of `TrackBatchAsync`, makes a new
   id, a lowercase UUID v4, so two calls are two events. For an event your code may send again (a
@@ -365,7 +424,8 @@ Every request carries `X-API-Key` and `Accept: application/json`; POSTs carry
 
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
-| `EvaluateFlagAsync` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=…` | `context`: the attributes as URL-encoded JSON, only when there are any | `{key, enabled, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
+| `EvaluateFlagAsync` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=…` | `context`: the attributes as URL-encoded JSON, only when there are any | `{key, enabled, config, value, value_type}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
+| `GetStringValueAsync`, `GetNumberValueAsync`, `GetJsonValueAsync` | the request of `EvaluateFlagAsync`, or its cached answer | as `EvaluateFlagAsync` | `value`, `value_type` |
 | `GetAssignmentAsync` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `TrackAsync` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?, event_id}` | ignored |
 | `TrackAsync` without keys, `TrackBatchAsync` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored (status only) |
@@ -386,6 +446,7 @@ low-level `ExperimentationHttpClient` throws:
 | `Controlvar.Exceptions.NetworkException` | `ExperimentationException` | `HttpRequestException`, timeouts (`TaskCanceledException`) |
 | `Controlvar.Exceptions.ApiException` (`StatusCode`, `ResponseBody`) | `ExperimentationException` | Other 4xx/5xx (404: an unknown experiment or flag key, or a draft experiment with no control variant; 422 validation; 429 rate limited) or an undecodable body |
 | `Controlvar.Exceptions.AuthException` | `ExperimentationException` | HTTP 401 — invalid API key |
+| `Controlvar.Exceptions.FlagValueException` (`Code`) | `ExperimentationException` | Never thrown: passed to `OnError` when a typed getter returns your default for any reason but a failed request (see [Flag values](#flag-values)) |
 
 ---
 

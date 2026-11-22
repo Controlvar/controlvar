@@ -1,12 +1,15 @@
-"""The .NET SDK's first release is 0.1.0, and its pages say what it targets.
+"""The .NET SDK's version is pinned, and its pages say what it targets.
 
 Before its first publish, the .NET project carried a version number never
-released, and targeted .NET 6, out of support. Plan P (#1498) moves it to
-0.1.0 targeting ``netstandard2.1`` and ``net8.0`` (P-M12). This holds:
+released (0.2.0), and targeted .NET 6, out of support. Plan P (#1498) moved
+it to 0.1.0, its first release, targeting ``netstandard2.1`` and ``net8.0``
+(P-M12). #1810's version pull request moves it to 0.2.0, the release after
+0.1.0, so 0.2.0 is now the project's own number. This holds:
 
 * the project's version (R1a: edit this pin at the next version bump);
-* the lines the widened version grep (EMP-9, the plan's C9) found for .NET,
-  which name 0.2.0 or the pre-release history;
+* the lines the widened version grep (EMP-9, the plan's C9) found for .NET
+  that name the never-released 0.2.0's history (its README's version line
+  and its "Migrating from 0.1.x" section);
 * no ``net6.0`` left in the SDK or in the files that described it;
 * the target frameworks the README, the SDK page and the docs hub state are
   the project's, with the compatibility sentences ruling 10 asks for.
@@ -48,11 +51,11 @@ def targets() -> Set[str]:
 
 
 @pytest.mark.regression
-def test_the_dotnet_package_is_first_published_at_0_1_0():
-    """R1a. The project said 0.2.0, a version never published; the first
-    release is 0.1.0. Edit this pin in the pull request that bumps the
-    version after 0.1.0 is on NuGet."""
-    assert properties(PROJECT)["Version"] == "0.1.0"
+def test_the_dotnet_package_is_at_0_2_0():
+    """R1a. The project said 0.2.0 before 0.1.0, a version never published;
+    the first release was 0.1.0, and 0.2.0 (#1810) adds the typed getters.
+    Edit this pin in the pull request that bumps the version after 0.2.0."""
+    assert properties(PROJECT)["Version"] == "0.2.0"
     assert properties(PROJECT)["PackageId"] == "Controlvar.SDK"
 
 
@@ -73,35 +76,45 @@ NEVER_RELEASED_DOTNET_SITES = (
     "docs/sdk/dotnet.md",
     "backend/tests/unit/docs/test_deferred_sdk_pages.py",
 )
-#: The .NET alternatives of that grep, as it ran in bash. They are built from
-#: OLD so that this file is not itself a hit for the grep.
+#: The .NET alternatives of that grep that still name something never
+#: released: the old README's version line and its section on the pre-release
+#: history. They are built from OLD so that this file is not itself a hit for
+#: the grep. The grep's other alternatives (the project's ``<Version>``, a
+#: `` `Controlvar.SDK` (v0.2...) `` quote, a package reference) named 0.2.0,
+#: which is now the released version after 0.1.0. Other tests hold those
+#: sites instead: test_sdk_doc_versions.py holds docs/sdk/dotnet.md's quotes
+#: to the project's ``<Version>``, and test_deferred_sdk_pages.py's
+#: packaged-README contract keeps sdk/dotnet/README.md free of any quote of
+#: its own version and of any registry install line. A revert of the .NET
+#: SDK to 0.1.0 takes this file back whole, which restores the wide guard.
 OLD = ".".join(("0", "2", "0"))
 OLD_ESCAPED = re.escape(OLD)
 NEVER_RELEASED_DOTNET = re.compile(
-    r"Controlvar\.SDK.{0,40}"
-    + OLD_ESCAPED
-    + r"|`Controlvar\.SDK` \(v0\.2"
-    + r"|Migrating from 0\.1\.x"
-    + r"|\*\*Version\*\*: "
-    + OLD_ESCAPED
-    + r"|<Version>"
-    + OLD_ESCAPED
-    + r"</Version>"
+    r"Migrating from 0\.1\.x" + r"|\*\*Version\*\*: " + OLD_ESCAPED
 )
 
 
 @pytest.mark.parametrize(
     "line",
     [
-        f"    <Version>{OLD}</Version>",
         f"**Version**: {OLD}",
         "## Migrating from " + ".".join(("0", "1", "x")),
-        f"`Controlvar.SDK` (v{OLD[:3]}) provides feature flag evaluation",
-        f'<PackageReference Include="Controlvar.SDK" Version="{OLD}" />',
     ],
 )
 def test_the_never_released_dotnet_pattern_finds_each_old_site(line):
     assert NEVER_RELEASED_DOTNET.search(line), line
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        f"    <Version>{OLD}</Version>",
+        f"`Controlvar.SDK` (v{OLD}) provides feature flag evaluation",
+        f"dotnet add package Controlvar.SDK --version {OLD}",
+    ],
+)
+def test_the_released_0_2_0_is_not_a_never_released_site(line):
+    assert not NEVER_RELEASED_DOTNET.search(line), line
 
 
 @pytest.mark.regression
