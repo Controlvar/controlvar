@@ -34,11 +34,17 @@ by = [
 ]
 
 [[unit]]
-text = "A flag's value in every SDK | An SDK reads a flag's value only where its page documents a value method; every other SDK reads a value flag as on or off (enabled is true when the user gets the on value). GET /api/v1/feature-flags/evaluate/{key} returns the value in value."
+text = "A flag's value in every SDK | An SDK reads a flag's value only where its page documents a value method: JavaScript, Python, Go, OpenFeature (JavaScript and Python), React, React Native, Java and .NET. Android, iOS, Flutter, PHP, Ruby, Elixir and Edge read a value flag as on or off (enabled is true when the user gets the on value). GET /api/v1/feature-flags/evaluate/{key} returns the value in value."
 by = [
     "test:backend/tests/integration/api/test_ruleset_published_sdk_compat.py::test_the_published_wheel_reads_the_route_and_obeys_both_kill_switches",
     "test:backend/tests/integration/api/test_flag_values_api.py::test_evaluation_serves_on_exactly_when_enabled_and_off_otherwise",
     "test:backend/tests/integration/api/test_front_door_behaviour.py::test_every_flag_evaluates_with_a_null_config",
+    "test:sdk/js/__tests__/value-vectors.test.ts",
+    "test:sdk/python/tests/test_value_vectors.py",
+    "test:sdk/react/src/__tests__/valueVectors.test.ts",
+    "test:sdk/react-native/__tests__/valueVectors.test.ts",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ValueVectorsTest.java",
+    "test:sdk/dotnet/tests/Controlvar.Tests/ValueVectorsTests.cs",
 ]
 
 [[unit]]
