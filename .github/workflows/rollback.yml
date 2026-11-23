@@ -192,7 +192,7 @@ jobs:
 
       - name: Notify rollback started
         if: env.SLACK_ON == 'true'
-        uses: slackapi/slack-github-action@v1.26.0
+        uses: slackapi/slack-github-action@v4.1.0
         with:
           channel-id: '#deployments'
           slack-message: |
@@ -1289,7 +1289,7 @@ jobs:
       # job had been dead for minutes.
       - name: Notify rollback result
         if: always() && env.SLACK_ON == 'true'
-        uses: slackapi/slack-github-action@v1.26.0
+        uses: slackapi/slack-github-action@v4.1.0
         with:
           channel-id: '#deployments'
           slack-message: |

@@ -589,7 +589,7 @@ jobs:
 
       - name: Notify deployment started
         if: env.SLACK_ON == 'true'
-        uses: slackapi/slack-github-action@v1.26.0
+        uses: slackapi/slack-github-action@v4.1.0
         with:
           channel-id: '#deployments'
           slack-message: |
@@ -1512,7 +1512,7 @@ jobs:
 
       - name: Notify deployment result
         if: always() && env.SLACK_ON == 'true'
-        uses: slackapi/slack-github-action@v1.26.0
+        uses: slackapi/slack-github-action@v4.1.0
         with:
           channel-id: '#deployments'
           slack-message: |
