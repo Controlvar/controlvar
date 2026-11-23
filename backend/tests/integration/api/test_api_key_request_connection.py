@@ -10,13 +10,13 @@ Driven through the real app with httpx's ``ASGITransport``: the real
 ``deps.get_db``, ``deps.get_api_key`` and route handlers, with only the
 session factory pointed at a QueuePool engine on the test database. A pool
 ``checkout`` listener records the thread of every checkout, and the test
-counts the ones made on the event loop's thread. For the flag evaluate
-route, a request whose key use is recorded must make no more of those
-checkouts than the next request with the same key, which records nothing. The
-ruleset route, with a key carrying ``sdk:ruleset``, and the tracking assign
-route must make none in either case. A positive control makes one checkout on
-the event loop's thread itself and sees the listener count it, so a zero
-above is not a listener that counts nothing. Nothing here measures time.
+counts the ones made on the event loop's thread. The flag evaluate route, the
+tracking assign route and the ruleset route (with a key carrying
+``sdk:ruleset``) must make none, both for a request whose key use is recorded
+and for the next request with the same key, which records nothing. A positive
+control makes one checkout on the event loop's thread itself and sees the
+listener count it, so a zero above is not a listener that counts nothing.
+Nothing here measures time.
 """
 
 import asyncio
@@ -174,10 +174,6 @@ def _last_used(db_session, key_id):
     return db_session.query(APIKey.last_used_at).filter(APIKey.id == key_id).scalar()
 
 
-#: The routes that make no checkout on the event loop's thread at all.
-OFF_THE_LOOP = {"ruleset", "assign"}
-
-
 @pytest.mark.regression
 @pytest.mark.parametrize("route", ["evaluate", "assign", "ruleset"])
 async def test_recording_the_key_use_adds_no_checkout_on_the_event_loop(
@@ -221,7 +217,6 @@ async def test_recording_the_key_use_adds_no_checkout_on_the_event_loop(
         # One request first, so the measured ones run on a route already used.
         await loop_checkouts(http)
 
-        counts = []
         for stored in (None, _utcnow() - 2 * LAST_USED_RESOLUTION):
             _set_last_used(db_session, key_id, stored)
 
@@ -242,28 +237,12 @@ async def test_recording_the_key_use_adds_no_checkout_on_the_event_loop(
                 f"the second {route} request recorded the key's use again "
                 f"({after_recorded!r} -> {after_not_recorded!r})"
             )
-            if route in OFF_THE_LOOP:
-                assert recorded == 0 and not_recorded == 0, (
-                    f"checkouts on the event loop's thread by the {route} "
-                    f"request that recorded the key's use, then by the next "
-                    f"one: {recorded} then {not_recorded}, want 0 then 0"
-                )
-            else:
-                # The listener counts on the loop's thread in both runs.
-                assert recorded >= 1 and not_recorded >= 1, (
-                    f"no checkout seen on the event loop's thread "
-                    f"({recorded=}, {not_recorded=})"
-                )
-            counts.append((stored, recorded, not_recorded))
-
-    assert all(recorded - not_recorded == 0 for _, recorded, not_recorded in counts), (
-        f"checkouts on the event loop's thread by the {route} request that "
-        f"recorded the key's use, then by the next one with the same key: "
-        + "; ".join(
-            f"stored last_used_at {stored!r}: {recorded} then {not_recorded}"
-            for stored, recorded, not_recorded in counts
-        )
-    )
+            assert recorded == 0 and not_recorded == 0, (
+                f"checkouts on the event loop's thread by the {route} request "
+                f"that recorded the key's use, then by the next one "
+                f"(stored last_used_at {stored!r}): {recorded} then "
+                f"{not_recorded}, want 0 then 0"
+            )
 
 
 async def test_the_listener_counts_a_checkout_on_the_event_loop(checkouts):

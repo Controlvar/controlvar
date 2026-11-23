@@ -41,6 +41,7 @@ from uuid import UUID
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps
 from backend.app.api.off_loop_route import OffLoopRoute
@@ -53,7 +54,6 @@ from backend.app.models.metrics.metric import (
     REPORT_SOURCE_SERVER,
     ErrorLog,
 )
-from backend.app.models.user import User
 from backend.app.schemas.metrics import ErrorLogCreate
 from backend.app.schemas.storable_text import StorableTextModel
 from backend.app.services.metrics_service import MetricsService
@@ -234,18 +234,17 @@ def _stored_metadata(report: ClientErrorRequest) -> Optional[Dict[str, Any]]:
     return metadata
 
 
-async def report_source(
-    db: Session = Depends(deps.get_db),
-    api_key_header: Optional[str] = Depends(deps.API_KEY_HEADER),
-    _owner: User = Depends(deps.get_api_key),
-) -> str:
+def report_source(db: Session, api_key_header: Optional[str]) -> str:
     """``"server"`` or ``"client"``: what this request's reports are stamped with.
 
-    Layered on ``deps.get_api_key``, so a missing or invalid key is still a 401
-    and nothing else is refused. The value comes from the presented key alone
-    (never from the body) and covers every report in a batch.
+    Called once per request, at the start of the route's worker trip, after
+    ``deps.get_api_key`` has admitted the key: a missing or invalid key is
+    still a 401, and nothing else is refused. The value comes from the
+    presented key alone (never from the body) and covers every report in a
+    batch.
 
-    Reads on the request's session; does no blocking work.
+    Reads through *db*, so call it from a worker thread, never from a
+    coroutine on the event loop.
     """
     if presented_key_is_server_key(db, api_key_header):
         return REPORT_SOURCE_SERVER
@@ -316,7 +315,7 @@ async def report_client_error(
     report: ClientErrorRequest = Body(..., description="Error report"),
     db: Session = Depends(deps.get_db),
     api_key_info: Dict[str, Any] = Depends(deps.get_api_key),
-    source: str = Depends(report_source),
+    api_key_header: Optional[str] = Depends(deps.API_KEY_HEADER),
 ) -> ClientErrorResponse:
     """
     Record an error that happened while a feature flag or experiment was
@@ -338,6 +337,35 @@ async def report_client_error(
         HTTPException 401: If the API key is invalid
         HTTPException 404: If ``feature_flag_key`` or ``experiment_key`` is unknown
         HTTPException 422: If neither key is given or the body is invalid
+    """
+    # Closes ``db`` before it returns: the source is read and the report
+    # stored in a worker thread on the same session, closed again when the
+    # work is done.
+    db.close()
+    return await run_in_threadpool(_report_in_worker, report, api_key_header, db)
+
+
+def _report_in_worker(
+    report: ClientErrorRequest, api_key_header: Optional[str], db: Session
+) -> ClientErrorResponse:
+    """:func:`report_one` on *db*, stamped with the presented key's
+    :func:`report_source`, in a worker thread; closes *db*."""
+    try:
+        return report_one(report, report_source(db, api_key_header), db)
+    finally:
+        db.close()
+
+
+def report_one(
+    report: ClientErrorRequest, source: str, db: Session
+) -> ClientErrorResponse:
+    """``POST /api/v1/tracking/errors``'s answer for *report*, stamped
+    *source*, worked out on *db*, which is left open.
+
+    Synchronous: it reads and writes through *db* as it goes, so call it from
+    a worker thread, never from a coroutine on the event loop. Raises the
+    route's ``HTTPException`` for every refusal and failure, with the route's
+    status codes and fixed texts.
     """
     try:
         feature_flag_id, experiment_id = _resolve_targets(db, report)
@@ -370,7 +398,7 @@ async def report_client_errors_batch(
     request: ClientErrorBatchRequest = Body(..., description="Batch of error reports"),
     db: Session = Depends(deps.get_db),
     api_key_info: Dict[str, Any] = Depends(deps.get_api_key),
-    source: str = Depends(report_source),
+    api_key_header: Optional[str] = Depends(deps.API_KEY_HEADER),
 ) -> ClientErrorBatchResponse:
     """
     Record up to 100 error reports in one request.
@@ -390,6 +418,36 @@ async def report_client_errors_batch(
         HTTPException 401: If the API key is invalid
         HTTPException 413: If more than 100 reports are sent
         HTTPException 422: If the batch is malformed
+    """
+    # Closes ``db`` before it returns: the source is read and the reports
+    # stored in a worker thread on the same session, closed again when the
+    # work is done.
+    db.close()
+    return await run_in_threadpool(_report_batch_in_worker, request, api_key_header, db)
+
+
+def _report_batch_in_worker(
+    request: ClientErrorBatchRequest, api_key_header: Optional[str], db: Session
+) -> ClientErrorBatchResponse:
+    """:func:`report_batch_one` on *db*, stamped with the presented key's
+    :func:`report_source`, in a worker thread; closes *db*."""
+    try:
+        return report_batch_one(request, report_source(db, api_key_header), db)
+    finally:
+        db.close()
+
+
+def report_batch_one(
+    request: ClientErrorBatchRequest, source: str, db: Session
+) -> ClientErrorBatchResponse:
+    """``POST /api/v1/tracking/errors/batch``'s answer for *request*, every
+    report stamped *source*, worked out on *db*, which is left open.
+
+    Synchronous: it reads and writes through *db* as it goes, so call it from
+    a worker thread, never from a coroutine on the event loop. Raises the
+    route's ``HTTPException`` for a refused batch and for a failed commit,
+    with the route's status codes and fixed texts; a report's own failure is
+    listed in the answer.
     """
     if len(request.errors) > MAX_BATCH_SIZE:
         raise HTTPException(
