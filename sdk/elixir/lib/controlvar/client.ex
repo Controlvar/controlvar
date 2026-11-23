@@ -42,7 +42,7 @@ defmodule Controlvar.Client do
 
   require Logger
 
-  alias Controlvar.{Assignment, BatchResult, Cache, Config, FlagEvaluation}
+  alias Controlvar.{Assignment, BatchResult, Cache, Config, EventId, FlagEvaluation}
 
   @batch_limit 100
 
@@ -53,6 +53,7 @@ defmodule Controlvar.Client do
           | {:value, number()}
           | {:event_type, String.t()}
           | {:timestamp, DateTime.t() | String.t()}
+          | {:event_id, String.t()}
 
   # --- Client API ---
 
@@ -223,7 +224,14 @@ defmodule Controlvar.Client do
 
   `properties` is sent as `metadata`. Other `opts`: `:value` (number),
   `:event_type` (defaults to `event_name`), `:timestamp` (`DateTime` or
-  ISO-8601 string; defaults to now, UTC).
+  ISO-8601 string; defaults to now, UTC), `:event_id` (see below).
+
+  Every event carries an `event_id`: the `:event_id` given, or, without one
+  (`nil` or `""`), a lowercase random UUID (version 4) made for this call.
+  All of the event's fan-out entries carry the same id. An `:event_id` the
+  server would refuse (not a string, not valid UTF-8, more than 255
+  characters, or a NUL) sends nothing and logs a warning that does not hold
+  the id. See `Controlvar.EventId`.
 
   `stop/1` waits (up to `timeout`) for in-flight track requests.
   """
@@ -238,9 +246,14 @@ defmodule Controlvar.Client do
 
   Each event is a map (atom or string keys) with `event_name` and `user_id`
   (required). Optional: `experiment_key`, `feature_flag_key`, `properties`
-  (sent as `metadata`), `value`, `event_type`, `timestamp`. An event with no
-  key is stored as history and counts in no experiment's results; tag
-  outcome events.
+  (sent as `metadata`), `value`, `event_type`, `timestamp`, `event_id`. An
+  event with no key is stored as history and counts in no experiment's
+  results; tag outcome events.
+
+  Each event is sent with its own `event_id`, or, without one (`nil` or
+  `""`), a lowercase random UUID (version 4) made for it in this call. An
+  `event_id` the server would refuse makes that event a local failure, like
+  a malformed event, and the other events are sent.
 
   Returns `{:ok, %BatchResult{}}` with the server's counts (malformed events
   are counted as failures locally without being sent), or `{:error, reason}`
@@ -425,8 +438,13 @@ defmodule Controlvar.Client do
   defp map_or_nil(_value), do: nil
 
   # Requests ([{path, body}]) for one track call, resolving the fan-out rule.
+  # The event_id goes into `base` before the fan-out, so every entry has it.
   defp track_requests(cache, event_name, user_id, properties, opts) do
-    base = event_body(event_name, user_id, properties, opts)
+    base =
+      event_name
+      |> event_body(user_id, properties, opts)
+      |> Map.put(:event_id, event_id!(Keyword.get(opts, :event_id)))
+
     experiment_key = Keyword.get(opts, :experiment_key)
     feature_flag_key = Keyword.get(opts, :feature_flag_key)
 
@@ -491,6 +509,15 @@ defmodule Controlvar.Client do
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
+  # The id for track/5. A refused one raises, with EventId's fixed text, into
+  # handle_cast's rescue: nothing is sent and the warning holds no id.
+  defp event_id!(given) do
+    case EventId.pick(given) do
+      {:ok, event_id} -> event_id
+      {:error, reason} -> raise ArgumentError, reason
+    end
+  end
+
   defp format_timestamp(nil), do: DateTime.utc_now() |> DateTime.to_iso8601()
   defp format_timestamp(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
   defp format_timestamp(other), do: to_string(other)
@@ -508,23 +535,26 @@ defmodule Controlvar.Client do
         {:error, "user_id is required"}
 
       true ->
-        properties = field(event, :properties) || field(event, :metadata) || %{}
+        with {:ok, event_id} <- EventId.pick(field(event, :event_id)) do
+          properties = field(event, :properties) || field(event, :metadata) || %{}
 
-        opts =
-          [
-            value: field(event, :value),
-            event_type: field(event, :event_type),
-            timestamp: field(event, :timestamp)
-          ]
-          |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+          opts =
+            [
+              value: field(event, :value),
+              event_type: field(event, :event_type),
+              timestamp: field(event, :timestamp)
+            ]
+            |> Enum.reject(fn {_k, v} -> is_nil(v) end)
 
-        body =
-          event_name
-          |> event_body(user_id, properties, opts)
-          |> maybe_put(:experiment_key, field(event, :experiment_key))
-          |> maybe_put(:feature_flag_key, field(event, :feature_flag_key))
+          body =
+            event_name
+            |> event_body(user_id, properties, opts)
+            |> maybe_put(:experiment_key, field(event, :experiment_key))
+            |> maybe_put(:feature_flag_key, field(event, :feature_flag_key))
+            |> Map.put(:event_id, event_id)
 
-        {:ok, body}
+          {:ok, body}
+        end
     end
   end
 

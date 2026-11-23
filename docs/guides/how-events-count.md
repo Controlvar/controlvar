@@ -56,9 +56,11 @@ every event an `event_id`, from version 0.2.0
 ([React](../sdk/react.md#event-ids), [React Native](../sdk/react-native.md#event-ids)). The .NET
 SDK gives every event an `event_id`, from version 0.2.0
 ([Event ids](../sdk/dotnet.md#event-ids)). The Android SDK, which you build from a clone of this
-repository, gives every event an `event_id` ([Event ids](../sdk/android.md#event-ids)).
+repository, gives every event an `event_id` ([Event ids](../sdk/android.md#event-ids)). The Elixir
+SDK, which you build from this repository, gives every event an `event_id`
+([Event ids](../sdk/elixir.md#event-ids)).
 No other
-SDK has an `event_id` option yet ([Limitations](../getting-started/limitations.md#sdks)): send an
+SDK has an `event_id` option ([Limitations](../getting-started/limitations.md#sdks)): send an
 event that may be sent again to `POST /api/v1/tracking/track` or `POST /api/v1/tracking/batch`
 yourself.
 

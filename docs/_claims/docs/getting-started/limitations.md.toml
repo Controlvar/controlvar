@@ -419,13 +419,15 @@ by = [
 ]
 
 [[unit]]
-text = "An event_id sent by the SDK, so that an event sent again is stored once | The Java SDK sends one with every event (Event ids). The JavaScript SDK sends the eventId you give it and the Python SDK the event_id you give it (JavaScript, Python). The React and React Native SDKs send an event_id with every event, from version 0.2.0 (React, React Native). The .NET SDK sends an event_id with every event, from version 0.2.0 (.NET). The Android SDK, which you build from a clone of this repository, sends an event_id with every event (Android). No other SDK has an event_id option yet: not the edge, Go, iOS, Flutter, PHP, Ruby or Elixir SDK, nor the OpenFeature providers. Send an event that may be sent again to POST /api/v1/tracking/track or POST /api/v1/tracking/batch with its event_id (#1543)."
+text = "An event_id sent by the SDK, so that an event sent again is stored once | The Java SDK sends one with every event (Event ids). The JavaScript SDK sends the eventId you give it and the Python SDK the event_id you give it (JavaScript, Python). The React and React Native SDKs send an event_id with every event, from version 0.2.0 (React, React Native). The .NET SDK sends an event_id with every event, from version 0.2.0 (.NET). The Android SDK, which you build from a clone of this repository, sends an event_id with every event (Android). The Elixir SDK, which you build from this repository, sends an event_id with every event (Elixir). No other SDK has an event_id option: not the edge, Go, iOS, Flutter, PHP or Ruby SDK, nor the OpenFeature providers. Send an event that may be sent again to POST /api/v1/tracking/track or POST /api/v1/tracking/batch with its event_id (#1543)."
 by = [
     "test:sdk/react/src/__tests__/event-id.test.ts::sends a generated lowercase UUID v4 as event_id on a keyed track",
     "test:sdk/react-native/__tests__/event-id.test.ts::track() with a key sends a generated lowercase UUID v4 as event_id",
     "test:sdk/dotnet/tests/Controlvar.Tests/EventIdTests.cs::Track_WithAKey_SendsAGeneratedLowercaseUuidV4AsEventId",
     "test:sdk/android/sdk/src/test/kotlin/EventIdTest.kt::a keyed track sends a generated lowercase UUID v4 as event_id",
     "test:sdk/android/sdk/src/test/kotlin/EventIdTest.kt::an unkeyed track fanned out to two assignments and a flag sends one id in every entry",
+    "test:sdk/elixir/test/controlvar/event_id_test.exs::a keyed track sends a lowercase UUID v4 as event_id",
+    "test:sdk/elixir/test/controlvar/event_id_test.exs::a key-less track fanned out to two assignments and a flag sends one id in every entry",
     "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::trackSendsAGeneratedEventId",
     "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::fanOutEntriesShareOneEventId",
     "test:sdk/js/__tests__/event-id.test.ts::sends event_id on a track with an explicit key",
