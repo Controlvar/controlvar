@@ -29,8 +29,11 @@ jobs:
     name: Unit Tests
     runs-on: ubuntu-latest
     # The runs of 2026-11-02 and 2026-11-03 were cancelled at the old 30 minute
-    # limit with pytest at 98% (about 30.5 minutes needed); 60 is that, doubled.
-    timeout-minutes: 60
+    # limit with pytest at 98% (about 30.5 minutes needed); 60 was that, doubled.
+    # On 2026-11-23 two runs of one commit were cancelled at 60 with pytest at
+    # 99% and 97% and no test failed: the job took 35-48 minutes in the week
+    # before, and those runners were 25-35% slower. 90 leaves room for that.
+    timeout-minutes: 90
     services:
       postgres:
         image: postgres:15
