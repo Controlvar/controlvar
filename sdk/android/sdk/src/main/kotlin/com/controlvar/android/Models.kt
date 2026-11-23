@@ -147,6 +147,13 @@ data class Assignment(
  * @property value          optional numeric value (revenue, duration, ...)
  * @property eventType      sent as `event_type`; defaults to [eventName]
  * @property timestampMs    optional epoch millis, sent as ISO-8601; the server stamps the event otherwise
+ * @property eventId        sent as `event_id`: the server stores an event sent again with the same
+ *                          `event_id`, user, experiment, flag and event name only once. `null` and
+ *                          `""` set none, and then [ExperimentationClient.track] and
+ *                          [ExperimentationClient.trackBatch] make a lowercase random UUID for the
+ *                          event each time it is tracked. At most 255 characters, with no NUL and
+ *                          no lone surrogate: any other id throws [IllegalArgumentException], here
+ *                          and from [copy], so that event is never sent.
  */
 data class TrackEvent(
     val userId: String,
@@ -156,14 +163,28 @@ data class TrackEvent(
     val featureFlagKey: String? = null,
     val value: Double? = null,
     val eventType: String? = null,
-    val timestampMs: Long? = null
+    val timestampMs: Long? = null,
+    val eventId: String? = null
 ) {
+    init {
+        // The server refuses these with 422, and in a batch one refuses the whole request.
+        // The messages never hold the id.
+        if (eventId != null) {
+            require(eventId.codePointCount(0, eventId.length) <= MAX_EVENT_ID_LENGTH) {
+                "eventId must be at most $MAX_EVENT_ID_LENGTH characters"
+            }
+            require(eventId.indexOf('\u0000') < 0) { "eventId must not contain NUL" }
+            require(!hasLoneSurrogate(eventId)) { "eventId must not contain a lone surrogate" }
+        }
+    }
+
     /** True when the event is attributed to an experiment or a feature flag. */
     fun hasKey(): Boolean = !experimentKey.isNullOrEmpty() || !featureFlagKey.isNullOrEmpty()
 
     /**
      * Wire form: the body of `POST /api/v1/tracking/track` and of each
-     * `POST /api/v1/tracking/batch` entry.
+     * `POST /api/v1/tracking/batch` entry. It holds `event_id` only when [eventId] is set;
+     * the client sets one on the event it sends.
      */
     fun toJson(): JSONObject = JSONObject().apply {
         put("event_type", eventType?.takeIf { it.isNotEmpty() } ?: eventName)
@@ -174,9 +195,30 @@ data class TrackEvent(
         if (value != null) put("value", value)
         if (properties.isNotEmpty()) put("metadata", kotlinToJson(properties))
         if (timestampMs != null) put("timestamp", isoTimestamp(timestampMs))
+        if (!eventId.isNullOrEmpty()) put("event_id", eventId)
     }
 
     companion object {
+        /** The longest `event_id` the server accepts, in characters (code points). */
+        const val MAX_EVENT_ID_LENGTH = 255
+
+        /** True when [text] holds a UTF-16 surrogate that is not half of a pair. */
+        private fun hasLoneSurrogate(text: String): Boolean {
+            var i = 0
+            while (i < text.length) {
+                val c = text[i]
+                if (Character.isHighSurrogate(c) && i + 1 < text.length &&
+                    Character.isLowSurrogate(text[i + 1])
+                ) {
+                    i += 2 // a pair: one character
+                    continue
+                }
+                if (Character.isSurrogate(c)) return true
+                i++
+            }
+            return false
+        }
+
         /** Formats epoch millis as ISO-8601 UTC, e.g. `2026-09-11T10:30:00.000Z`. */
         fun isoTimestamp(epochMs: Long): String =
             SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
