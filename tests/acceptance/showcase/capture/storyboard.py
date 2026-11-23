@@ -75,6 +75,13 @@ the page draws it. A storyboard with a ``date`` step pins the browser's
 ``time_zone`` and ``locale``, so the take is the same on any machine; one
 without names neither, and its browser is as it always was.
 
+Video 11's ``setup`` also makes flags and dates them back (``FlagSetup``, S1
+of the V11-V13 plan), and its end state's ``stale`` (``StaleEnd``, S2) is what
+the flag list must then mark: refused at load unless it is the docs' table
+applied to those flags' declared fields (``derived_stale``), and unless every
+row and count it compares is read where it can be true. A beat's ``count``
+keeps how many elements a CSS selector matches at its cue's start.
+
 A scene that films a credential the product shows (the invite dialog's
 one-time password) names it under ``masks``, a closed list: the capture hides
 it before it is painted (C4 of T149, S6 of plan v2.2) and the scene states the
@@ -251,8 +258,10 @@ class Slide(_Strict):
 #: A ``date`` step's time of day, "HH:MM": 06:00 to 21:59, clear of midnight
 #: and of the night hours a change of daylight saving time skips or repeats.
 DATE_AT = r"^(?:0[6-9]|1[0-9]|2[01]):[0-5][0-9]$"
-#: The name a ``date`` step keeps its reading under.
+#: The name a ``date`` step keeps its reading under, and a beat's ``count``.
 READING_NAME = r"^[a-z][a-z0-9-]{0,40}$"
+#: The longest CSS selector a beat's ``count`` names.
+COUNT_CSS_MAX = 200
 
 
 class Date(_Strict):
@@ -300,10 +309,28 @@ class Beat(_Strict):
     alerts: List[str] = Field(default_factory=list)
     #: Elements whose text is kept at the cue's start, by name, for gate 10.
     record: Dict[str, Locator] = Field(default_factory=dict)
+    #: Elements counted at the cue's start, by name, each by a CSS selector:
+    #: every match ``document.querySelectorAll`` finds, for gate 10 (video 11's
+    #: Stale pills, rows and notice).
+    count: Dict[str, str] = Field(default_factory=dict)
     #: The narration: up to four sentences, spoken in order (none: a silent beat).
     say: List[str] = Field(default_factory=list, max_length=contract.MAX_SAY_SENTENCES)
     #: Number words the narration says, each with its page of the docs.
     claims: List[Claim] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _counts_named(self) -> "Beat":
+        for name, css in self.count.items():
+            if not re.fullmatch(READING_NAME, name):
+                raise ValueError(
+                    f"a count's name is lowercase letters, digits and dashes, not {name!r}"
+                )
+            if not css.strip() or len(css) > COUNT_CSS_MAX:
+                raise ValueError(
+                    f"the count {name!r} names a CSS selector of 1 to"
+                    f" {COUNT_CSS_MAX} characters"
+                )
+        return self
 
 
 #: The longest line a code card shows (it is drawn 1,600 px wide).
@@ -1029,14 +1056,25 @@ DesignReading = Literal[
     "detail_group",
     "detail_holdout",
     "detail_note",
+    "review_balance",
+    "detail_balance",
 ]
-#: The readings that compare what the video set on the draft's own pages, each
-#: with the end state's field it needs.
+#: The readings that compare a field a design end state declares only when the
+#: video sets it (on the draft's own pages, or the balance setting in guided
+#: setup), each with the end state's field it needs.
 DESIGN_SET_READINGS: Dict[str, str] = {
     "detail_start": "scheduled_start",
     "detail_group": "group",
     "detail_holdout": "holdout",
+    "review_balance": "balance_within",
+    "detail_balance": "balance_within",
 }
+#: A balance setting's attribute, as the API takes it (backend/app/schemas/
+#: balance_within.py ``ATTRIBUTE_PATTERN``): a top-level key of the assign
+#: ``context``, no dot.
+BALANCE_ATTRIBUTE = r"^[A-Za-z0-9_][A-Za-z0-9_-]{0,99}$"
+#: The share step of a balanced split: the API refuses any other (#448).
+BALANCE_SHARE_STEP = 5
 
 
 class DesignVariant(_Strict):
@@ -1164,6 +1202,22 @@ class DesignHoldout(_Strict):
     percentage: int = Field(ge=1, le=20)
 
 
+class DesignBalance(_Strict):
+    """What the draft balances its split within (#448), as the API echoes it:
+    one attribute, typed under "Another attribute…" or chosen, and the values
+    to keep apart in the order they were added. A setting of saved segments
+    names ids made at run time, so a design end state does not declare one."""
+
+    attribute: str = Field(pattern=BALANCE_ATTRIBUTE)
+    values: List[str] = Field(min_length=1, max_length=20)
+
+    @model_validator(mode="after")
+    def _as_the_api_takes_it(self) -> "DesignBalance":
+        if len(set(self.values)) != len(self.values):
+            raise ValueError(f"a value to keep apart repeats: {self.values}")
+        return self
+
+
 class DesignEnd(_Strict):
     """Gate 10 for an experiment the video designs and leaves a draft
     (``gates.design_end``): it exists once, exactly as declared, with nothing
@@ -1172,7 +1226,13 @@ class DesignEnd(_Strict):
     pages is declared too (``gates.eligibility_end``): its start (the reading
     of the ``date`` step named ``scheduled_start``), the setup's exclusion
     group it joins (``group``), and the global holdout it makes and activates
-    (``holdout``). Absent, each is held untouched as before."""
+    (``holdout``). Absent, each is held untouched as before.
+
+    ``balance_within`` (#448) is what the video balances the split within at
+    the Variants step: set, the API's echo must equal it exactly, and the
+    split's shares are multiples of 5. Unset, it is not read, not compared and
+    left out of the dump, so a design declared before it existed (video 9) is
+    judged and recorded exactly as it was (PE 2)."""
 
     name: str = Field(min_length=1, max_length=100)
     key: str = Field(min_length=1)
@@ -1192,6 +1252,18 @@ class DesignEnd(_Strict):
     #: The setup's exclusion group the draft is added to, by its name.
     group: Optional[str] = Field(default=None, min_length=1, max_length=200)
     holdout: Optional[DesignHoldout] = None
+    #: What the split is balanced within, as the API echoes it (#448).
+    balance_within: Optional[DesignBalance] = None
+
+    @model_serializer(mode="wrap")
+    def _unset_balance_left_out(self, handler: Any) -> Dict[str, Any]:
+        """The dump without ``balance_within`` when it is unset: a design
+        declared before it existed records exactly what it did (gate 10's
+        ``storyboard`` number, PE 2)."""
+        data = handler(self)
+        if data.get("balance_within") is None:
+            data.pop("balance_within", None)
+        return data
 
     @model_validator(mode="after")
     def _as_the_wizard_saves(self) -> "DesignEnd":
@@ -1219,6 +1291,193 @@ class DesignEnd(_Strict):
                 raise ValueError(
                     f"the design end state compares {kind}, and declares no {needs}"
                 )
+        if self.balance_within is not None:
+            off_step = [
+                f"{variant.name} {variant.allocation}"
+                for variant in self.variants
+                if variant.allocation % BALANCE_SHARE_STEP
+            ]
+            if off_step:
+                raise ValueError(
+                    f"a balanced split's shares are multiples of {BALANCE_SHARE_STEP}"
+                    f" (the API refuses any other), not {off_step}"
+                )
+        return self
+
+
+#: Stale flags (#1808; video 11, S1 and S2 of the V11-V13 plan). N, the days a
+#: board is recorded at: the API's default ``STALE_FLAG_DAYS``
+#: (backend/app/core/config.py; a unit test keeps the two equal). A board at
+#: any other N is refused, so a take never rests on a setting the Quick Start
+#: does not run with.
+STALE_DAYS = 30
+#: How far from N a setup flag's age must be, in days: no slip of the clock or
+#: of a day moves a flag across the threshold (S1).
+STALE_AGE_MARGIN_DAYS = 15
+#: Why the list marks a flag stale, in the order an item lists them
+#: (backend/app/services/stale_flags.py ``REASONS``; a unit test keeps them equal).
+StaleReason = Literal["not_evaluated", "on_for_everyone", "off_for_everyone"]
+STALE_REASONS: Tuple[str, ...] = (
+    "not_evaluated",
+    "on_for_everyone",
+    "off_for_everyone",
+)
+#: The tag that keeps a flag from ever being stale, compared as the API compares
+#: it: surrounding spaces and case aside (stale_flags.py ``PERMANENT_TAG``).
+PERMANENT_TAG = "permanent"
+#: The demo seed's flags (backend/scripts/seed_demo_data.py; a unit test keeps
+#: them equal): a setup flag never takes one of their keys.
+SEED_FLAG_KEYS: Tuple[str, ...] = ("new_dashboard_ui", "beta_features")
+#: A setup flag's key: the API's rule (a lowercase letter or digit, then those,
+#: ``-`` and ``_``), within S1's 64 characters. The dating step puts it in SQL,
+#: so nothing else ever reaches it.
+SETUP_FLAG_KEY = r"^[a-z0-9][a-z0-9_-]{0,63}$"
+#: The most flags a setup makes (S1).
+MAX_SETUP_FLAGS = 6
+
+
+def is_permanent(tags: List[str]) -> bool:
+    """The API's rule (stale_flags.py ``is_permanent``): a tag that is
+    ``permanent``, surrounding spaces and case aside."""
+    return any(tag.strip().casefold() == PERMANENT_TAG for tag in tags)
+
+
+class FlagSetup(_Strict):
+    """A flag the setup makes through the API off camera, then dates back (S1):
+    no rules and no schedule. ``evaluate`` asks the API for it once, as an app
+    does, before it is dated; ``created_days_ago`` and ``updated_days_ago`` are
+    what the dating step sets its ``created_at`` and ``updated_at`` to."""
+
+    name: str = Field(min_length=1, max_length=100)
+    key: str = Field(pattern=SETUP_FLAG_KEY)
+    status: Literal["active", "inactive"]
+    rollout: int = Field(ge=0, le=100)
+    tags: List[str] = Field(default_factory=list, max_length=10)
+    evaluate: bool
+    created_days_ago: int = Field(ge=0, le=3650)
+    updated_days_ago: int = Field(ge=0, le=3650)
+
+    @model_validator(mode="after")
+    def _dated_clear_of_n(self) -> "FlagSetup":
+        if self.updated_days_ago > self.created_days_ago:
+            raise ValueError(
+                f"{self.key} is updated {self.updated_days_ago} days ago, before it"
+                f" was created ({self.created_days_ago} days ago)"
+            )
+        for field in ("created_days_ago", "updated_days_ago"):
+            age = getattr(self, field)
+            if abs(age - STALE_DAYS) <= STALE_AGE_MARGIN_DAYS:
+                raise ValueError(
+                    f"{self.key}'s {field} is {age}: within {STALE_AGE_MARGIN_DAYS}"
+                    f" days of N ({STALE_DAYS}), a slip could move it across"
+                )
+        for tag in self.tags:
+            if not tag.strip() or len(tag) > 50:
+                raise ValueError(
+                    f"{self.key} has a tag of 1 to 50 characters, not {tag!r}"
+                )
+        return self
+
+
+def derived_stale(
+    flags: List[FlagSetup], days: int = STALE_DAYS
+) -> Tuple[Dict[str, List[str]], bool]:
+    """What the list must answer for the setup's flags: each stale flag's
+    reasons, and ``evaluations_seen``. The docs' table (docs/feature-flags/
+    stale-flags.md, "When a flag is stale") applied to each flag's declared
+    fields, at load (PE1512-3's rule): created at least N days ago, not
+    tagged permanent (no setup flag is archived, ruled or scheduled), then
+    ``not_evaluated`` when another flag is evaluated and this one is not,
+    ``on_for_everyone`` when on at 100% and unchanged for N days, and
+    ``off_for_everyone`` when off, or on at 0%, and unchanged for N days."""
+    seen = any(flag.evaluate for flag in flags)
+    found: Dict[str, List[str]] = {}
+    for flag in flags:
+        if flag.created_days_ago < days or is_permanent(flag.tags):
+            continue
+        reasons: List[str] = []
+        if seen and not flag.evaluate:
+            reasons.append("not_evaluated")
+        if flag.updated_days_ago >= days:
+            if flag.status == "active" and flag.rollout == 100:
+                reasons.append("on_for_everyone")
+            elif flag.status == "inactive" or flag.rollout == 0:
+                reasons.append("off_for_everyone")
+        if reasons:
+            found[flag.key] = reasons
+    return found, seen
+
+
+class StaleEnd(_Strict):
+    """Gate 10 for the flags a setup made and dated back (S2 of the V11 plan),
+    checked after the last frame (``gates.stale_end``), and its API half before
+    the first (S1, ``run.make_setup``):
+
+    * the API classifies at ``days`` (30; a ``STALE_FLAG_DAYS`` leak refuses)
+      and says ``evaluations_seen``;
+    * ``?stale=true`` lists exactly ``stale``, each flag's reasons in order,
+      and the list marks every other flag not stale, ``not_stale`` among them;
+    * no listing wrote a flag: each setup flag's ``updated_at`` is the value
+      read just after the setup;
+    * the page said the same, in its words: each row ``listed`` (read before
+      Stale is pressed) and ``filtered`` (read with it pressed) has the Stale
+      pill and the reason lines exactly when the API says so; the hint is the
+      page's; the stale pills counted are as many as the stale flags, the rows
+      as many as the API's ``total``, and the notice is not shown.
+
+    Each reading is a beat's ``record`` (the rows, the hint) or ``count`` (the
+    pills, the rows, the notice), by name."""
+
+    days: int = Field(ge=1, le=3650)
+    evaluations_seen: bool
+    #: Each stale flag's reasons, by key, in the order the API lists them.
+    stale: Dict[str, List[StaleReason]] = Field(min_length=1)
+    #: The setup's other flags, by key: listed, and never stale.
+    not_stale: List[str] = Field(default_factory=list)
+    #: The ``record`` name of each setup flag's row before Stale is pressed.
+    listed: Dict[str, str] = Field(min_length=1)
+    #: The ``record`` name of each stale flag's row with Stale pressed.
+    filtered: Dict[str, str] = Field(min_length=1)
+    #: The ``record`` name of the hint, read with Stale pressed.
+    hint: str
+    #: The ``count`` names: the Stale pills and the rows before Stale is
+    #: pressed, the same with it pressed, and the notice at each.
+    pills_listed: str
+    rows_listed: str
+    pills_filtered: str
+    rows_filtered: str
+    notices: List[str] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _one_map(self) -> "StaleEnd":
+        if self.days != STALE_DAYS:
+            raise ValueError(
+                f"stale days {self.days}: a board is recorded at the API's default"
+                f" N, {STALE_DAYS} (a STALE_FLAG_DAYS of its own is refused)"
+            )
+        for key, reasons in self.stale.items():
+            if not reasons or reasons != [r for r in STALE_REASONS if r in reasons]:
+                raise ValueError(
+                    f"{key}'s reasons {reasons} are not each once, in the API's"
+                    f" order {list(STALE_REASONS)}"
+                )
+        if len(set(self.not_stale)) != len(self.not_stale) or set(self.not_stale) & set(
+            self.stale
+        ):
+            raise ValueError(
+                f"not_stale {self.not_stale} names a flag twice, or a stale one"
+            )
+        every = set(self.stale) | set(self.not_stale)
+        if set(self.listed) != every:
+            raise ValueError(
+                f"the rows read before Stale is pressed are {sorted(self.listed)};"
+                f" the setup's flags are {sorted(every)}"
+            )
+        if set(self.filtered) != set(self.stale):
+            raise ValueError(
+                f"the rows read with Stale pressed are {sorted(self.filtered)}; the"
+                f" stale flags are {sorted(self.stale)}"
+            )
         return self
 
 
@@ -1238,6 +1497,18 @@ class EndState(_Strict):
     design: Optional[DesignEnd] = None
     #: A flag the safety monitor rolled back by itself (video 4).
     rollback: Optional[RollbackEnd] = None
+    #: The flags the setup made and dated back, as the list marks them (video 11).
+    stale: Optional[StaleEnd] = None
+
+    @model_serializer(mode="wrap")
+    def _unset_stale_left_out(self, handler: Any) -> Dict[str, Any]:
+        """The dump without ``stale`` when it is unset: an end state declared
+        before it existed records exactly what it did (gate 10's
+        ``storyboard`` number; video 3's ``V3_DUMP`` pin)."""
+        data = handler(self)
+        if data.get("stale") is None:
+            data.pop("stale", None)
+        return data
 
     @model_validator(mode="after")
     def _something(self) -> "EndState":
@@ -1249,16 +1520,25 @@ class EndState(_Strict):
             and self.team is None
             and self.design is None
             and self.rollback is None
+            and self.stale is None
         ):
             raise ValueError(
                 "an end state names experiments_listed, an experiment, a flag,"
-                " calculations or a team, or a design, or a rollback"
+                " calculations or a team, or a design, or a rollback, or stale flags"
             )
         if self.design is not None and (
             self.experiment is not None or self.flag is not None
         ):
             raise ValueError(
                 "a design end state stands alone: not with an experiment or a flag"
+            )
+        if self.stale is not None and any(
+            made is not None
+            for made in (self.experiment, self.flag, self.design, self.rollback)
+        ):
+            raise ValueError(
+                "a stale end state stands alone: not with an experiment, a flag, a"
+                " design or a rollback"
             )
         return self
 
@@ -1283,15 +1563,30 @@ class GroupSetup(_Strict):
 
 class Setup(_Strict):
     """What the video uses but does not film being made, made through the API
-    off camera, after gate 14 (the seed's counts) and before the first scene."""
+    off camera, after gate 14 (the seed's counts) and before the first scene.
+
+    ``flags`` (video 11, S1): at most six, each with its own name and key and
+    none of the seed's keys, made and then dated back (``FlagSetup``)."""
 
     segments: List[SegmentSetup] = Field(default_factory=list)
     exclusion_groups: List[GroupSetup] = Field(default_factory=list)
+    flags: List[FlagSetup] = Field(default_factory=list, max_length=MAX_SETUP_FLAGS)
 
     @model_validator(mode="after")
     def _something(self) -> "Setup":
-        if not self.segments and not self.exclusion_groups:
-            raise ValueError("a setup makes at least one segment or exclusion group")
+        if not self.segments and not self.exclusion_groups and not self.flags:
+            raise ValueError(
+                "a setup makes at least one segment or exclusion group, or a flag"
+            )
+        keys = [flag.key for flag in self.flags]
+        names = [flag.name for flag in self.flags]
+        if len(set(keys)) != len(keys) or len(set(names)) != len(names):
+            raise ValueError(f"a setup flag's key or name repeats: {keys}, {names}")
+        seeded = [key for key in keys if key in SEED_FLAG_KEYS]
+        if seeded:
+            raise ValueError(
+                f"the setup makes {seeded[0]}, a key the demo seed's flag has"
+            )
         return self
 
 
@@ -1471,6 +1766,97 @@ class Storyboard(_Strict):
                 f"the video invites {len(emails)} teammates, and no scene masks"
                 f" {config.INVITE_PASSWORD_TESTID}: each one-time password would be"
                 " filmed (masks)"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _stale_in_order(self) -> "Storyboard":
+        """Video 11 (S1, S2): a beat's counts are each named once, never as a
+        reading; a setup that makes flags declares the stale end state, and
+        only it does; that end state is the docs' table applied to the
+        flags' declared fields (``derived_stale``), for every flag the setup
+        makes; and its readings are taken where they can be true: every row
+        and count before Stale is pressed at one beat, and every one with it
+        pressed at one later beat."""
+        where: Dict[str, int] = {}
+        recorded: Dict[str, int] = {}
+        index = 0
+        for scene in self.scenes:
+            for beat in scene.beats:
+                for name in beat.record:
+                    recorded.setdefault(name, index)
+                for name in beat.count:
+                    if name in where or name in beat.record or name in recorded:
+                        raise ValueError(f"the count {name!r} is named twice")
+                    where[name] = index
+                index += 1
+        clash = [name for name in where if name in recorded]
+        if clash:
+            raise ValueError(f"the count {clash[0]!r} is named twice")
+        flags = self.setup.flags if self.setup is not None else []
+        end = self.end_state.stale
+        if not flags and end is None:
+            return self
+        if not flags or end is None:
+            raise ValueError(
+                "a setup that makes flags declares the stale end state, and only"
+                " such a setup does"
+            )
+        if not any(flag.evaluate for flag in flags):
+            raise ValueError(
+                "the setup evaluates none of its flags: evaluations_seen would be"
+                " the seed's, not the storyboard's"
+            )
+        for flag in flags:
+            if "stale" in flag.key.lower() or "stale" in flag.name.lower():
+                raise ValueError(
+                    f"{flag.key} names 'stale': its row's Stale pill could not be"
+                    " told from its name"
+                )
+        derived, seen = derived_stale(flags, end.days)
+        declared = {key: list(reasons) for key, reasons in end.stale.items()}
+        if declared != derived:
+            raise ValueError(
+                f"the stale end state says {declared}; the docs' table gives"
+                f" {derived} for the flags the setup makes"
+            )
+        if end.evaluations_seen is not seen:
+            raise ValueError(
+                f"the stale end state says evaluations_seen {end.evaluations_seen};"
+                f" the setup's evaluations give {seen}"
+            )
+        rest = sorted({flag.key for flag in flags} - set(derived))
+        if sorted(end.not_stale) != rest:
+            raise ValueError(
+                f"not_stale is {sorted(end.not_stale)}; the setup's other flags are"
+                f" {rest}"
+            )
+        before = [*end.listed.values()]
+        pressed = [*end.filtered.values(), end.hint]
+        counted_before = [end.pills_listed, end.rows_listed]
+        counted_pressed = [end.pills_filtered, end.rows_filtered]
+        for name in before + pressed:
+            if name not in recorded:
+                raise ValueError(
+                    f"the stale end state compares {name!r}, which no beat records"
+                )
+        for name in counted_before + counted_pressed + list(end.notices):
+            if name not in where:
+                raise ValueError(
+                    f"the stale end state compares {name!r}, which no beat counts"
+                )
+        at_before = {recorded[n] for n in before} | {where[n] for n in counted_before}
+        at_pressed = {recorded[n] for n in pressed} | {
+            where[n] for n in counted_pressed
+        }
+        if (
+            len(at_before) != 1
+            or len(at_pressed) != 1
+            or min(at_before) >= min(at_pressed)
+        ):
+            raise ValueError(
+                "the stale end state's rows and counts before Stale is pressed are"
+                " read at one beat, and those with it pressed at one later beat"
             )
         return self
 

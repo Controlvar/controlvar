@@ -1,0 +1,80 @@
+{
+  "_about": "The create request the new-experiment form sends for a split URL experiment (#1961), read by both sides: frontend/src/tests/pages/experiment-new-split-url.test.tsx sends each case through the form and compares the body with `body`, and backend/tests/unit/schemas/test_split_url_form_fixture.py holds each `body` to the API's own rules. Each case's `urls` are what is typed into the Pages block, in variant order.",
+  "cases": [
+    {
+      "_about": "The body documented in docs/api/split-url.md (name, variants, URLs and allocations), with the key the form makes from the name and the form's other defaults.",
+      "name": "Checkout pages",
+      "urls": [
+        "https://shop.example.com/checkout",
+        "https://shop.example.com/checkout-v2"
+      ],
+      "body": {
+        "name": "Checkout pages",
+        "key": "checkout_pages",
+        "experiment_type": "split_url",
+        "targeting_rules": null,
+        "variants": [
+          { "name": "Control", "is_control": true, "traffic_allocation": 50 },
+          { "name": "Treatment", "is_control": false, "traffic_allocation": 50 }
+        ],
+        "metrics": [
+          { "name": "Conversion", "event_name": "conversion", "metric_type": "conversion", "is_primary": true }
+        ],
+        "confidence_level": 0.95,
+        "correction_method": "benjamini_hochberg",
+        "split_url_config": {
+          "variants": [
+            { "name": "Control", "url": "https://shop.example.com/checkout", "traffic_allocation": 50 },
+            { "name": "Treatment", "url": "https://shop.example.com/checkout-v2", "traffic_allocation": 50 }
+          ]
+        }
+      }
+    },
+    {
+      "_about": "URLs that `new URL(url).href` would change (a bare origin gets a trailing slash; an upper-case scheme and host are lowered). The API stores them exactly as sent, so the form must too.",
+      "name": "Href cases",
+      "urls": [
+        "https://shop.example.com",
+        "HTTPS://Shop.Example.com/x"
+      ],
+      "body": {
+        "name": "Href cases",
+        "key": "href_cases",
+        "experiment_type": "split_url",
+        "targeting_rules": null,
+        "variants": [
+          { "name": "Control", "is_control": true, "traffic_allocation": 50 },
+          { "name": "Treatment", "is_control": false, "traffic_allocation": 50 }
+        ],
+        "metrics": [
+          { "name": "Conversion", "event_name": "conversion", "metric_type": "conversion", "is_primary": true }
+        ],
+        "confidence_level": 0.95,
+        "correction_method": "benjamini_hochberg",
+        "split_url_config": {
+          "variants": [
+            { "name": "Control", "url": "https://shop.example.com", "traffic_allocation": 50 },
+            { "name": "Treatment", "url": "HTTPS://Shop.Example.com/x", "traffic_allocation": 50 }
+          ]
+        }
+      }
+    }
+  ],
+  "accepted_urls_comment": "Accepted by the API today (url_problem returns None); the client must refuse none; if url_problem tightens, move them in that PR.",
+  "accepted_urls": [
+    "HTTPS://Shop.Example.com/x",
+    "http://localhost:3000/x",
+    "https://[::1]:8443/x",
+    "https://xn--caf-dma.example/x",
+    "https://a_b.example/x",
+    "https://shop.example.com",
+    "https://a<b.example/x",
+    "https://a^b.example/x",
+    "https://a|b.example/x",
+    "https://a>b.example/x",
+    "https://1.2.3.256/x",
+    "https://999999999999/x",
+    "https://example.1/x",
+    "https://foo.0x/x"
+  ]
+}

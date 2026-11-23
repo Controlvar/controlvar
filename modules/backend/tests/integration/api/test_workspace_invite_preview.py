@@ -311,6 +311,28 @@ def test_credentials_that_do_not_resolve_still_get_a_masked_preview(
     _assert_masked(_preview(client, invite.token, headers), invited)
 
 
+def test_a_token_from_before_a_password_change_gets_the_masked_preview(
+    client, db_session, invite, invited
+):
+    """A token the account held before its password changed (#501) is
+    answered like any token that does not resolve: the masked preview, never
+    a 401 or a 500. The account's token from after the change sees the
+    address as stored."""
+    invitee = _user(db_session, invited)
+    earlier = _bearer(invitee)
+    db_session.execute(
+        text("UPDATE users SET hashed_password = :value WHERE id = :id"),
+        {"value": HASHED_PASSWORD + "-changed", "id": invitee.id},
+    )
+    db_session.commit()
+    db_session.refresh(invitee)
+
+    _assert_masked(_preview(client, invite.token, earlier), invited)
+    now = _preview(client, invite.token, _bearer(invitee))
+    assert now.status_code == 200, now.text
+    assert now.json()["email"] == invited
+
+
 def test_an_unknown_token_is_still_404(client, db_session, invited):
     invitee = _user(db_session, invited)
     assert _preview(client, "no-such-token").status_code == 404

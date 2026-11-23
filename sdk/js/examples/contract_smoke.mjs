@@ -7,7 +7,9 @@
  * Env: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY (required),
  * (the former names EXPERIMENTLY_API_URL / EXPERIMENTLY_API_KEY are read when these are unset),
  *      CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag),
- *      CONTRACT_TARGETED_FLAG_KEY (default sdk_contract_targeted), CONTRACT_USER_ID (default smoke-<uuid>).
+ *      CONTRACT_TARGETED_FLAG_KEY (default sdk_contract_targeted), CONTRACT_USER_ID (default smoke-<uuid>),
+ *      CONTROLVAR_LOCAL_API_KEY (optional: a key with the sdk:ruleset scope; with it the smoke also
+ *      links two ids with alias, step 7).
  *
  * Prints exactly one JSON line on stdout and exits 0; on failure prints one line to stderr and exits 1.
  */
@@ -138,6 +140,43 @@ try {
     json: await valued.getJsonValue('sdk_contract_value_json', { userId }, ['smoke-default']),
   };
 
+  // 7. Two ids of one person (#449), only with the seed's sdk:ruleset key, which the live runner
+  //    gives every smoke as CONTROLVAR_LOCAL_API_KEY. A NEW client with that key assigns a fresh
+  //    anonymous id, links it to a fresh known id twice (created true, then false), sends one
+  //    key-less event under the known id before anything assigned it (the client copied the
+  //    anonymous id's experiment), then assigns the known id: the anonymous id's variant. The
+  //    runner then reads the database: one assignment row among the two ids, the anonymous id's,
+  //    and the event stored under it with the experiment and that variant.
+  const linkingKey = process.env.CONTROLVAR_LOCAL_API_KEY || process.env.EXPERIMENTLY_LOCAL_API_KEY;
+  let alias;
+  if (linkingKey) {
+    const linkErrors = [];
+    const linking = new ExperimentationClient({
+      apiUrl,
+      apiKey: linkingKey,
+      onError: (error, operation) => linkErrors.push(`${operation}: ${error.message}`),
+    });
+    const anonymousId = `smoke-anon-${randomUUID()}`;
+    const knownId = `smoke-known-${randomUUID()}`;
+    const before = await linking.getAssignment(experimentKey, { userId: anonymousId });
+    const created = [await linking.alias(anonymousId, knownId), await linking.alias(anonymousId, knownId)];
+    const eventName = `contract_alias_${randomUUID()}`;
+    await linking.track(knownId, eventName, { value: 1 });
+    if (linkErrors.length) fail(`alias: ${linkErrors[0]}`);
+    const after = await linking.getAssignment(experimentKey, { userId: knownId });
+    if (after.variantName !== before.variantName) {
+      fail(`alias: the known id was answered ${after.variantName}, the anonymous id ${before.variantName}`);
+    }
+    alias = {
+      anonymous_id: anonymousId,
+      user_id: knownId,
+      created,
+      variant_before: before.variantName,
+      variant_after: after.variantName,
+      event_name: eventName,
+    };
+  }
+
   const [exposure] = exposures;
   process.stdout.write(
     JSON.stringify({
@@ -160,6 +199,7 @@ try {
           : null,
       },
       values,
+      ...(alias ? { alias } : {}),
     }) + '\n'
   );
 } catch (err) {

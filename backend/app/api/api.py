@@ -20,7 +20,6 @@ from backend.app.api.v1.endpoints import (
     client_errors,
     compliance,
     events,
-    experiment_wizard,
     experiments,
     export,
     feature_flags,
@@ -45,6 +44,8 @@ from backend.app.api.v1.endpoints import (
     tracking,
     tracking_visual,
     users,
+    visual_editor,
+    visual_editor_tickets,
     visual_preview_links,
     websocket_results,
 )
@@ -76,6 +77,16 @@ def register_core_routers(router: APIRouter) -> APIRouter:
     # dashboard (needs experiment update).
     router.include_router(
         visual_preview_links.router, prefix="/experiments", tags=["Experiments"]
+    )
+    # #1545: opening a visual draft in the visual editor (needs experiment
+    # update; only from the dashboard's origin).
+    router.include_router(
+        visual_editor_tickets.router, prefix="/experiments", tags=["Experiments"]
+    )
+    # #1545: the editor link's claim, from the site's page, and the editor's
+    # session, from the dashboard; neither takes a sign-in or an API key.
+    router.include_router(
+        visual_editor.router, prefix="/visual-editor", tags=["Visual Editor"]
     )
     router.include_router(tracking.router, prefix="/tracking", tags=["Tracking"])
     # #1545: the visual editor's browser script asks which changes and goals a
@@ -139,10 +150,6 @@ def register_core_routers(router: APIRouter) -> APIRouter:
     router.include_router(ai_design.router, prefix="/ai", tags=["AI Design"])
     # Issue #23: the tool list of the MCP server (sdk/mcp), which is not this API
     router.include_router(mcp.router, prefix="/mcp", tags=["MCP"])
-    # Issue #27: guided experiment builder (draft-and-submit API; no dashboard UI)
-    router.include_router(
-        experiment_wizard.router, prefix="/wizard", tags=["Experiment Wizard"]
-    )
     # EP-030: Notification preferences and delivery log
     router.include_router(
         notifications.router, prefix="/notifications", tags=["Notifications"]
@@ -316,16 +323,12 @@ CORE_TAGS_METADATA = [
         "description": "The tool list of the Controlvar MCP server, which runs on your computer and calls this API",
     },
     {
-        "name": "Experiment Wizard",
-        "description": "Step-by-step draft-and-submit flow for designing an experiment; submitting creates it",
-    },
-    {
         "name": "Compliance",
         "description": (
-            "Compliance audit trail: append-only events for every experiment and "
-            "feature-flag change, readable by ADMIN and ANALYST. HMAC signing, "
-            "SOC 2 / ISO 27001 reports and the audit export are the compliance "
-            "module's, on the same routes."
+            "Compliance audit trail: append-only events for experiment and "
+            "feature-flag creates, updates and deletes, readable by ADMIN and "
+            "ANALYST. HMAC signing, SOC 2 / ISO 27001 reports and the audit "
+            "export are the compliance module's, on the same routes."
         ),
     },
 ]

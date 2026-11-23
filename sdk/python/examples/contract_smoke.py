@@ -8,7 +8,8 @@ Run from the repository root (no install needed):
 Env: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY (required;
 the former names EXPERIMENTLY_API_URL / EXPERIMENTLY_API_KEY are read when these are unset),
 CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag),
-CONTRACT_USER_ID (default: random "smoke-<uuid>").
+CONTRACT_USER_ID (default: random "smoke-<uuid>"), CONTROLVAR_LOCAL_API_KEY (optional:
+a key with the sdk:ruleset scope; with it the smoke also links two ids with alias, step 6).
 
 Prints exactly one JSON line on stdout and exits 0; on failure prints one line to stderr
 and exits 1.
@@ -190,7 +191,20 @@ def main() -> None:
     if [(r.levelname, r.getMessage().startswith("on_exposure failed: ")) for r in logged.records] != [("ERROR", True)]:
         fail(f"the raising hook was logged as {[(r.levelname, r.getMessage()) for r in logged.records]}")
 
+    # 6. Two ids of one person (#449), only with the seed's sdk:ruleset key, which the live runner
+    #    gives every smoke as CONTROLVAR_LOCAL_API_KEY. A NEW client with that key assigns a fresh
+    #    anonymous id, links it to a fresh known id twice (created True, then False), sends one
+    #    key-less event under the known id before anything assigned it (the client copied the
+    #    anonymous id's experiment), then assigns the known id: the anonymous id's variant. The
+    #    runner then reads the database: one assignment row among the two ids, the anonymous id's,
+    #    and the event stored under it with the experiment and that variant.
+    linking_key = os.environ.get("CONTROLVAR_LOCAL_API_KEY") or os.environ.get("EXPERIMENTLY_LOCAL_API_KEY")
+    alias = None
+    if linking_key:
+        alias = link_two_ids(api_url, linking_key, experiment_key)
+
     exposure = exposures[0] if exposures else None
+    extra = {} if alias is None else {"alias": alias}
     print(
         json.dumps(
             {
@@ -215,10 +229,40 @@ def main() -> None:
                         "user_id": exposure.user_id,
                     },
                 },
+                **extra,
             },
             separators=(",", ":"),
         )
     )
+
+
+def link_two_ids(api_url: str, key: str, experiment_key: str) -> Mapping[str, Any]:
+    """Step 6: what the runner checks against the database."""
+    linking = ExperimentationClient(api_url, key)
+    anonymous_id = f"smoke-anon-{uuid.uuid4()}"
+    known_id = f"smoke-known-{uuid.uuid4()}"
+    try:
+        before = linking.get_assignment(experiment_key, anonymous_id)
+        created = [linking.alias(anonymous_id, known_id), linking.alias(anonymous_id, known_id)]
+    except ExperimentationError as exc:
+        fail(f"alias: {exc} (status={exc.status}, body={exc.body!r})")
+    event_name = f"contract_alias_{uuid.uuid4()}"
+    if not linking.track(known_id, event_name, event_value=1):
+        fail("alias: the key-less event under the known id was not accepted")
+    try:
+        after = linking.get_assignment(experiment_key, known_id)
+    except ExperimentationError as exc:
+        fail(f"alias: assigning the known id failed: {exc} (status={exc.status}, body={exc.body!r})")
+    if after.variant_name != before.variant_name:
+        fail(f"alias: the known id was answered {after.variant_name}, the anonymous id {before.variant_name}")
+    return {
+        "anonymous_id": anonymous_id,
+        "user_id": known_id,
+        "created": created,
+        "variant_before": before.variant_name,
+        "variant_after": after.variant_name,
+        "event_name": event_name,
+    }
 
 
 if __name__ == "__main__":

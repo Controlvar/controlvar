@@ -6,6 +6,7 @@ that require superuser privileges.
 """
 
 import json
+import logging
 import uuid
 from typing import Any, Dict, Optional
 
@@ -32,13 +33,24 @@ from backend.app.api.v1.endpoints.users import (
     require_still_active_superuser,
 )
 from backend.app.core.config import settings
+from backend.app.core.logger import failure_detail
 from backend.app.models.audit_log import ActionType, EntityType
 from backend.app.models.user import User, UserRole
+from backend.app.schemas.app_user_erasure import (
+    AppUserEraseCounts,
+    AppUserEraseRequest,
+    AppUserEraseResponse,
+)
 from backend.app.schemas.user import (
     AdminUserPatch,
     UserListResponse,
     UserResponse,
     UserUpdate,
+)
+from backend.app.services.app_user_erasure import (
+    EraseNotFinished,
+    EraseNotStarted,
+    erase_app_user,
 )
 from backend.app.services.audit_service import (
     AuditService,
@@ -47,6 +59,8 @@ from backend.app.services.audit_service import (
     role_value,
 )
 from backend.app.services.two_factor_service import two_factor_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(route_class=OffLoopRoute)
 
@@ -387,6 +401,78 @@ def reset_user_two_factor(
     two_factor_service.reset(db, [user], actor=current_user)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+#: The 500 of ``POST /admin/app-users/erase`` before anything was deleted.
+ERASE_NOT_STARTED = "The erase could not be recorded, so nothing was erased"
+#: The 500 once the start entry is written.
+ERASE_NOT_FINISHED = "Part of the data may already be erased; send the request again"
+
+
+def _erase_failed(db: Session, cause: BaseException, sentence: str) -> HTTPException:
+    """The 500 of a failed erase: *sentence* with the request id.
+
+    The log line names the exception's type only: no traceback and no
+    exception text.
+    """
+    try:
+        db.rollback()
+    except Exception:
+        logger.warning("Rollback after a failed app user erase also failed")
+    logger.error("App user erase failed (%s)", type(cause).__name__)
+    return HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail=failure_detail(sentence),
+    )
+
+
+@router.post(
+    "/app-users/erase",
+    response_model=AppUserEraseResponse,
+    openapi_extra={"x-stability": "beta"},
+    responses={
+        500: {
+            "description": (
+                "An unplanned failure. Nothing was erased if the start entry "
+                "could not be written; otherwise part of the data may already "
+                "be erased: send the request again."
+            )
+        }
+    },
+)
+def erase_app_user_data(
+    body: AppUserEraseRequest,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_superuser),
+) -> AppUserEraseResponse:
+    """
+    Erase one app user's data (beta, superusers only).
+
+    Deletes every row stored under one `user_id` your app sent: events
+    (exposures included), flag-evaluation metrics, client errors, LLM
+    evaluations, event dedup keys, assignments, global-holdout rows, id-list
+    segment memberships and flag overrides. The id is matched exactly. It does
+    not delete dashboard accounts (`DELETE /api/v1/admin/users/{user_id}`).
+    There is no undo.
+
+    A call works for at most 20 seconds. `complete: false` means rows may be
+    left: send the same request again until it is `true`. An id with nothing
+    stored answers 200 with every count 0. Each call writes two audit-log
+    entries with `receipt_id` as their `entity_id`, one when it starts and one
+    when it finishes; they hold counts only.
+    """
+    try:
+        result = erase_app_user(db, body.user_id, current_user)
+    except EraseNotStarted as failed:
+        raise _erase_failed(db, failed.cause, ERASE_NOT_STARTED) from None
+    except EraseNotFinished as failed:
+        raise _erase_failed(db, failed.cause, ERASE_NOT_FINISHED) from None
+    return AppUserEraseResponse(
+        receipt_id=result.receipt_id,
+        complete=result.complete,
+        ids_erased=result.ids_erased,
+        deleted=AppUserEraseCounts(**result.deleted),
+    )
 
 
 @router.get("/stats", response_model=Dict[str, Any])

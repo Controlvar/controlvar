@@ -56,7 +56,7 @@ export const middleware = createEdgeMiddleware({
  */
 export async function featureCheckHandler(request: Request): Promise<Response> {
   const url = new URL(request.url);
-  const userId = url.searchParams.get('userId') ?? 'anonymous';
+  const userId = url.searchParams.get('userId') ?? crypto.randomUUID();
   const flagKey = url.searchParams.get('flag') ?? '';
 
   if (!flagKey) {

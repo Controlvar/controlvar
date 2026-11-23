@@ -688,7 +688,7 @@ async def test_start_experiment(
 
             # Verify service was called correctly
             mock_experiment_service.start_experiment.assert_called_once_with(
-                mock_experiment
+                mock_experiment, actor=mock_user
             )
 
             # Convert response to dict if it's a Pydantic model

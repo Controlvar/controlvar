@@ -78,6 +78,17 @@ def test_every_sdk_directory_has_an_ecosystem() -> None:
     )
 
 
+def test_the_visual_script_cannot_be_published() -> None:
+    """sdk/visual (@controlvar/visual, #1545) is built and tested, never published.
+
+    Literal, on purpose: set it to ``"npm"`` and every other test in this file
+    stays green -- it has a version, a ``repository`` entry and an npm job that
+    selects by ecosystem -- so this line is the only thing that refuses it.
+    Moving it takes a release decision, in the change that makes it.
+    """
+    assert ecosystems()["visual"] == "unwired"
+
+
 def test_no_ecosystem_entry_without_a_directory() -> None:
     """The other direction: a name left behind after a rename publishes nothing."""
     stale = set(ecosystems()) - sdk_directories()

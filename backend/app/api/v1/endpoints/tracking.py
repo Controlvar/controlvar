@@ -19,8 +19,7 @@ from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps
 from backend.app.api.off_loop_route import OffLoopRoute, release_request_sessions
-from backend.app.api.sdk_scope import require_batch_assign_key
-from backend.app.core.balanced_blocks import balance_setting
+from backend.app.api.sdk_scope import require_batch_assign_key, require_sdk_ruleset_key
 from backend.app.core.context_limits import check_context
 from backend.app.core.logger import failure_detail, unexpected_failure
 from backend.app.core.metrics import (
@@ -35,6 +34,8 @@ from backend.app.models.experiment import Experiment, ExperimentStatus
 from backend.app.models.feature_flag import FeatureFlag
 from backend.app.schemas.storable_text import storable_text_param
 from backend.app.schemas.tracking import (
+    AliasRequest,
+    AliasResponse,
     AssignmentBatchRequest,
     AssignmentBatchResponse,
     AssignmentRequest,
@@ -56,6 +57,17 @@ from backend.app.services.assignment_service import (
 )
 from backend.app.services.bandit_routing import bandit_chooser
 from backend.app.services.event_service import EventService
+from backend.app.services.identity_aliases import (
+    ANONYMOUS_ID_HAS_LINKS,
+    ANONYMOUS_ID_LINKED_ELSEWHERE,
+    MAX_ANONYMOUS_IDS_PER_USER,
+    USER_ID_AT_CAP,
+    USER_ID_IS_LINKED,
+    AliasConflict,
+    holder_of,
+    link,
+    person_of,
+)
 
 # Create router
 router = APIRouter(route_class=OffLoopRoute)
@@ -151,11 +163,47 @@ def _variant_at_receipt(db: Session, experiment: Experiment, user_id: str) -> An
     return assignment.variant_id if assignment else None
 
 
+def _holder_at_receipt(
+    db: Session,
+    experiment_id: Any,
+    presented: str,
+    experiment: Optional[Experiment] = None,
+) -> tuple[str, Any]:
+    """``(user id, variant)`` an event that names an experiment is stored with,
+    when it was sent as *presented* (#449).
+
+    An id never linked: itself, after one read of ``identity_aliases``. A
+    linked id: the person's holder in the experiment
+    (``identity_aliases.holder_of``, whatever the experiment's status). So a
+    conversion sent under a known id after its anonymous id was assigned is
+    stored under the assigned id and counts for it, with no change to any
+    analysis path.
+
+    With *experiment* (``/track`` and ``/batch``), the variant is the one the
+    event is tagged with: :func:`_variant_at_receipt`'s for an id never
+    linked, exactly as before; for a linked id, the holder's stored variant
+    while the experiment is ACTIVE. Without it (``/events``, which keeps the
+    variant it was given), the variant is None.
+    """
+    person = person_of(db, presented)
+    if not person.linked:
+        if experiment is None:
+            return presented, None
+        return presented, _variant_at_receipt(db, experiment, presented)
+    holder, row = holder_of(db, person, experiment_id)
+    if experiment is None or row is None:
+        return holder, None
+    if experiment.status != ExperimentStatus.ACTIVE:
+        return holder, None
+    return holder, row.variant_id
+
+
 def _event_response(
     event: Event,
     *,
     event_id: Optional[str],
     stored_id: Any = None,
+    user_id: Optional[str] = None,
 ) -> EventResponse:
     """Build the public response model from an Event.
 
@@ -164,13 +212,15 @@ def _event_response(
     stored, and ``stored_id`` is the id of the event already stored with the
     same key: the answer's ``id`` is that one, and every other field comes
     from this request or this request's time, never from the stored row.
+    ``user_id`` is the id the request sent, when the event is stored under
+    the holder of a linked id (#449): the answer echoes what was sent.
     """
     duplicate = stored_id is not None
     return EventResponse(
         id=str(stored_id if duplicate else event.id),
         event_type=event.event_type,
         event_name=event.event_name or event.event_type,
-        user_id=event.user_id,
+        user_id=user_id if user_id is not None else event.user_id,
         experiment_id=str(event.experiment_id) if event.experiment_id else None,
         feature_flag_id=str(event.feature_flag_id) if event.feature_flag_id else None,
         variant_id=str(event.variant_id) if event.variant_id else None,
@@ -191,6 +241,7 @@ def _store_once(
     *,
     route: str,
     allow_untagged: bool,
+    claim_user_id: Optional[str],
 ) -> tuple[Event, Any]:
     """Store one event unless its ``event_id`` was already stored (#1543).
 
@@ -198,9 +249,19 @@ def _store_once(
     duplicate, the event this request built (never stored) and the id of the
     event already stored. Counts the event in ``events_tracked_total`` only
     when a row was written, and a duplicate in ``events_duplicate_total``.
+    ``claim_user_id`` is the id the request sent: an event is stored once per
+    user id as sent, also when it is stored under a linked id's holder
+    (#449), so a retry that straddles a link is still one event. It is passed
+    on only when it differs from the event's user, so an id never linked is
+    stored as before.
     """
+    claim = (
+        {"claim_user_id": claim_user_id}
+        if claim_user_id is not None and claim_user_id != event_data.user_id
+        else {}
+    )
     stored_id, created, event = EventService(db).track_event_once(
-        event_data, event_id, allow_untagged=allow_untagged
+        event_data, event_id, allow_untagged=allow_untagged, **claim
     )
     if created:
         record_event_tracked(str(event_data.event_type))
@@ -347,6 +408,33 @@ async def assign_user_to_experiment(
             control variant
         HTTPException 500: If there's an error during assignment
     """
+    # Closes ``db`` before it returns: the assignment runs in a worker thread
+    # on the same session, closed again when the work is done. A caller must
+    # not use ORM objects it loaded on ``db`` after this call (the split URL
+    # assign route uses only the answer).
+    db.close()
+    return await run_in_threadpool(_assign_in_worker, request, db)
+
+
+def _assign_in_worker(
+    request: AssignmentRequest, db: Session
+) -> VariantAssignmentResponse:
+    """:func:`assign_one` on *db*, in a worker thread; closes *db*."""
+    try:
+        return assign_one(request, db)
+    finally:
+        db.close()
+
+
+def assign_one(request: AssignmentRequest, db: Session) -> VariantAssignmentResponse:
+    """``POST /api/v1/tracking/assign``'s answer for *request*, worked out on
+    *db*, which is left open.
+
+    Synchronous: it reads and writes through *db* as it goes, so call it from
+    a worker thread, never from a coroutine on the event loop. Raises the
+    route's ``HTTPException`` for every refusal and failure, with the route's
+    status codes and fixed texts.
+    """
     # The limits of backend.app.core.context_limits, before anything is read
     # or written.
     check_context(request.context)
@@ -380,7 +468,7 @@ async def assign_user_to_experiment(
     )
 
     def assign_and_answer() -> VariantAssignmentResponse:
-        # A balanced experiment's release (below) expired it.
+        # Reads again only if a commit since the query expired it.
         _reread_without_visual_settings(db, experiment)
         # Attempt to assign the user
         assignment_data = assignment_service.assign_user(
@@ -432,19 +520,10 @@ async def assign_user_to_experiment(
         )
 
     try:
-        if balance_setting(experiment) is not None:
-            # A balanced experiment's new user takes a place from their
-            # group's counter row, which another request can be holding
-            # (#448), so the assignment runs in a worker thread, off the event
-            # loop. The request's sessions are released first: their
-            # transaction ends and the connection goes back to the pool while
-            # the request waits for a worker, and the session, whose objects
-            # stay attached, reads again inside it (one thread at a time).
-            # test_route_worker_steps.py and the balanced row of
-            # test_api_key_routes_under_overload.py pin both. Every other
-            # experiment is assigned here, as before.
-            release_request_sessions()
-            return await run_in_threadpool(assign_and_answer)
+        # Every experiment is assigned here, in the worker thread the route
+        # hands this to. That includes a balanced experiment, whose new user
+        # takes a place from their group's counter row, which another request
+        # can be holding (#448).
         return assign_and_answer()
     except ValidationError as e:
         # A response that does not build is not the caller's mistake, and
@@ -672,6 +751,111 @@ def _assign_users_in_batch(
         db.close()
 
 
+#: The 409 ``detail`` for each reason ``identity_aliases.link`` refuses a link
+#: for (#449). None of them names either id.
+ALIAS_CONFLICT_DETAILS: Dict[str, str] = {
+    ANONYMOUS_ID_LINKED_ELSEWHERE: (
+        "That anonymous_id is already linked to a different user_id. An "
+        "anonymous_id can be linked to one user_id."
+    ),
+    ANONYMOUS_ID_HAS_LINKS: (
+        "That anonymous_id already has other ids linked to it, so it cannot itself "
+        "be linked. Links are one level deep; check that the two ids are not "
+        "swapped."
+    ),
+    USER_ID_IS_LINKED: (
+        "That user_id is itself linked to another user_id, so nothing can be "
+        "linked to it. Links are one level deep; link to the user_id it is linked "
+        "to, or check that the two ids are not swapped."
+    ),
+    USER_ID_AT_CAP: (
+        f"That user_id already has {MAX_ANONYMOUS_IDS_PER_USER} anonymous_ids "
+        "linked to it, the most allowed, so this anonymous_id was not linked."
+    ),
+}
+
+#: The sentence of the 500 for any other failure to store a link.
+ALIAS_FAILURE_SENTENCE = "Could not link the two ids"
+
+
+@router.post(
+    "/alias",
+    response_model=AliasResponse,
+    summary="Link an anonymous id to a known user id (beta)",
+    response_description="The two ids as sent, and whether this request stored the link",
+    openapi_extra={"x-stability": "beta"},
+    responses={
+        401: {
+            "description": "No API key, or an unknown, expired or revoked one, or "
+            "one whose owner is deactivated"
+        },
+        403: {
+            "description": "The key lacks the sdk:ruleset scope, or its owner can "
+            "no longer change feature flags"
+        },
+        409: {
+            "description": "A rule refuses the link: the anonymous_id is linked "
+            "to another user_id, one of the ids is already on the other side of "
+            "a link, or the user_id has 100 anonymous_ids; nothing is written"
+        },
+        429: {"description": "Over the SDK rate limit for this address"},
+    },
+)
+async def link_anonymous_id(
+    request: AliasRequest = Body(
+        ..., description="The anonymous id and the known user id of one person"
+    ),
+    db: Session = Depends(deps.get_db),
+    api_key: APIKey = Depends(require_sdk_ruleset_key),
+) -> AliasResponse:
+    """
+    Link an anonymous id to the known user id of the same person (beta).
+
+    From then on the tracking routes answer either id as one person. In each
+    experiment the assignment stored first among the person's ids is the
+    answer for all of them, and an id with no assignment of its own gets no
+    second one. An event sent under either id that names an experiment
+    counts for that assignment. Nothing stored before the link is moved or
+    changed, and feature flags are not linked.
+
+    An anonymous id is linked to one user id and never moved, links are one
+    level deep, and a user id has at most 100 anonymous ids. A link that
+    already exists answers 200 with ``created: false`` and writes nothing; a
+    link a rule refuses answers 409, and nothing is written. The answer
+    repeats the two ids as sent; no refusal names either.
+
+    **Authentication**: a server-side key, an API key with the
+    ``sdk:ruleset`` scope whose owner can change feature flags: ADMIN,
+    DEVELOPER, a superuser, or in the full profile anyone whose custom roles
+    or direct grants give ``feature_flag (update)``. Call it from your
+    backend.
+    """
+    # ``link`` waits for advisory locks another request can be holding, so it
+    # runs in a worker thread, off the event loop: the request's sessions are
+    # released first, then the lock, read, decision, insert and commit take
+    # one trip.
+    release_request_sessions()
+    try:
+        created = await run_in_threadpool(
+            link, db, request.anonymous_id, request.user_id
+        )
+    except AliasConflict as conflict:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=ALIAS_CONFLICT_DETAILS[conflict.reason],
+        ) from None
+    except Exception as e:
+        # The class name only: the driver's text repeats both ids.
+        logger.error("Tracking alias failed (%s)", type(e).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=failure_detail(ALIAS_FAILURE_SENTENCE),
+        ) from None
+    return AliasResponse(
+        anonymous_id=request.anonymous_id, user_id=request.user_id, created=created
+    )
+
+
 @router.post(
     "/track",
     response_model=EventResponse,
@@ -713,9 +897,33 @@ async def track_event(
         HTTPException 401: If the API key is invalid
         HTTPException 422: If the event data is invalid
     """
+    # Closes ``db`` before it returns: the event is stored in a worker thread
+    # on the same session, closed again when the work is done.
+    db.close()
+    return await run_in_threadpool(_track_in_worker, request, db)
+
+
+def _track_in_worker(request: EventRequest, db: Session) -> EventResponse:
+    """:func:`track_one` on *db*, in a worker thread; closes *db*."""
+    try:
+        return track_one(request, db)
+    finally:
+        db.close()
+
+
+def track_one(request: EventRequest, db: Session) -> EventResponse:
+    """``POST /api/v1/tracking/track``'s answer for *request*, worked out on
+    *db*, which is left open.
+
+    Synchronous: it reads and writes through *db* as it goes, so call it from
+    a worker thread, never from a coroutine on the event loop. Raises the
+    route's ``HTTPException`` for every refusal and failure, with the route's
+    status codes and fixed texts.
+    """
     # Find experiment ID if specified
     experiment_id = None
     variant_id = None
+    stored_user_id = request.user_id
     if request.experiment_key:
         experiment = (
             db.query(Experiment)
@@ -726,7 +934,9 @@ async def track_event(
 
         if experiment:
             experiment_id = experiment.id
-            variant_id = _variant_at_receipt(db, experiment, request.user_id)
+            stored_user_id, variant_id = _holder_at_receipt(
+                db, experiment.id, request.user_id, experiment
+            )
 
     # Find feature flag ID if specified
     feature_flag_id = None
@@ -755,7 +965,7 @@ async def track_event(
     try:
         # Create event data
         event_data = _event_model(experiment_id, feature_flag_id)(
-            user_id=request.user_id,
+            user_id=stored_user_id,
             event_type=request.event_type,
             event_name=request.event_name or request.event_type,
             experiment_id=str(experiment_id) if experiment_id else None,
@@ -767,11 +977,21 @@ async def track_event(
             event_id=request.event_id,
         )
 
-        # Track the event, once per event_id (#1543)
+        # Track the event, once per event_id (#1543) and id as sent
         event, stored_id = _store_once(
-            db, event_data, request.event_id, route="track", allow_untagged=True
+            db,
+            event_data,
+            request.event_id,
+            route="track",
+            allow_untagged=True,
+            claim_user_id=request.user_id,
         )
-        return _event_response(event, event_id=request.event_id, stored_id=stored_id)
+        return _event_response(
+            event,
+            event_id=request.event_id,
+            stored_id=stored_id,
+            user_id=request.user_id,
+        )
     except ValidationError as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -824,21 +1044,58 @@ async def track_event_by_ids(
 
     **Authentication**: Requires a valid API key in the X-API-Key header.
     """
+    # Closes ``db`` before it returns: the event is stored in a worker thread
+    # on the same session, closed again when the work is done.
+    db.close()
+    return await run_in_threadpool(_track_by_ids_in_worker, event_data, db)
+
+
+def _track_by_ids_in_worker(event_data: EventCreate, db: Session) -> EventResponse:
+    """:func:`track_by_ids_one` on *db*, in a worker thread; closes *db*."""
+    try:
+        return track_by_ids_one(event_data, db)
+    finally:
+        db.close()
+
+
+def track_by_ids_one(event_data: EventCreate, db: Session) -> EventResponse:
+    """``POST /api/v1/tracking/events``'s answer for *event_data*, worked out
+    on *db*, which is left open.
+
+    Synchronous: it reads and writes through *db* as it goes, so call it from
+    a worker thread, never from a coroutine on the event loop. Raises the
+    route's ``HTTPException`` for every refusal and failure, with the route's
+    status codes and fixed texts.
+    """
     service = EventService(db)
     try:
         # Raises ValueError for an id that is not a UUID, as track_event does.
         unknown = service.unknown_id_fields(event_data)
         if not unknown:
-            # Once per event_id (#1543), with the rule /track and /batch use.
+            # An event that names an experiment is stored under the holder of
+            # a linked id, with the variant it was given (#449).
+            presented = event_data.user_id
+            stored = event_data
+            if event_data.experiment_id and presented is not None:
+                holder, _ = _holder_at_receipt(
+                    db, uuid.UUID(str(event_data.experiment_id)), presented
+                )
+                if holder != presented:
+                    stored = event_data.model_copy(update={"user_id": holder})
+            # Once per event_id (#1543) and id as sent, as /track and /batch.
             event, stored_id = _store_once(
                 db,
-                event_data,
+                stored,
                 event_data.event_id,
                 route="events",
                 allow_untagged=False,
+                claim_user_id=presented,
             )
             return _event_response(
-                event, event_id=event_data.event_id, stored_id=stored_id
+                event,
+                event_id=event_data.event_id,
+                stored_id=stored_id,
+                user_id=presented,
             )
     except ValidationError as e:
         raise HTTPException(
@@ -923,6 +1180,31 @@ async def track_events_batch(
         HTTPException 413: If the batch size exceeds the limit
         HTTPException 422: If the batch request format is invalid
     """
+    # Closes ``db`` before it returns: the batch is stored in a worker thread
+    # on the same session, closed again when the work is done.
+    db.close()
+    return await run_in_threadpool(_track_batch_in_worker, request, db)
+
+
+def _track_batch_in_worker(
+    request: EventBatchRequest, db: Session
+) -> EventBatchResponse:
+    """:func:`track_batch_one` on *db*, in a worker thread; closes *db*."""
+    try:
+        return track_batch_one(request, db)
+    finally:
+        db.close()
+
+
+def track_batch_one(request: EventBatchRequest, db: Session) -> EventBatchResponse:
+    """``POST /api/v1/tracking/batch``'s answer for *request*, worked out on
+    *db*, which is left open.
+
+    Synchronous: it reads and writes through *db* as it goes, so call it from
+    a worker thread, never from a coroutine on the event loop. Raises the
+    route's ``HTTPException`` for a refused batch, with the route's status
+    code and text; an event's own failure is listed in the answer.
+    """
     # Check batch size
     if len(request.events) > 100:
         raise HTTPException(
@@ -943,6 +1225,7 @@ async def track_events_batch(
             # Find experiment ID if specified
             experiment_id = None
             variant_id = None
+            stored_user_id = event_request.user_id
             if event_request.experiment_key:
                 experiment = (
                     db.query(Experiment)
@@ -953,8 +1236,8 @@ async def track_events_batch(
 
                 if experiment:
                     experiment_id = experiment.id
-                    variant_id = _variant_at_receipt(
-                        db, experiment, event_request.user_id
+                    stored_user_id, variant_id = _holder_at_receipt(
+                        db, experiment.id, event_request.user_id, experiment
                     )
 
             # Find feature flag ID if specified
@@ -991,7 +1274,7 @@ async def track_events_batch(
 
             # Create event data
             event_data = _event_model(experiment_id, feature_flag_id)(
-                user_id=event_request.user_id,
+                user_id=stored_user_id,
                 event_type=event_request.event_type,
                 event_name=event_request.event_name or event_request.event_type,
                 experiment_id=str(experiment_id) if experiment_id else None,
@@ -1003,14 +1286,16 @@ async def track_events_batch(
                 event_id=event_request.event_id,
             )
 
-            # Track the event, once per event_id (#1543). Items commit one at
-            # a time, so a repeat later in this batch finds the earlier one.
+            # Track the event, once per event_id (#1543) and id as sent.
+            # Items commit one at a time, so a repeat later in this batch
+            # finds the earlier one.
             _, stored_id = _store_once(
                 db,
                 event_data,
                 event_request.event_id,
                 route="batch",
                 allow_untagged=True,
+                claim_user_id=event_request.user_id,
             )
             success_count += 1
             if stored_id is not None:
@@ -1089,8 +1374,44 @@ async def get_user_assignments(
         HTTPException 401: If the API key is invalid
         HTTPException 404: If user has no assignments
     """
+    # Closes ``db`` before it returns: the assignments are read in a worker
+    # thread on the same session, closed again when the work is done.
+    db.close()
+    return await run_in_threadpool(
+        _user_assignments_in_worker, user_id, active_only, db
+    )
+
+
+def _user_assignments_in_worker(
+    user_id: str, active_only: bool, db: Session
+) -> List[Dict[str, Any]]:
+    """:func:`user_assignments_one` on *db*, in a worker thread; closes *db*."""
+    try:
+        return user_assignments_one(user_id, active_only, db)
+    finally:
+        db.close()
+
+
+def user_assignments_one(
+    user_id: str, active_only: bool, db: Session
+) -> List[Dict[str, Any]]:
+    """``GET /api/v1/tracking/assignments/{user_id}``'s answer, read on *db*,
+    which is left open.
+
+    Synchronous: it reads through *db*, so call it from a worker thread,
+    never from a coroutine on the event loop.
+    """
     # Create assignment service
     assignment_service = AssignmentService(db)
+
+    # A linked id answers with its person's assignments, one per experiment
+    # by the holder rule, each under the id that was sent (#449). An id never
+    # linked is answered exactly as before.
+    person = person_of(db, user_id)
+    if person.linked:
+        return assignment_service.get_person_assignments(
+            person, user_id, active_only=active_only
+        )
 
     # Get user assignments
     assignments = assignment_service.get_user_assignments(

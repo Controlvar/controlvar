@@ -8,11 +8,13 @@ Flag evaluation and experiment assignment are decided **by the server**: every c
 public API with your `X-API-Key`, the server buckets the user (sticky per user + experiment), and
 the SDK caches the answer per user + key for a TTL. Nothing is bucketed locally.
 
-> **Flag evaluation sends only the user id.** `GET /api/v1/feature-flags/evaluate/{key}?user_id=…`
-> carries none of the user's attributes, so the server evaluates a flag's targeting rules against
-> an empty context. Experiment assignment sends them: `getAssignment`, with `user.attributes`, sends the attributes as
-> `context`. To evaluate a flag with attributes, call the evaluate endpoint with a `context`
-> query parameter (a URL-encoded JSON object of the attributes).
+> **Flag evaluation sends the user's attributes.** `evaluateFlag(flagKey, user)` sends `user.attributes`
+> as `context` on `GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=<URL-encoded JSON object>`,
+> so the flag's targeting rules are evaluated against them. With no attributes, or an empty map,
+> no `context` is sent and the request carries the user id alone. The change is in this
+> repository ([#438](https://github.com/Controlvar/controlvar/issues/438)); it reaches a registry
+> at this SDK's first publish, so a build from a clone of `main` has it and a copy installed
+> earlier does not.
 
 Full reference: [`docs/sdk/android.md`](../../docs/sdk/android.md).
 
@@ -58,7 +60,7 @@ lifecycleScope.launch {
     assignment.variantName      // "control" / "treatment"
     assignment.configuration    // Map<String, Any?>? from the variant definition
 
-    // Feature flag — GET /api/v1/feature-flags/evaluate/new_search?user_id=user-123
+    // Feature flag — GET /api/v1/feature-flags/evaluate/new_search?user_id=user-123&context=%7B%22country%22%3A%22US%22%2C%22plan%22%3A%22pro%22%7D
     val flag = client.evaluateFlag("new_search", user)
     if (flag.enabled) { /* show the feature; flag.config is always null */ }
 
@@ -90,7 +92,7 @@ to persist results across process restarts.
 
 | Method | Returns | On failure |
 |---|---|---|
-| `suspend evaluateFlag(flagKey, user)` | `EvalResult(key, enabled, config)` | Last offline value if any, else throws `FlagNotFoundException` (404) / `ServerException` / `NetworkException` |
+| `suspend evaluateFlag(flagKey, user)` | `EvalResult(key, enabled, config)` | Last offline value if any (not after a 404), else throws `FlagNotFoundException` (404) / `ServerException` / `NetworkException` |
 | `suspend getAssignment(experimentKey, user)` | `Assignment(experimentKey, userId, variantId, variantName, isControl, configuration)` | Last offline value if any, else throws `ServerException` (404: no experiment has the key, or a draft has no control variant) / `NetworkException` |
 | `suspend track(event)` | `Unit` | Never throws; runs in the background |
 | `suspend trackBatch(events)` | `Unit` | Never throws; ≤ 100 events per request |
@@ -102,9 +104,19 @@ to persist results across process restarts.
 
 - Successful evaluations and assignments are cached in memory per **user + key** for
   `cacheTtlMs` and written to the `OfflineStore`. A cache hit makes no request.
-- **Failures are never cached.** On a network/HTTP failure the last successful value from the
-  offline store is returned (not re-cached, so the next call retries); with nothing stored the
-  call throws, exactly as the SDK did before the rewire.
+- The SDK keeps one cached answer per user and flag, together with the attributes it was asked
+  with. A later call is answered from the cache only if its attributes are exactly the same;
+  otherwise the SDK asks the server, and the new answer replaces the cached one. So two calls
+  that differ only in attributes get two answers. The attributes are written with their keys
+  sorted, so the same attributes always find the same cached answer.
+- **Failures are never cached.** The SDK stores the last answer the server gave for each user and
+  flag, whatever attributes it was asked with, and serves it only when the server cannot answer: on a network or HTTP failure other than
+  a 404 it is returned (not re-cached, so the next call retries); with nothing stored the call
+  throws, exactly as the SDK did before the rewire. A 404 removes the stored answer, and the call
+  throws `FlagNotFoundException`.
+- If the attributes cannot be written as JSON (a NaN or an infinite number, at any depth),
+  `evaluateFlag` throws `IllegalArgumentException` ("user.attributes cannot be sent as JSON") and
+  sends nothing.
 - `track` / `trackBatch` never throw: the request is launched on a background `Dispatchers.IO`
   scope and failures are swallowed.
 
@@ -122,6 +134,29 @@ control variant, and an event tracked without a key after the user's cache entri
 (`cacheTtlMs`, 5 minutes by default) is not sent, so pass `experimentKey` on a conversion that
 can come later.
 
+## Event ids
+
+Every event this SDK sends carries an `event_id`, and the server stores an event sent again with
+the same `event_id`, user, experiment, flag and event name only once. The SDK is not on Maven
+Central yet, so this is in the build you make from a clone of this repository.
+
+- `TrackEvent(userId, eventName, eventId = ...)` sets the id. Without one, the SDK makes a
+  lowercase random UUID (version 4) each time you track the event, so tracking the same
+  `TrackEvent` twice sends two events. For an event your code may send again, make the id once,
+  when the event happens (for example `UUID.randomUUID().toString()`), keep it with the event,
+  and pass the same `eventId` each time you send it.
+- A fanned-out event carries the same id in every entry. In `trackBatch`, each event has its own id.
+- At most 255 characters, with no NUL and no lone surrogate; `TrackEvent`'s constructor and
+  `copy()` throw `IllegalArgumentException` for any other id, so that event is never sent. `null`
+  and `""` set none.
+- OkHttp sends a request again by itself when a kept-alive connection that the server or a proxy
+  has closed drops after the request was written. The request it sends again carries the same
+  body and the same `event_id`, so the server stores the event once.
+- A request that times out, or whose new connection drops, is not sent again. To send it again
+  yourself and have it stored once, give the event an `eventId` and send that same id again.
+
+Full details: [Event ids](../../docs/sdk/android.md#event-ids).
+
 ## Consistent hash (compatibility utility)
 
 `ConsistentHash.compute(userId, key)` computes `MD5("{userId}:{key}")`, reads the first 4 bytes as
@@ -135,9 +170,9 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
-| `evaluateFlag` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
+| `evaluateFlag` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=…` | `context`: the user's attributes as JSON, left out when there are none | `{key, enabled, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
 | `getAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
-| `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
+| `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?, event_id}` | ignored |
 | `track` without keys, `trackBatch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored |
 
 ## Tests
@@ -166,7 +201,7 @@ bash sdk/android/examples/contract_smoke.sh
 It prints:
 
 ```text
-{"sdk":"android","assign":{"variant_name":"treatment","is_control":false,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
+{"sdk":"android","assign":{"variant_name":"treatment","is_control":false,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true},"event_id":{"user_id":"smoke-<uuid>","event_name":"contract_dedup_<uuid>","id":"contract-<uuid>","sends":2}}
 ```
 
 Runs `com.controlvar.android.examples.ContractSmoke` from the JVM build above
@@ -180,7 +215,8 @@ forces a rebuild). Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`),
 `ExperimentationClient.track()` is fire-and-forget — it launches on a background scope and swallows
 every error — so the smoke calls it *and* posts the same `TrackEvent.toJson()` bodies through
 `HttpClient`, which throws on a non-2xx response. A renamed field or a path the backend does not
-serve fails the smoke.
+serve fails the smoke. It also sends one keyed event twice with one fixed `eventId` and reports it
+as `event_id`; the runner then checks that the server stored that event once.
 
 CI runs this SDK's contract smoke against a real API: `android` is in the `sdks:` list of the
 SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml). The smoke

@@ -57,11 +57,8 @@ COUNTED = "a flag evaluation that failed on the server: no source, counted on pu
 #: (file, enclosing function) -> what its rows mean.
 WRITERS: Dict[Tuple[str, str], str] = {
     ("backend/app/services/metrics_service.py", "MetricsService.log_error"): HELPER,
-    ("backend/app/api/v1/endpoints/client_errors.py", "report_client_error"): STAMPED,
-    (
-        "backend/app/api/v1/endpoints/client_errors.py",
-        "report_client_errors_batch",
-    ): STAMPED,
+    ("backend/app/api/v1/endpoints/client_errors.py", "report_one"): STAMPED,
+    ("backend/app/api/v1/endpoints/client_errors.py", "report_batch_one"): STAMPED,
     (
         "backend/app/services/feature_flag_service.py",
         "FeatureFlagService.evaluate_flag_detailed",

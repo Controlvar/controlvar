@@ -25,7 +25,9 @@ custom metric adds its value twice. To have it counted once, give it an `event_i
   out, `null` and `""` all mean no `event_id`. A number, longer text, or text holding NUL is
   refused with `422`, and in `/batch` one such event refuses the whole request.
 - The server does not store an event when it already has one with the same `event_id`, user,
-  experiment, flag and event name. `POST /api/v1/tracking/track` and `POST /api/v1/tracking/events`
+  experiment, flag and event name. The user is the user id the event was sent with, also when the
+  event is stored under another id of a linked person ([below](#ids-linked-as-one-person)).
+  `POST /api/v1/tracking/track` and `POST /api/v1/tracking/events`
   answer it with `200`, `"duplicate": true` and the stored event's `id`;
   `POST /api/v1/tracking/batch` counts it in `success_count` and in `duplicate_count`. The first
   one sent is kept: the value, metadata and timestamp of a later one are not compared and not
@@ -50,19 +52,26 @@ The Java SDK gives every event an `event_id` ([Event ids](../sdk/java.md#event-i
 JavaScript SDK sends the `eventId` you give it, and makes none itself
 ([Event ids](../sdk/javascript.md#event-ids)). The Python SDK sends the `event_id` you give it, and
 makes none itself ([Event ids](../sdk/python.md#event-ids)). The React and React Native SDKs give
-every event an `event_id`, from their next published version
+every event an `event_id`, from version 0.2.0
 ([React](../sdk/react.md#event-ids), [React Native](../sdk/react-native.md#event-ids)). The .NET
-SDK gives every event an `event_id`, from its next published version
-([Event ids](../sdk/dotnet.md#event-ids)). The Elixir SDK, which you build from this repository,
-gives every event an `event_id` ([Event ids](../sdk/elixir.md#event-ids)).
+SDK gives every event an `event_id`, from version 0.2.0
+([Event ids](../sdk/dotnet.md#event-ids)). The Android SDK, which you build from a clone of this
+repository, gives every event an `event_id` ([Event ids](../sdk/android.md#event-ids)). The Elixir
+SDK, which you build from this repository, gives every event an `event_id`
+([Event ids](../sdk/elixir.md#event-ids)).
 No other
-SDK has an `event_id` option yet ([Limitations](../getting-started/limitations.md#sdks)): send an
+SDK has an `event_id` option ([Limitations](../getting-started/limitations.md#sdks)): send an
 event that may be sent again to `POST /api/v1/tracking/track` or `POST /api/v1/tracking/batch`
 yourself.
 
-`event_dedup_keys` holds your app's user ids and keeps them when events are deleted. An operator
-erasing one person's events by hand must delete their keys too. An `event_id` is remembered for as
-long as its key is kept.
+`event_dedup_keys` holds your app's user ids and keeps them when events are deleted. Erasing one
+app user's data ([Erase one app user's data](../api/erase-user-data.md)) deletes their keys with
+their events, so an `event_id` they send again after an erase is stored again. An `event_id` is
+remembered for as long as its key is kept.
+When the person's ids are linked ([below](#ids-linked-as-one-person)), the erase covers every
+one of their ids and their links in `identity_aliases`, because an event one id sends after the
+link can be stored under another
+([A user linked to other ids](../api/erase-user-data.md#a-user-linked-to-other-ids)).
 
 ### When sending fails
 
@@ -89,6 +98,28 @@ that.
   count in no variant included.
 - Holdout results and CUPED history have their own rules: see
   [Mutual Exclusion Groups](../api/mutual-exclusion-groups.md) and [CUPED](../api/cuped.md).
+
+## Ids linked as one person
+
+`POST /api/v1/tracking/alias` (beta)
+[links an anonymous id to a known id of the same person](identity.md); it needs a server-side
+key and is called from your backend
+([API endpoints](../api/endpoints.md#link-an-anonymous-id-to-a-known-user-id-beta)). From the
+link on:
+
+- An event that names an experiment is stored under the id that holds the person's assignment in
+  it, the one stored first among their ids, whichever of their ids sent it, and counts for that
+  assignment's variant while the experiment is running. The answer names the id that sent it. An
+  event that names no experiment is stored under the id that sent it.
+- An `event_id` is remembered per user id as sent: the same `event_id` sent once under each of
+  two linked ids is stored twice, and a revenue, duration or custom metric adds its value twice.
+- Nothing recorded before the link is moved: those events keep the id and the variant they were
+  stored with, and a person who already had an assignment under each id counts once for each of
+  them.
+- Holdout membership follows the person; holdout results do not: a linked person's conversions
+  count only under the id the holdout first recorded.
+- Interaction detection, the audience preview and CUPED's history count each id on its own.
+- Flags are not linked: each id is evaluated on its own.
 
 ## Timestamps
 

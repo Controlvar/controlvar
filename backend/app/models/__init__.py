@@ -109,6 +109,7 @@ CORE_MODEL_MODULES = (
     "feature_flag",
     "global_holdout",
     "holdout_population",
+    "identity_alias",
     "llm_experiment",
     "metrics.metric",
     "mutual_exclusion_group",

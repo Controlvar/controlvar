@@ -372,12 +372,26 @@ text = "The new password must meet the same requirements as registration."
 by = ["test:backend/tests/integration/api/test_own_password_change.py::test_a_weak_new_password_is_422"]
 
 [[unit]]
-text = "Changing your password does not sign out your other sessions: a token issued before the change keeps working until it expires."
-by = ["test:backend/tests/integration/api/test_own_password_change.py::test_a_token_issued_before_the_change_keeps_working"]
+text = "Changing your password signs out your other sessions."
+by = [
+    "test:backend/tests/integration/api/test_own_password_change.py::test_a_token_issued_before_the_change_is_refused",
+    "test:backend/tests/integration/api/test_stale_token_on_every_path.py::test_a_stale_token_is_refused_on_every_signed_in_path",
+]
 
 [[unit]]
-text = "To end them straight away, an administrator deactivates the account (sets is_active to false)."
-by = ["test:backend/tests/integration/api/test_local_auth_path.py::TestLoginFlow::test_deactivated_after_login_gets_400"]
+text = "This one stays signed in."
+by = [
+    "test:backend/tests/integration/api/test_password_change_ends_sessions.py::test_the_answer_carries_a_new_token_and_the_sending_token_is_refused",
+    "test:frontend/src/tests/pages/account-password.test.tsx::sends the change, keeps the new token, and says it is done, clearing the fields",
+]
+
+[[unit]]
+text = "A script holding an older token gets 401 and logs in again."
+by = ["test:backend/tests/integration/api/test_own_password_change.py::test_a_token_issued_before_the_change_is_refused"]
+
+[[unit]]
+text = "With two-step sign-in on, or required for your role, every session ends, this one too, and you sign in again."
+by = ["test:backend/tests/integration/api/test_password_change_ends_sessions.py::test_an_account_that_signs_in_with_a_second_step_gets_204_and_signs_in_again"]
 
 [[unit]]
 text = "An administrator resets another user's password with PUT /api/v1/admin/users/{id}; nobody, administrators included, can change their own password that way."
@@ -495,10 +509,12 @@ by = [
 ]
 
 [[unit]]
-text = "Delete removes the account after you confirm it."
+text = "Delete removes the account, and every API key it created, after you confirm it."
 by = [
     "test:frontend/src/tests/admin/UserTable.test.tsx::shows confirmation before delete",
     "test:frontend/src/tests/admin/UserTable.test.tsx::clicking delete button calls AdminService.deleteUser with user id",
+    "test:backend/tests/integration/api/test_account_removal_keeps_segments_and_schedules.py::test_removing_an_account_keeps_its_segments_and_rollout_schedules",
+    "test:backend/tests/integration/api/test_account_removal_keeps_segments_and_schedules.py::test_only_api_keys_are_removed_with_the_account",
 ]
 
 [[unit]]
@@ -554,8 +570,22 @@ by = [
 ]
 
 [[unit]]
-text = "Check which keys a user created before deactivating them."
-by = ["exempt:baseline"]
+text = "When you clear Active, the Edit dialog lists the user's active keys, with each key's scopes and when it was last used, before you save."
+by = [
+    "test:frontend/src/tests/admin/EditUserModal.test.tsx::lists only the keys of this user that are active, not those of another user or an expired one",
+    "test:frontend/tests/e2e/dialog-focus.journey.spec.ts::the edit-user dialog: focus in, Tab trapped, page inert, focus back, announced after close",
+]
+
+[[unit]]
+text = "To keep an application running, switch it to a key created by an account that is staying, then deactivate the user."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Reactivating the user makes their keys work again, unless they have expired."
+by = [
+    "test:backend/tests/integration/api/test_admin_users_api.py::TestDeactivatingAnOwnerStopsTheirKeys::test_the_owners_key_is_401_while_they_are_inactive_and_works_again",
+    "test:backend/tests/integration/api/test_admin_users_api.py::TestDeactivatingAnOwnerStopsTheirKeys::test_a_key_that_expired_meanwhile_stays_401_after_reactivation",
+]
 
 [[unit]]
 text = "With AUTH_PROVIDER=cognito and SYNC_ROLES_ON_LOGIN on (the default), roles come from Cognito groups and are rewritten on every request, so a role change is refused with \"Roles on this deployment come from Cognito groups and are updated on every request."
@@ -653,10 +683,11 @@ text = "Token Errors"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "401 \"Could not validate credentials\" | The access token has expired, or is malformed or altered | Log in again (under cognito, you can also refresh the token)"
+text = "401 \"Could not validate credentials\" | The access token has expired, or is malformed or altered, or your password was changed after it was issued | Log in again (under cognito, you can also refresh the token)"
 by = [
     "test:backend/tests/unit/api/test_local_auth.py::TestGetCurrentUserLocal::test_expired_token_is_401",
     "test:backend/tests/unit/api/test_local_auth.py::TestGetCurrentUserLocal::test_malformed_token_is_401",
+    "test:backend/tests/unit/api/test_local_auth.py::TestGetCurrentUserLocal::test_a_token_from_before_the_password_changed_is_401",
 ]
 
 [[unit]]
@@ -768,19 +799,18 @@ text = "If you notice suspicious activity on your account:"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Ask an administrator to deactivate the account (is_active set to false)."
-by = ["test:backend/tests/unit/api/test_route_surface_rules.py::test_a_deactivated_account_is_refused"]
-
-[[unit]]
-text = "That ends every session straight away; changing the password alone does not."
+text = "Change your password (POST /api/v1/users/me/password), or ask an administrator to reset it; that signs out your other sessions."
 by = [
-    "test:backend/tests/integration/api/test_local_auth_path.py::TestLoginFlow::test_deactivated_after_login_gets_400",
-    "test:backend/tests/integration/api/test_own_password_change.py::test_a_token_issued_before_the_change_keeps_working",
+    "test:backend/tests/integration/api/test_own_password_change.py::test_a_token_issued_before_the_change_is_refused",
+    "test:backend/tests/integration/api/test_own_password_change.py::test_a_superuser_reset_ends_the_accounts_sessions",
 ]
 
 [[unit]]
-text = "Have the administrator reset your password, and reactivate the account once the tokens issued before it was deactivated have expired (12 hours with the default LOCAL_AUTH_TOKEN_TTL_MINUTES)."
-by = ["test:backend/tests/unit/core/test_config_environment.py"]
+text = "To be sure every session has ended while you check, ask an administrator to deactivate the account (is_active set to false)."
+by = [
+    "test:backend/tests/unit/api/test_route_surface_rules.py::test_a_deactivated_account_is_refused",
+    "test:backend/tests/integration/api/test_local_auth_path.py::TestLoginFlow::test_deactivated_after_login_gets_400",
+]
 
 [[unit]]
 text = "A deactivated account's tokens are refused only while it stays deactivated."
@@ -796,8 +826,12 @@ by = [
 ]
 
 [[unit]]
-text = "A password change and other changes to your profile are not recorded (#502); keep the account deactivated while you check."
-by = ["test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact"]
+text = "A password change that returns a new token is recorded as a sign-in; other password changes and profile changes are not (#502); keep the account deactivated while you check."
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_password_change_ends_sessions.py::test_the_answer_with_a_token_is_recorded_as_one_sign_in",
+    "test:backend/tests/integration/api/test_password_change_ends_sessions.py::test_the_answer_without_a_token_records_no_sign_in",
+]
 
 [[unit]]
 text = "Resetting two-step sign-in"

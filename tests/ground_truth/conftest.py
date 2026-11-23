@@ -24,8 +24,10 @@ from test_replay import (
     _mask,
     _say,
     credentials,
+    significance_skipped_line,
     start_session,
     summary_text,
+    write_step_summary,
 )
 
 
@@ -55,7 +57,7 @@ def live(pytestconfig: pytest.Config) -> Iterator[driver.Driver]:
             text = summary_text(session)
             for line in text.splitlines():
                 _say(pytestconfig, line)
-            target = os.environ.get("GITHUB_STEP_SUMMARY")
-            if target:
-                with open(target, "a", encoding="utf-8") as stream:
-                    stream.write(text)
+            skipped = significance_skipped_line()
+            if skipped:
+                _say(pytestconfig, skipped)
+            write_step_summary(text, os.environ)

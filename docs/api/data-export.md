@@ -23,7 +23,7 @@ counts, rates and unadjusted p-values are the same.
 When the primary metric is a revenue, count, duration or custom metric, `conversion_rate` is
 empty: `/results` reports that metric's `mean` as a value per assigned user, not a rate. `conversions` is
 still the number of users who sent the metric's event, and `p_value` is the p-value of
-Welch's t-test that `/results` reports.
+the permutation test of Welch's t that `/results` reports.
 
 `p_value` is the unadjusted p-value, while `is_significant` is decided on the corrected
 one. With two or more treatments a row can therefore show `p_value` 0.035 and

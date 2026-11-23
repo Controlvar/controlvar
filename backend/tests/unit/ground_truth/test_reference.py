@@ -8,7 +8,11 @@
   the same and only the degrees of freedom differ, so ``equal_var=True``
   could pass unseen there (on these arrays at 30/70 it moves the revenue
   p-value from 0.00022 to 0.00494);
-* the corrections equal statsmodels' and the docs' worked example.
+* the corrections equal statsmodels' and the docs' worked example;
+* a mean's p-value (engine 1.13.0) is scipy's permutation test of Welch's t,
+  exact where scipy can enumerate, reproducible from its seed, and compared
+  with the server's within ``permutation_tolerance``, pinned at three p-values;
+  ``is_significant`` only away from alpha.
 
 The arrays are a generated plan replayed through a fake server and counted
 by the contract: what C2 will compare the live results with.
@@ -229,3 +233,90 @@ def test_every_metric_type_has_its_analysis():
     assert {
         reference.ANALYSIS[t] for t in ("revenue", "count", "duration", "custom")
     } == {"mean"}
+
+
+# ---------------------------------------------------------------------------
+# A mean's p-value: two permutation tests, compared within their error
+# ---------------------------------------------------------------------------
+
+#: p -> the tolerance between a server p-value from 2,000 resamples and the
+#: reference's from 10,000, both at p: 5 standard errors of the difference of
+#: two equal-tailed p-values, ``2 * sqrt(q (1 - q) (1/2000 + 1/10000))`` with
+#: ``q = p / 2``, plus the server's step 2/2000.
+TOLERANCES = {
+    0.001: 0.006475856097451795,
+    0.05: 0.03924264635194589,
+    0.5: 0.10706601717798214,
+}
+
+
+@pytest.mark.parametrize("p", sorted(TOLERANCES))
+def test_the_permutation_tolerance_is_pinned(p):
+    """A single proportion's standard error, ``sqrt(p (1 - p) ...)``, gives
+    0.0277 at p 0.05: 1.4 times too tight, and a nightly that flakes."""
+    got = reference.permutation_tolerance(p, p, 2000)
+    assert got == pytest.approx(TOLERANCES[p], rel=1e-12), (p, got)
+
+
+def test_the_servers_resamples_follow_the_documented_rule():
+    """``max(2000, 2000 * ceil(4k / (2000 * alpha)))``, integer arithmetic on
+    ``round(alpha * 10**9)``: at 0.9 with 50 treatments and 0.8 with 100 the
+    float formula would say 4,000."""
+    rule = {
+        (1, 0.95): 2000,
+        (2, 0.95): 2000,
+        (6, 0.99): 4000,
+        (25, 0.99): 10000,
+        (50, 0.9): 2000,
+        (100, 0.8): 2000,
+        (99, 0.99): 40000,
+    }
+    assert {key: reference.product_resamples(*key) for key in rule} == rule
+
+
+def test_significance_is_compared_only_away_from_alpha():
+    """Compared when both p-values are further than the tolerance from alpha;
+    not when either is within it, where Monte Carlo error alone can put the
+    two on different sides."""
+    for p in (0.5, 0.001):
+        tolerance = reference.permutation_tolerance(p, p, 2000)
+        assert reference.significance_comparable(p, p, 0.05, tolerance), p
+    near = reference.permutation_tolerance(0.05, 0.06, 2000)
+    assert not reference.significance_comparable(0.05, 0.06, 0.05, near)
+    assert not reference.significance_comparable(0.5, 0.06, 0.05, near)
+
+
+def test_the_reference_permutation_p_value_is_scipys_and_reproducible(skewed):
+    """On 11 users (462 assignments) scipy enumerates them all, so the
+    reference is the exact permutation p-value; on the replayed arrays it is
+    scipy's 9,999 resamples, the same for the same seed."""
+    from scipy.stats import PermutationMethod
+
+    control = [0.0, 0.0, 1.5, 3.0, 0.0, 7.25]
+    treatment = [2.0, 0.0, 9.5, 4.0, 6.0]
+    exact = stats.ttest_ind(
+        treatment, control, equal_var=False, method=PermutationMethod(n_resamples=10**6)
+    ).pvalue
+    assert reference.permutation_p(control, treatment, 7) == pytest.approx(
+        exact, rel=1e-12
+    )
+    c = skewed.per_user("control", "purchase", "revenue")
+    t = skewed.per_user("treatment", "purchase", "revenue")
+    rng = reference.permutation_rng(2026, "f1r", "revenue")
+    assert rng == reference.permutation_rng(2026, "f1r", "revenue")
+    assert 0 <= rng < 2**63
+    assert reference.permutation_p(c, t, rng) == reference.permutation_p(c, t, rng)
+
+
+def test_a_mean_gets_the_permutation_p_value_and_welchs_interval(skewed):
+    per_user = {v: skewed.per_user(v, "purchase", "revenue") for v in skewed.variants}
+    rng = reference.permutation_rng(2026, "f1r", "revenue")
+    (treatment,) = reference.compare(per_user, "mean", "none", 0.95, rng=rng)
+    c, t = per_user["control"], per_user["treatment"]
+    assert treatment.p_value == reference.permutation_p(c, t, rng)
+    assert (
+        treatment.absolute_difference_ci
+        == reference.welch(c, t, 0.95).absolute_difference_ci
+    )
+    with pytest.raises(ValueError, match="needs rng"):
+        reference.compare(per_user, "mean", "none", 0.95)

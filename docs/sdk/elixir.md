@@ -376,7 +376,9 @@ defmodule MyAppWeb.CheckoutController do
   alias Controlvar, as: Experiments
 
   def show(conn, _params) do
-    user_id = get_session(conn, :user_id) || "anonymous"
+    user_id =
+      get_session(conn, :user_id) || get_session(conn, :visitor_id) ||
+        Base.url_encode64(:crypto.strong_rand_bytes(16), padding: false)
 
     new_checkout = Experiments.feature_enabled?(MyApp.Experiments, "new-checkout", user_id)
 
@@ -392,6 +394,12 @@ defmodule MyAppWeb.CheckoutController do
   end
 end
 ```
+
+A visitor who has not signed in is assigned under an id of their own: the `:visitor_id` your app
+puts in their session on the first visit, or a new id until it does. Never fall back to a
+placeholder such as `"anonymous"`: every visitor without one would share it, and with it one
+assignment. When the visitor signs in, your backend links their `:visitor_id` to their
+`:user_id` ([Link a visitor's ids when they sign in](../guides/identity.md)).
 
 ---
 

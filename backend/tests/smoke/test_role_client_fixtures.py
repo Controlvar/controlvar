@@ -61,8 +61,7 @@ ROLE_CLIENT_FIXTURES = frozenset(
         "mock_auth",
         "mock_auth_superuser",
         # backend/tests/integration/conftest.py, plus file-local ones of the
-        # same names (contract/e2e conftests, test_interaction_endpoints.py,
-        # test_experiment_wizard_endpoints.py)
+        # same names (contract/e2e conftests, test_interaction_endpoints.py)
         "admin_client",
         "developer_client",
         "analyst_client",
@@ -83,7 +82,6 @@ ROLE_CLIENT_FIXTURES = frozenset(
         # test_workspaces_api.py defines a fixture of the same name.
         "as_user",
         # Fixtures that write the override themselves (#476).
-        "authenticated_client",  # test_experiment_wizard_endpoints.py
         "client_analyst",  # test_bayesian_results_api.py
         "client_developer",  # test_bayesian_results_api.py
         "client_with_developer",  # test_ai_design_endpoints.py

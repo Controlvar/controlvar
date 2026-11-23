@@ -1,6 +1,6 @@
 {
   "name": "@controlvar/react-native-sdk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "React Native SDK for Controlvar — server-decided feature flags and A/B assignments, event tracking, in-memory cache and AsyncStorage offline fallback.",
   "main": "src/index.ts",
   "types": "src/index.ts",

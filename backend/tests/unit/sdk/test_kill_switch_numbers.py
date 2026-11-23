@@ -15,8 +15,8 @@ page with it, move too:
   (``config.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS``) and where the edge adapters
   pass the caller's KV lifetime on, so a default written in place of the
   constant fails too.
-* The directories under ``sdk/``, except the MCP server's (``NOT_AN_SDK``,
-  which keeps no answer), are exactly the table's keys plus
+* The directories under ``sdk/``, except the MCP server's and the visual
+  script's (``NOT_AN_SDK``: neither keeps a flag answer), are exactly the table's keys plus
   ``NO_CONSTANT_OF_ITS_OWN``, which is empty: both OpenFeature providers carry
   their own 300-second default, so each is a row. A new SDK fails here until
   the page has a row for it.
@@ -435,6 +435,7 @@ LOCAL_WORST_SECONDS = 33
 #: there is no lifetime to state (``test_the_mcp_server_keeps_no_answer``).
 NOT_AN_SDK: Dict[str, str] = {
     "mcp": "the MCP server: it asks the API on every call and keeps no answer",
+    "visual": "the visual experiments' browser script: it evaluates no flag",
 }
 
 

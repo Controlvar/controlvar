@@ -16,7 +16,9 @@ routing (which reader a type gets, and that every mean type is routed to the
 mean); the SQL itself is held by
 ``backend/tests/integration/api/test_value_metrics_results.py`` against
 Postgres.  The expected numbers come from scipy on the per-user arrays,
-zeros included.
+zeros included.  A treatment's p-value comes from a permutation test of
+Welch's t (#2041); it is held to scipy's permutation test of the same
+statistic (99,999 resamples) within both tests' Monte Carlo error.
 
 The output for an experiment with a count primary and a duration and a custom
 metric is pinned per ``ENGINE_VERSION`` (``VALUE_RESULTS_FINGERPRINTS``), and
@@ -160,6 +162,31 @@ def _run(
     return output
 
 
+#: scipy's resamples, and the product's permutations at one treatment.
+_REFERENCE_RESAMPLES = 99_999
+_PRODUCT_PERMUTATIONS = 1_999
+
+
+def _assert_permutation_p(p_value: float, treatment_y, control_y) -> None:
+    """``p_value`` is scipy's permutation p-value of Welch's t on the same
+    per-user arrays, within 5 standard errors of the difference of two
+    Monte Carlo p-values plus one step of the product's."""
+    reference = stats.ttest_ind(
+        treatment_y,
+        control_y,
+        equal_var=False,
+        method=stats.PermutationMethod(
+            n_resamples=_REFERENCE_RESAMPLES, batch=10_000, rng=2041
+        ),
+    ).pvalue
+    q = min(max((p_value + reference) / 4, 1 / (_REFERENCE_RESAMPLES + 1)), 0.5)
+    se = 2 * math.sqrt(
+        q * (1 - q) * (1 / (_PRODUCT_PERMUTATIONS + 1) + 1 / (_REFERENCE_RESAMPLES + 1))
+    )
+    tolerance = 5 * se + 2 / (_PRODUCT_PERMUTATIONS + 1)
+    assert abs(p_value - reference) <= tolerance, (p_value, reference, tolerance)
+
+
 def _arms(output: Dict[str, Any]):
     [result] = output["metrics"]
     by_name = {v["variant_name"]: v for v in result["variants"]}
@@ -232,9 +259,9 @@ def test_a_count_metric_whose_events_carry_no_value_is_not_0_vs_0(monkeypatch):
     assert (control["mean"], treatment["mean"]) == (1.5, 2.0)
     assert (control["conversions"], treatment["conversions"]) == (75, 80)
     assert (control["sample_size"], treatment["sample_size"]) == (100, 100)
-    assert treatment["statistical_test_used"] == "welch_t_test"
-    assert treatment["p_value"] == pytest.approx(welch.pvalue, rel=1e-9)
-    assert treatment["p_value"] == pytest.approx(0.006359822708272411, rel=1e-9)
+    assert treatment["statistical_test_used"] == "permutation_t_test"
+    _assert_permutation_p(treatment["p_value"], treatment_y, control_y)
+    assert treatment["p_value"] < 0.05
     assert treatment["absolute_difference"] == pytest.approx(0.5, rel=1e-12)
     assert treatment["absolute_difference_ci"] == pytest.approx(
         tuple(welch.confidence_interval(0.95)), rel=1e-9
@@ -332,8 +359,8 @@ def test_duration_and_custom_match_scipy_on_the_per_user_values(
         assert variant["confidence_interval"] == pytest.approx(
             (y.mean() - half, y.mean() + half), rel=1e-12
         )
-    assert treatment["statistical_test_used"] == "welch_t_test"
-    assert treatment["p_value"] == pytest.approx(welch.pvalue, rel=1e-9)
+    assert treatment["statistical_test_used"] == "permutation_t_test"
+    _assert_permutation_p(treatment["p_value"], treatment_y, control_y)
     assert treatment["absolute_difference"] == pytest.approx(
         treatment_y.mean() - control_y.mean(), rel=1e-12
     )
@@ -483,6 +510,9 @@ VALUE_RESULTS_FINGERPRINTS: Dict[str, str] = {
     # 1.12.0 (#1969) changes the segment breakdown's heterogeneity flag only:
     # 1.11.0's.
     "1.12.0": "01ce8332a03c5cf0032f72277011ac993875cd40c4a6b3c8d127c74e24da2e96",
+    # 1.13.0 (#2041): each metric's p-value comes from the permutation test
+    # of Welch's t, named permutation_t_test.
+    "1.13.0": "91e20f3464393510a306f69a8dc1df666e5a49a7124005f376559a71e00da685",
 }
 
 

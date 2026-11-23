@@ -7,6 +7,7 @@
  */
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import ExperimentDetailPage from '@/pages/experiments/[id]';
 import {
   ACTIVE_REASON,
@@ -505,6 +506,154 @@ describe('Who can join — rules the builder cannot show', () => {
     expect(within(s).queryByRole('dialog')).toBeNull();
     expect(within(s).getByTestId('targeting-raw')).toBeInTheDocument();
     expect(puts).toEqual([]);
+  });
+});
+
+// #1797: both questions in this section move focus in, cancel on Escape and
+// give focus back. The button each one replaces comes back on Cancel, so focus
+// returns to that new button; a confirmed answer places focus itself.
+describe('Who can join — the two questions and the keyboard (#1797)', () => {
+  it('Replace rules: focus opens on Cancel, and Escape sends nothing and gives focus back to Replace rules', async () => {
+    const puts = install({ targeting_rules: FLAT_RULES });
+    const user = userEvent.setup();
+    render(<ExperimentDetailPage />);
+    const s = await section();
+    within(s).getByRole('button', { name: 'Replace rules' }).focus();
+    await user.keyboard('{Enter}');
+
+    const dialog = within(s).getByRole('dialog', { name: 'Replace rules' });
+    expect(dialog).toHaveAccessibleDescription(
+      'These rules will be discarded when you save new ones. Until you save, nothing changes.',
+    );
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus();
+    expect(within(s).queryByRole('button', { name: 'Replace rules' })).toBeNull();
+
+    await user.keyboard('{Escape}');
+    expect(within(s).queryByRole('dialog')).toBeNull();
+    expect(within(s).getByRole('button', { name: 'Replace rules' })).toHaveFocus();
+
+    // Cancel does the same.
+    await user.keyboard('{Enter}');
+    await user.click(within(s).getByRole('button', { name: 'Cancel' }));
+    expect(within(s).getByRole('button', { name: 'Replace rules' })).toHaveFocus();
+    expect(puts).toEqual([]);
+  });
+
+  it('Replace rules: "Start with no rules" moves focus to + Add Group, the empty editor\'s one control', async () => {
+    const puts = install({ targeting_rules: FLAT_RULES });
+    const user = userEvent.setup();
+    render(<ExperimentDetailPage />);
+    const s = await section();
+    await user.click(within(s).getByRole('button', { name: 'Replace rules' }));
+    await user.click(within(s).getByRole('button', { name: 'Start with no rules' }));
+    expect(within(s).queryByRole('dialog')).toBeNull();
+    expect(within(within(s).getByTestId('targeting-editor')).getByTestId('add-group')).toHaveFocus();
+    expect(puts).toEqual([]);
+  });
+
+  it('Replace rules, opener gone: once the experiment starts under the open question, Cancel lands on the docs link', async () => {
+    // Started from the header while the question is open: on an active
+    // experiment Replace rules is not offered, so it cannot come back.
+    let state: Experiment = { ...BASE, status: 'paused', targeting_rules: FLAT_RULES };
+    mockedApiFetch.mockImplementation(
+      routedApi([
+        { path: '/api/v1/experiments/exp-1', handler: () => state },
+        {
+          method: 'POST',
+          path: '/api/v1/experiments/exp-1/start',
+          handler: () => {
+            state = { ...state, status: 'active' };
+            return state;
+          },
+        },
+      ]) as unknown as typeof apiFetch,
+    );
+    const user = userEvent.setup();
+    render(<ExperimentDetailPage />);
+    const s = await section();
+    await user.click(within(s).getByRole('button', { name: 'Replace rules' }));
+    await user.click(screen.getByTestId('action-start'));
+    await waitFor(() => expect(screen.getByTestId('experiment-status')).toHaveTextContent('Active'));
+    expect(within(s).queryByRole('button', { name: 'Replace rules' })).toBeNull();
+
+    const dialog = within(s).getByRole('dialog', { name: 'Replace rules' });
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(within(s).queryByRole('dialog')).toBeNull();
+    expect(within(s).getByRole('link', { name: 'Read about targeting rules' })).toHaveFocus();
+  });
+
+  it('Save rules while paused, fallback: while the save runs nothing takes focus (Save rules and the editor\'s Cancel are both disabled)', async () => {
+    // The opener-gone case is not reachable here: Keep editing and Escape
+    // always bring Save rules back, enabled. The fallback acts only at
+    // confirm, when it is disabled with Save rules for the whole request.
+    let release: (value: unknown) => void = () => undefined;
+    install({ status: 'paused' }, () => new Promise((resolve) => (release = resolve)));
+    const user = userEvent.setup();
+    render(<ExperimentDetailPage />);
+    const s = await section();
+    await user.click(editButton()!);
+    await user.click(within(s).getByRole('button', { name: 'Save rules' }));
+    const dialog = within(s).getByRole('dialog', { name: 'Save rules while paused' });
+    await user.click(within(dialog).getByRole('button', { name: 'Save rules' }));
+
+    expect(within(s).queryByRole('dialog')).toBeNull();
+    expect(within(s).getByTestId('targeting-save')).toBeDisabled();
+    expect(within(s).getByTestId('targeting-cancel')).toBeDisabled();
+    expect(document.activeElement).toBe(document.body);
+
+    release({ ...BASE, status: 'paused' });
+    await waitFor(() => expect(editButton()).toHaveFocus());
+  });
+
+  it('Save rules while paused: focus opens on Keep editing, and Escape sends nothing and gives focus back to Save rules', async () => {
+    const puts = install({ status: 'paused' });
+    const user = userEvent.setup();
+    render(<ExperimentDetailPage />);
+    const s = await section();
+    await user.click(editButton()!);
+    within(s).getByRole('button', { name: 'Save rules' }).focus();
+    await user.keyboard('{Enter}');
+
+    const dialog = within(s).getByRole('dialog', { name: 'Save rules while paused' });
+    expect(dialog).toHaveAccessibleDescription(PAUSED_SAVE_NOTICE);
+    expect(within(dialog).getByRole('button', { name: 'Keep editing' })).toHaveFocus();
+
+    await user.keyboard('{Escape}');
+    expect(within(s).queryByRole('dialog')).toBeNull();
+    expect(within(s).getByRole('button', { name: 'Save rules' })).toHaveFocus();
+    expect(puts).toEqual([]);
+  });
+
+  it('Save rules while paused: a confirmed save moves focus to Edit once it lands', async () => {
+    const puts = install({ status: 'paused' });
+    const user = userEvent.setup();
+    render(<ExperimentDetailPage />);
+    const s = await section();
+    await user.click(editButton()!);
+    await user.click(within(s).getByRole('button', { name: 'Save rules' }));
+    const dialog = within(s).getByRole('dialog', { name: 'Save rules while paused' });
+    await user.click(within(dialog).getByRole('button', { name: 'Save rules' }));
+
+    await within(s).findByText('Saved. The new rules apply when you resume the experiment.');
+    expect(puts).toHaveLength(1);
+    await waitFor(() => expect(editButton()).toHaveFocus());
+  });
+
+  it('Save rules while paused: a refused save puts focus on the alert', async () => {
+    install({ status: 'paused' }, () => {
+      throw apiError(409, 'The experiment changed since you opened it.');
+    });
+    const user = userEvent.setup();
+    render(<ExperimentDetailPage />);
+    const s = await section();
+    await user.click(editButton()!);
+    await user.click(within(s).getByRole('button', { name: 'Save rules' }));
+    const dialog = within(s).getByRole('dialog', { name: 'Save rules while paused' });
+    await user.click(within(dialog).getByRole('button', { name: 'Save rules' }));
+
+    const alert = await within(s).findByTestId('targeting-save-error');
+    expect(alert).toHaveTextContent('The experiment changed since you opened it.');
+    await waitFor(() => expect(alert).toHaveFocus());
   });
 });
 

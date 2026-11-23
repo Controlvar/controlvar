@@ -77,6 +77,16 @@ export class AttributedKeys {
   }
 
   /**
+   * After `alias(fromUserId, toUserId)` (#449): record for `toUserId` each experiment key
+   * `keys(fromUserId)` gives (within the horizon, and not draft, paused, completed or archived),
+   * as answered now, so its horizon starts at the alias. Flag keys are not copied: flags are not
+   * linked. `fromUserId`'s own keys are kept.
+   */
+  copyExperiments(fromUserId: string, toUserId: string): void {
+    for (const experimentKey of this.keys(fromUserId).experiments) this.recordExperiment(toUserId, experimentKey);
+  }
+
+  /**
    * The user's keys within the horizon, experiments then flags, each in the order
    * they were first answered. Keys past the horizon are dropped here.
    */

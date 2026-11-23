@@ -51,7 +51,6 @@ SDK = NotAudited("SDK traffic with an API key, not a change made by a person")
 CALCULATION = NotAudited("a calculation: it stores nothing")
 READ_ONLY = NotAudited("a POST that only reads: it changes nothing")
 LLM = NotAudited("LLM experiments are not on the audited event list")
-DRAFT = NotAudited("a wizard draft is not an experiment until it is submitted")
 COGNITO_ACCOUNT = NotAudited(
     "a Cognito account step (sign-up, confirmation, password reset, token "
     "refresh); not on the audited event list"
@@ -73,6 +72,10 @@ INVENTORY = {
     ("PUT", f"{V1}/admin/users/{{user_id}}"): ACCESS,
     # A superuser turning off someone else's two-step sign-in (#1812).
     ("DELETE", f"{V1}/admin/users/{{user_id}}/2fa"): Audited(A.USER_2FA_RESET),
+    # Erasing one app user's data (#2042): a start entry and a final entry.
+    ("POST", f"{V1}/admin/app-users/erase"): Audited(
+        A.APP_USER_ERASE_STARTED, A.APP_USER_ERASED
+    ),
     # --- AI design helpers ---------------------------------------------------
     ("POST", f"{V1}/ai/design"): CALCULATION,
     ("POST", f"{V1}/ai/interpret/{{experiment_id}}"): CALCULATION,
@@ -168,7 +171,10 @@ INVENTORY = {
     ("POST", f"{V1}/experiments/{{experiment_id}}/metadata"): EXP_UPDATE,
     ("POST", f"{V1}/experiments/{{experiment_id}}/pause"): Audited(A.EXPERIMENT_PAUSE),
     ("PUT", f"{V1}/experiments/{{experiment_id}}/schedule"): EXP_UPDATE,
-    ("POST", f"{V1}/experiments/{{experiment_id}}/start"): Audited(A.EXPERIMENT_START),
+    # A start also closes the experiment's open visual editor sessions (#1545).
+    ("POST", f"{V1}/experiments/{{experiment_id}}/start"): Audited(
+        A.EXPERIMENT_START, A.VISUAL_EDITOR_SESSION_CLOSED
+    ),
     # #1545: a visual experiment's preview links.
     ("POST", f"{V1}/experiments/{{experiment_id}}/visual/preview-links"): Audited(
         A.EXPERIMENT_PREVIEW_LINK_CREATE
@@ -176,11 +182,11 @@ INVENTORY = {
     ("DELETE", f"{V1}/experiments/{{experiment_id}}/visual/preview-links"): Audited(
         A.EXPERIMENT_PREVIEW_LINKS_REVOKE
     ),
-    # --- experiment wizard ---------------------------------------------------
-    ("POST", f"{V1}/wizard/drafts"): DRAFT,
-    ("PUT", f"{V1}/wizard/drafts/{{draft_id}}/step"): DRAFT,
-    ("POST", f"{V1}/wizard/drafts/{{draft_id}}/submit"): Audited(A.EXPERIMENT_CREATE),
-    ("POST", f"{V1}/wizard/validate"): DRAFT,
+    # #1545: opening the visual editor closes the experiment's open editor
+    # sessions, one entry each.
+    ("POST", f"{V1}/experiments/{{experiment_id}}/visual/editor-tickets"): Audited(
+        A.VISUAL_EDITOR_SESSION_CLOSED
+    ),
     # --- holdouts ------------------------------------------------------------
     # is_active true also ends the active holdout: one deactivate for it.
     ("POST", f"{V1}/holdout"): Audited(A.HOLDOUT_CREATE, A.HOLDOUT_DEACTIVATE),
@@ -215,9 +221,11 @@ INVENTORY = {
     ("POST", f"{V1}/segments/{{segment_id}}/preview"): READ_ONLY,
     # --- users ---------------------------------------------------------------
     ("POST", f"{V1}/users/"): Audited(A.USER_CREATE),
-    ("POST", f"{V1}/users/me/password"): NotAudited(
-        "a user changing their own password is not on the audited event list"
-    ),
+    # A change answers a new access token for an account that signs in with
+    # its password alone (#501): that answer is a sign-in and writes
+    # user_login. The entry is written only when the answer carries a token;
+    # the 204 answer (two-step sign-in on or required) writes none.
+    ("POST", f"{V1}/users/me/password"): Audited(A.USER_LOGIN),
     # Your own two-step sign-in (#1812). A wrong code writes a log line, never
     # an entry.
     ("POST", f"{V1}/users/me/2fa/enroll"): NotAudited(
@@ -264,6 +272,7 @@ INVENTORY = {
     ("POST", f"{V1}/power/sample-size"): CALCULATION,
     ("POST", f"{V1}/utils/utils/sample-size"): CALCULATION,
     # --- tracking (SDKs) -----------------------------------------------------
+    ("POST", f"{V1}/tracking/alias"): SDK,
     ("POST", f"{V1}/tracking/assign"): SDK,
     ("POST", f"{V1}/tracking/assign/batch"): NotAudited(
         "assignments are not audit events (D49)"
@@ -277,6 +286,23 @@ INVENTORY = {
     # #1545: the visual editor's browser script, with a key in the page.
     ("POST", f"{V1}/tracking/visual"): SDK,
     ("POST", f"{V1}/tracking/visual/preview"): READ_ONLY,
+    # --- the visual editor's sign-in (#1545) -----------------------------------
+    # A used editor link presented again ends the editor it opened.
+    ("POST", f"{V1}/visual-editor/tickets/claim"): Audited(
+        A.VISUAL_EDITOR_TICKET_REUSED, A.VISUAL_EDITOR_SESSION_CLOSED
+    ),
+    ("POST", f"{V1}/visual-editor/sessions"): Audited(
+        A.VISUAL_EDITOR_SESSION_OPENED,
+        A.VISUAL_EDITOR_TICKET_REUSED,
+        A.VISUAL_EDITOR_SESSION_CLOSED,
+    ),
+    ("DELETE", f"{V1}/visual-editor/sessions/current"): Audited(
+        A.VISUAL_EDITOR_SESSION_CLOSED
+    ),
+    # The editor's save is PUT /experiments/{id}'s own write and entry.
+    ("PUT", f"{V1}/visual-editor/sessions/current/variants/{{variant_id}}/changes"): (
+        EXP_UPDATE
+    ),
 }
 
 #: GET routes a reader could expect to be recorded, and why they are not.
@@ -327,7 +353,7 @@ def test_the_inventory_is_exact():
         f"unclassified: {sorted(found - set(INVENTORY))}; "
         f"gone: {sorted(set(INVENTORY) - found)}"
     )
-    assert len(INVENTORY) == 119
+    assert len(INVENTORY) == 122
 
 
 def test_every_mutating_route_is_under_backend_or_modules():

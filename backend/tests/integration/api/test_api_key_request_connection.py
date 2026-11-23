@@ -10,11 +10,13 @@ Driven through the real app with httpx's ``ASGITransport``: the real
 ``deps.get_db``, ``deps.get_api_key`` and route handlers, with only the
 session factory pointed at a QueuePool engine on the test database. A pool
 ``checkout`` listener records the thread of every checkout, and the test
-counts the ones made on the event loop's thread. For the flag evaluate and
-the tracking assign routes, a request whose key use is recorded must make no
-more of those checkouts than the next request with the same key, which
-records nothing. The ruleset route, with a key carrying ``sdk:ruleset``, must
-make none in either case. Nothing here measures time.
+counts the ones made on the event loop's thread. The flag evaluate route, the
+tracking assign route and the ruleset route (with a key carrying
+``sdk:ruleset``) must make none, both for a request whose key use is recorded
+and for the next request with the same key, which records nothing. A positive
+control makes one checkout on the event loop's thread itself and sees the
+listener count it, so a zero above is not a listener that counts nothing.
+Nothing here measures time.
 """
 
 import asyncio
@@ -24,7 +26,7 @@ from datetime import datetime, timezone
 
 import httpx
 import pytest
-from sqlalchemy import create_engine, event, update
+from sqlalchemy import create_engine, event, text, update
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import QueuePool
 
@@ -215,7 +217,6 @@ async def test_recording_the_key_use_adds_no_checkout_on_the_event_loop(
         # One request first, so the measured ones run on a route already used.
         await loop_checkouts(http)
 
-        counts = []
         for stored in (None, _utcnow() - 2 * LAST_USED_RESOLUTION):
             _set_last_used(db_session, key_id, stored)
 
@@ -236,25 +237,26 @@ async def test_recording_the_key_use_adds_no_checkout_on_the_event_loop(
                 f"the second {route} request recorded the key's use again "
                 f"({after_recorded!r} -> {after_not_recorded!r})"
             )
-            if route == "ruleset":
-                assert recorded == 0 and not_recorded == 0, (
-                    f"checkouts on the event loop's thread by the ruleset "
-                    f"request that recorded the key's use, then by the next "
-                    f"one: {recorded} then {not_recorded}, want 0 then 0"
-                )
-            else:
-                # The listener counts on the loop's thread in both runs.
-                assert recorded >= 1 and not_recorded >= 1, (
-                    f"no checkout seen on the event loop's thread "
-                    f"({recorded=}, {not_recorded=})"
-                )
-            counts.append((stored, recorded, not_recorded))
+            assert recorded == 0 and not_recorded == 0, (
+                f"checkouts on the event loop's thread by the {route} request "
+                f"that recorded the key's use, then by the next one "
+                f"(stored last_used_at {stored!r}): {recorded} then "
+                f"{not_recorded}, want 0 then 0"
+            )
 
-    assert all(recorded - not_recorded == 0 for _, recorded, not_recorded in counts), (
-        f"checkouts on the event loop's thread by the {route} request that "
-        f"recorded the key's use, then by the next one with the same key: "
-        + "; ".join(
-            f"stored last_used_at {stored!r}: {recorded} then {not_recorded}"
-            for stored, recorded, not_recorded in counts
-        )
+
+async def test_the_listener_counts_a_checkout_on_the_event_loop(checkouts):
+    """The positive control: a checkout made on the event loop's thread, here
+    in the test, is one the listener records with that thread."""
+    loop_thread = threading.get_ident()
+    start = len(checkouts)
+    session = deps.SessionLocal()
+    try:
+        assert session.execute(text("SELECT 1")).scalar() == 1
+    finally:
+        session.close()
+    made = checkouts[start:]
+    assert made == [loop_thread], (
+        f"one checkout made on the event loop's thread, the listener saw "
+        f"{len(made)} ({sum(1 for t in made if t == loop_thread)} on that thread)"
     )

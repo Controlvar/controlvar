@@ -80,17 +80,27 @@ MODULE_ASYNC_FIRST: set = set()
 CORE_ASYNC_FIRST: set = set()
 
 #: Routes whose ``async`` handler takes a worker trip itself while a ``get_db``
-#: is in its dependency tree. Seven of the core eight close their session first
-#: (the SDK routes, the visual page route (#1545) and the experiment results
-#: routes); ``/tracking/assign`` releases the request's sessions first, and
-#: takes its trip only for an experiment that balances within groups (#448);
-#: the module three release the request's sessions first (the warehouse routes
-#: that wait on the warehouse).
+#: is in its dependency tree. Seventeen of the core eighteen close their
+#: session first (the SDK routes, the visual page route (#1545) and the
+#: experiment results routes); ``/tracking/alias`` releases the request's
+#: sessions first, and takes one trip for the whole link, whose advisory locks
+#: can wait for another request's (#449); the module three release the
+#: request's sessions first (the warehouse routes that wait on the warehouse).
 CORE_HANDLER_TRIPS = {
     ("GET", "/api/v1/sdk/ruleset"),
     ("POST", "/api/v1/tracking/evaluations"),
     ("POST", "/api/v1/tracking/assign"),
     ("POST", "/api/v1/tracking/assign/batch"),
+    ("POST", "/api/v1/tracking/alias"),
+    ("POST", "/api/v1/tracking/track"),
+    ("POST", "/api/v1/tracking/events"),
+    ("POST", "/api/v1/tracking/batch"),
+    ("GET", "/api/v1/tracking/assignments/{user_id}"),
+    ("POST", "/api/v1/tracking/errors"),
+    ("POST", "/api/v1/tracking/errors/batch"),
+    ("GET", "/api/v1/feature-flags/evaluate/{flag_key}"),
+    ("POST", "/api/v1/feature-flags/evaluate/{flag_key}"),
+    ("GET", "/api/v1/feature-flags/user/{user_id}"),
     ("POST", "/api/v1/tracking/visual"),
     ("GET", "/api/v1/experiments/{experiment_id}/results"),
     ("GET", "/api/v1/experiments/{experiment_id}/daily-results"),

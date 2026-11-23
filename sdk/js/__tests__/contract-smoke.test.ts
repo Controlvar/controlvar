@@ -17,12 +17,25 @@ const SDK = join(__dirname, '..');
 const FAKE_API = `
 import { writeFileSync } from 'node:fs';
 const seen = [];
+const links = new Set();
 process.on('exit', () => writeFileSync(process.env.FAKE_API_LOG, JSON.stringify(seen)));
 const reply = (body) => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
 globalThis.fetch = async (url, init = {}) => {
   const body = typeof init.body === 'string' ? JSON.parse(init.body) : null;
   seen.push({ url: String(url), method: init.method || 'GET', key: (init.headers || {})['X-API-Key'], body });
   const path = new URL(String(url)).pathname;
+  if (path === '/api/v1/tracking/alias') {
+    // #449: created for a new link, not for one already stored.
+    const link = JSON.stringify([body.anonymous_id, body.user_id]);
+    const created = !links.has(link);
+    links.add(link);
+    return reply({ anonymous_id: body.anonymous_id, user_id: body.user_id, created });
+  }
+  if (path === '/api/v1/tracking/assign' && process.env.FAKE_LINK_IGNORED && body.user_id.startsWith('smoke-known-')) {
+    // A server that does not follow the link: the known id gets a variant of its own.
+    return reply({ experiment_key: body.experiment_key, user_id: body.user_id, variant_id: 'v-2',
+      variant_name: 'treatment', is_control: false, configuration: null, assigned: true, reason: 'assigned' });
+  }
   if (path === '/api/v1/tracking/assign') {
     // The server answers an enrolled user with assigned: true; FAKE_NO_ASSIGNED drops the field.
     const enrolled = process.env.FAKE_NO_ASSIGNED ? {} : { assigned: true, reason: 'assigned' };
@@ -204,6 +217,66 @@ test('it stops without a key and sends nothing', () => {
   expect(run.status).toBe(1);
   expect(run.stderr).toContain('CONTROLVAR_API_KEY is required');
   expect(seen).toEqual([]);
+});
+
+// #449: with the seed's sdk:ruleset key the smoke also links two ids. The runner gives that key
+// to every smoke as CONTROLVAR_LOCAL_API_KEY and reads the database for what the step stored.
+const LINKING = {
+  CONTROLVAR_API_URL: 'http://api.test',
+  CONTROLVAR_API_KEY: 'k',
+  CONTROLVAR_LOCAL_API_KEY: 'scoped',
+  CONTRACT_EXPERIMENT_KEY: 'exp_a',
+  CONTRACT_FLAG_KEY: 'flag_a',
+  CONTRACT_TARGETED_FLAG_KEY: 'targeted_a',
+  CONTRACT_USER_ID: 'user-a',
+};
+
+test('with the sdk:ruleset key it links a new anonymous id to a new known id on one new client, and reports it', () => {
+  const { run, seen } = runSmoke(LINKING);
+  expect(run.stderr).toBe('');
+  expect(run.status).toBe(0);
+  const report = JSON.parse(run.stdout.trim());
+  const { alias } = report;
+  expect(alias).toEqual({
+    anonymous_id: expect.stringMatching(/^smoke-anon-[0-9a-f-]{36}$/),
+    user_id: expect.stringMatching(/^smoke-known-[0-9a-f-]{36}$/),
+    created: [true, false],
+    variant_before: 'control',
+    variant_after: 'control',
+    event_name: expect.stringMatching(/^contract_alias_[0-9a-f-]{36}$/),
+  });
+  // Every step before it is unchanged and uses the plain key; the alias step alone uses the
+  // sdk:ruleset key: assign the anonymous id, link it twice, a key-less event under the known id
+  // (fanned out to the experiment the anonymous id was answered for), then assign the known id.
+  expect(seen.slice(0, 15).every(r => r.key === 'k')).toBe(true);
+  const step = seen.slice(15);
+  expect(step.map(r => `${r.key} ${r.method} ${new URL(r.url).pathname}`)).toEqual([
+    'scoped POST /api/v1/tracking/assign',
+    'scoped POST /api/v1/tracking/alias',
+    'scoped POST /api/v1/tracking/alias',
+    'scoped POST /api/v1/tracking/batch',
+    'scoped POST /api/v1/tracking/assign',
+  ]);
+  expect(step[0].body).toEqual({ experiment_key: 'exp_a', user_id: alias.anonymous_id });
+  expect(step[1].body).toEqual({ anonymous_id: alias.anonymous_id, user_id: alias.user_id });
+  expect(step[3].body).toEqual({
+    events: [
+      { event_type: alias.event_name, event_name: alias.event_name, user_id: alias.user_id, value: 1, experiment_key: 'exp_a' },
+    ],
+  });
+  expect(step[4].body).toEqual({ experiment_key: 'exp_a', user_id: alias.user_id });
+  expect(Object.keys(report).sort()).toEqual(
+    ['alias', 'assign', 'event_id', 'exposure', 'fanout', 'flag', 'sdk', 'targeted', 'track', 'values']
+  );
+});
+
+test('it fails when the server answers the known id another variant than the anonymous id', () => {
+  const { run } = runSmoke({ ...LINKING, FAKE_LINK_IGNORED: '1' });
+  expect(run.status).toBe(1);
+  expect(run.stdout).toBe('');
+  expect(run.stderr).toBe(
+    'js contract smoke failed: alias: the known id was answered treatment, the anonymous id control\n'
+  );
 });
 
 // Three distinct values per setting, none of them the default or what CI sets.

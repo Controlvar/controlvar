@@ -87,6 +87,9 @@ REVENUE_RESULTS_FINGERPRINTS: Dict[str, str] = {
     # 1.12.0 (#1969) changes the segment breakdown's heterogeneity flag only:
     # 1.11.0's.
     "1.12.0": "ac54b3b114353fad31c73c95e0e8513c579edee92538696ac5ce1c8cc2640071",
+    # 1.13.0 (#2041): the revenue metric's p-value comes from the
+    # permutation test of Welch's t, named permutation_t_test.
+    "1.13.0": "3e62a8db9f08b6de51a3da68ef189cdcc3f8660659be503770a3fc7081cb6673",
 }
 
 
@@ -171,7 +174,9 @@ def test_the_results_analyse_every_type_but_conversion_as_a_mean(monkeypatch):
     """#439: a count, duration or custom metric is its mean per assigned user,
     as a revenue metric is; only a conversion metric is a share of users.  On
     the code before #439 the count, duration and custom rows were
-    ``("proportion", "fisher_exact")``."""
+    ``("proportion", "fisher_exact")``.  From engine 1.13.0 (#2041) every
+    mean is compared with the permutation test of Welch's t; before, with
+    Welch's t-test (``welch_t_test``)."""
     metrics = [_metric(t, is_primary=t is MetricType.CONVERSION) for t in MetricType]
     output = _results(metrics, monkeypatch)
 
@@ -184,10 +189,10 @@ def test_the_results_analyse_every_type_but_conversion_as_a_mean(monkeypatch):
         )
     assert routes == {
         "conversion": ("proportion", "fisher_exact"),
-        "revenue": ("mean", "welch_t_test"),
-        "count": ("mean", "welch_t_test"),
-        "duration": ("mean", "welch_t_test"),
-        "custom": ("mean", "welch_t_test"),
+        "revenue": ("mean", "permutation_t_test"),
+        "count": ("mean", "permutation_t_test"),
+        "duration": ("mean", "permutation_t_test"),
+        "custom": ("mean", "permutation_t_test"),
     }
     # Revenue, duration and custom read event values, once per variant ...
     assert output["totals_read_for"] == sorted(

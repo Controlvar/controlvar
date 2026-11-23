@@ -217,7 +217,6 @@ NOT_PUBLISHABLE: Tuple[str, ...] = (
     "above-the-cap",
     "preconditions",
 )
-TRACKING_ISSUE = "https://github.com/Controlvar/controlvar/issues/823"
 BEGIN = "<!-- scale:begin -->"
 END = "<!-- scale:end -->"
 #: The claims target every unit of the generated block names. PR-5 registers
@@ -2496,12 +2495,12 @@ def _stopped(method: Mapping[str, Any], code: str, split: Mapping[str, str]) -> 
 
 
 #: Said once, and only where a run's bottleneck is ``serialised`` (PE-S9): what
-#: the measurement names, and the issue that tracks the database calls. It says
-#: nothing about what a fix would change.
+#: the measurement names, with one such call named as an example rather than
+#: every one listed. It links no issue, and says nothing about what a fix
+#: would change.
 SERIALISED_NOTE = (
-    "The request path makes synchronous calls that block the API's event loop: the "
-    "rate limiter's call to Redis and the database calls. The database ones are "
-    f"tracked in [#823]({TRACKING_ISSUE})."
+    "The request path makes synchronous calls that block the API's event loop, "
+    "among them the rate limiter's call to Redis."
 )
 
 

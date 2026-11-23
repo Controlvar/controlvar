@@ -90,6 +90,12 @@ public class HTTPClient {
         value.addingPercentEncoding(withAllowedCharacters: unreserved) ?? value
     }
 
+    /// `url` up to its first `?`: what an error message may name of a request. A flag
+    /// evaluation's query carries the user's attributes.
+    static func withoutQuery(_ url: String) -> String {
+        url.firstIndex(of: "?").map { String(url[..<$0]) } ?? url
+    }
+
     // MARK: - Private Helpers
 
     private func encode<Body: Encodable>(_ body: Body) throws -> Data {
@@ -116,8 +122,20 @@ public class HTTPClient {
             (data, response) = try await send(request)
         } catch let urlError as URLError where urlError.code == .cancelled {
             throw ExperimentationError.cancelled
+        } catch let urlError as URLError {
+            // The code and the system's sentence for it ("Could not connect to the server."),
+            // nothing else. URLSession's error carries the request's URL, query included, in its
+            // userInfo (NSErrorFailingURLStringKey and NSErrorFailingURLKey), and a flag
+            // evaluation's query holds the user's attributes. The sentence names no URL (measured
+            // for -1001, -1002, -1003 and -1004 with the attributes in the query).
+            throw ExperimentationError.networkError(
+                URLError(urlError.code, userInfo: [NSLocalizedDescriptionKey: urlError.localizedDescription])
+            )
         } catch {
-            throw ExperimentationError.networkError(error)
+            // Any other error (from an injected URLProtocol, say): its domain and code alone. Its
+            // text is not the system's and may name the URL.
+            let nsError = error as NSError
+            throw ExperimentationError.networkError(NSError(domain: nsError.domain, code: nsError.code))
         }
 
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
@@ -165,7 +183,7 @@ public class HTTPClient {
         }
 
         guard let url = URL(string: urlString) else {
-            throw ExperimentationError.invalidConfig("Invalid URL: \(urlString)")
+            throw ExperimentationError.invalidConfig("Invalid URL: \(Self.withoutQuery(urlString))")
         }
 
         var request = URLRequest(url: url, timeoutInterval: timeout)

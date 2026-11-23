@@ -510,8 +510,9 @@ class TestStatementCount:
         # Measured on the parent commit with exposure tracking on (what the
         # route does): grouped 13, solo 9.  The sibling lookup adds exactly one
         # statement to the grouped path and none to an ungrouped experiment.
-        assert len(grouped) == 14, grouped
-        assert len(solo) == 9, solo
+        # #449's read of the person the id belongs to adds one to both.
+        assert len(grouped) == 15, grouped
+        assert len(solo) == 10, solo
         assert sum("NOT IN" in st for st in grouped) == 1
         assert sum("NOT IN" in st for st in solo) == 0
 

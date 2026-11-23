@@ -133,7 +133,14 @@ by = [
 ]
 
 [[unit]]
-text = "For flags, experiments and warehouse analysis runs, a failure to write the event does not fail the request that made the change: the change is kept and the failure is logged as a warning."
+text = "A feature flag's event is written in the same transaction as the change: if it cannot be written, nothing is saved and the request answers 500."
+by = [
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_a_refused_compliance_event_saves_nothing_and_answers_500",
+    "test:backend/tests/integration/api/test_change_audit_saved.py::test_failed_flag_audit_write_keeps_neither",
+]
+
+[[unit]]
+text = "For experiments and warehouse analysis runs, a failure to write the event does not fail the request that made the change: the change is kept and the failure is logged as a warning."
 by = ["test:backend/tests/integration/api/test_change_audit_saved.py::test_failed_audit_write_keeps_the_answer_and_the_change"]
 
 [[unit]]

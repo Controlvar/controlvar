@@ -1,6 +1,6 @@
 # React SDK
 
-`@controlvar/react-sdk` (v0.1.0) provides a context provider, hooks, a higher-order
+`@controlvar/react-sdk` (v0.2.0) provides a context provider, hooks, a higher-order
 component and an SSR client for using experiments and feature flags from React and Next.js.
 
 Flag evaluation and experiment assignment are decided **by the server**: every call goes to the
@@ -18,16 +18,16 @@ SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlv
 ## Installation
 
 The `@controlvar/react-sdk` package is on [npm](https://www.npmjs.com/package/@controlvar/react-sdk).
-0.1.0 is a beta release.
+0.2.0 is a beta release.
 
 ```bash
-npm install @controlvar/react-sdk@0.1.0
+npm install @controlvar/react-sdk@0.2.0
 ```
 
 Its peer dependencies are `react` >= 17 and `react-dom` >= 17.
 
 To work on the SDK itself, build it from a clone of this repository instead. `npm pack` writes
-`controlvar-react-sdk-0.1.0.tgz`:
+`controlvar-react-sdk-0.2.0.tgz`:
 
 ```bash
 git clone https://github.com/Controlvar/controlvar.git
@@ -38,7 +38,7 @@ npm ci && npm run build && npm pack
 Then install that file in your app:
 
 ```bash
-npm install /path/to/controlvar/sdk/react/controlvar-react-sdk-0.1.0.tgz
+npm install /path/to/controlvar/sdk/react/controlvar-react-sdk-0.2.0.tgz
 ```
 
 To consume the SDK from source inside this monorepo (what `demo/shoplab` does), alias
@@ -150,6 +150,11 @@ const flags = useMultipleFlags(['new_search', 'free_shipping_banner']);
 const showBanner = flags['free_shipping_banner']?.isEnabled ?? false;
 ```
 
+### `useFlagValue(flagKey, type, defaultValue): FlagValueResult`
+
+Reads the value a string, number or json flag serves the current user; see
+[Flag values](#flag-values).
+
 ### `useExperiment(experimentKey): ExperimentAssignment`
 
 Assigns the current user via `POST /api/v1/tracking/assign` (sticky on the server) and returns the
@@ -221,11 +226,10 @@ Conversions are matched to metrics by **event name**: an experiment metric whose
 
 Every event this SDK sends carries an `event_id`. The server stores an event sent again with the
 same `event_id`, user, experiment, flag and event name only once (see
-[How events count](../guides/how-events-count.md#sending-an-event-again)). Use this from the next
-published version of this package, not from the version on npm now. It also needs a Controlvar
-server that includes the `event_id` change ([#1640](https://github.com/Controlvar/controlvar/pull/1640)),
-which the platform release after 0.39.0 is to carry; an older server ignores the field and stores
-an event sent again a second time.
+[How events count](../guides/how-events-count.md#sending-an-event-again)). This package sends it
+from version 0.2.0. It also needs a Controlvar server that includes the `event_id` change
+([#1640](https://github.com/Controlvar/controlvar/pull/1640)), which the platform release after
+0.39.0 is to carry; an older server ignores the field and stores an event sent again a second time.
 
 - Without an `eventId`, each call of the function `useTrackEvent` returns makes a new id, a
   lowercase UUID v4, so two calls are two events. For an event your code may send again (a
@@ -243,6 +247,43 @@ an event sent again a second time.
 
 Escape hatch to the underlying `ExperimentationClient` (for example `client.getAssignments(user.userId)`
 to build a debug overlay). `useExperimentationContext` is an alias.
+
+---
+
+## Flag values
+
+A flag serves two values: its on value to the users it is on for, and its off value to everyone
+else, and to everyone while it is turned off. For a string, number or json flag, read the value
+with `useFlagValue`, giving the type the flag serves: `'string'`, `'number'` or `'json'`.
+
+```tsx
+import { useFlagValue } from '@controlvar/react-sdk';
+
+const { value: label } = useFlagValue('checkout-button-label', 'string', 'Buy now');
+const { value: limit } = useFlagValue('free-shipping-threshold', 'number', 50);
+const { value: theme } = useFlagValue('checkout-theme', 'json', { color: 'gray' });
+```
+
+Pass the flag's off value as your default, so that a flag your code cannot reach behaves as off.
+The hook takes the flag key, the type, then the default; the user is the Provider's.
+
+It returns `{ value, loading, error }` and never throws. `value` is your default while `loading`
+is `true`, and whenever there is no value of that type to read; `error` then says why, as a
+`FlagValueError` whose `code` is `'REQUEST_FAILED'` when the request fails (including a 404 for a
+flag the server does not know; `cause` is the request's error), `'INVALID_RESPONSE'` when the
+server's answer carries no value (a server from before flag values), or `'TYPE_MISMATCH'` when the
+flag serves another type. This SDK has no `onError`, so `error` is the only report. A boolean
+flag is another type; read it with `useFeatureFlag`. Nothing is coerced: `"10"` is not a number.
+
+With `'json'`, the value is checked to be an object or an array, not to match your type
+parameter, and it is the hook's own copy.
+
+The hook shares `useFeatureFlag`'s request and cache: one request answers both for a user and
+flag, reused for `cacheTtlMs`. It asks again when the flag key or the user changes, never because
+the default did, so an inline default object is fine. When the Provider's
+[bootstrap](#start-from-the-servers-answers-bootstrap) has the flag, the hook answers its value at
+the first render, on the server too, with no request; a failed refresh keeps that value and sets
+`error`. Reading a value records no exposure.
 
 ---
 
@@ -272,6 +313,7 @@ disabled evaluation or the control defaults with `error` set.
 
 ```tsx
 // pages/checkout.tsx
+import { randomUUID } from 'node:crypto';
 import { ServerClient } from '@controlvar/react-sdk';
 import type { GetServerSideProps } from 'next';
 
@@ -280,7 +322,7 @@ export const getServerSideProps: GetServerSideProps = async ({ req }) => {
     apiKey: process.env.CONTROLVAR_API_KEY!,
     baseUrl: process.env.CONTROLVAR_API_URL!,
   });
-  const user = { userId: req.cookies['visitor_id'] ?? 'anonymous' };
+  const user = { userId: req.cookies['visitor_id'] ?? randomUUID() };
 
   const [checkout, flags] = await Promise.all([
     client.assignExperiment('checkout_flow', user),
@@ -290,6 +332,12 @@ export const getServerSideProps: GetServerSideProps = async ({ req }) => {
   return { props: { variantKey: checkout.variantKey, flags } };
 };
 ```
+
+A visitor without a `visitor_id` cookie gets a new id of their own; set it as their cookie so they
+keep it. Never fall back to a placeholder such as `'anonymous'`: every visitor without the cookie
+would share it, and with it one assignment. When the visitor signs in, your backend links their
+`visitor_id` to their account's id
+([Link a visitor's ids when they sign in](../guides/identity.md)).
 
 In the App Router, import `ServerClient` from `@controlvar/react-sdk/ssr` in an async server
 component and call the same methods there. Use the `/ssr` subpath rather than the package root: the
@@ -625,7 +673,7 @@ Every request carries `X-API-Key` and `Content-Type: application/json`.
 
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
-| `useFeatureFlag`, `useVariant`, `useMultipleFlags`, `ServerClient.evaluateFeatureFlag`/`getAll`/`bootstrap` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=<url-encoded JSON>` | `context` = `user.attributes` (omitted when empty) | `{key, enabled, config, reason}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
+| `useFeatureFlag`, `useFlagValue`, `useVariant`, `useMultipleFlags`, `ServerClient.evaluateFeatureFlag`/`getAll`/`bootstrap` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=<url-encoded JSON>` | `context` = `user.attributes` (omitted when empty) | `{key, enabled, config, reason, value, value_type}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
 | `useExperiment`, `ServerClient.assignExperiment`/`bootstrap` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `useTrackEvent` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?, event_id}` | ignored |
 | `useTrackEvent` without keys | `POST /api/v1/tracking/batch` | `{events: [ ...track bodies ]}` (max 100 per request) | ignored |
@@ -646,7 +694,11 @@ import type {
   TrackEventOptions,
   Exposure,
   ExperimentationBootstrap,
+  FlagValueResult,
+  FlagValueErrorCode,
+  FlagValueType,
 } from '@controlvar/react-sdk';
+import { FlagValueError } from '@controlvar/react-sdk';   // a class
 
 interface FeatureFlagEvaluation {
   flagKey: string;
@@ -656,6 +708,14 @@ interface FeatureFlagEvaluation {
   loading: boolean;
   error: Error | null;
   reason?: string; // 'targeting_rule' | 'rollout' | 'inactive' | 'error'; undefined when not sent
+  value?: unknown;    // the server's `value`, when it sent one; read it with useFlagValue
+  valueType?: string; // 'boolean' | 'string' | 'number' | 'json'; undefined when not sent
+}
+
+interface FlagValueResult<T> {   // what useFlagValue returns
+  value: T;
+  loading: boolean;
+  error: FlagValueError | null;  // code: 'TYPE_MISMATCH' | 'INVALID_RESPONSE' | 'REQUEST_FAILED'
 }
 
 interface ExperimentAssignment {
@@ -700,6 +760,8 @@ interface ExperimentationBootstrap {   // what ServerClient.bootstrap() returns;
 
 - `useFeatureFlag` / `useMultipleFlags` report the flag as off with `error` set, or keep a
   bootstrapped answer with `error` set.
+- `useFlagValue` answers your default (or keeps a bootstrapped value) with `error` set (see
+  [Flag values](#flag-values)).
 - `useExperiment` returns the control defaults (`variantKey: 'control'`, `isControl: true`,
   `configuration: null`) with `error` set, or keeps a bootstrapped assignment with `error` set.
 - `ServerClient.bootstrap()` never throws: a key it could not get is left out.

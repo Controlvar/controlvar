@@ -97,6 +97,7 @@ on for that user: `"new_dashboard_ui": true` and `"beta_features": true`.
    - Can manage all experiments
    - Can access admin endpoints
    - Can create other users
+   - Can erase one app user's data (beta)
 
 ## Usage Examples
 
@@ -738,9 +739,11 @@ curl -s "http://localhost:8000/api/v1/audit-logs/?page=4611686018427387905&limit
 - **Endpoint**: `POST /api/v1/users/me/password`
 - **Description**: Change your own password. Available when `AUTH_PROVIDER`
   is `local`; otherwise the route answers 404 before the body is validated
-  against the schema. Changing the password does not end other sessions: a
-  token issued before the change keeps working until it expires. To end them
-  straight away, an administrator sets `is_active` to `false`.
+  against the schema. Changing the password signs out every session of the
+  account: every token issued before the change answers 401, the one that
+  sent the request included, and a sign-in that has not finished starts
+  again. An administrator can also end every session of an account by
+  setting `is_active` to `false`.
 - **Headers**: Authorization: Bearer {token}
 - **Request Body**: `new_password` follows the same rules as a new account's.
   ```json
@@ -749,7 +752,11 @@ curl -s "http://localhost:8000/api/v1/audit-logs/?page=4611686018427387905&limit
     "new_password": "string"
   }
   ```
-- **Response**: 204 No Content
+- **Response**: 200 with what `POST /api/v1/auth/login` answers (a new
+  `access_token`, `token_type`, `expires_in` and `user`): use that token from
+  then on. For an account with two-step sign-in on, or required for its role,
+  204 No Content instead: every session has ended, this one too, and it signs
+  in again.
 - **Errors**: 403 when `current_password` is missing or incorrect ("The
   current password is incorrect."), or when the account has no password of
   its own; 422 when `new_password` breaks the rules; 423 with `Retry-After`
@@ -907,7 +914,10 @@ is not significant. For a proportion, near the threshold, the interval and
 Fisher's exact test can disagree either way: 128 of 1,000 against 100 of
 1,000 is not significant (p 0.057) while its interval runs from +0.0001
 to +0.056, and 3 of 50 against 18 of 100 is significant (p 0.049) while its
-interval reaches +0.00003.
+interval reaches +0.00003. For a mean, the test is a permutation test of
+Welch's t (`statistical_test_used` `permutation_t_test`, engine 1.13.0) while
+the interval is Welch's, so the two can disagree either way, most often when
+the variants' sizes are very different.
 
 For a proportion, `relative_improvement_pct_ci` is null only when an arm has no
 users or the control has no conversions. The ratio is taken over values of 0
@@ -1250,6 +1260,58 @@ A 422 names positions and fields, never the ids that were sent.
     }
   ]
   ```
+- **Linked ids**: for an id linked to another as one person
+  ([below](#link-an-anonymous-id-to-a-known-user-id-beta)), the list holds the person's
+  assignments, one per experiment (the one stored first), each with `user_id` the id in the path.
+
+### Link an Anonymous Id to a Known User Id (beta)
+- **Endpoint**: `POST /api/v1/tracking/alias`
+- **Description**: Record that an anonymous id and a known user id are one person, from your
+  backend, when you learn who the visitor is. From then on the tracking routes answer either id
+  as that person: in each experiment the assignment stored first among the person's ids answers
+  for all of them, and an id with no assignment of its own gets no second one. An event either id
+  sends to an experiment is stored under the id that holds that assignment and counts for it
+  ([How events count](../guides/how-events-count.md#ids-linked-as-one-person)). Nothing recorded
+  before the link is moved or changed, and flags are not linked.
+- **Rules**: an anonymous id is linked to one user id and never moved to another. Links are one
+  level deep: an id that has anonymous ids linked to it is not itself linked, and nothing is
+  linked to an id linked as an anonymous id. A user id has at most 100 anonymous ids. The two ids
+  are compared exactly.
+- **Headers**: `X-API-Key: {api_key}`, a server-side key: one with the `sdk:ruleset` scope whose
+  owner can change feature flags, which is an ADMIN, a DEVELOPER, a superuser, or in the full
+  profile anyone whose custom roles or direct grants give `feature_flag (update)`. Unlike batch
+  assignment, the owner need not be able to change experiments. See
+  [Scopes](../security/api-keys.md#scopes).
+- **Body**: `{"anonymous_id": string, "user_id": string}`, each 1 to 255 characters. The ids go in
+  the body only, never in the path.
+- **Response**: 200 OK
+  ```json
+  {"anonymous_id": "visitor-7f3a92", "user_id": "customer-1042", "created": true}
+  ```
+  `created` is `false` when that exact link already exists, and then nothing is written.
+- **Errors**: see the table below. Nothing is written for any of them, and no `detail` names
+  either id.
+- **Rate limit**: the tracking routes' limit, `SDK_RATE_LIMIT_PER_MINUTE` a minute per client
+  address and path.
+
+| Status | When | `detail` |
+|---|---|---|
+| 401 | no key | `API key missing` |
+| 401 | an unknown, expired or revoked key, or one whose owner is deactivated | `Invalid API Key` |
+| 403 | the key lacks the scope | `This API key does not have the 'sdk:ruleset' scope. Create a key with the 'sdk:ruleset' scope for server-side SDK use.` |
+| 403 | the key's owner can no longer change feature flags | `This key's owner can no longer change feature flags, so the key is refused for server-side SDK use.` |
+| 409 | the `anonymous_id` is linked to a different `user_id` | `That anonymous_id is already linked to a different user_id. An anonymous_id can be linked to one user_id.` |
+| 409 | the `anonymous_id` has ids linked to it | `That anonymous_id already has other ids linked to it, so it cannot itself be linked. Links are one level deep; check that the two ids are not swapped.` |
+| 409 | the `user_id` is linked as an anonymous id | `That user_id is itself linked to another user_id, so nothing can be linked to it. Links are one level deep; link to the user_id it is linked to, or check that the two ids are not swapped.` |
+| 409 | the `user_id` already has 100 anonymous ids | `That user_id already has 100 anonymous_ids linked to it, the most allowed, so this anonymous_id was not linked.` |
+| 422 | the two ids are equal | loc `["body"]`, msg `anonymous_id and user_id must differ.` |
+| 422 | either id is exactly `anonymous` or `anon` | loc `["body","anonymous_id"]` or `["body","user_id"]`, msg `must identify one visitor or customer: 'anonymous' and 'anon' are placeholders shared by many and cannot be linked` |
+| 422 | an id missing, empty or over 255 characters, or text the database cannot store | pydantic's message at the field's loc |
+| 429 | over the limit | `Too Many Requests. Please slow down and retry after a moment.`, with `Retry-After` |
+| 500 | anything else | `Could not link the two ids (request ID: <id>).` |
+
+Only `anonymous` and `anon` are refused as placeholders: `Anonymous`, `ANON` or `anonymous-1` is
+an id like any other, so send each visitor's own id.
 
 ## Admin Endpoints
 
@@ -1354,8 +1416,10 @@ A 422 names positions and fields, never the ids that were sent.
   changes nothing and still answers 200.
 - **Deactivating a user**: they can no longer sign in, requests with a token
   they already hold are refused, and **the API keys they created stop
-  working, including keys your applications use**. Check which keys a user
-  created before deactivating them.
+  working, including keys your applications use**. To see which, list every
+  user's keys with `GET /api/v1/api-keys?all=true` and keep those whose
+  `user_id` is this user's `id`; the dashboard's Edit user dialog does this when
+  you clear **Active**.
 - **During a concurrent change**: deactivating an account that is a superuser
   first waits for any change in progress to an active superuser's account,
   then checks that you are still an active superuser. If another administrator
@@ -1399,6 +1463,22 @@ A 422 names positions and fields, never the ids that were sent.
 - **Response**: 204 No Content
 - **Errors**: 400 "Cannot delete your own user account" when the account is
   your own. 404 "User not found".
+
+### Erase One App User's Data (Admin, beta)
+- **Endpoint**: `POST /api/v1/admin/app-users/erase`
+- **Description**: Delete every row stored under one `user_id` your app sent
+  (superuser only); dashboard accounts are not touched.
+- **Headers**: Authorization: Bearer {token}
+- **Request Body**: `{"user_id": "user-to-erase"}`, 1 to 255 characters,
+  matched exactly; any other field answers 422.
+- **Response**: 200 with `receipt_id`, `complete`, `ids_erased` and `deleted`
+  (rows per table). `complete: false` means send the same request again.
+- **Errors**: 401 with no token or with an API key alone; 403 "Not enough
+  permissions" for anyone but a superuser; 422 for a body tracking could not
+  store; 500 when the erase could not be recorded (nothing erased) or failed
+  part way (send the request again).
+- See [Erase one app user's data](erase-user-data.md) for what is and is not
+  deleted, and what results look like afterwards.
 
 ## Error Responses
 
@@ -1994,24 +2074,6 @@ answers 404. Which warehouses are available is on
 
 ---
 
-### Experiment Wizard
-
-See [Experiment Wizard Guide](../guides/experiment-wizard.md) for full documentation.
-
-All six wizard operations are **deprecated**: the dashboard does not use them, and they
-may be removed in a later release.
-
-```text
-POST /api/v1/wizard/drafts              — Create draft (deprecated)
-GET  /api/v1/wizard/drafts              — List my drafts (deprecated)
-GET  /api/v1/wizard/drafts/{id}         — Get draft (deprecated)
-PUT  /api/v1/wizard/drafts/{id}/step    — Update draft step (deprecated)
-POST /api/v1/wizard/validate            — Validate step data (deprecated)
-POST /api/v1/wizard/drafts/{id}/submit  — Submit → create experiment (deprecated)
-```
-
----
-
 ### Rollout Schedules
 
 ```text
@@ -2494,7 +2556,8 @@ GET  /api/v1/experiments/{experiment_id}/split-url/preview — The URL a visitor
 
 Query parameters for preview: `user_id` (required). The preview answers the visitor's stored
 variant, or the variant a new visitor with that id would get, as the assign route does,
-without recording anything.
+without recording anything. For an id linked to another by `POST /api/v1/tracking/alias`, it
+reads that id's own stored variant or hash, not its person's as the assign route does.
 
 **`SplitUrlConfig` schema** (`split_url_config` field):
 

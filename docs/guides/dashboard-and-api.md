@@ -48,7 +48,7 @@ The table lists each capability and where you do it today:
 | A bandit's weight history (beta) | Dashboard | [Multi-armed bandits](../api/multi-armed-bandit.md) |
 | Global holdouts: create and activate; read their results (beta) | Dashboard | [Mutual exclusion groups and global holdout](../api/mutual-exclusion-groups.md) |
 | Mutual exclusion groups | Dashboard | [Mutual exclusion groups and global holdout](../api/mutual-exclusion-groups.md) |
-| Split-URL experiments (full profile) | API only | [Split URL testing](../api/split-url.md) |
+| Split-URL experiments (full profile) | Dashboard | [Split URL testing](../api/split-url.md) |
 | CUPED-adjusted results (beta) | Dashboard | [CUPED](../api/cuped.md) |
 | The interaction scan and the pair test (beta) | Dashboard | [Interaction detection](../api/interaction-detection.md) |
 | Download results as CSV | Dashboard | [Exporting results](user-guide.md#exporting-results) |

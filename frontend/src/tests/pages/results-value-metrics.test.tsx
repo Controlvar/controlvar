@@ -118,7 +118,7 @@ function metricResult(type: MeanType, name: string, analysis: 'mean' | 'proporti
         p_value: mean ? 0.0064 : 0.4985,
         is_significant: mean,
         relative_improvement_pct: mean ? 33.33 : 6.67,
-        statistical_test_used: mean ? 'welch_t_test' : 'fisher_exact',
+        statistical_test_used: mean ? 'permutation_t_test' : 'fisher_exact',
         absolute_difference: mean ? 0.5 : null,
         absolute_difference_ci: mean ? [0.14, 0.86] : null,
       }),

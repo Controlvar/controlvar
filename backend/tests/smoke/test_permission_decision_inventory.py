@@ -170,12 +170,6 @@ DECIDER_CALLS = {
     (E + "bulk_toggle.py", "get_flag_history", "can_read_all_audit_logs", ""),
     (E + "bulk_toggle.py", "stream_audit_logs", "can_read_all_audit_logs", ""),
     (
-        E + "experiment_wizard.py",
-        "submit_draft",
-        "check_permission",
-        "ResourceType.EXPERIMENT, Action.CREATE",
-    ),
-    (
         E + "experiments.py",
         "clone_experiment",
         "check_permission",

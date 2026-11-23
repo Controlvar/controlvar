@@ -3,7 +3,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { TargetingRuleBuilder } from '@/components/targeting';
 import { PageTitle } from '@/components/PageTitle';
-import { docsUrl } from '@/services/docs';
 import { EXPERIMENT_TYPE_LABELS, METRIC_TYPE_LABELS, OPTIMIZATION_TYPE_LABELS } from '@/types/experiments';
 import {
   bayesianConfigProblem,
@@ -12,14 +11,15 @@ import {
   configurationProblems,
   ExperimentFormAction,
   ExperimentFormState,
-  FORM_EXPERIMENT_TYPES,
+  formExperimentTypes,
   FORM_STEPS,
   FormStep,
   maxReachableStep,
   validateStep,
 } from './formState';
 import { BalanceUnavailable, BalanceWithinFields, focusBalanceField, splitProblemShown } from './BalanceWithinFields';
-import { BALANCE_BANDIT_LINE, balanceSummary } from './balanceWithin';
+import { BALANCE_BANDIT_LINE, BALANCE_SPLIT_URL_LINE, balanceSummary } from './balanceWithin';
+import { SPLIT_URL_DESCRIPTION, SplitUrlFields } from './SplitUrlFields';
 import {
   BANDIT_ALLOCATION_LINE,
   BANDIT_DESCRIPTION,
@@ -68,6 +68,7 @@ const TYPE_DESCRIPTIONS: Record<string, string> = {
   a_b: 'Compare a control with one or more alternatives.',
   mv: 'Compare several versions against a control, with each user seeing one version.',
   bandit: BANDIT_DESCRIPTION,
+  split_url: SPLIT_URL_DESCRIPTION,
 };
 
 /** Input types where Enter means "Next" on the first three steps. */
@@ -89,6 +90,8 @@ interface WizardProps {
   onClearError: () => void;
   /** True when this is the first view the page showed after loading. */
   freshLoad: boolean;
+  /** True when the API lists the split_url module: the Type step then offers Split URL (#1961). */
+  splitUrl?: boolean;
 }
 
 const primaryButton =
@@ -108,7 +111,16 @@ const editButton =
  * text or number field on the first three steps presses Next, and does
  * nothing on Estimate and Review.
  */
-export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClearError, freshLoad }: WizardProps) {
+export function Wizard({
+  state,
+  dispatch,
+  error,
+  isSubmitting,
+  onCreate,
+  onClearError,
+  freshLoad,
+  splitUrl = false,
+}: WizardProps) {
   const router = useRouter();
   const rawStep = router.query.step;
   const requested = parseStep(rawStep);
@@ -134,10 +146,10 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
   const step = FORM_STEPS[current];
 
   // The Review row names the saved segments the setting lists, never their ids.
-  // A bandit sends no setting (#1956), so there is nothing to name.
+  // A bandit (#1956) or a split URL experiment (#1961) sends no setting, so there is nothing to name.
   const bandit = state.type === 'bandit';
   const segmentList = useSegmentList(
-    !bandit && state.balance.on && state.balance.groupBy === 'segments' && state.balance.segments.length > 0,
+    !bandit && state.type !== 'split_url' && state.balance.on && state.balance.groupBy === 'segments' && state.balance.segments.length > 0,
   );
   const segmentNames =
     segmentList.state === 'ready' ? new Map(segmentList.segments.map((s) => [s.id, s.name] as const)) : null;
@@ -366,7 +378,7 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
             <fieldset>
               <legend className="text-sm text-slate-700 mb-3">Choose the experiment type.</legend>
               <div className="grid gap-3 sm:grid-cols-2">
-                {FORM_EXPERIMENT_TYPES.map((t) => (
+                {formExperimentTypes(splitUrl).map((t) => (
                   <label
                     key={t}
                     className={`flex gap-3 items-start rounded-lg border p-4 cursor-pointer ${
@@ -393,12 +405,6 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
               </div>
               {/* Under the radios, in DOM order; choosing Bandit moves no focus. */}
               {bandit && <OptimizationTypeField value={state.optimizationType} dispatch={dispatch} />}
-              <p className="text-sm text-slate-600 mt-3" data-testid="wizard-type-note">
-                <a href={docsUrl('api/split-url')} className="text-blue-700 underline hover:text-blue-900">
-                  Split URL
-                </a>{' '}
-                experiments need settings this flow does not ask for. Create them through the API.
-              </p>
             </fieldset>
           )}
 
@@ -423,6 +429,11 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
                 revealProblems={revealProblems}
                 splitProblem={splitProblemShown(state, error?.balance)}
               />
+              {state.type === 'split_url' && (
+                <div className="pt-2">
+                  <SplitUrlFields variants={state.variants} dispatch={dispatch} />
+                </div>
+              )}
               <div className="pt-2">
                 {bandit ? (
                   <div className="space-y-3">
@@ -431,6 +442,8 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
                     </p>
                     <BalanceUnavailable line={BALANCE_BANDIT_LINE} />
                   </div>
+                ) : state.type === 'split_url' ? (
+                  <BalanceUnavailable line={BALANCE_SPLIT_URL_LINE} />
                 ) : (
                   <BalanceWithinFields
                     balance={state.balance}
@@ -534,6 +547,14 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
                             data-testid={`review-variant-configuration-${i}`}
                           >
                             {JSON.stringify(v.configuration)}
+                          </code>
+                        </>
+                      )}
+                      {payload.split_url_config && (
+                        <>
+                          {', page '}
+                          <code className="font-mono break-all" data-testid={`review-variant-page-${i}`}>
+                            {payload.split_url_config.variants[i]?.url}
                           </code>
                         </>
                       )}

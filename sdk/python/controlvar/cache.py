@@ -67,6 +67,11 @@ class UserKeyCache(Generic[T]):
                     live.append((key, value))
             return live
 
+    def forget(self, user_id: str) -> None:
+        """Drop every entry of one user."""
+        with self._lock:
+            self._users.pop(user_id, None)
+
     def clear(self) -> None:
         with self._lock:
             self._users.clear()

@@ -1,6 +1,6 @@
 # React Native SDK
 
-`@controlvar/react-native-sdk` (v0.1) provides feature flag evaluation, A/B experiment
+`@controlvar/react-native-sdk` (v0.2) provides feature flag evaluation, A/B experiment
 assignment and event tracking for React Native apps: a context provider, three hooks and a plain
 client, with an in-memory cache and an AsyncStorage-backed offline fallback.
 
@@ -23,10 +23,10 @@ SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlv
 ## Installation
 
 The `@controlvar/react-native-sdk` package is on
-[npm](https://www.npmjs.com/package/@controlvar/react-native-sdk). 0.1.0 is a beta release.
+[npm](https://www.npmjs.com/package/@controlvar/react-native-sdk). 0.2.0 is a beta release.
 
 ```bash
-npm install @controlvar/react-native-sdk@0.1.0
+npm install @controlvar/react-native-sdk@0.2.0
 ```
 
 Its peer dependencies are `react` (>= 16.8), `react-native` (>= 0.65) and
@@ -49,7 +49,7 @@ AsyncStorage on that line (such as `@latest`): npm saves it, which moves an app 
   declarations, `@types/md5`, are a dependency too, so an app's `tsc` finds them.
 
 To work on the SDK itself, pack it from a clone of this repository instead (it ships TypeScript
-source, so there is no build step). `npm pack` writes `controlvar-react-native-sdk-0.1.0.tgz`:
+source, so there is no build step). `npm pack` writes `controlvar-react-native-sdk-0.2.0.tgz`:
 
 ```bash
 git clone https://github.com/Controlvar/controlvar.git
@@ -60,7 +60,7 @@ npm pack
 Then, in your app, install the tarball:
 
 ```bash
-npm install /path/to/controlvar/sdk/react-native/controlvar-react-native-sdk-0.1.0.tgz
+npm install /path/to/controlvar/sdk/react-native/controlvar-react-native-sdk-0.2.0.tgz
 ```
 
 The SDK Unit Tests workflow packs it and type-checks it in a TypeScript React Native app on every
@@ -153,7 +153,7 @@ remount is answered from the memory cache.
 | `timeoutMs` | `number` | `5000` | Per-request timeout (`AbortController`) |
 | `cacheTtlMs` | `number` | `300000` | How long a successful evaluation/assignment is reused per user + key (memory and AsyncStorage) |
 | `offlineFallback` | `boolean` | `true` | Persist results to AsyncStorage and serve them (even past their TTL) when the request fails, except a flag evaluation that answers 404 (the flag was deleted), which removes the stored answer |
-| `onError` | `(error, operation) => void` | — | Called for every swallowed failure; `operation` is `'evaluateFlag' \| 'getAssignment' \| 'getAllFlags' \| 'track' \| 'trackBatch' \| 'exposure'` |
+| `onError` | `(error, operation) => void` | — | Called for every swallowed failure; `operation` is `'evaluateFlag' \| 'getAssignment' \| 'getAllFlags' \| 'track' \| 'trackBatch' \| 'exposure' \| 'value'` (`'value'`: see [Flag values](#flag-values)) |
 | `onExposure` | `(exposure: Exposure) => void` | — | Called once each time the server enrols the user in an experiment and the answer is not cached; see [Exposure hook](#exposure-hook) |
 
 ---
@@ -170,13 +170,18 @@ argument as `context`; when it has none, the provider's `attributes`. The two ar
 |-------|------|-------------|
 | `key` | `string` | The key you asked for |
 | `enabled` | `boolean` | Server decision for this user (`false` while loading or on failure) |
-| `value` | `boolean` | Alias of `enabled` (kept from 0.1) |
+| `value` | `boolean` | Alias of `enabled` (kept from 0.1), for a string, number or json flag too: read its value with [`useFlagValue`](#flag-values) |
 | `config` | `unknown \| null` | Always `null`: the evaluate endpoint returns `config: null` for every flag |
 | `loading` | `boolean` | `true` until the first response |
 | `error` | `Error \| null` | Only set if the client promise rejects (the client itself never throws, so this is normally `null` — failures come back as `enabled: false`) |
 
 A component already on screen keeps the answer it rendered until it mounts again; the SDK neither
 polls nor streams. See [Turning a Flag Off](../feature-flags/kill-switch.md).
+
+### `useFlagValue(flagKey, type, defaultValue, attributes?): FlagValueResult`
+
+Reads the value a string, number or json flag serves the provider's user; see
+[Flag values](#flag-values).
 
 ### `useExperiment(experimentKey): ExperimentState`
 
@@ -212,6 +217,7 @@ const client = new ExperimentationClient({ apiKey: 'YOUR_API_KEY', baseUrl: 'htt
 const { key, enabled, config } = await client.evaluateFlag('dark-mode', 'user-123');
 const on = await client.isFeatureEnabled('dark-mode', 'user-123');          // boolean
 const all = await client.getAllFlags('user-123');                            // { [flagKey]: boolean }
+const label = await client.getStringValue('checkout-button-label', 'user-123', 'Buy now'); // see Flag values
 
 const assignment = await client.getAssignment('checkout-experiment', 'user-123', { plan: 'pro' });
 // { experimentKey, userId, variantId, variantName, isControl, configuration } | null
@@ -227,8 +233,9 @@ const result = await client.trackBatch([
 
 | Method | Signature | Returns | On failure |
 |--------|-----------|---------|------------|
-| `evaluateFlag` | `(flagKey, userId, attributes?) => Promise<FlagEvaluation>` | `{ key, enabled, config }` | `{ key, enabled: false, config: null }` (or the last-known AsyncStorage value, except on a 404, which answers disabled and removes the stored value). Attributes that cannot be sent (`JSON.stringify` throws, or the server answers 422 for a context over 8,192 bytes or nested more than 10 levels) are reported to `onError` and answered the same way |
+| `evaluateFlag` | `(flagKey, userId, attributes?) => Promise<FlagEvaluation>` | `{ key, enabled, config, value?, valueType? }` (`value` and `valueType` only when the server sends them) | `{ key, enabled: false, config: null }` (or the last-known AsyncStorage value, except on a 404, which answers disabled and removes the stored value). Attributes that cannot be sent (`JSON.stringify` throws, or the server answers 422 for a context over 8,192 bytes or nested more than 10 levels) are reported to `onError` and answered the same way |
 | `isFeatureEnabled` | `(flagKey, userId, attributes?) => Promise<boolean>` | `enabled` | `false` |
+| `getStringValue`, `getNumberValue`, `getJsonValue` | `(flagKey, userId, defaultValue, attributes?) => Promise<string \| number \| T>` | The value the flag serves the user | `defaultValue`, never rejects; reported to `onError` with `'value'` (see [Flag values](#flag-values)) |
 | `getAllFlags` | `(userId, attributes?) => Promise<Record<string, boolean>>` | `{ flagKey: enabled }`; not cached, not part of the fan-out | `{}` |
 | `getAssignment` | `(experimentKey, userId, attributes?) => Promise<Assignment \| null>` | `{ experimentKey, userId, variantId, variantName, isControl, configuration }` | `null` (or the last-known AsyncStorage value) |
 | `getVariant` | `(experimentKey, userId, attributes?) => Promise<string \| null>` | `variantName` | `null` |
@@ -263,11 +270,10 @@ components that use the same experiment produces one assignment (and one exposur
 
 Every event this SDK sends carries an `event_id`. The server stores an event sent again with the
 same `event_id`, user, experiment, flag and event name only once (see
-[How events count](../guides/how-events-count.md#sending-an-event-again)). Use this from the next
-published version of this package, not from the version on npm now. It also needs a Controlvar
-server that includes the `event_id` change ([#1640](https://github.com/Controlvar/controlvar/pull/1640)),
-which the platform release after 0.39.0 is to carry; an older server ignores the field and stores
-an event sent again a second time.
+[How events count](../guides/how-events-count.md#sending-an-event-again)). This package sends it
+from version 0.2.0. It also needs a Controlvar server that includes the `event_id` change
+([#1640](https://github.com/Controlvar/controlvar/pull/1640)), which the platform release after
+0.39.0 is to carry; an older server ignores the field and stores an event sent again a second time.
 
 - Without an `eventId`, each `track()` call, and each event of `trackBatch()`, makes a new id, a
   lowercase UUID v4, so two calls are two events. For an event your code may send again (a retried
@@ -283,6 +289,50 @@ an event sent again a second time.
 - Hermes has no `crypto.randomUUID()` unless your app installs a polyfill; the SDK then makes the
   id from `crypto.getRandomValues()` or, with neither, from `Math.random()`. The id only has to
   differ between events: it is not a secret.
+
+---
+
+## Flag values
+
+A flag serves two values: its on value to the users it is on for, and its off value to everyone
+else, and to everyone while it is turned off. For a string, number or json flag, read the value
+with `useFlagValue` in a component, giving the type the flag serves (`'string'`, `'number'` or
+`'json'`), or anywhere else with the client's getter of its type: `getStringValue`,
+`getNumberValue` or `getJsonValue`.
+
+```tsx
+const { value: label } = useFlagValue('checkout-button-label', 'string', 'Buy now');
+
+const limit = await client.getNumberValue('free-shipping-threshold', 'user-123', 50);
+const theme = await client.getJsonValue('checkout-theme', 'user-123', { color: 'gray' });
+```
+
+Pass the flag's off value as your default, so that a flag your code cannot reach behaves as off.
+The hook takes the flag key, the type, the default and optional `attributes` (sent as `context`;
+without them the provider's, as `useFlag` does). Each getter takes the flag key, the user id, the
+default and optional `attributes`, the order of `evaluateFlag`.
+
+The hook returns `{ value, loading, error }`: `value` is your default while `loading` is `true`,
+and whenever there is no value of that type to read; `error` is then a `FlagValueError` whose
+`code` says why. The hook never throws, and a getter never rejects: it returns your default. Each
+fallback calls `onError(err, 'value')` once: with the request's own error when the request fails
+(an `ApiError` with its `status` for an HTTP error, a 404 for a flag the server does not know
+included, or the network or timeout error itself; the hook's `error` code is then
+`'REQUEST_FAILED'`), and otherwise with a `FlagValueError` whose `code` is
+`'INVALID_RESPONSE'` (the answer carries no value: a server from before flag values, or an answer
+this SDK's 0.1 stored on the device) or `'TYPE_MISMATCH'` (the flag serves another type). A boolean
+flag is another type; read it with `useFlag`. Nothing is coerced: `"10"` is not a number.
+`'value'` is new in `SwallowedOperation`: a `switch` over it that lists every member needs the case.
+
+`getJsonValue` and a `'json'` hook check that the value is an object or an array, not that it
+matches your type parameter. The getter returns a new copy on every call, and the hook its own copy.
+
+Both are evaluated as `evaluateFlag` is, with its request, memory cache and AsyncStorage entry: a
+value read after `evaluateFlag` or `isFeatureEnabled` for the same user and flag asks the server
+nothing more. When the request fails and the offline fallback holds an answer with a value of that
+type, that value is returned, and the error still goes to `onError`. The hook asks again when the
+client, the user, the flag key or the type changes, never because the default did. Reading a value
+records no exposure.
 
 ---
 
@@ -393,7 +443,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 | SDK call | Method and path | Body / query | 200 response |
 |---|---|---|---|
 | `getAssignment`, `getVariant`, `useExperiment` | `POST /api/v1/tracking/assign` | `{"experiment_key","user_id","context"?: object}` | `{"experiment_key","user_id","variant_id","variant_name","is_control","configuration","assigned","reason"}` |
-| `evaluateFlag`, `isFeatureEnabled`, `useFlag` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<id>&context=<url-encoded JSON>` (no `context` for missing or empty attributes) | — | `{"key","enabled","config"}` |
+| `evaluateFlag`, `isFeatureEnabled`, `useFlag`, `getStringValue`, `getNumberValue`, `getJsonValue`, `useFlagValue` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<id>&context=<url-encoded JSON>` (no `context` for missing or empty attributes) | — | `{"key","enabled","config","value","value_type"}` |
 | `getAllFlags` | `GET /api/v1/feature-flags/user/{user_id}?context=<url-encoded JSON>` (no `context` for missing or empty attributes) | — | `{"<flag_key>": bool, ...}` |
 | `track` with a key | `POST /api/v1/tracking/track` | `{"event_type","event_name","user_id","experiment_key"?,"feature_flag_key"?,"value"?,"metadata"?,"timestamp"?,"event_id"}` | stored event (ignored) |
 | `track` without a key, `trackBatch` | `POST /api/v1/tracking/batch` | `{"events":[<track body>...]}` (max 100) | `{"success_count","failure_count","errors"}` |

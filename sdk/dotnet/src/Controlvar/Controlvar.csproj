@@ -10,7 +10,7 @@
     <Nullable>enable</Nullable>
     <LangVersion>10.0</LangVersion>
     <PackageId>Controlvar.SDK</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Authors>Controlvar</Authors>
     <Description>Official .NET/C# SDK for Controlvar — server-decided feature flags, A/B experiment assignment and event tracking.</Description>
     <PackageTags>experimentation;feature-flags;ab-testing;sdk</PackageTags>

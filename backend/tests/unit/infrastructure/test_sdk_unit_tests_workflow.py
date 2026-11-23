@@ -65,6 +65,7 @@ def test_the_linux_tier_runs_these_sdks():
             "php",
             "dotnet",
             "mcp",
+            "visual",
         ]
     )
 
@@ -173,6 +174,28 @@ def test_the_mcp_server_runs_its_own_suite():
         "npm test -- --ci",
     ], commands
     assert matrix_constants()["LINUX"]["mcp"] == "node"
+
+
+def test_the_visual_script_runs_its_type_check_and_its_suite():
+    """sdk/visual's leg installs from its dependency file, type-checks the
+    sources and the tests, and runs the suite (which builds both outputs)."""
+    run = {s.get("name"): s for s in workflow()["jobs"]["linux"]["steps"]}[
+        "Run unit tests"
+    ]["run"]
+    leg = re.search(r"\n\s*visual\)\n(?P<body>.*?)\n\s*;;", run, re.S)
+    assert leg, "sdk-unit-tests.yml has no visual) case"
+    commands = [
+        line.strip()
+        for line in leg["body"].splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    assert commands == [
+        "cd sdk/visual",
+        "npm ci --no-audit --no-fund",
+        "npm run typecheck",
+        "npm test -- --ci",
+    ], commands
+    assert matrix_constants()["LINUX"]["visual"] == "node"
 
 
 def sdk_directories() -> set:

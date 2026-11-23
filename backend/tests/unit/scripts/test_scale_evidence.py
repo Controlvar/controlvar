@@ -1083,9 +1083,9 @@ def test_an_invalid_first_failing_step_gives_invalid_never_serialised():
     assert se.attribute(method, step, fx.SPLIT) == "invalid"
 
 
-def test_the_issue_is_linked_only_when_serialised_is_the_result():
+def test_the_note_is_said_only_when_serialised_is_the_result_and_links_no_issue():
     serial = se.render_block(fx.small(), LINK)
-    assert serial.count(se.TRACKING_ISSUE) == len(se.SCENARIOS)
+    assert serial.count(se.SERIALISED_NOTE) == len(se.SCENARIOS)
     meth = fx.method()
     reps = {
         name: [
@@ -1098,8 +1098,10 @@ def test_the_issue_is_linked_only_when_serialised_is_the_result():
     assert (
         "the API kept its hardware thread, cpu0, busy at least 90% of the time" in hot
     )
-    assert se.TRACKING_ISSUE not in hot
-    assert "#823" not in hot
+    assert se.SERIALISED_NOTE not in hot
+    for block in (serial, hot):
+        assert "/issues/" not in block
+        assert "#823" not in block
 
 
 #: V29's stall: ruleset run 2's steps 15 and 16 of workflow run 41732112985,
@@ -1139,8 +1141,8 @@ def test_a_step_whose_answers_collapse_while_the_api_s_cpu_falls_is_stalled():
     """V29, recorded: 9 of the 1,557 measured requests answered (1,549 timed
     out), the API's CPU fell from 652 to 172 per-mille, and the database
     sampler saw no active connection in 30 of 30 samples. The step also meets
-    serialised's signature, which is what it was attributed before (and what
-    linked #823): it is stalled only because stalled is checked first."""
+    serialised's signature, which is what it was attributed before: it is
+    stalled only because stalled is checked first."""
     split, before, step = _stall()
     method = se.load_config()
     assert split == fx.SPLIT
@@ -1230,7 +1232,7 @@ def test_a_run_is_attributed_from_its_first_failing_step_and_the_step_before():
 
 
 @pytest.mark.regression
-def test_a_stalled_run_is_never_published_and_never_links_the_database_issue():
+def test_a_stalled_run_is_never_published_and_never_says_the_serialised_note():
     """Render refuses a stall exactly as it refuses an invalid run: the
     scenario is blocked (stalled-rep), so the page is never written, and the
     bottleneck has no words of its own to write."""
@@ -1248,7 +1250,8 @@ def test_a_stalled_run_is_never_published_and_never_links_the_database_issue():
     )
     message = refused(se.render_block, results, LINK)
     assert "stalled-rep" in message
-    assert se.TRACKING_ISSUE not in message and "#823" not in message
+    assert se.SERIALISED_NOTE not in message
+    assert "/issues/" not in message and "#823" not in message
     assert "no words for the bottleneck 'stalled'" in refused(
         se._stopped, meth, "stalled", fx.SPLIT
     )
@@ -3317,6 +3320,9 @@ def test_the_expected_evaluate_reasons_are_what_the_evaluation_answers():
             pass
 
         def rollback(self):
+            pass
+
+        def close(self):
             pass
 
     def session():

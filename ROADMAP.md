@@ -73,7 +73,10 @@ install.
 - **SAML sign-in**, and Microsoft Entra ID over OIDC
   ([#123](https://github.com/Controlvar/controlvar/issues/123)).
 - **Identity aliasing:** a visitor who signs in keeps one assignment
-  ([#449](https://github.com/Controlvar/controlvar/issues/449)).
+  ([#449](https://github.com/Controlvar/controlvar/issues/449)). Its first part,
+  `POST /api/v1/tracking/alias` (beta), links a visitor's anonymous id to their account's id from
+  your backend ([the guide](docs/guides/identity.md)). The JavaScript and Python SDKs gain the call
+  in their next releases.
 - **Data retention by age**, and erasing one person's data.
 - **Moving in and out:** import flags from other flag tools, and export and import between
   Controlvar instances.
@@ -96,7 +99,7 @@ install.
 - Local evaluation in more server SDKs, including segments and the advanced operators.
 - Changes through the MCP server, under the same role checks, with a person approving risky ones
   ([#1607](https://github.com/Controlvar/controlvar/issues/1607)).
-- More integrations, such as Slack and PagerDuty, when people ask for them.
+- More Slack events, and PagerDuty, when people ask for them.
 - The one-command AWS installer out of beta
   ([#1299](https://github.com/Controlvar/controlvar/issues/1299)).
 - Scheduled flag changes beyond rollout schedules.

@@ -20,6 +20,11 @@ posterior: every call made on the same day for the same experiment and
 sample count reuses the same seed, so dashboards, API consumers and the
 persisted ``analysis_snapshots`` agree.
 
+``derive_test_seed(key)`` is the same construction over a key alone, with no
+day: a mean metric's permutation test (``services/permutation_test.py``)
+keys it on the comparison's identity, so the same rows give the same p-value
+on every day.
+
 This module lives in ``core`` (not ``services``) so that Pydantic schemas can
 import ``ENGINE_VERSION`` without creating an import cycle through
 ``backend.app.services``.
@@ -73,6 +78,14 @@ import numpy as np
 #: longer fires on a spread or a change of sign of the lifts, nor on a
 #: chi-squared test of the converting users alone at a fixed 0.05; the
 #: ``hte_warning`` text changes with it.
+#: 1.13.0 (#2041): a revenue, count, duration or custom metric's p-value in
+#: ``/results`` comes from a permutation test of Welch's t on each user's
+#: value (``backend/app/services/permutation_test.py``), named
+#: ``permutation_t_test``, instead of Welch's t-test, so ``p_value``,
+#: ``adjusted_p_value``, ``is_significant``, the winner and the
+#: recommendation can change; a mean's ``is_significant`` no longer follows
+#: its ``absolute_difference_ci``, which is still Welch's.  A mean computed
+#: from sums alone (a warehouse run) keeps Welch's t-test.
 #:
 #: The rule: an engine-changing PR bumps ``ENGINE_VERSION`` to the next minor
 #: and appends it to ``RELEASED_ENGINE_VERSIONS`` ("frozen on main", in
@@ -84,7 +97,7 @@ import numpy as np
 #: path stamping ``engine_version`` returns, caches or persists: results and
 #: its snapshots, Bayesian, CUPED, sequential, and the bandit's state, history
 #: and status.  A revert of an engine-changing PR bumps again.
-ENGINE_VERSION: str = "1.12.0"
+ENGINE_VERSION: str = "1.13.0"
 
 #: Mask that keeps the derived seed inside the signed 64-bit range.
 _SEED_MASK = (1 << 63) - 1
@@ -122,6 +135,25 @@ def derive_seed(experiment_id: object, bucket: str, n_samples: int) -> int:
     """
     key = f"{experiment_id}|{bucket}|{int(n_samples)}".encode("utf-8")
     digest = hashlib.blake2b(key, digest_size=8).digest()
+    return int.from_bytes(digest, "big") & _SEED_MASK
+
+
+def derive_test_seed(key: str) -> int:
+    """Derive the RNG seed of a computation identified by ``key`` alone.
+
+    The same construction as :func:`derive_seed` (blake2b, 8 bytes,
+    big-endian, top bit cleared) with no day bucket, so the same key gives
+    the same seed on every day, in every process and on every machine.  A
+    mean metric's permutation test (#2041) keys it on the comparison's
+    identity (``backend.app.services.permutation_test``).
+
+    Args:
+        key: The computation's identity, encoded as UTF-8.
+
+    Returns:
+        A non-negative integer below 2**63.
+    """
+    digest = hashlib.blake2b(key.encode("utf-8"), digest_size=8).digest()
     return int.from_bytes(digest, "big") & _SEED_MASK
 
 

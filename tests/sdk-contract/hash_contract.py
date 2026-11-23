@@ -107,6 +107,8 @@ NOT_RUN: dict[str, str] = {
     "nothing to check",
     "mcp": "the MCP server hashes nothing: it asks the API, which evaluates every flag; "
     "nothing to check",
+    "visual": "the visual experiments' browser script hashes nothing: it asks the API, "
+    "which assigns the variant; nothing to check",
     "android": "NOT RUN: compiling the Kotlin source needs Maven and the Kotlin "
     "compiler, which this job does not install; the SDK's own HashCompatibilityTest "
     "runs in sdk-unit-tests.yml's android job (nightly, and when sdk/android changes)",

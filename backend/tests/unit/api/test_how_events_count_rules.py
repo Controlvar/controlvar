@@ -120,6 +120,12 @@ def _source(rel: str) -> str:
 #: source is: the MCP server reads flags, experiments and results only.
 NOT_AN_SDK = {"mcp": "sdk/mcp/src"}
 
+#: The visual experiments' browser script (#1545): not an SDK, and its events
+#: (``track()``) go to ``/tracking/batch`` only. It also asks for a page's
+#: changes and reports the ones it could not apply.
+VISUAL_SOURCE = "sdk/visual/src"
+VISUAL_ROUTE_LITERAL = re.compile(r"""["']/api/v1/tracking/([a-z_/]+)["']""")
+
 
 def test_every_sdk_directory_is_listed():
     """A new SDK fails here until it is listed, so the next test reads it."""
@@ -128,7 +134,17 @@ def test_every_sdk_directory_is_listed():
         for p in SDK.iterdir()
         if p.is_dir() and not p.name.startswith((".", "__"))
     )
-    assert found == sorted([*SDK_SOURCES, *NOT_AN_SDK])
+    assert found == sorted([*SDK_SOURCES, *NOT_AN_SDK, "visual"])
+
+
+def test_the_visual_script_sends_events_through_batch_only():
+    """Its quoted tracking routes are exactly the page's changes, a preview
+    link's changes (which record nothing), the error reports and the batch
+    route: never /tracking/track or /tracking/events."""
+    routes = set(VISUAL_ROUTE_LITERAL.findall(_source(VISUAL_SOURCE)))
+    assert routes == {"visual", "visual/preview", "errors", "batch"}, (
+        f"visual has quoted routes {routes}"
+    )
 
 
 @pytest.mark.parametrize("name", sorted(NOT_AN_SDK))
@@ -159,9 +175,19 @@ def test_every_sdk_sends_its_events_through_track_and_batch(sdk):
 #: The SDKs that send an ``event_id`` (#1543). Each SDK's own pull request
 #: adds the option, moves the SDK here, and takes it out of the SDK row of
 #: ``docs/getting-started/limitations.md``. What each one sends is held by its
-#: own tests (Java: ``ExperimentationClientTest``'s ``EventIds``; Elixir:
-#: ``event_id_test.exs``).
-WITH_EVENT_ID = ("java", "js", "python", "react", "react-native", "dotnet", "elixir")
+#: own tests (Java: ``ExperimentationClientTest``'s ``EventIds``; Android:
+#: ``EventIdTest``; Elixir: ``event_id_test.exs``).
+# An SDK that gains a retry, a re-send in its HTTP client, or an event queue moves here in the same pull request (#1543).
+WITH_EVENT_ID = (
+    "java",
+    "js",
+    "python",
+    "react",
+    "react-native",
+    "dotnet",
+    "android",
+    "elixir",
+)
 #: The SDKs with no ``event_id`` option yet: every other one.
 WITHOUT_EVENT_ID = sorted(set(SDK_SOURCES) - set(WITH_EVENT_ID))
 #: The option's name in each SDK's idiom: ``event_id``, ``eventId``,

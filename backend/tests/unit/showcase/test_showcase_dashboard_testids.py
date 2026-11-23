@@ -1,11 +1,19 @@
-"""Every test id video 9's board names is one the dashboard draws (PE 4, EM-9).
+"""Every test id a dashboard board names is one the dashboard draws (PE 4,
+EM-9; videos 11 and 12's PE 8).
 
-The board finds its elements by ``data-testid``; a renamed id fails the take
+A board finds its elements by ``data-testid``; a renamed id fails the take
 only when it is reached, minutes into a capture. This reads frontend/src
 (tests aside) and resolves each id the product writes, by rule and with no
-list of exceptions:
+list of exceptions. The boards it holds are ``BOARDS``: video 9's, and video
+11's (#1889), whose flag list rows, Stale pills, reason lines, Stale filter,
+hint and notice are new ids, its ``count`` selectors among them, and video
+12's (#1890), whose Variants-step switch, "Group users by", attribute and
+values, and Review and experiment-page balance rows are new ids:
 
 * a quoted id is itself;
+* a quoted ``testId`` prop (``testId="x"`` or ``testId={'x'}``) is an id the
+  component it is passed to writes; a template or a name in ``testId`` is not
+  read;
 * an id written as a template literal, or held in a ``const`` such a literal
   or a quoted string sets, has each ``${name}`` resolved in its own file: a
   ``const`` it names is expanded; a parameter typed with a string-literal union
@@ -15,6 +23,11 @@ list of exceptions:
 So ``schedule-${which}`` and ``${id}-readback`` give exactly
 ``schedule-start-readback`` and ``schedule-end-readback``, and the board's
 ``schedule-bogus-readback`` is refused (EM-9). No browser, network or build.
+
+The ``testId`` rule holds only if a component that takes the prop writes it,
+so a test pins that every ``.tsx`` file declaring a ``testId`` field writes
+``data-testid={testId}`` or ``data-testid={row.testId}``. It does not catch a
+component that declares ``testId`` but writes a different object's ``.testId``.
 """
 
 from __future__ import annotations
@@ -36,6 +49,9 @@ SLUG = "09-design-in-depth"
 
 QUOTED = re.compile(r"""data-testid=(?:"([^"]+)"|\{\s*['"]([^'"]+)['"]\s*\})""")
 TEMPLATE = re.compile(r"data-testid=\{\s*`([^`]+)`\s*\}")
+PROP = re.compile(r"""\btestId=(?:"([^"]+)"|\{\s*['"]([^'"]+)['"]\s*\})""")
+DECLARES = re.compile(r"\btestId\??:")
+FORWARDS = re.compile(r"data-testid=\{\s*(?:testId|[A-Za-z_]\w*\.testId)\s*\}")
 NAMED = re.compile(r"data-testid=\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}")
 CONST = re.compile(
     r"""const\s+([A-Za-z_]\w*)\s*=\s*(?:`([^`]*)`|'([^']*)'|"([^"]*)")\s*;"""
@@ -98,6 +114,8 @@ def product_ids(sources: Dict[str, str]) -> List[str]:
     for text in sources.values():
         for double, single in QUOTED.findall(text):
             found.add(re.escape(double or single))
+        for double, single in PROP.findall(text):
+            found.add(re.escape(double or single))
         for template in TEMPLATE.findall(text):
             found.update(expand(template, text, types))
         consts = {m[0]: m for m in CONST.findall(text)}
@@ -109,7 +127,8 @@ def product_ids(sources: Dict[str, str]) -> List[str]:
 
 
 def board_ids(made: storyboard.Storyboard) -> List[str]:
-    """Every test id the board names: by ``testid``, or inside a CSS selector."""
+    """Every test id the board names: by ``testid``, or inside a CSS selector,
+    a beat's ``count`` selectors included."""
     found: Set[str] = set()
     for scene in made.scenes:
         for beat in scene.beats:
@@ -120,6 +139,8 @@ def board_ids(made: storyboard.Storyboard) -> List[str]:
                 if locator.testid:
                     found.add(locator.testid)
                 found.update(CSS_TESTID.findall(locator.css or ""))
+            for css in beat.count.values():
+                found.update(CSS_TESTID.findall(css))
     return sorted(found)
 
 
@@ -128,18 +149,36 @@ def missing(ids: List[str], patterns: List[str]) -> List[str]:
     return [i for i in ids if not any(p.fullmatch(i) for p in compiled)]
 
 
-def board() -> storyboard.Storyboard:
-    return storyboard.load(SHOWCASE / config.VIDEOS[SLUG])
+def board(slug: str = SLUG) -> storyboard.Storyboard:
+    return storyboard.load(SHOWCASE / config.VIDEOS[slug])
 
 
-def raw() -> dict:
-    return yaml.safe_load((SHOWCASE / config.VIDEOS[SLUG]).read_text(encoding="utf-8"))
+def raw(slug: str = SLUG) -> dict:
+    return yaml.safe_load((SHOWCASE / config.VIDEOS[slug]).read_text(encoding="utf-8"))
 
 
-def test_every_test_id_video_9_names_is_one_the_dashboard_draws():
-    ids = board_ids(board())
-    assert len(ids) == 65
+#: The boards this file ties to frontend/src, each with the number of test ids
+#: it names: a board that names fewer or more is read again, not passed.
+BOARDS = {SLUG: 65, "11-stale-flags": 7, "12-balance-within": 23}
+
+
+@pytest.mark.parametrize("slug, count", sorted(BOARDS.items()))
+def test_every_test_id_the_board_names_is_one_the_dashboard_draws(slug, count):
+    ids = board_ids(board(slug))
+    assert len(ids) == count, ids
     assert missing(ids, product_ids(frontend_sources())) == []
+
+
+def test_every_component_declaring_a_test_id_field_writes_it():
+    """The ``testId`` prop rule is true only if each .tsx file that declares a
+    ``testId`` field writes it to ``data-testid``."""
+    declaring = {
+        name: text
+        for name, text in frontend_sources().items()
+        if name.endswith(".tsx") and DECLARES.search(text)
+    }
+    assert declaring
+    assert [n for n, t in declaring.items() if not FORWARDS.search(t)] == []
 
 
 def test_the_schedule_fields_computed_ids_resolve_to_start_and_end_only():
@@ -178,4 +217,133 @@ def test_a_renamed_product_id_is_refused():
     sources[name] = sources[name].replace("${id}-readback`}", "${id}-read-back`}")
     assert missing(board_ids(board()), product_ids(sources)) == [
         "schedule-start-readback"
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Video 11 (PE 8): the flag list's stale ids, tied to frontend/src
+# ---------------------------------------------------------------------------
+
+V11 = "11-stale-flags"
+#: Every id video 11 names: the list's table and rows, the Stale pill, the
+#: reason lines, the Stale filter's group, its hint and the notice.
+V11_IDS = [
+    "flag-row",
+    "flag-stale-filter",
+    "flag-stale-hint",
+    "flag-stale-notice",
+    "flag-stale-pill",
+    "flag-stale-reasons",
+    "flags-table",
+]
+LIST_PAGE = "pages/feature-flags/index.tsx"
+
+
+def test_video_11_names_the_lists_stale_ids_its_counts_among_them():
+    assert board_ids(board(V11)) == V11_IDS
+    counted = {css for b in board(V11).scenes[0].beats for css in b.count.values()}
+    assert {i for css in counted for i in CSS_TESTID.findall(css)} == {
+        "flag-row",
+        "flag-stale-notice",
+        "flag-stale-pill",
+    }
+
+
+@pytest.mark.parametrize(
+    "drawn, renamed",
+    [
+        ('data-testid="flag-stale-pill"', 'data-testid="flag-stale-badge"'),
+        ('data-testid="flag-stale-reasons"', 'data-testid="flag-stale-why"'),
+        ('data-testid="flag-stale-hint"', 'data-testid="flag-stale-help"'),
+        ('data-testid="flag-row"', 'data-testid="flag-list-row"'),
+    ],
+    ids=["pill", "reasons", "hint", "row"],
+)
+def test_a_stale_id_renamed_in_the_tree_is_refused_by_name(drawn, renamed):
+    """PE 8's plant on the product side: one id renamed in the flag list (in
+    memory) leaves exactly that id of video 11's board unmatched; the pill's
+    is a ``count`` selector only, so the count's ids are read too."""
+    sources = frontend_sources()
+    assert sources[LIST_PAGE].count(drawn) == 1, drawn
+    sources[LIST_PAGE] = sources[LIST_PAGE].replace(drawn, renamed)
+    assert missing(board_ids(board(V11)), product_ids(sources)) == [drawn.split('"')[1]]
+
+
+def test_a_video_11_count_id_the_dashboard_does_not_draw_is_refused():
+    """PE 8's plant on the board side: the pills counted by an id the
+    dashboard does not draw."""
+    data = raw(V11)
+    data["scenes"][0]["beats"][0]["count"]["pills-listed"] = (
+        "[data-testid=flag-stale-badge]"
+    )
+    patterns = product_ids(frontend_sources())
+    assert missing(board_ids(storyboard.parse(data)), patterns) == ["flag-stale-badge"]
+
+
+# ---------------------------------------------------------------------------
+# Video 12 (PE 8): the balance setting's ids, tied to frontend/src
+# ---------------------------------------------------------------------------
+
+V12 = "12-balance-within"
+#: The ids video 12 names that video 9's does not: the Variants step's balance
+#: fields and the two rows that read the setting back.
+V12_BALANCE_IDS = [
+    "balance-custom-key",
+    "balance-group-by",
+    "balance-switch",
+    "balance-value-add",
+    "balance-value-input",
+    "balance-values",
+    "balance-within",
+    "experiment-balance",
+    "review-balance",
+]
+
+
+def test_video_12_names_the_balance_fields_and_both_rows_that_read_it_back():
+    ids = board_ids(board(V12))
+    assert [i for i in ids if "balance" in i] == V12_BALANCE_IDS
+
+
+@pytest.mark.parametrize(
+    "name, drawn, renamed",
+    [
+        (
+            "components/experiments/new/BalanceWithinFields.tsx",
+            'data-testid="balance-switch"',
+            'data-testid="balance-toggle"',
+        ),
+        (
+            "components/experiments/new/Wizard.tsx",
+            'data-testid="review-balance"',
+            'data-testid="review-balance-row"',
+        ),
+        (
+            "pages/experiments/[id].tsx",
+            'data-testid="experiment-balance"',
+            'data-testid="experiment-balance-value"',
+        ),
+    ],
+    ids=["switch", "review-row", "page-row"],
+)
+def test_a_balance_id_renamed_in_the_tree_is_refused_by_name(name, drawn, renamed):
+    """PE 8's plant on the product side: one id renamed in frontend/src (in
+    memory) leaves exactly that id of video 12's board unmatched."""
+    sources = frontend_sources()
+    assert sources[name].count(drawn) == 1, name
+    sources[name] = sources[name].replace(drawn, renamed)
+    wanted = drawn.split('"')[1]
+    assert missing(board_ids(board(V12)), product_ids(sources)) == [wanted]
+
+
+def test_a_video_12_board_id_the_dashboard_does_not_draw_is_refused():
+    """PE 8's plant on the board side: the values' list looked at by an id
+    the dashboard does not draw."""
+    data = raw(V12)
+    steps = data["scenes"][0]["beats"][4]["steps"]
+    look = next(s for s in steps if s.get("look", {}).get("testid") == "balance-values")
+    look["look"]["testid"] = "balance-value-list"
+    patterns = product_ids(frontend_sources())
+    assert missing(board_ids(storyboard.parse(data)), patterns) == [
+        "balance-value-list"
     ]

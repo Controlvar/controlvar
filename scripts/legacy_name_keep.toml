@@ -2688,7 +2688,7 @@ reason = "the setting's name before the rename, still read when the new one is n
 [[keep]]
 path = "backend/tests/unit/scripts/test_run_live_contract.py"
 literal = "EXPERIMENTLY_LOCAL_API_KEY"
-count = 2
+count = 3
 reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
 
 [[keep]]
@@ -3448,6 +3448,12 @@ count = 2
 reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
 
 [[keep]]
+path = "sdk/js/examples/contract_smoke.mjs"
+literal = "EXPERIMENTLY_LOCAL_API_KEY"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
 path = "sdk/js/examples/local_eval_smoke.mjs"
 literal = "EXPERIMENTLY_API_URL"
 count = 1
@@ -3550,6 +3556,12 @@ count = 2
 reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
 
 [[keep]]
+path = "sdk/python/examples/contract_smoke.py"
+literal = "EXPERIMENTLY_LOCAL_API_KEY"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
 path = "sdk/python/examples/local_eval_smoke.py"
 literal = "EXPERIMENTLY_API_URL"
 count = 2
@@ -3574,6 +3586,12 @@ count = 3
 reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
 
 [[keep]]
+path = "sdk/python/tests/test_contract_smoke.py"
+literal = "EXPERIMENTLY_LOCAL_API_KEY"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
 path = "sdk/react-native/examples/contract_smoke.test.ts"
 literal = "EXPERIMENTLY_API_KEY"
 count = 1
@@ -3624,7 +3642,7 @@ reason = "the setting's name before the rename, still read when the new one is n
 [[keep]]
 path = "tests/sdk-contract/live/run_live_contract.py"
 literal = "EXPERIMENTLY_LOCAL_API_KEY"
-count = 2
+count = 3
 reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
 
 [[keep]]

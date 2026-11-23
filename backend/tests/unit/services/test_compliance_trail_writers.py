@@ -98,6 +98,25 @@ def test_every_event_is_written_with_outcome_success():
     assert named == {"SUCCESS"}
 
 
+def test_the_compliance_tag_says_what_writes_an_event():
+    """The Compliance tag's description, in both OpenAPI snapshots, names what
+    core writes: creates, updates and deletes of experiments and flags, not
+    every change (a flag's status change writes none) (#1042)."""
+    from backend.app.api.api import CORE_TAGS_METADATA
+
+    written = {(resource, action) for _, _, action, resource, *_ in _writes()}
+    assert written == {
+        (resource, action)
+        for resource in ("feature_flag", "experiment")
+        for action in ("CREATE", "UPDATE", "DELETE")
+    }
+    (tag,) = [t for t in CORE_TAGS_METADATA if t["name"] == "Compliance"]
+    assert tag["description"].startswith(
+        "Compliance audit trail: append-only events for experiment and "
+        "feature-flag creates, updates and deletes, readable by ADMIN and ANALYST."
+    ), tag["description"]
+
+
 def test_flag_status_changes_and_experiment_lifecycle_write_no_event():
     by_function = {(path, fn) for path, fn, *_ in _writes()}
     assert {fn for path, fn in by_function if path == FLAGS} == {
@@ -105,9 +124,11 @@ def test_flag_status_changes_and_experiment_lifecycle_write_no_event():
         "update_feature_flag",
         "delete_feature_flag",
     }
+    # PUT /experiments/{id}'s trail is written in _apply_experiment_update,
+    # the update's steps that the visual editor's save shares (#1545).
     assert {fn for path, fn in by_function if path == EXPERIMENTS} == {
         "create_experiment",
-        "update_experiment",
+        "_apply_experiment_update",
         "delete_experiment",
     }
     # Sign-ins, role and API key changes write none either: no other file.

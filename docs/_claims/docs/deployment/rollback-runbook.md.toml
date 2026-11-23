@@ -378,6 +378,13 @@ by = [
 ]
 
 [[unit]]
+text = "From a release that carries t449_identity_aliases (its own down_revision is t1812_user_totp), it also includes t449_identity_aliases's, which drops every link between an anonymous id and a known id and leaves assignments and events untouched; an upgrade afterwards starts with no links, and they must be sent again."
+by = [
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_after_the_newer_release_downgrades_the_database_the_older_one_starts",
+    "test:backend/tests/integration/database/test_identity_aliases_migration.py::test_the_downgrade_drops_every_link_and_keeps_assignments_and_events",
+]
+
+[[unit]]
 text = "Rolling back past segment targeting"
 by = ["exempt:label"]
 
@@ -420,6 +427,36 @@ text = "Each account's secret and recovery codes stay in user_totp and work agai
 by = [
     "test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_api_serves_a_database_a_newer_release_migrated",
     "test:backend/tests/integration/database/test_user_totp_migration.py::test_the_downgrade_drops_the_table_only",
+]
+
+[[unit]]
+text = "Rolling back past identity aliasing"
+by = ["exempt:label"]
+
+[[unit]]
+text = "An API rolled back to a release that does not serve POST /api/v1/tracking/alias (0.47.0 or earlier) answers that route 404 and ignores every link, for as long as it serves: it answers each id with that id's own assignment."
+by = [
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_api_serves_a_database_a_newer_release_migrated",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_alias_route_is_the_one_call_that_links_two_user_ids",
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_row_a_release_without_links_wrote_is_answered_by_the_earliest",
+]
+
+[[unit]]
+text = "So a linked id with no assignment of its own in an experiment sees the variant its own id gives, and gets a second assignment row there."
+by = ["test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_row_a_release_without_links_wrote_is_answered_by_the_earliest"]
+
+[[unit]]
+text = "Once a release that reads links is back, the person's assignment stored first answers for both ids again, so that person can see their variant change twice, and the second row stays and counts in the experiment's results."
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_resolution.py::test_a_row_a_release_without_links_wrote_is_answered_by_the_earliest",
+    "test:backend/tests/integration/api/test_identity_alias_counting.py::test_linked_people_count_per_row_on_every_endpoint",
+]
+
+[[unit]]
+text = "The links stay in identity_aliases unless the database was also downgraded below t449_identity_aliases, which drops them (above)."
+by = [
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_api_serves_a_database_a_newer_release_migrated",
+    "test:backend/tests/integration/database/test_identity_aliases_migration.py::test_the_downgrade_drops_every_link_and_keeps_assignments_and_events",
 ]
 
 [[unit]]
@@ -1411,6 +1448,17 @@ by = [
     "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
     "test:backend/tests/integration/database/test_user_totp_migration.py::test_the_downgrade_drops_the_table_only",
 ]
+
+[[unit]]
+text = "From a release that carries t449_identity_aliases, whose down_revision is t1812_user_totp, every core target in this list undoes t449_identity_aliases before all of these, which drops the table identity_aliases, every link between an anonymous id and a known id, and leaves every assignment and event untouched (nothing restores the links: an upgrade afterwards creates the table empty, and they must be sent again), and does not refuse; a downgrade to t1812_user_totp undoes it alone."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_identity_aliases_migration.py::test_the_downgrade_drops_every_link_and_keeps_assignments_and_events",
+]
+
+[[unit]]
+text = "Until the API is rolled back, a release that serves POST /api/v1/tracking/alias answers 500, for every id, to each tracking route that reads that table, among them POST /api/v1/tracking/assign for an active experiment, POST /api/v1/tracking/assign/batch, POST /api/v1/tracking/track with an experiment_key, POST /api/v1/tracking/events with an experiment_id, GET /api/v1/tracking/assignments/{user_id} and POST /api/v1/tracking/alias; POST /api/v1/tracking/batch reports each event that names an experiment in errors."
+by = ["test:backend/tests/integration/api/test_identity_alias_route.py::test_without_the_table_the_routes_that_read_links_answer_500"]
 
 [[unit]]
 text = "A downgrade to 85dd4796bb8b also undoes 7b6b4b4fe246, which drops rollout_stages.started_at, the time each rollout stage started (nothing restores the exact values: an upgrade afterwards sets each stage in progress from its updated_at, which an edit may have moved, so a stage edited in the meantime restarts its clock from the edit), and it does not refuse, so it needs the Engineering Lead's approval at the moment it runs when any stage is IN_PROGRESS."

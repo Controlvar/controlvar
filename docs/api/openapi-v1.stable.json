@@ -418,6 +418,59 @@
         "title": "AggregationPeriod",
         "type": "string"
       },
+      "AliasRequest": {
+        "description": "Body of ``POST /api/v1/tracking/alias``: link an anonymous id to a\nknown user id (#449).\n\nEach id is 1 to 255 characters of text the database can store, and is\ncompared exactly. Refused with a 422 before anything is read or written:\na missing, empty, over-long or unstorable field; either field exactly\n``anonymous`` or ``anon``; two equal ids. No message repeats an id.",
+        "example": {
+          "anonymous_id": "visitor-7f3a92",
+          "user_id": "customer-1042"
+        },
+        "properties": {
+          "anonymous_id": {
+            "description": "The id the visitor was known by before they were identified",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Anonymous Id",
+            "type": "string"
+          },
+          "user_id": {
+            "description": "The known user id of the same person",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "anonymous_id",
+          "user_id"
+        ],
+        "title": "AliasRequest",
+        "type": "object"
+      },
+      "AliasResponse": {
+        "description": "Response for ``POST /api/v1/tracking/alias``: the two ids as sent, and\nwhether this request stored the link (``false`` when it already existed).",
+        "properties": {
+          "anonymous_id": {
+            "title": "Anonymous Id",
+            "type": "string"
+          },
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "anonymous_id",
+          "user_id",
+          "created"
+        ],
+        "title": "AliasResponse",
+        "type": "object"
+      },
       "AlphaSpendingBoundaryResponse": {
         "description": "Alpha spending boundary at a single interim look.",
         "properties": {
@@ -450,6 +503,128 @@
           "boundary_p"
         ],
         "title": "AlphaSpendingBoundaryResponse",
+        "type": "object"
+      },
+      "AppUserEraseCounts": {
+        "description": "Rows this call deleted, per table.",
+        "properties": {
+          "assignments": {
+            "description": "Experiment assignments.",
+            "title": "Assignments",
+            "type": "integer"
+          },
+          "error_logs": {
+            "description": "Client errors.",
+            "title": "Error Logs",
+            "type": "integer"
+          },
+          "event_dedup_keys": {
+            "description": "Keys of events sent with an id.",
+            "title": "Event Dedup Keys",
+            "type": "integer"
+          },
+          "events": {
+            "description": "Events, exposures included.",
+            "title": "Events",
+            "type": "integer"
+          },
+          "feature_flag_overrides": {
+            "description": "Per-user flag overrides.",
+            "title": "Feature Flag Overrides",
+            "type": "integer"
+          },
+          "holdout_population": {
+            "description": "Global-holdout rows.",
+            "title": "Holdout Population",
+            "type": "integer"
+          },
+          "identity_aliases": {
+            "description": "Links between the person's ids, deleted last.",
+            "title": "Identity Aliases",
+            "type": "integer"
+          },
+          "llm_evaluations": {
+            "description": "LLM experiment evaluations.",
+            "title": "Llm Evaluations",
+            "type": "integer"
+          },
+          "raw_metrics": {
+            "description": "Flag evaluations and latencies.",
+            "title": "Raw Metrics",
+            "type": "integer"
+          },
+          "segment_members": {
+            "description": "Id-list segment memberships.",
+            "title": "Segment Members",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "events",
+          "raw_metrics",
+          "error_logs",
+          "llm_evaluations",
+          "event_dedup_keys",
+          "assignments",
+          "holdout_population",
+          "segment_members",
+          "feature_flag_overrides",
+          "identity_aliases"
+        ],
+        "title": "AppUserEraseCounts",
+        "type": "object"
+      },
+      "AppUserEraseRequest": {
+        "additionalProperties": false,
+        "description": "The app user to erase. Any other field is refused with 422.",
+        "example": {
+          "user_id": "user-to-erase"
+        },
+        "properties": {
+          "user_id": {
+            "description": "The id your app sent as user_id. Matched exactly, case and spaces included.",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id"
+        ],
+        "title": "AppUserEraseRequest",
+        "type": "object"
+      },
+      "AppUserEraseResponse": {
+        "description": "What one call did. Counts only: never the id.",
+        "properties": {
+          "complete": {
+            "description": "True when no row of the person's ids is left. False when time ran out, a statement timed out or a link added an id during the call: send the same request again.",
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "deleted": {
+            "$ref": "#/components/schemas/AppUserEraseCounts"
+          },
+          "ids_erased": {
+            "description": "How many ids the erase covered: the id sent and every id linked to the same person.",
+            "title": "Ids Erased",
+            "type": "integer"
+          },
+          "receipt_id": {
+            "description": "The entity_id of this call's two audit-log entries: GET /api/v1/audit-logs/?entity_id=<receipt_id>.",
+            "format": "uuid",
+            "title": "Receipt Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "receipt_id",
+          "complete",
+          "ids_erased",
+          "deleted"
+        ],
+        "title": "AppUserEraseResponse",
         "type": "object"
       },
       "AssignmentBatchRequest": {
@@ -1239,7 +1414,7 @@
             "type": "string"
           },
           "engine_version": {
-            "default": "1.12.0",
+            "default": "1.13.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"
@@ -1365,7 +1540,7 @@
             "type": "array"
           },
           "engine_version": {
-            "default": "1.12.0",
+            "default": "1.13.0",
             "description": "Statistics engine version that computed the current weights",
             "title": "Engine Version",
             "type": "string"
@@ -1751,7 +1926,7 @@
             ]
           },
           "engine_version": {
-            "default": "1.12.0",
+            "default": "1.13.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"
@@ -2114,6 +2289,30 @@
           "success"
         ],
         "title": "BulkToggleResult",
+        "type": "object"
+      },
+      "ClaimExchange": {
+        "additionalProperties": false,
+        "description": "What the visual editor's panel sends to start its session.",
+        "properties": {
+          "claim": {
+            "description": "The value the page handed the panel: the 43 base64url characters it sent with the editor link.",
+            "title": "Claim",
+            "type": "string"
+          },
+          "page_origin": {
+            "description": "The origin of the page that handed the panel the value: the `origin` of that message event. It must be one of the experiment's sites.",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Page Origin",
+            "type": "string"
+          }
+        },
+        "required": [
+          "claim",
+          "page_origin"
+        ],
+        "title": "ClaimExchange",
         "type": "object"
       },
       "ClickGoal": {
@@ -3184,7 +3383,7 @@
             "title": "Covariate Lookback Days"
           },
           "engine_version": {
-            "default": "1.12.0",
+            "default": "1.13.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"
@@ -3545,6 +3744,220 @@
           "segments"
         ],
         "title": "DimensionalBreakdownResponse",
+        "type": "object"
+      },
+      "EditorExperiment": {
+        "properties": {
+          "design_etag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The design's version, as the experiment's own answer gives it.",
+            "title": "Design Etag"
+          },
+          "editor_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Editor Url"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pages": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Pages",
+            "type": "array"
+          },
+          "variants": {
+            "items": {
+              "$ref": "#/components/schemas/EditorVariant"
+            },
+            "title": "Variants",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "pages",
+          "variants"
+        ],
+        "title": "EditorExperiment",
+        "type": "object"
+      },
+      "EditorLinkOpened": {
+        "description": "The editor link, shown once.",
+        "properties": {
+          "expires_at": {
+            "description": "When the link stops working.",
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "open_url": {
+            "description": "The experiment's editor page with `#controlvar-editor=<43 characters>`. It opens the visual editor once, within 120 seconds, on a page with the Controlvar script.",
+            "title": "Open Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "open_url",
+          "expires_at"
+        ],
+        "title": "EditorLinkOpened",
+        "type": "object"
+      },
+      "EditorSessionOpened": {
+        "description": "A new editor session, with its token, shown once.",
+        "properties": {
+          "experiment": {
+            "$ref": "#/components/schemas/EditorExperiment"
+          },
+          "expires_at": {
+            "description": "When the session ends: 4 hours after it began.",
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "site_origins": {
+            "description": "The experiment's sites the editor may run on: its pages' origins that this server accepts requests from.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Site Origins",
+            "type": "array"
+          },
+          "token": {
+            "description": "`cves_` and 43 base64url characters: the session's bearer token for the visual editor's session routes and no other.",
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expires_at",
+          "site_origins",
+          "experiment",
+          "token"
+        ],
+        "title": "EditorSessionOpened",
+        "type": "object"
+      },
+      "EditorSessionRefusal": {
+        "description": "An editor session's 401.",
+        "properties": {
+          "detail": {
+            "description": "The sentence the editor shows.",
+            "title": "Detail",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Why: reopened, ticket_reused, started, signed_out, scheduled, expired or not_recognised.",
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail",
+          "reason"
+        ],
+        "title": "EditorSessionRefusal",
+        "type": "object"
+      },
+      "EditorSessionState": {
+        "description": "An editor session: when it ends, where it may run, and the draft.",
+        "properties": {
+          "experiment": {
+            "$ref": "#/components/schemas/EditorExperiment"
+          },
+          "expires_at": {
+            "description": "When the session ends: 4 hours after it began.",
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "site_origins": {
+            "description": "The experiment's sites the editor may run on: its pages' origins that this server accepts requests from.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Site Origins",
+            "type": "array"
+          }
+        },
+        "required": [
+          "expires_at",
+          "site_origins",
+          "experiment"
+        ],
+        "title": "EditorSessionState",
+        "type": "object"
+      },
+      "EditorVariant": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_control": {
+            "title": "Is Control",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "visual_changes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The variant's page changes as stored, or null.",
+            "title": "Visual Changes"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "is_control"
+        ],
+        "title": "EditorVariant",
         "type": "object"
       },
       "EffectSizeLabel": {
@@ -8990,7 +9403,7 @@
         "properties": {
           "analysis": {
             "default": "proportion",
-            "description": "How the variants are compared.  'mean' for a revenue, count, duration or custom metric: the mean per assigned user (see VariantResult.mean), compared with Welch's t-test.  'proportion' for a conversion metric: the share of users who converted, compared with Fisher's exact test.",
+            "description": "How the variants are compared.  'mean' for a revenue, count, duration or custom metric: the mean per assigned user (see VariantResult.mean), compared with a permutation test of Welch's t statistic (statistical_test_used permutation_t_test; engines before 1.13.0 used Welch's t-test).  'proportion' for a conversion metric: the share of users who converted, compared with Fisher's exact test.",
             "enum": [
               "proportion",
               "mean"
@@ -10066,127 +10479,6 @@
           "runtime_days"
         ],
         "title": "PlanResponse",
-        "type": "object"
-      },
-      "PostStratResultResponse": {
-        "description": "Response schema for a post-stratification analysis result.\n\nReturned by ``POST /api/v1/results/{experiment_id}/post-stratification``.",
-        "properties": {
-          "adjusted_se": {
-            "description": "Standard error of the post-stratified effect estimate.",
-            "title": "Adjusted Se",
-            "type": "number"
-          },
-          "confidence_interval": {
-            "description": "(lower, upper) confidence interval at the requested alpha.",
-            "maxItems": 2,
-            "minItems": 2,
-            "prefixItems": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "number"
-              }
-            ],
-            "title": "Confidence Interval",
-            "type": "array"
-          },
-          "control_mean": {
-            "description": "Post-stratification-weighted control mean.",
-            "title": "Control Mean",
-            "type": "number"
-          },
-          "effect_size": {
-            "description": "Absolute treatment effect: treatment_mean - control_mean.",
-            "title": "Effect Size",
-            "type": "number"
-          },
-          "effect_size_relative": {
-            "description": "Relative lift: effect_size / |control_mean|.",
-            "title": "Effect Size Relative",
-            "type": "number"
-          },
-          "metric_name": {
-            "description": "Name of the metric analysed.",
-            "title": "Metric Name",
-            "type": "string"
-          },
-          "n_strata": {
-            "description": "Number of unique strata used.",
-            "title": "N Strata",
-            "type": "integer"
-          },
-          "p_value": {
-            "description": "Two-tailed p-value from a z-test.",
-            "title": "P Value",
-            "type": "number"
-          },
-          "strata_sizes": {
-            "additionalProperties": {
-              "type": "integer"
-            },
-            "description": "Mapping of stratum label → total count across both groups.",
-            "title": "Strata Sizes",
-            "type": "object"
-          },
-          "treatment_mean": {
-            "description": "Post-stratification-weighted treatment mean.",
-            "title": "Treatment Mean",
-            "type": "number"
-          },
-          "variance_reduction": {
-            "description": "Percentage variance reduction vs. the naive (unstratified) estimator. Positive means reduction; negative means the stratification inflates variance.",
-            "title": "Variance Reduction",
-            "type": "number"
-          }
-        },
-        "required": [
-          "metric_name",
-          "control_mean",
-          "treatment_mean",
-          "effect_size",
-          "effect_size_relative",
-          "variance_reduction",
-          "adjusted_se",
-          "p_value",
-          "confidence_interval",
-          "n_strata",
-          "strata_sizes"
-        ],
-        "title": "PostStratResultResponse",
-        "type": "object"
-      },
-      "PostStratificationRequest": {
-        "description": "Request body for the post-stratification endpoint.\n\nAttributes:\n    stratum_cols: Column names in the experiment data that define strata\n        (e.g. [\"country\", \"device_type\"]). Must be non-empty.\n    metric_col: Name of the numeric outcome column in the data.\n        Defaults to \"metric_value\".\n    alpha: Significance level for confidence interval construction (0–1).\n        Defaults to 0.05.",
-        "properties": {
-          "alpha": {
-            "default": 0.05,
-            "description": "Significance level for confidence interval construction (exclusive: 0–1).",
-            "exclusiveMaximum": 1,
-            "exclusiveMinimum": 0,
-            "title": "Alpha",
-            "type": "number"
-          },
-          "metric_col": {
-            "default": "metric_value",
-            "description": "Name of the numeric outcome column in the experiment data.",
-            "title": "Metric Col",
-            "type": "string"
-          },
-          "stratum_cols": {
-            "description": "Column name(s) that define strata (e.g. ['country', 'device_type']). Must be non-empty.",
-            "items": {
-              "type": "string"
-            },
-            "minItems": 1,
-            "title": "Stratum Cols",
-            "type": "array"
-          }
-        },
-        "required": [
-          "stratum_cols"
-        ],
-        "title": "PostStratificationRequest",
         "type": "object"
       },
       "PowerCurvePoint": {
@@ -13498,11 +13790,12 @@
         "type": "object"
       },
       "StatisticalTest": {
-        "description": "Statistical test used when computing significance for a variant result.\n\nFISHER_EXACT       - Fisher's exact test (small-sample conversion data).\nZ_TEST_PROPORTIONS - Two-proportion z-test (large-sample conversions).\nWELCH_T_TEST       - Welch's t-test (continuous/revenue metrics).",
+        "description": "Statistical test used when computing significance for a variant result.\n\nFISHER_EXACT       - Fisher's exact test (small-sample conversion data).\nZ_TEST_PROPORTIONS - Two-proportion z-test (large-sample conversions).\nWELCH_T_TEST       - Welch's t-test, on per-variant sums alone (a\n                     warehouse mean run).\nPERMUTATION_T_TEST - A permutation test of Welch's t statistic on each\n                     user's value: a revenue, count, duration or custom\n                     metric in /results, from engine 1.13.0.",
         "enum": [
           "fisher_exact",
           "z_test_proportions",
-          "welch_t_test"
+          "welch_t_test",
+          "permutation_t_test"
         ],
         "title": "StatisticalTest",
         "type": "string"
@@ -13568,6 +13861,46 @@
           }
         },
         "title": "TestNotificationRequest",
+        "type": "object"
+      },
+      "TicketClaim": {
+        "additionalProperties": false,
+        "description": "What the page an editor link opened sends.",
+        "properties": {
+          "claim": {
+            "description": "43 base64url characters (A-Z, a-z, 0-9, - and _, no padding), drawn at random by the page.",
+            "title": "Claim",
+            "type": "string"
+          },
+          "ticket": {
+            "description": "The value after `#controlvar-editor=` in the editor link.",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Ticket",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticket",
+          "claim"
+        ],
+        "title": "TicketClaim",
+        "type": "object"
+      },
+      "TicketClaimed": {
+        "description": "The claim was stored. No credential comes back.",
+        "properties": {
+          "expires_at": {
+            "description": "When the claim stops working if the editor has not used it.",
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expires_at"
+        ],
+        "title": "TicketClaimed",
         "type": "object"
       },
       "ToggleRequest": {
@@ -14653,7 +14986,7 @@
                 "type": "null"
               }
             ],
-            "description": "Two-sided confidence interval of absolute_difference as (lower, upper), at the response's confidence_level and not adjusted for multiple comparisons.  For a proportion, Newcombe's hybrid score interval, built from each variant's Wilson score interval; for a mean, the Welch-Satterthwaite interval.  is_significant is decided by statistical_test_used on adjusted_p_value (p_value when no correction applies), not by this interval: with two or more treatments under a correction the interval can exclude 0 on a variant that is not significant, and for a proportion near the threshold the interval and Fisher's exact test can disagree either way.  relative_improvement_pct_ci and incremental_impact_ci, when not None, contain 0 exactly when this interval does.  None when absolute_difference is None; for a mean, also when neither variant's per-user values vary.  For a proportion with users in both variants it is never None: 0 of 20 against 0 of 20 gives (-0.161, 0.161).",
+            "description": "Two-sided confidence interval of absolute_difference as (lower, upper), at the response's confidence_level and not adjusted for multiple comparisons.  For a proportion, Newcombe's hybrid score interval, built from each variant's Wilson score interval; for a mean, the Welch-Satterthwaite interval.  is_significant is decided by statistical_test_used on adjusted_p_value (p_value when no correction applies), not by this interval: with two or more treatments under a correction the interval can exclude 0 on a variant that is not significant; for a proportion near the threshold the interval and Fisher's exact test can disagree either way; and for a mean the interval is Welch's while the test is the permutation test, so they can disagree either way, most often when the variants' sizes are very different.  relative_improvement_pct_ci and incremental_impact_ci, when not None, contain 0 exactly when this interval does.  None when absolute_difference is None; for a mean, also when neither variant's per-user values vary.  For a proportion with users in both variants it is never None: 0 of 20 against 0 of 20 gives (-0.161, 0.161).",
             "title": "Absolute Difference Ci"
           },
           "adjusted_p_value": {
@@ -14758,7 +15091,7 @@
             "type": "boolean"
           },
           "is_significant": {
-            "description": "True when the adjusted (or raw, if no correction) p-value is below the significance threshold 1 - confidence_level, the same level as confidence_interval.",
+            "description": "True when the adjusted (or raw, if no correction) p-value is below the significance threshold 1 - confidence_level, the same level as confidence_interval.  For a mean it follows the permutation test, not absolute_difference_ci.",
             "title": "Is Significant",
             "type": "boolean"
           },
@@ -14776,7 +15109,7 @@
                 "type": "null"
               }
             ],
-            "description": "Unadjusted p-value from the chosen statistical test.  None for the control variant.",
+            "description": "Unadjusted p-value from the chosen statistical test (statistical_test_used).  For a mean, the permutation test's: twice the smaller tail over the observed assignment and the permutations, a multiple of 2 / (permutations + 1), so at least 0.001 with one treatment.  None for the control variant.",
             "title": "P Value"
           },
           "power": {
@@ -14840,7 +15173,7 @@
                 "type": "null"
               }
             ],
-            "description": "The statistical test that produced p_value.  None for the control variant."
+            "description": "The statistical test that produced p_value: permutation_t_test for a mean in /results (welch_t_test before engine 1.13.0, and for a mean computed from per-variant sums alone, as a warehouse run is), fisher_exact for a proportion.  None for the control variant and for a variant that was not compared."
           },
           "std_dev": {
             "anyOf": [
@@ -15547,251 +15880,6 @@
         "title": "VisualTrackingResponse",
         "type": "object"
       },
-      "WizardDraftCreate": {
-        "description": "Request body for creating a new wizard draft.",
-        "properties": {
-          "experiment_type": {
-            "default": "ab",
-            "description": "Initial experiment type: 'ab', 'multivariate', or 'feature_flag_rollout'.",
-            "title": "Experiment Type",
-            "type": "string"
-          }
-        },
-        "title": "WizardDraftCreate",
-        "type": "object"
-      },
-      "WizardDraftListResponse": {
-        "description": "Response schema for listing wizard drafts.",
-        "properties": {
-          "drafts": {
-            "items": {
-              "$ref": "#/components/schemas/WizardDraftResponse"
-            },
-            "title": "Drafts",
-            "type": "array"
-          },
-          "total": {
-            "default": 0,
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "title": "WizardDraftListResponse",
-        "type": "object"
-      },
-      "WizardDraftResponse": {
-        "description": "Response schema for a wizard draft.",
-        "properties": {
-          "baseline_rate": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Baseline Rate"
-          },
-          "current_step": {
-            "title": "Current Step",
-            "type": "string"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
-          "experiment_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Experiment Type"
-          },
-          "guardrail_metric_ids": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Guardrail Metric Ids",
-            "type": "array"
-          },
-          "hypothesis": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Hypothesis"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "mde": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Mde"
-          },
-          "name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          },
-          "primary_metric_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Primary Metric Id"
-          },
-          "targeting_rules": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Targeting Rules",
-            "type": "array"
-          },
-          "user_id": {
-            "title": "User Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "user_id",
-          "current_step"
-        ],
-        "title": "WizardDraftResponse",
-        "type": "object"
-      },
-      "WizardStepUpdate": {
-        "description": "Request body for updating a draft with a completed step.",
-        "properties": {
-          "data": {
-            "additionalProperties": true,
-            "description": "Step-specific data payload.",
-            "title": "Data",
-            "type": "object"
-          },
-          "step": {
-            "description": "The wizard step name being completed.",
-            "title": "Step",
-            "type": "string"
-          }
-        },
-        "required": [
-          "step",
-          "data"
-        ],
-        "title": "WizardStepUpdate",
-        "type": "object"
-      },
-      "WizardSubmitResponse": {
-        "description": "Response schema for wizard draft submission.",
-        "properties": {
-          "errors": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Errors",
-            "type": "array"
-          },
-          "experiment_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Experiment Id"
-          },
-          "success": {
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success"
-        ],
-        "title": "WizardSubmitResponse",
-        "type": "object"
-      },
-      "WizardValidationRequest": {
-        "description": "Request body for validating a wizard step.",
-        "properties": {
-          "data": {
-            "additionalProperties": true,
-            "description": "Step data to validate.",
-            "title": "Data",
-            "type": "object"
-          },
-          "step": {
-            "description": "The wizard step name to validate.",
-            "title": "Step",
-            "type": "string"
-          }
-        },
-        "required": [
-          "step",
-          "data"
-        ],
-        "title": "WizardValidationRequest",
-        "type": "object"
-      },
-      "WizardValidationResponse": {
-        "description": "Response schema for a wizard step validation result.",
-        "properties": {
-          "errors": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Errors",
-            "type": "array"
-          },
-          "is_valid": {
-            "title": "Is Valid",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "is_valid"
-        ],
-        "title": "WizardValidationResponse",
-        "type": "object"
-      },
       "backend__app__api__v1__sample_size_calculator__SampleSizeRequest": {
         "description": "Schema for sample size calculation request.",
         "example": {
@@ -16244,6 +16332,57 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/admin/app-users/erase": {
+      "post": {
+        "description": "Erase one app user's data (beta, superusers only).\n\nDeletes every row stored under one `user_id` your app sent: events\n(exposures included), flag-evaluation metrics, client errors, LLM\nevaluations, event dedup keys, assignments, global-holdout rows, id-list\nsegment memberships and flag overrides. The id is matched exactly. It does\nnot delete dashboard accounts (`DELETE /api/v1/admin/users/{user_id}`).\nThere is no undo.\n\nA call works for at most 20 seconds. `complete: false` means rows may be\nleft: send the same request again until it is `true`. An id with nothing\nstored answers 200 with every count 0. Each call writes two audit-log\nentries with `receipt_id` as their `entity_id`, one when it starts and one\nwhen it finishes; they hold counts only.",
+        "operationId": "erase_app_user_data_api_v1_admin_app_users_erase_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppUserEraseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppUserEraseResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "500": {
+            "description": "An unplanned failure. Nothing was erased if the start entry could not be written; otherwise part of the data may already be erased: send the request again."
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Erase App User Data",
+        "tags": [
+          "Administration"
+        ],
+        "x-stability": "beta"
+      }
+    },
     "/api/v1/admin/cache/clear": {
       "post": {
         "description": "Clear system cache.\n\nThis endpoint is only accessible by superusers and clears all Redis cache entries\nfor the application.",
@@ -21427,6 +21566,60 @@
         ]
       }
     },
+    "/api/v1/experiments/{experiment_id}/visual/editor-tickets": {
+      "post": {
+        "description": "Make the link that opens a visual draft in the visual editor, on the\nexperiment's own page.\n\nThe link is the experiment's editor page with\n`#controlvar-editor=<ticket>`; it works once, within 120 seconds, and is\nanswered once (only a hash of the ticket is stored). Making it ends every\neditor session of the experiment that is still open, whoever opened it.\n\nAccepted only from the dashboard: the request's `Origin` must be one of\nthe server's dashboard origins (DASHBOARD_ORIGINS, or PUBLIC_BASE_URL's).\nRefused, in this order: 422 when the server knows no dashboard origin;\n403 for any other `Origin`, or none; 404; 403 for a caller who may not\nchange experiments (READ and UPDATE); 400 when the experiment has no\nvisual settings, is not a draft, or has a start date; 422 when one of its\npages, or its editor page, is on a site this server does not accept\nrequests from (CORS_ORIGINS), or on the dashboard's own address, or when\nCORS_ORIGINS is `*`. Sent with `Cache-Control: no-store`.",
+        "operationId": "open_visual_editor_api_v1_experiments__experiment_id__visual_editor_tickets_post",
+        "parameters": [
+          {
+            "description": "The visual draft",
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "description": "The visual draft",
+              "format": "uuid",
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditorLinkOpened"
+                }
+              }
+            },
+            "description": "The editor link, shown once"
+          },
+          "400": {
+            "description": "The experiment has no visual settings, is not a draft, or has a start date"
+          },
+          "403": {
+            "description": "The request does not come from the dashboard, or the caller may not change experiments"
+          },
+          "404": {
+            "description": "No such experiment"
+          },
+          "422": {
+            "description": "The server does not know the dashboard's address, or a page of the experiment is on a site this server does not accept"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Open a visual draft in the visual editor (beta)",
+        "tags": [
+          "Experiments"
+        ],
+        "x-stability": "beta"
+      }
+    },
     "/api/v1/experiments/{experiment_id}/visual/preview-links": {
       "delete": {
         "description": "End every live preview link of the experiment at once: each answers 404\nfrom then on. Needs a caller who may change experiments (READ and\nUPDATE). The audit entry records how many links were ended.",
@@ -22242,7 +22435,7 @@
     },
     "/api/v1/feature-flags/bulk-toggle": {
       "post": {
-        "description": "Toggle multiple feature flags in a single operation.\nEach flag's result is reported individually.\nRequires UPDATE permission on feature_flag resource.\nCreates one audit log entry per successfully-processed flag.\nThe operation is partial-success by design: if some flags fail,\nthe endpoint still returns 200 with per-flag results.\n\nAn archived flag is never turned on: with ``enable`` it is reported with\n``success: false`` and left archived, and the other flags are processed.\nWith ``disable`` it succeeds and stays archived.",
+        "description": "Toggle multiple feature flags in a single operation.\nEach flag's result is reported individually.\nRequires UPDATE permission on feature_flag resource.\nCreates one audit log entry per successfully-processed flag.\nThe operation is partial-success by design: if some flags fail,\nthe endpoint still returns 200 with per-flag results.\nThe changes and their audit entries are saved together: if they cannot\nbe saved, no flag is changed and the endpoint returns 500.\n\nAn archived flag is never turned on: with ``enable`` it is reported with\n``success: false`` and left archived, and the other flags are processed.\nWith ``disable`` it succeeds and stays archived.",
         "operationId": "bulk_toggle_flags_api_v1_feature_flags_bulk_toggle_post",
         "requestBody": {
           "content": {
@@ -22623,7 +22816,7 @@
     },
     "/api/v1/feature-flags/{flag_id}": {
       "delete": {
-        "description": "Delete a feature flag.\n\nThis endpoint deletes an existing feature flag. Access is by permission,\nnot ownership: ADMIN and DEVELOPER may delete any flag, and in the full\nprofile so may anyone whose custom role or direct grant gives\nfeature_flag (delete); anyone else gets 403.\n\nDeleting a feature flag has the following effects:\n- The feature flag and its related data are permanently removed, except\n  its events: those are kept, with `feature_flag_id` set to null\n- An audit record of the deletion is written (if that fails, the delete still stands)\n\n**Note**: This operation cannot be undone. For active feature flags, consider\nchanging the status to 'archived' instead.\n\nReturns:\n    None: No content, feature flag was successfully deleted\n\nRaises:\n    HTTPException 403: If the user doesn't have permission to delete this feature flag\n    HTTPException 404: If the feature flag doesn't exist",
+        "description": "Delete a feature flag.\n\nThis endpoint deletes an existing feature flag. Access is by permission,\nnot ownership: ADMIN and DEVELOPER may delete any flag, and in the full\nprofile so may anyone whose custom role or direct grant gives\nfeature_flag (delete); anyone else gets 403.\n\nDeleting a feature flag has the following effects:\n- The feature flag and its related data are permanently removed, except\n  its events: those are kept, with `feature_flag_id` set to null\n- An audit record of the deletion is written with it: if the record cannot\n  be written, nothing is deleted and the request answers 500\n\n**Note**: This operation cannot be undone. For active feature flags, consider\nchanging the status to 'archived' instead.\n\nReturns:\n    None: No content, feature flag was successfully deleted\n\nRaises:\n    HTTPException 403: If the user doesn't have permission to delete this feature flag\n    HTTPException 404: If the feature flag doesn't exist\n    HTTPException 500: The audit record could not be written; nothing was deleted",
         "operationId": "delete_feature_flag_api_v1_feature_flags__flag_id__delete",
         "parameters": [
           {
@@ -23150,7 +23343,7 @@
     },
     "/api/v1/feature-flags/{flag_id}/disable": {
       "post": {
-        "description": "Disable a feature flag (set to INACTIVE status).\n\nThis endpoint explicitly disables a feature flag. An archived flag is\nalready off: it answers 200 and stays archived.\nWrites one audit entry with user information and optional reason, also\nwhen the flag already has that status; a failed audit write does not fail\nthe request.\n\n**Authentication**: Requires valid user authentication.\n**Permissions**: Needs the feature_flag (update) permission, which ADMIN\nand DEVELOPER hold; in the full profile a custom role or direct grant can\nadd it, and a superuser always has it. Anyone else gets 403.\n\nReturns:\n    ToggleResponse: Updated feature flag details with audit log ID\n\nRaises:\n    HTTPException 403: If user doesn't have permission to disable this feature flag\n    HTTPException 404: If feature flag doesn't exist\n    HTTPException 500: If disable operation fails",
+        "description": "Disable a feature flag (set to INACTIVE status).\n\nThis endpoint explicitly disables a feature flag. An archived flag is\nalready off: it answers 200 and stays archived.\nWrites one audit entry with user information and optional reason, also\nwhen the flag already has that status. The entry is saved with the change:\nif it cannot be written, nothing is changed and the request answers 500.\n\n**Authentication**: Requires valid user authentication.\n**Permissions**: Needs the feature_flag (update) permission, which ADMIN\nand DEVELOPER hold; in the full profile a custom role or direct grant can\nadd it, and a superuser always has it. Anyone else gets 403.\n\nReturns:\n    ToggleResponse: Updated feature flag details with audit log ID\n\nRaises:\n    HTTPException 403: If user doesn't have permission to disable this feature flag\n    HTTPException 404: If feature flag doesn't exist\n    HTTPException 500: If disable operation fails",
         "operationId": "disable_feature_flag_api_v1_feature_flags__flag_id__disable_post",
         "parameters": [
           {
@@ -23262,7 +23455,7 @@
     },
     "/api/v1/feature-flags/{flag_id}/enable": {
       "post": {
-        "description": "Enable a feature flag (set to ACTIVE status).\n\nThis endpoint explicitly enables a feature flag. An archived flag answers\n400 and stays archived: unarchive it first.\nWrites one audit entry with user information and optional reason, also\nwhen the flag already has that status; a failed audit write does not fail\nthe request.\n\n**Authentication**: Requires valid user authentication.\n**Permissions**: Needs the feature_flag (update) permission, which ADMIN\nand DEVELOPER hold; in the full profile a custom role or direct grant can\nadd it, and a superuser always has it. Anyone else gets 403.\n\nReturns:\n    ToggleResponse: Updated feature flag details with audit log ID\n\nRaises:\n    HTTPException 400: The flag is archived\n    HTTPException 403: If user doesn't have permission to enable this feature flag\n    HTTPException 404: If feature flag doesn't exist\n    HTTPException 500: If enable operation fails",
+        "description": "Enable a feature flag (set to ACTIVE status).\n\nThis endpoint explicitly enables a feature flag. An archived flag answers\n400 and stays archived: unarchive it first.\nWrites one audit entry with user information and optional reason, also\nwhen the flag already has that status. The entry is saved with the change:\nif it cannot be written, nothing is changed and the request answers 500.\n\n**Authentication**: Requires valid user authentication.\n**Permissions**: Needs the feature_flag (update) permission, which ADMIN\nand DEVELOPER hold; in the full profile a custom role or direct grant can\nadd it, and a superuser always has it. Anyone else gets 403.\n\nReturns:\n    ToggleResponse: Updated feature flag details with audit log ID\n\nRaises:\n    HTTPException 400: The flag is archived\n    HTTPException 403: If user doesn't have permission to enable this feature flag\n    HTTPException 404: If feature flag doesn't exist\n    HTTPException 500: If enable operation fails",
         "operationId": "enable_feature_flag_api_v1_feature_flags__flag_id__enable_post",
         "parameters": [
           {
@@ -23450,7 +23643,7 @@
     },
     "/api/v1/feature-flags/{flag_id}/toggle": {
       "post": {
-        "description": "Toggle a feature flag between enabled and disabled states.\n\nThis endpoint provides a unified way to toggle feature flags, automatically\ndetermining whether to activate or deactivate based on the current status.\n\nThe toggle operation includes:\n- Status change (ACTIVE ↔ INACTIVE). An archived flag would be turned on,\n  so it answers 400 and stays archived: unarchive it first\n- One audit entry with user information and optional reason; a failed\n  audit write does not fail the request\n- Response with new status and audit log ID\n\n**Authentication**: Requires valid user authentication.\n**Permissions**: ADMIN and DEVELOPER may toggle any flag, and in the full\nprofile so may anyone whose custom role or direct grant gives\nfeature_flag (update); anyone else gets 403.\n\nReturns:\n    ToggleResponse: Updated feature flag details with audit log ID\n\nRaises:\n    HTTPException 400: The flag is archived\n    HTTPException 403: If user doesn't have permission to toggle this feature flag\n    HTTPException 404: If feature flag doesn't exist\n    HTTPException 500: If toggle operation fails",
+        "description": "Toggle a feature flag between enabled and disabled states.\n\nThis endpoint provides a unified way to toggle feature flags, automatically\ndetermining whether to activate or deactivate based on the current status.\n\nThe toggle operation includes:\n- Status change (ACTIVE ↔ INACTIVE). An archived flag would be turned on,\n  so it answers 400 and stays archived: unarchive it first\n- One audit entry with user information and optional reason, saved with\n  the change: if the entry cannot be written, nothing is changed and the\n  request answers 500\n- Response with new status and audit log ID\n\n**Authentication**: Requires valid user authentication.\n**Permissions**: ADMIN and DEVELOPER may toggle any flag, and in the full\nprofile so may anyone whose custom role or direct grant gives\nfeature_flag (update); anyone else gets 403.\n\nReturns:\n    ToggleResponse: Updated feature flag details with audit log ID\n\nRaises:\n    HTTPException 400: The flag is archived\n    HTTPException 403: If user doesn't have permission to toggle this feature flag\n    HTTPException 404: If feature flag doesn't exist\n    HTTPException 500: If toggle operation fails",
         "operationId": "toggle_feature_flag_api_v1_feature_flags__flag_id__toggle_post",
         "parameters": [
           {
@@ -26798,74 +26991,6 @@
         ]
       }
     },
-    "/api/v1/results/{experiment_id}/post-stratification": {
-      "post": {
-        "deprecated": true,
-        "description": "**Deprecated**, because it is not available: this route answers 501 for every existing experiment, and it may be removed in a later release. Post-stratification needs one metric value and the stratum attributes per assigned user, and nothing builds those rows from an experiment's recorded assignments and events yet.",
-        "operationId": "compute_post_stratification_api_v1_results__experiment_id__post_stratification_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "experiment_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Experiment Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PostStratificationRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PostStratResultResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "404": {
-            "description": "No experiment with this ID"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          },
-          "501": {
-            "description": "Post-stratification is not available yet"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Post-stratification variance reduction, not available yet (deprecated)",
-        "tags": [
-          "Results",
-          "Results"
-        ],
-        "x-stability": "beta"
-      }
-    },
     "/api/v1/results/{experiment_id}/sample-size": {
       "get": {
         "description": "The planned sample size for an experiment, and how far it has got.\n\nPlans a two-sided two-proportion test on the primary metric: the users\neach variant needs to detect a relative lift of ``mde`` over the baseline\nat ``confidence_level`` with ``power_target`` power.  The MDE is ``mde``\nwhen sent, otherwise the primary metric's saved ``expected_effect`` when\nit is above 0 and below 1, otherwise 0.05 (``mde_source`` says which).\nThe baseline is ``baseline_conversion_rate`` when sent, otherwise the\ncontrol variant's conversion rate so far -- counted the way the results\ncount it, but not read from the results cache, so for up to its five\nminutes it can be newer than the rate the results show.\n\nProgress is the smallest variant's assignments.  Nothing is saved.\nWith no data to plan from the answer is 200 with\n``required_sample_size_per_variant: null`` and ``unavailable_reason``.\nA sent baseline that the MDE raises to 100% or more answers 422, and so\ndoes one too close to its treatment rate for the size to be a finite\nnumber; an observed rate in that position gives ``effect_too_small``.",
@@ -29037,6 +29162,67 @@
         ]
       }
     },
+    "/api/v1/tracking/alias": {
+      "post": {
+        "description": "Link an anonymous id to the known user id of the same person (beta).\n\nFrom then on the tracking routes answer either id as one person. In each\nexperiment the assignment stored first among the person's ids is the\nanswer for all of them, and an id with no assignment of its own gets no\nsecond one. An event sent under either id that names an experiment\ncounts for that assignment. Nothing stored before the link is moved or\nchanged, and feature flags are not linked.\n\nAn anonymous id is linked to one user id and never moved, links are one\nlevel deep, and a user id has at most 100 anonymous ids. A link that\nalready exists answers 200 with ``created: false`` and writes nothing; a\nlink a rule refuses answers 409, and nothing is written. The answer\nrepeats the two ids as sent; no refusal names either.\n\n**Authentication**: a server-side key, an API key with the\n``sdk:ruleset`` scope whose owner can change feature flags: ADMIN,\nDEVELOPER, a superuser, or in the full profile anyone whose custom roles\nor direct grants give ``feature_flag (update)``. Call it from your\nbackend.",
+        "operationId": "link_anonymous_id_api_v1_tracking_alias_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AliasRequest",
+                "description": "The anonymous id and the known user id of one person"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AliasResponse"
+                }
+              }
+            },
+            "description": "The two ids as sent, and whether this request stored the link"
+          },
+          "401": {
+            "description": "No API key, or an unknown, expired or revoked one, or one whose owner is deactivated"
+          },
+          "403": {
+            "description": "The key lacks the sdk:ruleset scope, or its owner can no longer change feature flags"
+          },
+          "409": {
+            "description": "A rule refuses the link: the anonymous_id is linked to another user_id, one of the ids is already on the other side of a link, or the user_id has 100 anonymous_ids; nothing is written"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "description": "Over the SDK rate limit for this address"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Link an anonymous id to a known user id (beta)",
+        "tags": [
+          "Tracking"
+        ],
+        "x-stability": "beta"
+      }
+    },
     "/api/v1/tracking/assign": {
       "post": {
         "description": "Assign a user to an experiment variant.\n\nThis endpoint assigns a user to a variant of the specified experiment.\nIt handles consistent assignment for returning users.\n\nThe assignment is deterministic based on:\n- User ID\n- Experiment ID\n- Targeting rules\n- Traffic allocation percentages\n\nFor an experiment that balances within groups, a new user's variant also\ndepends on the users of their group assigned before them.\n\nThis means that the same user will always get the same variant assignment\nfor a specific experiment, including across experiments in the same mutual\nexclusion group: a user enrolled in one experiment of a group is not\nenrolled in another, even as experiments in the group are activated,\npaused or resumed.\n\nNew users are first checked for eligibility: the global holdout, the\nexperiment's mutual exclusion group and its targeting rules (evaluated\nagainst ``context``; top-level keys also answer ``user.<key>`` /\n``device.<key>`` / ``app.<key>``).  Ineligible users receive HTTP 200 with\nthe control variant, ``assigned: false`` and ``reason`` set to\n``holdout`` | ``mutual_exclusion`` | ``targeting``; nothing is recorded\nfor them.  Existing assignments are always returned as-is.\n\nAn experiment that is not ACTIVE (a draft, or paused, completed or\narchived) answers every user, enrolled or not, with HTTP 200, its control\nvariant, ``assigned: false`` and ``reason`` set to its status: ``draft``\n| ``paused`` | ``completed`` | ``archived``.  Nothing is recorded, and\nusers who were assigned keep their assignment, so a resumed experiment\ngives them their variant again.  A draft with no control variant answers\n404.\n\n**Authentication**: Requires a valid API key in the X-API-Key header.\n\nReturns:\n    VariantAssignmentResponse: The variant assignment with configuration\n    details plus ``assigned`` / ``reason``\n\nRaises:\n    HTTPException 401: If the API key is invalid\n    HTTPException 404: If no experiment has the key, or a draft has no\n        control variant\n    HTTPException 500: If there's an error during assignment",
@@ -30024,7 +30210,7 @@
     },
     "/api/v1/users/me/password": {
       "post": {
-        "description": "Change your own password.\n\nRequires your current password. The new password must be at least 8\ncharacters and at most 72 bytes (UTF-8), with an upper-case letter, a\nlower-case letter and a digit. Answers 204 with no body.\n\nA wrong current password answers 403 (not 401, which would read as a\nsigned-out session) and counts toward the same lockout as sign-in; after\ntoo many failures both answer 423 until ``Retry-After`` has passed.\n\nChanging the password does not end other sessions: a token issued before\nthe change keeps working until it expires.",
+        "description": "Change your own password.\n\nRequires your current password. The new password must be at least 8\ncharacters and at most 72 bytes (UTF-8), with an upper-case letter, a\nlower-case letter and a digit.\n\nA wrong current password answers 403 (not 401, which would read as a\nsigned-out session) and counts toward the same lockout as sign-in; after\ntoo many failures both answer 423 until ``Retry-After`` has passed.\n\nChanging the password signs out every session of the account: every\naccess token issued before the change answers 401 from then on, the one\nthat sent this request included, and a sign-in waiting for its code\nstarts again. An account that signs in with its password alone gets 200\nwith a new access token and the profile, as ``POST /api/v1/auth/login``\nanswers; use that token from then on. Any other account, such as one with\ntwo-step sign-in on or required for its role, gets 204 with no body and\nsigns in again with the new password.",
         "operationId": "change_own_password_api_v1_users_me_password_post",
         "requestBody": {
           "content": {
@@ -30037,8 +30223,18 @@
           "required": true
         },
         "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            },
+            "description": "The password is changed. A new access token for this account, as POST /api/v1/auth/login answers: every token issued before the change is refused, the one that sent this request included."
+          },
           "204": {
-            "description": "Successful Response"
+            "description": "The password is changed and every session of the account has ended, this one too. The answer for an account that the password alone does not sign in, such as one with two-step sign-in on or required for its role: sign in again with the new password."
           },
           "403": {
             "description": "The current password is missing or incorrect, or the account has no password of its own."
@@ -30316,52 +30512,15 @@
         ]
       }
     },
-    "/api/v1/wizard/drafts": {
-      "get": {
-        "deprecated": true,
-        "description": "**Deprecated.** The dashboard does not use the wizard API; it may be removed in a later release. Drafts are per user and held in the API process's memory.\n\nReturns all in-progress wizard drafts belonging to the authenticated user.",
-        "operationId": "list_drafts_api_v1_wizard_drafts_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WizardDraftListResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "description": "Authentication required"
-          },
-          "403": {
-            "description": "Permission denied"
-          },
-          "404": {
-            "description": "Draft not found"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "List wizard drafts for the current user (deprecated)",
-        "tags": [
-          "Experiment Wizard",
-          "Experiment Wizard"
-        ]
-      },
+    "/api/v1/visual-editor/sessions": {
       "post": {
-        "deprecated": true,
-        "description": "**Deprecated.** The dashboard does not use the wizard API; it may be removed in a later release. Drafts are per user and held in the API process's memory.\n\nInitialise a new wizard draft for the authenticated user. The draft starts at the 'choose_type' step and accumulates data as the user progresses through the wizard.",
-        "operationId": "create_draft_api_v1_wizard_drafts_post",
+        "description": "Exchange the page's value for a visual editor session.\n\nSent by the visual editor's panel, from the dashboard, with the value the\npage handed it and that page's origin. The session belongs to the user\nwho made the editor link, lasts 4 hours and cannot be extended; its token\nworks only on the visual editor's session routes. The answer carries the\ntoken once, the experiment's sites the editor may run on, and the\ndraft's design.\n\nRefused, in this order: 403 when the request's `Origin` is not one of the\ndashboard's; 422 when the request is not in the documented form; 409 when\nthe value was already used, which also closes the editor it opened; 401\nwhen it is unknown, expired or ended; 403 when `page_origin` is not one of\nthe experiment's sites; 422, as opening the editor answers, when\nCORS_ORIGINS contains `*` or one of the experiment's pages is no longer\non a site this server accepts; 403 when the user is no longer active or\nmay no longer change experiments; 400 when the experiment is no longer a\ndraft, has a start date, or has no visual settings; then the same 409 or\n401 if the value has been ended or has expired meanwhile. After the 401\nevery refusal leaves the value spent. Sent with `Cache-Control: no-store`.",
+        "operationId": "open_editor_session_api_v1_visual_editor_sessions_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/WizardDraftCreate"
+                "$ref": "#/components/schemas/ClaimExchange"
               }
             }
           },
@@ -30372,20 +30531,23 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/WizardDraftResponse"
+                  "$ref": "#/components/schemas/EditorSessionOpened"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The session's token, shown once, and the draft"
+          },
+          "400": {
+            "description": "The experiment is no longer a draft, has a start date, or has no visual settings"
           },
           "401": {
-            "description": "Authentication required"
+            "description": "The value is unknown, expired or ended"
           },
           "403": {
-            "description": "Permission denied"
+            "description": "The request does not come from the dashboard, the page is not one of the experiment's sites, or the user may no longer change the experiment"
           },
-          "404": {
-            "description": "Draft not found"
+          "409": {
+            "description": "The editor link was already used: the editor it opened is closed"
           },
           "422": {
             "content": {
@@ -30398,89 +30560,96 @@
             "description": "Validation Error"
           }
         },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Create a new experiment wizard draft (deprecated)",
+        "summary": "Start a visual editor session (beta)",
         "tags": [
-          "Experiment Wizard",
-          "Experiment Wizard"
-        ]
+          "Visual Editor"
+        ],
+        "x-stability": "beta"
       }
     },
-    "/api/v1/wizard/drafts/{draft_id}": {
+    "/api/v1/visual-editor/sessions/current": {
+      "delete": {
+        "description": "End the session: its token answers 401 `signed_out` from then on. The\nsaved design is kept. Only the first four checks of every session call\napply (the `Origin`, the token, the session's end and its expiry), so a\nsession signs out even once its user may no longer change experiments,\nand of a draft that has since been given a start date, or is no longer a\ndraft.",
+        "operationId": "sign_out_of_editor_api_v1_visual_editor_sessions_current_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditorSessionRefusal"
+                }
+              }
+            },
+            "description": "The session cannot be used; reason says why"
+          },
+          "403": {
+            "description": "The request does not come from the dashboard"
+          }
+        },
+        "summary": "Sign out of the visual editor (beta)",
+        "tags": [
+          "Visual Editor"
+        ],
+        "x-stability": "beta"
+      },
       "get": {
-        "deprecated": true,
-        "description": "**Deprecated.** The dashboard does not use the wizard API; it may be removed in a later release. Drafts are per user and held in the API process's memory.\n\nRetrieve one of the caller's wizard drafts, including all accumulated step data. A draft that does not exist or belongs to another user answers 404.",
-        "operationId": "get_draft_api_v1_wizard_drafts__draft_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "draft_id",
-            "required": true,
-            "schema": {
-              "title": "Draft Id",
-              "type": "string"
-            }
-          }
-        ],
+        "description": "The session's end, the experiment's sites the editor may run on, and the\ndraft's design as stored now: the session's answer without its token.\nSent with `Cache-Control: no-store`.",
+        "operationId": "read_editor_session_api_v1_visual_editor_sessions_current_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/WizardDraftResponse"
+                  "$ref": "#/components/schemas/EditorSessionState"
                 }
               }
             },
             "description": "Successful Response"
           },
+          "400": {
+            "description": "The experiment is no longer a draft, or has a start date"
+          },
           "401": {
-            "description": "Authentication required"
-          },
-          "403": {
-            "description": "Permission denied"
-          },
-          "404": {
-            "description": "Draft not found"
-          },
-          "422": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/EditorSessionRefusal"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "The session cannot be used; reason says why"
+          },
+          "403": {
+            "description": "The request does not come from the dashboard, or the user may no longer change the experiment"
+          },
+          "404": {
+            "description": "The experiment no longer exists"
           }
         },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Get a wizard draft by ID (deprecated)",
+        "summary": "The visual editor session and its draft (beta)",
         "tags": [
-          "Experiment Wizard",
-          "Experiment Wizard"
-        ]
+          "Visual Editor"
+        ],
+        "x-stability": "beta"
       }
     },
-    "/api/v1/wizard/drafts/{draft_id}/step": {
+    "/api/v1/visual-editor/sessions/current/variants/{variant_id}/changes": {
       "put": {
-        "deprecated": true,
-        "description": "**Deprecated.** The dashboard does not use the wizard API; it may be removed in a later release. Drafts are per user and held in the API process's memory.\n\nSubmit data for the current wizard step and advance to the next step. The draft accumulates data across all steps. `data` may only contain step fields (`experiment_type`, `hypothesis`, `primary_metric_id`, `guardrail_metric_ids`, `targeting_rules`, `baseline_rate`, `mde`, `name`, `description`); any other key, or a step field of the wrong type, answers 422 and the draft is unchanged. A draft that does not exist or belongs to another user answers 404.",
-        "operationId": "update_draft_step_api_v1_wizard_drafts__draft_id__step_put",
+        "description": "Replace one variant's page changes, keeping every other variant and its\nchanges as stored. It is the experiment update's own write, so it refuses\nwhat an update refuses (the control's changes among them), records one\n\"Experiment changed\" entry by the session's user with the reason\n`visual editor session <first 8 characters of the session's id>`, and\ndrops the cached experiment. The variants are saved again, so each gets a\nnew id; the answer is the session's, with the new ids. Sent with\n`Cache-Control: no-store`.",
+        "operationId": "save_variant_changes_api_v1_visual_editor_sessions_current_variants__variant_id__changes_put",
         "parameters": [
           {
+            "description": "One of the draft's variants",
             "in": "path",
-            "name": "draft_id",
+            "name": "variant_id",
             "required": true,
             "schema": {
-              "title": "Draft Id",
+              "description": "One of the draft's variants",
+              "format": "uuid",
+              "title": "Variant Id",
               "type": "string"
             }
           }
@@ -30489,7 +30658,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/WizardStepUpdate"
+                "$ref": "#/components/schemas/VisualChanges"
               }
             }
           },
@@ -30500,159 +30669,85 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/WizardDraftResponse"
+                  "$ref": "#/components/schemas/EditorSessionState"
                 }
               }
             },
             "description": "Successful Response"
           },
-          "401": {
-            "description": "Authentication required"
-          },
-          "403": {
-            "description": "Permission denied"
-          },
-          "404": {
-            "description": "Draft not found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Update a wizard draft with step data (deprecated)",
-        "tags": [
-          "Experiment Wizard",
-          "Experiment Wizard"
-        ]
-      }
-    },
-    "/api/v1/wizard/drafts/{draft_id}/submit": {
-      "post": {
-        "deprecated": true,
-        "description": "**Deprecated.** The dashboard does not use the wizard API; it may be removed in a later release. Drafts are per user and held in the API process's memory.\n\nValidate one of the caller's drafts and create the experiment it describes (status DRAFT, owned by the caller), then discard the draft. Returns the new experiment_id on success or validation errors on failure. A draft that does not exist or belongs to another user answers 404.",
-        "operationId": "submit_draft_api_v1_wizard_drafts__draft_id__submit_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "draft_id",
-            "required": true,
-            "schema": {
-              "title": "Draft Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WizardSubmitResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
+          "400": {
+            "description": "The experiment is no longer a draft, or has a start date"
           },
           "401": {
-            "description": "Authentication required"
-          },
-          "403": {
-            "description": "Permission denied"
-          },
-          "404": {
-            "description": "Draft not found"
-          },
-          "422": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/EditorSessionRefusal"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "The session cannot be used; reason says why"
+          },
+          "403": {
+            "description": "The request does not come from the dashboard, or the user may no longer change the experiment"
+          },
+          "404": {
+            "description": "The experiment no longer exists, or has no variant with that id"
+          },
+          "422": {
+            "description": "The page changes are refused, as an experiment update refuses them"
           }
         },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Submit a completed wizard draft to create an experiment (deprecated)",
+        "summary": "Save one variant's page changes from the visual editor (beta)",
         "tags": [
-          "Experiment Wizard",
-          "Experiment Wizard"
-        ]
+          "Visual Editor"
+        ],
+        "x-stability": "beta"
       }
     },
-    "/api/v1/wizard/validate": {
+    "/api/v1/visual-editor/tickets/claim": {
       "post": {
-        "deprecated": true,
-        "description": "**Deprecated.** The dashboard does not use the wizard API; it may be removed in a later release. Drafts are per user and held in the API process's memory.\n\nValidate data for a specific wizard step without modifying any draft. Returns is_valid flag and list of validation errors.",
-        "operationId": "validate_step_api_v1_wizard_validate_post",
+        "description": "Spend an editor link's ticket and store the page's value in its place.\n\nSent by the Controlvar script on the page the editor link opened, with no\nAPI key and no cookie. `claim` is 43 base64url characters the page drew;\nthe editor's panel then exchanges it for a session\n(`POST /api/v1/visual-editor/sessions`) within 120 seconds. The answer holds\nno credential.\n\nRefused, in this order: 422 when `claim` is not 43 base64url characters,\nor is already in use (the ticket is not spent); 409 when the ticket was\nalready used, which also closes the editor it opened; 401 when it is\nunknown, expired or ended; 403 when the request's `Origin` is not one of\nthe experiment's sites (the ticket stays spent); then the same 409 or 401\nif the link has been used again, ended or has expired meanwhile. Sent\nwith `Cache-Control: no-store`.",
+        "operationId": "claim_editor_link_api_v1_visual_editor_tickets_claim_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/WizardValidationRequest"
+                "$ref": "#/components/schemas/TicketClaim"
               }
             }
           },
           "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/WizardValidationResponse"
+                  "$ref": "#/components/schemas/TicketClaimed"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The claim is stored; no credential comes back"
           },
           "401": {
-            "description": "Authentication required"
+            "description": "The editor link is unknown, expired or ended"
           },
           "403": {
-            "description": "Permission denied"
+            "description": "The request does not come from one of the experiment's sites"
           },
-          "404": {
-            "description": "Draft not found"
+          "409": {
+            "description": "The editor link was already used: the editor it opened is closed"
           },
           "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
+            "description": "The request is not in the documented form, or the value sent with the link is already in use"
           }
         },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Validate wizard step data (deprecated)",
+        "summary": "Claim an editor link, from the page it opened (beta)",
         "tags": [
-          "Experiment Wizard",
-          "Experiment Wizard"
-        ]
+          "Visual Editor"
+        ],
+        "x-stability": "beta"
       }
     },
     "/api/v1/ws/active-experiments": {
@@ -30827,11 +30922,7 @@
       "name": "MCP"
     },
     {
-      "description": "Step-by-step draft-and-submit flow for designing an experiment; submitting creates it",
-      "name": "Experiment Wizard"
-    },
-    {
-      "description": "Compliance audit trail: append-only events for every experiment and feature-flag change, readable by ADMIN and ANALYST. HMAC signing, SOC 2 / ISO 27001 reports and the audit export are the compliance module's, on the same routes.",
+      "description": "Compliance audit trail: append-only events for experiment and feature-flag creates, updates and deletes, readable by ADMIN and ANALYST. HMAC signing, SOC 2 / ISO 27001 reports and the audit export are the compliance module's, on the same routes.",
       "name": "Compliance"
     }
   ]

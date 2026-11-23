@@ -1,6 +1,10 @@
 /**
  * Changing your own password (#503). Every outcome shows the page's own fixed
- * sentence; no response text reaches the screen.
+ * sentence; no response text reaches the screen. A change signs out every
+ * session of the account (#501): an answer with a new token keeps this tab
+ * signed in through it, and one without asks the user to sign in again. The
+ * AuthContext is a stand-in here; account-password-session.test.tsx runs the
+ * same page with the real one.
  */
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -26,19 +30,38 @@ const PATH = '/api/v1/users/me/password';
 /** Text a server could send. None of it may appear on the page. */
 const PLANTED = 'PLANTED-SERVER-TEXT <b>do not show</b>';
 
+const CHANGED =
+  'Your password has been changed. Other browsers and devices signed in to your account have been ' +
+  'signed out. Use the new password the next time you sign in.';
+const SIGNED_OUT =
+  'Your password has been changed, and every session has been signed out, this one too. ' +
+  'Sign in again with the new password.';
+
+const ME = {
+  id: 'u1',
+  email: 'u@example.com',
+  username: 'u',
+  full_name: null,
+  role: 'DEVELOPER',
+  is_superuser: false,
+  is_active: true,
+  auth_provider: 'local',
+};
+
+/** The sign-in answer the change gives an account without two-step sign-in. */
+const NEW_TOKEN_ANSWER = { access_token: 'tok2', token_type: 'bearer', expires_in: 43200, user: ME };
+
+const mockRefresh = jest.fn();
+const mockLogout = jest.fn();
+/** The stored token each time the page asked for the session to be re-checked. */
+let tokenAtRefresh: Array<string | null> = [];
+
 function signIn(authProvider = 'local') {
   mockAuth.mockReturnValue({
     status: 'authenticated',
-    user: {
-      id: 'u1',
-      email: 'u@example.com',
-      username: 'u',
-      full_name: null,
-      role: 'DEVELOPER',
-      is_superuser: false,
-      is_active: true,
-      auth_provider: authProvider,
-    },
+    user: { ...ME, auth_provider: authProvider },
+    refresh: mockRefresh,
+    logout: mockLogout,
   });
 }
 
@@ -73,6 +96,14 @@ const axeOptions: axe.RunOptions = { rules: { 'color-contrast': { enabled: false
 
 beforeEach(() => {
   mockFetch.mockReset();
+  mockRefresh.mockReset();
+  mockLogout.mockReset();
+  tokenAtRefresh = [];
+  mockRefresh.mockImplementation(() => {
+    tokenAtRefresh.push(localStorage.getItem(TOKEN_STORAGE_KEY));
+    return Promise.resolve(ME);
+  });
+  mockLogout.mockResolvedValue(undefined);
   localStorage.clear();
   localStorage.setItem(TOKEN_STORAGE_KEY, 'tok');
   signIn('local');
@@ -92,25 +123,84 @@ describe('ChangePasswordPage', () => {
     expect(result.violations.map((v) => v.id)).toEqual([]);
   });
 
-  it('sends the change and says it is done, clearing the fields', async () => {
+  it('sends the change, keeps the new token, and says it is done, clearing the fields', async () => {
     render(<ChangePasswordPage />);
-    respond(204);
+    respond(200, NEW_TOKEN_ANSWER);
     fill('OldPass1', 'NewPass12');
     await submit();
     const box = await outcome();
     expect(box).toHaveAttribute('data-outcome', 'changed');
-    expect(box).toHaveTextContent(
-      'Your password has been changed. Use the new one the next time you sign in. ' +
-        'Anywhere else you are signed in stays signed in until that session expires.',
-    );
+    expect(box).toHaveAttribute('role', 'status');
+    expect(box).toHaveTextContent(CHANGED);
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const [url, init] = mockFetch.mock.calls[0];
     expect(url).toBe(`${BASE}${PATH}`);
     expect(init.method).toBe('POST');
+    expect(init.headers.Authorization).toBe('Bearer tok');
     expect(JSON.parse(init.body)).toEqual({ current_password: 'OldPass1', new_password: 'NewPass12' });
     expect(screen.getByTestId('current-password-input')).toHaveValue('');
     expect(screen.getByTestId('new-password-input')).toHaveValue('');
+    // The new token is stored before the session is checked again, so that
+    // check, and every request after it, carries the new token.
+    expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('tok2');
+    expect(tokenAtRefresh).toEqual(['tok2']);
+    expect(mockLogout).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('change-password-sign-in')).not.toBeInTheDocument();
   });
+
+  it('says it is done only once the session has been checked again', async () => {
+    let finish: (value: unknown) => void = () => undefined;
+    mockRefresh.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    render(<ChangePasswordPage />);
+    respond(200, NEW_TOKEN_ANSWER);
+    fill('OldPass1', 'NewPass12');
+    await submit();
+    await waitFor(() => expect(mockRefresh).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId('change-password-outcome')).not.toBeInTheDocument();
+    await act(async () => {
+      finish(ME);
+    });
+    expect(await outcome()).toHaveAttribute('data-outcome', 'changed');
+  });
+
+  // 204: an account with two-step sign-in on or required. A 200 without a
+  // token is read the same way: no session continues.
+  const signedOutAnswers: Array<[string, number, unknown]> = [
+    ['204', 204, undefined],
+    ['a 200 without a token', 200, { token_type: 'bearer' }],
+    ['a 200 whose token is not a string', 200, { ...NEW_TOKEN_ANSWER, access_token: 42 }],
+  ];
+
+  it.each(signedOutAnswers)(
+    'on %s says every session has ended, clears nothing, and Sign in signs this tab out',
+    async (_label, status, body) => {
+      render(<ChangePasswordPage />);
+      respond(status, body);
+      fill('OldPass1', 'NewPass12');
+      await submit();
+      const box = await outcome();
+      expect(box).toHaveAttribute('data-outcome', 'signed-out');
+      expect(box).toHaveAttribute('role', 'status');
+      expect(box).toHaveTextContent(SIGNED_OUT);
+      expect(box).not.toHaveTextContent('Other browsers');
+      expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('tok');
+      expect(mockRefresh).not.toHaveBeenCalled();
+      expect(mockLogout).not.toHaveBeenCalled();
+
+      const button = screen.getByTestId('change-password-sign-in');
+      expect(button).toHaveTextContent('Sign in');
+      button.focus();
+      expect(button).toHaveFocus();
+      fireEvent.click(button);
+      expect(mockLogout).toHaveBeenCalledTimes(1);
+      expect(mockLogout).toHaveBeenCalledWith();
+    },
+  );
 
   it('refuses a confirmation that does not match, without a request', async () => {
     render(<ChangePasswordPage />);

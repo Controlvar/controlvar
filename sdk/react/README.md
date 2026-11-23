@@ -60,6 +60,19 @@ const flags = useMultipleFlags(['shoplab_new_search', 'shoplab_free_shipping_ban
 const showBanner = flags['shoplab_free_shipping_banner']?.isEnabled ?? false;  // null while loading
 ```
 
+### `useFlagValue(flagKey, type, defaultValue): FlagValueResult`
+
+```tsx
+const { value: label, loading, error } = useFlagValue('checkout-button-label', 'string', 'Buy now');
+```
+
+Reads the value a string, number or json flag serves the user (`type` is `'string'`, `'number'` or
+`'json'`): its on value when the flag is on for them, its off value otherwise. Pass the flag's off
+value as your default. `value` is the default while loading and whenever there is no value of that
+type to read; `error` is then a `FlagValueError` whose `code` is `'REQUEST_FAILED'`,
+`'INVALID_RESPONSE'` or `'TYPE_MISMATCH'`. It never throws, and shares `useFeatureFlag`'s request
+and cache. Full details: [Flag values](https://github.com/Controlvar/controlvar/blob/main/docs/sdk/react.md#flag-values).
+
 ### `useExperiment(experimentKey): ExperimentAssignment`
 
 ```tsx
@@ -128,10 +141,9 @@ experiment the user is in.
 ## Event ids
 
 Every event the SDK sends carries an `event_id`, so the server stores an event sent again with the
-same `event_id`, user, experiment, flag and event name only once. Use this from the next published
-version, not from the version on npm now. It needs a Controlvar server that includes the
-`event_id` change (#1640, in the first platform release after it merged): an older server ignores
-the field.
+same `event_id`, user, experiment, flag and event name only once. It needs a Controlvar server
+that includes the `event_id` change (#1640, in the first platform release after it merged): an
+older server ignores the field.
 
 - Without an `eventId` option, each call makes a new lowercase UUID v4. For an event your code may
   send again, make the id once, when the event happens, and pass the same `eventId` each time.
@@ -230,7 +242,7 @@ Every request carries `X-API-Key: <key>` and `Content-Type: application/json`.
 
 | SDK call | Method & path | Body / query | Response used |
 |---|---|---|---|
-| `evaluateFeatureFlag*`, `useFeatureFlag`, `useVariant`, `useMultipleFlags`, `ServerClient.getAll` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=<url-encoded JSON>` | `context` = `user.attributes` (omitted when empty) | `{key, enabled, config, reason}` (off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key) |
+| `evaluateFeatureFlag*`, `useFeatureFlag`, `useFlagValue`, `useVariant`, `useMultipleFlags`, `ServerClient.getAll` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=<url-encoded JSON>` | `context` = `user.attributes` (omitted when empty) | `{key, enabled, config, reason, value, value_type}` (off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key) |
 | `assignExperiment`, `useExperiment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason}` (404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false`) |
 | `trackEvent` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?, event_id}` | ignored |
 | `trackEvent` without keys | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (≤ 100 per request) | ignored |
