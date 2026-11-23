@@ -238,7 +238,23 @@ by = [
 ]
 
 [[unit]]
-text = "No other SDK has an event_id option yet (Limitations): send an event that may be sent again to POST /api/v1/tracking/track or POST /api/v1/tracking/batch yourself."
+text = "The Android SDK, which you build from a clone of this repository, gives every event an event_id (Event ids)."
+by = [
+    "test:sdk/android/sdk/src/test/kotlin/EventIdTest.kt::a keyed track sends a generated lowercase UUID v4 as event_id",
+    "test:sdk/android/sdk/src/test/kotlin/EventIdTest.kt::an unkeyed track fanned out to two assignments and a flag sends one id in every entry",
+    "test:backend/tests/unit/api/test_how_events_count_rules.py::test_the_sdks_with_an_event_id_option_name_it",
+]
+
+[[unit]]
+text = "The Elixir SDK, which you build from this repository, gives every event an event_id (Event ids)."
+by = [
+    "test:sdk/elixir/test/controlvar/event_id_test.exs::a keyed track sends a lowercase UUID v4 as event_id",
+    "test:sdk/elixir/test/controlvar/event_id_test.exs::a key-less track fanned out to two assignments and a flag sends one id in every entry",
+    "test:backend/tests/unit/api/test_how_events_count_rules.py::test_the_sdks_with_an_event_id_option_name_it",
+]
+
+[[unit]]
+text = "No other SDK has an event_id option (Limitations): send an event that may be sent again to POST /api/v1/tracking/track or POST /api/v1/tracking/batch yourself."
 by = [
     "test:backend/tests/unit/api/test_how_events_count_rules.py::test_no_other_sdk_has_an_event_id_option_yet",
     "test:backend/tests/unit/api/test_how_events_count_rules.py::test_every_sdk_directory_is_listed",

@@ -289,3 +289,93 @@ def test_the_dotnet_scan_reads_only_public_typed_getters():
         "}\n"
     )
     assert dotnet_getters(source) == {"GetStringValueAsync", "GetJsonValueAsync"}
+
+
+# --- the limitations row (#1810) -------------------------------------------------
+
+LIMITATIONS = REPO_ROOT / "docs" / "getting-started" / "limitations.md"
+GO_PAGE = DOCS / "go.md"
+OPENFEATURE_PAGE = DOCS / "openfeature.md"
+ROW_TITLE = "| A flag's value in every SDK |"
+
+#: The page each name in the row stands for.
+ROW_NAMES = {
+    "JavaScript": "javascript",
+    "Python": "python",
+    "Go": "go",
+    "OpenFeature": "openfeature",
+    "React": "react",
+    "React Native": "react-native",
+    "Java": "java",
+    ".NET": "dotnet",
+    "Android": "android",
+    "iOS": "ios",
+    "Flutter": "flutter",
+    "PHP": "php",
+    "Ruby": "ruby",
+    "Elixir": "elixir",
+    "Edge": "edge",
+}
+#: Pages under docs/sdk/ that are not an SDK.
+NOT_AN_SDK = {"exposure-hook", "local-evaluation", "visual"}
+
+
+def row_names(text: str) -> Tuple[Set[str], Set[str]]:
+    """The names the limitations row gives as reading a value, and as on or off."""
+    rows = [line for line in text.splitlines() if line.startswith(ROW_TITLE)]
+    assert len(rows) == 1, f"{rel(LIMITATIONS)}: no single {ROW_TITLE!r} row"
+    match = re.search(
+        r"documents a value method: (?P<readers>.+?)\. (?P<off>[^.]+) read a value flag as on or off",
+        rows[0],
+    )
+    assert match, f"{rel(LIMITATIONS)}: the row names no readers and no on-or-off SDKs"
+
+    def split(names: str) -> Set[str]:
+        names = re.sub(r"\([^)]*\)", "", names)
+        return {n.strip() for n in re.split(r",| and ", names) if n.strip()}
+
+    return split(match["readers"]), split(match["off"])
+
+
+def expected_pages() -> Tuple[Set[str], Set[str]]:
+    """The pages that read a value, and the other SDK pages, from the scans and the pages."""
+    readers = {page.stem for _, _, page, _, _ in READERS}
+    # Go reads it with ``EvalResult.StringValue`` and the rest: its page's
+    # "Flag values" section (go.md).
+    assert section(GO_PAGE.read_text(encoding="utf-8")), "go.md has no Flag values"
+    readers.add("go")
+    # OpenFeature (JavaScript and Python) reads it with its typed calls, named
+    # under "Resolution rules" in openfeature.md; a fixed entry, not scanned.
+    assert "`getStringValue`" in OPENFEATURE_PAGE.read_text(encoding="utf-8")
+    readers.add("openfeature")
+    every = {p.stem for p in DOCS.glob("*.md")} - NOT_AN_SDK
+    return readers, every - readers
+
+
+def test_the_limitations_row_lists_the_sdks_that_read_a_value():
+    reads, on_off = row_names(LIMITATIONS.read_text(encoding="utf-8"))
+    unknown = (reads | on_off) - set(ROW_NAMES)
+    assert not unknown, f"{rel(LIMITATIONS)}: {sorted(unknown)} are not SDK names here"
+    expected_reads, expected_on_off = expected_pages()
+    assert {ROW_NAMES[n] for n in reads} == expected_reads, (
+        f"{rel(LIMITATIONS)}'s row names {sorted(reads)} as reading a value; "
+        f"the scans and pages give {sorted(expected_reads)}"
+    )
+    assert {ROW_NAMES[n] for n in on_off} == expected_on_off, (
+        f"{rel(LIMITATIONS)}'s row names {sorted(on_off)} as on or off; "
+        f"the other SDK pages are {sorted(expected_on_off)}"
+    )
+    assert len(reads) + len(on_off) == len(set(reads) | set(on_off))
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "no row here",
+        f"{ROW_TITLE} An SDK reads a value. |",
+    ],
+    ids=["no-row", "no-names"],
+)
+def test_a_row_that_names_no_sdks_is_refused(text):
+    with pytest.raises(AssertionError):
+        row_names(text)
