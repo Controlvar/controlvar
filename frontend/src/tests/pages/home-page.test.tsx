@@ -17,11 +17,14 @@
  *        `<video>` since the site design of 2026-11-11, and the teaser's
  *        posters load lazily. No timings;
  *   links  the SDK chips are `SDK_GUIDES`, `content/site-links.ts` holds
- *        no docs page, the facts strip links files that exist, and the
- *        Controlvar books are linked from their band and the footer (#1859):
- *        the /books page on the marketing build, their repository on a
- *        platform build; the capability page from under the facts strip and
- *        the footer, and the roadmap from the footer (D380).
+ *        no docs page, and the Controlvar books are linked from their band
+ *        and the footer (#1859): the /books page on the marketing build, their
+ *        repository on a platform build; the roadmap from the footer;
+ *   first screen, and what is specific to Controlvar (#2040)  the hero's links
+ *        are an exact list of words and addresses; the section under it has
+ *        exactly six items, each with its quotes and its links, which go to
+ *        files and pages that exist and that the docs nav lists; axe finds no
+ *        violation in either (its layout and colour rules are the site spec's).
  *
  * The flag is mocked, as in `index.site-mode.test.tsx`: SITE_MODE is read at
  * module load.
@@ -30,6 +33,7 @@ import fs from 'fs';
 import path from 'path';
 import React from 'react';
 import { render } from '@testing-library/react';
+import axe from 'axe-core';
 import HomePage from '@/pages/index';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { isMarketingSite } from '@/utils/site-mode';
@@ -37,11 +41,12 @@ import { WALKTHROUGHS, anchorFor } from '@/components/Walkthroughs';
 import { SCREENS, screenSrc } from '@/components/homepage/Screenshot';
 import { sdkChips } from '@/components/homepage/SdkChips';
 import { TEASER } from '@/components/homepage/WalkthroughsTeaser';
-import { MORE_LINK } from '@/components/homepage/styles';
+import { FOCUS } from '@/components/homepage/styles';
 import { CORE_PATH, bookUrl } from '@/content/books';
 import { SDK_GUIDES, SDKS } from '@/content/sdks';
 import * as SITE_LINKS from '@/content/site-links';
 import { docsUrl } from '@/services/docs';
+import { navEntry } from '../content/home-quotes-rules';
 import { Build, inventory, TYPED, typedRepeatsData } from './helpers/homeInventory';
 import { keyOf, renderedItems, surplus } from './helpers/homeText';
 
@@ -117,18 +122,53 @@ describe.each<[string, Build]>([
   });
 });
 
-// F12 (review r1): on a phone the hero's two buttons were 124 and 221 px wide. Full width below sm, so equal.
-describe.each<[string, boolean]>([
-  ['platform build', false],
-  ['marketing build', true],
-])("the homepage's hero buttons, %s", (_name, marketing) => {
+/**
+ * The hero's links (#2040): the two buttons, then the row under them, each by
+ * its words and its address. The row's Walkthroughs is the marketing build's
+ * only: a platform build has no such page.
+ */
+describe.each<[string, boolean, Array<[string, string]>]>([
+  [
+    'platform build',
+    false,
+    [
+      ['Get started', docsUrl('getting-started/quick-start')],
+      ['Sign in to the dashboard', '/login'],
+      ['Docs', '/docs'],
+      ['Source', 'https://github.com/Controlvar/controlvar'],
+    ],
+  ],
+  [
+    'marketing build',
+    true,
+    [
+      ['Get started', docsUrl('getting-started/quick-start')],
+      ['Try the live demo', 'https://demo.controlvar.com'],
+      ['Docs', '/docs'],
+      ['Walkthroughs', '/walkthroughs'],
+      ['Source', 'https://github.com/Controlvar/controlvar'],
+    ],
+  ],
+])("the homepage's hero links, %s", (_name, marketing, want) => {
   beforeEach(() => mode.mockReturnValue(marketing));
 
-  it('are full width below sm and their own width from it', () => {
+  const links = (): HTMLElement[] => {
     const hero = page().querySelector('h1')?.closest('section') as HTMLElement;
-    const buttons = Array.from(hero.querySelectorAll('a'));
-    expect(buttons.map((a) => a.textContent)).toEqual(['Get started', marketing ? 'Try the live demo' : 'Sign in to the dashboard']);
-    for (const a of buttons) expect(a.className.split(/\s+/)).toEqual(expect.arrayContaining(['w-full', 'justify-center', 'sm:w-auto']));
+    return Array.from(hero.querySelectorAll('a'));
+  };
+  const classes = (a: HTMLElement): string[] => a.className.split(/\s+/);
+
+  it('are exactly these, in order', () => {
+    expect(links().map((a) => [a.textContent, a.getAttribute('href')])).toEqual(want);
+  });
+
+  // On a phone the two buttons were 124 and 221 px wide. Full width below sm, so equal.
+  it('has buttons full width below sm and their own width from it', () => {
+    for (const a of links().slice(0, 2)) expect(classes(a)).toEqual(expect.arrayContaining(['w-full', 'justify-center', 'sm:w-auto']));
+  });
+
+  it('has links 44 px tall that draw a focus outline', () => {
+    for (const a of links()) expect(classes(a)).toEqual(expect.arrayContaining(['min-h-11', ...FOCUS.split(' ')]));
   });
 });
 
@@ -325,67 +365,36 @@ describe("the homepage's links", () => {
 
   it('puts the books near the top: right after How it works, before the product rows (site design 2026-11-11, item 4)', () => {
     const h2s = Array.from(page().querySelectorAll('h2')).map((h) => h.textContent);
-    expect(h2s.slice(0, 3)).toEqual(['How it works', 'The Controlvar books', 'Roll features out gradually, with automatic rollback']);
+    expect(h2s.slice(0, 4)).toEqual([
+      'Specific to Controlvar',
+      'How it works',
+      'The Controlvar books',
+      'Roll features out gradually, with automatic rollback',
+    ]);
   });
 
   /**
-   * The facts strip (site design 2026-11-11, item 2; BORROW 1): each fact
-   * links what checks it. The Compose guide is mkdocs.yml's own entry for the
-   * stack's README; the licence, the changelog and the statistics tests are
-   * files and a folder of this repository.
-   */
-  it("links the deploy fact's Compose guide to mkdocs.yml's own entry for the stack's README, which exists", () => {
-    const nav = fs.readFileSync(path.join(REPO_ROOT, 'mkdocs.yml'), 'utf8');
-    expect(nav).toMatch(new RegExp(`^\\s+- Docker Compose \\(self-hosting stack\\): ${SITE_LINKS.COMPOSE_GUIDE_URL.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}\\s*$`, 'm'));
-    const file = /\/blob\/main\/(.+)$/.exec(SITE_LINKS.COMPOSE_GUIDE_URL)?.[1] ?? '';
-    expect(file).toBe('deploy/compose/README.md');
-    expect(fs.existsSync(path.join(REPO_ROOT, file))).toBe(true);
-    const links = Array.from(page().querySelectorAll('a')).filter((a) => a.getAttribute('href') === SITE_LINKS.COMPOSE_GUIDE_URL);
-    expect(links.map((a) => [a.textContent, a.closest('section')?.getAttribute('aria-label')])).toEqual([['One machine', 'At a glance']]);
-  });
-
-  it.each<[string, string, string]>([
-    ['LICENSE_URL', 'LICENSE', 'LICENSE'],
-    ['CHANGELOG_URL', 'CHANGELOG.md', 'CHANGELOG'],
-    ['STATS_TESTS_URL', 'backend/tests/unit/stats_validation', 'Tests'],
-    ['RELEASES_URL', '', 'Releases'],
-  ])('links the facts strip to %s, which exists, as "%s"', (name, file, text) => {
-    const url = (SITE_LINKS as Record<string, string>)[name];
-    if (file) {
-      expect(url).toBe(`${SITE_LINKS.REPO_URL}/${fs.statSync(path.join(REPO_ROOT, file)).isDirectory() ? 'tree' : 'blob'}/main/${file}`);
-    }
-    const strip = page().querySelector('section[aria-label="At a glance"]') as HTMLElement;
-    const links = Array.from(strip.querySelectorAll('a')).filter((a) => a.getAttribute('href') === url);
-    expect(links.map((a) => a.textContent)).toEqual([text]);
-  });
-
-  /**
-   * What Controlvar does today and the roadmap (D380): the capability page
-   * from one link under the facts strip and from the footer, and the roadmap
-   * from the footer, labelled as the docs hub labels them, in both builds.
+   * What Controlvar does today and the roadmap: the capability page from the
+   * line that ends "Specific to Controlvar" and from the footer, and the
+   * roadmap from the footer, labelled as the docs hub labels it, in both
+   * builds.
    */
   it.each<[string, boolean]>([
     ['platform build', false],
     ['marketing build', true],
-  ])('links what Controlvar does under the facts strip and in the footer, and the roadmap in the footer, and nowhere else (D380, %s)', (_name, marketing) => {
+  ])('links what Controlvar does under Specific to Controlvar and in the footer, and the roadmap in the footer, and nowhere else (%s)', (_name, marketing) => {
     mode.mockReturnValue(marketing);
     const container = page();
-    const where = (a: Element) => a.closest('section')?.getAttribute('aria-label') ?? a.closest('nav')?.getAttribute('aria-label');
+    const where = (a: Element) => a.closest('section')?.querySelector('h2')?.textContent ?? a.closest('nav')?.getAttribute('aria-label');
     const linksTo = (href: string) =>
       Array.from(container.querySelectorAll('a'))
         .filter((a) => a.getAttribute('href') === href)
         .map((a) => ({ in: where(a), text: a.textContent }));
     expect(linksTo(docsUrl('capabilities'))).toEqual([
-      { in: 'At a glance', text: 'See everything it does →' },
+      { in: 'Specific to Controlvar', text: 'What Controlvar does today' },
       { in: 'Footer', text: 'What Controlvar does' },
     ]);
     expect(linksTo(SITE_LINKS.ROADMAP_URL)).toEqual([{ in: 'Footer', text: 'Roadmap' }]);
-    // Under the four facts, in the strip's band, in the style of every link that leads on from a section.
-    const strip = container.querySelector('section[aria-label="At a glance"]') as HTMLElement;
-    const more = strip.querySelector('dl + p > a') as HTMLElement;
-    expect(more.getAttribute('href')).toBe(docsUrl('capabilities'));
-    expect(more).toHaveAccessibleName('See everything it does');
-    expect(more.className).toBe(MORE_LINK);
   });
 
   it("links the roadmap as mkdocs.yml's nav does, to ROADMAP.md, and the capability page is a page of that nav (D380)", () => {
@@ -396,16 +405,123 @@ describe("the homepage's links", () => {
     expect(nav).toMatch(/^\s+- What Controlvar Does: capabilities\.md\s*$/m);
     expect(fs.existsSync(path.join(REPO_ROOT, 'docs', 'capabilities.md'))).toBe(true);
   });
+});
 
-  it('gives every fact of the strip a link, and the deploy fact its three guides', () => {
-    const strip = page().querySelector('section[aria-label="At a glance"]') as HTMLElement;
-    const facts = Array.from(strip.querySelectorAll('dd'));
-    expect(facts).toHaveLength(4);
-    for (const dd of facts) expect(dd.querySelectorAll('a').length).toBeGreaterThan(0);
-    expect(Array.from(facts[1].querySelectorAll('a')).map((a) => a.getAttribute('href'))).toEqual([
-      SITE_LINKS.COMPOSE_GUIDE_URL,
-      docsUrl('self-hosting/kubernetes'),
-      docsUrl('self-hosting/cdk'),
+/**
+ * Specific to Controlvar (#2040): six items under the hero, in both builds.
+ *
+ * The list below is typed, not read from the component or from
+ * `content/home-quotes.json`: an item deleted from the page, its quotes and
+ * the inventory together would pass the inventory, and fails the count here.
+ * Each item has its quotes, by id (`tests/content/home-quotes.test.tsx` holds
+ * their words), and its links, each outside the quote it follows.
+ */
+const SPECIFIC: Array<{ heading: string; quotes: string[]; links: Array<[string, string]> }> = [
+  { heading: 'Apache-2.0, SDKs MIT', quotes: [], links: [['LICENSE', SITE_LINKS.LICENSE_URL]] },
+  {
+    heading: 'Flags that roll themselves back',
+    quotes: ['specific-rollback'],
+    links: [['Safety Monitoring →', docsUrl('feature-flags/safety')]],
+  },
+  {
+    heading: 'Corrected for several variants',
+    quotes: ['specific-correction'],
+    links: [['How results are judged →', docsUrl('api/endpoints', 'how-results-are-judged')]],
+  },
+  {
+    heading: 'Sequential testing',
+    quotes: ['specific-sequential'],
+    links: [['Sequential Testing & Early Stopping →', docsUrl('api/sequential-testing')]],
+  },
+  {
+    heading: 'Compose, Helm or AWS CDK',
+    quotes: ['specific-compose', 'specific-kubernetes', 'specific-cdk'],
+    links: [
+      ['Docker Compose', SITE_LINKS.COMPOSE_GUIDE_URL],
+      ['Kubernetes', docsUrl('self-hosting/kubernetes')],
+      ['AWS CDK', docsUrl('self-hosting/cdk')],
+    ],
+  },
+  { heading: 'Tested statistics', quotes: [], links: [['Tests', SITE_LINKS.STATS_TESTS_URL]] },
+];
+
+describe.each<[string, boolean]>([
+  ['platform build', false],
+  ['marketing build', true],
+])('Specific to Controlvar, %s', (_name, marketing) => {
+  beforeEach(() => mode.mockReturnValue(marketing));
+
+  const section = (container: HTMLElement): HTMLElement =>
+    container.querySelector('section[aria-labelledby="specifics-heading"]') as HTMLElement;
+  const wordsAndAddress = (a: Element): [string, string] => [a.textContent ?? '', a.getAttribute('href') ?? ''];
+
+  it('is exactly six items, each with its heading, its quotes and its links', () => {
+    const items = Array.from(section(page()).querySelectorAll('ul > li'));
+    expect(items).toHaveLength(6);
+    expect(
+      items.map((li) => ({
+        heading: Array.from(li.querySelectorAll('h3')).map((h) => h.textContent).join(' | '),
+        quotes: Array.from(li.querySelectorAll('[data-quote]')).map((q) => q.getAttribute('data-quote')),
+        links: Array.from(li.querySelectorAll('a')).map(wordsAndAddress),
+      })),
+    ).toEqual(SPECIFIC);
+    for (const li of items) expect(li.querySelectorAll('[data-quote] a')).toHaveLength(0);
+  });
+
+  it('ends with the line that links what Controlvar does not do, and what it does', () => {
+    const line = section(page()).querySelector('ul + p') as HTMLElement;
+    expect(line.textContent).toBe('What Controlvar does not do is in Limitations; its main capabilities are in What Controlvar does today.');
+    expect(Array.from(line.querySelectorAll('a')).map(wordsAndAddress)).toEqual([
+      ['Limitations', docsUrl('getting-started/limitations')],
+      ['What Controlvar does today', docsUrl('capabilities')],
     ]);
+  });
+
+  /** `docs-links.test.ts` checks that a docs page exists, and never that the docs nav lists it. */
+  it('links docs pages that exist and that the nav of mkdocs.yml lists', () => {
+    const nav = fs.readFileSync(path.join(REPO_ROOT, 'mkdocs.yml'), 'utf8');
+    const prefix = `${SITE_LINKS.REPO_URL}/blob/main/docs/`;
+    const pages = Array.from(section(page()).querySelectorAll('a'))
+      .map((a) => a.getAttribute('href') ?? '')
+      .filter((href) => href.startsWith(prefix))
+      .map((href) => href.slice(prefix.length).replace(/\.md(#.*)?$/, ''));
+    // Three items, two of the deployment item's three guides, and the closing line's two.
+    expect(pages).toHaveLength(7);
+    const dead = pages.filter((p) => !fs.existsSync(path.join(REPO_ROOT, 'docs', `${p}.md`)));
+    const notInNav = pages.filter((p) => !navEntry(p).test(nav));
+    expect({ dead, notInNav }).toEqual({ dead: [], notInNav: [] });
+  });
+
+  /**
+   * The Compose guide is mkdocs.yml's own entry for the stack's README; the
+   * licence and the statistics tests are a file and a folder of this
+   * repository.
+   */
+  it('links files and folders of this repository that exist', () => {
+    const nav = fs.readFileSync(path.join(REPO_ROOT, 'mkdocs.yml'), 'utf8');
+    expect(nav).toMatch(new RegExp(`^\\s+- Docker Compose \\(self-hosting stack\\): ${SITE_LINKS.COMPOSE_GUIDE_URL.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}\\s*$`, 'm'));
+    for (const [url, file] of [
+      [SITE_LINKS.COMPOSE_GUIDE_URL, 'deploy/compose/README.md'],
+      [SITE_LINKS.LICENSE_URL, 'LICENSE'],
+      [SITE_LINKS.STATS_TESTS_URL, 'backend/tests/unit/stats_validation'],
+    ]) {
+      expect(url).toBe(`${SITE_LINKS.REPO_URL}/${fs.statSync(path.join(REPO_ROOT, file)).isDirectory() ? 'tree' : 'blob'}/main/${file}`);
+    }
+  });
+
+  it('draws a focus outline on every link', () => {
+    const links = Array.from(section(page()).querySelectorAll('a'));
+    expect(links.length).toBeGreaterThanOrEqual(6);
+    for (const a of links) expect(a.className.split(/\s+/)).toEqual(expect.arrayContaining(FOCUS.split(' ')));
+  });
+
+  // jsdom has no layout and no colour: those rules are the site spec's (Playwright, over the marketing export).
+  it.each<[string, (container: HTMLElement) => HTMLElement]>([
+    ['the hero', (container) => container.querySelector('h1')?.closest('section') as HTMLElement],
+    ['this section', section],
+  ])('has no axe violation in %s', async (_where, part) => {
+    const result = await axe.run(part(page()), { rules: { 'color-contrast': { enabled: false } } });
+    expect(result.passes.length).toBeGreaterThan(0);
+    expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`)).toEqual([]);
   });
 });

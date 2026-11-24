@@ -7,7 +7,7 @@
  *              against their own API. This is the default, because it is the
  *              product.
  *   marketing  the public site at controlvar.com. Static, no API behind
- *              it, and there is no hosted tier -- the homepage says so.
+ *              it, and there is no hosted tier.
  *
  * WHY THIS EXISTS. The marketing build shipped the whole dashboard:
  * `/experiments`, `/feature-flags`, `/admin/*`, `/results`, `/workspaces`, and

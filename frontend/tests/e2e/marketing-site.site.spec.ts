@@ -298,6 +298,29 @@ test.describe("the public site", () => {
     }
   });
 
+  // #2040: what Controlvar is, who it is for, and where to read more, on the
+  // first screen of a phone. On macOS's system font the row ends at 616 px, so
+  // the headline or the subline may take one line more in another font.
+  test("the first phone screen holds the headline, the subline and the row of links", async ({ page }) => {
+    await open(page, "/");
+    const height = page.viewportSize()?.height ?? 0;
+    expect(height, "the phone's viewport").toBe(664);
+    expect(await page.evaluate(() => window.scrollY), "scrolled").toBe(0);
+    const hero = page.locator("h1").locator("xpath=ancestor::section[1]");
+    const row = hero.getByRole("link", { name: "Walkthroughs", exact: true }).locator("xpath=..");
+    await expect(row).toHaveText("Docs · Walkthroughs · Source");
+    for (const [what, block] of [
+      ["headline", page.locator("h1")],
+      ["subline", hero.locator("h1 + p")],
+      ["row of links", row],
+    ] as const) {
+      const box = await block.boundingBox();
+      expect(box, `${what}: no box`).not.toBeNull();
+      const bottom = Math.ceil((box?.y ?? 0) + (box?.height ?? 0));
+      expect.soft(bottom, `${what}: bottom ${bottom}, viewport ${height}`).toBeLessThanOrEqual(height);
+    }
+  });
+
   test("the homepage plays nothing, and each teaser card opens its row of /walkthroughs", async ({ page }) => {
     await open(page, "/");
     expect(await page.locator("video").count(), "<video> on /").toBe(0);

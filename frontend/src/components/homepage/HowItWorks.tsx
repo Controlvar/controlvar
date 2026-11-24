@@ -45,7 +45,7 @@ export const RUN_COMMANDS = [
  * share the next row from `lg`, which gives the SDK code half the row instead
  * of a third. Step 1 also carries the AWS installer's sentence
  * (`content/home-quotes.json`), the other way to run it, since the deploy
- * cards that held it are folded into the facts strip.
+ * cards that held it are gone.
  *
  * The SDK step's code is lines 68 and 80 of docs/sdk/javascript.md, verbatim:
  * the `sdk-snippet` row of `content/home-quotes.json`, which both of that

@@ -72,6 +72,81 @@
       "sources": [{ "page": "capabilities", "phrases": ["downloads as CSV or JSON"] }]
     },
     {
+      "id": "rollback-on-a-breach",
+      "parts": [
+        "Error rate and latency checked against your thresholds, and an automatic rollback on a breach when you turn that on"
+      ],
+      "sources": [
+        {
+          "page": "capabilities",
+          "phrases": [
+            "error rate and latency checked against your thresholds, and an automatic rollback on a breach when you turn that on"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "specific-rollback",
+      "parts": [
+        "Each active flag's error rate and latency are checked against your thresholds every 5 minutes by default, with an automatic rollback on a breach when you turn that on."
+      ],
+      "sources": [
+        {
+          "page": "capabilities",
+          "phrases": [
+            "each active flag's error rate and latency",
+            "checked against your thresholds",
+            "an automatic rollback on a breach when you turn that on"
+          ]
+        },
+        { "page": "feature-flags/safety", "phrases": ["every 5 minutes by default"] }
+      ]
+    },
+    {
+      "id": "specific-correction",
+      "parts": [
+        "Frequentist results are judged at the experiment's confidence level, with Benjamini-Hochberg (the default) or Bonferroni correction across its variants."
+      ],
+      "sources": [
+        {
+          "page": "capabilities",
+          "phrases": [
+            "judged at the experiment's confidence level, with Benjamini-Hochberg (the default) or Bonferroni correction across its variants"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "specific-sequential",
+      "parts": ["Beta: mSPRT with always-valid confidence intervals, so you can read results at any time."],
+      "sources": [
+        {
+          "page": "capabilities",
+          "phrases": ["mSPRT with always-valid confidence intervals, so you can read results at any time"]
+        }
+      ]
+    },
+    {
+      "id": "specific-compose",
+      "parts": ["one host, on the published images."],
+      "sources": [{ "page": "capabilities", "phrases": ["one host, on the published images"] }]
+    },
+    {
+      "id": "specific-kubernetes",
+      "parts": ["a Helm chart, which CI installs on a kind cluster."],
+      "sources": [{ "page": "capabilities", "phrases": ["a Helm chart, which CI installs on a kind cluster"] }]
+    },
+    {
+      "id": "specific-cdk",
+      "parts": ["stacks that provision the API, the dashboard and their data stores in your AWS account."],
+      "sources": [
+        {
+          "page": "capabilities",
+          "phrases": ["stacks that provision the API, the dashboard and their data stores in your AWS account"]
+        }
+      ]
+    },
+    {
       "id": "sdk-snippet",
       "code": [
         "const assignment = await client.getAssignment('checkout_button_color', user);",

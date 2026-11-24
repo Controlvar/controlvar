@@ -7,7 +7,7 @@ import { PageTitle } from '@/components/PageTitle';
 import { SiteHeader } from '@/components/SiteHeader';
 import { isMarketingSite } from '@/utils/site-mode';
 import { Hero } from '@/components/homepage/Hero';
-import { FactsStrip } from '@/components/homepage/FactsStrip';
+import { Specifics } from '@/components/homepage/Specifics';
 import { HowItWorks } from '@/components/homepage/HowItWorks';
 import { Books } from '@/components/homepage/Books';
 import { ProductRows } from '@/components/homepage/ProductRows';
@@ -46,14 +46,15 @@ export const HOME_AFTER_LOGIN = '/experiments';
  * `tests/pages/home-page.test.tsx` fails a rendered sentence that is not a row
  * and a row that is not rendered, in both builds. The two builds differ in
  * these only: the walkthroughs teaser and the screenshots are the marketing
- * build's; its second hero button is the power calculator where a self-hosted
+ * build's; its second hero button is the live demo where a self-hosted
  * platform build offers "Sign in to the dashboard"; and the books and
- * walkthroughs links go to the marketing build's own /books and
- * /walkthroughs pages, which a platform build does not have.
+ * walkthroughs links, the hero's among them, go to the marketing build's own
+ * /books and /walkthroughs pages, which a platform build does not have.
  *
- * The order is the site design of 2026-11-11 (D377): the hero, the facts
- * strip (which took in the deploy cards), How it works, the books, the
- * product rows, the SDKs, the walkthroughs teaser and the closing band.
+ * The order is the site design of 2026-11-11: the hero, what is specific to
+ * Controlvar (#2040, in the place of the facts strip), How it works, the
+ * books, the product rows, the SDKs, the walkthroughs teaser and the closing
+ * band.
  */
 export default function HomePage() {
   const router = useRouter();
@@ -97,7 +98,7 @@ export default function HomePage() {
 
         <main>
           <Hero />
-          <FactsStrip />
+          <Specifics />
           <HowItWorks />
           <Books />
           <ProductRows />
