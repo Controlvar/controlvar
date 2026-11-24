@@ -218,6 +218,26 @@ function renderPage() {
 }
 
 const select = () => screen.getByLabelText('Environment') as HTMLSelectElement;
+/** Everything already answered, the URL change among it, has been read and rendered. */
+const settle = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
+/** What the switcher's status says. */
+const status = () => screen.getByTestId('environment-announcement').textContent;
+
+/** Every time the document changes: what the status said that the select did not. */
+function watchStatus(): { wrong: string[] } {
+  const seen: { wrong: string[] } = { wrong: [] };
+  new MutationObserver(() => {
+    const said = document.querySelector('[data-testid="environment-announcement"]')?.textContent ?? '';
+    const chosen = document.querySelector<HTMLSelectElement>('[data-testid="environment-select"]');
+    const shown = chosen?.selectedOptions[0]?.textContent ?? '';
+    if (said !== '' && said !== `Showing ${shown}.`) seen.wrong.push(`"${said}" while the select is ${shown}`);
+    // Never said of a page that is loading, or that failed to load.
+    for (const testId of ['flag-loading', 'flag-error']) {
+      if (said !== '' && document.querySelector(`[data-testid="${testId}"]`)) seen.wrong.push(`"${said}" beside ${testId}`);
+    }
+  }).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
+  return seen;
+}
 
 async function choose(env: string) {
   fireEvent.change(select(), { target: { value: env } });
@@ -266,7 +286,7 @@ describe('the environment switcher on a flag page', () => {
     expect(screen.getByTestId('production-marker')).toHaveTextContent(PRODUCTION_MARKER);
     await choose('staging');
     expect(screen.queryByTestId('production-marker')).toBeNull();
-    expect(screen.getByTestId('environment-announcement')).toHaveTextContent('Showing Staging.');
+    await waitFor(() => expect(status()).toBe('Showing Staging.'));
   });
 
   it("puts the environment in the page's fetch URL, and fetches again on every switch", async () => {
@@ -345,6 +365,128 @@ describe('the environment switcher on a flag page', () => {
     await screen.findByTestId('flag-detail');
     expect(select().value).toBe('production');
     expect(anyEnvironmentRoute()).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The status says the environment on screen, once it is on screen
+// ---------------------------------------------------------------------------
+
+describe('the status says the environment on screen', () => {
+  // A new element each time, so a re-render reads the router again.
+  const page = () => (
+    <FlagEnvironmentProvider>
+      <EnvironmentSwitcher />
+      <FeatureFlagDetailPage />
+    </FlagEnvironmentProvider>
+  );
+  /** The URL as the browser has it now (a choice, or Back): the router re-renders with it. */
+  const urlIs = (env: string) => {
+    mockRouter = makeRouter({ pathname: '/feature-flags/[id]', query: { id: 'flag-1', env } });
+  };
+
+  it('says nothing for the first environment shown, and the next only after its data has loaded', async () => {
+    const setting = later<FlagEnvironmentSettings>();
+    install({}, [{ path: '/api/v1/feature-flags/flag-1/environments/staging', handler: () => setting.promise }]);
+    renderPage();
+    const seen = watchStatus();
+    await screen.findByTestId('flag-detail');
+    expect(status()).toBe('');
+    fireEvent.change(select(), { target: { value: 'staging' } });
+    await screen.findByTestId('flag-loading');
+    // The URL change has landed; only the data is missing.
+    await settle();
+    expect(select().value).toBe('staging');
+    expect(status()).toBe('');
+    await act(async () => setting.give(STAGING()));
+    await screen.findByTestId('flag-detail');
+    await waitFor(() => expect(status()).toBe('Showing Staging.'));
+    expect(seen.wrong).toEqual([]);
+  });
+
+  it('waits for the URL to name the environment, so the route announcer speaks first', async () => {
+    const route = later<boolean>();
+    install();
+    renderPage();
+    const seen = watchStatus();
+    await screen.findByTestId('flag-detail');
+    mockRouter.replace.mockReturnValueOnce(route.promise);
+    fireEvent.change(select(), { target: { value: 'staging' } });
+    await waitFor(() => expect(screen.getByTestId('rollout-value')).toHaveTextContent('40%'));
+    await settle();
+    expect(status()).toBe('');
+    await act(async () => route.give(true));
+    await waitFor(() => expect(status()).toBe('Showing Staging.'));
+    expect(seen.wrong).toEqual([]);
+  });
+
+  it('says the environment Back returns to', async () => {
+    urlIs('production');
+    install();
+    const { rerender } = renderInAppRoot(page());
+    const seen = watchStatus();
+    await screen.findByTestId('flag-detail');
+    await choose('staging');
+    urlIs('staging');
+    rerender(page());
+    await waitFor(() => expect(status()).toBe('Showing Staging.'));
+
+    urlIs('production');
+    rerender(page());
+    await waitFor(() => expect(select().value).toBe('production'));
+    expect(status()).not.toBe('Showing Staging.');
+    await waitFor(() => expect(status()).toBe('Showing Production.'));
+    expect(screen.getByTestId('rollout-value')).toHaveTextContent('25%');
+    expect(seen.wrong).toEqual([]);
+  });
+
+  it('says nothing after a load that failed, which is an alert, and the next environment when it loads', async () => {
+    install({}, [
+      {
+        path: '/api/v1/feature-flags/flag-1/environments/staging',
+        handler: () => {
+          throw apiError(503, 'Service unavailable');
+        },
+      },
+    ]);
+    renderPage();
+    const seen = watchStatus();
+    await screen.findByTestId('flag-detail');
+    fireEvent.change(select(), { target: { value: 'staging' } });
+    const error = await screen.findByTestId('flag-error');
+    expect(error).toHaveAttribute('role', 'alert');
+    expect(error).toHaveTextContent('Could not load this feature flag');
+    await settle();
+    expect(status()).toBe('');
+    await choose('production');
+    await waitFor(() => expect(status()).toBe('Showing Production.'));
+    expect(seen.wrong).toEqual([]);
+  });
+
+  it('keeps one status on the page for the loading state, from the first render', async () => {
+    const setting = later<FlagEnvironmentSettings>();
+    install({}, [{ path: '/api/v1/feature-flags/flag-1/environments/staging', handler: () => setting.promise }]);
+    renderPage();
+    const region = screen.getByTestId('flag-loading').closest('[role="status"]');
+    expect(region).not.toBeNull();
+    await screen.findByTestId('flag-detail');
+    expect(region).toBeInTheDocument();
+    expect(region).toBeEmptyDOMElement();
+    fireEvent.change(select(), { target: { value: 'staging' } });
+    expect(region).toContainElement(screen.getByTestId('flag-loading'));
+    expect(screen.queryByTestId('flag-detail')).toBeNull();
+    await act(async () => setting.give(STAGING()));
+    expect(region).toBeEmptyDOMElement();
+    expect(screen.getByTestId('flag-detail')).toBeInTheDocument();
+  });
+
+  it('names the environment in the page title, but not for Production', async () => {
+    install();
+    renderPage();
+    await screen.findByTestId('flag-detail');
+    expect(document.title).toBe('Checkout v2 · Controlvar');
+    await choose('staging');
+    await waitFor(() => expect(document.title).toBe('Checkout v2 in Staging · Controlvar'));
   });
 });
 

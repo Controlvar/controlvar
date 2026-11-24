@@ -27,14 +27,29 @@ export interface FlagEnvironmentValue {
   environment: FlagEnvironment | null;
   /** Show another environment: stored for the user and written to `?env=`. */
   choose: (next: FlagEnvironment) => void;
+  /** True while the URL is being changed to name the chosen environment. */
+  routing: boolean;
+  /** What the page says it has on screen; null while it loads, and on a page that says nothing. */
+  shown: ShownEnvironment | null;
+  /** A flag page's own report: loaded, failed, or (null) loading. */
+  reportShown: (shown: ShownEnvironment | null) => void;
   /** False outside a provider (Production only, nothing to choose). */
   switchable: boolean;
+}
+
+/** An environment a flag page has on screen, and whether its data loaded. */
+export interface ShownEnvironment {
+  environment: FlagEnvironment;
+  loaded: boolean;
 }
 
 /** Outside a provider: Production, fixed. The pages then behave as they did before environments. */
 const PRODUCTION_ONLY: FlagEnvironmentValue = {
   environment: DEFAULT_FLAG_ENVIRONMENT,
   choose: () => undefined,
+  routing: false,
+  shown: null,
+  reportShown: () => undefined,
   switchable: false,
 };
 
@@ -91,15 +106,25 @@ export function FlagEnvironmentProvider({ children }: { children: ReactNode }) {
     );
   }, [ready, queryEnvironment, userId]);
 
+  // The URL changes still under way (two quick choices overlap).
+  const [routeChanges, setRouteChanges] = useState(0);
+  const [shown, reportShown] = useState<ShownEnvironment | null>(null);
+
   const choose = useCallback(
     (next: FlagEnvironment) => {
       setCurrent({ environment: next, userId });
       storeFlagEnvironment(userId, next);
-      void router.replace(
-        { pathname: router.pathname, query: { ...router.query, [FLAG_ENVIRONMENT_QUERY]: next } },
-        undefined,
-        { shallow: true, scroll: false },
-      );
+      setRouteChanges((n) => n + 1);
+      void Promise.resolve(
+        router.replace(
+          { pathname: router.pathname, query: { ...router.query, [FLAG_ENVIRONMENT_QUERY]: next } },
+          undefined,
+          { shallow: true, scroll: false },
+        ),
+      )
+        // A later navigation may replace this one: the choice stands.
+        .catch(() => undefined)
+        .finally(() => setRouteChanges((n) => n - 1));
     },
     [router, userId],
   );
@@ -108,9 +133,12 @@ export function FlagEnvironmentProvider({ children }: { children: ReactNode }) {
     () => ({
       environment: ready && current && current.userId === userId ? current.environment : null,
       choose,
+      routing: routeChanges > 0,
+      shown,
+      reportShown,
       switchable: true,
     }),
-    [ready, current, userId, choose],
+    [ready, current, userId, choose, routeChanges, shown],
   );
 
   return <FlagEnvironmentContext.Provider value={value}>{children}</FlagEnvironmentContext.Provider>;

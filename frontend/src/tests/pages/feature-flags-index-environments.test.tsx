@@ -208,6 +208,49 @@ describe('the flag list in Staging and Development', () => {
     );
   });
 
+  it('announces that text, in a status that is on the page before it', async () => {
+    const batch = later<unknown>();
+    install({}, FLAGS, [{ path: '/api/v1/environments/staging/feature-flag-settings', handler: () => batch.promise }]);
+    renderList('staging');
+    await screen.findByTestId('flags-loading');
+    const empty = screen.getAllByRole('status').filter((s) => s.getAttribute('data-testid') !== 'environment-announcement');
+    expect(empty).toHaveLength(1);
+    expect(empty[0]).toBeEmptyDOMElement();
+    await act(async () => batch.give({ environment: 'staging', settings: {} }));
+    expect(empty[0]).toContainElement(await screen.findByTestId('flags-environment-empty'));
+  });
+
+  it('says the environment only once its rows have loaded, and not after a load that failed', async () => {
+    const batch = later<unknown>();
+    install({}, FLAGS, [{ path: '/api/v1/environments/staging/feature-flag-settings', handler: () => batch.promise }]);
+    renderList();
+    await screen.findByTestId('flags-table');
+    const said = () => screen.getByTestId('environment-announcement').textContent;
+    expect(said()).toBe('');
+    const select = screen.getByLabelText('Environment') as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: 'staging' } });
+    await screen.findByTestId('flags-loading');
+    // Everything already answered, the URL change among it, has been read and rendered.
+    await act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
+    expect(said()).toBe('');
+    await act(async () => batch.refuse(apiError(503, 'Service unavailable')));
+    await screen.findByTestId('flags-error');
+    expect(said()).toBe('');
+    fireEvent.change(select, { target: { value: 'development' } });
+    await screen.findByTestId('flags-table');
+    await waitFor(() => expect(said()).toBe('Showing Development.'));
+    expect(select.value).toBe('development');
+  });
+
+  it('names the environment in the page title, but not for Production', async () => {
+    install();
+    renderList('staging');
+    await screen.findByTestId('flags-table');
+    expect(document.title).toBe('Feature Flags in Staging · Controlvar');
+    fireEvent.change(screen.getByLabelText('Environment'), { target: { value: 'production' } });
+    await waitFor(() => expect(document.title).toBe('Feature Flags · Controlvar'));
+  });
+
   it('says so when no listed flag has a setting in Development', async () => {
     install();
     renderList('development');

@@ -513,6 +513,7 @@ export function AppShell({ children }: AppShellProps) {
 
         {showEnvironment && (
           <div
+            id="environment-bar"
             data-testid="environment-bar"
             data-environment={flagEnvironment.environment ?? undefined}
             className={`border-t ${productionShown ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-slate-50'}`}

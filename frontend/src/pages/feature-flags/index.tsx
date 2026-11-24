@@ -114,7 +114,7 @@ export default function FeatureFlagsPage() {
   // Production lists the flags as before. Staging and Development list the
   // same flags with their settings there (the batch route), and a switch
   // changes the setting through the environment's route.
-  const { environment } = useFlagEnvironment();
+  const { environment, reportShown } = useFlagEnvironment();
   const otherEnvironment: NonProductionEnvironment | null =
     environment && environment !== 'production' ? environment : null;
   const production = environment === 'production';
@@ -304,6 +304,12 @@ export default function FeatureFlagsPage() {
   // Until the rows belong to the environment on screen, the list shows its
   // loading state: one environment's state is never shown under another's name.
   const busy = loading || loadedFor !== environment;
+  // What is on screen, for the environment switcher's status.
+  const failed = error !== null;
+  useEffect(() => {
+    reportShown(environment && !busy ? { environment, loaded: !failed } : null);
+    return () => reportShown(null);
+  }, [environment, busy, failed, reportShown]);
   const isEmpty = !busy && !error && flags.length === 0;
   // Outside Production: no listed flag has a setting there yet.
   const noneConfigured =
@@ -312,7 +318,7 @@ export default function FeatureFlagsPage() {
 
   return (
     <div className="flex-1 bg-slate-50">
-      <PageTitle title="Feature Flags" />
+      <PageTitle title={environmentLabel ? `Feature Flags in ${environmentLabel}` : 'Feature Flags'} />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
@@ -428,13 +434,18 @@ export default function FeatureFlagsPage() {
           </p>
         )}
 
-        {otherEnvironment && !busy && !error && noneConfigured && (
-          <p
-            data-testid="flags-environment-empty"
-            className="mb-4 rounded-lg bg-white border border-slate-200 p-3 text-sm text-slate-700"
-          >
-            {noFlagsConfiguredText(otherEnvironment)}
-          </p>
+        {/* On the page before its text, which is announced once the rows have loaded. */}
+        {otherEnvironment && (
+          <div role="status">
+            {!busy && !error && noneConfigured && (
+              <p
+                data-testid="flags-environment-empty"
+                className="mb-4 rounded-lg bg-white border border-slate-200 p-3 text-sm text-slate-700"
+              >
+                {noFlagsConfiguredText(otherEnvironment)}
+              </p>
+            )}
+          </div>
         )}
 
         {production && !busy && !error && !evaluationsSeen && (

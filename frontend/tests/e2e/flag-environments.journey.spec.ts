@@ -21,9 +21,7 @@ import { API_URL, BASE_URL, TOKEN_STORAGE_KEY } from "./env";
  * chose is kept in the browser, and the signed-in contexts are shared by every
  * spec of the worker, so each test ends by forgetting the choice.
  *
- * axe runs at desktop width and at 390 px. The list is scanned whole. The
- * flag's page is scanned where this journey's parts are: a whole-page scan fails
- * on the slider's 0%/100% (slate-400), which every flag page has.
+ * axe scans the whole of each page, at desktop width and at 390 px.
  */
 
 /** Source of truth: `FLAG_ENVIRONMENT_STORAGE_PREFIX` in src/contexts/FlagEnvironmentContext.tsx. */
@@ -57,17 +55,8 @@ const PRODUCTION_RULES = {
   groups: [{ logical_operator: "AND", conditions: [{ attribute: "country", operator: "equals", value: "US" }] }],
 };
 
-/** The parts of a flag's page that environments add or change. */
-const FLAG_PAGE_PARTS = [
-  '[data-testid="environment-bar"]',
-  '[data-testid="flag-header"]',
-  '[data-testid="environment-comparison"]',
-];
-
-async function expectNoSeriousViolations(page: Page, where: string, parts: string[] = []): Promise<void> {
-  let scan = new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]);
-  for (const part of parts) scan = scan.include(part);
-  const results = await scan.analyze();
+async function expectNoSeriousViolations(page: Page, where: string): Promise<void> {
+  const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze();
   const serious = results.violations
     .filter((v) => v.impact === "serious" || v.impact === "critical")
     .map((v) => `${v.id} (${v.impact}): ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`);
@@ -241,10 +230,10 @@ test.describe("Journey: a flag in each environment", () => {
     await expect(flags.statusBadge).toHaveAttribute("data-status", "active");
     await expect(flags.rolloutScheduleSection).toBeVisible();
     await expect(flags.safetySection).toBeVisible();
-    await expectNoSeriousViolations(page, "a flag in Production", [
-      ...FLAG_PAGE_PARTS,
-      '[data-testid="production-banner"]',
-    ]);
+    // The safety check has answered, so its values are scanned too.
+    await expect(flags.safetyStatus).toBeVisible({ timeout: 20_000 });
+    await expectNoSeriousViolations(page, "a flag in Production");
+    await expect(flags.environmentAnnouncement, "nothing has changed yet").toHaveText("");
 
     // Staging: the URL names it, the page starts again, and the select keeps the focus.
     const changes = flagChanges(page, flagId);
@@ -268,10 +257,8 @@ test.describe("Journey: a flag in each environment", () => {
     ]) {
       await expect(absent).toHaveCount(0);
     }
-    await expectNoSeriousViolations(page, "a flag not configured in Staging", [
-      ...FLAG_PAGE_PARTS,
-      '[data-testid="production-only-note"]',
-    ]);
+    await expect(page).toHaveTitle(`${name} in Staging · Controlvar`);
+    await expectNoSeriousViolations(page, "a flag not configured in Staging");
 
     // On, and at 60%: two changes, both in Staging.
     await flags.detailToggle.click();
@@ -313,7 +300,7 @@ test.describe("Journey: a flag in each environment", () => {
     await expect(cells("compare-status")).toHaveText(["OffNot configured", "On", "On"]);
     await expect(cells("compare-rollout")).toHaveText(["0%", "60%", "25%"]);
     await expect(cells("compare-rules")).toHaveText(["None", "None", "1 condition in 1 group"]);
-    await expectNoSeriousViolations(page, "the comparison", FLAG_PAGE_PARTS);
+    await expectNoSeriousViolations(page, "the comparison");
 
     // And back: Production shows what it did before any of this.
     await flags.chooseEnvironment("production");
@@ -442,6 +429,36 @@ test.describe("Journey: a flag in each environment", () => {
     }
   });
 
+  test("the status says the environment on screen: after Back, and not after a load that failed", async ({
+    developerPage: page,
+  }) => {
+    const flags = await openList(page, "production");
+    await expect(flags.environmentAnnouncement).toHaveText("");
+    await flags.getFlagRow(key).getByTestId("flag-link").click();
+    await expect(flags.detailKey).toHaveText(key, { timeout: 15_000 });
+    await flags.chooseEnvironment("staging");
+    await expect(flags.environmentAnnouncement).toHaveText("Showing Staging.");
+
+    // Back to the list, whose URL names Production.
+    await page.goBack();
+    await expect(flags.flagList).toHaveAttribute("data-environment", "production", { timeout: 15_000 });
+    await expect(flags.environmentSelect).toHaveValue("production");
+    await expect(flags.environmentAnnouncement).toHaveText("Showing Production.");
+
+    // A load that fails is an alert; the status does not say the environment is shown.
+    await openFlag(page, "production");
+    await page.route(`**/api/v1/feature-flags/${flagId}/environments/development`, (route) =>
+      route.fulfill({ status: 503, contentType: "application/json", body: '{"detail": "Service unavailable"}' }),
+    );
+    await flags.chooseEnvironment("development");
+    await expect(page.getByTestId("flag-error")).toHaveAttribute("role", "alert");
+    await expect(page.getByRole("alert").filter({ hasText: "Could not load this feature flag" })).toBeVisible();
+    await expect(flags.environmentAnnouncement).toHaveText("");
+    await flags.chooseEnvironment("production");
+    await expect(flags.rolloutValue).toHaveText("30%");
+    await expect(flags.environmentAnnouncement).toHaveText("Showing Production.");
+  });
+
   test("a viewer reads each environment and is offered no change", async ({ viewerPage: page }) => {
     const changes = flagChanges(page, flagId);
     const flags = await openFlag(page, "staging");
@@ -525,6 +542,31 @@ test.describe("Journey: a flag in each environment", () => {
     expect(after.staging).toMatchObject({ is_active: false, rollout_percentage: 75, configured: true });
   });
 
+  test("a control that takes the focus is scrolled clear of the sticky header", async ({ developerPage: page }) => {
+    // 1280 x 1024 at 400% zoom, where the header is tallest and takes half the screen.
+    await page.setViewportSize({ width: 320, height: 256 });
+    const flags = await openFlag(page, "production");
+    await expect(flags.safetyStatus).toBeVisible({ timeout: 20_000 });
+    const header = page.getByRole("banner");
+    for (const [what, control] of [
+      ["Save", flags.saveButton],
+      ["the slider", flags.rolloutPercentageInput],
+      ["the switch", flags.detailToggle],
+    ] as const) {
+      await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" }));
+      await control.focus();
+      await expect
+        .poll(
+          async () => {
+            const [focused, bar] = [await control.boundingBox(), await header.boundingBox()];
+            return focused && bar ? Math.round(focused.y - (bar.y + bar.height)) : Number.NEGATIVE_INFINITY;
+          },
+          { message: `${what} is below the header` },
+        )
+        .toBeGreaterThanOrEqual(0);
+    }
+  });
+
   test("the flag pages fit a phone in every environment", async ({ developerPage: page }) => {
     await page.setViewportSize(PHONE);
     for (const environment of ["production", "staging", "development"] as const) {
@@ -534,7 +576,7 @@ test.describe("Journey: a flag in each environment", () => {
       await flags.comparisonToggle.click();
       await expect(flags.comparisonTable).toBeVisible();
       await expectNoSidewaysScroll(page, `the comparison in ${environment} at 390 px`);
-      await expectNoSeriousViolations(page, `a flag in ${environment} at 390 px`, FLAG_PAGE_PARTS);
+      await expectNoSeriousViolations(page, `a flag in ${environment} at 390 px`);
 
       const list = await openList(page, environment);
       await expect(list.environmentSelect).toBeVisible();

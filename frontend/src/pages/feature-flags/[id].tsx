@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useId, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useId, useLayoutEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { TargetingRuleBuilder } from '@/components/targeting';
@@ -177,11 +177,35 @@ export function pickSchedule(items: RolloutSchedule[]): RolloutSchedule | null {
  */
 export default function FeatureFlagDetailPage() {
   const { environment } = useFlagEnvironment();
-  return <FlagInEnvironment key={environment ?? 'resolving'} environment={environment} />;
+  const [loading, setLoading] = useState(true);
+  return (
+    <>
+      {/* On the page from the first render, so a load after a switch is announced. */}
+      <div role="status" className={loading ? 'flex-1 bg-slate-50 flex items-center justify-center' : undefined}>
+        {loading && (
+          <>
+            <PageTitle title="Feature Flag" />
+            <div className="text-center" data-testid="flag-loading">
+              <div className="inline-block w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+              <p className="text-slate-500 mt-2 text-sm">Loading feature flag...</p>
+            </div>
+          </>
+        )}
+      </div>
+      <FlagInEnvironment key={environment ?? 'resolving'} environment={environment} onLoading={setLoading} />
+    </>
+  );
 }
 
-function FlagInEnvironment({ environment }: { environment: FlagEnvironment | null }) {
+function FlagInEnvironment({
+  environment,
+  onLoading,
+}: {
+  environment: FlagEnvironment | null;
+  onLoading: (loading: boolean) => void;
+}) {
   const router = useRouter();
+  const { reportShown } = useFlagEnvironment();
   const rawId = router.query.id;
   const id = typeof rawId === 'string' ? rawId : undefined;
   const auth = useOptionalAuth();
@@ -214,6 +238,17 @@ function FlagInEnvironment({ environment }: { environment: FlagEnvironment | nul
   const [changeCount, setChangeCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<{ status: number; message: string } | null>(null);
+  const loading = !id || isLoading;
+  const failed = loadError !== null;
+
+  // Before the paint, so the loading state and the flag are never both on screen.
+  useLayoutEffect(() => onLoading(loading), [loading, onLoading]);
+  // What is on screen, for the environment switcher's status.
+  useEffect(() => {
+    reportShown(environment && !loading ? { environment, loaded: !failed } : null);
+    return () => reportShown(null);
+  }, [environment, loading, failed, reportShown]);
+
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -550,24 +585,19 @@ function FlagInEnvironment({ environment }: { environment: FlagEnvironment | nul
     }
   };
 
-  if (!id || isLoading) {
-    return (
-      <div className="flex-1 bg-slate-50 flex items-center justify-center">
-        <PageTitle title="Feature Flag" />
-        <div className="text-center" data-testid="flag-loading">
-          <div className="inline-block w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-          <p className="text-slate-500 mt-2 text-sm">Loading feature flag...</p>
-        </div>
-      </div>
-    );
-  }
+  // FeatureFlagDetailPage shows the loading state.
+  if (loading) return null;
 
   if (loadError || !flag) {
     const notFound = loadError?.status === 404;
     return (
       <div className="flex-1 bg-slate-50 flex items-center justify-center">
         <PageTitle title={notFound ? 'Flag not found' : 'Feature Flag'} />
-        <div className="text-center max-w-md px-4" data-testid={notFound ? 'flag-not-found' : 'flag-error'}>
+        <div
+          role={notFound ? undefined : 'alert'}
+          className="text-center max-w-md px-4"
+          data-testid={notFound ? 'flag-not-found' : 'flag-error'}
+        >
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-600 mb-2">
             {notFound ? '404' : 'Error'}
           </p>
@@ -618,7 +648,7 @@ function FlagInEnvironment({ environment }: { environment: FlagEnvironment | nul
 
   return (
     <div className="flex-1 bg-slate-50" data-testid="flag-detail">
-      <PageTitle title={flag.name} />
+      <PageTitle title={environmentLabel ? `${flag.name} in ${environmentLabel}` : flag.name} />
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="flex items-center gap-4 mb-4">

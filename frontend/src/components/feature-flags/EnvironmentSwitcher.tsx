@@ -1,26 +1,66 @@
-import React, { useId, useState } from 'react';
-import { useFlagEnvironment } from '@/contexts/FlagEnvironmentContext';
+import React, { useEffect, useId, useRef, useState } from 'react';
+import { FlagEnvironmentValue, useFlagEnvironment } from '@/contexts/FlagEnvironmentContext';
 import {
   ENVIRONMENT_LABEL,
   FLAG_ENVIRONMENTS,
   FLAG_ENVIRONMENT_LABELS,
+  FlagEnvironment,
   PRODUCTION_MARKER,
   parseFlagEnvironment,
 } from '@/utils/flagEnvironments';
+
+/**
+ * What the status says: the environment on screen, once the page has loaded it
+ * and the URL names it. It follows what is on screen, not the select, so Back
+ * and Forward are said too, and it never names another environment than the
+ * select does. It is empty for the first environment shown (nothing changed),
+ * while one is loading, and after a load that failed.
+ */
+function useAnnouncement({
+  environment,
+  shown,
+  routing,
+}: Pick<FlagEnvironmentValue, 'environment' | 'shown' | 'routing'>): string {
+  const [said, setSaid] = useState<FlagEnvironment | null>(null);
+  // The environment the user knows is on screen: undefined before the first
+  // has loaded, null once another is chosen or a load has failed.
+  const known = useRef<FlagEnvironment | null | undefined>(undefined);
+  const last = useRef<FlagEnvironment | null>(null);
+
+  useEffect(() => {
+    if (!environment) return;
+    if (last.current !== null && last.current !== environment) {
+      known.current = null;
+      setSaid(null);
+    }
+    last.current = environment;
+    if (!shown || shown.environment !== environment || routing) return;
+    if (!shown.loaded) {
+      known.current = null;
+      setSaid(null);
+    } else if (known.current === undefined) {
+      known.current = environment;
+    } else if (known.current !== environment) {
+      known.current = environment;
+      setSaid(environment);
+    }
+  }, [environment, shown, routing]);
+
+  return said !== null && said === environment ? `Showing ${FLAG_ENVIRONMENT_LABELS[said]}.` : '';
+}
 
 /**
  * The environment switcher on the flag pages: a native select labelled
  * "Environment" (Development, Staging, Production), so it is keyboard
  * operable and its value is read out by assistive technology.
  *
- * Production carries a text marker beside it, not only a colour. After a
- * change a polite status says which environment the page now shows; the
- * status is empty until then.
+ * Production carries a text marker beside it, not only a colour. A polite
+ * status says which environment the page shows after it changes.
  */
 export function EnvironmentSwitcher() {
-  const { environment, choose } = useFlagEnvironment();
+  const { environment, choose, shown, routing } = useFlagEnvironment();
   const id = useId();
-  const [announcement, setAnnouncement] = useState('');
+  const announcement = useAnnouncement({ environment, shown, routing });
 
   if (!environment) return null;
   const production = environment === 'production';
@@ -35,9 +75,7 @@ export function EnvironmentSwitcher() {
         value={environment}
         onChange={(event) => {
           const next = parseFlagEnvironment(event.target.value);
-          if (!next) return;
-          choose(next);
-          setAnnouncement(`Showing ${FLAG_ENVIRONMENT_LABELS[next]}.`);
+          if (next) choose(next);
         }}
         className="rounded-md border border-slate-300 bg-white py-1 pl-2 pr-8 text-sm text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
         data-testid="environment-select"

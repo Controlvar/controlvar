@@ -4,6 +4,8 @@
  * for a signed-in user. Every other page (experiments run in Production
  * only) and the marketing build have none.
  */
+import fs from 'fs';
+import path from 'path';
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { AppShell } from '@/components/AppShell';
@@ -105,6 +107,17 @@ describe('the environment switcher in the header', () => {
     expect(userMenu.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(bar).not.toContainElement(userMenu);
     expect(bar).toHaveAttribute('data-environment', 'production');
+  });
+
+  it('makes room for the taller sticky header, so a focused control is not scrolled under it', async () => {
+    signIn();
+    renderShell();
+    // jsdom lays nothing out: the rule, and the element it names.
+    const css = fs.readFileSync(path.resolve(__dirname, '../../styles/globals.css'), 'utf8');
+    const rule = /html:has\(#([\w-]+)\)\s*\{\s*scroll-padding-top:\s*9rem;\s*\}/.exec(css);
+    expect(rule).not.toBeNull();
+    expect(await screen.findByTestId('environment-bar')).toHaveAttribute('id', rule![1]);
+    expect(screen.getByRole('banner')).toHaveClass('sticky');
   });
 
   it('follows ?env= in the URL', async () => {
