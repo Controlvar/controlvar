@@ -23,13 +23,13 @@ What it refuses:
   with its host bits zero, or is ``*`` (``proxy_trust.entry_problems``, one
   line per entry; read from the process environment only, as the entrypoint
   reads it).  And a ``UVICORN_TIMEOUT_KEEP_ALIVE`` that is set but is not a
-  whole number of seconds above 60 written in the digits 0-9 (``0``, ``60``,
-  ``+65``, ``65s``, ``" 65"``, ``1_000``, Arabic-Indic or fullwidth digits):
-  the entrypoint passes it to uvicorn as ``--timeout-keep-alive``, and the
-  API must keep an idle connection open longer than the AWS load balancer in
-  front (60 s).  It is checked even when the command passes its own
-  ``--timeout-keep-alive``, which this check cannot see; read from the
-  process environment only.
+  whole number of seconds from 61 to 99999 in the digits 0-9 (``0``, ``60``,
+  ``100000``, ``+65``, ``65s``, ``" 65"``, ``1_000``, Arabic-Indic or
+  fullwidth digits): the entrypoint passes it to uvicorn as
+  ``--timeout-keep-alive``, and the API must keep an idle connection open
+  longer than the AWS load balancer in front (60 s).  It is checked even when
+  the command passes its own ``--timeout-keep-alive``, which this check
+  cannot see; read from the process environment only.
 * in staging and production -- ``TESTING`` set (the test runner's flag; one
   line, and nothing else is listed, as the settings refuse it outright);
   ``SECRET_KEY``, ``FIRST_SUPERUSER_PASSWORD``
@@ -168,10 +168,13 @@ KEEP_ALIVE_DEFAULT = 65
 #: default; the CDK stack does not set it). The keep-alive must be above it.
 LOAD_BALANCER_IDLE_TIMEOUT = 60
 
+#: The largest value accepted: at most five digits, which bounds the parse.
+KEEP_ALIVE_MAX = 99999
+
 #: ASCII digits only, and ``fullmatch``: ``int()``, ``str.isdigit()`` and
 #: ``\d`` also take other scripts' digits (Arabic-Indic, fullwidth), ``int()``
 #: a sign, spaces and underscores, and ``$`` a trailing newline; uvicorn would
-#: take all of those. Five digits bound the parse.
+#: take all of those.
 _KEEP_ALIVE_VALUE = re.compile(r"[0-9]{1,5}")
 
 
@@ -184,10 +187,10 @@ def keep_alive_problem(raw: Optional[str]) -> Optional[str]:
         return None
     return (
         f"{KEEP_ALIVE_SETTING}={_truncate(raw)!r} must be a whole number of "
-        f"seconds above {LOAD_BALANCER_IDLE_TIMEOUT}, in digits 0-9: the API has "
-        "to keep an idle connection open longer than the proxy in front (the AWS "
-        f"load balancer closes at {LOAD_BALANCER_IDLE_TIMEOUT}). Unset it to use "
-        f"{KEEP_ALIVE_DEFAULT}."
+        f"seconds from {LOAD_BALANCER_IDLE_TIMEOUT + 1} to {KEEP_ALIVE_MAX}, in "
+        "digits 0-9: the API has to keep an idle connection open longer than the "
+        "proxy in front (the AWS load balancer closes at "
+        f"{LOAD_BALANCER_IDLE_TIMEOUT}). Unset it to use {KEEP_ALIVE_DEFAULT}."
     )
 
 

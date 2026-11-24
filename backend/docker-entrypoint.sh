@@ -20,8 +20,8 @@
 #   4. exec "$@" — by default uvicorn. When the command is uvicorn,
 #      `--workers ${WEB_CONCURRENCY:-1}` is appended unless the caller passed
 #      --workers, `--timeout-keep-alive ${UVICORN_TIMEOUT_KEEP_ALIVE:-65}`
-#      unless the caller passed --timeout-keep-alive (step 0 refuses a
-#      value that is not a whole number above 60), and the proxy flags
+#      unless the caller passed --timeout-keep-alive (step 0 refuses a value
+#      that is not a whole number from 61 to 99999), and the proxy flags
 #      (--proxy-headers, and
 #      --forwarded-allow-ips with the list backend/app/core/proxy_trust.py
 #      builds) are always appended, after any the caller passed, so they win.
@@ -255,11 +255,11 @@ if [ "$1" = "uvicorn" ]; then
     # 60 s: with uvicorn's default the API is the side that closes, and the
     # load balancer may already be sending the next request on that
     # connection. AWS lists a target keep-alive shorter than the load
-    # balancer's idle timeout as a cause of 502s. At 65 s the proxy in front
+    # balancer's idle timeout as a cause of 502s. At 65 s the load balancer
     # closes first. UVICORN_TIMEOUT_KEEP_ALIVE is uvicorn's own variable, so a
     # value an operator already set is used, not overridden; the preflight
-    # refuses one that is not a whole number above 60. A --timeout-keep-alive
-    # in the command is kept as it is.
+    # refuses one that is not a whole number from 61 to 99999. A
+    # --timeout-keep-alive in the command is kept as it is.
     if [ "$has_keep_alive" = "false" ]; then
         set -- "$@" --timeout-keep-alive "${UVICORN_TIMEOUT_KEEP_ALIVE:-65}"
     fi

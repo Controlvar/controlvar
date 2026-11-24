@@ -13,13 +13,13 @@ Each case runs ``app.py`` directly (``python3 app.py``, the ``app`` command in
 placeholder account, fake ARNs, no AWS credentials and a scratch ``HOME``, so
 nothing reaches AWS. It does not receive the ``context`` object in ``cdk.json``
 that ``cdk synth`` adds; with it, some IAM, key and scaling-target settings
-differ (more in the full profile), and no task definition and no load
-balancer attribute does, which is all this test reads. The task definitions' environment is read out of the
-synthesized templates, as ECS hands it to the container, and the application's
-settings are built from it in a fresh interpreter, with the database and Redis
-on port 1, where nothing listens. With strong secrets the settings must be the
-hardened class for the expected environment. With weak ones they must refuse to
-load, and an API whose settings do not load does not start.
+differ (more in the full profile), and no task definition and no load balancer
+attribute does, which is all this test reads. The task definitions' environment
+is read out of the synthesized templates, as ECS hands it to the container, and
+the application's settings are built from it in a fresh interpreter, with the
+database and Redis on port 1, where nothing listens. With strong secrets the
+settings must be the hardened class for the expected environment. With weak ones
+they must refuse to load, and an API whose settings do not load does not start.
 """
 
 from __future__ import annotations

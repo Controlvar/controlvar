@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import shutil
 import socket
 import subprocess
@@ -257,11 +258,14 @@ def test_a_refused_value_stops_the_start_even_when_the_command_passes_a_flag(
 # What the pinned uvicorn does with it
 # ---------------------------------------------------------------------------
 
-#: The stub app the server is started with in place of the API: it answers
-#: every request 200 with MARKER, and completes the lifespan.
+#: The module of the stub app the server is started with in place of the API.
 STUB_MODULE = "keep_alive_probe_app"
-MARKER = b"keep-alive-probe"
-_STUB_APP = f"""
+
+
+def _stub_app(marker: bytes) -> str:
+    """The stub app's source: it answers every request 200 with *marker*, and
+    completes the lifespan."""
+    return f"""
 async def app(scope, receive, send):
     if scope["type"] == "lifespan":
         while True:
@@ -277,11 +281,12 @@ async def app(scope, receive, send):
             "status": 200,
             "headers": [
                 (b"content-type", b"text/plain"),
-                (b"content-length", b"{len(MARKER)}"),
+                (b"content-length", b"{len(marker)}"),
             ],
         }})
-        await send({{"type": "http.response.body", "body": {MARKER!r}}})
+        await send({{"type": "http.response.body", "body": {marker!r}}})
 """
+
 
 #: The ports this repository's own services use on a developer's machine
 #: (the API, the dashboard and the demo apps, PostgreSQL, Redis).
@@ -362,6 +367,33 @@ def _read_response(sock: socket.socket) -> bytes:
     return head + b"\r\n\r\n" + body
 
 
+def _stub_app_answers(port: int, marker: bytes) -> bool:
+    """Whether the stub app holding *marker* answers on 127.0.0.1:*port*.
+
+    A connection that is accepted is not enough: another process may have
+    taken the port between the pick and the bind, and it would accept this
+    one while uvicorn is still starting. *marker* is new for each fixture, so
+    another run's stub app is not ours either. Bounded to a second or two,
+    whatever the other end does.
+    """
+    deadline = time.monotonic() + 1
+    data = b""
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=1) as probe:
+            probe.sendall(REQUEST)
+            while marker not in data and len(data) < 4096:
+                probe.settimeout(max(0.05, deadline - time.monotonic()))
+                chunk = probe.recv(4096)
+                if not chunk:
+                    break
+                data += chunk
+                if time.monotonic() > deadline:
+                    break
+    except OSError:
+        return False
+    return data.startswith(b"HTTP/1.1 200 ") and data.endswith(marker)
+
+
 def _stop(server: subprocess.Popen) -> None:
     """Terminate, wait, and kill only if it is still alive."""
     if server.poll() is None:
@@ -376,17 +408,21 @@ def _stop(server: subprocess.Popen) -> None:
 @pytest.fixture
 def served(tmp_path):
     """The pinned uvicorn, started with the arguments the entrypoint builds
-    from the image's command, on 127.0.0.1: (arguments, port).
+    from the image's command, on 127.0.0.1: (arguments, port, marker).
 
-    A start that fails is a setup error, not a test failure; a port someone
-    took between the pick and the bind is picked again.
+    It is ready when the stub app itself has answered with this start's
+    marker, so a process that took the port between the pick and uvicorn's
+    bind is never taken for it, whatever it answers. A port uvicorn cannot
+    bind is picked again, five picks in all; every other failed start, and
+    running out of picks, is a setup error, not a test failure.
     """
     code, stderr, started = start(tmp_path / "entrypoint", *image_command())
     if code != 0 or started is None:
         raise SetupError(f"the entrypoint did not start uvicorn ({code}):\n{stderr}")
     app_dir = tmp_path / "app"
     app_dir.mkdir()
-    (app_dir / f"{STUB_MODULE}.py").write_text(_STUB_APP)
+    marker = secrets.token_hex(16).encode("ascii")
+    (app_dir / f"{STUB_MODULE}.py").write_text(_stub_app(marker))
     env = {k: v for k, v in os.environ.items() if not k.startswith("UVICORN_")}
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     for attempt in range(5):
@@ -407,15 +443,13 @@ def served(tmp_path):
             deadline = time.monotonic() + 30
             ready = False
             while time.monotonic() < deadline and server.poll() is None:
-                try:
-                    socket.create_connection(("127.0.0.1", port), timeout=1).close()
-                except OSError:
+                if not _stub_app_answers(port, marker):
                     time.sleep(0.1)
                     continue
                 ready = server.poll() is None
                 break
             if ready:
-                yield arguments, port
+                yield arguments, port, marker
                 return
             output = log_path.read_text(errors="replace")
             if server.poll() is not None and "address already in use" in output.lower():
@@ -430,17 +464,39 @@ def served(tmp_path):
 
 
 @pytest.mark.regression
+def test_a_port_taken_between_the_pick_and_the_bind_is_picked_again(
+    request, monkeypatch
+):
+    """A listener that took the first pick accepts connections, and is not the
+    stub app: the server that starts is on a later pick."""
+    pick = _free_port
+    tried: List[int] = []
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as taken:
+
+        def take_the_first():
+            tried.append(pick())
+            if len(tried) == 1:
+                taken.bind(("127.0.0.1", tried[0]))
+                taken.listen()
+            return tried[-1]
+
+        monkeypatch.setattr(sys.modules[__name__], "_free_port", take_the_first)
+        _, port, _ = request.getfixturevalue("served")
+        assert port != tried[0] and port == tried[-1], (tried, port)
+
+
+@pytest.mark.regression
 def test_the_pinned_uvicorn_keeps_the_idle_connection_past_its_own_default(served):
     """V2: one request, then idle. With the flag the entrypoint adds, the
     server does not close the connection within CEILING (it would at 65 s),
     and answers a second request on it; with uvicorn's default it closes it
     at 5 s. The wait is one-sided: a slow machine can only make the server
     look better, never fail a correct entrypoint."""
-    arguments, port = served
+    arguments, port, marker = served
     with socket.create_connection(("127.0.0.1", port), timeout=10) as sock:
         sock.sendall(REQUEST)
         first = _read_response(sock)
-        assert first.startswith(b"HTTP/1.1 200 ") and first.endswith(MARKER), first
+        assert first.startswith(b"HTTP/1.1 200 ") and first.endswith(marker), first
         idle_from = time.monotonic()
         sock.settimeout(CEILING)
         try:
@@ -462,4 +518,4 @@ def test_the_pinned_uvicorn_keeps_the_idle_connection_past_its_own_default(serve
         sock.settimeout(10)
         sock.sendall(REQUEST)
         second = _read_response(sock)
-        assert second.startswith(b"HTTP/1.1 200 ") and second.endswith(MARKER), second
+        assert second.startswith(b"HTTP/1.1 200 ") and second.endswith(marker), second
