@@ -1649,6 +1649,7 @@ jobs:
             echo "::error::the API could not read its networks from /proc"
             exit 1
           fi
+          grep -qE '^\[entrypoint\] starting: uvicorn .* --timeout-keep-alive 65 ' api-start.log || { grep -F '[entrypoint] starting:' api-start.log || true; echo "::error::the API was not started with --timeout-keep-alive 65, a keep-alive longer than the load balancer's 60 s idle timeout"; exit 1; }
 
       - name: API readiness and auth gate
         run: |

@@ -183,3 +183,38 @@ by = ["exempt:advice"]
 [[unit]]
 text = "Every access line shows the same address."
 by = ["exempt:advice"]
+
+[[unit]]
+text = "Idle connections"
+by = ["exempt:label"]
+
+[[unit]]
+text = "UVICORN_TIMEOUT_KEEP_ALIVE is how many seconds the API keeps an idle connection open after a response; the entrypoint passes it to uvicorn as --timeout-keep-alive."
+by = [
+    "test:backend/tests/unit/infrastructure/test_entrypoint_keep_alive.py::test_the_variable_reaches_the_flag",
+    "test:backend/tests/unit/infrastructure/test_entrypoint_keep_alive.py::test_the_pinned_uvicorn_keeps_the_idle_connection_past_its_own_default",
+]
+
+[[unit]]
+text = "Unset or empty, it is 65, longer than the 60 seconds the AWS load balancer keeps an idle connection open."
+by = [
+    "test:backend/tests/unit/infrastructure/test_entrypoint_keep_alive.py::test_the_image_command_starts_uvicorn_with_a_65_second_keep_alive_once",
+    "test:backend/tests/unit/infrastructure/test_entrypoint_keep_alive.py::test_the_variable_reaches_the_flag",
+    "test:backend/tests/unit/infrastructure/test_cdk_api_settings.py::test_the_load_balancer_closes_an_idle_connection_before_the_api_does",
+]
+
+[[unit]]
+text = "Behind another proxy, set it above that proxy's idle timeout: AWS lists a target keep-alive shorter than the load balancer's idle timeout as a cause of 502 errors."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "A value that is not a whole number from 61 to 99999, in at most five digits 0-9, stops the container at start-up with a line that names it, even when the command passes its own --timeout-keep-alive."
+by = [
+    "test:backend/tests/unit/core/test_preflight.py::test_a_keep_alive_that_is_not_a_whole_number_above_60_is_refused",
+    "test:backend/tests/unit/core/test_preflight.py::test_main_exits_78_for_a_refused_keep_alive",
+    "test:backend/tests/unit/infrastructure/test_entrypoint_keep_alive.py::test_a_refused_value_stops_the_start_even_when_the_command_passes_a_flag",
+]
+
+[[unit]]
+text = "With the Helm chart, set it in api.extraEnv."
+by = ["exempt:instruction"]
