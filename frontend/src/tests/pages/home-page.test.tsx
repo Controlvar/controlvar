@@ -262,6 +262,10 @@ describe('the inventory', () => {
   it('gives every typed row a source', () => {
     expect(TYPED.filter((row) => row.source.trim().length < 8).map(keyOf)).toEqual([]);
   });
+
+  it('types no sentence that says beta: it is a row of content/home-quotes.json, held to the capability page', () => {
+    expect(TYPED.filter((row) => /\bbeta\b/i.test(row.text)).map(keyOf)).toEqual([]);
+  });
 });
 
 describe("the homepage's links", () => {
