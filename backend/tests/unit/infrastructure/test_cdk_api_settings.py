@@ -13,8 +13,8 @@ Each case runs ``app.py`` directly (``python3 app.py``, the ``app`` command in
 placeholder account, fake ARNs, no AWS credentials and a scratch ``HOME``, so
 nothing reaches AWS. It does not receive the ``context`` object in ``cdk.json``
 that ``cdk synth`` adds; with it, some IAM, key and scaling-target settings
-differ (more in the full profile), and no task definition does, which is all
-this test reads. The task definitions' environment is read out of the
+differ (more in the full profile), and no task definition and no load
+balancer attribute does, which is all this test reads. The task definitions' environment is read out of the
 synthesized templates, as ECS hands it to the container, and the application's
 settings are built from it in a fresh interpreter, with the database and Redis
 on port 1, where nothing listens. With strong secrets the settings must be the
@@ -174,7 +174,28 @@ def _backend_container(templates: list[dict], family: str) -> dict:
             e["Name"]: e["Value"] for e in container.get("Environment", [])
         },
         "secrets": sorted(s["Name"] for s in container.get("Secrets", [])),
+        "entry_point": container.get("EntryPoint"),
+        "command": container.get("Command"),
     }
+
+
+def _load_balancer_attributes(templates: list[dict]) -> list[dict]:
+    """The attributes of every load balancer, key -> value, one dict each.
+
+    At least one: an empty scan must fail here rather than make the
+    assertion on them vacuous.
+    """
+    found = [
+        {
+            attribute["Key"]: attribute["Value"]
+            for attribute in resource["Properties"].get("LoadBalancerAttributes", [])
+        }
+        for template in templates
+        for resource in template.get("Resources", {}).values()
+        if resource["Type"] == "AWS::ElasticLoadBalancingV2::LoadBalancer"
+    ]
+    assert found, "the synth has no load balancer"
+    return found
 
 
 @pytest.fixture(scope="module", params=sorted(EXPECTED))
@@ -189,6 +210,7 @@ def synthesized(request, tmp_path_factory) -> dict:
         "env": env_name,
         "api": _backend_container(templates, f"experimentation-backend-{env_name}"),
         "migrate": _backend_container(templates, f"experimentation-migrate-{env_name}"),
+        "load_balancers": _load_balancer_attributes(templates),
     }
 
 
@@ -274,3 +296,30 @@ def test_weak_secrets_stop_the_api_from_starting(synthesized, tmp_path):
     assert result.get("refused") == "ValidationError", result
     for name in WEAK_SECRETS:
         assert name in result["detail"], result
+
+
+def test_the_load_balancer_closes_an_idle_connection_before_the_api_does(
+    synthesized,
+):
+    """#2107: the API must keep an idle connection open longer than the load
+    balancer in front of it. The stack leaves the load balancer's idle timeout
+    at AWS's default, 60 s, and the API container sets no EntryPoint and no
+    Command, so the image's entrypoint starts uvicorn from the image's CMD
+    and adds ``--timeout-keep-alive`` (65 s unless UVICORN_TIMEOUT_KEEP_ALIVE
+    says otherwise; the preflight refuses 60 or less). A change that sets the
+    idle timeout, or the container's command, has to keep that order and
+    update this test knowingly."""
+    for attributes in synthesized["load_balancers"]:
+        assert "idle_timeout.timeout_seconds" not in attributes, (
+            f"the {synthesized['env']} load balancer sets idle_timeout."
+            f"timeout_seconds={attributes['idle_timeout.timeout_seconds']}; the "
+            "API's keep-alive must stay above it"
+        )
+    api = synthesized["api"]
+    assert api["entry_point"] is None, (
+        f"{api['family']} sets EntryPoint {api['entry_point']}, which bypasses "
+        "the image's entrypoint and its --timeout-keep-alive"
+    )
+    assert api["command"] is None, (
+        f"{api['family']} sets Command {api['command']} in place of the image's"
+    )

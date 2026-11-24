@@ -22,7 +22,14 @@ What it refuses:
   ``FORWARDED_ALLOW_IPS`` entry that is not an IP address or a network written
   with its host bits zero, or is ``*`` (``proxy_trust.entry_problems``, one
   line per entry; read from the process environment only, as the entrypoint
-  reads it).
+  reads it).  And a ``UVICORN_TIMEOUT_KEEP_ALIVE`` that is set but is not a
+  whole number of seconds above 60 written in the digits 0-9 (``0``, ``60``,
+  ``+65``, ``65s``, ``" 65"``, ``1_000``, Arabic-Indic or fullwidth digits):
+  the entrypoint passes it to uvicorn as ``--timeout-keep-alive``, and the
+  API must keep an idle connection open longer than the AWS load balancer in
+  front (60 s).  It is checked even when the command passes its own
+  ``--timeout-keep-alive``, which this check cannot see; read from the
+  process environment only.
 * in staging and production -- ``TESTING`` set (the test runner's flag; one
   line, and nothing else is listed, as the settings refuse it outright);
   ``SECRET_KEY``, ``FIRST_SUPERUSER_PASSWORD``
@@ -48,6 +55,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Callable, Dict, List, Mapping, Optional
@@ -149,6 +157,40 @@ def _truncate(value: str, limit: int = 200) -> str:
     return value if len(value) <= limit else value[:limit] + "..."
 
 
+#: uvicorn's own variable for ``--timeout-keep-alive``: the entrypoint passes
+#: it as that flag, and uvicorn reads it itself when it is started directly.
+KEEP_ALIVE_SETTING = "UVICORN_TIMEOUT_KEEP_ALIVE"
+
+#: What the entrypoint passes when the variable is unset or empty.
+KEEP_ALIVE_DEFAULT = 65
+
+#: The idle timeout of the AWS load balancer in front of the API (its
+#: default; the CDK stack does not set it). The keep-alive must be above it.
+LOAD_BALANCER_IDLE_TIMEOUT = 60
+
+#: ASCII digits only, and ``fullmatch``: ``int()``, ``str.isdigit()`` and
+#: ``\d`` also take other scripts' digits (Arabic-Indic, fullwidth), ``int()``
+#: a sign, spaces and underscores, and ``$`` a trailing newline; uvicorn would
+#: take all of those. Five digits bound the parse.
+_KEEP_ALIVE_VALUE = re.compile(r"[0-9]{1,5}")
+
+
+def keep_alive_problem(raw: Optional[str]) -> Optional[str]:
+    """The refusal for a ``UVICORN_TIMEOUT_KEEP_ALIVE`` value; None when it is
+    unset, empty or usable."""
+    if not raw:
+        return None
+    if _KEEP_ALIVE_VALUE.fullmatch(raw) and int(raw) > LOAD_BALANCER_IDLE_TIMEOUT:
+        return None
+    return (
+        f"{KEEP_ALIVE_SETTING}={_truncate(raw)!r} must be a whole number of "
+        f"seconds above {LOAD_BALANCER_IDLE_TIMEOUT}, in digits 0-9: the API has "
+        "to keep an idle connection open longer than the proxy in front (the AWS "
+        f"load balancer closes at {LOAD_BALANCER_IDLE_TIMEOUT}). Unset it to use "
+        f"{KEEP_ALIVE_DEFAULT}."
+    )
+
+
 def check(
     environ: Mapping[str, str],
     *,
@@ -217,6 +259,13 @@ def check(
     # environment only: the entrypoint reads it there, never from .env.prod.
     forwarded_allow_ips = environ.get(proxy_trust.SETTING)
     problems.extend(proxy_trust.entry_problems(forwarded_allow_ips))
+
+    # UVICORN_TIMEOUT_KEEP_ALIVE, in every environment, from the process
+    # environment only, as the entrypoint reads it. Checked even when the
+    # command passes its own --timeout-keep-alive: this check cannot see it.
+    keep_alive = keep_alive_problem(environ.get(KEEP_ALIVE_SETTING))
+    if keep_alive:
+        problems.append(keep_alive)
 
     if environment not in HARDENED_ENVIRONMENTS:
         return problems
