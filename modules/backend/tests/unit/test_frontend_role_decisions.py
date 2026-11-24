@@ -405,10 +405,11 @@ SITES: Dict[Key, Tuple[int, str, str]] = {
         NOTHING,
         "the header's role chip: its label",
     ),
-    (
-        _REQUIRE_AUTH,
-        'Signed in as <span className="font-medium">{user.email}</span> ({user.role}). This page',
-    ): (1, NOTHING, "names the role in the guard's 403 view"),
+    (_REQUIRE_AUTH, "({user.role}). This page requires {requirement}."): (
+        1,
+        NOTHING,
+        "names the role in the guard's 403 view",
+    ),
     (_EDIT_USER, "if (role !== null && role !== user.role) changes.role = role;"): (
         4,
         NOTHING,
