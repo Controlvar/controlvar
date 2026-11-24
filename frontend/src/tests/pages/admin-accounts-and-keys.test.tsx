@@ -92,7 +92,14 @@ function route(url: string, init: RequestInit = {}): Promise<Response> {
     }
     if (pathname === '/api/v1/api-keys') {
       return Promise.resolve(
-        respond(201, { id: 'k-1', name: body.name, key: 'eptk_' + '1'.repeat(32), scopes: [], created_at: '2026-01-01T00:00:00Z' }),
+        respond(201, {
+          id: 'k-1',
+          name: body.name,
+          key: 'eptk_' + '1'.repeat(32),
+          scopes: [],
+          created_at: '2026-01-01T00:00:00Z',
+          environment: body.environment,
+        }),
       );
     }
   }

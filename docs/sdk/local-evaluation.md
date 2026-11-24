@@ -221,8 +221,8 @@ server are not counted twice.
 `reportError` and `report_error` return `true` / `True` when the server stored the report (201),
 and `false` / `False` on any other answer or a network failure; they never throw. Stored is not
 counted: a report counts only when the key has the `sdk:ruleset` scope and was created by a user
-who can change feature flags, and the flag's safety check shows the reports it stored but did not
-count as `uncounted_error_count`. With no evaluation counts in the check's 15-minute window (a
+who can change feature flags, and the flag's safety check shows the production reports it stored but
+did not count as `uncounted_error_count`. With no evaluation counts in the check's 15-minute window (a
 process that stopped without `close()` loses up to 60 seconds of them), the error rate reads 0 and
 an error-rate threshold cannot fire.
 

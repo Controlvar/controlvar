@@ -124,7 +124,16 @@ class TestCreate:
         )
         assert resp.status_code == 201, resp.text
         body = resp.json()
-        assert set(body) == {"id", "name", "key", "prefix", "created_at", "expires_at"}
+        assert set(body) == {
+            "id",
+            "name",
+            "key",
+            "prefix",
+            "created_at",
+            "expires_at",
+            "environment",
+        }
+        assert body["environment"] == "production"
         assert body["name"] == "SDK key"
         assert body["key"].startswith("eptk_") and len(body["key"]) == len("eptk_") + 32
         assert body["prefix"] == body["key"][:9]
@@ -287,7 +296,9 @@ class TestList:
             "created_at",
             "expires_at",
             "last_used_at",
+            "environment",
         }
+        assert item["environment"] == "production"
         assert "key" not in item
 
     def test_scopes_round_trip_as_list(self, client, developer):

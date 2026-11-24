@@ -195,7 +195,7 @@ def test_the_alias_route_is_the_one_call_that_links_two_user_ids(routes):
 
 
 # ---------------------------------------------------------------------------
-# One deployment is one environment
+# Environments are for feature flags and API keys, not experiments
 # ---------------------------------------------------------------------------
 API_KEYS = "/api/v1/api-keys"
 
@@ -257,31 +257,40 @@ def _api_key_route_names() -> set:
     return names
 
 
-def _fields(model) -> set:
-    """What the pages' sentence is about: a flag's and an experiment's
-    columns, and an API key's fields where a user meets them: the routes'
-    requests and responses, and the audit trail.
-
-    Since #2011's schema, ``api_keys`` stores an ``environment``, and the SDK
-    routes answer the stored one: every key is a production key, no request
-    sets another and no response or audit entry shows it. That one stored
-    column is the only exception; the day a key's request, response or audit
-    entry gains the field, this fails and the pages change.
-    """
-    if model is APIKey:
-        stored = {c for c in APIKey.__table__.columns.keys() if "env" in c.lower()}
-        assert stored == {"environment"}, stored
-        audited = set(AUDIT_VALUE_FIELDS[EntityType.API_KEY])
-        audited |= set(AUDIT_NAME_ONLY_FIELDS[EntityType.API_KEY])
-        return _api_key_route_names() | audited
-    return set(model.__table__.columns.keys())
+def _environment_names(names) -> set:
+    assert names
+    return {name for name in names if "env" in name.lower()}
 
 
-@pytest.mark.parametrize("model", [FeatureFlag, Experiment, APIKey])
-def test_flags_experiments_and_keys_carry_no_environment(model):
-    columns = _fields(model)
-    assert columns, model
-    assert not {c for c in columns if "env" in c.lower()}, columns
+@pytest.mark.parametrize("model", [FeatureFlag, Experiment])
+def test_a_flag_row_and_an_experiment_carry_no_environment(model):
+    """An experiment runs in production only. A flag's row is its production
+    settings; the other two environments' are rows of their own."""
+    assert _environment_names(model.__table__.columns.keys()) == set()
+
+
+def test_an_api_key_carries_one_environment_wherever_a_user_meets_it():
+    """``api_keys`` stores one, the routes take and answer it, and the audit
+    trail records it (#2011). A second such name fails here, and the pages
+    say what it is."""
+    audited = set(AUDIT_VALUE_FIELDS[EntityType.API_KEY])
+    audited |= set(AUDIT_NAME_ONLY_FIELDS[EntityType.API_KEY])
+    stored = APIKey.__table__.columns.keys()
+    for names in (stored, _api_key_route_names(), audited):
+        assert _environment_names(names) == {"environment"}
+
+
+def test_no_route_changes_an_api_key(routes):
+    """So none changes a key's environment."""
+    assert {
+        (method, path)
+        for method, path in routes
+        if path == API_KEYS or path.startswith(f"{API_KEYS}/")
+    } == {
+        ("GET", API_KEYS),
+        ("POST", API_KEYS),
+        ("DELETE", f"{API_KEYS}/{{key_id}}"),
+    }
 
 
 # ---------------------------------------------------------------------------

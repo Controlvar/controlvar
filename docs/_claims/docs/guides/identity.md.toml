@@ -516,9 +516,9 @@ text = "Links have no environment"
 by = ["exempt:label"]
 
 [[unit]]
-text = "One deployment is one environment (Limitations), and a link has no environment of its own: a deployment keeps one set of links, and its tracking routes follow them whichever API key a request carries."
+text = "Event tracking runs in production only (Limitations), and a link has no environment of its own: a deployment keeps one set of links, and its tracking routes, which take production API keys only, follow them whichever of those keys a request carries."
 by = [
-    "test:backend/tests/unit/api/test_documented_limits.py::test_flags_experiments_and_keys_carry_no_environment",
+    "test:backend/tests/integration/api/test_key_environment_routes.py::test_a_production_only_route_refuses_another_key_and_writes_nothing",
     "test:backend/tests/integration/database/test_identity_aliases_migration.py::test_an_upgraded_database_and_a_bootstrapped_one_have_the_same_table",
     "test:backend/tests/integration/api/test_identity_alias_route.py::test_a_link_made_through_the_route_is_the_one_the_tracking_routes_follow",
 ]

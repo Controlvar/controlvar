@@ -82,7 +82,7 @@ AUDIT_VALUE_FIELDS: Dict[EntityType, Tuple[str, ...]] = {
         "bayesian_enabled",
     ),
     EntityType.USER: ("username", "role", "is_active", "is_superuser"),
-    EntityType.API_KEY: ("name", "scopes", "expires_at", "user_id"),
+    EntityType.API_KEY: ("name", "scopes", "expires_at", "user_id", "environment"),
     EntityType.HOLDOUT: (
         "name",
         "holdout_percentage",

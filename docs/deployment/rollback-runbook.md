@@ -276,6 +276,17 @@ stay in `identity_aliases` unless the database was also downgraded below
 
 ### Rolling back past flag environments
 
+- Before rolling the API back below 0.49.0, an ADMIN lists all keys and deletes
+  every key whose `environment` is not `production`.
+- After an alarm rollback, 0.48.0's list has no `environment`. Delete every key
+  whose `created_at` is after the 0.49.0 traffic shift. That is a superset;
+  recreate any production key among them.
+- The SQL `UPDATE` stays as an alternative for an operator with database access:
+  `UPDATE api_keys SET is_active=false WHERE environment <> 'production'`.
+
+In the dashboard a superuser does this on Admin > API Keys with 'All users
+(admin)' ticked; an ADMIN who is not a superuser uses the API.
+
 Rolling back below `t2011_flag_environments` loses every staging and
 development flag setting and deactivates every staging and development API
 key: the downgrade sets those keys inactive, then removes the column and the

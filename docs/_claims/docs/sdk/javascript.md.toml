@@ -757,7 +757,7 @@ by = [
 ]
 
 [[unit]]
-text = "A report sent with any other key is stored too and still resolves true; the flag's safety check shows those reports as uncounted_error_count."
+text = "A report sent with any other production key is stored too and still resolves true; the flag's safety check shows those reports as uncounted_error_count."
 by = [
     "test:backend/tests/integration/api/test_error_report_source.py::test_the_check_endpoint_shows_the_reports_it_does_not_count",
     "test:backend/tests/integration/api/test_error_report_source.py::test_the_stored_source_follows_the_presented_key",

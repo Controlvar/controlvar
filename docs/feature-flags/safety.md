@@ -36,14 +36,16 @@ a server-side key, an API key with the `sdk:ruleset` scope whose owner can chang
 gives `feature_flag (update)`). Error reports sent with any other key, such as the key in a
 browser or mobile app, are stored and counted separately in the check
 (`details.uncounted_error_count`), but do not count toward the error rate or a rollback. The same
-goes for an `sdk:ruleset` key whose owner can no longer change feature flags. To have app errors
+goes for an `sdk:ruleset` key whose owner can no longer change feature flags. Errors with a `staging`
+or `development` key are stored and are in neither number. To have app errors
 count, send them to your server and forward them from there with a server-side key; see
 [Reporting client-side errors](create.md#reporting-client-side-errors). A server using the
 JavaScript or Python SDK sends one with `reportError` or `report_error`; `true` from either means
 the report was stored, not that it counts. No other SDK has its own call for it; the OpenFeature providers expose the JavaScript or Python client, which does.
 
 `GET /api/v1/metrics/summary` counts errors by the same rule: its `error_rate` leaves out the
-reports that do not count, and its `uncounted_error_count` is the number of them in its period.
+reports that do not count, and its `uncounted_error_count` is the number of them in its period,
+in production.
 That `error_rate` still differs from the check's in three ways: it covers `start_date` to
 `end_date` (by default the 30 days before now), not the last 15 minutes; it divides by the
 aggregated flag evaluations (of its `period`, by default `day`), not the raw ones; and it is a
@@ -302,8 +304,8 @@ Each metric's `details` holds its `warning_threshold`, `critical_threshold`, `co
 `warning` (whether the warning threshold is breached) and `measured` (`false` for a metric name
 with no data source). The response also carries
 `feature_flag_id`, `last_checked` and `details`, with the window's `error_count`,
-`total_evaluations` and `uncounted_error_count`: the error reports that were stored but do not
-count (see [Which errors count](#which-errors-count)). When a metric breaches its critical
+`total_evaluations` and `uncounted_error_count`: the production error reports that were stored but
+do not count (see [Which errors count](#which-errors-count)). When a metric breaches its critical
 threshold, that metric and the whole response read `"is_healthy": false`.
 
 The dashboard shows the same check. The flag's page has a **Safety check** section that reads

@@ -13,8 +13,12 @@ create endpoint; only its SHA-256 hash is persisted (``APIKey.key``).
   ``sdk:ruleset`` scope is for server-side evaluation, and only a user who can
   change feature flags (ADMIN, DEVELOPER, a superuser, or in the full profile
   anyone whose custom role or direct grant gives ``feature_flag (update)``)
-  may create one; anyone else gets 403 and no key is written.
+  may create one; anyone else gets 403 and no key is written. ``environment``
+  (production unless given) is the flag environment the key works in (#2011);
+  ``mcp:read`` on a key outside production is 422 and no key is written.
 * ``DELETE /{key_id}`` — owner or ADMIN; 204.
+
+No route changes a key's environment: create another key and delete this one.
 
 These are the only API keys: workspaces (the workspaces module) issue none.
 """
@@ -86,6 +90,7 @@ def _to_read(key: APIKey) -> APIKeyRead:
         created_at=key.created_at,
         expires_at=key.expires_at,
         last_used_at=key.last_used_at,
+        environment=key.environment,
     )
 
 
@@ -146,6 +151,7 @@ def create_api_key(
         description=body.description,
         scopes=scopes,
         expires_at=body.expires_at,
+        environment=body.environment,
     )
     created = APIKeyCreated(
         id=api_key.id,
@@ -154,6 +160,8 @@ def create_api_key(
         prefix=plaintext[:KEY_PREFIX_LENGTH],
         created_at=api_key.created_at,
         expires_at=api_key.expires_at,
+        # The stored value, as read back after the insert: a caller checks it.
+        environment=api_key.environment,
     )
     # The key is committed; a failed audit write does not undo it. The entry
     # holds no part of the key or its hash (``key`` is not an audit field).
