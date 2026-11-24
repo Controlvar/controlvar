@@ -11,7 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from backend.app.core.config import settings
-from backend.app.core.logger import unexpected_failure
+from backend.app.core.logger import failure_label, unexpected_failure
 from backend.app.core.permissions import (
     Action,
     ResourceType,
@@ -603,7 +603,11 @@ def get_api_key(
         api_key.update_last_used(db)
     except SQLAlchemyError as exc:
         db.rollback()
-        logger.warning(f"Could not record API key use for key {api_key.id}: {exc}")
+        # The class and SQLSTATE only: the driver's message can include the
+        # statement's values.
+        logger.warning(
+            f"Could not record API key use for key {api_key.id} ({failure_label(exc)})"
+        )
 
     # Hold a connection for the rest of the request whether or not the use was recorded.
     db.connection()
