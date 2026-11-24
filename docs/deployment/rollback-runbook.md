@@ -276,16 +276,28 @@ stay in `identity_aliases` unless the database was also downgraded below
 
 ### Rolling back past flag environments
 
+These steps are for an API rolled back alone: where the database is downgraded
+below `t2011_flag_environments` first, the only order for Docker Compose and
+Helm, the downgrade deactivates every staging and development API key (below).
+
 - Before rolling the API back below 0.49.0, an ADMIN lists all keys and deletes
   every key whose `environment` is not `production`.
-- After an alarm rollback, 0.48.0's list has no `environment`. Delete every key
-  whose `created_at` is after the 0.49.0 traffic shift. That is a superset;
-  recreate any production key among them.
-- The SQL `UPDATE` stays as an alternative for an operator with database access:
-  `UPDATE api_keys SET is_active=false WHERE environment <> 'production'`.
+- After an alarm rollback, or any rollback already made, 0.48.0's list has no
+  `environment`. Delete every key whose `created_at` is later than the
+  `createTime` of the first CodeDeploy deployment of 0.49.0 or a later release:
+  its canary serves that release before the traffic shift. That is a superset;
+  recreate any production key among them through the API, or in the dashboard
+  once it is back on 0.48.0 too. Read `createTime` in UTC, as `created_at` is:
+  `TZ=UTC aws deploy get-deployment --deployment-id <id> --query deploymentInfo.createTime --output text`
+  (`<id>` is the CodeDeploy deployment in that deploy's run summary).
+- Instead of either, an operator with database access can run this, which turns
+  off only the keys outside production (if you changed `POSTGRES_SCHEMA`, write
+  yours for `experimentation`):
+  `UPDATE experimentation.api_keys SET is_active=false WHERE environment <> 'production'`.
 
-In the dashboard a superuser does this on Admin > API Keys with 'All users
-(admin)' ticked; an ADMIN who is not a superuser uses the API.
+In the dashboard a superuser lists and deletes keys on Admin > API Keys with
+'All users (admin)' ticked, where Created is in the browser's time zone; an
+ADMIN who is not a superuser uses the API.
 
 Rolling back below `t2011_flag_environments` loses every staging and
 development flag setting and deactivates every staging and development API
@@ -748,6 +760,10 @@ revision that served before it. There is nothing to roll back for the API.
    segment targeting, disable segment-targeted flags and pause
    segment-targeted experiments now
    ([Rolling back past segment targeting](#rolling-back-past-segment-targeting)).
+10. **API keys.** If the release that served before the deploy is older than
+    0.49.0, turn off the staging and development API keys made on the new
+    release now
+    ([Rolling back past flag environments](#rolling-back-past-flag-environments)).
 
 ## Fix forward while an alarm is firing
 
