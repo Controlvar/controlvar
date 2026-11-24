@@ -253,6 +253,8 @@ def test_the_migration_adds_the_models_key_environment(monkeypatch):
     assert column.type.length == model.type.length == 32
     assert column.nullable is False and model.nullable is False
     assert _default_sql(column) == _default_sql(model) == "'production'"
+    # The literal in the column and the constant the downgrade's UPDATE reads.
+    assert _default_sql(column) == f"'{_module()._KEY_DEFAULT}'"
 
     (name, table, condition), kwargs = recorder.one("create_check_constraint")
     assert (name, table) == (API_KEY_ENVIRONMENT_CHECK, "api_keys")

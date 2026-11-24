@@ -313,7 +313,7 @@ def _add_absent_key_environment() -> None:
             sa.Column(
                 _KEY_COLUMN,
                 sa.String(length=32),
-                server_default=sa.text(f"'{_KEY_DEFAULT}'"),
+                server_default=sa.text("'production'"),
                 nullable=False,
             ),
             schema=_SCHEMA,
