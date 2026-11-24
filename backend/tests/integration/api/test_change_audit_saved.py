@@ -390,15 +390,14 @@ def test_flag_update_record_carries_its_five_values(client, fresh, developer):
     assert rows[0].old_value == {
         "key": body["key"],
         "name": body["name"],
-        # pins main's format; see #2066
-        "status": "FeatureFlagStatus.ACTIVE",
+        # the same spelling as the "after" side (#2066)
+        "status": "active",
         "rollout_percentage": 30,
         "value_type": "boolean",
     }, rows[0].old_value
     assert rows[0].new_value == {
         "key": body["key"],
         "name": "renamed",
-        # pins main's format; see #2066
         "status": "active",
         "rollout_percentage": 30,
         "value_type": "boolean",
