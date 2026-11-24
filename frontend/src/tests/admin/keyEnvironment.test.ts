@@ -3,7 +3,7 @@
  * only if the API says it is of the environment asked for. Otherwise it
  * revokes the key and throws, and the key's value goes no further.
  */
-import { ApiError, apiFetch } from '@/services/api';
+import { ApiError, apiFetch, serverErrorMessage, timeoutMessage, unreachableMessage } from '@/services/api';
 import {
   CreateKeyBody,
   KEY_ENVIRONMENTS,
@@ -35,7 +35,7 @@ const ANSWER_OF_0_48_0 = {
 const STAGING: CreateKeyBody = { name: 'laptop', environment: 'staging' };
 
 const NEXT =
-  'This happens while an earlier release of the API, which has no environments, is still running: create the key again when the upgrade has finished.';
+  'This happens while an earlier release of the API, which has no environments, is still running: create the key again once the API is upgraded.';
 
 /** Answer the POST with *created*, and the DELETE with *revoke*. */
 function answer(created: unknown, revoke: () => Promise<unknown> = () => Promise.resolve(undefined)) {
@@ -97,26 +97,33 @@ it('an answer that names no environment is refused for a Production key too', as
   );
 });
 
-it('when the revoke fails, says why, that the key still exists, and where to revoke it', async () => {
-  answer(ANSWER_OF_0_48_0, () =>
-    Promise.reject(new ApiError({ status: 500, detail: 'Internal server error' })),
-  );
+// Each error as `apiFetch` builds it, its message included: a timeout, an
+// unreachable API and a 5xx with no JSON are whole sentences, which the reason
+// in parentheses never is. Only a 403 says that the key is there.
+it.each([
+  ['403', new ApiError({ status: 403, detail: "You don't have permission to delete API keys" }), 'HTTP 403', 'still exists'],
+  ['401', new ApiError({ status: 401, detail: 'Not authenticated' }), 'HTTP 401', 'may still exist'],
+  ['404', new ApiError({ status: 404, detail: 'API key not found' }), 'HTTP 404', 'may still exist'],
+  ['429', new ApiError({ status: 429, detail: 'Rate limit exceeded' }), 'HTTP 429', 'may still exist'],
+  ['500', new ApiError({ status: 500, message: serverErrorMessage(500, 'req-1') }), 'HTTP 500', 'may still exist'],
+  ['502', new ApiError({ status: 502, message: serverErrorMessage(502) }), 'HTTP 502', 'may still exist'],
+  ['a 2xx that could not be read', new ApiError({ status: 200, message: 'Cut off.', unreadableAnswer: true }), 'HTTP 200', 'may still exist'],
+  [
+    'a timeout',
+    new ApiError({ status: 0, message: timeoutMessage(30_000, true), timedOut: true, outcomeUnknown: true }),
+    'no answer',
+    'may still exist',
+  ],
+  ['an unreachable API', new ApiError({ status: 0, detail: unreachableMessage() }), 'no answer', 'may still exist'],
+  ['something that is not an ApiError', new Error('Failed to fetch.'), 'no answer', 'may still exist'],
+])('a revoke that fails with %s is reported in a few words', async (_, error, reason, exists) => {
+  answer(ANSWER_OF_0_48_0, () => Promise.reject(error));
   const err = await refusal(STAGING);
   expect(err.message).toBe(
-    'The API did not confirm that the new key is a Staging key, and revoking it failed (Internal server error). ' +
-      `The key “laptop” still exists: revoke it in the list on this page. ${NEXT}`,
+    `The API did not confirm that the new key is a Staging key, and revoking it failed (${reason}). ` +
+      `The key “laptop” ${exists}: revoke it in the list on this page. ${NEXT}`,
   );
-  expect(err.message).not.toContain(SECRET);
-});
-
-it('when the revoke timed out, says the key may still exist', async () => {
-  answer(ANSWER_OF_0_48_0, () =>
-    Promise.reject(
-      new ApiError({ status: 0, detail: 'No answer.', message: 'No answer.', timedOut: true, outcomeUnknown: true }),
-    ),
-  );
-  const err = await refusal(STAGING);
-  expect(err.message).toContain('The key “laptop” may still exist: revoke it in the list on this page.');
+  expect(JSON.stringify(err) + err.message + String(err.stack)).not.toContain(SECRET);
 });
 
 it('a create the API refused is not a mismatch, and revokes nothing', async () => {

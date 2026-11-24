@@ -72,14 +72,18 @@ export class KeyEnvironmentMismatch extends Error {
 }
 
 const WHY_AND_NEXT =
-  'This happens while an earlier release of the API, which has no environments, is still running: create the key again when the upgrade has finished.';
+  'This happens while an earlier release of the API, which has no environments, is still running: create the key again once the API is upgraded.';
 
-function mismatchMessage(asked: KeyEnvironment, name: string, revokeError: unknown): string {
+/** What a `KeyEnvironmentMismatch` says; `revokeError` is null when the key was revoked. */
+export function mismatchMessage(asked: KeyEnvironment, name: string, revokeError: unknown): string {
   const unconfirmed = `The API did not confirm that the new key is a ${LABELS[asked]} key`;
   if (revokeError === null) return `${unconfirmed}, so the key was revoked. ${WHY_AND_NEXT}`;
-  const reason = revokeError instanceof Error && revokeError.message ? revokeError.message : 'the request failed';
-  // A revoke that timed out may have been carried out.
-  const exists = isApiError(revokeError) && revokeError.outcomeUnknown ? 'may still exist' : 'still exists';
+  // 0: no answer arrived (timed out, or unreachable).
+  const status = isApiError(revokeError) ? revokeError.status : 0;
+  const reason = status === 0 ? 'no answer' : `HTTP ${status}`;
+  // Only a 403 says the key is there: the route looks it up first, and answers
+  // 404 when it is gone. With no answer, or a 5xx, the revoke may have been done.
+  const exists = status === 403 ? 'still exists' : 'may still exist';
   return `${unconfirmed}, and revoking it failed (${reason}). The key “${name}” ${exists}: revoke it in the list on this page. ${WHY_AND_NEXT}`;
 }
 
@@ -89,7 +93,7 @@ function mismatchMessage(asked: KeyEnvironment, name: string, revokeError: unkno
  * production key and answers without one. So when the answer names no
  * environment, or another one, the key is revoked, its value is dropped here,
  * and a `KeyEnvironmentMismatch` says so (and, if the revoke failed, that the
- * key still exists).
+ * key still exists, or may).
  */
 export async function createApiKey(body: CreateKeyBody): Promise<CreatedKey> {
   const created = await apiFetch<CreatedKey>(API_KEYS_PATH, { method: 'POST', json: body });

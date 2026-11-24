@@ -45,7 +45,7 @@ function listedKey(id: string, environment?: string): Record<string, unknown> {
 
 const UNCONFIRMED = 'The API did not confirm that the new key is a Staging key';
 const NEXT =
-  'This happens while an earlier release of the API, which has no environments, is still running: create the key again when the upgrade has finished.';
+  'This happens while an earlier release of the API, which has no environments, is still running: create the key again once the API is upgraded.';
 const MCP_READ_REFUSED =
   'mcp:read needs a production key: the routes it opens read production only. Create the key for production, or without mcp:read.';
 
@@ -195,18 +195,30 @@ describe('an answer that does not confirm the environment', () => {
     expectKeyNowhere();
   });
 
-  it('when the revoke fails, says the key still exists and where, and lists it', async () => {
+  it.each([
+    ['403', () => respond(403, { detail: "You don't have permission to delete API keys" }), 'HTTP 403', 'still exists'],
+    ['404', () => respond(404, { detail: 'API key not found' }), 'HTTP 404', 'may still exist'],
+    ['500', () => respond(500, { detail: 'Internal server error' }), 'HTTP 500', 'may still exist'],
+    [
+      'no answer',
+      () => {
+        throw new TypeError('Failed to fetch');
+      },
+      'no answer',
+      'may still exist',
+    ],
+  ] as [string, () => Response, string, string][])('when the revoke fails (%s), says so and where to revoke it, and lists the key', async (_, answer, reason, exists) => {
     create = (body) => {
       listed = [{ ...listedKey('k-1'), name: body.name }];
       return respond(201, answerOf0480(String(body.name)));
     };
-    revoke = () => respond(500, { detail: 'Internal server error' });
+    revoke = answer;
     await open();
     await submit('staging');
     const error = await screen.findByTestId('own-key-create-error');
     expect(error.textContent).toBe(
-      `${UNCONFIRMED}, and revoking it failed (Internal server error). ` +
-        `The key “laptop” still exists: revoke it in the list on this page. ${NEXT}`,
+      `${UNCONFIRMED}, and revoking it failed (${reason}). ` +
+        `The key “laptop” ${exists}: revoke it in the list on this page. ${NEXT}`,
     );
     expectKeyNowhere();
     const row = await screen.findByTestId('own-key-row-k-1');

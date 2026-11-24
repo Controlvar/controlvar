@@ -39,6 +39,7 @@ import {
 import { classifyPasswordError, passwordOutcomeSentence } from '@/services/password';
 import { FORBIDDEN_MESSAGE, editErrorMessage } from '@/components/admin/users/EditUserModal';
 import { OVERRIDE_ERROR_COPY, overrideErrorCopy } from '@/components/experiments/BanditWeightsOverride';
+import { createKeyErrorMessage } from '@/components/admin/api-keys/keyEnvironment';
 
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
@@ -103,6 +104,7 @@ const MAPS: Array<[string, (err: unknown) => string]> = [
   ['editErrorMessage', editErrorMessage],
   // #1957: "Set weights by hand" on the experiment page's bandit panel.
   ['overrideErrorCopy', overrideErrorCopy],
+  ['createKeyErrorMessage', (e) => createKeyErrorMessage(e, 'fallback')],
 ];
 
 beforeEach(() => {
@@ -185,6 +187,8 @@ const FORBIDDEN_PATTERNS = [/\b403\s*:/, /\bstatus\s*===?\s*403\b/, /\bcase\s+40
 const NEED_NOT_ASK: Record<string, string> = {
   'services/api.ts': 'defines ApiError.isForbidden',
   'utils/demoMode.ts': 'is the check',
+  'components/admin/api-keys/keyEnvironment.ts':
+    'the revoke of an API key just created: demo mode refuses the create, so no revoke is sent',
   'components/results/ResultsDashboard/ResultsDashboard.tsx': 'a results load (GET), which demo mode never refuses',
   'components/results/ResultsDashboard/SavedSegment.tsx':
     "a saved segment's results load (GET), which demo mode never refuses",

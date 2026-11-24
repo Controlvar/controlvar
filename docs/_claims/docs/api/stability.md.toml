@@ -1549,8 +1549,9 @@ by = [
 ]
 
 [[unit]]
-text = "GET /api/v1/metrics/summary, POST /api/v1/tracking/errors | #2011 | An error with a staging or development key is stored and is in neither error_rate nor uncounted_error_count, nor in the safety check's two counts. A production key's is counted as before. The OpenAPI document changes in the two operations' descriptions and those of MetricsSummary.error_rate and MetricsSummary.uncounted_error_count. See Which errors count."
+text = "GET /api/v1/metrics/summary, POST /api/v1/tracking/errors, POST /api/v1/tracking/errors/batch, GET /api/v1/safety/feature-flags/{feature_flag_id}/check | #2011 | An error with a staging or development key is stored and is in neither error_rate nor uncounted_error_count, nor in the safety check's two counts. A production key's is counted as before. The OpenAPI document changes in the first two operations' descriptions and those of MetricsSummary.error_rate and MetricsSummary.uncounted_error_count. See Which errors count."
 by = [
+    "test:backend/tests/integration/api/test_key_environment_routes.py::test_an_error_report_of_another_environment_is_stored_and_counted_in_neither_set",
     "test:backend/tests/integration/api/test_api_key_environment_api.py::test_a_created_keys_errors_outside_production_are_in_neither_number",
     "test:backend/tests/integration/api/test_environment_safety.py::test_errors_of_another_environment_never_roll_production_back",
     "test:backend/tests/integration/api/test_metrics_summary_error_rule.py::test_the_summary_counts_errors_by_the_safety_checks_rule",
