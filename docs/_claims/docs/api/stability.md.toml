@@ -1475,3 +1475,19 @@ by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
+
+[[unit]]
+text = "GET /api/v1/auth/me, POST /api/v1/auth/login, POST /api/v1/auth/token, POST /api/v1/auth/mfa/verify, POST /api/v1/auth/mfa/enroll/confirm, POST /api/v1/users/me/password | #2067 | The signed-in account's profile (what GET /api/v1/auth/me answers with local sign-in, and user in a sign-in answer) carries email and username as null for an account stored without one, with both keys always there. GET /api/v1/auth/me answered 500 for an account with no email address, no username or neither. The four sign-in operations, where they issue the access token, answered 500 for an account with no username. POST /api/v1/users/me/password answered 204 for an account with no email address or no username: one with no username that signs in with its password alone now gets 200 with a new access token, as POST /api/v1/auth/login answers, and one with no email address still gets 204. The profile of an account that has both is unchanged. The OpenAPI document changes only in UserMe: email and username become string or null, and stay required. The beta POST /api/v1/auth/sso/exchange (full profile) carries the same profile."
+by = [
+    "test:backend/tests/unit/api/test_local_auth.py::TestMeAndLogoutEndpoints::test_me_answers_null_for_an_empty_email_or_username",
+    "test:backend/tests/unit/api/test_local_auth.py::TestLoginEndpoint::test_sign_in_answers_null_for_an_empty_username",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_the_code_step_signs_in_an_account_with_no_username",
+    "test:backend/tests/unit/api/test_two_factor_routes.py::test_the_first_code_signs_in_an_account_with_no_username",
+    "test:backend/tests/integration/api/test_password_change_ends_sessions.py::test_the_change_issues_a_token_exactly_when_sign_in_would",
+    "test:backend/tests/integration/api/test_password_change_ends_sessions.py::test_an_account_with_no_email_address_gets_204_and_its_sessions_end",
+    "test:backend/tests/unit/api/test_local_auth.py::TestMeAndLogoutEndpoints::test_me_with_valid_token",
+    "test:backend/tests/unit/api/test_local_auth.py::TestLoginEndpoint::test_login_success_shape",
+    "test:modules/backend/tests/unit/api/test_sso_exchange_empty_email_or_username.py::test_the_exchange_answers_null_for_an_empty_email_or_username",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]

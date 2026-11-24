@@ -705,21 +705,22 @@ def _check_own_password(
 
 def _signs_in_with_password_alone(db: Session, user: User) -> bool:
     """Whether a sign-in with the password would issue ``user`` an access token
-    at once, and the answer can describe the account: it may sign in, it has
-    no two-step sign-in on and its role does not require it, and it has both
-    an email address and a username (``UserMe`` needs both). Read from the row
-    as the database holds it after the change.
+    at once: it may sign in, it has no two-step sign-in on, its role does not
+    require it, and its email address is not NULL, because sign-in finds an
+    account by its address. It needs no username (#2067). Read from the row as
+    the database holds it after the change.
 
-    The same conditions ``auth._issue_local_login`` applies after the
-    password; ``test_password_change_ends_sessions.py`` compares the two
-    answers for each kind of account.
+    The first three are what sign-in (``auth._issue_local_login``) applies
+    once the password matches. Of the address this asks only that it is not
+    NULL; sign-in refuses an empty one as well, so the two rules are close and
+    not the same. ``test_password_change_ends_sessions.py`` compares the two
+    answers for each kind of account it lists.
     """
     return (
         account_may_sign_in(user)
         and not two_factor_service.is_enabled(db, user.id)
         and not two_factor_required(user)
         and user.email is not None
-        and user.username is not None
     )
 
 

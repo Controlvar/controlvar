@@ -64,7 +64,7 @@ function Consumer() {
       <span data-testid="email">{user?.email ?? 'none'}</span>
       <span data-testid="session-error">{sessionError ?? ''}</span>
       <span data-testid="after-logout">{afterLogoutPath ?? ''}</span>
-      <button onClick={() => void login(second.email, 'Second1234!').catch(() => undefined)}>login</button>
+      <button onClick={() => void login('second@demo.com', 'Second1234!').catch(() => undefined)}>login</button>
       <button onClick={() => void logout()}>logout</button>
       <button onClick={() => void refresh()}>refresh</button>
     </div>

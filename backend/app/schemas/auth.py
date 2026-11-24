@@ -39,8 +39,13 @@ class UserMe(BaseModel):
     """
 
     id: UUID
-    email: str
-    username: str
+    # Nullable, but still required (no default): both columns are nullable,
+    # and with a non-null ``str`` here the profile of an account stored
+    # without one could not be built, a 500 from ``/auth/me`` and from sign-in
+    # (#2067). Required with ``None`` allowed keeps both keys in every answer,
+    # as ``UserResponse.email`` does.
+    email: Optional[str]
+    username: Optional[str]
     full_name: Optional[str] = None
     role: RoleName
     is_superuser: bool

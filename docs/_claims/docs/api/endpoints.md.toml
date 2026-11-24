@@ -805,6 +805,14 @@ by = [
 count = 17
 
 [[unit]]
+text = "Fields: email, username and full_name may be null."
+by = [
+    "test:backend/tests/unit/api/test_local_auth.py::TestMeAndLogoutEndpoints::test_me_answers_null_for_an_empty_email_or_username",
+    "test:backend/tests/unit/api/test_local_auth.py::TestUserMeSchema::test_the_profile_builds_for_a_row_with_only_its_address_and_name",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
 text = "User Management Endpoints"
 by = ["exempt:label"]
 

@@ -267,12 +267,18 @@ function MoreNavGroup({
   );
 }
 
-export function displayName(user: UserMe): string {
-  return user.full_name?.trim() || user.username || user.email;
+/** Full name, else username, else email; '' for an account with none of them (#2067). */
+function accountName(user: UserMe): string {
+  return user.full_name?.trim() || user.username || user.email || '';
 }
 
+export function displayName(user: UserMe): string {
+  return accountName(user) || 'Your account';
+}
+
+// From the account's own name, never from the words "Your account".
 function initials(user: UserMe): string {
-  const name = displayName(user);
+  const name = accountName(user);
   const parts = name.split(/[\s@._-]+/).filter(Boolean);
   const letters = parts.slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '');
   return letters.join('') || 'U';
@@ -452,7 +458,7 @@ export function AppShell({ children }: AppShellProps) {
                   <span
                     data-testid="user-menu-name"
                     className="text-sm font-medium text-slate-800 truncate max-w-[12rem]"
-                    title={user.email}
+                    title={user.email || undefined}
                   >
                     {displayName(user)}
                   </span>

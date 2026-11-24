@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ExperimentDetailPage, { ACTIONS_BY_STATUS, keepOwnerName } from '@/pages/experiments/[id]';
 import { ModulesProvider } from '@/contexts/ModulesContext';
@@ -249,6 +249,23 @@ describe("ExperimentDetailPage — the owner's name (#921)", () => {
   it('still says "You (…)" to the owner', async () => {
     const owner = await renderNamed({ owner_id: 'user-1' });
     expect(owner).toHaveTextContent(/^You \(admin@demo\.com\)$/);
+  });
+
+  it('says "You (username)", else "You", to an owner with no email (#2067)', async () => {
+    // null from the API; '' is what the Cognito session holds for no email.
+    for (const none of [null, '']) {
+      for (const [username, shown] of [
+        ['admin', /^You \(admin\)$/],
+        [none, /^You$/],
+      ] as const) {
+        mockUseAuth.mockReturnValue({
+          user: { id: 'user-1', email: none, username, role: 'ADMIN' },
+          status: 'authenticated',
+        });
+        expect(await renderNamed({ owner_id: 'user-1' })).toHaveTextContent(shown);
+        cleanup();
+      }
+    }
   });
 
   it('keeps the name after Start', async () => {

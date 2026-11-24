@@ -213,4 +213,22 @@ describe('RequireAuth', () => {
     expect(screen.getByRole('link', { name: /go to home/i })).toHaveAttribute('href', '/experiments');
     expect(mockReplace).not.toHaveBeenCalled();
   });
+
+  it('names an account with no email by its username, else in words (#2067)', async () => {
+    // null from the API; '' is what the Cognito session holds for no email.
+    for (const none of [null, '']) {
+      for (const [username, shown] of [
+        ['viewer', 'viewer'],
+        [none, 'an account with no email address'],
+      ]) {
+        localStorage.setItem(TOKEN_STORAGE_KEY, 'tok');
+        mockFetch.mockResolvedValueOnce(meResponse({ ...viewer, email: none, username }));
+        const view = renderGuarded(['ADMIN']);
+        expect(await screen.findByTestId('require-auth-forbidden')).toHaveTextContent(
+          `Signed in as ${shown} (VIEWER). This page requires ADMIN.`,
+        );
+        view.unmount();
+      }
+    }
+  });
 });

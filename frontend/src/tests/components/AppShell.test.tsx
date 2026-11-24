@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import {
   AppShell,
   MODULE_NAV_ITEMS,
@@ -423,6 +423,23 @@ describe('AppShell', () => {
     expect(displayName(makeUser({ full_name: null }))).toBe('admin');
     expect(displayName(makeUser({ full_name: '  ' }))).toBe('admin');
     expect(displayName(makeUser({ full_name: null, username: '' }))).toBe('admin@demo.com');
+  });
+
+  it('shows "Your account" and Log out to an account with no name, username or email (#2067)', async () => {
+    // null from the API; '' is what the Cognito session holds for no email.
+    for (const none of [null, '']) {
+      localStorage.clear();
+      mockFetch.mockReset();
+      signInAs(makeUser({ full_name: null, username: none, email: none }));
+      const view = renderShell();
+      const name = await screen.findByTestId('user-menu-name');
+      expect(name).toHaveTextContent(/^Your account$/);
+      expect(name).not.toHaveAttribute('title');
+      // The avatar's letters come from the account, not from that text ("YA").
+      expect(within(screen.getByTestId('user-menu')).getByText('U')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Log out' })).toBeInTheDocument();
+      view.unmount();
+    }
   });
 
   it('logs out and navigates to /login', async () => {

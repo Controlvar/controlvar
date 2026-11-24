@@ -733,9 +733,10 @@ class TestUserMeSchema:
         }
 
     def test_the_profile_builds_for_a_row_with_only_its_address_and_name(self):
-        """``POST /users/me/password`` answers with this profile for an account
-        that has an email address and a username (#501): every other nullable
-        column may be NULL without the answer failing after the change."""
+        """``POST /users/me/password`` answers with this profile (#501): every
+        nullable column but the address and the username may be NULL without
+        the answer failing after the change. Those two are NULL in
+        ``test_me_answers_null_for_an_empty_email_or_username`` (#2067)."""
         row = User(
             id=uuid.uuid4(),
             email="only@example.com",
@@ -816,6 +817,32 @@ class TestLoginEndpoint:
             "auth_provider": "local",
         }
         assert decode_local_token(body["access_token"])["sub"] == str(user.id)
+
+    @pytest.mark.regression
+    @pytest.mark.parametrize("route", ["login", "token"])
+    def test_sign_in_answers_null_for_an_empty_username(self, http, route):
+        """An account with an email address and no username signs in (#2067):
+        both routes answered 500 after the password, so it never could."""
+        user = _user(username=None)
+        http.state.user = user
+        if route == "login":
+            sent = {"json": {"email": user.email, "password": PASSWORD}}
+        else:
+            sent = {"data": {"username": user.email, "password": PASSWORD}}
+        resp = http.post(f"/api/v1/auth/{route}", **sent)
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert decode_local_token(body["access_token"])["sub"] == str(user.id)
+        assert body["user"] == {
+            "id": str(user.id),
+            "email": "alice@example.com",
+            "username": None,
+            "full_name": "Alice Example",
+            "role": "DEVELOPER",
+            "is_superuser": False,
+            "is_active": True,
+            "auth_provider": "local",
+        }
 
     def test_wrong_password_401_generic_message(self, http):
         user = _user()
@@ -905,16 +932,47 @@ class TestTokenFormEndpoint:
 
 class TestMeAndLogoutEndpoints:
     def test_me_with_valid_token(self, http):
-        user = _user(role=UserRole.ADMIN, is_superuser=True)
+        """The whole profile, as stored: the address keeps its letter case."""
+        user = _user(email="Alice@Example.com", role=UserRole.ADMIN, is_superuser=True)
         http.state.user = user
         token = create_local_access_token(user)
         resp = http.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
         assert resp.status_code == 200, resp.text
-        body = resp.json()
-        assert body["role"] == "ADMIN"
-        assert body["is_superuser"] is True
-        assert body["auth_provider"] == "local"
-        assert body["id"] == str(user.id)
+        assert resp.json() == {
+            "id": str(user.id),
+            "email": "Alice@Example.com",
+            "username": "alice",
+            "full_name": "Alice Example",
+            "role": "ADMIN",
+            "is_superuser": True,
+            "is_active": True,
+            "auth_provider": "local",
+        }
+
+    @pytest.mark.regression
+    @pytest.mark.parametrize(
+        "empty",
+        [("email",), ("username",), ("email", "username")],
+        ids=["no-email", "no-username", "neither"],
+    )
+    def test_me_answers_null_for_an_empty_email_or_username(self, http, empty):
+        """``null`` and not ``""``, with every key present and the rest of the
+        profile as it is for any account (#2067); it answered 500."""
+        user = _user(**dict.fromkeys(empty))
+        http.state.user = user
+        token = create_local_access_token(user)
+        resp = http.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+        assert resp.status_code == 200, resp.text
+        assert resp.json() == {
+            "id": str(user.id),
+            "email": None if "email" in empty else "alice@example.com",
+            "username": None if "username" in empty else "alice",
+            "full_name": "Alice Example",
+            "role": "DEVELOPER",
+            "is_superuser": False,
+            "is_active": True,
+            "auth_provider": "local",
+        }
 
     def test_me_without_token_401(self, http):
         resp = http.get("/api/v1/auth/me")

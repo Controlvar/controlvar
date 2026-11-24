@@ -24,11 +24,16 @@ export const LOGIN_PATH = '/login';
 
 export type Role = 'ADMIN' | 'DEVELOPER' | 'ANALYST' | 'VIEWER';
 
-/** Shape returned by `GET /api/v1/auth/me` and inside the login response. */
+/**
+ * Shape returned by `GET /api/v1/auth/me` and inside the login response.
+ * `email` and `username` are null for an account that has none (#2067). Under
+ * Cognito a missing `email` is '' instead (AuthContext's `cognitoUser`), so a
+ * reader falls back with `||`, not `??`.
+ */
 export interface UserMe {
   id: string;
-  email: string;
-  username: string;
+  email: string | null;
+  username: string | null;
   full_name: string | null;
   role: Role;
   is_superuser: boolean;
