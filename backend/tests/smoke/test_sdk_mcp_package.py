@@ -73,13 +73,17 @@ def test_the_runtime_dependencies_are_exact_pins_the_lock_resolves() -> None:
     assert not problems, "\n".join(problems)
 
 
+#: Not a release of anything, so it can never be the version the lock names.
+NEVER_LOCKED = "9.9.9"
+
+
 @pytest.mark.parametrize(
     "spec, expected",
     [
-        ("^1.32.1", "@modelcontextprotocol/sdk is a range, not a pin"),
-        ("~1.32.1", "@modelcontextprotocol/sdk is a range, not a pin"),
-        (">=1.32.1", "@modelcontextprotocol/sdk is a range, not a pin"),
-        ("1.32.2", "package-lock.json's root names @modelcontextprotocol/sdk"),
+        ("^{pinned}", "@modelcontextprotocol/sdk is a range, not a pin"),
+        ("~{pinned}", "@modelcontextprotocol/sdk is a range, not a pin"),
+        (">={pinned}", "@modelcontextprotocol/sdk is a range, not a pin"),
+        (NEVER_LOCKED, "package-lock.json's root names @modelcontextprotocol/sdk"),
     ],
 )
 def test_a_range_or_a_pin_the_lock_disagrees_with_is_refused(
@@ -87,7 +91,9 @@ def test_a_range_or_a_pin_the_lock_disagrees_with_is_refused(
 ) -> None:
     manifest = _json(PACKAGE_DIR / "package.json")
     lock = _json(PACKAGE_DIR / "package-lock.json")
-    manifest["dependencies"]["@modelcontextprotocol/sdk"] = spec
+    pinned = manifest["dependencies"]["@modelcontextprotocol/sdk"]
+    assert EXACT.fullmatch(pinned) and pinned != NEVER_LOCKED
+    manifest["dependencies"]["@modelcontextprotocol/sdk"] = spec.format(pinned=pinned)
     assert any(p.startswith(expected) for p in pin_problems(manifest, lock))
 
 
