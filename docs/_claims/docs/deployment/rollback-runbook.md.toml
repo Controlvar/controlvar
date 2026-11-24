@@ -385,6 +385,13 @@ by = [
 ]
 
 [[unit]]
+text = "From a release that carries t2011_flag_environments (its own down_revision is t449_identity_aliases), it also includes t2011_flag_environments's, which deactivates every staging and development API key and drops api_keys.environment and flag_environment_settings, every staging and development flag setting (Rolling back past flag environments)."
+by = [
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_after_the_newer_release_downgrades_the_database_the_older_one_starts",
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_the_downgrade_deactivates_staging_and_development_keys_then_drops_what_it_added",
+]
+
+[[unit]]
 text = "Rolling back past segment targeting"
 by = ["exempt:label"]
 
@@ -458,6 +465,61 @@ by = [
     "test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_api_serves_a_database_a_newer_release_migrated",
     "test:backend/tests/integration/database/test_identity_aliases_migration.py::test_the_downgrade_drops_every_link_and_keeps_assignments_and_events",
 ]
+
+[[unit]]
+text = "Rolling back past flag environments"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Rolling back below t2011_flag_environments loses every staging and development flag setting and deactivates every staging and development API key: the downgrade sets those keys inactive, then removes the column and the table."
+by = [
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_the_downgrade_deactivates_staging_and_development_keys_then_drops_what_it_added",
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_the_downgrade_runs_exactly_its_statements",
+]
+
+[[unit]]
+text = "Those keys then answer 401; they are never served production's configuration."
+by = ["test:backend/tests/integration/database/test_flag_environments_migration.py::test_the_downgrade_deactivates_staging_and_development_keys_then_drops_what_it_added"]
+
+[[unit]]
+text = "Production flags and keys are unaffected."
+by = ["test:backend/tests/integration/database/test_flag_environments_migration.py::test_the_downgrade_deactivates_staging_and_development_keys_then_drops_what_it_added"]
+
+[[unit]]
+text = "Upgrading again does not restore the settings, and the deactivated keys stay inactive."
+by = ["test:backend/tests/integration/database/test_flag_environments_migration.py::test_the_downgrade_deactivates_staging_and_development_keys_then_drops_what_it_added"]
+
+[[unit]]
+text = "The downgrade can wait for more than one lock, and each wait has its own bound: at most 1.5 s for each lock it needs on api_keys (the row of each staging or development key, then the table), then at most 0.5 s for each lock it needs to drop flag_environment_settings (on that table, then on feature_flags)."
+by = [
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_the_downgrade_waits_for_each_lock_it_needs_on_its_own_bound",
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_a_session_reading_a_table_the_downgrade_locks_ends_it_with_its_refusal",
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_the_downgrade_runs_exactly_its_statements",
+    "test:backend/tests/unit/db/test_flag_environments_revision.py::test_the_two_bounds_are_half_a_second_and_a_second_and_a_half_and_sum_to_the_declared_two",
+]
+
+[[unit]]
+text = "If one cannot be taken in time, or a deadlock is detected, it stops with nothing changed, and is simply run again."
+by = [
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_a_session_reading_a_table_the_downgrade_locks_ends_it_with_its_refusal",
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_a_deadlock_with_a_session_updating_a_key_ends_the_downgrade_with_its_refusal",
+    "test:backend/tests/unit/db/test_flag_environments_revision.py::test_a_lock_timeout_or_a_deadlock_in_any_block_refuses_with_that_blocks_text",
+]
+
+[[unit]]
+text = "Downgrading the database first is the only order for Docker Compose and Helm, and the Database Migration workflow downgrades while the newer release still serves (Database Rollback Procedure)."
+by = [
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_release_refuses_a_database_a_newer_release_migrated",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_db_migrate_runs_the_serving_image_and_refuses_when_there_is_none",
+]
+
+[[unit]]
+text = "Until every API container, pod or task of the release that carries t2011_flag_environments has been replaced, each answers 500 to every request that presents an API key, production keys included: the SDKs it serves get errors from evaluation (/api/v1/feature-flags/evaluate/{key}) and from the ruleset (/api/v1/sdk/ruleset)."
+by = ["test:backend/tests/integration/database/test_flag_environments_migration.py::test_this_release_answers_500_to_a_production_key_on_the_downgraded_schema"]
+
+[[unit]]
+text = "Roll the API back straight after the downgrade."
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Step 1: Find the Previous Task Definition ARN"
@@ -1450,11 +1512,23 @@ by = [
 ]
 
 [[unit]]
-text = "From a release that carries t449_identity_aliases, whose down_revision is t1812_user_totp, every core target in this list undoes t449_identity_aliases before all of these, which drops the table identity_aliases, every link between an anonymous id and a known id, and leaves every assignment and event untouched (nothing restores the links: an upgrade afterwards creates the table empty, and they must be sent again), and does not refuse; a downgrade to t1812_user_totp undoes it alone."
+text = "From a release that carries t449_identity_aliases, whose down_revision is t1812_user_totp, every core target in this list undoes t449_identity_aliases before t1812_user_totp, which drops the table identity_aliases, every link between an anonymous id and a known id, and leaves every assignment and event untouched (nothing restores the links: an upgrade afterwards creates the table empty, and they must be sent again), and does not refuse; a downgrade to t1812_user_totp undoes it alone."
 by = [
     "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
     "test:backend/tests/integration/database/test_identity_aliases_migration.py::test_the_downgrade_drops_every_link_and_keeps_assignments_and_events",
 ]
+
+[[unit]]
+text = "From a release that carries t2011_flag_environments, whose down_revision is t449_identity_aliases, every core target in this list undoes t2011_flag_environments before all of these, which deactivates every staging and development API key (they then answer 401, and are never served production's configuration) and drops api_keys.environment and the table flag_environment_settings, every staging and development flag setting (nothing restores them: an upgrade afterwards starts every flag off in staging and development, and those keys stay inactive), and does not refuse over data (a lock it cannot take within 1.5 s on api_keys, or within 0.5 s on flag_environment_settings or feature_flags, stops it with nothing changed: run it again); a downgrade to t449_identity_aliases undoes it alone."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_the_downgrade_deactivates_staging_and_development_keys_then_drops_what_it_added",
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_a_session_reading_a_table_the_downgrade_locks_ends_it_with_its_refusal",
+]
+
+[[unit]]
+text = "Until the API is rolled back, the release still serving answers 500 to every request that presents an API key, production keys included (Rolling back past flag environments)."
+by = ["test:backend/tests/integration/database/test_flag_environments_migration.py::test_this_release_answers_500_to_a_production_key_on_the_downgraded_schema"]
 
 [[unit]]
 text = "Until the API is rolled back, a release that serves POST /api/v1/tracking/alias answers 500, for every id, to each tracking route that reads that table, among them POST /api/v1/tracking/assign for an active experiment, POST /api/v1/tracking/assign/batch, POST /api/v1/tracking/track with an experiment_key, POST /api/v1/tracking/events with an experiment_id, GET /api/v1/tracking/assignments/{user_id} and POST /api/v1/tracking/alias; POST /api/v1/tracking/batch reports each event that names an experiment in errors."

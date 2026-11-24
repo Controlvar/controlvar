@@ -91,7 +91,8 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini history
 Output, for example:
 
 ```text
-t1812_user_totp -> t449_identity_aliases (head), Identity aliases: the table that links an anonymous id to a known id
+t449_identity_aliases -> t2011_flag_environments (head), Flag environments: each flag's staging and development settings, and each key's environment
+t1812_user_totp -> t449_identity_aliases, Identity aliases: the table that links an anonymous id to a known id
 4955571d232c -> t1812_user_totp, Two-step sign-in: each local account's authenticator secret and recovery codes
 c448_balance_within -> 4955571d232c, Visual experiments: page changes, pages and goals, and the editor's tokens
 7b6b4b4fe246 -> c448_balance_within, Experiments: balance the split within groups as users arrive
@@ -120,7 +121,7 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini current
 Output, for a full install (a core install prints the first line only):
 
 ```text
-t449_identity_aliases (head)
+t2011_flag_environments (head)
 modules_0005_redshift (head)
 ```
 
@@ -458,10 +459,16 @@ table `user_totp`: every account's two-step sign-in secret, recovery codes and
 wrong-code count (see
 [`t1812_user_totp`](#t1812_user_totp-stores-two-step-sign-in-secrets)).
 
-Past `t449_identity_aliases` it first runs that revision's downgrade, which
+Past `t449_identity_aliases` it also runs that revision's downgrade, which
 drops the table `identity_aliases`: every link between an anonymous id and a
 known id (see
 [`t449_identity_aliases`](#t449_identity_aliases-adds-the-identity-aliases-table)).
+
+Past `t2011_flag_environments` it first runs that revision's downgrade, which
+deactivates every staging and development API key and drops the column
+`api_keys.environment` and the table `flag_environment_settings`: every
+staging and development flag setting (see
+[`t2011_flag_environments`](#t2011_flag_environments-adds-each-flags-staging-and-development-settings)).
 
 ### `d29a479daafe` records who each global holdout covers
 
@@ -555,6 +562,11 @@ From a release that carries `t449_identity_aliases`, it also runs that
 revision's downgrade, which drops the table `identity_aliases`, every link
 between an anonymous id and a known id (see
 [`t449_identity_aliases`](#t449_identity_aliases-adds-the-identity-aliases-table)).
+From a release that carries `t2011_flag_environments`, it also runs that
+revision's downgrade, which deactivates every staging and development API key
+and drops `api_keys.environment` and the table `flag_environment_settings`,
+every staging and development flag setting (see
+[`t2011_flag_environments`](#t2011_flag_environments-adds-each-flags-staging-and-development-settings)).
 
 ### `4c2c09a2b3e8` keeps rollback records without a safety configuration
 
@@ -628,10 +640,15 @@ From a release that carries `t1812_user_totp`, it also runs that revision's
 downgrade, which drops the table `user_totp`, every account's two-step sign-in
 secret, recovery codes and wrong-code count (see
 [`t1812_user_totp`](#t1812_user_totp-stores-two-step-sign-in-secrets)).
-From a release that carries `t449_identity_aliases`, it first runs that
+From a release that carries `t449_identity_aliases`, it also runs that
 revision's downgrade, which drops the table `identity_aliases`, every link
 between an anonymous id and a known id (see
 [`t449_identity_aliases`](#t449_identity_aliases-adds-the-identity-aliases-table)).
+From a release that carries `t2011_flag_environments`, it first runs that
+revision's downgrade, which deactivates every staging and development API key
+and drops `api_keys.environment` and the table `flag_environment_settings`,
+every staging and development flag setting (see
+[`t2011_flag_environments`](#t2011_flag_environments-adds-each-flags-staging-and-development-settings)).
 
 ### `85dd4796bb8b` stores an event sent again with its event_id once
 
@@ -702,10 +719,15 @@ From a release that carries `t1812_user_totp`, it also runs that revision's
 downgrade, which drops the table `user_totp`, every account's two-step sign-in
 secret, recovery codes and wrong-code count (see
 [`t1812_user_totp`](#t1812_user_totp-stores-two-step-sign-in-secrets)).
-From a release that carries `t449_identity_aliases`, it first runs that
+From a release that carries `t449_identity_aliases`, it also runs that
 revision's downgrade, which drops the table `identity_aliases`, every link
 between an anonymous id and a known id (see
 [`t449_identity_aliases`](#t449_identity_aliases-adds-the-identity-aliases-table)).
+From a release that carries `t2011_flag_environments`, it first runs that
+revision's downgrade, which deactivates every staging and development API key
+and drops `api_keys.environment` and the table `flag_environment_settings`,
+every staging and development flag setting (see
+[`t2011_flag_environments`](#t2011_flag_environments-adds-each-flags-staging-and-development-settings)).
 
 On Helm, run the same command in an API pod with `kubectl exec`. Once the
 database is at the previous release's heads, start the previous release. The
@@ -762,10 +784,15 @@ From a release that carries `t1812_user_totp`, it also runs that revision's
 downgrade, which drops the table `user_totp`, every account's two-step sign-in
 secret, recovery codes and wrong-code count (see
 [`t1812_user_totp`](#t1812_user_totp-stores-two-step-sign-in-secrets)).
-From a release that carries `t449_identity_aliases`, it first runs that
+From a release that carries `t449_identity_aliases`, it also runs that
 revision's downgrade, which drops the table `identity_aliases`, every link
 between an anonymous id and a known id (see
 [`t449_identity_aliases`](#t449_identity_aliases-adds-the-identity-aliases-table)).
+From a release that carries `t2011_flag_environments`, it first runs that
+revision's downgrade, which deactivates every staging and development API key
+and drops `api_keys.environment` and the table `flag_environment_settings`,
+every staging and development flag setting (see
+[`t2011_flag_environments`](#t2011_flag_environments-adds-each-flags-staging-and-development-settings)).
 
 On Helm, run the same command in an API pod with `kubectl exec`. The upgrade
 cannot be emitted as SQL (`--sql`).
@@ -798,10 +825,15 @@ From a release that carries `t1812_user_totp`, it also runs that revision's
 downgrade, which drops the table `user_totp`, every account's two-step sign-in
 secret, recovery codes and wrong-code count (see
 [`t1812_user_totp`](#t1812_user_totp-stores-two-step-sign-in-secrets)).
-From a release that carries `t449_identity_aliases`, it first runs that
+From a release that carries `t449_identity_aliases`, it also runs that
 revision's downgrade, which drops the table `identity_aliases`, every link
 between an anonymous id and a known id (see
 [`t449_identity_aliases`](#t449_identity_aliases-adds-the-identity-aliases-table)).
+From a release that carries `t2011_flag_environments`, it first runs that
+revision's downgrade, which deactivates every staging and development API key
+and drops `api_keys.environment` and the table `flag_environment_settings`,
+every staging and development flag setting (see
+[`t2011_flag_environments`](#t2011_flag_environments-adds-each-flags-staging-and-development-settings)).
 
 On Helm, run the same command in an API pod with `kubectl exec`.
 
@@ -828,10 +860,15 @@ this revision alone:
 docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade 4955571d232c
 ```
 
-From a release that carries `t449_identity_aliases`, it first runs that
+From a release that carries `t449_identity_aliases`, it also runs that
 revision's downgrade, which drops the table `identity_aliases`, every link
 between an anonymous id and a known id (see
 [`t449_identity_aliases`](#t449_identity_aliases-adds-the-identity-aliases-table)).
+From a release that carries `t2011_flag_environments`, it first runs that
+revision's downgrade, which deactivates every staging and development API key
+and drops `api_keys.environment` and the table `flag_environment_settings`,
+every staging and development flag setting (see
+[`t2011_flag_environments`](#t2011_flag_environments-adds-each-flags-staging-and-development-settings)).
 
 On Helm, run the same command in an API pod with `kubectl exec`.
 
@@ -865,13 +902,85 @@ id. Assignments and events are untouched. It does not refuse, and nothing can
 restore the links: an upgrade afterwards creates the table empty, and the
 links must be sent again. Neither its upgrade nor its downgrade can be emitted
 as SQL (`--sql`). This revision's own `down_revision` is `t1812_user_totp`;
-this undoes this revision alone:
+from a release that carries no later revision, this undoes this revision
+alone:
 
 ```{.bash skip reason="destructive: drops identity_aliases, every link between an anonymous id and a known id"}
 docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade t1812_user_totp
 ```
 
+From a release that carries `t2011_flag_environments`, it first runs that
+revision's downgrade, which deactivates every staging and development API key
+and drops `api_keys.environment` and the table `flag_environment_settings`,
+every staging and development flag setting (see
+[`t2011_flag_environments`](#t2011_flag_environments-adds-each-flags-staging-and-development-settings)).
+
 On Helm, run the same command in an API pod with `kubectl exec`.
+
+### `t2011_flag_environments` adds each flag's staging and development settings
+
+This revision adds the table `flag_environment_settings`, where a flag's
+configuration in staging or development is kept: one row per flag and
+environment, holding whether the flag is on there, its targeting rules and its
+rollout percentage. A flag's production configuration stays where it is, in
+`feature_flags`, so the table never holds a production row, and a flag with no
+row in an environment is off there. Deleting a flag deletes its rows. The
+revision also adds `api_keys.environment` (`production`, `staging` or
+`development`, default `production`) with the check
+`check_api_key_environment`.
+
+Nothing is copied: after the upgrade every flag's configuration is its
+production configuration, every flag is off in staging and development, and
+every API key is a production key. SDKs get the same answers as before.
+
+The previous release, 0.48.0, runs against this schema unchanged: it never
+reads or writes the table, and a key it creates gets `production` from the
+column's default.
+
+From 0.48.0, the upgrade waits for two locks, each with its own bound: at most
+0.5 s for the lock that creating the table takes on `feature_flags`, which a
+session writing to `feature_flags`, or a vacuum, analyze or schema change of
+it, holds up (SDK requests only read that table, and keep being answered), then
+at most 1.5 s for `api_keys`, which every SDK request reads. A lock that cannot
+be taken within its bound, or a deadlock, stops the upgrade with nothing
+applied, and it is simply run again.
+
+The downgrade can wait for more than one lock, and each wait has its own
+bound: at most 1.5 s for each lock it needs on `api_keys` (the row of each
+staging or development key, then the table), then at most 0.5 s for each lock
+it needs to drop `flag_environment_settings` (on that table, then on
+`feature_flags`). A lock that cannot be taken within its bound, or a deadlock,
+stops it with nothing changed; run it again.
+
+**The downgrade loses every staging and development setting.**
+`t2011_flag_environments`'s downgrade first deactivates every staging and
+development API key, then drops `check_api_key_environment`,
+`api_keys.environment` and the table `flag_environment_settings`. Rolling back
+below `t2011_flag_environments` loses every staging and development flag
+setting and deactivates every staging and development API key: the downgrade
+sets those keys inactive, then removes the column and the table. Those keys
+then answer 401; they are never served production's configuration. Production
+flags and keys are unaffected. Upgrading again does not restore the settings,
+and the deactivated keys stay inactive. It does not refuse over data. Neither
+its upgrade nor its downgrade can be emitted as SQL (`--sql`). This revision's
+own `down_revision` is `t449_identity_aliases`; this undoes this revision
+alone:
+
+```{.bash skip reason="destructive: deactivates every staging and development key and drops flag_environment_settings"}
+docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade t449_identity_aliases
+```
+
+On Helm, run the same command in an API pod with `kubectl exec`.
+
+Downgrading the database first, with this release still running, is the only
+order under Docker Compose and Helm
+([An Older Image Against a Newer Database](#an-older-image-against-a-newer-database)).
+Until every API container or pod of this release has been replaced, each
+answers `500` to every request that presents an API key, production keys
+included: the SDKs it serves get errors from evaluation
+(`/api/v1/feature-flags/evaluate/{key}`) and from the ruleset
+(`/api/v1/sdk/ruleset`). Start the previous release straight after the
+downgrade.
 
 Roll back to a specific revision:
 

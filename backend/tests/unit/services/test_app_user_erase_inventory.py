@@ -51,6 +51,10 @@ KEPT_CORE: Dict[str, str] = {
     "experiments": "configuration; a targeting rule naming an id is kept",
     "feature_flag_safety_configs": "safety configuration of a flag",
     "feature_flags": "configuration; a targeting rule naming an id is kept",
+    "flag_environment_settings": (
+        "a flag's staging and development configuration; a targeting rule "
+        "naming an id is kept"
+    ),
     "global_holdouts": "holdout configuration",
     "llm_experiments": "LLM experiment configuration",
     "llm_variants": "LLM experiment configuration",

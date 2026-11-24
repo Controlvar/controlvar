@@ -12,6 +12,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     event,
     false,
     text,
@@ -220,6 +221,72 @@ def _an_archived_flag_is_not_turned_on(target, value, oldvalue, initiator):
         and flag_status_name(value) == FeatureFlagStatus.ACTIVE.value
     ):
         raise ArchivedFlagError()
+
+
+#: The checks and the unique constraint of ``flag_environment_settings``: the
+#: same names and SQL as migration ``t2011_flag_environments``. The names are
+#: the side-row environments of ``backend.app.core.flag_environments``
+#: (``NON_PRODUCTION``); production is the flag row, so a production side row
+#: is refused.
+FLAG_ENVIRONMENT_NAME_CHECK = "check_flag_environment_name"
+FLAG_ENVIRONMENT_NAME_CHECK_SQL = "environment IN ('staging', 'development')"
+FLAG_ENVIRONMENT_ROLLOUT_CHECK = "check_flag_environment_rollout"
+FLAG_ENVIRONMENT_ROLLOUT_CHECK_SQL = (
+    "rollout_percentage >= 0 AND rollout_percentage <= 100"
+)
+FLAG_ENVIRONMENT_UNIQUE = "uq_flag_environment"
+
+
+class FlagEnvironmentSetting(Base, BaseModel):
+    """A flag's configuration in staging or development (#2011).
+
+    Production's configuration is the flag row itself (``status``,
+    ``targeting_rules``, ``rollout_percentage``), so this table holds only
+    ``staging`` and ``development`` rows, at most one per flag and
+    environment, and only once someone configures the flag there. No row
+    means the flag is off in that environment.
+    ``backend.app.core.flag_environments.flag_in_environment`` turns a flag
+    and its row into what the environment serves.
+
+    Deleting a flag deletes its rows (``ON DELETE CASCADE`` in the database;
+    no ORM relationship, so nothing loads them first).
+    """
+
+    __tablename__ = "flag_environment_settings"
+
+    feature_flag_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey(f"{get_schema_name()}.feature_flags.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    environment = Column(String(32), nullable=False)
+    # ``server_default`` is load-bearing: a row written naming only the flag
+    # and the environment is off, with no rules and 0%.
+    is_active = Column(Boolean, nullable=False, default=False, server_default=false())
+    # ``none_as_null``: Python ``None`` is stored as SQL NULL (no rules), never
+    # as JSON ``null``.
+    targeting_rules = Column(JSONB(none_as_null=True), nullable=True)
+    rollout_percentage = Column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+
+    @declared_attr
+    def __table_args__(cls):
+        return (
+            CheckConstraint(
+                FLAG_ENVIRONMENT_NAME_CHECK_SQL, name=FLAG_ENVIRONMENT_NAME_CHECK
+            ),
+            CheckConstraint(
+                FLAG_ENVIRONMENT_ROLLOUT_CHECK_SQL, name=FLAG_ENVIRONMENT_ROLLOUT_CHECK
+            ),
+            UniqueConstraint(
+                "feature_flag_id", "environment", name=FLAG_ENVIRONMENT_UNIQUE
+            ),
+            {"schema": get_schema_name()},
+        )
+
+    def __repr__(self):
+        return f"<FlagEnvironmentSetting {self.feature_flag_id}:{self.environment}>"
 
 
 class FeatureFlagOverride(Base, BaseModel):
