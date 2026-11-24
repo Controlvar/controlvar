@@ -208,13 +208,14 @@ describe('FeatureFlagsService environment routes', () => {
     expect(mockFetch.mock.calls[0][0]).toBe(`${BASE}/api/v1/feature-flags/f1/environments/staging`);
   });
 
-  it('PUTs a change to the environment route with only the fields given', async () => {
+  it('PUTs a change to the environment route with only the fields given, and returns its answer', async () => {
     mockOk(settings('development'));
-    await FeatureFlagsService.updateInEnvironment('f1', 'development', { is_active: true });
+    const answer = await FeatureFlagsService.updateInEnvironment('f1', 'development', { is_active: true });
     expect(mockFetch).toHaveBeenCalledWith(
       `${BASE}/api/v1/feature-flags/f1/environments/development`,
       jsonInit('PUT', { is_active: true }),
     );
+    expect(answer).toEqual(settings('development'));
   });
 
   it('reads the batch route with one flag_id per flag', async () => {

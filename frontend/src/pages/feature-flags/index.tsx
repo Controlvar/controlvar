@@ -198,16 +198,14 @@ export default function FeatureFlagsPage() {
     void load();
   }, [load]);
 
-  // A failed switch in one environment says nothing about another.
+  // A failed switch in one environment says nothing about another, and an
+  // answer that arrives after the environment was changed is not shown.
+  const shownEnvironment = useRef(environment);
   useEffect(() => {
+    shownEnvironment.current = environment;
     setToggleErrors({});
   }, [environment]);
 
-  /**
-   * Optimistic on/off: flip locally, call enable/disable, and on failure revert
-   * only this row — a whole-list snapshot would also undo any other toggle that
-   * succeeded while this request was in flight.
-   */
   /** On/off in Staging or Development: the environment's PUT, never the flag's enable or disable. */
   const handleEnvironmentToggle = async (flag: FeatureFlagListItem, env: NonProductionEnvironment) => {
     const previous = envSettings[flag.id] ?? unconfigured(env);
@@ -218,6 +216,7 @@ export default function FeatureFlagsPage() {
       status: next ? 'active' : 'inactive',
       configured: true,
     };
+    const stillShown = () => shownEnvironment.current === env;
     setToggleErrors((e) => {
       const copy = { ...e };
       delete copy[flag.id];
@@ -226,15 +225,11 @@ export default function FeatureFlagsPage() {
     setToggling((t) => ({ ...t, [flag.id]: true }));
     setEnvSettings((current) => ({ ...current, [flag.id]: optimistic }));
     try {
-      await FeatureFlagsService.updateInEnvironment(flag.id, env, { is_active: next });
-      let fresh = optimistic;
-      try {
-        fresh = await FeatureFlagsService.getInEnvironment(flag.id, env);
-      } catch {
-        // The change landed; the row keeps what was sent until the next load.
-      }
-      setEnvSettings((current) => ({ ...current, [flag.id]: fresh }));
+      // The PUT answers the setting as it now is.
+      const saved = await FeatureFlagsService.updateInEnvironment(flag.id, env, { is_active: next });
+      if (stillShown()) setEnvSettings((current) => ({ ...current, [flag.id]: saved }));
     } catch (err) {
+      if (!stillShown()) return;
       setEnvSettings((current) => ({ ...current, [flag.id]: previous }));
       setToggleErrors((e) => ({
         ...e,
@@ -252,6 +247,11 @@ export default function FeatureFlagsPage() {
     }
   };
 
+  /**
+   * Optimistic on/off: flip locally, call enable/disable, and on failure revert
+   * only this row — a whole-list snapshot would also undo any other toggle that
+   * succeeded while this request was in flight.
+   */
   const handleToggle = async (flag: FeatureFlagListItem) => {
     if (otherEnvironment) {
       await handleEnvironmentToggle(flag, otherEnvironment);
@@ -286,6 +286,7 @@ export default function FeatureFlagsPage() {
           f.id === flag.id ? { ...f, status: previousStatus, is_active: previousIsActive } : f,
         ),
       );
+      if (shownEnvironment.current !== 'production') return;
       setToggleErrors((e) => ({
         ...e,
         [flag.id]:

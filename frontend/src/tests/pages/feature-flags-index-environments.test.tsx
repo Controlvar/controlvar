@@ -6,19 +6,20 @@
  * beta batch route (`GET /api/v1/environments/{environment}/feature-flag-settings`
  * with one `flag_id` per listed flag), and a row's switch changes the flag
  * there through `PUT /api/v1/feature-flags/{id}/environments/{environment}`,
- * never through enable/disable. The batch route's answers are mocked in the
- * shape the plan documents.
+ * never through enable/disable. The beta routes' answers are mocked in the
+ * API's shapes, which the first test holds to the committed OpenAPI snapshot.
  */
 import React from 'react';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import FeatureFlagsPage from '@/pages/feature-flags/index';
 import { EnvironmentSwitcher } from '@/components/feature-flags/EnvironmentSwitcher';
 import { FlagEnvironmentProvider } from '@/contexts/FlagEnvironmentContext';
 import { apiFetch, ApiFetchOptions, buildQuery } from '@/services/api';
 import { FeatureFlagListItem, FlagEnvironmentSettings } from '@/services/featureFlags';
 import { NEW_FLAGS_IN_PRODUCTION, PRODUCTION_BANNER } from '@/utils/flagEnvironments';
+import { shapeErrors } from '@/tests/helpers/openapiShape';
 import { renderInAppRoot } from '@/tests/helpers/renderInAppRoot';
-import { makeRouter, routedApi, Route } from './helpers/apiMock';
+import { apiError, makeRouter, routedApi, Route } from './helpers/apiMock';
 
 jest.mock('@/services/api', () => ({
   ...jest.requireActual('@/services/api'),
@@ -70,9 +71,16 @@ function setting(environment: string, overrides: Partial<FlagEnvironmentSettings
   };
 }
 
-function install(batch: Record<string, FlagEnvironmentSettings> = {}, flags = FLAGS) {
+/** The mocked API: `first` answers before the routes every test has. */
+function install(batch: Record<string, FlagEnvironmentSettings> = {}, flags = FLAGS, first: Route[] = []) {
+  const api = routedApi([...first, ...routes(batch, flags)]);
+  mockedApiFetch.mockImplementation(api as unknown as typeof apiFetch);
+  return api;
+}
+
+function routes(batch: Record<string, FlagEnvironmentSettings>, flags: FeatureFlagListItem[]): Route[] {
   const live: Record<string, FlagEnvironmentSettings> = { ...batch };
-  const r: Route[] = [
+  return [
     { path: '/api/v1/feature-flags', handler: () => ({ items: flags, total: flags.length, skip: 0, limit: 100 }) },
     {
       path: /^\/api\/v1\/environments\/(staging|development)\/feature-flag-settings$/,
@@ -89,14 +97,7 @@ function install(batch: Record<string, FlagEnvironmentSettings> = {}, flags = FL
         const [, , , , id, , env] = p.split('/');
         const body = opts.json as { is_active: boolean };
         live[id] = setting(env, { ...(live[id] ?? {}), is_active: body.is_active, status: body.is_active ? 'active' : 'inactive', configured: true, updated_at: '2026-11-22T00:00:00Z' });
-        return {};
-      },
-    },
-    {
-      path: /^\/api\/v1\/feature-flags\/[^/]+\/environments\/(staging|development)$/,
-      handler: (p) => {
-        const [, , , , id, , env] = p.split('/');
-        return live[id] ?? setting(env);
+        return live[id];
       },
     },
     {
@@ -105,7 +106,17 @@ function install(batch: Record<string, FlagEnvironmentSettings> = {}, flags = FL
       handler: (p) => ({ id: p.split('/')[4], name: 'x', key: 'x', status: p.endsWith('/enable') ? 'active' : 'inactive', updated_at: '2026-11-22T00:00:00Z', audit_log_id: null }),
     },
   ];
-  mockedApiFetch.mockImplementation(routedApi(r) as unknown as typeof apiFetch);
+}
+
+/** An answer the test gives when it chooses to. */
+function later<T>() {
+  let give!: (value: T) => void;
+  let refuse!: (reason: unknown) => void;
+  const promise = new Promise<T>((resolve, reject) => {
+    give = resolve;
+    refuse = reject;
+  });
+  return { promise, give, refuse };
 }
 
 function calls(): string[] {
@@ -139,6 +150,14 @@ beforeEach(() => {
     status: 'authenticated',
     user: { id: 'u1', email: 'u1@example.com', username: 'u1', role: 'ADMIN', is_superuser: false },
   });
+});
+
+it("mocks the environment routes in the API's own shapes", async () => {
+  const api = install();
+  const batch = await api('/api/v1/environments/staging/feature-flag-settings', { query: { flag_id: ['f1', 'f2'] } });
+  expect(shapeErrors('EnvironmentFlagSettings', batch)).toEqual([]);
+  const answer = await api('/api/v1/feature-flags/f1/environments/staging', { method: 'PUT', json: { is_active: true } });
+  expect(shapeErrors('FlagEnvironmentSettings', answer)).toEqual([]);
 });
 
 describe('the flag list in Production', () => {
@@ -207,8 +226,97 @@ describe('the flag list in Staging and Development', () => {
     const put = mockedApiFetch.mock.calls.find(([, o]) => (o as ApiFetchOptions | undefined)?.method === 'PUT');
     expect(put?.[0]).toBe('/api/v1/feature-flags/f2/environments/staging');
     expect((put?.[1] as ApiFetchOptions).json).toEqual({ is_active: true });
+    expect(shapeErrors('FlagEnvironmentUpdate', (put?.[1] as ApiFetchOptions).json)).toEqual([]);
     expect(calls().filter((c) => /\/(enable|disable)$/.test(c))).toEqual([]);
     expect(within(row('dark_mode')).queryByTestId('flag-not-configured')).toBeNull();
+  });
+
+  it("shows what the PUT answered in the row, and does not read the setting again", async () => {
+    install({}, FLAGS, [
+      {
+        method: 'PUT',
+        path: '/api/v1/feature-flags/f2/environments/staging',
+        // Another user has set 35% there since the list was loaded.
+        handler: () =>
+          setting('staging', { status: 'active', is_active: true, rollout_percentage: 35, configured: true, updated_at: '2026-11-22T00:00:00Z' }),
+      },
+    ]);
+    renderList('staging');
+    await screen.findByTestId('flags-table');
+    fireEvent.click(within(row('dark_mode')).getByRole('switch', { name: 'Turn dark_mode on in Staging' }));
+    await waitFor(() => expect(row('dark_mode')).toHaveTextContent('35%'));
+    expect(within(row('dark_mode')).getByTestId('flag-status-pill')).toHaveTextContent('On');
+    expect(calls()).toEqual([
+      'GET /api/v1/feature-flags',
+      'GET /api/v1/environments/staging/feature-flag-settings?flag_id=f1&flag_id=f2',
+      'PUT /api/v1/feature-flags/f2/environments/staging',
+    ]);
+  });
+
+  it('lists a flag the batch answer leaves out (deleted meanwhile) as off, and not configured', async () => {
+    install({}, FLAGS, [
+      {
+        path: '/api/v1/environments/staging/feature-flag-settings',
+        handler: () => ({
+          environment: 'staging',
+          settings: { f1: setting('staging', { status: 'active', is_active: true, rollout_percentage: 30, configured: true }) },
+        }),
+      },
+    ]);
+    renderList('staging');
+    await screen.findByTestId('flags-table');
+    expect(within(row('checkout_v2')).getByTestId('flag-status-pill')).toHaveTextContent('On');
+    expect(within(row('dark_mode')).getByTestId('flag-status-pill')).toHaveTextContent('Off');
+    expect(within(row('dark_mode')).getByTestId('flag-not-configured')).toHaveTextContent('Not configured in Staging');
+  });
+
+  it('a Staging switch that answers after a move to Development leaves the Development row as it was', async () => {
+    const answer = later<FlagEnvironmentSettings>();
+    install({}, FLAGS, [
+      { method: 'PUT', path: '/api/v1/feature-flags/f2/environments/staging', handler: () => answer.promise },
+    ]);
+    renderList('staging');
+    await screen.findByTestId('flags-table');
+    fireEvent.click(within(row('dark_mode')).getByRole('switch', { name: 'Turn dark_mode on in Staging' }));
+    fireEvent.change(screen.getByLabelText('Environment'), { target: { value: 'development' } });
+    await waitFor(() => expect(screen.getByTestId('flags-table')).toHaveAttribute('data-environment', 'development'));
+    await act(async () => {
+      answer.give(setting('staging', { status: 'active', is_active: true, rollout_percentage: 35, configured: true }));
+    });
+    expect(within(row('dark_mode')).getByTestId('flag-status-pill')).toHaveTextContent('Off');
+    expect(within(row('dark_mode')).getByTestId('flag-not-configured')).toHaveTextContent('Not configured in Development');
+    expect(row('dark_mode')).toHaveTextContent('0%');
+    expect(within(row('dark_mode')).getByRole('switch', { name: 'Turn dark_mode on in Development' })).toBeEnabled();
+  });
+
+  it('a refused Staging switch says nothing in Development', async () => {
+    const answer = later<FlagEnvironmentSettings>();
+    install({}, FLAGS, [
+      { method: 'PUT', path: '/api/v1/feature-flags/f2/environments/staging', handler: () => answer.promise },
+    ]);
+    renderList('staging');
+    await screen.findByTestId('flags-table');
+    fireEvent.click(within(row('dark_mode')).getByRole('switch', { name: 'Turn dark_mode on in Staging' }));
+    fireEvent.change(screen.getByLabelText('Environment'), { target: { value: 'development' } });
+    await waitFor(() => expect(screen.getByTestId('flags-table')).toHaveAttribute('data-environment', 'development'));
+    await act(async () => answer.refuse(apiError(500, 'Could not update the feature flag.')));
+    expect(screen.queryByText('Could not update the feature flag.')).toBeNull();
+    expect(within(row('dark_mode')).getByTestId('flag-not-configured')).toHaveTextContent('Not configured in Development');
+  });
+
+  it('a refused Production switch says nothing in Staging', async () => {
+    const answer = later<unknown>();
+    install({}, FLAGS, [
+      { method: 'POST', path: '/api/v1/feature-flags/f1/disable', handler: () => answer.promise },
+    ]);
+    renderList();
+    await screen.findByTestId('flags-table');
+    fireEvent.click(within(row('checkout_v2')).getByRole('switch', { name: 'Turn checkout_v2 off' }));
+    fireEvent.change(screen.getByLabelText('Environment'), { target: { value: 'staging' } });
+    await waitFor(() => expect(screen.getByTestId('flags-table')).toHaveAttribute('data-environment', 'staging'));
+    await act(async () => answer.refuse(apiError(500, 'Could not toggle the feature flag.')));
+    expect(screen.queryByText('Could not toggle the feature flag.')).toBeNull();
+    expect(within(row('checkout_v2')).getByTestId('flag-not-configured')).toHaveTextContent('Not configured in Staging');
   });
 
   it('switching back to Production lists Production again, and its switch uses disable', async () => {

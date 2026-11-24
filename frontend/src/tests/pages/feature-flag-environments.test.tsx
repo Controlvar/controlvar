@@ -10,10 +10,11 @@
  *     `GET`/`PUT /api/v1/feature-flags/{id}/environments/{environment}`.
  * A save sent to the other family is the failure that edits Production while
  * the user is looking at Staging (or the reverse), so each direction has a
- * test that fails on it.
+ * test that fails on it. So has an answer that arrives after the environment
+ * was switched: it may not change the page now on screen.
  *
- * The beta routes' answers are mocked in the shapes the plan documents; the
- * real routes land with the backend write path.
+ * The beta routes' answers are mocked in the API's shapes, which the first
+ * test holds to the committed OpenAPI snapshot.
  */
 import React from 'react';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -22,13 +23,14 @@ import FeatureFlagDetailPage from '@/pages/feature-flags/[id]';
 import { EnvironmentSwitcher } from '@/components/feature-flags/EnvironmentSwitcher';
 import { FlagEnvironmentProvider, flagEnvironmentStorageKey } from '@/contexts/FlagEnvironmentContext';
 import { apiFetch, ApiFetchOptions } from '@/services/api';
-import { FeatureFlag, FlagEnvironmentSettings } from '@/services/featureFlags';
+import { FeatureFlag, FlagEnvironmentSettings, UpdateFlagEnvironmentRequest } from '@/services/featureFlags';
 import {
   PRODUCTION_BANNER,
   PRODUCTION_MARKER,
   PRODUCTION_ONLY_NOTE,
   SHARED_SETTINGS_NOTE,
 } from '@/utils/flagEnvironments';
+import { shapeErrors } from '@/tests/helpers/openapiShape';
 import { renderInAppRoot } from '@/tests/helpers/renderInAppRoot';
 import { apiError, makeRouter, routedApi, Route } from './helpers/apiMock';
 
@@ -84,7 +86,7 @@ function flag(overrides: Partial<FeatureFlag> = {}): FeatureFlag {
   };
 }
 
-/** EnvSettings, as the plan documents it. */
+/** The API's `FlagEnvironmentSettings`; by default a flag nobody configured there. */
 function settings(environment: string, overrides: Partial<FlagEnvironmentSettings> = {}): FlagEnvironmentSettings {
   return {
     environment,
@@ -119,6 +121,20 @@ function routes(o: Overrides = {}): Route[] {
   const production = () => o.flag ?? flag();
   const staging = () => o.staging ?? STAGING();
   const development = () => o.development ?? DEVELOPMENT();
+  // What the environment PUT answers: the setting there, with the fields sent changed.
+  const changed = (environment: string, body: UpdateFlagEnvironmentRequest): FlagEnvironmentSettings => {
+    const before =
+      environment === 'staging' ? staging() : environment === 'development' ? development() : settings(environment);
+    const on = body.is_active ?? before.is_active;
+    return {
+      ...before,
+      ...body,
+      is_active: on,
+      status: on ? 'active' : 'inactive',
+      configured: true,
+      updated_at: '2026-11-22T00:00:00Z',
+    };
+  };
   return [
     { path: '/api/v1/feature-flags/flag-1', handler: production },
     { method: 'PUT', path: '/api/v1/feature-flags/flag-1', handler: (_p, opts) => ({ ...production(), ...(opts.json as object) }) },
@@ -135,7 +151,11 @@ function routes(o: Overrides = {}): Route[] {
     { path: '/api/v1/feature-flags/flag-1/environments/development', handler: development },
     // Any name, production included: a save sent to the wrong route succeeds
     // here, so the test that catches it fails on the route, not on an error.
-    { method: 'PUT', path: /^\/api\/v1\/feature-flags\/flag-1\/environments\/[a-z]+$/, handler: () => ({}) },
+    {
+      method: 'PUT',
+      path: /^\/api\/v1\/feature-flags\/flag-1\/environments\/[a-z]+$/,
+      handler: (p, opts) => changed(p.split('/')[6], opts.json as UpdateFlagEnvironmentRequest),
+    },
     {
       path: '/api/v1/feature-flags/flag-1/environments',
       handler: () => ({
@@ -156,8 +176,20 @@ function routes(o: Overrides = {}): Route[] {
   ];
 }
 
-function install(o: Overrides = {}) {
-  mockedApiFetch.mockImplementation(routedApi(routes(o)) as unknown as typeof apiFetch);
+/** The mocked API: `first` answers before the routes every test has. */
+function install(o: Overrides = {}, first: Route[] = []) {
+  mockedApiFetch.mockImplementation(routedApi([...first, ...routes(o)]) as unknown as typeof apiFetch);
+}
+
+/** An answer the test gives when it chooses to. */
+function later<T>() {
+  let give!: (value: T) => void;
+  let refuse!: (reason: unknown) => void;
+  const promise = new Promise<T>((resolve, reject) => {
+    give = resolve;
+    refuse = reject;
+  });
+  return { promise, give, refuse };
 }
 
 /** Every call made so far, as `METHOD path` (query string dropped). */
@@ -203,6 +235,21 @@ beforeEach(() => {
   localStorage.clear();
   mockRouter = makeRouter({ pathname: '/feature-flags/[id]', query: { id: 'flag-1' } });
   signIn('ADMIN');
+});
+
+// ---------------------------------------------------------------------------
+// The mocks are what the API sends
+// ---------------------------------------------------------------------------
+
+it("mocks the environment routes in the API's own shapes", async () => {
+  const api = routedApi(routes());
+  const base = '/api/v1/feature-flags/flag-1/environments';
+  expect(shapeErrors('FlagEnvironments', await api(base))).toEqual([]);
+  for (const environment of ['staging', 'development']) {
+    expect(shapeErrors('FlagEnvironmentSettings', await api(`${base}/${environment}`))).toEqual([]);
+    const answer = await api(`${base}/${environment}`, { method: 'PUT', json: { rollout_percentage: 10 } });
+    expect(shapeErrors('FlagEnvironmentSettings', answer)).toEqual([]);
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -367,31 +414,160 @@ describe('a save goes to the route of the environment on screen', () => {
     const body = bodyOf('PUT /api/v1/feature-flags/flag-1/environments/staging') as Record<string, unknown>;
     expect(body.rollout_percentage).toBe(40);
     expect(JSON.stringify(body.targeting_rules)).toContain('"pro"');
+    expect(shapeErrors('FlagEnvironmentUpdate', body)).toEqual([]);
     expect(callsTo('PUT /api/v1/feature-flags/flag-1')).toBe(0);
+  });
+
+  it('shows what the Staging PUT answered after a save, and does not read the setting again', async () => {
+    mockRouter = makeRouter({ pathname: '/feature-flags/[id]', query: { id: 'flag-1', env: 'staging' } });
+    install({}, [
+      {
+        method: 'PUT',
+        path: '/api/v1/feature-flags/flag-1/environments/staging',
+        // Another user's rules, saved since this page was opened.
+        handler: () => ({ ...STAGING(), rollout_percentage: 61, targeting_rules: US_RULES }),
+      },
+    ]);
+    renderPage();
+    await screen.findByTestId('flag-detail');
+    expect(screen.getByDisplayValue('beta')).toBeInTheDocument();
+    await setSlider(60);
+    fireEvent.click(screen.getByTestId('save-flag'));
+    await screen.findByTestId('save-success');
+    expect(screen.getByTestId('rollout-value')).toHaveTextContent('61%');
+    expect(screen.getByDisplayValue('US')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('beta')).toBeNull();
+    expect(callsTo('GET /api/v1/feature-flags/flag-1/environments/staging')).toBe(1);
+  });
+
+  it("shows what the Staging PUT answered after the switch, and does not read the setting again", async () => {
+    mockRouter = makeRouter({ pathname: '/feature-flags/[id]', query: { id: 'flag-1', env: 'staging' } });
+    install({}, [
+      {
+        method: 'PUT',
+        path: '/api/v1/feature-flags/flag-1/environments/staging',
+        // Another user has archived the flag since this page was opened.
+        handler: () => ({ ...STAGING(), is_active: false, status: 'archived' }),
+      },
+    ]);
+    renderPage();
+    await screen.findByTestId('flag-detail');
+    fireEvent.click(screen.getByRole('switch', { name: 'Turn checkout_v2 off in Staging' }));
+    await waitFor(() => expect(screen.getByTestId('flag-status')).toHaveTextContent('Archived'));
+    expect(callsTo('GET /api/v1/feature-flags/flag-1/environments/staging')).toBe(1);
   });
 
   it('a refused Staging save shows the error and changes nothing on screen', async () => {
     mockRouter = makeRouter({ pathname: '/feature-flags/[id]', query: { id: 'flag-1', env: 'staging' } });
-    const base = routes();
-    mockedApiFetch.mockImplementation(
-      routedApi([
-        {
-          method: 'PUT',
-          path: '/api/v1/feature-flags/flag-1/environments/staging',
-          handler: () => {
-            throw apiError(500, 'The change was not saved: its audit entry could not be written.');
-          },
+    install({}, [
+      {
+        method: 'PUT',
+        path: '/api/v1/feature-flags/flag-1/environments/staging',
+        // What the API answers when the change or its audit entry cannot be saved.
+        handler: () => {
+          throw apiError(500, 'Could not update the feature flag (request ID: 8a5e6c1e).');
         },
-        ...base,
-      ]) as unknown as typeof apiFetch,
-    );
+      },
+    ]);
     renderPage();
     await screen.findByTestId('flag-detail');
     await setSlider(60);
     fireEvent.click(screen.getByTestId('save-flag'));
-    expect(await screen.findByTestId('save-error')).toHaveTextContent('could not be written');
+    expect(await screen.findByTestId('save-error')).toHaveTextContent(
+      'Could not update the feature flag (request ID: 8a5e6c1e).',
+    );
     expect(screen.queryByTestId('save-success')).toBeNull();
     expect(callsTo('PUT /api/v1/feature-flags/flag-1')).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A late answer belongs to the environment it was asked in
+// ---------------------------------------------------------------------------
+
+describe('a change that answers after the environment was switched', () => {
+  const stagingPut = '/api/v1/feature-flags/flag-1/environments/staging';
+
+  it('a Staging save leaves the Production page, and the next Production save, as they were', async () => {
+    mockRouter = makeRouter({ pathname: '/feature-flags/[id]', query: { id: 'flag-1', env: 'staging' } });
+    const answer = later<FlagEnvironmentSettings>();
+    const o: Overrides = {};
+    install(o, [{ method: 'PUT', path: stagingPut, handler: () => answer.promise }]);
+    renderPage();
+    await screen.findByTestId('flag-detail');
+    await setSlider(60);
+    fireEvent.click(screen.getByTestId('save-flag'));
+    await waitFor(() => expect(callsTo(`PUT ${stagingPut}`)).toBe(1));
+    await choose('production');
+    await waitFor(() => expect(screen.getByTestId('rollout-value')).toHaveTextContent('25%'));
+
+    await act(async () => {
+      o.staging = { ...STAGING(), is_active: false, status: 'inactive', rollout_percentage: 60 };
+      answer.give(o.staging);
+    });
+    expect(screen.getByTestId('rollout-value')).toHaveTextContent('25%');
+    expect(screen.getByTestId('flag-status')).toHaveTextContent('On');
+    expect(screen.getByDisplayValue('US')).toBeInTheDocument();
+    expect(screen.queryByTestId('save-success')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('save-flag'));
+    await waitFor(() => expect(callsTo('PUT /api/v1/feature-flags/flag-1')).toBe(1));
+    expect(bodyOf('PUT /api/v1/feature-flags/flag-1')).toEqual({ rollout_percentage: 25 });
+  });
+
+  it('a refused Staging save says nothing on the Production page', async () => {
+    mockRouter = makeRouter({ pathname: '/feature-flags/[id]', query: { id: 'flag-1', env: 'staging' } });
+    const answer = later<FlagEnvironmentSettings>();
+    install({}, [{ method: 'PUT', path: stagingPut, handler: () => answer.promise }]);
+    renderPage();
+    await screen.findByTestId('flag-detail');
+    fireEvent.click(screen.getByTestId('save-flag'));
+    await waitFor(() => expect(callsTo(`PUT ${stagingPut}`)).toBe(1));
+    await choose('production');
+    await waitFor(() => expect(screen.getByTestId('rollout-value')).toHaveTextContent('25%'));
+    await act(async () => answer.refuse(apiError(500, 'Could not update the feature flag.')));
+    expect(screen.queryByTestId('save-error')).toBeNull();
+    expect(screen.getByTestId('save-flag')).toBeEnabled();
+  });
+
+  it('a Staging switch leaves the Production page as it was', async () => {
+    mockRouter = makeRouter({ pathname: '/feature-flags/[id]', query: { id: 'flag-1', env: 'staging' } });
+    const answer = later<FlagEnvironmentSettings>();
+    const o: Overrides = {};
+    install(o, [{ method: 'PUT', path: stagingPut, handler: () => answer.promise }]);
+    renderPage();
+    await screen.findByTestId('flag-detail');
+    fireEvent.click(screen.getByRole('switch', { name: 'Turn checkout_v2 off in Staging' }));
+    await waitFor(() => expect(callsTo(`PUT ${stagingPut}`)).toBe(1));
+    await choose('production');
+    await waitFor(() => expect(screen.getByTestId('rollout-value')).toHaveTextContent('25%'));
+    await act(async () => {
+      o.staging = { ...STAGING(), is_active: false, status: 'inactive' };
+      answer.give(o.staging);
+    });
+    expect(screen.getByTestId('flag-status')).toHaveTextContent('On');
+    expect(screen.getByRole('switch', { name: 'Turn checkout_v2 off' })).toBeEnabled();
+  });
+
+  it('a Production save leaves the Staging page, and the next Staging save, as they were', async () => {
+    const answer = later<FeatureFlag>();
+    install({}, [{ method: 'PUT', path: '/api/v1/feature-flags/flag-1', handler: () => answer.promise }]);
+    renderPage();
+    await screen.findByTestId('flag-detail');
+    await setSlider(70);
+    fireEvent.click(screen.getByTestId('save-flag'));
+    await waitFor(() => expect(callsTo('PUT /api/v1/feature-flags/flag-1')).toBe(1));
+    await choose('staging');
+    await waitFor(() => expect(screen.getByTestId('rollout-value')).toHaveTextContent('40%'));
+
+    await act(async () => answer.give(flag({ rollout_percentage: 70 })));
+    expect(screen.getByTestId('rollout-value')).toHaveTextContent('40%');
+    expect(screen.getByDisplayValue('beta')).toBeInTheDocument();
+    expect(screen.queryByTestId('save-success')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('save-flag'));
+    await waitFor(() => expect(callsTo(`PUT ${stagingPut}`)).toBe(1));
+    expect(bodyOf(`PUT ${stagingPut}`)).toEqual({ rollout_percentage: 40 });
   });
 });
 
@@ -533,18 +709,14 @@ describe('Compare environments', () => {
   });
 
   it('keeps a failure inside the section', async () => {
-    const base = routes();
-    mockedApiFetch.mockImplementation(
-      routedApi([
-        {
-          path: '/api/v1/feature-flags/flag-1/environments',
-          handler: () => {
-            throw apiError(503, 'Service unavailable');
-          },
+    install({}, [
+      {
+        path: '/api/v1/feature-flags/flag-1/environments',
+        handler: () => {
+          throw apiError(503, 'Service unavailable');
         },
-        ...base,
-      ]) as unknown as typeof apiFetch,
-    );
+      },
+    ]);
     renderPage();
     await screen.findByTestId('flag-detail');
     fireEvent.click(screen.getByRole('button', { name: /Compare environments/ }));

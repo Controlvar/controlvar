@@ -33,6 +33,7 @@ import {
 import { useFlagEnvironment } from '@/contexts/FlagEnvironmentContext';
 import {
   FLAG_ENVIRONMENT_LABELS,
+  FlagEnvironment,
   NonProductionEnvironment,
   notConfiguredText,
 } from '@/utils/flagEnvironments';
@@ -168,7 +169,18 @@ export function pickSchedule(items: RolloutSchedule[]): RolloutSchedule | null {
   })[0];
 }
 
+/**
+ * A flag's page in the environment on screen. Choosing another environment
+ * starts the page again (the key), so nothing of the last one is left: a
+ * change still being saved there cannot answer into this one's form and be
+ * saved from it.
+ */
 export default function FeatureFlagDetailPage() {
+  const { environment } = useFlagEnvironment();
+  return <FlagInEnvironment key={environment ?? 'resolving'} environment={environment} />;
+}
+
+function FlagInEnvironment({ environment }: { environment: FlagEnvironment | null }) {
   const router = useRouter();
   const rawId = router.query.id;
   const id = typeof rawId === 'string' ? rawId : undefined;
@@ -186,11 +198,11 @@ export default function FeatureFlagDetailPage() {
   const changePending = !canChange && permissionsLoading;
   // A read-only demo shows the demo note in place of the role note.
   const demo = useDemoMode();
-  // The environment on screen (null while it is resolved). Production is the
-  // flag itself, read and changed through the stable routes as before;
-  // Staging and Development are the flag's settings there, read and changed
-  // through the beta environment routes. Nothing else decides the route.
-  const { environment } = useFlagEnvironment();
+  // `environment` is null while it is resolved, and the page is loading until
+  // then. Production is the flag itself, read and changed through the stable
+  // routes as before; Staging and Development are the flag's settings there,
+  // read and changed through the beta environment routes. Nothing else
+  // decides the route.
   const otherEnvironment: NonProductionEnvironment | null =
     environment && environment !== 'production' ? environment : null;
   const production = environment === 'production';
@@ -198,10 +210,6 @@ export default function FeatureFlagDetailPage() {
   const [flag, setFlag] = useState<FeatureFlag | null>(null);
   // The flag's settings in `otherEnvironment`; null in Production.
   const [envSettings, setEnvSettings] = useState<FlagEnvironmentSettings | null>(null);
-  // The environment the loaded state belongs to. Until it is the one on
-  // screen the page shows its loading state, so one environment's settings
-  // are never shown, or saved, under another's name.
-  const [loadedFor, setLoadedFor] = useState<string | null>(null);
   // Moves after every change made on this page, so an open comparison reloads.
   const [changeCount, setChangeCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -351,12 +359,6 @@ export default function FeatureFlagDetailPage() {
     const fetchFlag = async () => {
       setIsLoading(true);
       setLoadError(null);
-      // A switch of environment starts the page again: nothing said about
-      // the last environment's change still applies.
-      setSaveError(null);
-      setSaveSuccess(false);
-      setToggleError(null);
-      setTargetingError(null);
       try {
         // Outside Production the flag itself still names the page and holds
         // the values; its settings there come from the environment's route.
@@ -367,7 +369,6 @@ export default function FeatureFlagDetailPage() {
         if (cancelled) return;
         setFlag(data);
         setEnvSettings(settings);
-        setLoadedFor(environment);
         loadValues(flagValueType(data), { on_value: data.on_value, off_value: data.off_value });
         if (settings) {
           loadRules(settings.targeting_rules ?? null);
@@ -382,7 +383,6 @@ export default function FeatureFlagDetailPage() {
         void loadSafety(id);
       } catch (err) {
         if (cancelled) return;
-        setLoadedFor(environment);
         setLoadError({
           status: isApiError(err) ? err.status : 0,
           message: err instanceof Error ? err.message : 'Failed to load feature flag',
@@ -398,38 +398,16 @@ export default function FeatureFlagDetailPage() {
     };
   }, [id, environment, loadSchedules, loadSafety, loadRules, loadValues]);
 
-  /**
-   * After a change in Staging or Development: the setting as the server now
-   * holds it. A read that fails leaves `fallback` (what was just sent) on screen.
-   */
-  const reloadEnvSettings = async (
-    flagId: string,
-    env: NonProductionEnvironment,
-    fallback: FlagEnvironmentSettings,
-  ): Promise<FlagEnvironmentSettings> => {
-    try {
-      return await FeatureFlagsService.getInEnvironment(flagId, env);
-    } catch {
-      return fallback;
-    }
-  };
-
   /** On/off in Staging or Development: the environment's PUT, never the flag's enable or disable. */
   const handleEnvironmentToggle = async (next: boolean) => {
     if (!flag || !otherEnvironment || !envSettings) return;
     const previous = envSettings;
-    const optimistic: FlagEnvironmentSettings = {
-      ...envSettings,
-      is_active: next,
-      status: next ? 'active' : 'inactive',
-      configured: true,
-    };
     setToggleError(null);
     setToggling(true);
-    setEnvSettings(optimistic);
+    setEnvSettings({ ...envSettings, is_active: next, status: next ? 'active' : 'inactive', configured: true });
     try {
-      await FeatureFlagsService.updateInEnvironment(flag.id, otherEnvironment, { is_active: next });
-      setEnvSettings(await reloadEnvSettings(flag.id, otherEnvironment, optimistic));
+      // The PUT answers the setting as it now is.
+      setEnvSettings(await FeatureFlagsService.updateInEnvironment(flag.id, otherEnvironment, { is_active: next }));
       setChangeCount((n) => n + 1);
     } catch (err) {
       setEnvSettings(previous);
@@ -470,22 +448,16 @@ export default function FeatureFlagDetailPage() {
     env: NonProductionEnvironment,
     targeting: Record<string, unknown> | undefined,
   ) => {
-    if (!flag || !envSettings) return;
+    if (!flag) return;
     const body: UpdateFlagEnvironmentRequest = { rollout_percentage: rolloutPercentage };
     if (targeting !== undefined) body.targeting_rules = targeting;
     setIsSaving(true);
     try {
-      await FeatureFlagsService.updateInEnvironment(flag.id, env, body);
-      const sent: FlagEnvironmentSettings = {
-        ...envSettings,
-        configured: true,
-        rollout_percentage: rolloutPercentage,
-        ...(targeting !== undefined ? { targeting_rules: targeting } : {}),
-      };
-      const fresh = await reloadEnvSettings(flag.id, env, sent);
-      setEnvSettings(fresh);
-      loadRules(fresh.targeting_rules ?? null);
-      setRolloutPercentage(fresh.rollout_percentage ?? 0);
+      // The PUT answers the setting as it now is.
+      const saved = await FeatureFlagsService.updateInEnvironment(flag.id, env, body);
+      setEnvSettings(saved);
+      loadRules(saved.targeting_rules ?? null);
+      setRolloutPercentage(saved.rollout_percentage ?? 0);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
       setChangeCount((n) => n + 1);
@@ -578,7 +550,7 @@ export default function FeatureFlagDetailPage() {
     }
   };
 
-  if (!id || isLoading || loadedFor !== environment) {
+  if (!id || isLoading) {
     return (
       <div className="flex-1 bg-slate-50 flex items-center justify-center">
         <PageTitle title="Feature Flag" />

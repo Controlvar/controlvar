@@ -336,15 +336,19 @@ export const FeatureFlagsService = {
 
   /**
    * `PUT /feature-flags/{id}/environments/{environment}` (beta): change a
-   * flag in Staging or Development. Production is never changed here: a
-   * Production change uses `update` and `setEnabled`, the stable routes.
+   * flag in Staging or Development, and answer its settings there as changed.
+   * Production is never changed here: a Production change uses `update` and
+   * `setEnabled`, the stable routes.
    */
   async updateInEnvironment(
     id: string,
     environment: NonProductionEnvironment,
     data: UpdateFlagEnvironmentRequest,
-  ): Promise<unknown> {
-    return apiFetch<unknown>(`${BASE}/${id}/environments/${environment}`, { method: 'PUT', json: data });
+  ): Promise<FlagEnvironmentSettings> {
+    return apiFetch<FlagEnvironmentSettings>(`${BASE}/${id}/environments/${environment}`, {
+      method: 'PUT',
+      json: data,
+    });
   },
 
   /**
