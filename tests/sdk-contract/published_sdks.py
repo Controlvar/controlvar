@@ -489,6 +489,12 @@ def _step(report: Dict[str, Any], label: str) -> Dict[str, Any]:
     raise GateError(f"the harness reported no '{label}' step")
 
 
+def _as_json(value: Any) -> str:
+    """A value as JSON text, so ``true`` is not ``1`` and ``2.5`` is not ``"2.5"``
+    (Python's ``True == 1`` would hide the first)."""
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
 def _shown(answer: Any) -> str:
     if answer == "DEFER":
         return "DEFER (asks the server)"
@@ -553,8 +559,10 @@ def check_outcome(
 def check_answers(
     artefact: Artefact, report: Dict[str, Any], vectors: Dict[str, Any]
 ) -> int:
-    """Every case DEFER or exactly the server's {enabled, reason}; the local ids
-    are exactly the must_local ids. Returns the number answered locally."""
+    """Every case DEFER or exactly the server's {enabled, reason}, and, where the
+    release returns a ``value``, the server's value as JSON (the case's
+    ``expected_value``, or ``enabled`` for a boolean flag); the local ids are
+    exactly the must_local ids. Returns the number answered locally."""
     cases = vectors["cases"]
     answers = report.get("answers")
     if not isinstance(answers, list) or len(answers) != len(cases):
@@ -569,11 +577,26 @@ def check_answers(
             continue
         local.add(case["id"])
         expected = {k: case["expected"][k] for k in ("enabled", "reason")}
-        if answer != expected:
+        # The value is compared only where the release returns one: 0.1.1 and
+        # 0.2.0 read no values and are judged on enabled and reason, as before.
+        shown = {k: answer[k] for k in ("enabled", "reason")}
+        if shown != expected:
             wrong.append(
                 f"{artefact.label} answered {case['id']} locally as {_shown(answer)}; "
                 f"the server says {_shown(expected)}"
             )
+        elif "value" in answer:
+            served = (
+                case["expected_value"]
+                if "expected_value" in case
+                else expected["enabled"]
+            )
+            if _as_json(answer["value"]) != _as_json(served):
+                wrong.append(
+                    f"{artefact.label} answered {case['id']} locally with value "
+                    f"{json.dumps(answer['value'])}; the server serves "
+                    f"{json.dumps(served)}"
+                )
     must = {case["id"] for case in cases if case["must_local"]}
     problems = wrong[:10]
     if len(wrong) > 10:

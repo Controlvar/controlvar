@@ -83,6 +83,14 @@ async function main() {
 
   const runtime = new local.LocalEvaluation(transport, { refreshIntervalMs: 30000 });
   const shown = answer => (answer === evaluator.DEFER ? 'DEFER' : { enabled: answer.enabled, reason: answer.reason });
+  // `shown` plus the answer's value when the release returns one (0.3.0 does;
+  // 0.1.1 and 0.2.0 read no values, so they report none and the gate compares
+  // them on enabled and reason alone).
+  const shownWithValue = answer => {
+    const out = shown(answer);
+    if (out !== 'DEFER' && Object.prototype.hasOwnProperty.call(answer, 'value')) out.value = answer.value;
+    return out;
+  };
   const steps = [];
   for (const [label, doc] of documents) {
     current = doc;
@@ -117,7 +125,7 @@ async function main() {
   let answers = null;
   let indexError = null;
   if (indexed) {
-    answers = all.cases.map(c => shown(evaluator.evaluateLocally(indexed, c.flag, c.user_id, c.context)));
+    answers = all.cases.map(c => shownWithValue(evaluator.evaluateLocally(indexed, c.flag, c.user_id, c.context)));
   } else {
     indexError = evaluator.isSupportedFormat(server)
       ? 'indexRuleset refused the document'

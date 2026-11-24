@@ -61,6 +61,16 @@ def _shown(evaluator, answer):
     return {"enabled": answer["enabled"], "reason": answer["reason"]}
 
 
+def _shown_with_value(evaluator, answer):
+    """``_shown`` plus the answer's ``value`` when the release returns one
+    (0.3.0 does; 0.1.1 and 0.2.0 read no values, so they report none and the
+    gate compares them on ``enabled`` and ``reason`` alone)."""
+    shown = _shown(evaluator, answer)
+    if shown != "DEFER" and "value" in answer:
+        shown["value"] = answer["value"]
+    return shown
+
+
 def _vectors(root, config):
     _, evaluator, local, Response, identity = _load(root)
 
@@ -150,7 +160,7 @@ def _vectors(root, config):
     answers, index_error = None, None
     if indexed is not None:
         answers = [
-            _shown(
+            _shown_with_value(
                 evaluator,
                 evaluator.evaluate_locally(
                     indexed, c["flag"], c["user_id"], c["context"]

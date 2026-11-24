@@ -157,9 +157,10 @@ directory. A harness (`harness/published_js_ruleset.cjs` under node, required by
   and the sentinel answers `{enabled: false, reason: "inactive"}`. A release that refuses the
   format passes only if its pin says `format-refused`, which is a decision taken in that file;
 - answers: every case is DEFER or exactly the server's `{enabled, reason}`, and the cases it
-  answers locally are exactly the `must_local` ones (1333 today; the count is logged). Only
-  `enabled` and `reason` are compared, never a value: 0.1.1 and 0.2.0 read none (a value flag
-  reaches them as on or off).
+  answers locally are exactly the `must_local` ones (1333 today; the count is logged). Where a
+  release returns a `value` (0.3.0 does) it must equal the case's `expected_value` as JSON, or
+  `enabled` for a boolean flag; 0.1.1 and 0.2.0 read none (a value flag reaches them as on or
+  off) and are compared on `enabled` and `reason` alone.
 
 Every run also plants a defect into the inputs, against the same releases, and checks the
 failure by its text: P1 a malformed flag, a string percentage (fails, naming the flag; an unknown `evaluation` is deferred to the server by 0.3.0, not refused), P2 a rule with no
@@ -167,7 +168,8 @@ integer percentage, P3 a percentage of `50.0` (fails for Python, passes for Java
 `JSON.parse` makes it 50), P4 schema 2 under `accepted` (fails; passes under `format-refused`),
 P5 keys the releases do not know at every level (passes), P6 the same files loaded from outside
 the verified extraction (fails on identity), P7 one expected answer flipped, P8 a wrong digest
-(fails before anything is unpacked).
+(fails before anything is unpacked), P9 a rule that serves "B" on a flag whose on value is "A"
+(fails for 0.3.0, which returns the value, naming the case; passes for 0.1.1 and 0.2.0).
 
 `backend/tests/integration/api/test_ruleset_published_sdk_compat.py` (G2) does the same for the
 pinned Python releases with the route's own response bytes: a DEVELOPER creates flags of every shape
