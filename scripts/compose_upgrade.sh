@@ -43,10 +43,10 @@
 # install holds -- each seeded user's assignment, the results' users and
 # conversions, each user's flag answer -- and after the upgrade, the restart,
 # the rollback in place when N-1 serves again and the restore, the same reads
-# come first, before anything is written, and must answer as N-1 did
-# (check_live_state). Assigning each user again comes after, as its own check
-# (repeat_assigns). scripts/compose_upgrade_state.py holds the seed's plan and
-# the comparison.
+# come first, before the job assigns, tracks or changes anything, and must
+# answer as N-1 did (check_live_state). Assigning each user again comes after,
+# as its own check (repeat_assigns). scripts/compose_upgrade_state.py holds the
+# seed's plan and the comparison.
 #
 # Every block runs in run_block: in the clone's deploy/compose, under `env -i`
 # with a fresh HOME (no registry credentials, so every pull is anonymous),
@@ -326,8 +326,8 @@ live_counts() {
 }
 
 # check_live_state WHEN NAME: the live state read again, into $OUT/live-NAME,
-# before anything is written, and compared with N-1's: every difference is a
-# line of its own, and the step fails.
+# before the job assigns, tracks or changes anything, and compared with N-1's:
+# every difference is a line of its own, and the step fails.
 check_live_state() {
     local when=$1 dir="$OUT/live-$2"
     read_live_state "$dir" "$when"

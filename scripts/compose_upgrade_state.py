@@ -25,7 +25,8 @@ seed that never took.
 
 After each step (the upgrade, ``restart api``, the rollback in place when N-1
 serves again, the restore) the job saves the same answers again, before it
-writes anything, and ``compare`` names every difference from N-1's document.
+assigns, tracks or changes anything, and ``compare`` names every difference
+from N-1's document.
 Assigning each user again comes after, as its own check: ``repeat`` requires
 the variant recorded at N-1.
 

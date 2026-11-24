@@ -3,7 +3,8 @@
 The compose-upgrade job (``scripts/compose_upgrade.sh``) seeds, at the previous
 release, 20 users assigned to the probe experiment, 10 of them converting, and
 the probe flag's answer for each; after every step it reads the same answers
-before it writes anything and compares them with what it recorded. These tests
+before it assigns, tracks or changes anything and compares them with what it
+recorded. These tests
 run that comparison on answers shaped as the API gives them, with no stack:
 the state as seeded passes, and each of the three ways an upgrade can lose it
 fails with a line that names what changed --
@@ -19,7 +20,8 @@ key and name; the flag's id, key and rollout percentage).
 The answers below are the ones the API gives for the seed: the variants from
 ``consistent_hash.bucket_of`` over the experiment's key, the flag's from its
 rule and its 30% rollout. The last tests hold the job's script to the order
-the comparison depends on: the reads come before any write in each step.
+the comparison depends on: in each step the reads come before the job
+assigns, tracks or changes anything.
 
 No Docker, no database, no network.
 """
@@ -495,7 +497,9 @@ def test_each_step_reads_the_live_state_before_it_writes(
 ):
     """After the transition: check_rows, then the live state read and
     compared, then the repeat assigns; and nothing between the transition and
-    the read sends an assign, a track or any other POST of the job's own."""
+    the read sends an assign, a track or any other ``api``/``sdk`` POST, PUT
+    or DELETE. The sign-in is the one POST, and it writes nothing the
+    comparison reads."""
     body = _function(function)
     start = body.index(transition)
     rows = body.index(f'check_rows "{when}"', start)
