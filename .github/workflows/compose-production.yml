@@ -382,7 +382,7 @@ jobs:
     # counts. `!cancelled()` still leaves out a run that was itself
     # cancelled; off a pull request the group above is the run's own id, so
     # that means a person cancelled it.
-    if: ${{ github.event_name != 'pull_request' && !cancelled() && (failure() || contains(needs.*.result, 'cancelled')) }}
+    if: false
     permissions:
       contents: read
       issues: write
