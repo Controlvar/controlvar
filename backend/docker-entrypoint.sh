@@ -21,8 +21,8 @@
 #      `--workers ${WEB_CONCURRENCY:-1}` is appended unless the caller passed
 #      --workers, `--timeout-keep-alive ${UVICORN_TIMEOUT_KEEP_ALIVE:-65}`
 #      unless the caller passed --timeout-keep-alive (step 0 refuses a value
-#      that is not a whole number from 61 to 99999), and the proxy flags
-#      (--proxy-headers, and
+#      that is not a whole number from 61 to 99999, in at most five digits
+#      0-9), and the proxy flags (--proxy-headers, and
 #      --forwarded-allow-ips with the list backend/app/core/proxy_trust.py
 #      builds) are always appended, after any the caller passed, so they win.
 #
@@ -258,8 +258,8 @@ if [ "$1" = "uvicorn" ]; then
     # balancer's idle timeout as a cause of 502s. At 65 s the load balancer
     # closes first. UVICORN_TIMEOUT_KEEP_ALIVE is uvicorn's own variable, so a
     # value an operator already set is used, not overridden; the preflight
-    # refuses one that is not a whole number from 61 to 99999. A
-    # --timeout-keep-alive in the command is kept as it is.
+    # refuses one that is not a whole number from 61 to 99999, in at most
+    # five digits 0-9. A --timeout-keep-alive in the command is kept as it is.
     if [ "$has_keep_alive" = "false" ]; then
         set -- "$@" --timeout-keep-alive "${UVICORN_TIMEOUT_KEEP_ALIVE:-65}"
     fi

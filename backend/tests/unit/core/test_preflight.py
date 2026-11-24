@@ -669,6 +669,7 @@ KEEP_ALIVE_REFUSED = [
     "٦٥",  # Arabic-Indic digits: int(), str.isdigit() and \d read 65
     "６５",  # fullwidth digits: the same
     "100000",
+    "000061",
     "65s",
     "6.5",
     "   ",
@@ -705,9 +706,9 @@ def test_a_keep_alive_above_60_or_unset_is_accepted(environment, value):
 def test_the_keep_alive_refusal_states_the_rule_and_the_fix():
     assert _keep_alive("production", "30") == [
         "UVICORN_TIMEOUT_KEEP_ALIVE='30' must be a whole number of seconds from 61 "
-        "to 99999, in digits 0-9: the API has to keep an idle connection open "
-        "longer than the proxy in front (the AWS load balancer closes at 60). "
-        "Unset it to use 65."
+        "to 99999, in at most five digits 0-9: the API has to keep an idle "
+        "connection open longer than the proxy in front (the AWS load balancer "
+        "closes at 60). Unset it to use 65."
     ]
 
 
@@ -732,9 +733,9 @@ def test_main_exits_78_for_a_refused_keep_alive(capsys):
     assert capsys.readouterr().err == (
         "[preflight] Controlvar cannot start: 1 setting needs attention.\n"
         "  - UVICORN_TIMEOUT_KEEP_ALIVE='65\\n' must be a whole number of seconds "
-        "from 61 to 99999, in digits 0-9: the API has to keep an idle connection "
-        "open longer than the proxy in front (the AWS load balancer closes at 60). "
-        "Unset it to use 65.\n"
+        "from 61 to 99999, in at most five digits 0-9: the API has to keep an idle "
+        "connection open longer than the proxy in front (the AWS load balancer "
+        "closes at 60). Unset it to use 65.\n"
     )
 
 
