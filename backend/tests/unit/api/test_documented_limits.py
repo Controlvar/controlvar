@@ -20,6 +20,7 @@ from backend.app.core.flag_values import served_value
 from backend.app.models.api_key import APIKey
 from backend.app.models.experiment import Experiment
 from backend.app.models.feature_flag import FeatureFlag
+from backend.app.schemas.api_key import APIKeyCreate, APIKeyCreated, APIKeyRead
 from backend.app.schemas.auth import LoginRequest
 from backend.app.schemas.experiment import ExperimentCreate
 from backend.app.schemas.feature_flag import FeatureFlagCreate, FeatureFlagUpdate
@@ -186,9 +187,30 @@ def test_the_alias_route_is_the_one_call_that_links_two_user_ids(routes):
 # ---------------------------------------------------------------------------
 # One deployment is one environment
 # ---------------------------------------------------------------------------
+def _fields(model) -> set:
+    """What the pages' sentence is about: a flag's and an experiment's
+    columns, and an API key's fields in the API.
+
+    Since #2011's schema, ``api_keys`` stores an ``environment``: every key is
+    a production key, no request sets it, no response shows it and no route
+    reads it, so a key still carries no environment field anywhere a user
+    meets it. That one stored column is the only exception; the day a key's
+    request or response gains the field, this fails and the pages change.
+    """
+    if model is APIKey:
+        stored = {c for c in APIKey.__table__.columns.keys() if "env" in c.lower()}
+        assert stored == {"environment"}, stored
+        return (
+            set(APIKeyCreate.model_fields)
+            | set(APIKeyRead.model_fields)
+            | set(APIKeyCreated.model_fields)
+        )
+    return set(model.__table__.columns.keys())
+
+
 @pytest.mark.parametrize("model", [FeatureFlag, Experiment, APIKey])
 def test_flags_experiments_and_keys_carry_no_environment(model):
-    columns = set(model.__table__.columns.keys())
+    columns = _fields(model)
     assert columns, model
     assert not {c for c in columns if "env" in c.lower()}, columns
 
