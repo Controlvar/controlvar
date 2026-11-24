@@ -21,10 +21,17 @@ Creates (idempotently):
   whose plaintext is written to ``tests/sdk-contract/live/.api_key``;
 - a second key of the same user, ``sdk-contract-local``, with the
   ``sdk:ruleset`` scope (server-side local evaluation), written to
-  ``tests/sdk-contract/live/.api_key_local``.
+  ``tests/sdk-contract/live/.api_key_local``;
+- the same two keys for the staging environment (#2011),
+  ``sdk-contract-smoke-staging`` and ``sdk-contract-local-staging``, written to
+  ``tests/sdk-contract/live/.api_key_staging`` and ``.api_key_local_staging``,
+  and staging's settings for two of the flags, each the other way round from
+  production: ``sdk_contract_flag`` off, ``sdk_contract_targeted`` on at 100%
+  with no rule.
 
-Both files are 0600 and gitignored. Two keys, so the live contract can show
-the ruleset endpoint refusing the first and serving the second.
+The files are 0600 and gitignored. Two keys of each environment, so the live
+contract can show the ruleset endpoint refusing the first and serving the
+second. Every SDK smoke uses the first two, which are production keys.
 
 Then run ``python tests/sdk-contract/live/run_live_contract.py`` against a
 backend pointed at the same database.
@@ -39,8 +46,9 @@ Development and test only, like the demo seeds: with any other ENVIRONMENT
 
 Environment: the same POSTGRES_* variables as the other seed scripts.
 ``SDK_CONTRACT_API_KEY`` and ``SDK_CONTRACT_LOCAL_API_KEY`` fix the plaintext
-keys (otherwise they are generated); ``SDK_CONTRACT_KEY_DIR`` redirects the key
-files (containers).
+keys, ``SDK_CONTRACT_STAGING_API_KEY`` and
+``SDK_CONTRACT_LOCAL_STAGING_API_KEY`` the staging ones (otherwise they are
+generated); ``SDK_CONTRACT_KEY_DIR`` redirects the key files (containers).
 """
 
 from __future__ import annotations
@@ -62,6 +70,7 @@ os.environ.setdefault("POSTGRES_PASSWORD", "postgres")
 os.environ.setdefault("POSTGRES_DB", "experimentation")
 os.environ.setdefault("POSTGRES_SCHEMA", "experimentation")
 
+from backend.app.core.flag_environments import PRODUCTION, STAGING
 from backend.app.core.permissions import Action, ResourceType, check_permission
 from backend.app.core.security import hash_api_key
 from backend.app.db.session import SessionLocal
@@ -76,7 +85,11 @@ from backend.app.models.experiment import (
     MetricType,
     Variant,
 )
-from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
+from backend.app.models.feature_flag import (
+    FeatureFlag,
+    FeatureFlagStatus,
+    FlagEnvironmentSetting,
+)
 from backend.scripts.seed_demo_data import (
     ensure_schema,
     ensure_tables,
@@ -128,6 +141,14 @@ KEY_DIR = (
 )
 KEY_FILE = KEY_DIR / ".api_key"
 LOCAL_KEY_FILE = KEY_DIR / ".api_key_local"
+#: The staging environment's two keys (#2011), and what it serves for the two
+#: flags it configures: ``(is_active, rollout_percentage)``, each the other way
+#: round from production, so a key that answers production's is seen.
+STAGING_API_KEY_NAME = "sdk-contract-smoke-staging"
+STAGING_LOCAL_API_KEY_NAME = "sdk-contract-local-staging"
+STAGING_KEY_FILE = KEY_DIR / ".api_key_staging"
+STAGING_LOCAL_KEY_FILE = KEY_DIR / ".api_key_local_staging"
+STAGING_SETTINGS = {FLAG_KEY: (False, 0), TARGETED_FLAG_KEY: (True, 100)}
 
 
 def seed_experiment(db, admin_user) -> Experiment:
@@ -282,6 +303,35 @@ def seed_targeted_flag(db, admin_user) -> FeatureFlag:
     return flag
 
 
+def seed_staging_settings(db) -> None:
+    """Staging's settings for the flags in :data:`STAGING_SETTINGS` (#2011).
+
+    Existing ones are put back to exactly that. No request configures a flag
+    outside production yet, so the rows are written here.
+    """
+    for key, (is_active, percentage) in STAGING_SETTINGS.items():
+        flag = db.query(FeatureFlag).filter(FeatureFlag.key == key).one()
+        setting = (
+            db.query(FlagEnvironmentSetting)
+            .filter(
+                FlagEnvironmentSetting.feature_flag_id == flag.id,
+                FlagEnvironmentSetting.environment == STAGING,
+            )
+            .first()
+        )
+        if setting is None:
+            setting = FlagEnvironmentSetting(
+                feature_flag_id=flag.id, environment=STAGING
+            )
+            db.add(setting)
+        setting.is_active = is_active
+        setting.rollout_percentage = percentage
+        setting.targeting_rules = None
+        state = f"on at {percentage}%" if is_active else "off"
+        print(f"  Flag '{key}' in staging: {state}.")
+    db.commit()
+
+
 def seed_api_key(
     db,
     admin_user,
@@ -289,11 +339,13 @@ def seed_api_key(
     key_file: Path = KEY_FILE,
     scopes: Optional[str] = "read,write",
     env_var: str = "SDK_CONTRACT_API_KEY",
+    environment: str = PRODUCTION,
 ) -> str:
     """Create (or keep) the named key and write its plaintext to *key_file*.
 
     An existing key is kept only when the file still holds its plaintext and
-    its scopes are the ones asked for; otherwise it is replaced.
+    its scopes and environment are the ones asked for; otherwise it is
+    replaced.
     """
     existing = (
         db.query(APIKey)
@@ -306,10 +358,14 @@ def seed_api_key(
             plaintext
             and hash_api_key(plaintext) == existing.key
             and existing.scopes == scopes
+            and existing.environment == environment
         ):
             print(f"  API key '{name}' kept ({_display(key_file)}).")
             return plaintext
-        print(f"  API key '{name}' does not match its file or scopes; rotating.")
+        print(
+            f"  API key '{name}' does not match its file, scopes or environment; "
+            "rotating."
+        )
     if existing is not None:
         db.delete(existing)
         db.commit()
@@ -323,6 +379,7 @@ def seed_api_key(
             description="Live SDK contract tests",
             scopes=scopes,
             is_active=True,
+            environment=environment,
         )
     )
     db.commit()
@@ -354,6 +411,27 @@ def seed_local_api_key(db, admin_user) -> str:
     )
 
 
+def seed_staging_api_keys(db, admin_user) -> None:
+    """The staging environment's two keys, with the two keys' own scopes."""
+    seed_api_key(
+        db,
+        admin_user,
+        name=STAGING_API_KEY_NAME,
+        key_file=STAGING_KEY_FILE,
+        env_var="SDK_CONTRACT_STAGING_API_KEY",
+        environment=STAGING,
+    )
+    seed_api_key(
+        db,
+        admin_user,
+        name=STAGING_LOCAL_API_KEY_NAME,
+        key_file=STAGING_LOCAL_KEY_FILE,
+        scopes=LOCAL_API_KEY_SCOPES,
+        env_var="SDK_CONTRACT_LOCAL_STAGING_API_KEY",
+        environment=STAGING,
+    )
+
+
 def _display(path: Path) -> str:
     try:
         return str(path.relative_to(PROJECT_ROOT))
@@ -378,11 +456,23 @@ def reset(db) -> None:
         if flag:
             db.query(Event).filter(Event.feature_flag_id == flag.id).delete()
             db.delete(flag)
-    db.query(APIKey).filter(APIKey.name.in_([API_KEY_NAME, LOCAL_API_KEY_NAME])).delete(
-        synchronize_session=False
-    )
+    db.query(APIKey).filter(
+        APIKey.name.in_(
+            [
+                API_KEY_NAME,
+                LOCAL_API_KEY_NAME,
+                STAGING_API_KEY_NAME,
+                STAGING_LOCAL_API_KEY_NAME,
+            ]
+        )
+    ).delete(synchronize_session=False)
     db.commit()
-    for key_file in (KEY_FILE, LOCAL_KEY_FILE):
+    for key_file in (
+        KEY_FILE,
+        LOCAL_KEY_FILE,
+        STAGING_KEY_FILE,
+        STAGING_LOCAL_KEY_FILE,
+    ):
         if key_file.exists():
             key_file.unlink()
     print("  Removed the SDK contract experiment, flag, API keys and key files.")
@@ -410,8 +500,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         seed_flag(db, admin)
         seed_value_flags(db, admin)
         seed_targeted_flag(db, admin)
+        seed_staging_settings(db)
         seed_api_key(db, admin)
         seed_local_api_key(db, admin)
+        seed_staging_api_keys(db, admin)
     print("Done. Run: python tests/sdk-contract/live/run_live_contract.py")
     return 0
 

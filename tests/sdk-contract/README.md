@@ -207,8 +207,13 @@ may not report it, and CI runs every listed SDK with `--strict`, so a missing to
 row instead of skipping it. Before the SDKs it checks `GET /api/v1/sdk/ruleset` once: the
 seed's plain key gets 403, its `sdk:ruleset` key gets the ruleset with `sdk_contract_flag` in it,
 and sending the ETag back gets 304 (the `ruleset (server)` row; `CONTROLVAR_LOCAL_API_KEY`
-overrides the scoped key). After the SDKs, each SDK with a local mode runs its local smoke with that
-key (the `python (local)` and `js (local)` rows): the runner reads the database before and after, through the backend's own
+overrides the scoped key). Then, also once, that a key answers its own flag environment (the
+`ruleset (staging)` row, #2011): the seed configures `sdk_contract_flag` off and
+`sdk_contract_targeted` on in staging, the other way round from production, and its two staging
+keys must be answered that, by the evaluate route and by the ruleset, while the production key is
+answered production's by the evaluate route. The SDK rows use the production keys. After the SDKs,
+each SDK with a local mode runs its local smoke with the seed's `sdk:ruleset` key (the
+`python (local)` and `js (local)` rows): the runner reads the database before and after, through the backend's own
 `SafetyService.get_error_metrics`, and requires no new per-user evaluation row (no evaluate call),
 the safety denominator grown by exactly the local evaluations, and the counted error count by
 exactly the errors the smoke reported with the `sdk:ruleset` key. It then reports one error with the
@@ -248,7 +253,7 @@ python tests/sdk-contract/live/run_live_contract.py
 python tests/sdk-contract/live/run_live_contract.py --sdk go --sdk python --strict
 ```
 
-- `python backend/scripts/seed_sdk_contract.py`: experiment sdk_contract_ab, flag sdk_contract_flag, a string, a number and a json flag, the targeted flag sdk_contract_targeted (0%, rule plan=pro at 100%), API keys -> live/.api_key, live/.api_key_local (sdk:ruleset); runs only with ENVIRONMENT development or test, like the demo seeds
+- `python backend/scripts/seed_sdk_contract.py`: experiment sdk_contract_ab, flag sdk_contract_flag, a string, a number and a json flag, the targeted flag sdk_contract_targeted (0%, rule plan=pro at 100%), API keys -> live/.api_key, live/.api_key_local (sdk:ruleset), and the same two of the staging environment -> live/.api_key_staging, live/.api_key_local_staging, with staging's settings for the two flags; runs only with ENVIRONMENT development or test, like the demo seeds
 - `uvicorn backend.app.main:app --port 8000 &`: or ./demo/setup-local.sh
 - `python tests/sdk-contract/live/run_live_contract.py`: all SDKs whose toolchain is installed
 

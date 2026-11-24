@@ -13,9 +13,11 @@ endpoint (each value flag's ``value`` among them, #1497), against the file.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from urllib.parse import quote
 
 import pytest
@@ -42,6 +44,7 @@ from backend.scripts.generate_ruleset_vectors import (
     VECTOR_SEGMENT_MEMBERS,
     VECTORS_PATH,
 )
+from backend.tests.integration.key_environments import configure
 
 pytestmark = pytest.mark.integration
 
@@ -550,6 +553,123 @@ class TestContractSeed:
                 db_session, developer, name=name, key_file=tmp_path / ".api_key"
             )
             == plain
+        )
+
+    @pytest.mark.regression
+    def test_the_seeds_staging_keys_pass_the_live_contracts_staging_row(
+        self, client, db_session, developer, tmp_path, monkeypatch
+    ):
+        """#2011: the seed's own functions, and the runner's own
+        ``check_staging``, with its two requests made to this application. The
+        seed's other keys are production keys."""
+        from backend.scripts import seed_sdk_contract as seed
+
+        runner_path = (
+            Path(__file__).resolve().parents[4]
+            / "tests"
+            / "sdk-contract"
+            / "live"
+            / "run_live_contract.py"
+        )
+        spec = importlib.util.spec_from_file_location("live_contract", runner_path)
+        runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runner)
+
+        for name in (
+            "KEY_FILE",
+            "LOCAL_KEY_FILE",
+            "STAGING_KEY_FILE",
+            "STAGING_LOCAL_KEY_FILE",
+        ):
+            monkeypatch.setattr(seed, name, tmp_path / name.lower())
+        for name in (
+            "SDK_CONTRACT_API_KEY",
+            "SDK_CONTRACT_STAGING_API_KEY",
+            "SDK_CONTRACT_LOCAL_STAGING_API_KEY",
+        ):
+            monkeypatch.delenv(name, raising=False)
+
+        def ruleset(api_url, key, etag=""):
+            answer = _get(client, key)
+            return answer.status_code, dict(answer.headers), answer.content
+
+        def evaluate(api_url, key, flag_key):
+            answer = client.get(
+                f"/api/v1/feature-flags/evaluate/{flag_key}",
+                params={"user_id": "contract-user"},
+                headers={"X-API-Key": key},
+            )
+            return answer.status_code, answer.json()
+
+        monkeypatch.setattr(runner, "_ruleset_request", ruleset)
+        monkeypatch.setattr(runner, "_evaluate_request", evaluate)
+
+        def row():
+            return runner.check_staging(
+                "http://in-process",
+                plain,
+                seed.STAGING_KEY_FILE.read_text().strip(),
+                seed.STAGING_LOCAL_KEY_FILE.read_text().strip(),
+                seed.FLAG_KEY,
+                seed.TARGETED_FLAG_KEY,
+            )
+
+        try:
+            seed.seed_flag(db_session, developer)
+            seed.seed_targeted_flag(db_session, developer)
+            seed.seed_staging_settings(db_session)
+            plain = seed.seed_api_key(
+                db_session, developer, key_file=tmp_path / ".api_key"
+            )
+            seed.seed_staging_api_keys(db_session, developer)
+            status, detail = row()
+            assert status == "PASS", detail
+            environments = dict(
+                db_session.query(APIKey.name, APIKey.environment)
+                .filter(APIKey.user_id == developer.id)
+                .tuples()
+                .all()
+            )
+            assert environments == {
+                seed.API_KEY_NAME: "production",
+                seed.STAGING_API_KEY_NAME: "staging",
+                seed.STAGING_LOCAL_API_KEY_NAME: "staging",
+            }
+
+            # A second run puts an edited setting back, and keeps the keys.
+            keys = [
+                path.read_text()
+                for path in (seed.STAGING_KEY_FILE, seed.STAGING_LOCAL_KEY_FILE)
+            ]
+            flag = (
+                db_session.query(FeatureFlag)
+                .filter(FeatureFlag.key == seed.FLAG_KEY)
+                .one()
+            )
+            configure(db_session, flag, "staging", rollout_percentage=100)
+            assert row()[0] == "FAIL"
+            seed.seed_staging_settings(db_session)
+            seed.seed_staging_api_keys(db_session, developer)
+            assert row()[0] == "PASS"
+            assert keys == [
+                path.read_text()
+                for path in (seed.STAGING_KEY_FILE, seed.STAGING_LOCAL_KEY_FILE)
+            ]
+
+            # A key of another environment under the seed's name is replaced.
+            db_session.query(APIKey).filter(
+                APIKey.name == seed.STAGING_API_KEY_NAME
+            ).update({"environment": "production"}, synchronize_session=False)
+            db_session.commit()
+            assert row()[0] == "FAIL"
+            seed.seed_staging_api_keys(db_session, developer)
+            assert row()[0] == "PASS"
+        finally:
+            db_session.rollback()
+            seed.reset(db_session)
+        assert not seed.STAGING_KEY_FILE.exists()
+        assert (
+            db_session.query(APIKey).filter(APIKey.user_id == developer.id).count() == 0
         )
 
 

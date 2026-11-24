@@ -34,7 +34,11 @@ fields.
 Before the SDKs, it checks the local-evaluation ruleset endpoint
 (``GET /api/v1/sdk/ruleset``) once: the seed's plain key gets 403, its
 ``sdk:ruleset`` key gets the ruleset with ``sdk_contract_flag`` in it, and
-sending the ETag back gets 304.
+sending the ETag back gets 304. Then, also once, that a key answers its own
+flag environment (#2011): the seed's staging keys are answered what staging
+serves for ``sdk_contract_flag`` (off) and ``sdk_contract_targeted`` (on),
+through the evaluate route and through the ruleset, while its production key
+is answered the other way round. The SDK rows use the production keys only.
 
 After the SDKs, each SDK with a local-evaluation mode (``LOCAL_MANIFEST``) runs
 its ``local_eval_smoke`` with the ``sdk:ruleset`` key: N evaluations of
@@ -64,7 +68,8 @@ Prerequisites
        seeded with ``python backend/scripts/seed_sdk_contract.py`` (creates the
        ``sdk_contract_ab`` experiment, the ``sdk_contract_flag`` flag and two API
        keys, written to tests/sdk-contract/live/.api_key and, with the
-       ``sdk:ruleset`` scope, .api_key_local).
+       ``sdk:ruleset`` scope, .api_key_local, and the same two for staging,
+       .api_key_staging and .api_key_local_staging).
     2. The toolchains of the SDKs you want to run (missing ones are skipped
        unless ``--strict``).
 
@@ -96,6 +101,9 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 KEY_FILE = Path(__file__).resolve().parent / ".api_key"
 # The seed's second key, with the sdk:ruleset scope (server-side local evaluation).
 LOCAL_KEY_FILE = Path(__file__).resolve().parent / ".api_key_local"
+# The same two keys of the staging environment (#2011); used by no SDK row.
+STAGING_KEY_FILE = Path(__file__).resolve().parent / ".api_key_staging"
+STAGING_LOCAL_KEY_FILE = Path(__file__).resolve().parent / ".api_key_local_staging"
 RULESET_PATH = "/api/v1/sdk/ruleset"
 
 # sdk name -> (shell command run from the repo root, required executables)
@@ -596,6 +604,53 @@ def check_ruleset(api_url: str, plain_key: str, scoped_key: str, flag_key: str) 
     if problems:
         return "FAIL", "; ".join(problems)
     return "PASS", f"403 unscoped, 200 scoped ({len(doc['flags'])} flags), 304 on ETag"
+
+
+def _evaluate_request(api_url: str, key: str, flag_key: str) -> tuple[int, dict]:
+    """``GET /feature-flags/evaluate/{flag_key}`` for one user with no attributes."""
+    path = f"/api/v1/feature-flags/evaluate/{urllib.parse.quote(flag_key, safe='')}?user_id=contract-user"
+    request = urllib.request.Request(f"{api_url}{path}", headers={"X-API-Key": key})
+    try:
+        with urllib.request.urlopen(request, timeout=10) as resp:
+            return resp.status, json.loads(resp.read())
+    except urllib.error.HTTPError as exc:
+        return exc.code, {}
+
+
+def check_staging(
+    api_url: str, plain_key: str, staging_key: str, staging_local_key: str, flag_key: str, targeted_key: str
+) -> tuple[str, str]:
+    """A key answers its own flag environment (#2011).
+
+    The seed configures two flags in staging, each the other way round from
+    production (``sdk_contract_flag`` off, the targeted one on at 100%). The
+    staging keys must be answered staging's, by the evaluate route and by the
+    ruleset, and the production key production's.
+    """
+    problems: list[str] = []
+    for name, key, flag, expected in (
+        ("production", plain_key, flag_key, "on"),
+        ("staging", staging_key, flag_key, "off"),
+        ("production", plain_key, targeted_key, "off"),
+        ("staging", staging_key, targeted_key, "on"),
+    ):
+        status, answer = _evaluate_request(api_url, key, flag)
+        got = ("on" if answer.get("enabled") else "off") if status == 200 else f"{status}"
+        if got != expected:
+            problems.append(f"evaluate {flag!r} with the {name} key: expected {expected}, got {got}")
+    status, _headers, body = _ruleset_request(api_url, staging_local_key)
+    if status != 200:
+        problems.append(f"the staging sdk:ruleset key got {status} from {RULESET_PATH}, expected 200")
+        return "FAIL", "; ".join(problems)
+    entries = {entry.get("key"): entry for entry in json.loads(body).get("flags", [])}
+    for flag, expected in ((flag_key, "off"), (targeted_key, "on")):
+        entry = entries.get(flag) or {}
+        got = "on" if entry.get("active") and entry.get("rollout_percentage") == 100 else "off"
+        if flag not in entries or got != expected:
+            problems.append(f"ruleset {flag!r} with the staging key: expected {expected}, got {got if entry else 'no entry'}")
+    if problems:
+        return "FAIL", "; ".join(problems)
+    return "PASS", f"{flag_key} off and {targeted_key} on, by evaluate and by the ruleset; production the other way round"
 
 
 def _flag_counters(flag_key: str) -> dict[str, int]:
@@ -1132,6 +1187,29 @@ def main() -> int:
         detail = "no sdk:ruleset key: set CONTROLVAR_LOCAL_API_KEY or run seed_sdk_contract.py"
     results.append(("ruleset (server)", status, detail))
     print(f"{status:4} {'ruleset (server)':<20} {detail}", flush=True)
+
+    # And that a key answers its own environment, with the seed's two staging keys.
+    staging_key, staging_local_key = (
+        os.environ.get(name) or (path.read_text().strip() if path.exists() else "")
+        for name, path in (
+            ("CONTROLVAR_STAGING_API_KEY", STAGING_KEY_FILE),
+            ("CONTROLVAR_LOCAL_STAGING_API_KEY", STAGING_LOCAL_KEY_FILE),
+        )
+    )
+    if staging_key and staging_local_key:
+        status, detail = check_staging(
+            args.api_url,
+            api_key,
+            staging_key,
+            staging_local_key,
+            env["CONTRACT_FLAG_KEY"],
+            env["CONTRACT_TARGETED_FLAG_KEY"],
+        )
+    else:
+        status = "FAIL" if args.strict else "SKIP"
+        detail = "no staging keys: run seed_sdk_contract.py"
+    results.append(("ruleset (staging)", status, detail))
+    print(f"{status:4} {'ruleset (staging)':<20} {detail}", flush=True)
 
     # Every smoke also gets the sdk:ruleset key, under the new name only (the decoy under the
     # former one): the alias step needs a server-side key (ALIAS_SDKS), and a smoke that links ids
