@@ -55,10 +55,10 @@ PREVIOUS_CORE_HEAD = "d12cbd384bbe"
 #: (a flag's value type and two values), ``85dd4796bb8b`` (the event_id keys),
 #: ``7b6b4b4fe246`` (when each rollout stage started), ``c448_balance_within``
 #: (balance the split within groups), ``4955571d232c`` (visual experiments),
-#: ``t1812_user_totp`` (two-step sign-in) and ``t449_identity_aliases``
-#: (identity aliases) find their objects already built by ``create_all`` and
-#: add none.
-CORE_HEAD = "t449_identity_aliases"
+#: ``t1812_user_totp`` (two-step sign-in), ``t449_identity_aliases``
+#: (identity aliases) and ``t2011_flag_environments`` (flag environments) find
+#: their objects already built by ``create_all`` and add none.
+CORE_HEAD = "t2011_flag_environments"
 #: Tables that a later core revision's downgrade drops: a downgrade from the
 #: head to this test's target unapplies those revisions too.  ``d29a479daafe``
 #: (#445) drops ``holdout_population``; ``37dcb2969766`` (#440) drops
@@ -66,7 +66,8 @@ CORE_HEAD = "t449_identity_aliases"
 #: ``c448_balance_within`` (#448) drops ``balance_group_counters``;
 #: ``4955571d232c`` (#1545) drops ``visual_tokens``; ``t1812_user_totp``
 #: (#1812) drops ``user_totp``; ``t449_identity_aliases`` (#449) drops
-#: ``identity_aliases``.
+#: ``identity_aliases``; ``t2011_flag_environments`` (#2011) drops
+#: ``flag_environment_settings``.
 LATER_DOWNGRADE_TABLES = {
     "holdout_population",
     "segment_members",
@@ -75,6 +76,7 @@ LATER_DOWNGRADE_TABLES = {
     "visual_tokens",
     "user_totp",
     "identity_aliases",
+    "flag_environment_settings",
 }
 #: ``feature_flags`` columns a later core revision's downgrade drops:
 #: ``607c51a59bf5`` (#1497) drops a flag's value type and its two values.

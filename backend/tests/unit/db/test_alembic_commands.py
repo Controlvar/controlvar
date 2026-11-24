@@ -27,8 +27,8 @@ ALEMBIC_INI = REPO_ROOT / "backend" / "app" / "db" / "alembic.ini"
 CORE_VERSIONS = REPO_ROOT / "backend" / "app" / "db" / "migrations" / "versions"
 ENV_PY = REPO_ROOT / "backend" / "app" / "db" / "migrations" / "env.py"
 
-#: The core chain's head (#449).
-CORE_HEAD = "t449_identity_aliases"
+#: The core chain's head (#2011).
+CORE_HEAD = "t2011_flag_environments"
 #: The modules branch's head (#826).
 MODULES_HEAD = "modules_0005_redshift"
 #: The revision 1ab99332f0ba's re-run recipe downgrades to, and what lies past it.
@@ -197,6 +197,12 @@ def test_past_1ab99332f0ba_its_rerun_downgrade_also_undoes_the_later_revisions()
     assert "4955571d232c" in from_head
     # And two-step sign-in's (#1812), which drops user_totp.
     assert "t1812_user_totp" in from_head
+    # And identity aliasing's (#449), which drops identity_aliases.
+    assert "t449_identity_aliases" in from_head
+    # And flag environments' (#2011), which deactivates the staging and
+    # development keys and drops api_keys.environment and
+    # flag_environment_settings, first of all.
+    assert from_head[0] == "t2011_flag_environments", from_head
 
 
 def _bootstrap_url(env: dict[str, str]) -> str:

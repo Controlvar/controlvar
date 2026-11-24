@@ -647,6 +647,99 @@ def test_main_exits_78_for_a_refused_entry(capsys):
 
 
 # ---------------------------------------------------------------------------
+# UVICORN_TIMEOUT_KEEP_ALIVE: a whole number of seconds above the load
+# balancer's 60, in every environment (#2107)
+# ---------------------------------------------------------------------------
+
+KEEP_ALIVE_ACCEPTED = [None, "", "61", "65", "065", "620", "4001", "99999"]
+
+#: uvicorn would take every one of these but the last five, and 0, -1 and 5
+#: close the connection before the load balancer stops using it.
+KEEP_ALIVE_REFUSED = [
+    "0",
+    "-1",
+    "5",
+    "30",
+    "60",
+    "+65",
+    " 65",
+    "65 ",
+    "65\n",
+    "1_000",
+    "٦٥",  # Arabic-Indic digits: int(), str.isdigit() and \d read 65
+    "６５",  # fullwidth digits: the same
+    "100000",
+    "000061",
+    "65s",
+    "6.5",
+    "   ",
+    "0x41",
+    "sixty-five",
+]
+
+
+def _keep_alive(environment: str, value) -> list:
+    env = with_(ENVIRONMENT=environment, UVICORN_TIMEOUT_KEEP_ALIVE=value)
+    return check(env)
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("environment", ENVIRONMENTS)
+@pytest.mark.parametrize("value", KEEP_ALIVE_REFUSED)
+def test_a_keep_alive_that_is_not_a_whole_number_above_60_is_refused(
+    environment, value
+):
+    """One line, naming the variable and the value as repr shows it, so a
+    newline in the value cannot start a line of its own; and nothing else."""
+    (problem,) = _keep_alive(environment, value)
+    assert problem.startswith(f"UVICORN_TIMEOUT_KEEP_ALIVE={value!r} must be "), problem
+    assert "\n" not in problem, problem
+
+
+@pytest.mark.parametrize("environment", ENVIRONMENTS)
+@pytest.mark.parametrize("value", KEEP_ALIVE_ACCEPTED)
+def test_a_keep_alive_above_60_or_unset_is_accepted(environment, value):
+    assert _keep_alive(environment, value) == []
+
+
+@pytest.mark.regression
+def test_the_keep_alive_refusal_states_the_rule_and_the_fix():
+    assert _keep_alive("production", "30") == [
+        "UVICORN_TIMEOUT_KEEP_ALIVE='30' must be a whole number of seconds from 61 "
+        "to 99999, in at most five digits 0-9: the API has to keep an idle "
+        "connection open longer than the proxy in front (the AWS load balancer "
+        "closes at 60). Unset it to use 65."
+    ]
+
+
+@pytest.mark.regression
+def test_a_long_keep_alive_is_echoed_cut_to_200_characters():
+    (problem,) = _keep_alive("development", "6" * 300)
+    assert f"={'6' * 200 + '...'!r} must be" in problem, problem
+    assert "6" * 201 not in problem
+
+
+def test_the_keep_alive_is_read_from_the_process_environment_only(tmp_path):
+    """The entrypoint reads the environment; a value in .env.prod never
+    reaches uvicorn, so it is not judged either."""
+    (tmp_path / ".env.prod").write_text("UVICORN_TIMEOUT_KEEP_ALIVE=30\n")
+    assert preflight.check(GOOD, full_profile=True, root=tmp_path) == []
+
+
+@pytest.mark.regression
+def test_main_exits_78_for_a_refused_keep_alive(capsys):
+    environ = with_(ENVIRONMENT="development", UVICORN_TIMEOUT_KEEP_ALIVE="65\n")
+    assert preflight.main(environ) == preflight.EX_CONFIG
+    assert capsys.readouterr().err == (
+        "[preflight] Controlvar cannot start: 1 setting needs attention.\n"
+        "  - UVICORN_TIMEOUT_KEEP_ALIVE='65\\n' must be a whole number of seconds "
+        "from 61 to 99999, in at most five digits 0-9: the API has to keep an idle "
+        "connection open longer than the proxy in front (the AWS load balancer "
+        "closes at 60). Unset it to use 65.\n"
+    )
+
+
+# ---------------------------------------------------------------------------
 # The entrypoint runs it first
 # ---------------------------------------------------------------------------
 

@@ -27,7 +27,8 @@ run the documented commands. Then:
    own ``statement_timeout`` and asserts no elapsed time;
 6. the downgrade drops the table with every link, leaves assignments and
    events, and an upgrade afterwards creates the table empty;
-7. ``alembic heads`` names exactly this revision and the modules head.
+7. ``alembic heads`` names exactly the core head (``t2011_flag_environments``
+   since #2011, which extends this revision) and the modules head.
 """
 
 from __future__ import annotations
@@ -53,15 +54,22 @@ pytestmark = [pytest.mark.integration]
 #: This revision, and the core revision it extends (0.47.0's core head).
 REVISION = "t449_identity_aliases"
 PREVIOUS_CORE_HEAD = "t1812_user_totp"
-#: The core head of this tree.
-CORE_HEAD = "t449_identity_aliases"
+#: The core head of this tree: ``t2011_flag_environments`` (#2011), the
+#: revision after this one, whose downgrade drops ``flag_environment_settings``
+#: and ``api_keys.environment``.
+CORE_HEAD = "t2011_flag_environments"
 MODULES_HEAD = "modules_0005_redshift"
+#: Tables a later core revision's downgrade drops: a downgrade from the head to
+#: this test's target unapplies ``t2011_flag_environments`` too.
+LATER_DOWNGRADE_TABLES = {"flag_environment_settings"}
 
 PREVIOUS_ROWS = {
     CORE: {PREVIOUS_CORE_HEAD},
     FULL: {PREVIOUS_CORE_HEAD, MODULES_HEAD},
 }
 ROWS = {CORE: {CORE_HEAD}, FULL: {CORE_HEAD, MODULES_HEAD}}
+#: The rows of a database upgraded to this revision and no further.
+REVISION_ROWS = {CORE: {REVISION}, FULL: {REVISION, MODULES_HEAD}}
 
 TABLE = "identity_aliases"
 INDEX = "ix_identity_aliases_user_id"
@@ -452,7 +460,7 @@ def test_the_upgrade_from_the_previous_core_head_runs_exactly_its_statements(
     captured = _captured_upgrade(tree, scratch_schema, tmp_path)
     for statement in captured:
         print(f"[{profile}] captured: {statement[:200]}")
-    assert _rows(test_db, scratch_schema) == ROWS[profile]
+    assert _rows(test_db, scratch_schema) == REVISION_ROWS[profile]
 
     revision = _load_revision(scratch_schema)
     set_statement = f"SET LOCAL lock_timeout = '{revision._LOCK_TIMEOUT}'"
@@ -516,11 +524,13 @@ def test_the_upgrade_and_the_downgrade_refuse_offline_mode(
 # 5. IA-M1c: the locks it does not take, and the one wait it bounds
 # ---------------------------------------------------------------------------
 def _upgrade_with_its_own_timeout(tree, schema: str) -> subprocess.CompletedProcess:
+    """``upgrade`` to this revision, named: what these legs claim is about this
+    revision alone, never a later one that ``heads`` would also run."""
     return tree_profiles.alembic(
         tree,
         schema,
         "upgrade",
-        "heads",
+        REVISION,
         extra_env={"PGOPTIONS": LEG_STATEMENT_TIMEOUT},
     )
 
@@ -550,7 +560,7 @@ def test_the_upgrade_commits_beside_sessions_holding_the_sdk_tables(
         f"{upgrade.stderr[-3000:]}"
     )
     assert "55P03" not in upgrade.stderr and "lock timeout" not in upgrade.stderr
-    assert _rows(test_db, scratch_schema) == ROWS[CORE]
+    assert _rows(test_db, scratch_schema) == REVISION_ROWS[CORE]
     assert TABLE in _tables(test_db, scratch_schema)
 
 
@@ -626,7 +636,7 @@ def test_the_downgrade_drops_every_link_and_keeps_assignments_and_events(
     _report(profile, "after downgrade", test_db, scratch_schema)
 
     assert _rows(test_db, scratch_schema) == PREVIOUS_ROWS[profile]
-    assert _tables(test_db, scratch_schema) == tables - {TABLE}
+    assert _tables(test_db, scratch_schema) == tables - {TABLE} - LATER_DOWNGRADE_TABLES
     assert _kept(test_db, scratch_schema) == kept
 
     upgrade = tree_profiles.alembic(tree, scratch_schema, "upgrade", "heads")

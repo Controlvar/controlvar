@@ -69,3 +69,15 @@ no `X-Forwarded-For`.
 - Signing in fails with "Too many attempts" for people who tried once.
 - The dashboard, or an SDK, is answered `429 Too Many Requests` in ordinary use.
 - Every access line shows the same address.
+
+## Idle connections
+
+`UVICORN_TIMEOUT_KEEP_ALIVE` is how many seconds the API keeps an idle connection
+open after a response; the entrypoint passes it to uvicorn as
+`--timeout-keep-alive`. Unset or empty, it is 65, longer than the 60 seconds the
+AWS load balancer keeps an idle connection open. Behind another proxy, set it
+above that proxy's idle timeout: AWS lists a target keep-alive shorter than the
+load balancer's idle timeout as a cause of 502 errors. A value that is not a
+whole number from 61 to 99999, in at most five digits 0-9, stops the container
+at start-up with a line that names it, even when the command passes its own
+`--timeout-keep-alive`. With the Helm chart, set it in `api.extraEnv`.

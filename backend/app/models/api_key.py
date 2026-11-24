@@ -4,12 +4,14 @@ from typing import Optional
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     ForeignKey,
     String,
     Text,
     or_,
+    text,
     update,
 )
 from sqlalchemy.dialects.postgresql import UUID
@@ -23,6 +25,14 @@ from .base import Base, BaseModel
 
 # last_used_at is written at most once per this window per key (issue #198).
 LAST_USED_RESOLUTION = timedelta(seconds=60)
+
+#: The check on a key's flag environment: the same name and SQL as migration
+#: ``t2011_flag_environments``, over
+#: ``backend.app.core.flag_environments.FLAG_ENVIRONMENTS``.
+API_KEY_ENVIRONMENT_CHECK = "check_api_key_environment"
+API_KEY_ENVIRONMENT_CHECK_SQL = (
+    "environment IN ('production', 'staging', 'development')"
+)
 
 
 def generate_api_key() -> str:
@@ -51,6 +61,18 @@ class APIKey(Base, BaseModel):
     # The create request refuses a set whose joined form is longer (#1936).
     scopes = Column(String(SCOPES_MAX_LENGTH), nullable=True)
 
+    # The flag environment this key serves (#2011): production, staging or
+    # development. Every key created before the column existed is a production
+    # key. ``server_default`` is load-bearing: the previous release inserts
+    # keys without naming this column, and the database fills ``production``.
+    # No request sets it yet.
+    environment = Column(
+        String(32),
+        nullable=False,
+        default="production",
+        server_default=text("'production'"),
+    )
+
     # User relationship
     user_id = Column(
         UUID(as_uuid=True),
@@ -63,7 +85,12 @@ class APIKey(Base, BaseModel):
 
     @declared_attr
     def __table_args__(cls):
-        return ({"schema": get_schema_name()},)
+        return (
+            CheckConstraint(
+                API_KEY_ENVIRONMENT_CHECK_SQL, name=API_KEY_ENVIRONMENT_CHECK
+            ),
+            {"schema": get_schema_name()},
+        )
 
     def __repr__(self):
         return f"<APIKey {self.name}>"

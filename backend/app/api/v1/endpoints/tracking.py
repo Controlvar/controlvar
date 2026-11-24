@@ -21,7 +21,12 @@ from backend.app.api import deps
 from backend.app.api.off_loop_route import OffLoopRoute, release_request_sessions
 from backend.app.api.sdk_scope import require_batch_assign_key, require_sdk_ruleset_key
 from backend.app.core.context_limits import check_context
-from backend.app.core.logger import failure_detail, unexpected_failure
+from backend.app.core.logger import (
+    failure_detail,
+    failure_label,
+    traceback_unless_database,
+    unexpected_failure,
+)
 from backend.app.core.metrics import (
     record_event_duplicate,
     record_event_tracked,
@@ -541,7 +546,11 @@ def assign_one(request: AssignmentRequest, db: Session) -> VariantAssignmentResp
             detail=str(e),
         )
     except Exception as e:
-        logger.exception("Tracking assign failed (%s)", type(e).__name__)
+        logger.error(
+            "Tracking assign failed (%s)",
+            failure_label(e),
+            exc_info=traceback_unless_database(e),
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=failure_detail("Could not assign the user to the experiment"),
@@ -1004,7 +1013,11 @@ def track_one(request: EventRequest, db: Session) -> EventResponse:
             detail=f"Invalid event: {e!s}",
         )
     except Exception as e:
-        logger.exception("Tracking event failed (%s)", type(e).__name__)
+        logger.error(
+            "Tracking event failed (%s)",
+            failure_label(e),
+            exc_info=traceback_unless_database(e),
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=failure_detail("Could not store the event"),
@@ -1109,7 +1122,11 @@ def track_by_ids_one(event_data: EventCreate, db: Session) -> EventResponse:
             detail=f"Invalid event: {e!s}",
         )
     except Exception as e:
-        logger.exception("Tracking event failed (%s)", type(e).__name__)
+        logger.error(
+            "Tracking event failed (%s)",
+            failure_label(e),
+            exc_info=traceback_unless_database(e),
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=failure_detail("Could not store the event"),
@@ -1322,7 +1339,11 @@ def track_batch_one(request: EventBatchRequest, db: Session) -> EventBatchRespon
                 }
             )
         except Exception as e:
-            logger.exception("Tracking batch item failed (%s)", type(e).__name__)
+            logger.error(
+                "Tracking batch item failed (%s)",
+                failure_label(e),
+                exc_info=traceback_unless_database(e),
+            )
             db.rollback()
             failure_count += 1
             errors.append(
