@@ -21,8 +21,10 @@ import { PROFILE, moduleSourcePrefixes, profileSourceFiles, sourceLabel } from '
 /** Each shape of "stage" used as an environment name. Case-insensitive. */
 export const STAGE_AS_ENVIRONMENT: RegExp[] = [
   // "Promote to stage", "in stage", "from stage" -- not "to stage 3", "in stage ${n}",
-  // "stage's", or a rollout's "the stage" ("advance only on the stage the schedule is at").
-  /\b(?:to|in|into|from)\s+stage\b(?!\s*(?:\d|\$\{|\{|#|["“'’(])|['’]s\b|_|-)/i,
+  // 'in stage "Canary"', "stage's", or a rollout's "the stage" ("advance only on the
+  // stage the schedule is at"). A quote right after "stage" ends the string, so it
+  // still fires: only a space and then a quote or bracket introduces a stage's name.
+  /\b(?:to|in|into|from)\s+stage\b(?!\s*(?:\d|\$\{|\{|#)|\s+["“'‘(]|['’]s\b|_|-)/i,
   // 'stage' or "stage" or `stage` as a whole value.
   /(['"`])stage\1/i,
   // env=stage, environment: stage, env stage.
@@ -44,6 +46,11 @@ describe(`no dashboard string calls an environment "stage" (${PROFILE})`, () => 
   describe('the patterns', () => {
     it.each([
       'Promote to stage',
+      // As the line reads in a source file: the closing quote follows "stage".
+      "export const PROMOTE_LABEL = 'Promote to stage';",
+      'label: "Deploy to stage",',
+      '<button type="button">Promote to stage</button>',
+      '`Turned on in stage`',
       'promote this flag into stage',
       'Configured in stage',
       "const environment = 'stage';",
@@ -67,6 +74,8 @@ describe(`no dashboard string calls an environment "stage" (${PROFILE})`, () => 
       'Stage ${n} is time-based but follows a manual stage',
       'Give stage ${n} a name.',
       'sets the flag to 50% in stage 2',
+      'Advance to stage “Half”',
+      "Moved to stage 'Canary' at 10%",
       'Complete “Half” now? This completes the stage',
       'the next stage that starts sets this percentage again',
       'No stage starts or completes until you resume',
