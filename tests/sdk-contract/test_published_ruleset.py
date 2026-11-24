@@ -435,6 +435,82 @@ def test_p9_a_flipped_expected_value_fails_for_a_value_flag(
     assert f"answered {valued['id']} locally with value" in str(failure.value)
 
 
+def _one_case(answer, expected_value=None):
+    """A one-case corpus and a report of one release's answer to it, for the
+    value comparison on its own (no network, no harness)."""
+    case = {
+        "id": "one",
+        "flag": "f",
+        "user_id": "u",
+        "context": {},
+        "expected": {"enabled": True, "reason": "rollout"},
+        "must_local": True,
+    }
+    if expected_value is not None:
+        case["expected_value"] = expected_value
+    vectors = {"cases": [case], "counts": {"must_local": 1}}
+    return vectors, {"answers": [answer]}
+
+
+@pytest.mark.parametrize(
+    ("served", "answered", "red"),
+    [
+        (10.0, 10, False),  # JSON.parse reads 10.0 as 10: one number
+        (10, 10.0, False),
+        (0.0, -0.0, False),
+        (-0.0, 0, False),
+        ({"n": [1.0, {"m": 2, "k": -0.0}]}, {"n": [1, {"k": 0, "m": 2}]}, False),
+        (2**53, 2.0**53, True),  # beyond the safe integers a float is not an int
+        (True, 1, True),  # Python's True == 1 must not hide this
+        (1, True, True),
+        (False, 0, True),
+        (2.5, "2.5", True),
+        ("A", "B", True),
+        ([1, 2], [2, 1], True),
+    ],
+    ids=lambda v: repr(v),
+)
+@regression
+def test_p9_values_are_equal_as_json_numbers(served, answered, red):
+    vectors, report = _one_case(
+        {"enabled": True, "reason": "rollout", "value": answered}, served
+    )
+    artefact = ARTEFACTS[0]
+    if red:
+        with pytest.raises(ps.GateError, match="locally with value"):
+            ps.check_answers(artefact, report, vectors)
+    else:
+        ps.check_answers(artefact, report, vectors)
+
+
+@regression
+def test_p9_a_malformed_answer_is_a_named_line_not_a_crash():
+    artefact = ARTEFACTS[0]
+    for answer in (
+        "yes",
+        None,
+        ["enabled", "reason"],
+        {"enabled": True},
+        {"enabled": True, "reason": "rollout", "extra": 1},
+    ):
+        vectors, report = _one_case(answer)
+        with pytest.raises(ps.GateError) as failure:
+            ps.check_answers(artefact, report, vectors)
+        assert f"{artefact.label} answered one locally as a malformed answer" in str(
+            failure.value
+        )
+
+
+@regression
+def test_p9_the_ok_line_counts_the_values_compared():
+    artefact = ARTEFACTS[0]
+    vectors, report = _one_case({"enabled": True, "reason": "rollout", "value": True})
+    vectors["ruleset"] = {"version": "v"}
+    assert ps.check_answers(artefact, report, vectors) == (1, 1)
+    vectors, report = _one_case({"enabled": True, "reason": "rollout"})
+    assert ps.check_answers(artefact, report, vectors) == (1, 0)
+
+
 # ---------------------------------------------------------------------------
 # The fetcher and the pins file, offline
 # ---------------------------------------------------------------------------

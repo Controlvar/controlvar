@@ -489,10 +489,33 @@ def _step(report: Dict[str, Any], label: str) -> Dict[str, Any]:
     raise GateError(f"the harness reported no '{label}' step")
 
 
+MAX_SAFE_INTEGER = 2**53 - 1
+
+
+def _canonical(value: Any) -> Any:
+    """Numbers as JSON.parse reads them: a whole float within the safe integers
+    is the integer (``10.0`` is ``10``) and ``-0.0`` is ``0``. A boolean stays a
+    boolean, and nothing else changes."""
+    if isinstance(value, bool):
+        return value
+    if (
+        isinstance(value, float)
+        and value.is_integer()
+        and abs(value) <= MAX_SAFE_INTEGER
+    ):
+        return int(value)
+    if isinstance(value, list):
+        return [_canonical(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _canonical(item) for key, item in value.items()}
+    return value
+
+
 def _as_json(value: Any) -> str:
     """A value as JSON text, so ``true`` is not ``1`` and ``2.5`` is not ``"2.5"``
-    (Python's ``True == 1`` would hide the first)."""
-    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+    (Python's ``True == 1`` would hide the first) while ``10.0`` is ``10`` (a
+    JavaScript release cannot tell them apart); key order is ignored."""
+    return json.dumps(_canonical(value), sort_keys=True, separators=(",", ":"))
 
 
 def _shown(answer: Any) -> str:
@@ -562,7 +585,8 @@ def check_answers(
     """Every case DEFER or exactly the server's {enabled, reason}, and, where the
     release returns a ``value``, the server's value as JSON (the case's
     ``expected_value``, or ``enabled`` for a boolean flag); the local ids are
-    exactly the must_local ids. Returns the number answered locally."""
+    exactly the must_local ids. Returns the number answered locally and the
+    number of values compared."""
     cases = vectors["cases"]
     answers = report.get("answers")
     if not isinstance(answers, list) or len(answers) != len(cases):
@@ -571,7 +595,7 @@ def check_answers(
             f"of {len(cases)} cases (the ruleset was not indexed: "
             f"{report.get('index_error') or 'no reason given'})"
         )
-    wrong, local = [], set()
+    wrong, local, compared = [], set(), 0
     for case, answer in zip(cases, answers):
         if answer == "DEFER":
             continue
@@ -579,6 +603,15 @@ def check_answers(
         expected = {k: case["expected"][k] for k in ("enabled", "reason")}
         # The value is compared only where the release returns one: 0.1.1 and
         # 0.2.0 read no values and are judged on enabled and reason, as before.
+        if not isinstance(answer, dict) or set(answer) not in (
+            {"enabled", "reason"},
+            {"enabled", "reason", "value"},
+        ):
+            wrong.append(
+                f"{artefact.label} answered {case['id']} locally as a malformed "
+                f"answer: {json.dumps(answer, default=repr)}"
+            )
+            continue
         shown = {k: answer[k] for k in ("enabled", "reason")}
         if shown != expected:
             wrong.append(
@@ -586,6 +619,7 @@ def check_answers(
                 f"the server says {_shown(expected)}"
             )
         elif "value" in answer:
+            compared += 1
             served = (
                 case["expected_value"]
                 if "expected_value" in case
@@ -619,7 +653,7 @@ def check_answers(
         )
     if problems:
         raise GateError("\n".join(problems))
-    return len(local)
+    return len(local), compared
 
 
 def check_report(
@@ -633,12 +667,12 @@ def check_report(
     outcome = check_outcome(artefact, report, vectors["ruleset"]["version"])
     if artefact.expectation == "format-refused":
         return f"{artefact.label}: OK ({module}): {outcome}"
-    count = check_answers(artefact, report, vectors)
+    count, compared = check_answers(artefact, report, vectors)
     deferred = len(vectors["cases"]) - count
     return (
         f"{artefact.label}: OK ({module}, {artefact.digest[:19]}...): {outcome}; "
         f"{count}/{vectors['counts']['must_local']} cases answered locally, every "
-        f"one the server's answer; {deferred} deferred"
+        f"one the server's answer; {compared} values compared; {deferred} deferred"
     )
 
 
