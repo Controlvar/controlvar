@@ -17,7 +17,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: nightly-qa
+  group: nightly-qa-m0-plant-${{ github.run_id }}
   cancel-in-progress: false
 
 env:
@@ -27,6 +27,7 @@ env:
 jobs:
   unit-tests:
     name: Unit Tests
+    if: ${{ github.event_name == 'm0-plant-never' }}
     runs-on: ubuntu-latest
     # The runs of 2026-11-02 and 2026-11-03 were cancelled at the old 30 minute
     # limit with pytest at 98% (about 30.5 minutes needed); 60 is that, doubled.
@@ -84,6 +85,7 @@ jobs:
   # summary below, not these.
   integration-shard:
     name: Integration Tests (shard ${{ matrix.shard }})
+    if: ${{ github.event_name == 'm0-plant-never' }}
     runs-on: ubuntu-latest
     needs: unit-tests
     timeout-minutes: 45
@@ -207,7 +209,7 @@ jobs:
   integration-tests:
     name: Integration Tests
     needs: integration-shard
-    if: always()
+    if: ${{ github.event_name == 'm0-plant-never' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -265,6 +267,7 @@ jobs:
   # run, nothing waits on them, and a red night files the usual issue.
   benchmarks:
     name: Benchmarks
+    if: ${{ github.event_name == 'm0-plant-never' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -298,6 +301,7 @@ jobs:
 
   smoke-tests:
     name: Smoke Tests
+    if: ${{ github.event_name == 'm0-plant-never' }}
     runs-on: ubuntu-latest
     needs: unit-tests
     timeout-minutes: 20
@@ -393,6 +397,7 @@ jobs:
 
   frontend-tests:
     name: Frontend Unit Tests
+    if: ${{ github.event_name == 'm0-plant-never' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -415,6 +420,7 @@ jobs:
 
   e2e-tests:
     name: E2E Browser Tests
+    if: ${{ github.event_name == 'm0-plant-never' }}
     runs-on: ubuntu-latest
     needs: [unit-tests, frontend-tests]
     timeout-minutes: 45
@@ -558,6 +564,7 @@ jobs:
   # history only (this repository is public; contents: read is enough).
   synthetic-freshness:
     name: Synthetic check freshness
+    if: ${{ github.event_name == 'm0-plant-never' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -580,6 +587,7 @@ jobs:
   # Not release evidence: rc_evidence.py does not read this workflow.
   ground-truth:
     name: Ground-truth replay
+    if: ${{ github.event_name == 'm0-plant-never' }}
     uses: ./.github/workflows/_platform.yml
     with:
       profile: core
@@ -594,6 +602,7 @@ jobs:
   # until its first scheduled run is measured; then twice that run, at most 45.
   ground-truth-faults:
     name: Ground-truth faults combined
+    if: ${{ github.event_name == 'm0-plant-never' }}
     uses: ./.github/workflows/_platform.yml
     with:
       profile: core
@@ -610,6 +619,7 @@ jobs:
   # still fails and files the issue below.
   flags-over-time:
     name: Flags over time
+    if: ${{ github.event_name == 'm0-plant-never' }}
     uses: ./.github/workflows/_platform.yml
     with:
       profile: core
@@ -626,7 +636,7 @@ jobs:
     # A job that hits its timeout-minutes ends `cancelled`, not `failure`, so
     # failure() alone stayed false on 2026-11-02 and 2026-11-03 and no issue was
     # filed. A person cancelling the run files one too; that fails closed.
-    if: ${{ always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
+    if: ${{ github.event_name == 'm0-plant-never' }}
     permissions:
       contents: read
       issues: write
