@@ -75,6 +75,7 @@ if __name__ == "__main__":  # pragma: no cover - run as a script
 from fastapi import HTTPException
 
 from backend.app.api.v1.endpoints import feature_flags as route
+from backend.app.core.flag_environments import PRODUCTION
 from backend.app.core.flag_values import BOOLEAN, JSON, NUMBER, STRING
 from backend.app.models import register_core_models
 from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
@@ -333,7 +334,7 @@ def server_response(key: str, state: str) -> Dict[str, Any]:
     """``{status, body}``: what the evaluate route answers for this case."""
     if key == UNKNOWN_KEY:
         try:
-            route._evaluate_flag_by_key(_NoFlags(), key, USER_ID, None)
+            route._evaluate_flag_by_key(_NoFlags(), key, USER_ID, None, PRODUCTION)
         except HTTPException as exc:
             # FastAPI's answer to an HTTPException (the app adds no handler for it).
             return {"status": exc.status_code, "body": {"detail": exc.detail}}

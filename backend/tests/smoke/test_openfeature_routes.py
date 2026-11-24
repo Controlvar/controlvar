@@ -77,7 +77,7 @@ def key_client(monkeypatch):
         def __init__(self, db):
             pass
 
-        def get_user_flags(self, user_id, context=None):
+        def get_user_flags(self, user_id, context=None, environment="production"):
             return {}
 
     monkeypatch.setattr(

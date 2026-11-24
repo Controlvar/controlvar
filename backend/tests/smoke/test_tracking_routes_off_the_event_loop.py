@@ -11,6 +11,10 @@ work runs.
   (``client_errors.report_source``) in that same worker trip, after the
   close: ``presented_key_is_server_key`` is replaced by a stub that records
   the same, and the source it answers is the one the report is stamped with.
+  The presented key's flag environment, which their handlers read from the
+  request (#2011), is given to the same function, before the source.
+* The four event and assignment routes refuse a key of another flag
+  environment before they touch the session (#2011).
 * Each handler is written ``async def``. Every router's ``OffLoopRoute``
   would turn a plain ``def`` into a coroutine on the route, so the route walk
   alone cannot tell.
@@ -24,7 +28,9 @@ from typing import Any, Callable, Dict, List, NamedTuple, Optional
 from unittest.mock import MagicMock, call
 
 import pytest
+from fastapi import HTTPException, Request
 
+from backend.app.api.key_environment import production_only_detail
 from backend.app.api.v1.endpoints import client_errors, tracking
 from backend.app.main import app
 
@@ -40,7 +46,7 @@ class Route(NamedTuple):
     module: Any
     handler: str
     one: str
-    #: The handler's arguments apart from ``db``.
+    #: The handler's arguments apart from ``db`` and the request.
     arguments: Callable[[], Dict[str, Any]]
     #: Whether the route stamps its reports with the presented key's source.
     stamps_a_source: bool = False
@@ -146,6 +152,13 @@ def _routed(path: str, method: str):
     return found
 
 
+def _request(environment: str) -> Request:
+    """A request whose key ``deps.get_api_key`` admitted in *environment*."""
+    request = Request({"type": "http", "headers": []})
+    request.state.flag_environment = environment
+    return request
+
+
 class _Seen(NamedTuple):
     thread: int
     session_calls: List[Any]
@@ -176,7 +189,11 @@ async def test_the_work_runs_in_one_worker_trip_after_the_session_is_closed(
 
     monkeypatch.setattr(route.module, route.one, one)
     monkeypatch.setattr(client_errors, "presented_key_is_server_key", key_check)
-    answer = await routed[0].endpoint(db=db, **route.arguments())
+    # The event routes take a production key only; the error routes any key.
+    environment = "staging" if route.stamps_a_source else "production"
+    answer = await routed[0].endpoint(
+        http_request=_request(environment), db=db, **route.arguments()
+    )
     loop_thread = threading.get_ident()
 
     assert answer == "the answer"
@@ -210,6 +227,32 @@ async def test_the_work_runs_in_one_worker_trip_after_the_session_is_closed(
         f"{route.method} {route.path}: the work was given the source "
         f"{work[0].arguments[-2]!r}, want the presented key's ('server')"
     )
+    assert work[0].arguments[-3] == "staging", (
+        f"{route.method} {route.path}: the work was given the environment "
+        f"{work[0].arguments[-3]!r}, want the presented key's ('staging')"
+    )
+
+
+@pytest.mark.parametrize("environment", ["staging", "development"])
+@pytest.mark.parametrize(
+    "route", [param for param in ROUTES if not param.values[0].stamps_a_source]
+)
+async def test_a_key_of_another_environment_is_refused_before_the_session_is_touched(
+    route: Route, environment: str, monkeypatch
+):
+    """#2011: event tracking runs in production only. The handler refuses the
+    key before it closes the session or takes a worker thread."""
+    routed = _routed(route.path, route.method)
+    assert len(routed) == 1, routed
+    db, work = MagicMock(), []
+    monkeypatch.setattr(route.module, route.one, lambda *args: work.append(args))
+    with pytest.raises(HTTPException) as refused:
+        await routed[0].endpoint(
+            http_request=_request(environment), db=db, **route.arguments()
+        )
+    assert refused.value.status_code == 403
+    assert refused.value.detail == production_only_detail(environment)
+    assert (work, db.mock_calls) == ([], [])
 
 
 @pytest.mark.parametrize("route", ROUTES)

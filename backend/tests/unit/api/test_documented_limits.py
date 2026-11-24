@@ -262,11 +262,11 @@ def _fields(model) -> set:
     columns, and an API key's fields where a user meets them: the routes'
     requests and responses, and the audit trail.
 
-    Since #2011's schema, ``api_keys`` stores an ``environment``: every key is
-    a production key, no request sets it, no response or audit entry shows it
-    and nothing uses its value yet. That one stored column is the only
-    exception; the day a key's request, response or audit entry gains the
-    field, this fails and the pages change.
+    Since #2011's schema, ``api_keys`` stores an ``environment``, and the SDK
+    routes answer the stored one: every key is a production key, no request
+    sets another and no response or audit entry shows it. That one stored
+    column is the only exception; the day a key's request, response or audit
+    entry gains the field, this fails and the pages change.
     """
     if model is APIKey:
         stored = {c for c in APIKey.__table__.columns.keys() if "env" in c.lower()}

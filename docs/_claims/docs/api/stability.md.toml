@@ -1491,3 +1491,16 @@ by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
+
+[[unit]]
+text = "POST /api/v1/tracking/assign, POST /api/v1/tracking/assign/batch (beta), POST /api/v1/tracking/alias (beta), POST /api/v1/tracking/track, POST /api/v1/tracking/events, POST /api/v1/tracking/batch, GET /api/v1/tracking/assignments/{user_id}, POST /api/v1/tracking/visual (beta), POST /api/v1/tracking/visual/preview (beta), GET /api/v1/tracking/split-url/routes (beta, full profile), POST /api/v1/tracking/split-url/assign (beta, full profile) | #2011 | An API key belongs to one flag environment, and these operations run in production only. A key of staging or development answers 403 with the detail This API key belongs to the staging environment. Experiments and event tracking run in production only; use a production key. (or development), and nothing is written. No operation creates such a key yet: every key is a production key, and a production key is answered as before. The OpenAPI documents of these operations do not change."
+by = [
+    "test:backend/tests/integration/api/test_key_environment_routes.py::test_every_key_route_is_in_exactly_one_class_and_the_counts_are_exact",
+    "test:backend/tests/integration/api/test_key_environment_routes.py::test_a_production_only_route_refuses_another_key_and_writes_nothing",
+    "test:modules/backend/tests/integration/split_url/test_split_url_key_environment.py::test_the_assign_route_refuses_another_environments_key_and_records_nothing",
+    "test:modules/backend/tests/integration/split_url/test_split_url_key_environment.py::test_the_routes_table_refuses_another_environments_key",
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_the_upgrade_changes_no_answer_whatever_the_deployments_environment",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_flags_experiments_and_keys_carry_no_environment",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]

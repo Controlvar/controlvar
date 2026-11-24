@@ -556,7 +556,9 @@ def get_experiment_change_access(
 
 
 def get_api_key(
-    db: Session = Depends(get_db), api_key_header: str = Depends(API_KEY_HEADER)
+    db: Session = Depends(get_db),
+    api_key_header: str = Depends(API_KEY_HEADER),
+    request: Request = None,  # type: ignore[assignment]
 ) -> Optional[User]:
     """
     Validate API key from header and return associated user if valid.
@@ -564,6 +566,10 @@ def get_api_key(
     Args:
         db: Database session
         api_key_header: API key from header
+        request: The request, which FastAPI passes. The key's flag environment
+            (#2011) is kept on its ``state`` for
+            ``key_environment.presented_environment``. Absent when this is
+            called as a plain function, as the MCP read routes do.
 
     Returns:
         User: User associated with the API key
@@ -596,6 +602,11 @@ def get_api_key(
             detail="Invalid API Key",
             headers={"WWW-Authenticate": "APIKey"},
         )
+
+    # The admitted key's environment, from the row already loaded: before
+    # update_last_used, whose commit would expire it.
+    if request is not None:
+        request.state.flag_environment = api_key.environment
 
     # Issue #198: record the use, throttled inside update_last_used. A failure
     # here is bookkeeping, not authentication, so it never fails the request.

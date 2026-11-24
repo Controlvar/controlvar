@@ -19,6 +19,7 @@ from fastapi import (
     HTTPException,
     Path,
     Query,
+    Request,
     Response,
     status,
 )
@@ -30,6 +31,7 @@ from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps
 from backend.app.api.enum_filters import enum_filter
+from backend.app.api.key_environment import presented_environment
 from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.query_params import MAX_OFFSET, describe_as_int64
 from backend.app.api.read_scope import get_current_reader
@@ -40,6 +42,7 @@ from backend.app.core.context_limits import (
     check_context,
     check_context_text,
 )
+from backend.app.core.flag_environments import PRODUCTION
 from backend.app.core.flag_values import flag_value_type, served_value
 from backend.app.core.logger import unexpected_failure
 from backend.app.core.metrics import record_flag_evaluation
@@ -87,6 +90,7 @@ from backend.app.services.feature_flag_service import (
     FlagVerb,
     transition,
 )
+from backend.app.services.flag_environment_reads import served_flag
 from backend.app.services.stale_flags import stale_clock, stale_reasons
 
 # Setup logger
@@ -1205,9 +1209,18 @@ def evaluation_answer(
 
 
 def _evaluate_flag_by_key(
-    db: Session, flag_key: str, user_id: str, context: Optional[Dict[str, Any]]
+    db: Session,
+    flag_key: str,
+    user_id: str,
+    context: Optional[Dict[str, Any]],
+    environment: str,
 ) -> Dict[str, Any]:
     """Shared body of the GET and POST evaluate endpoints.
+
+    *environment* is the presented key's (#2011). Production is the flag row
+    itself. Staging and development answer with what they serve for the flag
+    (``served_flag``, one more query; off when nothing configures it there),
+    and record no metric: safety monitoring measures production only.
 
     A flag that exists but is not ACTIVE (disabled with the kill switch,
     archived, ...) evaluates to ``enabled: false`` with ``reason: "inactive"``
@@ -1230,6 +1243,12 @@ def _evaluate_flag_by_key(
         )
 
     feature_flag_service = FeatureFlagService(db)
+    if environment != PRODUCTION:
+        served = served_flag(db, db_flag, environment)
+        evaluation = feature_flag_service.evaluate_flag_detailed(
+            served, user_id, context, record_metrics=False
+        )
+        return evaluation_answer(flag_key, served, evaluation)
     evaluation = feature_flag_service.evaluate_flag_detailed(db_flag, user_id, context)
     record_flag_evaluation(flag_key, "enabled" if evaluation["enabled"] else "disabled")
     return evaluation_answer(flag_key, db_flag, evaluation)
@@ -1242,6 +1261,7 @@ def _evaluate_flag_by_key(
     response_description="Returns the feature flag evaluation result",
 )
 async def evaluate_feature_flag(
+    http_request: Request,
     flag_key: Annotated[
         str,
         Path(description="The key of the feature flag to evaluate"),
@@ -1282,30 +1302,40 @@ async def evaluate_feature_flag(
             and ``reason: "inactive"``.
         HTTPException 422: If ``context`` is not valid JSON object
     """
+    # Read here, after the key dependency has run; the worker gets the name.
+    environment = presented_environment(http_request)
     # Closes ``db`` before it returns: the evaluation runs in a worker thread
     # on the same session, closed again when the work is done.
     db.close()
     return await run_in_threadpool(
-        _evaluate_get_in_worker, flag_key, user_id, context, db
+        _evaluate_get_in_worker, flag_key, user_id, context, environment, db
     )
 
 
 def _evaluate_get_in_worker(
-    flag_key: str, user_id: str, context: Optional[str], db: Session
+    flag_key: str,
+    user_id: str,
+    context: Optional[str],
+    environment: str,
+    db: Session,
 ) -> Dict[str, Any]:
     """:func:`evaluate_get_one` on *db*, in a worker thread; closes *db*."""
     try:
-        return evaluate_get_one(flag_key, user_id, context, db)
+        return evaluate_get_one(flag_key, user_id, context, environment, db)
     finally:
         db.close()
 
 
 def evaluate_get_one(
-    flag_key: str, user_id: str, context: Optional[str], db: Session
+    flag_key: str,
+    user_id: str,
+    context: Optional[str],
+    environment: str,
+    db: Session,
 ) -> Dict[str, Any]:
     """``GET /api/v1/feature-flags/evaluate/{flag_key}``'s answer for
-    *user_id*, with *context* as the query parameter was sent, worked out on
-    *db*, which is left open.
+    *user_id* in *environment*, with *context* as the query parameter was
+    sent, worked out on *db*, which is left open.
 
     Synchronous: it reads and writes through *db* as it goes, so call it from
     a worker thread, never from a coroutine on the event loop. Raises the
@@ -1317,7 +1347,7 @@ def evaluate_get_one(
     check_context_text(context)
     parsed_context = _parse_context_param(context)
     check_context(parsed_context)
-    return _evaluate_flag_by_key(db, flag_key, user_id, parsed_context)
+    return _evaluate_flag_by_key(db, flag_key, user_id, parsed_context, environment)
 
 
 @router.post(
@@ -1327,6 +1357,7 @@ def evaluate_get_one(
     response_description="Returns the feature flag evaluation result",
 )
 async def evaluate_feature_flag_post(
+    http_request: Request,
     flag_key: Annotated[
         str,
         Path(description="The key of the feature flag to evaluate"),
@@ -1358,27 +1389,31 @@ async def evaluate_feature_flag_post(
             and ``reason: "inactive"``.
         HTTPException 422: If the body is invalid
     """
+    # Read here, after the key dependency has run; the worker gets the name.
+    environment = presented_environment(http_request)
     # Closes ``db`` before it returns: the evaluation runs in a worker thread
     # on the same session, closed again when the work is done.
     db.close()
-    return await run_in_threadpool(_evaluate_post_in_worker, flag_key, request, db)
+    return await run_in_threadpool(
+        _evaluate_post_in_worker, flag_key, request, environment, db
+    )
 
 
 def _evaluate_post_in_worker(
-    flag_key: str, request: FlagEvaluationRequest, db: Session
+    flag_key: str, request: FlagEvaluationRequest, environment: str, db: Session
 ) -> Dict[str, Any]:
     """:func:`evaluate_post_one` on *db*, in a worker thread; closes *db*."""
     try:
-        return evaluate_post_one(flag_key, request, db)
+        return evaluate_post_one(flag_key, request, environment, db)
     finally:
         db.close()
 
 
 def evaluate_post_one(
-    flag_key: str, request: FlagEvaluationRequest, db: Session
+    flag_key: str, request: FlagEvaluationRequest, environment: str, db: Session
 ) -> Dict[str, Any]:
     """``POST /api/v1/feature-flags/evaluate/{flag_key}``'s answer for
-    *request*, worked out on *db*, which is left open.
+    *request* in *environment*, worked out on *db*, which is left open.
 
     Synchronous: it reads and writes through *db* as it goes, so call it from
     a worker thread, never from a coroutine on the event loop. Raises the
@@ -1387,7 +1422,9 @@ def evaluate_post_one(
     """
     # The limits of backend.app.core.context_limits, outside the evaluation.
     check_context(request.context)
-    return _evaluate_flag_by_key(db, flag_key, request.user_id, request.context)
+    return _evaluate_flag_by_key(
+        db, flag_key, request.user_id, request.context, environment
+    )
 
 
 @router.get(
@@ -1397,6 +1434,7 @@ def evaluate_post_one(
     response_description="Returns all feature flags evaluated for a user",
 )
 async def get_user_flags(
+    http_request: Request,
     user_id: Annotated[
         str,
         Path(description="ID of the user to get flags for"),
@@ -1426,28 +1464,32 @@ async def get_user_flags(
         HTTPException 401: If the API key is invalid
         HTTPException 422: If ``context`` is not a valid JSON object
     """
+    # Read here, after the key dependency has run; the worker gets the name.
+    environment = presented_environment(http_request)
     # Closes ``db`` before it returns: the evaluations run in a worker thread
     # on the same session, closed again when the work is done.
     db.close()
-    return await run_in_threadpool(_user_flags_in_worker, user_id, context, db)
+    return await run_in_threadpool(
+        _user_flags_in_worker, user_id, context, environment, db
+    )
 
 
 def _user_flags_in_worker(
-    user_id: str, context: Optional[str], db: Session
+    user_id: str, context: Optional[str], environment: str, db: Session
 ) -> Dict[str, bool]:
     """:func:`user_flags_one` on *db*, in a worker thread; closes *db*."""
     try:
-        return user_flags_one(user_id, context, db)
+        return user_flags_one(user_id, context, environment, db)
     finally:
         db.close()
 
 
 def user_flags_one(
-    user_id: str, context: Optional[str], db: Session
+    user_id: str, context: Optional[str], environment: str, db: Session
 ) -> Dict[str, bool]:
-    """``GET /api/v1/feature-flags/user/{user_id}``'s answer for *user_id*,
-    with *context* as the query parameter was sent, worked out on *db*, which
-    is left open.
+    """``GET /api/v1/feature-flags/user/{user_id}``'s answer for *user_id* in
+    *environment*, with *context* as the query parameter was sent, worked out
+    on *db*, which is left open.
 
     Synchronous: it reads and writes through *db* as it goes, so call it from
     a worker thread, never from a coroutine on the event loop. Raises the
@@ -1463,7 +1505,7 @@ def user_flags_one(
     feature_flag_service = FeatureFlagService(db)
 
     # Get all flags for user
-    flags = feature_flag_service.get_user_flags(user_id, parsed_context)
+    flags = feature_flag_service.get_user_flags(user_id, parsed_context, environment)
 
     return flags
 

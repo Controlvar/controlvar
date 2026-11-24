@@ -26,7 +26,14 @@ texts are the same on every route.  Batch assignment
 (:func:`require_batch_assign_key`) also checks that the owner can change
 experiments (``check_permission(owner, EXPERIMENT, UPDATE)``) and refuses with
 its own 403 (:data:`OWNER_EXPERIMENT_DETAIL`) before any assignment is
-written: three 403 texts in all.
+written.
+
+Batch assignment and the alias route run in production only (#2011):
+:func:`require_production_ruleset_key` refuses a key of another flag
+environment with ``key_environment``'s 403, after the 401s and the two 403s
+above and, on batch assignment, before the owner's own: four 403 texts in all.
+The rule is never in :func:`require_sdk_ruleset_key`: the ruleset and the local
+evaluation counts accept a key of any environment.
 
 :func:`presented_key_is_server_key` applies the scope and owner rules without
 refusing anything: the error report routes (``POST /api/v1/tracking/errors``
@@ -40,6 +47,7 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.key_environment import refuse_non_production
 from backend.app.core.api_key_scopes import SDK_RULESET_SCOPE, has_scope
 from backend.app.core.permissions import Action, ResourceType, check_permission
 from backend.app.core.security import hash_api_key
@@ -160,16 +168,29 @@ async def require_sdk_ruleset_key(
     return api_key
 
 
+async def require_production_ruleset_key(
+    api_key: APIKey = Depends(require_sdk_ruleset_key),
+) -> APIKey:
+    """The presented ``sdk:ruleset`` key, if it is a production key.
+
+    :func:`require_sdk_ruleset_key` first (its 401s and two 403s), then 403
+    for a key of another flag environment, read from the row it returned:
+    before the route reads or writes anything.
+    """
+    refuse_non_production(api_key.environment)
+    return api_key
+
+
 async def require_batch_assign_key(
     db: Session = Depends(deps.get_db),
-    api_key: APIKey = Depends(require_sdk_ruleset_key),
+    api_key: APIKey = Depends(require_production_ruleset_key),
 ) -> APIKey:
     """The presented key, if it may assign users in a batch.
 
-    :func:`require_sdk_ruleset_key` first (its 401s and two 403s), then the
-    owner must be able to change experiments: otherwise a 403 with
-    :data:`OWNER_EXPERIMENT_DETAIL`, before the route reads its experiment or
-    writes any assignment.
+    :func:`require_production_ruleset_key` first (the 401s, the two 403s and
+    the environment's 403), then the owner must be able to change experiments:
+    otherwise a 403 with :data:`OWNER_EXPERIMENT_DETAIL`, before the route
+    reads its experiment or writes any assignment.
 
     Reads on the request's session; does no blocking work.
     """

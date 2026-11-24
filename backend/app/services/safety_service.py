@@ -368,7 +368,8 @@ class SafetyService:
         (``{"context": ...}``) and rows with no ``request_data``.
         ``uncounted_error_count`` is the number of ``'client'`` rows
         (``uncounted_error_filter()``): stored, and shown on the check, but
-        not counted.
+        not counted. A row of staging or development, which names its
+        environment in ``request_data``, is in neither number (#2011).
 
         ``error_count``, ``error_rate`` and ``error_types`` cover the counted
         rows; ``total_evaluations`` is unchanged.

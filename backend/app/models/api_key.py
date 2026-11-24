@@ -65,6 +65,7 @@ class APIKey(Base, BaseModel):
     # development. Every key created before the column existed is a production
     # key. ``server_default`` is load-bearing: the previous release inserts
     # keys without naming this column, and the database fills ``production``.
+    # The routes that take a key read it (backend/app/api/key_environment.py).
     # No request sets it yet.
     environment = Column(
         String(32),

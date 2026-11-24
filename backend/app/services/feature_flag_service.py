@@ -13,6 +13,7 @@ from sqlalchemy import delete, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from backend.app.core.flag_environments import PRODUCTION, FlagInEnvironment
 from backend.app.core.flag_values import (
     BOOLEAN,
     VALUE_FIELDS,
@@ -41,7 +42,12 @@ from backend.app.models.feature_flag import (
     FeatureFlagStatus,
     flag_status_name,
 )
-from backend.app.models.metrics.metric import AggregatedMetric, ErrorLog, RawMetric
+from backend.app.models.metrics.metric import (
+    REPORT_ENVIRONMENT,
+    AggregatedMetric,
+    ErrorLog,
+    RawMetric,
+)
 from backend.app.schemas.feature_flag import (
     LIST_ITEM_FIELDS,
     READ_ONLY_FIELDS,
@@ -51,6 +57,7 @@ from backend.app.schemas.feature_flag import (
     flag_to_read,
 )
 from backend.app.schemas.metrics import ErrorLogCreate
+from backend.app.services.flag_environment_reads import flags_on_in
 from backend.app.services.metrics_service import MetricsService
 from backend.app.services.segment_membership import (
     SegmentMemberships,
@@ -533,7 +540,10 @@ class FeatureFlagService:
         return flag_to_read(flag)
 
     def get_user_flags(
-        self, user_id: str, context: Optional[Dict[str, Any]] = None
+        self,
+        user_id: str,
+        context: Optional[Dict[str, Any]] = None,
+        environment: str = PRODUCTION,
     ) -> Dict[str, Any]:
         """
         Get all active feature flags with their evaluation for a specific user.
@@ -541,6 +551,9 @@ class FeatureFlagService:
         Args:
             user_id: ID of the user
             context: Optional context data for rule evaluation
+            environment: The flag environment to answer for (#2011). Outside
+                production, the flags that are on there, as it serves them,
+                and no evaluation metric is recorded.
 
         Returns:
             Dictionary mapping flag keys to their values for this user. A
@@ -548,11 +561,8 @@ class FeatureFlagService:
             other flags are unaffected (#1674).
         """
         # Get all active flags
-        flags = (
-            self.db.query(FeatureFlag)
-            .filter(FeatureFlag.status == FeatureFlagStatus.ACTIVE.value)
-            .all()
-        )
+        flags = flags_on_in(self.db, environment)
+        record_metrics = environment == PRODUCTION
 
         # Segment membership is resolved once for every segment any flag
         # references (#440). A flag fails only if it references a segment
@@ -582,48 +592,54 @@ class FeatureFlagService:
             if memberships.unavailable:
                 log_unavailable("feature flags", memberships.unavailable)
 
-        # Evaluate each flag for the user
+        # Evaluate each flag for the user. The options are given only when they
+        # differ from the defaults.
+        options: Dict[str, Any] = {}
+        if memberships is not None:
+            options["memberships"] = memberships
+        if not record_metrics:
+            options["record_metrics"] = False
         result = {}
         for flag in flags:
-            if memberships is None:
-                result[flag.key] = self.evaluate_flag(flag, user_id, context)
-            else:
-                result[flag.key] = self.evaluate_flag(
-                    flag, user_id, context, memberships=memberships
-                )
+            result[flag.key] = self.evaluate_flag(flag, user_id, context, **options)
 
         return result
 
     def evaluate_flag(
         self,
-        flag: FeatureFlag,
+        flag: Union[FeatureFlag, FlagInEnvironment],
         user_id: str,
         context: Optional[Dict[str, Any]] = None,
         memberships: Optional[SegmentMemberships] = None,
+        record_metrics: bool = True,
     ) -> bool:
         """
         Evaluate a feature flag for a specific user.
 
         Args:
-            flag: Feature flag model object
+            flag: Feature flag model object, or its view in an environment
             user_id: ID of the user
             context: Optional context data for rule evaluation
+            memberships: As for :meth:`evaluate_flag_detailed`
+            record_metrics: As for :meth:`evaluate_flag_detailed`
 
         Returns:
             Boolean indicating if the flag is enabled for this user
         """
-        if memberships is None:
-            return self.evaluate_flag_detailed(flag, user_id, context)["enabled"]
-        return self.evaluate_flag_detailed(
-            flag, user_id, context, memberships=memberships
-        )["enabled"]
+        options: Dict[str, Any] = {}
+        if memberships is not None:
+            options["memberships"] = memberships
+        if not record_metrics:
+            options["record_metrics"] = False
+        return self.evaluate_flag_detailed(flag, user_id, context, **options)["enabled"]
 
     def evaluate_flag_detailed(
         self,
-        flag: FeatureFlag,
+        flag: Union[FeatureFlag, FlagInEnvironment],
         user_id: str,
         context: Optional[Dict[str, Any]] = None,
         memberships: Optional[SegmentMemberships] = None,
+        record_metrics: bool = True,
     ) -> Dict[str, Any]:
         """
         Evaluate a feature flag for a user and explain the outcome.
@@ -660,13 +676,20 @@ class FeatureFlagService:
         disabled with reason ``error``, one WARNING names the segments, and
         no error-log row is written.
 
+        A flag outside production is given as its view there
+        (``flag_in_environment``), with ``record_metrics=False``: no
+        ``raw_metrics`` row is written, and the error row of a failed
+        evaluation names the environment in ``request_data``, so safety
+        monitoring, which measures production only, does not count it.
+
         Args:
-            flag: Feature flag model object
+            flag: Feature flag model object, or its view in an environment
             user_id: ID of the user
             context: Optional context data for rule evaluation
             memberships: Membership already resolved for this user
                 (``get_user_flags`` resolves every flag's segments at once).
                 Its unavailable segments were logged by the caller.
+            record_metrics: Whether the evaluation is recorded as metrics
 
         Returns:
             ``{"enabled": bool, "reason": "targeting_rule" | "rollout" |
@@ -751,22 +774,26 @@ class FeatureFlagService:
 
             try:
                 # Record metrics (in a separate try-except to avoid affecting the main flow)
-                MetricsService.record_flag_evaluation(
-                    db=self.db,
-                    feature_flag_id=flag.id,
-                    user_id=user_id,
-                    targeting_rule_id=targeting_rule_id,
-                    latency_ms=latency_ms,
-                )
+                if record_metrics:
+                    MetricsService.record_flag_evaluation(
+                        db=self.db,
+                        feature_flag_id=flag.id,
+                        user_id=user_id,
+                        targeting_rule_id=targeting_rule_id,
+                        latency_ms=latency_ms,
+                    )
 
                 # If there was an error, log it separately
                 if error:
+                    request_data: Dict[str, Any] = {"context": context}
+                    if isinstance(flag, FlagInEnvironment):
+                        request_data[REPORT_ENVIRONMENT] = flag.environment
                     error_data = ErrorLogCreate(
                         error_type="flag_evaluation_error",
                         feature_flag_id=flag.id,
                         user_id=user_id,
                         message=error,
-                        request_data={"context": context},
+                        request_data=request_data,
                     )
                     MetricsService.log_error(db=self.db, data=error_data)
             except Exception as metrics_error:
