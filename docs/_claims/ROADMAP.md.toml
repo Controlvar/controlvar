@@ -59,10 +59,6 @@ text = "A bug reported by someone running Controlvar comes before everything els
 by = ["exempt:policy"]
 
 [[unit]]
-text = "A balanced split within each segment, so test and control match within every group (#448)."
-by = ["exempt:policy"]
-
-[[unit]]
 text = "Dashboard sign-in when Controlvar uses Amazon Cognito (#708)."
 by = ["exempt:policy"]
 
@@ -78,26 +74,7 @@ by = [
 ]
 
 [[unit]]
-text = "SDKs that do the same things: every SDK reads a flag's value, not only on or off (#1810), and sends user attributes on flag evaluation (#438, #1720)."
-by = ["exempt:policy"]
-
-[[unit]]
-text = "An SDK that installs from a clone today is published to its registry when someone asks for it, with event ids (#1543) and the exposure hook."
-by = ["exempt:policy"]
-
-[[unit]]
-text = "Two-factor sign-in for local accounts (#1812)."
-by = ["exempt:policy"]
-
-[[unit]]
-text = "Its first part, storing each local account's two-step secret, is in 0.47.0 (#1948)."
-by = [
-    "test:backend/tests/integration/services/test_two_factor_service.py::test_confirm_gives_ten_recovery_codes_and_stores_only_their_hashes",
-    "test:backend/tests/integration/database/test_user_totp_migration.py::test_a_database_at_the_previous_release_gains_the_table",
-]
-
-[[unit]]
-text = "Signing in with it comes next."
+text = "SDKs on their registries: an SDK that installs from a clone today is published to its registry when someone asks for it, with the exposure hook."
 by = ["exempt:policy"]
 
 [[unit]]

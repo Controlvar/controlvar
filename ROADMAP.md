@@ -16,23 +16,13 @@ to Next if something more urgent comes up.
 
 - **What you report comes first.** A bug reported by someone running Controlvar comes before
   everything else on this page.
-- **A balanced split within each segment**, so test and control match within every group
-  ([#448](https://github.com/Controlvar/controlvar/issues/448)).
 - **Dashboard sign-in when Controlvar uses Amazon Cognito**
   ([#708](https://github.com/Controlvar/controlvar/issues/708)).
 - **Warehouse analysis on Databricks**
   ([#1605](https://github.com/Controlvar/controlvar/issues/1605)). Amazon Redshift is available
   ([#826](https://github.com/Controlvar/controlvar/issues/826)).
-- **SDKs that do the same things:** every SDK reads a flag's value, not only on or off
-  ([#1810](https://github.com/Controlvar/controlvar/issues/1810)), and sends user attributes on
-  flag evaluation ([#438](https://github.com/Controlvar/controlvar/issues/438),
-  [#1720](https://github.com/Controlvar/controlvar/issues/1720)). An SDK that installs from a clone
-  today is published to its registry when someone asks for it, with event ids
-  ([#1543](https://github.com/Controlvar/controlvar/issues/1543)) and the exposure hook.
-- **Two-factor sign-in for local accounts**
-  ([#1812](https://github.com/Controlvar/controlvar/issues/1812)). Its first part, storing each
-  local account's two-step secret, is in 0.47.0
-  ([#1948](https://github.com/Controlvar/controlvar/pull/1948)). Signing in with it comes next.
+- **SDKs on their registries:** an SDK that installs from a clone today is published to its
+  registry when someone asks for it, with the exposure hook.
 - **A visual page editor:** change a live page's text and layout to make a variant, with no code
   ([#1545](https://github.com/Controlvar/controlvar/issues/1545)). It is built in steps, carries on
   into Next, and reaches users once it is complete. Its first part, storing a visual experiment's
