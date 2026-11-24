@@ -39,8 +39,10 @@ on:
       - tests/alb/rehearse.sh
       - tests/web/access_log.sh
       - scripts/check_compose_config.py
-      # What runs the README's blocks (compose-upgrade), and what extracts them.
+      # What runs the README's blocks (compose-upgrade) and checks the live
+      # state across them, and what extracts them.
       - scripts/compose_upgrade.sh
+      - scripts/compose_upgrade_state.py
       - scripts/guide_blocks.py
       - VERSION
       - .github/workflows/compose-production.yml
