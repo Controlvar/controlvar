@@ -12,20 +12,25 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import get_args
 
 import pytest
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from backend.app.core.flag_values import served_value
 from backend.app.models.api_key import APIKey
+from backend.app.models.audit_log import EntityType
 from backend.app.models.experiment import Experiment
 from backend.app.models.feature_flag import FeatureFlag
-from backend.app.schemas.api_key import APIKeyCreate, APIKeyCreated, APIKeyRead
 from backend.app.schemas.auth import LoginRequest
 from backend.app.schemas.experiment import ExperimentCreate
 from backend.app.schemas.feature_flag import FeatureFlagCreate, FeatureFlagUpdate
 from backend.app.schemas.results import SampleSizeResult
 from backend.app.schemas.tracking import AssignmentRequest
+from backend.app.services.audit_service import (
+    AUDIT_NAME_ONLY_FIELDS,
+    AUDIT_VALUE_FIELDS,
+)
 
 pytestmark = [pytest.mark.unit, pytest.mark.regression]
 
@@ -42,9 +47,8 @@ def _app_sources():
             yield path.relative_to(ROOT).as_posix(), path.read_text(encoding="utf-8")
 
 
-@pytest.fixture(scope="module")
-def routes():
-    """(method, path) of every mounted HTTP route, the included routers' too.
+def _route_contexts():
+    """Every mounted HTTP route's context, the included routers' too.
 
     FastAPI keeps ``include_router`` as a lazy entry, so ``app.routes`` alone
     holds a handful of routes; ``effective_route_contexts`` flattens them, as
@@ -54,16 +58,22 @@ def routes():
 
     from backend.app.main import app
 
-    found = []
     for route in app.routes:
         contexts = getattr(route, "effective_route_contexts", None)
         if contexts is None:
             if not isinstance(route, APIRoute):
                 continue
             contexts = (route,)
-        for ctx in contexts() if callable(contexts) else contexts:
-            for method in getattr(ctx, "methods", None) or ():
-                found.append((method, ctx.path))
+        yield from contexts() if callable(contexts) else contexts
+
+
+@pytest.fixture(scope="module")
+def routes():
+    """(method, path) of every mounted HTTP route, the included routers' too."""
+    found = []
+    for ctx in _route_contexts():
+        for method in getattr(ctx, "methods", None) or ():
+            found.append((method, ctx.path))
     assert len(found) > 100, "the scan found too few routes: it is broken"
     return found
 
@@ -187,24 +197,83 @@ def test_the_alias_route_is_the_one_call_that_links_two_user_ids(routes):
 # ---------------------------------------------------------------------------
 # One deployment is one environment
 # ---------------------------------------------------------------------------
+API_KEYS = "/api/v1/api-keys"
+
+
+def _models_in(annotation) -> set:
+    """The Pydantic models in *annotation*, inside List, Optional and Union."""
+    if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+        return {annotation}
+    found = set()
+    for argument in get_args(annotation):
+        found |= _models_in(argument)
+    return found
+
+
+def _names_in(model, seen) -> set:
+    """Every field of *model*, by name and alias, and those of the models its
+    fields hold."""
+    if model in seen:
+        return set()
+    seen.add(model)
+    names = set()
+    for name, field in model.model_fields.items():
+        names |= {name, field.alias, field.validation_alias, field.serialization_alias}
+        for nested in _models_in(field.annotation):
+            names |= _names_in(nested, seen)
+    return {name for name in names if isinstance(name, str)}
+
+
+def _parameters(dependant) -> set:
+    """Every query, path, header and cookie parameter of a route, by name and
+    alias, through its dependencies."""
+    names = set()
+    for group in ("query", "path", "header", "cookie"):
+        for param in getattr(dependant, f"{group}_params"):
+            names |= {param.name, param.alias}
+    for dependency in dependant.dependencies:
+        names |= _parameters(dependency)
+    return names
+
+
+def _api_key_route_names() -> set:
+    """Every name the mounted ``/api/v1/api-keys`` routes take or answer with:
+    parameters, and the fields of the request and response models, read from
+    the routes rather than named here."""
+    names, models, methods = set(), set(), set()
+    for ctx in _route_contexts():
+        if ctx.path != API_KEYS and not ctx.path.startswith(f"{API_KEYS}/"):
+            continue
+        methods |= set(ctx.methods or ())
+        names |= _parameters(ctx.dependant)
+        models |= _models_in(ctx.response_model)
+        if ctx.body_field is not None:
+            models |= _models_in(ctx.body_field.field_info.annotation)
+    assert {"GET", "POST", "DELETE"} <= methods, methods
+    found = {model.__name__ for model in models}
+    assert {"APIKeyCreate", "APIKeyRead", "APIKeyCreated"} <= found, found
+    for model in models:
+        names |= _names_in(model, set())
+    return names
+
+
 def _fields(model) -> set:
     """What the pages' sentence is about: a flag's and an experiment's
-    columns, and an API key's fields in the API.
+    columns, and an API key's fields where a user meets them: the routes'
+    requests and responses, and the audit trail.
 
     Since #2011's schema, ``api_keys`` stores an ``environment``: every key is
-    a production key, no request sets it, no response shows it and no route
-    reads it, so a key still carries no environment field anywhere a user
-    meets it. That one stored column is the only exception; the day a key's
-    request or response gains the field, this fails and the pages change.
+    a production key, no request sets it, no response or audit entry shows it
+    and nothing uses its value yet. That one stored column is the only
+    exception; the day a key's request, response or audit entry gains the
+    field, this fails and the pages change.
     """
     if model is APIKey:
         stored = {c for c in APIKey.__table__.columns.keys() if "env" in c.lower()}
         assert stored == {"environment"}, stored
-        return (
-            set(APIKeyCreate.model_fields)
-            | set(APIKeyRead.model_fields)
-            | set(APIKeyCreated.model_fields)
-        )
+        audited = set(AUDIT_VALUE_FIELDS[EntityType.API_KEY])
+        audited |= set(AUDIT_NAME_ONLY_FIELDS[EntityType.API_KEY])
+        return _api_key_route_names() | audited
     return set(model.__table__.columns.keys())
 
 
