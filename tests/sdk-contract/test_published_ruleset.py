@@ -15,9 +15,11 @@ reaches it, and nothing on the server says so. So for each release:
   expectation ``accepted``. A refusal by format passes only if the pin says
   ``format-refused``, which is a decision made in that file;
 * answers: every case is DEFER or exactly the server's ``{enabled, reason}``,
-  and the cases answered locally are exactly the ``must_local`` ones.
+  and the cases answered locally are exactly the ``must_local`` ones. Where a
+  release returns a ``value`` (0.3.0 does; 0.1.1 and 0.2.0 do not), it equals
+  the case's ``expected_value`` as JSON, or ``enabled`` for a boolean flag.
 
-The self-tests P1-P8 plant a defect into the inputs on every run, against the
+The self-tests P1-P9 plant a defect into the inputs on every run, against the
 same published artefacts, and assert the gate fails with the right text (or, for
 P3's JavaScript half and P5, that it passes). Nothing here skips: no network or
 no node is a failure that says so.
@@ -262,6 +264,15 @@ def test_p5_additive_keys_pass(artefact, unpacked, tmp_path):
     vectors, path = _planted(tmp_path, _additive)
     assert '"on_value": "on"' in path.read_text(encoding="utf-8")
     report = _run(artefact, root, tmp_path, path)
+    # The plant gives every flag new values, so a release that returns one now
+    # answers "on" or "off" where the unplanted cases expect true or false. P5
+    # is about the keys being accepted, not the values (P9 compares those).
+    report["answers"] = [
+        {k: v for k, v in answer.items() if k != "value"}
+        if isinstance(answer, dict)
+        else answer
+        for answer in report["answers"]
+    ]
     log.info(ps.check_report(artefact, extraction, report, vectors))
 
 
@@ -323,6 +334,181 @@ def test_p8_a_wrong_digest_fails_before_anything_is_unpacked(
     assert not destination.exists()
     with pytest.raises(ps.GateError, match="Refusing to unpack or run it"):
         fetched(wrong)
+
+
+def _rule_value(vectors):
+    """A local entry whose rule serves "B" on a flag whose on value is "A",
+    and the case that asks for it: enabled and reason are right, only the
+    value tells the release apart from the server."""
+    vectors["ruleset"]["flags"].append(
+        {
+            "key": "zz-rulevalue",
+            "active": True,
+            "evaluation": "local",
+            "value_type": "string",
+            "on_value": "A",
+            "off_value": "off",
+            "rollout_percentage": 0,
+            "rules": [
+                {
+                    "id": "pro",
+                    "match": {
+                        "op": "and",
+                        "conditions": [
+                            {"attribute": "plan", "operator": "eq", "value": "pro"}
+                        ],
+                        "groups": [],
+                    },
+                    "rollout_percentage": 100,
+                    "value": "B",
+                }
+            ],
+            "default_rule": None,
+        }
+    )
+    vectors["cases"].append(
+        {
+            "id": "zz-rulevalue/pro",
+            "flag": "zz-rulevalue",
+            "user_id": "user-1",
+            "context": {"plan": "pro"},
+            "expected": {"enabled": True, "reason": "targeting_rule"},
+            "expected_value": "B",
+            "must_local": True,
+        }
+    )
+    vectors["counts"]["must_local"] += 1
+
+
+@regression
+def test_p9_a_wrong_value_fails_where_the_release_returns_one(
+    artefact, unpacked, tmp_path
+):
+    """G1 compares the value wherever a release returns one. 0.3.0 does, and
+    serves the flag's on value ("A") where the rule says "B": right enabled,
+    right reason, wrong value. 0.1.1 and 0.2.0 return no value and are judged
+    on enabled and reason, so the same document passes for them."""
+    extraction, root = unpacked
+    vectors, path = _planted(tmp_path, _rule_value)
+    report = _run(artefact, root, tmp_path, path)
+    answer = report["answers"][-1]
+    assert answer != "DEFER"
+    if artefact.version != "0.3.0":
+        assert "value" not in answer
+        log.info(ps.check_report(artefact, extraction, report, vectors))
+        return
+    assert answer["value"] == "A"
+    with pytest.raises(ps.GateError) as failure:
+        ps.check_report(artefact, extraction, report, vectors)
+    assert (
+        f'{artefact.label} answered zz-rulevalue/pro locally with value "A"; '
+        'the server serves "B"'
+    ) in str(failure.value)
+    # The same run over the unplanted vectors is green.
+    real = _run(artefact, root, tmp_path, name="cwd-real")
+    log.info(ps.check_report(artefact, extraction, real, VECTORS))
+
+
+@regression
+def test_p9_a_flipped_expected_value_fails_for_a_value_flag(
+    artefact, unpacked, tmp_path
+):
+    """The same comparison over a case already in the corpus: a string flag's
+    expected value changed. Only a release that returns a value can see it."""
+    extraction, root = unpacked
+    valued = next(
+        c for c in VECTORS["cases"] if "expected_value" in c and c["must_local"]
+    )
+
+    def flip(vectors):
+        for case in vectors["cases"]:
+            if case["id"] == valued["id"]:
+                case["expected_value"] = ["not", valued["expected_value"]]
+
+    vectors, path = _planted(tmp_path, flip)
+    report = _run(artefact, root, tmp_path, path)
+    if artefact.version != "0.3.0":
+        log.info(ps.check_report(artefact, extraction, report, vectors))
+        return
+    with pytest.raises(ps.GateError) as failure:
+        ps.check_report(artefact, extraction, report, vectors)
+    assert f"answered {valued['id']} locally with value" in str(failure.value)
+
+
+def _one_case(answer, expected_value=None):
+    """A one-case corpus and a report of one release's answer to it, for the
+    value comparison on its own (no network, no harness)."""
+    case = {
+        "id": "one",
+        "flag": "f",
+        "user_id": "u",
+        "context": {},
+        "expected": {"enabled": True, "reason": "rollout"},
+        "must_local": True,
+    }
+    if expected_value is not None:
+        case["expected_value"] = expected_value
+    vectors = {"cases": [case], "counts": {"must_local": 1}}
+    return vectors, {"answers": [answer]}
+
+
+@pytest.mark.parametrize(
+    ("served", "answered", "red"),
+    [
+        (10.0, 10, False),  # JSON.parse reads 10.0 as 10: one number
+        (10, 10.0, False),
+        (0.0, -0.0, False),
+        (-0.0, 0, False),
+        ({"n": [1.0, {"m": 2, "k": -0.0}]}, {"n": [1, {"k": 0, "m": 2}]}, False),
+        (2**53, 2.0**53, True),  # beyond the safe integers a float is not an int
+        (True, 1, True),  # Python's True == 1 must not hide this
+        (1, True, True),
+        (False, 0, True),
+        (2.5, "2.5", True),
+        ("A", "B", True),
+        ([1, 2], [2, 1], True),
+    ],
+    ids=lambda v: repr(v),
+)
+@regression
+def test_p9_values_are_equal_as_json_numbers(served, answered, red):
+    vectors, report = _one_case(
+        {"enabled": True, "reason": "rollout", "value": answered}, served
+    )
+    artefact = ARTEFACTS[0]
+    if red:
+        with pytest.raises(ps.GateError, match="locally with value"):
+            ps.check_answers(artefact, report, vectors)
+    else:
+        ps.check_answers(artefact, report, vectors)
+
+
+@regression
+def test_p9_a_malformed_answer_is_a_named_line_not_a_crash():
+    artefact = ARTEFACTS[0]
+    for answer in (
+        "yes",
+        None,
+        ["enabled", "reason"],
+        {"enabled": True},
+        {"enabled": True, "reason": "rollout", "extra": 1},
+    ):
+        vectors, report = _one_case(answer)
+        with pytest.raises(ps.GateError) as failure:
+            ps.check_answers(artefact, report, vectors)
+        assert f"{artefact.label} answered one locally as a malformed answer" in str(
+            failure.value
+        )
+
+
+@regression
+def test_p9_the_ok_line_counts_the_values_compared():
+    artefact = ARTEFACTS[0]
+    vectors, report = _one_case({"enabled": True, "reason": "rollout", "value": True})
+    vectors["ruleset"] = {"version": "v"}
+    assert ps.check_answers(artefact, report, vectors) == (1, 1)
+    vectors, report = _one_case({"enabled": True, "reason": "rollout"})
+    assert ps.check_answers(artefact, report, vectors) == (1, 0)
 
 
 # ---------------------------------------------------------------------------
