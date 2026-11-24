@@ -120,6 +120,109 @@ def unexpected_failure(
     return HTTPException(status_code=status_code, detail=failure_detail(sentence))
 
 
+#: A SQLSTATE as PostgreSQL reports it: five digits or upper-case letters.
+SQLSTATE_PATTERN = re.compile(r"[0-9A-Z]{5}")
+
+
+def _is_database_error(exc: BaseException) -> bool:
+    """A SQLAlchemy error, or psycopg2's own."""
+    # Imported here so this module stays importable without them.
+    from sqlalchemy.exc import SQLAlchemyError
+
+    if isinstance(exc, SQLAlchemyError):
+        return True
+    try:
+        import psycopg2
+    except ImportError:
+        return False
+    return isinstance(exc, psycopg2.Error)
+
+
+def database_error_in(exc: BaseException) -> Optional[BaseException]:
+    """The first database error in *exc*'s chain, or None.
+
+    Looks at *exc*, then at its ``__cause__`` (else its ``__context__``), and
+    so on to the end of the chain, each exception once: a traceback prints
+    the chain, so a database error anywhere in it is printed.
+    """
+    seen: set[int] = set()
+    current: Optional[BaseException] = exc
+    while current is not None and id(current) not in seen:
+        if _is_database_error(current):
+            return current
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+    return None
+
+
+def _attribute(obj: Any, name: str) -> Any:
+    try:
+        return getattr(obj, name, None)
+    except Exception:
+        return None
+
+
+def sqlstate_of(exc: BaseException) -> Optional[str]:
+    """The SQLSTATE of database error *exc*, when the driver gave one.
+
+    Read from SQLAlchemy's ``orig`` (the driver's exception) or from *exc*
+    itself: its ``pgcode`` (psycopg2's name), else its ``sqlstate``. Anything
+    that is not :data:`SQLSTATE_PATTERN` in full is None.
+    """
+    driver = _attribute(exc, "orig") or exc
+    for name in ("pgcode", "sqlstate"):
+        code = _attribute(driver, name)
+        if isinstance(code, str) and SQLSTATE_PATTERN.fullmatch(code):
+            return code
+    return None
+
+
+def failure_label(exc: BaseException) -> str:
+    """What a log line says about *exc*: class names and a SQLSTATE, never text.
+
+    ``"IntegrityError, SQLSTATE 23505"`` for a database error;
+    ``"RuntimeError from IntegrityError, SQLSTATE 23505"`` when the database
+    error is further down *exc*'s chain; the SQLSTATE is left out when the
+    driver gave none. Anything else is its class name: ``"RuntimeError"``.
+    """
+    label = type(exc).__name__
+    database_error = database_error_in(exc)
+    if database_error is None:
+        return label
+    if database_error is not exc:
+        label = f"{label} from {type(database_error).__name__}"
+    code = sqlstate_of(database_error)
+    if code is not None:
+        label = f"{label}, SQLSTATE {code}"
+    return label
+
+
+def traceback_unless_database(exc: BaseException) -> Optional[BaseException]:
+    """The ``exc_info`` to log *exc* with: *exc* itself, so its traceback is
+    logged, or None when a database error is in its chain.
+
+    The driver's message, which a traceback prints, can include the values of
+    the statement that failed (a constraint violation's DETAIL line names the
+    key's values). A generic ``except`` block logs::
+
+        logger.error(
+            "Tracking event failed (%s)",
+            failure_label(e),
+            exc_info=traceback_unless_database(e),
+        )
+
+    which is what ``logger.exception("Tracking event failed (%s)",
+    type(e).__name__)`` logs for anything but a database error, and
+    ``"Tracking event failed (IntegrityError, SQLSTATE 23505)"`` with no
+    traceback for one. The call stays in the caller, so the line has the
+    caller's file, line and function, and this request's ID from the log
+    context, as every line does.
+    """
+    if database_error_in(exc) is None:
+        return exc
+    return None
+
+
 # ---------------------------------------------------------------------------
 # structlog context-variable processor
 # ---------------------------------------------------------------------------

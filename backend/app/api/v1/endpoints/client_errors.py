@@ -46,7 +46,11 @@ from starlette.concurrency import run_in_threadpool
 from backend.app.api import deps
 from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.sdk_scope import presented_key_is_server_key
-from backend.app.core.logger import failure_detail
+from backend.app.core.logger import (
+    failure_detail,
+    failure_label,
+    traceback_unless_database,
+)
 from backend.app.models.experiment import Experiment
 from backend.app.models.feature_flag import FeatureFlag
 from backend.app.models.metrics.metric import (
@@ -379,7 +383,11 @@ def report_one(
         )
     except Exception as exc:
         db.rollback()
-        logger.exception("Error report failed (%s)", type(exc).__name__)
+        logger.error(
+            "Error report failed (%s)",
+            failure_label(exc),
+            exc_info=traceback_unless_database(exc),
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=failure_detail("Could not store the error report"),
@@ -502,7 +510,11 @@ def report_batch_one(
                 }
             )
         except Exception as exc:
-            logger.exception("Error report batch item failed (%s)", type(exc).__name__)
+            logger.error(
+                "Error report batch item failed (%s)",
+                failure_label(exc),
+                exc_info=traceback_unless_database(exc),
+            )
             db.rollback()
             failure_count += 1
             failures.append(
@@ -520,7 +532,11 @@ def report_batch_one(
             db.commit()
         except Exception as exc:
             db.rollback()
-            logger.exception("Error report batch failed (%s)", type(exc).__name__)
+            logger.error(
+                "Error report batch failed (%s)",
+                failure_label(exc),
+                exc_info=traceback_unless_database(exc),
+            )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=failure_detail("Could not store the error reports"),
