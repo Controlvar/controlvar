@@ -20,7 +20,8 @@
 #             change's commit, which the clone does not have (C5(a));
 #             install-named, then install, which pulls N-1's images; one
 #             experiment and one flag through the API; N-1's API image ID, its
-#             revisions and alembic_version
+#             revisions and alembic_version; then the live state, recorded
+#             (seed_live_state)
 #   prepare   backup, check-backup, get-files (RELEASE = the tag above),
 #             check-settings (the old release still serving), pull
 #   retag     the one step that is not a page block: this change's builds, by
@@ -37,6 +38,15 @@
 #             brings N-1 back with the backup's rows
 #   diagnose  containers and logs, for a failed run
 #   teardown  remove the stack and its volumes
+#
+# The live state (#1897): beside the rows, install records what a running
+# install holds -- each seeded user's assignment, the results' users and
+# conversions, each user's flag answer -- and after the upgrade, the restart,
+# the rollback in place when N-1 serves again and the restore, the same reads
+# come first, before anything is written, and must answer as N-1 did
+# (check_live_state). Assigning each user again comes after, as its own check
+# (repeat_assigns). scripts/compose_upgrade_state.py holds the seed's plan and
+# the comparison.
 #
 # Every block runs in run_block: in the clone's deploy/compose, under `env -i`
 # with a fresh HOME (no registry credentials, so every pull is anonymous),
@@ -71,6 +81,8 @@ RESTART_WAIT=300
 PROBE_KEY=compose-upgrade-probe
 PROBE_NAME='Compose upgrade probe'
 PROBE_ROLLOUT=30
+# The live state's plan, reads and comparison (#1897).
+STATE_TOOL=scripts/compose_upgrade_state.py
 # What an older image says of a database a newer release migrated
 # (backend/app/db/bootstrap.py), and step 7 tells the reader to look for.
 REFUSAL='this database was migrated by a newer Controlvar release'
@@ -210,6 +222,131 @@ check_rows() {
         '.id == $id and .key == $key and .rollout_percentage == $rollout' "$OUT/flag.json" >/dev/null ||
         fail "$when: flag $fid reads back as $(jq -c '{id, key, rollout_percentage}' "$OUT/flag.json")"
     say "(c) $when: 1 experiment and 1 flag, the seeded ones ($eid, $fid)"
+}
+
+# sdk METHOD PATH [CURL ARGS...]: an SDK request through the dashboard's port,
+# with the API key seed_live_state made. The key is sent from a header file,
+# never on a command line. Prints the body; fails on any answer but 2xx.
+sdk() {
+    local method=$1 path=$2
+    shift 2
+    [ -s "$WORK/sdk-headers" ] || fail "no API key for the SDK requests: the install phase makes it"
+    [ -n "${HOST:-}" ] || connect
+    curl -fsS -X "$method" -H "Host: $HOST" -H @"$WORK/sdk-headers" "$@" "$BASE$path"
+}
+
+# assign USER COUNTRY: POST /tracking/assign for USER of the probe experiment,
+# with COUNTRY as the context. Prints the answer.
+assign() {
+    sdk POST /api/v1/tracking/assign -H 'content-type: application/json' \
+        -d "$(jq -nc --arg key "$PROBE_KEY" --arg user "$1" --arg country "$2" \
+            '{experiment_key: $key, user_id: $user, context: {country: $country}}')"
+}
+
+# read_live_state DIR WHEN: the live state's answers, saved in DIR and reduced
+# to DIR/state.json. Reads only, in this order: each user's assignment, the
+# results computed afresh (compose's Redis persists, so a cached copy would be
+# N-1's), each user's flag answer with the user's context.
+read_live_state() {
+    local dir=$1 when=$2 eid user country
+    eid=$(sed -n 's/^experiment=//p' "$WORK/rows.txt")
+    [ -n "$eid" ] || fail "$when: no seeded experiment id in $WORK/rows.txt"
+    rm -rf "$dir"
+    mkdir -p "$dir/assignments" "$dir/flags"
+    while read -r user _; do
+        sdk GET "/api/v1/tracking/assignments/$user?active_only=false" >"$dir/assignments/$user.json" ||
+            fail "$when: GET /api/v1/tracking/assignments/$user failed"
+    done <"$WORK/plan.txt"
+    api GET "/api/v1/results/$eid?use_cache=false" >"$dir/results.json" ||
+        fail "$when: GET /api/v1/results/$eid?use_cache=false failed"
+    while read -r user country _; do
+        sdk GET "/api/v1/feature-flags/evaluate/$PROBE_KEY" -G --data-urlencode "user_id=$user" \
+            --data-urlencode "context=$(jq -nc --arg country "$country" '{country: $country}')" \
+            >"$dir/flags/$user.json" ||
+            fail "$when: evaluating the flag for $user failed"
+    done <"$WORK/plan.txt"
+    python3 "$STATE_TOOL" state "$dir" "$eid" >"$dir/state.json" ||
+        fail "$when: $STATE_TOOL could not read the answers in $dir"
+}
+
+# state_lines WHEN WHAT COMMAND ARGS...: the state tool's COMMAND, each line of
+# whose output is a difference: each is printed as an error, and the step
+# fails with WHAT.
+state_lines() {
+    local when=$1 what=$2 out="$WORK/state-lines.txt" rc=0
+    shift 2
+    python3 "$STATE_TOOL" "$@" >"$out" || rc=$?
+    case $rc in
+        0) ;;
+        1)
+            sed 's/^/::error::/' "$out" >&2
+            fail "$when: $what ($(grep -c . "$out") line(s) above)"
+            ;;
+        *) fail "$when: $STATE_TOOL $1 could not run (exit $rc)" ;;
+    esac
+}
+
+# seed_live_state: at N-1, after the rows. An API key, the experiment
+# started, the plan's users assigned with their country as the context (each
+# must be), a purchase from each converting one; then the live state, read as
+# every later step reads it, which must be the seed's, recorded.
+seed_live_state() {
+    local eid user country converts
+    eid=$(sed -n 's/^experiment=//p' "$WORK/rows.txt")
+    [ -n "$eid" ] || fail "N-1: no seeded experiment id in $WORK/rows.txt"
+    python3 "$STATE_TOOL" plan >"$WORK/plan.txt" || fail "$STATE_TOOL plan failed"
+    api POST /api/v1/api-keys "$(jq -nc --arg name "$PROBE_KEY" '{name: $name}')" >"$WORK/api-key.json" ||
+        fail "N-1: creating an API key failed"
+    jq -er '.key | strings | select(length > 0) | "X-API-Key: " + .' "$WORK/api-key.json" >"$WORK/sdk-headers" ||
+        fail "N-1: the API key's answer has no key"
+    rm -f "$WORK/api-key.json"
+    api POST "/api/v1/experiments/$eid/start" >"$OUT/start.json" ||
+        fail "N-1: starting experiment $eid failed"
+    mkdir -p "$WORK/seed"
+    while read -r user country converts; do
+        assign "$user" "$country" >"$WORK/seed/$user.json" || fail "N-1: assigning $user failed"
+        jq -e '.assigned == true' "$WORK/seed/$user.json" >/dev/null ||
+            fail "N-1: $user was not assigned: $(jq -c '{assigned, reason}' "$WORK/seed/$user.json")"
+        if [ "$converts" = yes ]; then
+            sdk POST /api/v1/tracking/track -H 'content-type: application/json' \
+                -d "$(jq -nc --arg key "$PROBE_KEY" --arg user "$user" \
+                    '{event_type: "purchase", user_id: $user, experiment_key: $key}')" \
+                >/dev/null || fail "N-1: the purchase of $user failed"
+        fi
+    done <"$WORK/plan.txt"
+    read_live_state "$WORK/live-n1" "N-1, after the seed"
+    state_lines "N-1, after the seed" "the seed's live state is not what it seeded" \
+        seeded "$WORK/live-n1/state.json"
+    say "N-1, after the seed: the live state is recorded: $(live_counts "$WORK/live-n1/state.json")"
+}
+
+# live_counts STATE: what a state document holds, in words.
+live_counts() {
+    jq -r '"\(.assignments | length) users each assigned once, the results counting \(.results.total_users) users and \(.results.total_conversions) conversions, \(.flags | length) flag answers"' "$1"
+}
+
+# check_live_state WHEN NAME: the live state read again, into $OUT/live-NAME,
+# before anything is written, and compared with N-1's: every difference is a
+# line of its own, and the step fails.
+check_live_state() {
+    local when=$1 dir="$OUT/live-$2"
+    read_live_state "$dir" "$when"
+    state_lines "$when" "the stored state is not what N-1 recorded" \
+        compare "$WORK/live-n1/state.json" "$dir/state.json" "$when"
+    say "$when: the live state is as N-1 recorded it: $(live_counts "$dir/state.json")"
+}
+
+# repeat_assigns WHEN NAME: after check_live_state, every user assigned again,
+# a write; each must be given the variant recorded at N-1.
+repeat_assigns() {
+    local when=$1 dir="$OUT/live-$2" user country
+    mkdir -p "$dir/repeat"
+    while read -r user country _; do
+        assign "$user" "$country" >"$dir/repeat/$user.json" || fail "$when: assigning $user again failed"
+    done <"$WORK/plan.txt"
+    state_lines "$when" "assigning a user again did not give the variant recorded at N-1" \
+        repeat "$WORK/live-n1/state.json" "$dir" "$when"
+    say "$when: assigning each of the $(grep -c . "$WORK/plan.txt") users again gives the variant recorded at N-1"
 }
 
 # check_version VERSION WHEN: /api/v1/modules reports the core profile at
@@ -422,9 +559,10 @@ do_blocks() {
 }
 
 do_install() {
-    local prev
+    local prev rules
     prev=$(cat "$WORK/previous-version")
-    rm -rf "$SELFHOST" "$READER_HOME" "$WORK/rows.txt"
+    rm -rf "$SELFHOST" "$READER_HOME" "$WORK/rows.txt" "$WORK/plan.txt" "$WORK/sdk-headers" \
+        "$WORK/seed" "$WORK/live-n1"
     mkdir -p "$READER_HOME"
     # The self-hoster's directory: a clone at the release, as the install the
     # root README gives makes one (git clone, then cd deploy/compose).
@@ -455,7 +593,8 @@ do_install() {
     say "N-1's alembic_version: $(tr '\n' ' ' <"$WORK/alembic-before")"
     check_version "$prev" "N-1 after the install"
 
-    # The rows the upgrade must keep: one experiment, with a key, and one flag.
+    # The rows the upgrade must keep: one experiment, with a key, and one flag,
+    # on, with a rule (the live state's flag answers).
     sign_in
     api POST /api/v1/experiments/ "$(jq -nc --arg key "$PROBE_KEY" --arg name "$PROBE_NAME" '{
         name: $name, key: $key,
@@ -465,10 +604,13 @@ do_install() {
         ],
         metrics: [{name: "Purchase", event_name: "purchase", is_primary: true}]
     }')" >"$OUT/seed-experiment.json" || fail "adding the experiment failed"
+    rules=$(python3 "$STATE_TOOL" flag-rules) || fail "$STATE_TOOL flag-rules failed"
     api POST /api/v1/feature-flags/ "$(jq -nc --arg key "$PROBE_KEY" --arg name "$PROBE_NAME" \
-        --argjson rollout "$PROBE_ROLLOUT" '{key: $key, name: $name, rollout_percentage: $rollout}')" \
+        --argjson rollout "$PROBE_ROLLOUT" --argjson rules "$rules" \
+        '{key: $key, name: $name, rollout_percentage: $rollout, is_active: true, targeting_rules: $rules}')" \
         >"$OUT/seed-flag.json" || fail "adding the flag failed"
     check_rows "N-1, after the seed"
+    seed_live_state
 }
 
 do_prepare() {
@@ -594,6 +736,8 @@ do_upgrade() {
 
     sign_in
     check_rows "after the upgrade"
+    check_live_state "after the upgrade" upgrade
+    repeat_assigns "after the upgrade" upgrade
 
     run_block addresses || fail "the page's addresses block failed"
     [ "$(grep -c . "$OUT/addresses.out" || true)" -ge 1 ] || fail "the addresses block printed no address"
@@ -654,6 +798,8 @@ do_restart() {
         fail "(f) restart api logged a new Running upgrade line; a restart must migrate nothing"
     [ "$(alembic_rows)" = "$rows" ] || fail "(f) restart api moved alembic_version"
     check_rows "after restart api"
+    check_live_state "after restart api" restart
+    repeat_assigns "after restart api" restart
 }
 
 do_rollback() {
@@ -677,6 +823,8 @@ do_rollback() {
         [ "$(alembic_rows)" = "$rows" ] || fail "rolling back in place moved alembic_version"
         sign_in
         check_rows "after rolling back in place"
+        check_live_state "after rolling back in place" rollback
+        repeat_assigns "after rolling back in place" rollback
         summary "rolled back in place to v$prev: N-1's image serves the same rows"
     else
         if run_block upgrade; then
@@ -700,7 +848,9 @@ do_rollback() {
         fail "after the restore alembic_version is not N-1's: $(alembic_rows | tr '\n' ' ')"
     sign_in
     check_rows "after the restore"
-    summary "restored the backup into v$prev: it serves the seeded rows, and the first administrator signs in"
+    check_live_state "after the restore" restore
+    repeat_assigns "after the restore" restore
+    summary "restored the backup into v$prev: it serves the seeded rows and the live state, and the first administrator signs in"
 }
 
 # diagnose: the stack's containers and the end of each one's log, found by the
