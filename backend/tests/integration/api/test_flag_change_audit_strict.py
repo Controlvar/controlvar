@@ -2,12 +2,13 @@
 
 The routes that change a flag -- create (and its hidden twin without the
 slash), update, delete, activate, deactivate, unarchive, toggle, enable,
-disable and bulk toggle -- write their ``audit_logs`` entry, and for create,
-update and delete their ``audit_events_v2`` event, in the transaction that
-saves the change. These tests drive the real routes on Postgres as a
-DEVELOPER who is not a superuser, make the database refuse every insert into
-an audit table with a trigger, and read the result back in a session of their
-own:
+disable and bulk toggle, and the change and promotion of its settings in an
+environment (#2011) -- write their ``audit_logs`` entry, and for create,
+update, delete and a change to production's settings their
+``audit_events_v2`` event, in the transaction that saves the change. These
+tests drive the real routes on Postgres as a DEVELOPER who is not a superuser,
+make the database refuse every insert into an audit table with a trigger, and
+read the result back in a session of their own:
 
 * the route answers 500 with its fixed sentence and the request ID, and
   nothing is saved: not the change, not an entry, not an event;
@@ -16,7 +17,7 @@ own:
   the route's (with the service's for create and update), and none carries a
   value from the refused row, which the trigger's message holds;
 * once the trigger is gone, the identical request is saved, with exactly one
-  entry;
+  entry (a promotion into production writes two);
 * a failure of the change itself keeps its own error type, waiting for a row
   another change holds ends the request the same way, and a bulk toggle whose
   commit fails answers 500 (it answered 200, reporting every flag as changed).
@@ -50,7 +51,11 @@ from backend.app.core.config import settings
 from backend.app.core.metrics import audit_write_failures_total
 from backend.app.main import app
 from backend.app.models.audit_log import AuditLog
-from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
+from backend.app.models.feature_flag import (
+    FeatureFlag,
+    FeatureFlagStatus,
+    FlagEnvironmentSetting,
+)
 from backend.app.models.rollout_schedule import RolloutSchedule
 from backend.app.models.user import User, UserRole
 from backend.app.services.audit_log_service import AuditLogService
@@ -64,6 +69,7 @@ FLAGS = f"{V1}/feature-flags"
 
 AUDIT_LOGGER = "backend.app.services.audit_service"
 ROUTE_LOGGER = "backend.app.api.v1.endpoints.feature_flags"
+ENVIRONMENT_LOGGER = "backend.app.api.v1.endpoints.flag_environments"
 BULK_LOGGER = "backend.app.api.v1.endpoints.bulk_toggle"
 SERVICE_LOGGER = "backend.app.services.feature_flag_service"
 #: The trigger's message; it is followed by the refused row.
@@ -78,7 +84,9 @@ ARCHIVED = FeatureFlagStatus.ARCHIVED
 class Case:
     """One route: the flag it starts from (None: it creates one), the status
     it leaves the flag in when saved (None: the flag is gone), the sentence of
-    its 500, its ERROR lines, and whether it writes a compliance event."""
+    its 500, its ERROR lines, whether it writes a compliance event, how many
+    entries it writes, and the flag's side rows (environment, on, percentage)
+    before it and after it."""
 
     start: Optional[FeatureFlagStatus]
     end: Optional[FeatureFlagStatus]
@@ -86,10 +94,17 @@ class Case:
     errors: tuple
     events: int = 0
     ok: int = 200
+    entries: int = 1
+    side_before: tuple = ()
+    side_after: tuple = ()
 
 
 def _route_line(verb):
     return (ROUTE_LOGGER, f"Feature flag {verb} failed (AuditWriteFailed)")
+
+
+def _environment_line(verb):
+    return (ENVIRONMENT_LOGGER, f"Feature flag {verb} failed (AuditWriteFailed)")
 
 
 def _service_line(doing, action):
@@ -145,6 +160,64 @@ CASES = {
         A,
         "Could not change the feature flags",
         ((BULK_LOGGER, "Bulk toggle failed (AuditWriteFailed)"),),
+    ),
+    # Archiving turns the flag off in staging too, in the same transaction.
+    "bulk-archive": Case(
+        A,
+        ARCHIVED,
+        "Could not change the feature flags",
+        ((BULK_LOGGER, "Bulk toggle failed (AuditWriteFailed)"),),
+        side_before=(("staging", True, 40),),
+        side_after=(("staging", False, 40),),
+    ),
+    # A flag's settings in an environment (#2011).
+    "put-staging": Case(
+        I,
+        I,
+        "Could not update the feature flag",
+        (_environment_line("environment update"),),
+        side_after=(("staging", True, 25),),
+    ),
+    "put-staging-again": Case(
+        I,
+        I,
+        "Could not update the feature flag",
+        (_environment_line("environment update"),),
+        side_before=(("development", False, 5), ("staging", False, 40)),
+        side_after=(("development", False, 5), ("staging", True, 25)),
+    ),
+    "put-production": Case(
+        I,
+        A,
+        "Could not update the feature flag",
+        (
+            _service_line("updating", "feature_flag_update"),
+            _environment_line("environment update"),
+        ),
+        events=1,
+        side_before=(("staging", True, 40),),
+        side_after=(("staging", True, 40),),
+    ),
+    "promote-development": Case(
+        I,
+        I,
+        "Could not promote the feature flag",
+        (_environment_line("promote"),),
+        side_before=(("staging", True, 40),),
+        side_after=(("development", True, 40), ("staging", True, 40)),
+    ),
+    "promote-production": Case(
+        I,
+        A,
+        "Could not promote the feature flag",
+        (
+            _service_line("updating", "feature_flag_update"),
+            _environment_line("promote"),
+        ),
+        events=1,
+        entries=2,
+        side_before=(("staging", True, 40),),
+        side_after=(("staging", True, 40),),
     ),
 }
 #: The routes that write a compliance event as well.
@@ -374,7 +447,21 @@ def _send(client, user, name, key, flag_id, canary, request_id):
         return client.post(f"{FLAGS}/{flag_id}/{name}", headers=h)
     if name in ("toggle", "enable", "disable"):
         return client.post(f"{FLAGS}/{flag_id}/{name}", json=reason, headers=h)
-    body = {"flag_ids": [str(flag_id)], "action": "enable", **reason}
+    if name.startswith("put-"):
+        environment = name.split("-")[1]
+        body = {"is_active": True, "rollout_percentage": 25}
+        return client.put(
+            f"{FLAGS}/{flag_id}/environments/{environment}", json=body, headers=h
+        )
+    if name.startswith("promote-"):
+        target = name.split("-")[1]
+        return client.post(
+            f"{FLAGS}/{flag_id}/environments/{target}/promote",
+            json={"from": "staging"},
+            headers=h,
+        )
+    action = "archive" if name == "bulk-archive" else "enable"
+    body = {"flag_ids": [str(flag_id)], "action": action, **reason}
     return client.post(f"{FLAGS}/bulk-toggle", json=body, headers=h)
 
 
@@ -384,6 +471,22 @@ def _stored(fresh, key):
     try:
         row = session.query(FeatureFlag).filter(FeatureFlag.key == key).one_or_none()
         return None if row is None else (FeatureFlagStatus(row.status), row.name)
+    finally:
+        session.close()
+
+
+def _side_rows(fresh, flag_id):
+    """The flag's side rows as a Case names them, by environment."""
+    if flag_id is None:
+        return ()
+    session = fresh()
+    try:
+        rows = session.query(FlagEnvironmentSetting).filter(
+            FlagEnvironmentSetting.feature_flag_id == flag_id
+        )
+        return tuple(
+            sorted((r.environment, r.is_active, r.rollout_percentage) for r in rows)
+        )
     finally:
         session.close()
 
@@ -470,6 +573,16 @@ def _setup(db_session, name, case, canary, owner):
     if case.start is None:
         return _key(), None
     flag = _flag(db_session, case.start, f"{PREFIX} {canary}", owner=owner)
+    for environment, is_active, percentage in case.side_before:
+        db_session.add(
+            FlagEnvironmentSetting(
+                feature_flag_id=flag.id,
+                environment=environment,
+                is_active=is_active,
+                rollout_percentage=percentage,
+            )
+        )
+    db_session.commit()
     return flag.key, flag.id
 
 
@@ -486,17 +599,20 @@ def _saved(name, case, canary):
 
 
 def _retry_is_saved_once(client, fresh, developer, name, case, key, flag_id, canary):
-    """The identical request, once the refusal is lifted: saved, one entry."""
+    """The identical request, once the refusal is lifted: saved, one entry
+    (as many as its Case says)."""
     counts = Counts(fresh)
     response = _send(client, developer, name, key, flag_id, canary, "fa1042-again")
     assert response.status_code == case.ok, response.text
-    assert counts.delta() == (1, case.events, 0)
+    assert counts.delta() == (case.entries, case.events, 0)
     if flag_id is None:
         flag_id = response.json()["id"]
     entries = _entries(fresh, flag_id)
-    assert len(entries) == 1, [(e.action_type, e.reason) for e in entries]
+    assert len(entries) == case.entries, [(e.action_type, e.reason) for e in entries]
     assert entries[0].user_id == developer.id
-    if name == "bulk":
+    assert {e.user_id for e in entries} == {developer.id}
+    assert _side_rows(fresh, flag_id) == case.side_after
+    if name.startswith("bulk"):
         assert response.json()["audit_log_ids"] == [str(entries[0].id)]
     if name in ("toggle", "enable", "disable"):
         assert response.json()["audit_log_id"] == str(entries[0].id)
@@ -521,6 +637,7 @@ def test_a_refused_entry_saves_nothing_and_answers_500(
 
     _assert_refused(response, case, f"fa1042-{name}")
     assert _stored(fresh, key) == _unchanged(case, canary)
+    assert _side_rows(fresh, flag_id) == case.side_before
     # No entry, no compliance event, and nothing counted as a lost entry.
     assert counts.delta() == (0, 0, 0)
     assert _error_lines(caplog) == case.errors
@@ -547,6 +664,7 @@ def test_a_refused_compliance_event_saves_nothing_and_answers_500(
 
     _assert_refused(response, case, f"fa1042-{name}")
     assert _stored(fresh, key) == _unchanged(case, canary)
+    assert _side_rows(fresh, flag_id) == case.side_before
     # The audit_logs entry is not saved without the event either.
     assert counts.delta() == (0, 0, 0)
     assert _error_lines(caplog) == case.errors
@@ -616,6 +734,38 @@ def test_a_refused_flag_write_keeps_its_own_error_type(
     assert _stored(fresh, key) == _unchanged(case, canary)
     assert counts.delta() == (0, 0, 0)
     assert _error_lines(caplog) == OWN_FAILURE[name]
+
+
+#: route -> its ERROR lines when its side row's INSERT is refused.
+OWN_SIDE_ROW_FAILURE = {
+    "put-staging": (
+        (ENVIRONMENT_LOGGER, "Feature flag environment update failed (InternalError)"),
+    ),
+    "promote-development": (
+        (ENVIRONMENT_LOGGER, "Feature flag promote failed (InternalError)"),
+    ),
+}
+
+
+@pytest.mark.parametrize("name", list(OWN_SIDE_ROW_FAILURE))
+def test_a_refused_side_row_write_keeps_its_own_error_type(
+    client, fresh, db_session, developer, refuse, caplog, name
+):
+    """As for a flag's own row: logged under its own type, 500, nothing saved."""
+    case = CASES[name]
+    canary = f"fa1042-canary-{uuid.uuid4().hex}"
+    key, flag_id = _setup(db_session, name, case, canary, developer)
+    refuse.inserts_into("flag_environment_settings")
+    counts = Counts(fresh)
+    caplog.set_level(logging.INFO)
+
+    response = _send(client, developer, name, key, flag_id, canary, f"fa1042-{name}")
+
+    _assert_refused(response, case, f"fa1042-{name}")
+    assert _stored(fresh, key) == _unchanged(case, canary)
+    assert _side_rows(fresh, flag_id) == case.side_before
+    assert counts.delta() == (0, 0, 0)
+    assert _error_lines(caplog) == OWN_SIDE_ROW_FAILURE[name]
 
 
 def _lock_timeout(dbapi_connection, connection_record):

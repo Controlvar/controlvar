@@ -1504,3 +1504,29 @@ by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
+
+[[unit]]
+text = "GET /api/v1/environments (beta), GET /api/v1/environments/{environment}/feature-flag-settings (beta), GET /api/v1/feature-flags/{flag_id}/environments (beta), GET/PUT /api/v1/feature-flags/{flag_id}/environments/{environment} (beta), POST /api/v1/feature-flags/{flag_id}/environments/{target}/promote (beta) | #2011 | New beta operations: a flag's settings in production, staging and development, and copying them from one into another. Production's are the flag's own, so a change to production through them is the one PUT /api/v1/feature-flags/{flag_id} makes. Their shapes may still change. The OpenAPI documents gain the operations and their schemas. See Flag environments."
+by = [
+    "test:backend/tests/unit/api/test_flag_environment_operations.py::test_exactly_these_operations_are_served",
+    "test:backend/tests/unit/api/test_flag_environment_operations.py::test_each_operation_is_beta_and_answers_what_it_says",
+    "test:backend/tests/unit/api/test_flag_environment_operations.py::test_the_schemas_are_the_settings_of_one_environment",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_each_environment_answers_its_own_settings",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_put_to_production_is_the_stable_put",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_promotion_copies_all_three_fields_and_nothing_else",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "POST /api/v1/feature-flags/bulk-toggle, GET /api/v1/feature-flags/, DELETE/PUT /api/v1/segments/{segment_id}, GET /api/v1/segments/{segment_id}/experiments | #2011 | These operations read a flag's staging and development settings, which only the beta operations above create. Archiving a flag turns it off there too. A flag that is on there is not stale. A segment those rules use is in use: the 409 and the list name the flag with environments, every environment whose rules use it. A flag with no such settings is answered as before. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/smoke/test_flag_environment_writers.py::test_the_settings_are_written_only_by_the_services_two_writers",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_bulk_archive_turns_the_flag_off_everywhere_and_names_where",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_bulk_archive_of_a_flag_on_nowhere_else_records_the_two_statuses",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_flag_on_outside_production_is_not_stale",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_segment_used_only_in_staging_is_in_use_and_names_staging",
+    "test:backend/tests/integration/api/test_segment_in_use.py::test_a_disabled_flag_and_a_paused_experiment_block",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]

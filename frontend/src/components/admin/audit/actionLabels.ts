@@ -34,6 +34,8 @@ export const ACTIONS: Readonly<Record<string, { label: string; group: ActionGrou
   feature_flag_delete: { label: 'Flag deleted', group: 'Flags' },
   feature_flag_activate: { label: 'Flag activated', group: 'Flags' },
   feature_flag_deactivate: { label: 'Flag deactivated', group: 'Flags' },
+  feature_flag_environment_update: { label: 'Flag changed in an environment', group: 'Flags' },
+  feature_flag_promote: { label: 'Flag promoted', group: 'Flags' },
   toggle_enable: { label: 'Flag turned on', group: 'Flags' },
   toggle_disable: { label: 'Flag turned off', group: 'Flags' },
   experiment_create: { label: 'Experiment created', group: 'Experiments' },

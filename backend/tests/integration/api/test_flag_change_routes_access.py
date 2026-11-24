@@ -1,4 +1,5 @@
-"""Who may change a feature flag through bulk-toggle and rollout schedules.
+"""Who may change a feature flag through bulk-toggle, rollout schedules and its
+settings in an environment.
 
 The same rule as the per-flag routes (test_feature_flag_ownership.py): ADMIN and
 DEVELOPER may change any flag, ANALYST and VIEWER may change none -- not even a
@@ -15,7 +16,11 @@ import uuid
 import pytest
 
 from backend.app.main import app
-from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
+from backend.app.models.feature_flag import (
+    FeatureFlag,
+    FeatureFlagStatus,
+    FlagEnvironmentSetting,
+)
 from backend.app.models.rollout_schedule import (
     RolloutSchedule,
     RolloutScheduleStatus,
@@ -309,6 +314,107 @@ def test_rollout_schedule_for_a_missing_flag_is_404(db_session, cleanup_override
 
 
 # ---------------------------------------------------------------------------
+# a flag's settings per environment (#2011): the change and the promotion
+# ---------------------------------------------------------------------------
+
+# route -> (method, path template, body, what the flag is in when allowed:
+#           (production status, {environment: (is_active, rollout)}))
+_STAGING_ON = {"staging": (True, 30)}
+ENVIRONMENT_ROUTES = {
+    "put_staging": (
+        "PUT",
+        "/environments/staging",
+        {"is_active": False, "rollout_percentage": 5},
+        (FeatureFlagStatus.INACTIVE, {"staging": (False, 5)}),
+    ),
+    "put_development": (
+        "PUT",
+        "/environments/development",
+        {"is_active": True},
+        (FeatureFlagStatus.INACTIVE, {**_STAGING_ON, "development": (True, 0)}),
+    ),
+    "put_production": (
+        "PUT",
+        "/environments/production",
+        {"is_active": True},
+        (FeatureFlagStatus.ACTIVE, _STAGING_ON),
+    ),
+    "promote_to_development": (
+        "POST",
+        "/environments/development/promote",
+        {"from": "staging"},
+        (FeatureFlagStatus.INACTIVE, {**_STAGING_ON, "development": (True, 30)}),
+    ),
+    "promote_to_production": (
+        "POST",
+        "/environments/production/promote",
+        {"from": "staging"},
+        (FeatureFlagStatus.ACTIVE, _STAGING_ON),
+    ),
+}
+
+ENVIRONMENT_CASES = [
+    pytest.param(a, o, r, id=f"{a}-{o}-{r}")
+    for a in ACTORS
+    for o in OWNERSHIP
+    for r in ENVIRONMENT_ROUTES
+]
+assert len(ENVIRONMENT_CASES) == 5 * 3 * 5 == 75
+
+
+def _environment_request(db_session, user, flag, route):
+    db_session.add(
+        FlagEnvironmentSetting(
+            feature_flag_id=flag.id,
+            environment="staging",
+            is_active=True,
+            rollout_percentage=30,
+        )
+    )
+    db_session.commit()
+    method, path, body, _ = ENVIRONMENT_ROUTES[route]
+    return make_client_for_user(db_session, user).request(
+        method, f"/api/v1/feature-flags/{flag.id}{path}", json=body
+    )
+
+
+def _environments(db_session, flag_id):
+    db_session.expire_all()
+    stored = db_session.query(FeatureFlag).filter(FeatureFlag.id == flag_id).one()
+    rows = db_session.query(FlagEnvironmentSetting).filter(
+        FlagEnvironmentSetting.feature_flag_id == flag_id
+    )
+    return (
+        FeatureFlagStatus(stored.status),
+        {row.environment: (row.is_active, row.rollout_percentage) for row in rows},
+    )
+
+
+@pytest.mark.parametrize("actor,ownership,route", ENVIRONMENT_CASES)
+def test_environment_changes_require_update_on_the_flag(
+    db_session, cleanup_overrides, actor, ownership, route
+):
+    user, flag = _actor_and_flag(db_session, actor, ownership)
+    response = _environment_request(db_session, user, flag, route)
+    refused = actor in READ_ONLY
+    assert response.status_code == (403 if refused else 200), (
+        f"{actor} {route} on a flag owned by {ownership}: "
+        f"{response.status_code}: {response.text}"
+    )
+    if refused:
+        # In no environment, production included.
+        assert response.json()["detail"] == (
+            "Not enough permissions to update this feature flag"
+        )
+        assert _environments(db_session, flag.id) == (
+            FeatureFlagStatus.INACTIVE,
+            _STAGING_ON,
+        ), f"{actor} was refused but the flag changed"
+    else:
+        assert _environments(db_session, flag.id) == ENVIRONMENT_ROUTES[route][3]
+
+
+# ---------------------------------------------------------------------------
 # A grant of feature_flag (update) covers any flag (#891, check #32, D11)
 # ---------------------------------------------------------------------------
 # In the full profile a VIEWER holding a direct grant of feature_flag (update)
@@ -420,3 +526,31 @@ def test_rollout_schedule_changes_follow_a_flag_update_grant(
         f"{actor} {route} on a flag owned by {ownership}: want {want}, "
         f"got {response.status_code}: {response.text}"
     )
+
+
+GRANT_ENVIRONMENT_CASES = [
+    pytest.param(a, o, r, id=f"{a}-{o}-{r}")
+    for a in GRANT_ACTORS
+    for o in OWNERSHIP
+    for r in ENVIRONMENT_ROUTES
+]
+
+
+@pytest.mark.modules
+@pytest.mark.parametrize("actor,ownership,route", GRANT_ENVIRONMENT_CASES)
+def test_environment_changes_follow_a_flag_update_grant(
+    db_session, cleanup_overrides, _remove_grants, actor, ownership, route
+):
+    user, flag = _granted_viewer_and_flag(
+        db_session, GRANT_ACTORS[actor], ownership, FeatureFlagStatus.INACTIVE
+    )
+    response = _environment_request(db_session, user, flag, route)
+    if GRANT_ACTORS[actor]:
+        assert response.status_code == 200, response.text
+        assert _environments(db_session, flag.id) == ENVIRONMENT_ROUTES[route][3]
+    else:
+        assert response.status_code == 403, response.text
+        assert _environments(db_session, flag.id) == (
+            FeatureFlagStatus.INACTIVE,
+            _STAGING_ON,
+        )

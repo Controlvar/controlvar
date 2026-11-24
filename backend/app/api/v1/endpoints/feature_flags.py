@@ -9,7 +9,7 @@ manage feature flags for gradual rollouts and A/B testing.
 import json
 import logging
 from datetime import datetime
-from typing import Annotated, Any, Dict, Optional
+from typing import Annotated, Any, Callable, Dict, Optional
 from uuid import UUID
 
 from fastapi import (
@@ -91,6 +91,7 @@ from backend.app.services.feature_flag_service import (
     transition,
 )
 from backend.app.services.flag_environment_reads import served_flag
+from backend.app.services.flag_environment_service import audit_side_rows
 from backend.app.services.stale_flags import stale_clock, stale_reasons
 
 # Setup logger
@@ -550,6 +551,73 @@ async def get_feature_flag(
     return feature_flag
 
 
+def flag_update_record(
+    db: Session, flag: FeatureFlag, current_user: Any
+) -> Callable[[FeatureFlag], None]:
+    """What an update of *flag* records, for ``update_feature_flag(record=...)``.
+
+    Called before the change: the old values are read from *flag* now. The
+    returned function writes the two entries of an update, the compliance
+    event and ``feature_flag_update``, in the update's own transaction.
+    Shared by ``PUT /feature-flags/{id}`` and the routes that change a flag's
+    production settings (``flag_environments.py``), so they record the same.
+    """
+    flag_id = flag.id
+    old_flag_snapshot = {
+        "key": flag.key,
+        "name": flag.name,
+        # The spelling ``FeatureFlagRead`` gives the "after" side, so an
+        # update that leaves the status alone records no status change (#2066).
+        "status": _status_text(flag.status),
+        "rollout_percentage": flag.rollout_percentage,
+        "value_type": flag_value_type(flag),
+    }
+    before_audit = audit_snapshot(EntityType.FEATURE_FLAG, flag)
+
+    def record(updated_row: FeatureFlag) -> None:
+        # The audit entries, in the update's own transaction (#1042), read
+        # from the row with the change applied.
+        with AuditService.audit_with_change(
+            db,
+            action=ActionType.FEATURE_FLAG_UPDATE,
+            entity_type=EntityType.FEATURE_FLAG,
+            entity_id=flag_id,
+        ):
+            updated_flag = FeatureFlagRead.model_validate(updated_row)
+            new_flag_snapshot = {
+                "key": updated_flag.key,
+                "name": updated_flag.name,
+                "status": updated_flag.status,
+                "rollout_percentage": updated_flag.rollout_percentage,
+                "value_type": updated_flag.value_type,
+            }
+            audit = AuditLogService(db)
+            audit.log(
+                action=AuditAction.UPDATE,
+                resource_type="feature_flag",
+                outcome=AuditOutcome.SUCCESS,
+                resource_id=str(flag_id),
+                actor_id=str(current_user.id) if current_user else None,
+                old_value=old_flag_snapshot,
+                new_value=new_flag_snapshot,
+            )
+            old_value, new_value = audit_changes(
+                before_audit, audit_snapshot(EntityType.FEATURE_FLAG, updated_row)
+            )
+            AuditService.record(
+                db,
+                actor=current_user,
+                action=ActionType.FEATURE_FLAG_UPDATE,
+                entity_type=EntityType.FEATURE_FLAG,
+                entity_id=flag_id,
+                entity_name=updated_flag.name,
+                before=old_value,
+                after=new_value,
+            )
+
+    return record
+
+
 @router.put(
     "/{flag_id}",
     response_model=FeatureFlagRead,
@@ -645,61 +713,11 @@ async def update_feature_flag(
         )
 
     # Capture pre-update state for audit trail
-    old_flag_snapshot = {
-        "key": flag.key,
-        "name": flag.name,
-        # The spelling ``FeatureFlagRead`` gives the "after" side, so an
-        # update that leaves the status alone records no status change (#2066).
-        "status": _status_text(flag.status),
-        "rollout_percentage": flag.rollout_percentage,
-        "value_type": flag_value_type(flag),
-    }
-    before_audit = audit_snapshot(EntityType.FEATURE_FLAG, flag)
+    record = flag_update_record(db, flag, current_user)
 
     # Every segment the rules name exists and is active (#440).
     if "targeting_rules" in feature_flag_in.model_fields_set:
         refuse_unusable_segments(db, feature_flag_in.targeting_rules)
-
-    def record(updated_row: FeatureFlag) -> None:
-        # The audit entries, in the update's own transaction (#1042), read
-        # from the row with the change applied.
-        with AuditService.audit_with_change(
-            db,
-            action=ActionType.FEATURE_FLAG_UPDATE,
-            entity_type=EntityType.FEATURE_FLAG,
-            entity_id=flag_id,
-        ):
-            updated_flag = FeatureFlagRead.model_validate(updated_row)
-            new_flag_snapshot = {
-                "key": updated_flag.key,
-                "name": updated_flag.name,
-                "status": updated_flag.status,
-                "rollout_percentage": updated_flag.rollout_percentage,
-                "value_type": updated_flag.value_type,
-            }
-            audit = AuditLogService(db)
-            audit.log(
-                action=AuditAction.UPDATE,
-                resource_type="feature_flag",
-                outcome=AuditOutcome.SUCCESS,
-                resource_id=str(flag_id),
-                actor_id=str(current_user.id) if current_user else None,
-                old_value=old_flag_snapshot,
-                new_value=new_flag_snapshot,
-            )
-            old_value, new_value = audit_changes(
-                before_audit, audit_snapshot(EntityType.FEATURE_FLAG, updated_row)
-            )
-            AuditService.record(
-                db,
-                actor=current_user,
-                action=ActionType.FEATURE_FLAG_UPDATE,
-                entity_type=EntityType.FEATURE_FLAG,
-                entity_id=flag_id,
-                entity_name=updated_flag.name,
-                before=old_value,
-                after=new_value,
-            )
 
     # Update feature flag
     try:
@@ -824,6 +842,10 @@ async def delete_feature_flag(
     }
     deleted_flag_id = str(flag.id)
     deleted_audit = audit_identity(audit_snapshot(EntityType.FEATURE_FLAG, flag))
+    # The staging and development settings the delete takes with it (#2011).
+    side_rows = audit_side_rows(db, flag_id)
+    if side_rows:
+        deleted_audit["environments"] = side_rows
     deleted_flag_name = flag.name
 
     # Create feature flag service

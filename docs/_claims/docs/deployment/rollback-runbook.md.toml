@@ -518,6 +518,14 @@ text = "Until every API container, pod or task of the release that carries t2011
 by = ["test:backend/tests/integration/database/test_flag_environments_migration.py::test_this_release_answers_500_to_a_production_key_on_the_downgraded_schema"]
 
 [[unit]]
+text = "The dashboard's flag list (GET /api/v1/feature-flags/) answers 500 too once a flag is old enough to be stale."
+by = ["test:backend/tests/integration/database/test_flag_environments_migration.py::test_this_release_answers_500_where_it_reads_a_side_row_on_the_downgraded_schema"]
+
+[[unit]]
+text = "Deleting a flag, archiving or deleting a segment and listing a segment's experiments answer 500, as does every route that reads or changes a flag's staging or development settings, its list of environments included, and the signed-in API key list, create and delete; a bulk archive answers 200 with every flag failed; reading, updating and deactivating a flag, a bulk disable and a flag's production environment PUT still answer 200."
+by = ["test:backend/tests/integration/database/test_flag_environments_migration.py::test_this_release_answers_500_where_it_reads_a_side_row_on_the_downgraded_schema"]
+
+[[unit]]
 text = "Roll the API back straight after the downgrade."
 by = ["exempt:instruction"]
 

@@ -39,6 +39,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from backend.app.core.balanced_blocks import balance_segments, balances_within_segments
+from backend.app.core.flag_environments import FLAG_ENVIRONMENTS, PRODUCTION
 from backend.app.core.pattern_match import PatternUnevaluable, report_unevaluable
 from backend.app.core.rules_engine import SEGMENT_MEMBERSHIP_KEY, TimeWindowUnreadable
 from backend.app.core.targeting_adapter import (
@@ -63,6 +64,7 @@ from backend.app.models.segment import (
 from backend.app.schemas.segment import MAX_MEMBER_ID_LENGTH
 from backend.app.schemas.storable_text import contains_unstorable_text
 from backend.app.schemas.targeting_rule import TargetingRules
+from backend.app.services.flag_environment_service import settings_mentioning
 
 logger = logging.getLogger(__name__)
 
@@ -387,37 +389,56 @@ TARGETED_BY_RULES = "targeted_by_rules"
 _INTERNAL_KEYS = (BALANCES_WITHIN, TARGETED_BY_RULES)
 
 
+def _environments_referencing(db: Session, segment_id: str) -> Dict[Any, List[str]]:
+    """The flags whose staging or development rules reference ``segment_id``
+    (#2011), each with those environments in their fixed order."""
+    found = {
+        (row.feature_flag_id, row.environment)
+        for row in settings_mentioning(db, segment_id)
+        if _references(row.targeting_rules, segment_id)
+    }
+    return {
+        flag_id: [name for name in FLAG_ENVIRONMENTS if (flag_id, name) in found]
+        for flag_id, _ in found
+    }
+
+
 def segment_references(
     db: Session, segment_id: Any
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """The flags and experiments that use ``segment_id``.
 
-    Flags that are not archived, by their rules, and experiments that are
-    draft, active or paused, by their rules or by the segments they balance
-    within (#448): the ones that can still evaluate the segment. A text
-    prefilter finds candidate rows; each is confirmed by reading the column
-    that matched, and a row whose value cannot be read counts. Query errors
-    propagate.
+    Flags that are not archived, by their rules in any environment, and
+    experiments that are draft, active or paused, by their rules or by the
+    segments they balance within (#448): the ones that can still evaluate the
+    segment. A text prefilter finds candidate rows; each is confirmed by
+    reading the column that matched, and a row whose value cannot be read
+    counts. Query errors propagate.
 
     Returns:
         ``(feature_flags, experiments)``: ``[{id, key, name}]`` and
-        ``[{id, key, name, status}]``, each ordered by key. An experiment also
-        carries ``balances_within: True`` when it balances within the segment
-        and ``targeted_by_rules: True`` when its rules reference it, for
-        :func:`segment_in_use_detail`'s message.
+        ``[{id, key, name, status}]``, each ordered by key. A flag whose
+        staging or development rules reference the segment (#2011) also
+        carries ``environments``, every environment whose rules do. An
+        experiment also carries ``balances_within: True`` when it balances
+        within the segment and ``targeted_by_rules: True`` when its rules
+        reference it, for :func:`segment_in_use_detail`'s message.
     """
     sid = str(segment_id).lower()
     pattern = f"%{sid}%"
+    outside_production = _environments_referencing(db, sid)
+    in_flag_rules = sa.cast(FeatureFlag.targeting_rules, sa.Text).ilike(pattern)
     flag_rows = (
         db.query(
             FeatureFlag.id,
             FeatureFlag.key,
             FeatureFlag.name,
             FeatureFlag.targeting_rules,
+            in_flag_rules.label("in_rules"),
         )
         .filter(
             FeatureFlag.status != FeatureFlagStatus.ARCHIVED,
-            sa.cast(FeatureFlag.targeting_rules, sa.Text).ilike(pattern),
+            sa.or_(in_flag_rules, FeatureFlag.id.in_(list(outside_production))),
         )
         .order_by(FeatureFlag.key)
         .all()
@@ -442,11 +463,16 @@ def segment_references(
         .order_by(Experiment.key)
         .all()
     )
-    flags = [
-        {"id": str(row.id), "key": row.key, "name": row.name}
-        for row in flag_rows
-        if _references(row.targeting_rules, sid)
-    ]
+    flags: List[Dict[str, Any]] = []
+    for row in flag_rows:
+        by_rules = bool(row.in_rules) and _references(row.targeting_rules, sid)
+        elsewhere = outside_production.get(row.id, [])
+        if not (by_rules or elsewhere):
+            continue
+        flag = {"id": str(row.id), "key": row.key, "name": row.name}
+        if elsewhere:
+            flag["environments"] = ([PRODUCTION] if by_rules else []) + elsewhere
+        flags.append(flag)
     experiments = []
     for row in experiment_rows:
         by_rules = bool(row.in_rules) and _references(row.targeting_rules, sid)

@@ -363,6 +363,21 @@ def test_a_flag_with_an_active_rollout_schedule_is_never_stale():
     assert reasons(item, evaluated=False, scheduled=False) == [NO_EVAL, OFF]
 
 
+def test_a_flag_on_in_staging_or_development_is_never_stale():
+    item = flag(status=FeatureFlagStatus.ACTIVE, rollout_percentage=0)
+    other = flag(status=FeatureFlagStatus.ACTIVE, rollout_percentage=0)
+    answer = stale_flags.classify(
+        [item, other],
+        now=NOW,
+        days=DAYS,
+        evaluations_seen=True,
+        evaluated_ids=set(),
+        active_schedule_ids=set(),
+        on_elsewhere_ids={item.id},
+    )
+    assert answer == {item.id: [], other.id: [NO_EVAL, OFF]}
+
+
 def test_every_flag_given_is_answered():
     items = [flag(), flag(status=FeatureFlagStatus.ARCHIVED), flag(created_at=NOW)]
     answer = stale_flags.classify(

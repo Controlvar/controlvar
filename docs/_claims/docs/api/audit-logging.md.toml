@@ -531,10 +531,38 @@ by = [
 ]
 
 [[unit]]
-text = "feature_flag_delete | feature_flag | DELETE /feature-flags/{id}"
+text = "feature_flag_update | feature_flag | PUT /feature-flags/{id}/environments/production and a promotion into production (beta), with what PUT /feature-flags/{id} records"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_put_to_production_is_the_stable_put",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_promotion_into_production_also_records_what_a_flag_update_records",
+]
+
+[[unit]]
+text = "feature_flag_update | feature_flag | Bulk archive of a flag that was on in staging or development, which turns it off there: old_value and new_value are then {\"status\", \"environments\"}, with the is_active of each of those environments"
+by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_bulk_archive_turns_the_flag_off_everywhere_and_names_where"]
+
+[[unit]]
+text = "feature_flag_environment_update | feature_flag | PUT /feature-flags/{id}/environments/{environment} (beta) changes a flag's settings in staging or development. old_value and new_value name the environment and what changed of is_active, rollout_percentage and configured (whether the flag had settings there); a change of rules is named in changed_fields"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_an_environment_change_records_what_changed_and_where",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_configuring_a_flag_records_that_it_was_not_configured",
+]
+
+[[unit]]
+text = "feature_flag_promote | feature_flag | POST /feature-flags/{id}/environments/{target}/promote (beta) copies a flag's settings from one environment into another. old_value and new_value are as for feature_flag_environment_update, with from and to"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_promotion_records_both_environments_and_the_change",
+]
+
+[[unit]]
+text = "feature_flag_delete | feature_flag | DELETE /feature-flags/{id}. When the flag had staging or development settings, old_value carries environments, each one's is_active and rollout_percentage"
 by = [
     "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_delete",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_flag_delete_records_the_side_rows_it_takes_with_it",
 ]
 
 [[unit]]
@@ -1057,7 +1085,7 @@ text = "Where | If the entry cannot be written"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "A feature flag created, changed, deleted, activated, deactivated, unarchived, toggled, enabled or disabled, or a bulk toggle | Nothing is saved and the response is 500 with a request ID; a bulk toggle saves none of its flags. Resend it once the problem is fixed"
+text = "A feature flag created, changed (in any environment), promoted, deleted, activated, deactivated, unarchived, toggled, enabled or disabled, or a bulk toggle | Nothing is saved and the response is 500 with a request ID; a bulk toggle saves none of its flags. Resend it once the problem is fixed"
 by = [
     "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_a_refused_entry_saves_nothing_and_answers_500",
     "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_a_refused_compliance_event_saves_nothing_and_answers_500",

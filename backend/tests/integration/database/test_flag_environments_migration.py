@@ -34,12 +34,13 @@ heads, in each profile, and run the documented commands. Then:
    waits for each lock it needs on its own bound, so it can wait for more
    than one; and a deadlock with a session updating a key ends it with the
    same refusal;
-6. the previous release's code (this tree without the revision and the
-   models' additions, where every key is a production key and nothing reads a
-   side row) creates, sets, lists, builds the ruleset and evaluates on this
-   schema exactly as this release does, through its routes too, ignoring a
-   staging row; this release turns the flag off through the stable PUT and the
-   previous release answers ``inactive``;
+6. the previous release's code (this tree without the revision, the models'
+   additions and the environment routes, where every key is a production key
+   and nothing reads or writes a side row) creates, sets, lists, builds the
+   ruleset and evaluates on this schema exactly as this release does, through
+   its routes too, ignoring a staging row; this release turns the flag off
+   through the stable PUT, and through production's environment PUT, and the
+   previous release answers ``inactive`` each time;
 7. the staging-key leg: the previous release treats a staging key as a
    production key: production's configuration on ``/evaluate``, its server
    error report counted, its evaluation counts recorded, and its assignment,
@@ -1449,8 +1450,8 @@ _MODEL_DECLARATIONS = {
     ),
 }
 
-#: The one module that reads the side rows, as 0.48.0 answers: from the flag
-#: rows alone. Asked about any other environment, it fails the request.
+#: The module the key routes read the side rows through, as 0.48.0 answers: from
+#: the flag rows alone. Asked about any other environment, it fails the request.
 _FLAG_ROWS_ONLY = textwrap.dedent(
     """
     from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
@@ -1477,10 +1478,52 @@ _FLAG_ROWS_ONLY = textwrap.dedent(
 )
 
 
+#: The modules that read and write the side rows, as 0.48.0 is without them:
+#: no side row is read or written, and no environment route exists. Each is
+#: named with a line of the module it replaces, so a renamed one fails here.
+_WITHOUT_SIDE_ROWS = {
+    ("backend", "app", "services", "flag_environment_reads.py"): (
+        "def served_flag(",
+        _FLAG_ROWS_ONLY,
+    ),
+    # The dashboard routes' reads, and every write.
+    ("backend", "app", "services", "flag_environment_service.py"): (
+        "def settings_of(",
+        """
+        def audit_side_rows(db, flag_id):
+            return {}
+
+
+        def flags_on_outside_production(db, flag_ids):
+            return set()
+
+
+        def settings_mentioning(db, words):
+            return []
+
+
+        def turn_off_environment_settings(db, flag_id):
+            return []
+        """,
+    ),
+    ("backend", "app", "api", "v1", "endpoints", "flag_environments.py"): (
+        "def update_flag_environment(",
+        """
+        from fastapi import APIRouter
+
+        router = APIRouter()
+        environments_router = APIRouter()
+        """,
+    ),
+}
+
+
 def _previous_release(profile: str, tmp_path) -> Path:
-    """Release N-1 (0.48.0): a copy of this tree without the revision and the
-    models' additions, where every key is a production key and nothing reads a
-    side row."""
+    """Release N-1 (0.48.0): a copy of this tree without the revision, the
+    models' additions and the environment routes, where every key is a
+    production key and nothing reads or writes a side row.
+    ``core/flag_environments.py`` stays: the names of the environments, and a
+    view of a side row that nothing left in the copy makes."""
     destination = tmp_path / "release-n-minus-1"
     if profile == FULL:
         tree = tree_profiles.full_tree(destination)
@@ -1489,9 +1532,10 @@ def _previous_release(profile: str, tmp_path) -> Path:
     versions = tree / "backend" / "app" / "db" / "migrations" / "versions"
     (revision_file,) = versions.glob(f"{REVISION}_*.py")
     revision_file.unlink()
-    reads = tree / "backend" / "app" / "services" / "flag_environment_reads.py"
-    assert "def served_flag(" in reads.read_text(encoding="utf-8"), reads
-    reads.write_text(_FLAG_ROWS_ONLY, encoding="utf-8")
+    for parts, (line, stub) in _WITHOUT_SIDE_ROWS.items():
+        module = tree.joinpath(*parts)
+        assert line in module.read_text(encoding="utf-8"), f"{module}: update it"
+        module.write_text(textwrap.dedent(stub), encoding="utf-8")
     for parts, declarations in _MODEL_DECLARATIONS.items():
         model = tree.joinpath(*parts)
         source = model.read_text(encoding="utf-8")
@@ -1688,32 +1732,35 @@ def test_the_previous_release_writes_and_serves_flags_on_this_schema(
     assert _settings(test_db, scratch_schema) == staging_before
 
     # In reverse: this release turns the flag off through the stable PUT, and
-    # N-1 answers `inactive` for every user. Staging's row is untouched.
+    # then, turned on again, through production's environment PUT. N-1 answers
+    # `inactive` for every user each time. Staging's row is untouched.
     token = _token(user)
-    turned_off = _client(
-        release_n,
-        scratch_schema,
-        tmp_path,
-        [
+    stable = f"/api/v1/feature-flags/{writes['id']}"
+    authorization = {"Authorization": f"Bearer {token}"}
+    for path in (stable, f"{stable}/environments/production"):
+        turned_off = _client(
+            release_n,
+            scratch_schema,
+            tmp_path,
             [
-                "PUT",
-                f"/api/v1/feature-flags/{writes['id']}",
-                {"Authorization": f"Bearer {token}"},
-                {"is_active": False},
-            ]
-        ],
-    )
-    ((status, body),) = turned_off["answers"]
-    assert status == 200, body
-    off = _client(
-        release_n_minus_1,
-        scratch_schema,
-        tmp_path,
-        [_evaluate("previous-release-flag", u, key) for u in USERS[:20]],
-    )
-    reasons = {(s, b["enabled"], b["reason"]) for s, b in off["answers"]}
-    assert reasons == {(200, False, "inactive")}, reasons
-    assert _settings(test_db, scratch_schema) == staging_before
+                ["PUT", stable, authorization, {"is_active": True}],
+                ["PUT", path, authorization, {"is_active": False}],
+            ],
+        )
+        for status, body in turned_off["answers"]:
+            assert status == 200, body
+        off = _client(
+            release_n_minus_1,
+            scratch_schema,
+            tmp_path,
+            [_evaluate("previous-release-flag", u, key) for u in USERS[:20]],
+        )
+        reasons = {(s, b["enabled"], b["reason"]) for s, b in off["answers"]}
+        assert reasons == {(200, False, "inactive")}, (
+            f"N-1 still serves previous-release-flag, which N turned off in "
+            f"production through PUT {path}: {reasons}"
+        )
+        assert _settings(test_db, scratch_schema) == staging_before
     shutil.rmtree(release_n_minus_1, ignore_errors=True)
 
 
@@ -2066,6 +2113,94 @@ def test_this_release_answers_500_to_a_production_key_on_the_downgraded_schema(
         ],
     )
     assert [status for status, _ in served["answers"]] == [500, 500], served["answers"]
+
+
+@pytest.mark.regression
+def test_this_release_answers_500_where_it_reads_a_side_row_on_the_downgraded_schema(
+    test_db, scratch_schema, tmp_path
+):
+    """The dashboard's half of the same outage. Once a flag is old enough to be
+    stale, the list reads the side table to say whether it is; deleting a flag,
+    archiving or deleting a segment, listing a segment's experiments and the
+    routes of a flag's staging and development settings read it too, and a bulk
+    archive writes it. The signed-in API key routes read the column the
+    downgrade dropped. The flag itself is still read and changed."""
+    tree = _at_this_revision(test_db, CORE, scratch_schema, tmp_path)
+    user = _user(test_db, scratch_schema)
+    authorization = {"Authorization": f"Bearer {_token(user)}"}
+    key_id, _ = _insert_key(test_db, scratch_schema, user.id, "production")
+    flag_id = _insert_flag(test_db, scratch_schema, "rolled-back-flag", "ACTIVE", 100)
+    with test_db.begin() as conn:
+        conn.execute(
+            text(
+                f'UPDATE "{scratch_schema}".feature_flags '
+                "SET created_at = now() - interval '400 days'"
+            )
+        )
+    keys = "/api/v1/api-keys"
+    flags = "/api/v1/feature-flags"
+    segments = "/api/v1/segments"
+    flag = f"{flags}/{flag_id}"
+    reads = [
+        ["GET", f"{flags}/", authorization, None],
+        ["GET", flag, authorization, None],
+    ]
+    condition = {"attribute": "country", "operator": "equals", "value": "US"}
+    rules = {"groups": [{"conditions": [condition]}]}
+    segment = {"name": "Rolled back", "rules": rules}
+    create = ["POST", f"{segments}/", authorization, segment]
+    before = _client(tree, scratch_schema, tmp_path, [*reads, create])
+    statuses = [status for status, _ in before["answers"]]
+    assert statuses == [200, 200, 201], before["answers"]
+    used_in = f"{segments}/{before['answers'][2][1]['id']}"
+    down = tree_profiles.alembic(tree, scratch_schema, "downgrade", PREVIOUS_CORE_HEAD)
+    assert down.returncode == 0, down.stderr[-3000:]
+
+    def bulk(action):
+        body = {"flag_ids": [flag_id], "action": action}
+        return ["POST", f"{flags}/bulk-toggle", authorization, body]
+
+    refused = [
+        reads[0],
+        ["DELETE", flag, authorization, None],
+        ["GET", f"{used_in}/experiments", authorization, None],
+        ["PUT", used_in, authorization, {"status": "archived"}],
+        ["DELETE", used_in, authorization, None],
+        ["GET", f"{flag}/environments", authorization, None],
+        ["GET", f"{flag}/environments/staging", authorization, None],
+        ["PUT", f"{flag}/environments/staging", authorization, {"is_active": False}],
+        [
+            "POST",
+            f"{flag}/environments/production/promote",
+            authorization,
+            {"from": "staging"},
+        ],
+        ["GET", keys, authorization, None],
+        ["POST", keys, authorization, {"name": "Rolled back"}],
+        ["DELETE", f"{keys}/{key_id}", authorization, None],
+    ]
+    answered = [
+        reads[1],
+        ["PUT", flag, authorization, {"rollout_percentage": 40}],
+        ["POST", f"{flag}/deactivate", authorization, None],
+        [
+            "PUT",
+            f"{flag}/environments/production",
+            authorization,
+            {"is_active": True},
+        ],
+        bulk("disable"),
+        bulk("archive"),
+        reads[1],
+    ]
+    after = _client(tree, scratch_schema, tmp_path, [*refused, *answered])
+    answers = after["answers"]
+    assert [status for status, _ in answers] == [500] * 12 + [200] * 7, answers
+    disabled, archived, read = (body for _, body in answers[-3:])
+    assert (disabled["succeeded"], disabled["failed"]) == (1, 0), disabled
+    assert (archived["succeeded"], archived["failed"]) == (0, 1), archived
+    # Neither the refused delete nor the failed archive changed the flag.
+    assert (read["status"], read["rollout_percentage"]) == ("inactive", 40), read
 
 
 # ---------------------------------------------------------------------------

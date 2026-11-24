@@ -94,6 +94,12 @@ WORDS = {
     (E + "feature_flags.py", "update_feature_flag"): [
         (("feature_flag", "update"), "targeting, values, rollout")
     ],
+    (E + "flag_environments.py", "promote_flag_environment"): [
+        (("feature_flag", "update"), "promoting them")
+    ],
+    (E + "flag_environments.py", "update_flag_environment"): [
+        (("feature_flag", "update"), "its settings in each environment")
+    ],
     (E + "global_holdout.py", "_require_developer"): [
         (("experiment", "create"), "read the global holdout")
     ],
@@ -155,6 +161,8 @@ NO_WORDS = {
     (E + "experiments.py", "list_experiments"),
     (E + "feature_flags.py", "get_feature_flag"),
     (E + "feature_flags.py", "list_feature_flags"),
+    (E + "flag_environments.py", "_readable_flag"),
+    (E + "flag_environments.py", "get_environment_flag_settings"),
     (E + "global_holdout.py", "get_holdout_results"),
     (E + "llm_experiments.py", "get_llm_experiment"),
     (E + "llm_experiments.py", "list_llm_experiments"),

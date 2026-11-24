@@ -191,6 +191,8 @@ WRITTEN_ACTION_TYPES: frozenset = frozenset(
         ActionType.FEATURE_FLAG_DELETE,
         ActionType.FEATURE_FLAG_ACTIVATE,
         ActionType.FEATURE_FLAG_DEACTIVATE,
+        ActionType.FEATURE_FLAG_ENVIRONMENT_UPDATE,
+        ActionType.FEATURE_FLAG_PROMOTE,
         ActionType.EXPERIMENT_CREATE,
         ActionType.EXPERIMENT_UPDATE,
         ActionType.EXPERIMENT_DELETE,

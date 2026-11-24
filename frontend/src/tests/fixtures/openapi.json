@@ -351,6 +351,18 @@
         "summary": "Reset counters (ADMIN only)"
       }
     },
+    "/api/v1/environments": {
+      "get": {
+        "operationId": "list_environments_api_v1_environments_get",
+        "summary": "List the flag environments (beta)"
+      }
+    },
+    "/api/v1/environments/{environment}/feature-flag-settings": {
+      "get": {
+        "operationId": "get_environment_flag_settings_api_v1_environments__environment__feature_flag_settings_get",
+        "summary": "Get several feature flags' settings in one environment (beta)"
+      }
+    },
     "/api/v1/etl/crawler/run": {
       "post": {
         "operationId": "run_crawler_api_v1_etl_crawler_run_post",
@@ -603,6 +615,28 @@
       "post": {
         "operationId": "enable_feature_flag_api_v1_feature_flags__flag_id__enable_post",
         "summary": "Enable feature flag"
+      }
+    },
+    "/api/v1/feature-flags/{flag_id}/environments": {
+      "get": {
+        "operationId": "get_flag_environments_api_v1_feature_flags__flag_id__environments_get",
+        "summary": "Get a feature flag's settings in every environment (beta)"
+      }
+    },
+    "/api/v1/feature-flags/{flag_id}/environments/{environment}": {
+      "get": {
+        "operationId": "get_flag_environment_api_v1_feature_flags__flag_id__environments__environment__get",
+        "summary": "Get a feature flag's settings in one environment (beta)"
+      },
+      "put": {
+        "operationId": "update_flag_environment_api_v1_feature_flags__flag_id__environments__environment__put",
+        "summary": "Change a feature flag's settings in one environment (beta)"
+      }
+    },
+    "/api/v1/feature-flags/{flag_id}/environments/{target}/promote": {
+      "post": {
+        "operationId": "promote_flag_environment_api_v1_feature_flags__flag_id__environments__target__promote_post",
+        "summary": "Promote a feature flag's settings into an environment (beta)"
       }
     },
     "/api/v1/feature-flags/{flag_id}/history": {

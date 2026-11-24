@@ -16,8 +16,8 @@ N is 30 days by default; `STALE_FLAG_DAYS` sets it, from 1 to 3650, for the
 whole installation; a change needs a restart.
 
 A flag is stale when it was created at least N days ago, is not archived, is not
-tagged `permanent`, has no active rollout schedule, and at least one of these
-reasons applies:
+tagged `permanent`, has no active rollout schedule, is not on in staging or
+development, and at least one of these reasons applies:
 
 | Reason | When |
 |---|---|
@@ -36,7 +36,9 @@ reasons applies to it.
 
 An archived flag is never stale, and neither is a flag whose rollout schedule is
 active, because its next stage will change it. A schedule that is paused, a
-draft, completed or cancelled does not keep a flag off the list.
+draft, completed or cancelled does not keep a flag off the list. A flag that is
+on in staging or development (beta) is not stale either, whatever its percentage
+there.
 
 ## What counts as an evaluation
 
@@ -63,12 +65,14 @@ not reach it, sees this.
 ## What unchanged means
 
 Unchanged means no setting of the flag changed: an edit, including a rename, or
-a status change, a rollout step or a safety rollback restarts the count.
+a status change, a rollout step or a safety rollback restarts the count. A change
+to its staging or development settings does not.
 
 The count starts from the flag's `updated_at`. The request for this feature
 (#1808) noted that `updated_at` is not the time the flag's answer last changed,
 and the platform does not record that time. It is used anyway: every change to a
-flag sets it, so a flag marked unchanged has not changed at all in N days. The
+flag sets it, its staging and development settings apart, so a flag marked
+unchanged has not changed in production in N days. The
 cost is that a change that leaves the answer as it was, a rename for example,
 also restarts the count.
 

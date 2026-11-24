@@ -802,7 +802,7 @@ by = [
     "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_valid_bearer_does_not_read_the_key",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
-count = 17
+count = 18
 
 [[unit]]
 text = "Fields: email, username and full_name may be null."
@@ -1678,6 +1678,122 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 [[unit]]
 text = "Errors: 403 without permission to change flags, 404 for an unknown flag"
 by = ["test:backend/tests/integration/api/test_archived_flag_verbs.py::test_unarchive_an_unknown_flag_is_404"]
+
+[[unit]]
+text = "Flag environments (beta)"
+by = ["test:backend/tests/unit/api/test_flag_environment_operations.py::test_each_operation_is_beta_and_answers_what_it_says"]
+
+[[unit]]
+text = "A flag has settings of its own in production, staging and development: whether it is on, its rollout percentage and its targeting rules."
+by = [
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_the_environments_are_listed_for_every_role",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_each_environment_answers_its_own_settings",
+]
+
+[[unit]]
+text = "Production's are the flag's own."
+by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_a_put_to_production_is_the_stable_put"]
+
+[[unit]]
+text = "In staging and development a flag is off until someone configures it there."
+by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_a_flag_nobody_configured_is_off_outside_production"]
+
+[[unit]]
+text = "Endpoint | What it does"
+by = ["exempt:label"]
+
+[[unit]]
+text = "GET /api/v1/environments | The three environments"
+by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_the_environments_are_listed_for_every_role"]
+
+[[unit]]
+text = "GET /api/v1/feature-flags/{flag_id}/environments | The flag's settings in each"
+by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_each_environment_answers_its_own_settings"]
+
+[[unit]]
+text = "GET /api/v1/feature-flags/{flag_id}/environments/{environment} | Its settings in one"
+by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_a_flag_nobody_configured_is_off_outside_production"]
+
+[[unit]]
+text = "GET /api/v1/environments/{environment}/feature-flag-settings?flag_id={id} | Several flags' settings in one: flag_id 1 to 100 times; an id that names no flag has no entry"
+by = [
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_the_batch_answers_each_flag_as_the_single_read_does",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_the_batch_takes_1_to_100_ids",
+]
+
+[[unit]]
+text = "PUT /api/v1/feature-flags/{flag_id}/environments/{environment} | Change its settings in one"
+by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_a_put_changes_only_its_environment"]
+
+[[unit]]
+text = "POST /api/v1/feature-flags/{flag_id}/environments/{target}/promote | Copy its settings into target from the environment the body names"
+by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_promotion_copies_all_three_fields_and_nothing_else"]
+
+[[unit]]
+text = "Permissions: any signed-in user may read."
+by = [
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_flag_nobody_configured_is_off_outside_production",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_every_route_needs_a_sign_in",
+]
+
+[[unit]]
+text = "Changing and promoting need ADMIN or DEVELOPER, and in the full profile anyone whose custom role or direct grant gives feature_flag (update); anyone else gets 403"
+by = [
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_environment_changes_require_update_on_the_flag",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_environment_changes_follow_a_flag_update_grant",
+]
+
+[[unit]]
+text = "Settings: {\"environment\", \"status\", \"is_active\", \"rollout_percentage\", \"targeting_rules\", \"configured\", \"updated_at\"}."
+by = ["test:backend/tests/unit/api/test_flag_environment_operations.py::test_the_schemas_are_the_settings_of_one_environment"]
+
+[[unit]]
+text = "configured is false for a flag nobody has configured in staging or development."
+by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_a_flag_nobody_configured_is_off_outside_production"]
+
+[[unit]]
+text = "An archived flag's status is archived in every environment"
+by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_an_archived_flag_is_archived_in_every_environment"]
+
+[[unit]]
+text = "PUT body: {\"is_active\", \"rollout_percentage\", \"targeting_rules\"}, each optional; only the fields sent change, and targeting_rules: null clears the rules."
+by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_only_the_fields_sent_change_and_null_clears_the_rules"]
+
+[[unit]]
+text = "A change to production is the one PUT /api/v1/feature-flags/{flag_id} makes"
+by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_a_put_to_production_is_the_stable_put"]
+
+[[unit]]
+text = "Promote body: {\"from\": environment}."
+by = [
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_promotion_body_that_names_no_environment_is_refused",
+    "test:backend/tests/unit/api/test_flag_environment_operations.py::test_the_schemas_are_the_settings_of_one_environment",
+]
+
+[[unit]]
+text = "is_active, rollout_percentage and targeting_rules are copied, all three together, and nothing else: not the flag's value type and values, its rollout schedules or its safety configuration"
+by = [
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_promotion_copies_exactly_the_per_environment_fields",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_promotion_copies_all_three_fields_and_nothing_else",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_change_and_its_entries_are_one_transaction_under_the_lock",
+]
+
+[[unit]]
+text = "Errors: 400 for is_active: true on an archived flag; 403 without permission to change flags; 404 for an unknown flag; 422 for a name that is not an environment, for a field the routes do not read, for rules a flag update refuses, or for from naming the target; 500 when the change cannot be saved with its audit entry, and then nothing is changed"
+by = [
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_an_archived_flag_is_not_turned_on_in_any_environment",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_environment_changes_require_update_on_the_flag",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_an_unknown_flag_is_404_and_a_bad_id_422",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_an_unknown_flag_cannot_be_changed_or_promoted",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_an_unknown_environment_in_the_path_is_the_standard_422",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_body_a_flag_update_would_refuse_is_refused",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_promoting_into_the_source_is_refused",
+    "test:backend/tests/integration/api/test_flag_change_audit_strict.py::test_a_refused_entry_saves_nothing_and_answers_500",
+]
+
+[[unit]]
+text = "Archiving a flag with bulk toggle turns it off in staging and development too; unarchiving it leaves it off there"
+by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_bulk_archive_turns_the_flag_off_everywhere_and_names_where"]
 
 [[unit]]
 text = "Tracking Endpoints"
@@ -3855,6 +3971,10 @@ by = [
 [[unit]]
 text = "A stored row that mentions the segment's id but whose rules cannot be read is listed too."
 by = ["test:backend/tests/integration/api/test_segment_in_use.py::test_unreadable_reference_counts"]
+
+[[unit]]
+text = "So is a flag whose staging or development rules name the segment (Flag environments); it carries environments, every environment whose rules do."
+by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_a_segment_used_only_in_staging_is_in_use_and_names_staging"]
 
 [[unit]]
 text = "Upgrading: segment rules"

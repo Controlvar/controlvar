@@ -31,6 +31,7 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
 from backend.app.core.context_limits import MAX_CONTEXT_BYTES
+from backend.app.core.flag_environments import FLAG_ENVIRONMENTS, PRODUCTION
 from backend.app.core.pattern_match import PatternUnevaluable, report_unevaluable
 from backend.app.core.rules_engine import TimeWindowUnreadable, evaluate_condition
 from backend.app.core.targeting_adapter import (
@@ -62,6 +63,7 @@ from backend.app.schemas.segment import (
 from backend.app.schemas.storable_text import contains_unstorable_text
 from backend.app.schemas.targeting_rule import TargetingRules
 from backend.app.services.event_matching import EXPOSURE_EVENT_TYPES
+from backend.app.services.flag_environment_service import settings_mentioning
 from backend.app.services.segment_membership import (
     balance_references,
     segment_in_use_detail,
@@ -783,12 +785,13 @@ class AudienceService:
     ) -> SegmentExperimentResponse:
         """
         Find all experiments and feature flags that reference this segment in their
-        targeting rules (JSONB field contains the segment_id), and the experiments
-        that balance within it.
+        targeting rules (JSONB field contains the segment_id), in any environment
+        for a flag, and the experiments that balance within it.
 
         This performs a lightweight search by looking for the segment UUID inside
-        the JSONB targeting_rules of Experiment and FeatureFlag records, and in an
-        experiment's balance_within, which is then read as archiving reads it.
+        the JSONB targeting_rules of Experiment and FeatureFlag records and of a
+        flag's staging and development settings, and in an experiment's
+        balance_within, which is then read as archiving reads it.
 
         Args:
             db: SQLAlchemy session.
@@ -834,13 +837,23 @@ class AudienceService:
                 }
             )
 
+        # A flag whose staging or development rules name the segment (#2011) is
+        # listed too, with the environments whose rules do.
+        elsewhere: Dict[UUID, Set[str]] = {}
+        for row in settings_mentioning(db, segment_id):
+            elsewhere.setdefault(row.feature_flag_id, set()).add(row.environment)
+        in_flag_rules = FeatureFlag.targeting_rules.cast(sa.Text).contains(segment_id)
         feature_flags = (
-            db.query(FeatureFlag)
-            .filter(FeatureFlag.targeting_rules.cast(sa.Text).contains(segment_id))
+            db.query(FeatureFlag, in_flag_rules.label("in_rules"))
+            .filter(sa.or_(in_flag_rules, FeatureFlag.id.in_(list(elsewhere))))
             .all()
         )
-        for flag in feature_flags:
-            feature_flags_data.append({"id": str(flag.id), "name": flag.name})
+        for flag, by_rules in feature_flags:
+            listed: Dict[str, Any] = {"id": str(flag.id), "name": flag.name}
+            if flag.id in elsewhere:
+                names = elsewhere[flag.id] | ({PRODUCTION} if by_rules else set())
+                listed["environments"] = [n for n in FLAG_ENVIRONMENTS if n in names]
+            feature_flags_data.append(listed)
 
         return SegmentExperimentResponse(
             segment_id=segment_id,
