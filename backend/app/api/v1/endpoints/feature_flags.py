@@ -153,6 +153,12 @@ def _raise_if_key_conflict(
         ) from None
 
 
+def _status_text(status: Any) -> Optional[str]:
+    """A stored status as the responses spell it: ``active``, lower-cased."""
+    status = getattr(status, "value", status)
+    return None if status is None else str(status).lower()
+
+
 def _status_read_only() -> RequestValidationError:
     """The 422 for a sent ``status`` that differs from the flag's (#94).
 
@@ -638,7 +644,9 @@ async def update_feature_flag(
     old_flag_snapshot = {
         "key": flag.key,
         "name": flag.name,
-        "status": str(flag.status),
+        # The spelling ``FeatureFlagRead`` gives the "after" side, so an
+        # update that leaves the status alone records no status change (#2066).
+        "status": _status_text(flag.status),
         "rollout_percentage": flag.rollout_percentage,
         "value_type": flag_value_type(flag),
     }
