@@ -37,7 +37,8 @@ pytestmark = [pytest.mark.integration]
 REVISION = "8fd44fb483a2"
 PREVIOUS_CORE_HEAD = "b8c9d0e1f2a3"
 #: The core head of this tree: ``upgrade heads`` runs on past this revision to
-#: ``t449_identity_aliases`` (identity aliases), through ``t1812_user_totp``
+#: ``t2011_flag_environments`` (flag environments), through
+#: ``t449_identity_aliases`` (identity aliases), ``t1812_user_totp``
 #: (two-step sign-in), ``4955571d232c`` (visual
 #: experiments), ``271f03a31742``, ``d12cbd384bbe``, ``a89544fb1075``,
 #: ``1ab99332f0ba``,
@@ -49,7 +50,7 @@ PREVIOUS_CORE_HEAD = "b8c9d0e1f2a3"
 #: stage started) and ``c448_balance_within`` (balance the split within
 #: groups); a database built by ``create_all`` already carries what they
 #: build, so they add nothing here.
-CORE_HEAD = "t449_identity_aliases"
+CORE_HEAD = "t2011_flag_environments"
 #: Tables that a later core revision's downgrade drops: a downgrade from the
 #: head to this test's target unapplies those revisions too.  ``d29a479daafe``
 #: (#445) drops ``holdout_population``; ``37dcb2969766`` (#440) drops
@@ -57,7 +58,8 @@ CORE_HEAD = "t449_identity_aliases"
 #: ``c448_balance_within`` (#448) drops ``balance_group_counters``;
 #: ``4955571d232c`` (#1545) drops ``visual_tokens``; ``t1812_user_totp``
 #: (#1812) drops ``user_totp``; ``t449_identity_aliases`` (#449) drops
-#: ``identity_aliases``.
+#: ``identity_aliases``; ``t2011_flag_environments`` (#2011) drops
+#: ``flag_environment_settings``.
 LATER_DOWNGRADE_TABLES = {
     "holdout_population",
     "segment_members",
@@ -66,6 +68,7 @@ LATER_DOWNGRADE_TABLES = {
     "visual_tokens",
     "user_totp",
     "identity_aliases",
+    "flag_environment_settings",
 }
 #: The modules revision the previous full release (0.10.0) recorded, and the
 #: branch's head in this tree.  This tree also carries

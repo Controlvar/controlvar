@@ -1,9 +1,11 @@
 """The lock budget of each release's upgrade, as a literal map (#449).
 
 Every revision a release's upgrade runs declares, in seconds, how long it can
-make the upgrade wait for a lock: the ``lock_timeout`` it sets around the one
-statement that can wait, or 0 when nothing it does can wait. The upgrade runs
-all of its revisions in one transaction (``env.py`` sets no
+make the upgrade wait for a lock: the sum of the ``lock_timeout`` bounds it
+sets, one around each block of statements that can wait (PostgreSQL applies a
+bound to each lock it waits for, so a revision with two blocks can wait for
+both), or 0 when nothing it does can wait. The upgrade runs all of its
+revisions in one transaction (``env.py`` sets no
 ``transaction_per_migration``), so the waits add up, and their sum is at most
 ``CAP_SECONDS``. A lock timeout in any revision rolls back every revision of
 that run.
@@ -57,10 +59,15 @@ class Release:
     declared: Dict[str, float]
 
 
-#: Oldest first; a release's walk ends where the next one's starts. 0.48.0's
-#: upgrade starts at 0.47.0's heads and runs ``t449_identity_aliases``, whose
-#: ``SET LOCAL lock_timeout = '250ms'`` bounds its one wait (behind a concurrent
-#: creation of the same table). A tuple of records, not a dict keyed by release:
+#: Oldest first; a release's walk ends where the next one's starts. A revision
+#: declares the sum of its blocks' bounds. 0.48.0's upgrade starts at 0.47.0's
+#: heads and runs ``t449_identity_aliases``, whose ``SET LOCAL lock_timeout =
+#: '250ms'`` bounds its one wait (behind a concurrent creation of the same
+#: table). 0.49.0's starts at 0.48.0's released heads and runs
+#: ``t2011_flag_environments``, which has two blocks: ``'500ms'`` for the lock
+#: its new table's foreign key takes on ``feature_flags``, then ``'1500ms'``
+#: for ``api_keys``, 2 s in all; #2012's ``t2012`` adds its 1 s here, for a
+#: planned 0.49.0 sum of 3 s. A tuple of records, not a dict keyed by release:
 #: ``test_engine_versions_frozen.py`` reads a dict keyed ``N.N.N`` as a table of
 #: stats-engine pins, and these are product releases.
 RELEASES: Tuple[Release, ...] = (
@@ -69,6 +76,12 @@ RELEASES: Tuple[Release, ...] = (
         start_heads=("t1812_user_totp", "modules_0005_redshift"),
         declared={"t449_identity_aliases": 0.25},
     ),
+    # t2011: 500 ms on feature_flags, then 1500 ms on api_keys.
+    Release(
+        name="0.49.0",
+        start_heads=("t449_identity_aliases", "modules_0005_redshift"),
+        declared={"t2011_flag_environments": 2},
+    ),
 )
 
 
@@ -76,6 +89,14 @@ def release(name: str) -> Release:
     """The entry of ``RELEASES`` for *name*."""
     (found,) = [entry for entry in RELEASES if entry.name == name]
     return found
+
+
+def end_heads(name: str) -> Optional[Tuple[str, ...]]:
+    """Where *name*'s walk ends: the next release's start heads, or ``None``
+    (the current heads) for the newest release."""
+    names = [entry.name for entry in RELEASES]
+    index = names.index(name)
+    return RELEASES[index + 1].start_heads if index + 1 < len(RELEASES) else None
 
 
 def _script() -> ScriptDirectory:
@@ -165,7 +186,7 @@ def problems(
 def test_every_revision_each_release_runs_is_declared_and_the_sum_fits():
     script = _script()
     for entry in RELEASES:
-        print(f"{entry.name}: walk {walk(script, entry)}")
+        print(f"{entry.name}: walk {walk(script, entry, end_heads(entry.name))}")
     assert problems(script, RELEASES) == {}
 
 
@@ -179,8 +200,24 @@ def test_0_48_0_runs_t449_alone_from_0_47_0_and_declares_a_quarter_second():
     ``t1812_user_totp`` (with ``modules_0005_redshift`` where it exists) the
     upgrade runs ``t449_identity_aliases`` and nothing else."""
     entry = release("0.48.0")
-    assert walk(_script(), entry) == ["t449_identity_aliases"]
+    assert walk(_script(), entry, release("0.49.0").start_heads) == [
+        "t449_identity_aliases"
+    ]
     assert entry.declared == {"t449_identity_aliases": 0.25}
+
+
+def test_0_49_0_starts_at_0_48_0s_released_heads_and_t2011_declares_two_seconds():
+    """0.48.0's walk now ends at 0.48.0's released heads, which shipped in
+    v0.48.0 (``t449_identity_aliases`` and, where the modules branch exists,
+    ``modules_0005_redshift``), and 0.49.0's starts there. In both profiles
+    0.49.0's upgrade runs ``t2011_flag_environments`` and declares 2 s, of the
+    planned 3 s with #2012's revision."""
+    entry = release("0.49.0")
+    assert entry.start_heads == ("t449_identity_aliases", "modules_0005_redshift")
+    assert end_heads("0.48.0") == entry.start_heads
+    assert walk(_script(), entry, end_heads("0.49.0")) == ["t2011_flag_environments"]
+    assert entry.declared == {"t2011_flag_environments": 2}
+    assert sum(entry.declared.values()) == 2
 
 
 def test_a_declared_bound_is_a_positive_number_or_zero():

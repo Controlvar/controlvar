@@ -2,8 +2,8 @@
 
 * IA-M2: its id fits ``alembic_version.version_num`` (32 characters), its
   ``down_revision`` is the literal ``t1812_user_totp`` (0.47.0's core head),
-  and the heads are exactly this revision and, in a full tree, the modules
-  head.
+  and its only child is ``t2011_flag_environments`` (#2011), the core head
+  since.
 * IA-M5, without a database: the migration creates the model's columns with
   the model's types, nullability and server defaults, the model's named check
   and index, and no foreign key.
@@ -61,11 +61,19 @@ def test_it_extends_0_47_0s_core_head_and_fits_the_version_table():
     assert len(revision.revision) <= 32
 
 
-def test_the_heads_are_this_revision_and_in_a_full_tree_the_modules_head():
-    expected = {REVISION}
-    if (REPO_ROOT / "modules").is_dir():
-        expected.add("modules_0005_redshift")
-    assert set(_script().get_heads()) == expected
+def test_this_revision_is_extended_by_the_core_head_and_nothing_else():
+    """0.48.0 shipped this revision as the core head; ``t2011_flag_environments``
+    (#2011) is its only child, and the heads test is that revision's now
+    (``test_flag_environments_revision.py``)."""
+    script = _script()
+    children = [
+        r.revision
+        for r in script.walk_revisions()
+        if r.down_revision == REVISION
+        or (isinstance(r.down_revision, tuple) and REVISION in r.down_revision)
+    ]
+    assert children == ["t2011_flag_environments"]
+    assert REVISION not in script.get_heads()
 
 
 class _Recorder:
