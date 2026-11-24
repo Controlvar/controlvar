@@ -9,8 +9,8 @@ whose stamp no longer matches the stored hash is refused. So:
   ``POST /api/v1/auth/login`` gives it), and every earlier token, the one that
   sent the request included, answers 401 from then on;
 * an account that sign-in would ask for a code or for setting two-step
-  sign-in up, or one the answer could not describe (no email address or no
-  username), gets 204 as before, and every token of the account ends;
+  sign-in up, or one with no email address (sign-in finds an account by its
+  address), gets 204 as before, and every token of the account ends;
 * a sign-in that took its password step before the change starts again;
 * the 200 answer is recorded as a sign-in (one ``user_login`` entry), the
   204 answer records nothing;
@@ -312,14 +312,20 @@ def test_an_account_that_signs_in_with_a_second_step_gets_204_and_signs_in_again
 @pytest.mark.regression
 @pytest.mark.parametrize(
     "account",
-    ["plain", "two-step-on", "required-not-set-up", "required-set-up"],
+    ["plain", "no-username", "two-step-on", "required-not-set-up", "required-set-up"],
 )
 def test_the_change_issues_a_token_exactly_when_sign_in_would(
     client, make_user, clock, require, account
 ):
     """The change's answer carries an access token for the same accounts as
-    ``POST /auth/login`` with the new password does, and for no other."""
-    user = make_user(role=UserRole.VIEWER if account == "plain" else UserRole.ANALYST)
+    ``POST /auth/login`` with the new password does, and for no other. One
+    with no username (#2067) is among them, with ``username`` null in both
+    answers."""
+    signs_in = account in ("plain", "no-username")
+    user = make_user(
+        role=UserRole.VIEWER if signs_in else UserRole.ANALYST,
+        username=None if account == "no-username" else _UNSET,
+    )
     if account in ("required-not-set-up", "required-set-up"):
         require("ANALYST")
     if account in ("two-step-on", "required-set-up"):
@@ -335,21 +341,22 @@ def test_the_change_issues_a_token_exactly_when_sign_in_would(
         change.status_code,
         login.json(),
     )
-    assert ("access_token" in change.text) is (account == "plain")
+    assert ("access_token" in change.text) is signs_in
+    assert change.status_code == (200 if signs_in else 204)
+    if account == "no-username":
+        for answer in (change, login):
+            assert answer.json()["user"]["username"] is None
+            assert answer.json()["user"]["email"] == user.email
 
 
 @pytest.mark.regression
-@pytest.mark.parametrize("missing", ["no-email", "no-username"])
-def test_an_account_the_answer_cannot_describe_gets_204_and_its_sessions_end(
-    client, make_user, read, missing
+def test_an_account_with_no_email_address_gets_204_and_its_sessions_end(
+    client, make_user, read
 ):
-    """``UserMe`` needs both an address and a username: without one, the
-    change still ends every session and answers 204, never a 500 after the
-    change has been committed."""
-    user = make_user(
-        email=None if missing == "no-email" else _UNSET,
-        username=None if missing == "no-username" else _UNSET,
-    )
+    """Sign-in finds an account by its email address, so a password does not
+    sign this one in: the change ends every session and answers 204 with no
+    token, and records no sign-in."""
+    user = make_user(email=None)
     earlier = _bearer(user)
 
     response = _change(client, earlier)

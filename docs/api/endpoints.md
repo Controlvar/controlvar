@@ -567,6 +567,7 @@ curl -s "http://localhost:8000/api/v1/audit-logs/?page=4611686018427387905&limit
     "auth_provider": "local"
   }
   ```
+- **Fields**: `email`, `username` and `full_name` may be `null`.
 
 ## User Management Endpoints
 

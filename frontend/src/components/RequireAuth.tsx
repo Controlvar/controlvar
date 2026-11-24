@@ -84,8 +84,11 @@ export function RequireAuth({ children, roles, superuser, fallbackPath = '/exper
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">403</p>
       <p className="text-slate-700 text-lg">You do not have permission to access this page.</p>
       <p className="text-sm text-slate-500">
-        Signed in as <span className="font-medium">{user.email}</span> ({user.role}). This page
-        requires {requirement}.
+        Signed in as{' '}
+        <span className="font-medium">
+          {user.email || user.username || 'an account with no email address'}
+        </span>{' '}
+        ({user.role}). This page requires {requirement}.
       </p>
       <Link href={fallbackPath} className="text-blue-600 hover:underline" aria-label="Go to Home">
         Go to Home

@@ -156,7 +156,7 @@ def audit(monkeypatch):
     return written
 
 
-def _client(db, *, signed_in=None, superuser=None) -> TestClient:
+def _client(db, *, signed_in=None, superuser=None, raise_errors=False) -> TestClient:
     def stub_db():
         yield db
 
@@ -165,7 +165,7 @@ def _client(db, *, signed_in=None, superuser=None) -> TestClient:
         app.dependency_overrides[deps.get_current_active_user] = lambda: signed_in
     if superuser is not None:
         app.dependency_overrides[deps.get_current_superuser] = lambda: superuser
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(app, raise_server_exceptions=raise_errors)
 
 
 # ---------------------------------------------------------------------------
@@ -430,6 +430,27 @@ def test_the_code_step_signs_in_and_records_the_second_step(method, monkeypatch,
     )
     assert [entry["after"] for entry in audit] == [
         {"provider": "local", "second_step": method}
+    ]
+
+
+@pytest.mark.regression
+def test_the_code_step_signs_in_an_account_with_no_username(monkeypatch, audit):
+    """``user.username`` is ``null`` in the answer (#2067); it answered 500.
+    The sign-in is recorded under the account's id."""
+    user = _user(username=None)
+    monkeypatch.setattr(
+        two_factor_service, "verify_sign_in", lambda *a, **k: CheckResult("totp")
+    )
+    client = _client(_db(user), raise_errors=True)
+    response = _verify(client, create_mfa_token(user), code="123456")
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert decode_local_token(body["access_token"])["sub"] == str(user.id)
+    assert body["user"]["username"] is None
+    assert body["user"]["email"] == user.email
+    assert [(entry["entity_name"], entry["after"]) for entry in audit] == [
+        (str(user.id), {"provider": "local", "second_step": "totp"})
     ]
 
 
@@ -1032,6 +1053,32 @@ def test_the_first_code_turns_it_on_and_signs_in(require, monkeypatch, audit):
     assert login_attempt_tracker.status(_key(user.email)).failures == 0
     assert [entry["after"] for entry in audit] == [
         {"provider": "local", "second_step": "totp"}
+    ]
+
+
+@pytest.mark.regression
+def test_the_first_code_signs_in_an_account_with_no_username(
+    require, monkeypatch, audit
+):
+    """``login.user.username`` is ``null`` in the answer, beside the recovery
+    codes (#2067); it answered 500. Recorded under the account's id."""
+    require("DEVELOPER")
+    user = _user(role=UserRole.DEVELOPER, username=None)
+    codes = ["CODE%06d" % i for i in range(10)]
+    monkeypatch.setattr(two_factor_service, "confirm", lambda *a, **k: codes)
+    response = _client(_db(user), raise_errors=True).post(
+        ENROL_CONFIRM, json={"mfa_token": _enrol_token(user), "code": "123456"}
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["recovery_codes"] == codes
+    login = body["login"]
+    assert decode_local_token(login["access_token"])["sub"] == str(user.id)
+    assert login["user"]["username"] is None
+    assert login["user"]["email"] == user.email
+    assert [(entry["entity_name"], entry["after"]) for entry in audit] == [
+        (str(user.id), {"provider": "local", "second_step": "totp"})
     ]
 
 

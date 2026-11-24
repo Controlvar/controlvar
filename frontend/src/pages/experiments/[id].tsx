@@ -451,6 +451,7 @@ export default function ExperimentDetailPage() {
   // never you.
   const isOwner =
     user !== null && experiment.owner_id !== null && user.id === experiment.owner_id;
+  const ownName = user?.email || user?.username;
   const resultsAvailable = status !== 'draft';
   const showRoleNote = !mayChange && !mayChangePending && statusActions.length > 0;
   const primaryMetric = experiment.metrics.find((m) => m.is_primary) ?? experiment.metrics[0];
@@ -561,7 +562,9 @@ export default function ExperimentDetailPage() {
                   <dt className="text-slate-500">Owner</dt>
                   <dd data-testid="experiment-owner" title={experiment.owner_id ?? undefined}>
                     {isOwner
-                      ? `You (${user?.email ?? user?.username})`
+                      ? ownName
+                        ? `You (${ownName})`
+                        : 'You'
                       : experiment.owner_name ||
                         (experiment.owner_id === null ? 'No owner' : shortId(experiment.owner_id))}
                   </dd>
