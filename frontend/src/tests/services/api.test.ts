@@ -124,6 +124,12 @@ describe('apiBase / apiUrl / buildQuery', () => {
     expect(buildQuery(undefined)).toBe('');
   });
 
+  it('repeats a key once per array item, in order, and sends nothing for an empty array', () => {
+    expect(buildQuery({ flag_id: ['a', 'b', 'c'], limit: 5 })).toBe('?flag_id=a&flag_id=b&flag_id=c&limit=5');
+    expect(buildQuery({ flag_id: [] })).toBe('');
+    expect(buildQuery({ n: [1, 2], ok: [true] })).toBe('?n=1&n=2&ok=true');
+  });
+
   it('derives the websocket base from the api base or location', () => {
     expect(wsBase()).toBe('ws://localhost');
     process.env.NEXT_PUBLIC_API_URL = 'https://api.example.com';

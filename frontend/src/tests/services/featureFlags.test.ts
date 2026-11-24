@@ -183,6 +183,61 @@ describe('FeatureFlagsService.safetyCheck', () => {
   });
 });
 
+// Flag environments (beta routes). Staging and Development only: the service
+// offers no way to send Production through them.
+describe('FeatureFlagsService environment routes', () => {
+  const settings = (environment: string) => ({
+    environment,
+    status: 'inactive',
+    is_active: false,
+    rollout_percentage: 0,
+    targeting_rules: null,
+    configured: false,
+    updated_at: null,
+  });
+
+  it('reads the flag in every environment', async () => {
+    mockOk({ flag_id: 'f1', key: 'k', environments: [] });
+    await FeatureFlagsService.getEnvironments('f1');
+    expect(mockFetch.mock.calls[0][0]).toBe(`${BASE}/api/v1/feature-flags/f1/environments`);
+  });
+
+  it('reads one environment by name', async () => {
+    mockOk(settings('staging'));
+    await FeatureFlagsService.getInEnvironment('f1', 'staging');
+    expect(mockFetch.mock.calls[0][0]).toBe(`${BASE}/api/v1/feature-flags/f1/environments/staging`);
+  });
+
+  it('PUTs a change to the environment route with only the fields given', async () => {
+    mockOk(settings('development'));
+    await FeatureFlagsService.updateInEnvironment('f1', 'development', { is_active: true });
+    expect(mockFetch).toHaveBeenCalledWith(
+      `${BASE}/api/v1/feature-flags/f1/environments/development`,
+      jsonInit('PUT', { is_active: true }),
+    );
+  });
+
+  it('reads the batch route with one flag_id per flag', async () => {
+    mockOk({ environment: 'staging', settings: { a: settings('staging'), b: settings('staging') } });
+    const got = await FeatureFlagsService.listEnvironmentSettings('staging', ['a', 'b']);
+    expect(mockFetch.mock.calls[0][0]).toBe(
+      `${BASE}/api/v1/environments/staging/feature-flag-settings?flag_id=a&flag_id=b`,
+    );
+    expect(Object.keys(got)).toEqual(['a', 'b']);
+  });
+
+  it('asks in parts of at most 100 ids, and not at all for none', async () => {
+    const ids = Array.from({ length: 205 }, (_, i) => `f${i}`);
+    for (let i = 0; i < 3; i += 1) mockOk({ environment: 'staging', settings: {} });
+    await FeatureFlagsService.listEnvironmentSettings('staging', ids);
+    const counts = mockFetch.mock.calls.map(([url]) => new URL(String(url)).searchParams.getAll('flag_id').length);
+    expect(counts).toEqual([100, 100, 5]);
+    mockFetch.mockReset();
+    await FeatureFlagsService.listEnvironmentSettings('staging', []);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+});
+
 describe('isFlagOn / flagRules helpers', () => {
   it('prefers status over is_active', () => {
     expect(isFlagOn({ status: 'active', is_active: false })).toBe(true);

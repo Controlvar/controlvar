@@ -13,6 +13,9 @@ import { ROLE_COLORS, USER_ROLE_LABELS } from '@/types/admin';
 import { useModules } from '@/contexts/ModulesContext';
 import { MODULES, MODULES_DOC_PATH, ModulesInfo, moduleInstalled } from '@/services/modules';
 import { AUDIT_LOG_ROLES } from '@/components/admin/audit/access';
+import { EnvironmentSwitcher } from '@/components/feature-flags/EnvironmentSwitcher';
+import { useFlagEnvironment } from '@/contexts/FlagEnvironmentContext';
+import { flagEnvironmentApplies } from '@/utils/flagEnvironments';
 
 export interface NavItem {
   label: string;
@@ -342,6 +345,13 @@ export function AppShell({ children }: AppShellProps) {
         : [OWN_API_KEYS_ITEM];
   const moreRoutes = modulesLoading ? [] : moduleNav;
   const showMore = accountNav.length > 0 || moreRoutes.length > 0 || showModulesGuide;
+  // The environment switcher: on the flag pages only, for a signed-in user,
+  // in a row of its own under the user menu. The header row has no room for
+  // it beside a superuser's nav (#1069), nor on a phone.
+  const flagEnvironment = useFlagEnvironment();
+  const showEnvironment =
+    status === 'authenticated' && flagEnvironment.switchable && flagEnvironmentApplies(pathname);
+  const productionShown = flagEnvironment.environment === 'production';
 
   const handleLogout = async () => {
     if (loggingOut) return;
@@ -500,6 +510,18 @@ export function AppShell({ children }: AppShellProps) {
             </button>
           </div>
         </div>
+
+        {showEnvironment && (
+          <div
+            data-testid="environment-bar"
+            data-environment={flagEnvironment.environment ?? undefined}
+            className={`border-t ${productionShown ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-slate-50'}`}
+          >
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex justify-end">
+              <EnvironmentSwitcher />
+            </div>
+          </div>
+        )}
 
         {menuOpen && (
           <nav

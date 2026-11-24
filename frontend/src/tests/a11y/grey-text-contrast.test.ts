@@ -49,6 +49,10 @@ const FILES = [
   // Unarchive), and the archived flag's note on both flag pages.
   'components/feature-flags/FlagManageSection.tsx',
   'components/feature-flags/ArchivedFlag.tsx',
+  // The flag pages' environment switcher, banner, production-only note and
+  // "Compare environments" table.
+  'components/feature-flags/EnvironmentSwitcher.tsx',
+  'components/feature-flags/FlagEnvironmentSections.tsx',
   // #442: the new-experiment form's analysis settings and Advanced Bayesian settings.
   'components/experiments/new/AnalysisSettingsFields.tsx',
   // #1957: the bandit panel, its role note and "Set weights by hand".
