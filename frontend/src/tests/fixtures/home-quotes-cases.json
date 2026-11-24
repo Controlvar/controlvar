@@ -3,6 +3,7 @@
   "files": {
     "mkdocs.yml": "site_name: Fixture\nnav:\n  - Home: README.md\n  - Limits: limits.md\n  - Guides:\n      - Reading results: guides/results.md\n  - Tool (beta): tool.md\n",
     "docs/README.md": "# Fixture docs\n",
+    "docs/capabilities.md": "# What it does\n\n**(beta)** marks a capability its own page calls beta; **(full profile)** marks an optional one.\n\n- [Revenue metrics](limits.md): analysed as its mean value per assigned user.\n- [Reading results](guides/results.md): the difference per user with its confidence interval.\n- [Sequential testing](sequential.md) (beta): mSPRT with always-valid confidence intervals, so you can read results at any time.\n- [Bayesian analysis](bayesian.md): each variant's chance to be best, the expected loss of choosing it, and a stopping recommendation.\n- [Bayesian priors at creation](bayesian.md#priors): the prior alpha and beta, loss threshold and credible level.\n- [Mutual exclusion groups and a global holdout](groups.md): a user joins at most one experiment of a group (its results are beta).\n- [Breakdowns](breakdowns.md): results by a user attribute, flagged when the effect differs between segments.\n- [Results for one saved segment](breakdowns.md#one-segment) (Beta, exploratory): counted only for the users in one ID-list segment.\n- [Split URL experiments](split.md) (full profile, beta): each variant is its own page.\n- [Segments](segments.md): a named group of users, by rules or by an uploaded list (adding and removing ids is beta).\n- [Administration](admin.md): users, roles and the audit log, which downloads as CSV or JSON (the download is beta).\n- [Tool installer](tool.md) (beta): one command that runs the steps for you, for the core profile in `us-west-2`.\n",
     "docs/limits.md": "# Limits\n\n| Metric | How |\n|---|---|\n| Revenue | A revenue metric is analysed as its mean value\nper assigned user, compared with Welch's t-test. |\n",
     "docs/guides/results.md": "# Reading results\n\nFor a revenue metric a second line gives the difference per user with its confidence interval.\n",
     "docs/tool.md": "# Run the tool with one command (beta)\n\nIt installs the core profile in `us-west-2`. It is not for production data.\n\n```bash\n    npm install @example/tool\n```\n",
@@ -18,6 +19,7 @@
             "id": "revenue",
             "parts": ["A revenue metric is analysed as its mean value per assigned user, compared with Welch's t-test, and its results give the difference per user with its confidence interval."],
             "sources": [
+              { "page": "capabilities", "phrases": ["analysed as its mean value per assigned user"] },
               { "page": "limits", "phrases": ["a revenue metric is analysed as its mean value per assigned user", "compared with Welch's t-test"] },
               { "page": "guides/results", "phrases": ["the difference per user with its confidence interval"] }
             ]
@@ -25,7 +27,7 @@
           {
             "id": "tool",
             "parts": ["Or ", { "link": "run the tool with one command", "page": "tool" }, ", a beta that installs the core profile in us-west-2; it is not for production data."],
-            "sources": [{ "page": "tool", "phrases": ["installs the core profile in us-west-2", "it is not for production data"] }]
+            "sources": [{ "page": "capabilities", "phrases": ["the core profile in us-west-2"] }, { "page": "tool", "phrases": ["installs the core profile in us-west-2", "it is not for production data"] }]
           },
           { "id": "tool-install", "code": ["npm install @example/tool"], "sources": [{ "page": "tool" }] }
         ]
@@ -39,7 +41,7 @@
           {
             "id": "results",
             "parts": [{ "link": "Reading results", "page": "guides/results" }, " gives the difference per user with its confidence interval."],
-            "sources": [{ "page": "guides/results", "phrases": ["the difference per user with its confidence interval"] }]
+            "sources": [{ "page": "capabilities", "phrases": ["the difference per user with its confidence interval"] }, { "page": "guides/results", "phrases": ["the difference per user with its confidence interval"] }]
           }
         ]
       }
@@ -125,7 +127,7 @@
       "refusals": ["duplicate-id"],
       "table": {
         "quotes": [
-          { "id": "results", "parts": ["It gives the difference per user with its confidence interval."], "sources": [{ "page": "guides/results", "phrases": ["the difference per user with its confidence interval"] }] },
+          { "id": "results", "parts": ["It gives the difference per user with its confidence interval."], "sources": [{ "page": "capabilities", "phrases": ["the difference per user with its confidence interval"] }, { "page": "guides/results", "phrases": ["the difference per user with its confidence interval"] }] },
           { "id": "results", "parts": ["It gives the difference per user with its confidence interval."], "sources": [{ "page": "guides/results", "phrases": ["the difference per user with its confidence interval"] }] }
         ]
       }
@@ -166,7 +168,7 @@
     {
       "name": "a phrase is under 20 characters",
       "refusals": ["short-phrase"],
-      "table": { "quotes": [{ "id": "results", "parts": ["It gives the difference per user with its confidence interval."], "sources": [{ "page": "guides/results", "phrases": ["difference per user"] }] }] }
+      "table": { "quotes": [{ "id": "results", "parts": ["It gives the difference per user with its confidence interval."], "sources": [{ "page": "capabilities", "phrases": ["the difference per user with its confidence interval"] }, { "page": "guides/results", "phrases": ["difference per user"] }] }] }
     },
     {
       "name": "the quote no longer says what its phrase says (production use, not production data)",
@@ -175,8 +177,8 @@
         "quotes": [
           {
             "id": "tool",
-            "parts": ["Or ", { "link": "run the tool with one command", "page": "tool" }, ", a beta that is not for production use."],
-            "sources": [{ "page": "tool", "phrases": ["it is not for production data"] }]
+            "parts": ["Or ", { "link": "run the tool with one command", "page": "tool" }, ", a beta for the core profile in us-west-2 that is not for production use."],
+            "sources": [{ "page": "capabilities", "phrases": ["the core profile in us-west-2"] }, { "page": "tool", "phrases": ["it is not for production data"] }]
           }
         ]
       }
@@ -185,12 +187,12 @@
       "name": "the cited page no longer says the phrase",
       "refusals": ["not-on-page"],
       "files": { "docs/guides/results.md": "# Reading results\n\nFor a revenue metric a second line gives the change per user with its interval.\n" },
-      "table": { "quotes": [{ "id": "results", "parts": ["It gives the difference per user with its confidence interval."], "sources": [{ "page": "guides/results", "phrases": ["the difference per user with its confidence interval"] }] }] }
+      "table": { "quotes": [{ "id": "results", "parts": ["It gives the difference per user with its confidence interval."], "sources": [{ "page": "capabilities", "phrases": ["the difference per user with its confidence interval"] }, { "page": "guides/results", "phrases": ["the difference per user with its confidence interval"] }] }] }
     },
     {
       "name": "a cited page does not exist",
       "refusals": ["no-page"],
-      "table": { "quotes": [{ "id": "results", "parts": ["It gives the difference per user with its confidence interval."], "sources": [{ "page": "guides/gone", "phrases": ["the difference per user with its confidence interval"] }] }] }
+      "table": { "quotes": [{ "id": "results", "parts": ["It gives the difference per user with its confidence interval."], "sources": [{ "page": "capabilities", "phrases": ["the difference per user with its confidence interval"] }, { "page": "guides/gone", "phrases": ["the difference per user with its confidence interval"] }] }] }
     },
     {
       "name": "a linked page does not exist",
@@ -200,7 +202,7 @@
           {
             "id": "tool",
             "parts": ["Or ", { "link": "run the tool with one command", "page": "gone" }, ", a beta that installs the core profile in us-west-2."],
-            "sources": [{ "page": "tool", "phrases": ["installs the core profile in us-west-2"] }]
+            "sources": [{ "page": "capabilities", "phrases": ["the core profile in us-west-2"] }, { "page": "tool", "phrases": ["installs the core profile in us-west-2"] }]
           }
         ]
       }
@@ -218,7 +220,7 @@
           {
             "id": "orphan",
             "parts": ["Or the ", { "link": "orphan tool", "page": "orphan" }, ", a beta that installs the core profile in us-west-2."],
-            "sources": [{ "page": "orphan", "phrases": ["installs the core profile in us-west-2"] }]
+            "sources": [{ "page": "capabilities", "phrases": ["the core profile in us-west-2"] }, { "page": "orphan", "phrases": ["installs the core profile in us-west-2"] }]
           }
         ]
       }
@@ -232,7 +234,7 @@
           {
             "id": "tool",
             "parts": ["Or ", { "link": "run the tool with one command", "page": "tool" }, ", a beta that installs the core profile in us-west-2."],
-            "sources": [{ "page": "tool", "phrases": ["installs the core profile in us-west-2"] }]
+            "sources": [{ "page": "capabilities", "phrases": ["the core profile in us-west-2"] }, { "page": "tool", "phrases": ["installs the core profile in us-west-2"] }]
           }
         ]
       }
@@ -246,7 +248,7 @@
           {
             "id": "tool",
             "parts": ["Or ", { "link": "run the tool with one command", "page": "tool" }, ", a beta that installs the core profile in us-west-2."],
-            "sources": [{ "page": "tool", "phrases": ["installs the core profile in us-west-2"] }]
+            "sources": [{ "page": "capabilities", "phrases": ["the core profile in us-west-2"] }, { "page": "tool", "phrases": ["installs the core profile in us-west-2"] }]
           }
         ]
       }
@@ -259,7 +261,7 @@
           {
             "id": "tool",
             "parts": ["Or ", { "link": "the one-command tool", "page": "tool" }, ", a beta that installs the core profile in us-west-2."],
-            "sources": [{ "page": "tool", "phrases": ["installs the core profile in us-west-2"] }]
+            "sources": [{ "page": "capabilities", "phrases": ["the core profile in us-west-2"] }, { "page": "tool", "phrases": ["installs the core profile in us-west-2"] }]
           }
         ]
       }
@@ -267,13 +269,16 @@
     {
       "name": "the quote says beta and the linked page's title no longer ends (beta)",
       "refusals": ["says-beta"],
-      "files": { "docs/tool.md": "# Run the tool with one command\n\nIt installs the core profile in `us-west-2`. It is not for production data.\n" },
+      "files": {
+        "docs/tool.md": "# Run the tool with one command\n\nIt installs the core profile in `us-west-2`. It is not for production data.\n",
+        "docs/capabilities.md": "# What it does\n\n- [Tool installer](tool.md): one command that runs the steps for you, for the core profile in `us-west-2`.\n"
+      },
       "table": {
         "quotes": [
           {
             "id": "tool",
             "parts": ["Or ", { "link": "run the tool with one command", "page": "tool" }, ", a beta that installs the core profile in us-west-2."],
-            "sources": [{ "page": "tool", "phrases": ["installs the core profile in us-west-2"] }]
+            "sources": [{ "page": "capabilities", "phrases": ["the core profile in us-west-2"] }, { "page": "tool", "phrases": ["installs the core profile in us-west-2"] }]
           }
         ]
       }
@@ -281,7 +286,7 @@
     {
       "name": "the quote says beta and links no page",
       "refusals": ["says-beta"],
-      "table": { "quotes": [{ "id": "results", "parts": ["It gives the difference per user with its confidence interval (beta)."], "sources": [{ "page": "guides/results", "phrases": ["the difference per user with its confidence interval"] }] }] }
+      "table": { "quotes": [{ "id": "results", "parts": ["It gives the difference per user with its confidence interval (beta)."], "sources": [{ "page": "capabilities", "phrases": ["the difference per user with its confidence interval"] }, { "page": "guides/results", "phrases": ["the difference per user with its confidence interval"] }] }] }
     },
     {
       "name": "the linked page's title ends (beta) and the quote does not say beta",
@@ -291,10 +296,184 @@
           {
             "id": "tool",
             "parts": ["Or ", { "link": "run the tool with one command", "page": "tool" }, ", which installs the core profile in us-west-2."],
-            "sources": [{ "page": "tool", "phrases": ["installs the core profile in us-west-2"] }]
+            "sources": [{ "page": "capabilities", "phrases": ["the core profile in us-west-2"] }, { "page": "tool", "phrases": ["installs the core profile in us-west-2"] }]
           }
         ]
       }
+    },
+    {
+      "name": "a quote rests on an item marked beta after its name, and says beta",
+      "refusals": [],
+      "table": { "quotes": [{ "id": "sequential", "parts": ["Sequential testing (beta): mSPRT with always-valid confidence intervals"], "sources": [{ "page": "capabilities", "phrases": ["mSPRT with always-valid confidence intervals"] }] }] }
+    },
+    {
+      "name": "a quote rests on an item that says its results are beta, and says it in other words",
+      "refusals": [],
+      "table": { "quotes": [{ "id": "holdout", "parts": ["Mutual exclusion groups and a global holdout, whose results are beta"], "sources": [{ "page": "capabilities", "phrases": ["Mutual exclusion groups and a global holdout"] }] }] }
+    },
+    {
+      "name": "a quote rests on an item that says the download is beta, and says it",
+      "refusals": [],
+      "table": { "quotes": [{ "id": "audit-log", "parts": ["It downloads as CSV or JSON (the download is beta)"], "sources": [{ "page": "capabilities", "phrases": ["downloads as CSV or JSON"] }] }] }
+    },
+    {
+      "name": "a quote names the item it rests on, marked beta, and does not say beta",
+      "refusals": ["omits-beta"],
+      "table": { "quotes": [{ "id": "sequential", "parts": ["Sequential testing: mSPRT with always-valid confidence intervals"], "sources": [{ "page": "capabilities", "phrases": ["mSPRT with always-valid confidence intervals"] }] }] }
+    },
+    {
+      "name": "a quote rests on an item marked beta without naming it, and does not say beta",
+      "refusals": ["omits-beta"],
+      "table": { "quotes": [{ "id": "sequential", "parts": ["Stop early: mSPRT with always-valid confidence intervals"], "sources": [{ "page": "capabilities", "phrases": ["mSPRT with always-valid confidence intervals"] }] }] }
+    },
+    {
+      "name": "a quote rests on an item that says the download is beta, and does not say beta",
+      "refusals": ["omits-beta"],
+      "table": { "quotes": [{ "id": "audit-log", "parts": ["It downloads as CSV or JSON"], "sources": [{ "page": "capabilities", "phrases": ["downloads as CSV or JSON"] }] }] }
+    },
+    {
+      "name": "a quote rests on an item marked (Beta, exploratory), and does not say beta",
+      "refusals": ["omits-beta"],
+      "table": { "quotes": [{ "id": "one-segment", "parts": ["Results counted only for the users in one ID-list segment"], "sources": [{ "page": "capabilities", "phrases": ["counted only for the users in one ID-list segment"] }] }] }
+    },
+    {
+      "name": "any word beta in an item marks it, no longer beta too, and the quote does not say beta",
+      "refusals": ["omits-beta"],
+      "files": { "docs/capabilities.md": "# What it does\n\n- [Sequential testing](sequential.md): no longer beta, mSPRT with always-valid confidence intervals.\n" },
+      "table": { "quotes": [{ "id": "sequential", "parts": ["Sequential testing: mSPRT with always-valid confidence intervals"], "sources": [{ "page": "capabilities", "phrases": ["mSPRT with always-valid confidence intervals"] }] }] }
+    },
+    {
+      "name": "a quote says beta and rests on an item that does not",
+      "refusals": ["says-beta"],
+      "table": { "quotes": [{ "id": "bayesian", "parts": ["Bayesian analysis (beta): each variant's chance to be best"], "sources": [{ "page": "capabilities", "phrases": ["each variant's chance to be best"] }] }] }
+    },
+    {
+      "name": "the capability page no longer marks the item beta, and the quote still says it",
+      "refusals": ["says-beta"],
+      "files": { "docs/capabilities.md": "# What it does\n\n- [Sequential testing](sequential.md): mSPRT with always-valid confidence intervals, so you can read results at any time.\n" },
+      "table": { "quotes": [{ "id": "sequential", "parts": ["Sequential testing (beta): mSPRT with always-valid confidence intervals"], "sources": [{ "page": "capabilities", "phrases": ["mSPRT with always-valid confidence intervals"] }] }] }
+    },
+    {
+      "name": "two sentences the homepage carried without beta, resting on no item of the capability page",
+      "refusals": ["no-capability", "no-capability"],
+      "files": { "docs/old.md": "# Old\n\nSequential testing with mSPRT for early stopping. Download it as CSV or JSON.\n" },
+      "table": {
+        "quotes": [
+          { "id": "sequential", "parts": ["Sequential testing with mSPRT for early stopping"], "sources": [{ "page": "old", "phrases": ["Sequential testing with mSPRT for early stopping"] }] },
+          { "id": "audit-log", "parts": ["Download it as CSV or JSON"], "sources": [{ "page": "old", "phrases": ["Download it as CSV or JSON"] }] }
+        ]
+      }
+    },
+    {
+      "name": "a quote cites no phrase of the capability page, so its beta is not judged",
+      "refusals": ["no-capability"],
+      "table": { "quotes": [{ "id": "results", "parts": ["It gives the difference per user with its confidence interval (beta)."], "sources": [{ "page": "guides/results", "phrases": ["the difference per user with its confidence interval"] }] }] }
+    },
+    {
+      "name": "a quote cites a line of the capability page that is not a list item",
+      "refusals": ["no-capability"],
+      "table": { "quotes": [{ "id": "legend", "parts": ["It marks a capability its own page calls beta"], "sources": [{ "page": "capabilities", "phrases": ["marks a capability its own page calls beta"] }] }] }
+    },
+    {
+      "name": "a quote cites phrases of two items of the capability page",
+      "refusals": ["no-capability"],
+      "table": { "quotes": [{ "id": "results", "parts": ["Each variant's chance to be best, and the difference per user with its confidence interval."], "sources": [{ "page": "capabilities", "phrases": ["each variant's chance to be best", "the difference per user with its confidence interval"] }] }] }
+    },
+    {
+      "name": "the capability page does not exist",
+      "refusals": ["no-page"],
+      "files": { "docs/capabilities.md": null },
+      "table": { "quotes": [{ "id": "sequential", "parts": ["Sequential testing (beta): mSPRT with always-valid confidence intervals"], "sources": [{ "page": "capabilities", "phrases": ["mSPRT with always-valid confidence intervals"] }] }] }
+    },
+    {
+      "name": "two items of the capability page hold the phrase, one of them marked beta",
+      "refusals": ["two-capabilities"],
+      "files": { "docs/capabilities.md": "# What it does\n\n- [Bayesian analysis](bayesian.md): each variant's chance to be best.\n- [Bandits](bandits.md) (beta): more users for each variant's chance to be best.\n" },
+      "table": { "quotes": [{ "id": "bayesian", "parts": ["Each variant's chance to be best (beta)"], "sources": [{ "page": "capabilities", "phrases": ["each variant's chance to be best"] }] }] }
+    },
+    {
+      "name": "a quote names its capability with a key of its own",
+      "refusals": ["keys"],
+      "table": { "quotes": [{ "id": "sequential", "capability": "Bayesian analysis", "parts": ["Sequential testing: mSPRT with always-valid confidence intervals"], "sources": [{ "page": "capabilities", "phrases": ["mSPRT with always-valid confidence intervals"] }] }] }
+    },
+    {
+      "name": "a quote about a beta cites another item's words, which it does not have",
+      "refusals": ["not-in-quote"],
+      "table": { "quotes": [{ "id": "sequential", "parts": ["Sequential testing: mSPRT with always-valid confidence intervals"], "sources": [{ "page": "capabilities", "phrases": ["the expected loss of choosing it"] }] }] }
+    },
+    {
+      "name": "a quote names a beta, cites another item's words, which it has, and does not say beta",
+      "refusals": ["omits-beta"],
+      "table": { "quotes": [{ "id": "sequential", "parts": ["Sequential testing: each variant's chance to be best, and the expected loss of choosing it"], "sources": [{ "page": "capabilities", "phrases": ["the expected loss of choosing it"] }] }] }
+    },
+    {
+      "name": "a quote names a beta, cites another item's words, which it has, and says beta",
+      "refusals": [],
+      "table": { "quotes": [{ "id": "sequential", "parts": ["Sequential testing (beta): each variant's chance to be best, and the expected loss of choosing it"], "sources": [{ "page": "capabilities", "phrases": ["the expected loss of choosing it"] }] }] }
+    },
+    {
+      "name": "a quote names an item marked (full profile, beta), cites another item's words, and does not say beta",
+      "refusals": ["omits-beta"],
+      "table": { "quotes": [{ "id": "split-url", "parts": ["Split URL experiments: each variant's chance to be best"], "sources": [{ "page": "capabilities", "phrases": ["each variant's chance to be best"] }] }] }
+    },
+    {
+      "name": "a quote names an item marked (Beta, exploratory), cites another item's words, and does not say beta",
+      "refusals": ["omits-beta"],
+      "table": { "quotes": [{ "id": "one-segment", "parts": ["In the results for one saved segment, each variant's chance to be best"], "sources": [{ "page": "capabilities", "phrases": ["each variant's chance to be best"] }] }] }
+    },
+    {
+      "name": "a capability page phrase under 20 characters: no item is looked for, and beta is not judged",
+      "refusals": ["short-phrase"],
+      "table": { "quotes": [{ "id": "results", "parts": ["It gives the difference per user with its confidence interval (beta)."], "sources": [{ "page": "capabilities", "phrases": ["difference per user"] }] }] }
+    },
+    {
+      "name": "one of two capability page phrases is not on that page: no item is looked for, and beta is not judged",
+      "refusals": ["not-on-page"],
+      "table": { "quotes": [{ "id": "results", "parts": ["It gives the difference per user with its confidence interval, side by side (beta)."], "sources": [{ "page": "capabilities", "phrases": ["the difference per user with its confidence interval", "with its confidence interval, side by side"] }] }] }
+    },
+    {
+      "name": "a quote's prior alpha and beta is not the word beta, in the item either",
+      "refusals": [],
+      "table": { "quotes": [{ "id": "priors", "parts": ["Set the prior alpha and beta, loss threshold and credible level"], "sources": [{ "page": "capabilities", "phrases": ["the prior alpha and beta, loss threshold and credible level"] }] }] }
+    },
+    {
+      "name": "a quote rests on the item that says prior alpha and beta, and does not say it",
+      "refusals": [],
+      "table": { "quotes": [{ "id": "priors", "parts": ["Set the loss threshold and credible level"], "sources": [{ "page": "capabilities", "phrases": ["loss threshold and credible level"] }] }] }
+    },
+    {
+      "name": "the item that says prior alpha and beta is marked beta too, and the quote says only the prior's",
+      "refusals": ["omits-beta"],
+      "files": { "docs/capabilities.md": "# What it does\n\n- [Bayesian priors at creation](bayesian.md#priors) (beta): the prior alpha and beta, loss threshold and credible level.\n" },
+      "table": { "quotes": [{ "id": "priors", "parts": ["Set the prior alpha and beta, loss threshold and credible level"], "sources": [{ "page": "capabilities", "phrases": ["the prior alpha and beta, loss threshold and credible level"] }] }] }
+    },
+    {
+      "name": "a quote of the item that says prior alpha and beta adds (beta)",
+      "refusals": ["says-beta"],
+      "table": { "quotes": [{ "id": "priors", "parts": ["Set the prior alpha and beta, loss threshold and credible level (beta)"], "sources": [{ "page": "capabilities", "phrases": ["the prior alpha and beta, loss threshold and credible level"] }] }] }
+    },
+    {
+      "name": "the linked page's title ends (beta), the item does not say beta, and the quote does not either",
+      "refusals": ["omits-beta"],
+      "files": { "docs/capabilities.md": "# What it does\n\n- [Tool installer](tool.md): one command that runs the steps for you, for the core profile in `us-west-2`.\n" },
+      "table": { "quotes": [{ "id": "tool", "parts": ["Or ", { "link": "run the tool with one command", "page": "tool" }, " for the core profile in us-west-2."], "sources": [{ "page": "capabilities", "phrases": ["the core profile in us-west-2"] }] }] }
+    },
+    {
+      "name": "the linked page's title ends (beta), the item does not say beta, and the quote does",
+      "refusals": [],
+      "files": { "docs/capabilities.md": "# What it does\n\n- [Tool installer](tool.md): one command that runs the steps for you, for the core profile in `us-west-2`.\n" },
+      "table": { "quotes": [{ "id": "tool", "parts": ["Or ", { "link": "run the tool with one command", "page": "tool" }, ", a beta for the core profile in us-west-2."], "sources": [{ "page": "capabilities", "phrases": ["the core profile in us-west-2"] }] }] }
+    },
+    {
+      "name": "the item says beta, the linked page's title does not, and the quote does",
+      "refusals": [],
+      "files": { "docs/tool.md": "# Run the tool with one command\n\nIt installs the core profile in `us-west-2`.\n" },
+      "table": { "quotes": [{ "id": "tool", "parts": ["Or ", { "link": "run the tool with one command", "page": "tool" }, ", a beta for the core profile in us-west-2."], "sources": [{ "page": "capabilities", "phrases": ["the core profile in us-west-2"] }] }] }
+    },
+    {
+      "name": "a quote holds the name of an item that says beta only after its colon, and rests on another",
+      "refusals": [],
+      "table": { "quotes": [{ "id": "breakdowns", "parts": ["Flagged when the effect differs between segments"], "sources": [{ "page": "capabilities", "phrases": ["flagged when the effect differs between segments"] }] }] }
     },
     {
       "name": "a code line is not a line of the page",

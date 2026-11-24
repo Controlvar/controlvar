@@ -672,7 +672,8 @@ JEST_TWINS = {
         "frontend/src/tests/services/docs-links.test.ts"
     ),
     # The homepage's quoted sentences (frontend/src/content/home-quotes.json)
-    # against the pages they quote, the linked page's "(beta)" title and its
+    # against the pages they quote, the capability page's list item each rests
+    # on and whether that says beta, the linked page's "(beta)" title and its
     # place in the mkdocs nav.
     "backend/tests/unit/docs/test_homepage_quotes_docs.py": (
         "frontend/src/tests/content/home-quotes.test.tsx"

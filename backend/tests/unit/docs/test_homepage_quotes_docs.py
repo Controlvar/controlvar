@@ -9,9 +9,21 @@ also checks that the page renders each row word for word. Both readers check
 the table against docs/ and mkdocs.yml, because a pull request that changes
 only docs/ (or mkdocs.yml) runs no Jest: it runs the "Docs content tests"
 step, which collects this directory. Without this reader, a docs-only change
-that rewords a quoted phrase, drops "(beta)" from a linked page's title or
-takes that page out of the nav merges green, and the next pull request that
-runs the frontend suite goes red.
+that rewords a quoted phrase, marks or unmarks a capability as beta, drops
+"(beta)" from a linked page's title or takes that page out of the nav merges
+green, and the next pull request that runs the frontend suite goes red.
+
+A sentence rests on one list item of docs/capabilities.md: the one that holds
+every phrase it cites from that page. It says "beta" when any of these holds,
+and only then:
+
+- that item says "beta", anywhere in it;
+- the page the sentence links is titled "... (beta)";
+- the sentence contains the name of an item marked beta right after its link,
+  as in "- [name](page.md) (full profile, beta)".
+
+"prior alpha and beta", a prior's parameters, does not count in an item or a
+sentence. A code row is not checked for beta.
 
 The rules are the Jest reader's (``frontend/src/tests/content/
 home-quotes-rules.ts``), written twice. They are held together by behaviour,
@@ -58,6 +70,8 @@ RULES = (
     "not-in-quote",
     "no-page",
     "not-on-page",
+    "no-capability",
+    "two-capabilities",
     "not-in-nav",
     "no-title",
     "link-text",
@@ -75,7 +89,16 @@ ID = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 PAGE = re.compile(r"[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*")
 TITLE = re.compile(r"^# (.+)$")
 BETA_TITLE = re.compile(r"^(.+) \(beta\)$")
-BETA_WORD = re.compile(r"\bbeta\b", re.I)
+# re.A: a \b between the characters JavaScript's \b knows.
+BETA_WORD = re.compile(r"\bbeta\b", re.A)
+#: A prior's parameters, named by an item of the capability page: not a release stage.
+PRIOR = "prior alpha and beta"
+#: The capability page, as a source names it.
+CAPABILITIES = "capabilities"
+#: An item marked beta right after its link; the group is the link's text, its name.
+MARKED_ITEM = re.compile(
+    r"^- \[([^\]]+)\]\([^)]*\) \([^)]*\bbeta\b[^)]*\)", re.A | re.I
+)
 
 Read = Callable[[str], Optional[str]]
 Problem = Tuple[str, str, str]  # (code, where, message)
@@ -84,6 +107,23 @@ Problem = Tuple[str, str, str]  # (code, where, message)
 def prose(s: str) -> str:
     """Code marks dropped, whitespace collapsed, case folded."""
     return re.sub(r"\s+", " ", s.replace("`", "")).lower()
+
+
+def _says_beta(s: str) -> bool:
+    """Whether a quote, or an item, says "beta"."""
+    return BETA_WORD.search(prose(s).replace(PRIOR, "")) is not None
+
+
+def _list_items(page: str) -> List[str]:
+    """The capability page's list items: its lines that start "- "."""
+    # Not splitlines(), which also breaks at characters JavaScript's split does not.
+    return [line for line in re.split(r"\r?\n", page) if line.startswith("- ")]
+
+
+def _beta_names(items: List[str]) -> List[str]:
+    """The names of the items marked beta right after their link."""
+    marked = (MARKED_ITEM.match(item) for item in items)
+    return [m.group(1) for m in marked if m is not None]
 
 
 def nav_entry(page: str) -> "re.Pattern[str]":
@@ -208,11 +248,14 @@ def _sentence_row(qid: str, row: Dict[str, Any], read: Read, add) -> None:
             return add("type", qid, "a phrase is a string")
 
     said = prose(text)
+    # The phrases cited from the capability page; None once one of them is refused.
+    cited: Optional[List[str]] = []
     for source in sources:
         page = read(f"docs/{source['page']}.md")
         if page is None:
             add("no-page", qid, f"docs/{source['page']}.md does not exist")
         on_page = "" if page is None else prose(page)
+        held: List[str] = []  # the phrases both the quote and the page hold
         for phrase in source["phrases"]:
             p = prose(phrase)
             if len(p.strip()) < MIN_PHRASE:
@@ -224,6 +267,13 @@ def _sentence_row(qid: str, row: Dict[str, Any], read: Read, add) -> None:
                 add(
                     "not-on-page", qid, f"{phrase!r} is not on docs/{source['page']}.md"
                 )
+            if p in said and p in on_page:
+                held.append(p)
+        if source["page"] == CAPABILITIES and cited is not None:
+            cited = cited + held if len(held) == len(source["phrases"]) else None
+
+    items = _list_items(read(f"docs/{CAPABILITIES}.md") or "")
+    item = None if cited is None else _item_holding(qid, cited, items, add)
 
     titled_beta = False
     titles_read = True
@@ -252,20 +302,56 @@ def _sentence_row(qid: str, row: Dict[str, Any], read: Read, add) -> None:
                 f"the link reads {link_text!r}; docs/{link_page}.md is titled "
                 f"{title.group(1)!r}",
             )
-    if not titles_read:
+    if item is None or not titles_read:
         return None
-    says_beta = BETA_WORD.search(text) is not None
-    if says_beta and not titled_beta:
+    why: List[str] = []
+    if _says_beta(item):
+        why.append(f'the list item of docs/{CAPABILITIES}.md it rests on says "beta"')
+    if titled_beta:
+        why.append('the page it links is titled "(beta)"')
+    for name in _beta_names(items):
+        if prose(name) in said:
+            why.append(f"it names {name!r}, which docs/{CAPABILITIES}.md marks beta")
+    if _says_beta(text) and not why:
         add(
             "says-beta",
             qid,
-            'the quote says "beta", and no page it links is titled "(beta)"',
+            f'the quote says "beta", and no list item of docs/{CAPABILITIES}.md it '
+            "rests on or names, and no page it links, is marked beta",
         )
-    if titled_beta and not says_beta:
+    if why and not _says_beta(text):
+        add("omits-beta", qid, f'the quote does not say "beta": {"; ".join(why)}')
+    return None
+
+
+def _item_holding(qid: str, cited: List[str], items: List[str], add) -> Optional[str]:
+    """The one list item that holds every phrase cited from the capability page;
+    None, with a refusal, when none or several do."""
+    # First: all() of an empty list is true, so with no phrase every item would
+    # hold them all.
+    if not cited:
         add(
-            "omits-beta",
+            "no-capability",
             qid,
-            'the page it links is titled "(beta)", and the quote does not say "beta"',
+            f"the quote cites no phrase of docs/{CAPABILITIES}.md",
+        )
+        return None
+    hits = [item for item in items if all(p in prose(item) for p in cited)]
+    if len(hits) == 1:
+        return hits[0]
+    if not hits:
+        add(
+            "no-capability",
+            qid,
+            f"no one list item of docs/{CAPABILITIES}.md holds every phrase cited "
+            "from it",
+        )
+    else:
+        add(
+            "two-capabilities",
+            qid,
+            f"{len(hits)} list items of docs/{CAPABILITIES}.md hold every phrase "
+            "cited from it; cite words only one has",
         )
     return None
 
@@ -334,6 +420,11 @@ def test_the_table_has_quotes_to_check():
     assert len(QUOTES) >= 2, QUOTES
     links = [p for row in QUOTES for p in row.get("parts", []) if isinstance(p, dict)]
     assert links, "no quote links a page, so the title and nav rules check nothing"
+
+
+def test_the_table_has_one_code_row():
+    """A code row is not checked for beta, so a second one is looked at first."""
+    assert [row["id"] for row in QUOTES if "code" in row] == ["sdk-snippet"]
 
 
 @pytest.mark.parametrize("row", QUOTES, ids=[row["id"] for row in QUOTES])

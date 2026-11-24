@@ -6,8 +6,10 @@
  *
  *   1. the table against docs/ and mkdocs.yml, by the rules in
  *      `home-quotes-rules.ts`: each phrase is in its quote and on the page it
- *      cites, a link's text is its page's title, the page is in the nav, and a
- *      quote says "beta" exactly when the page it links is titled "(beta)";
+ *      cites, a link's text is its page's title, the page is in the nav, each
+ *      sentence rests on one list item of docs/capabilities.md, and it says
+ *      "beta" exactly when that item does, it names an item marked beta, or
+ *      the page it links is titled "(beta)";
  *   2. the rules themselves, by the cases in `fixtures/home-quotes-cases.json`,
  *      which the Python reader runs too;
  *   3. the page against the table: each quote renders once in each build,
@@ -70,6 +72,10 @@ describe('content/home-quotes.json against docs/', () => {
   it('has quotes to check, so an empty table cannot pass', () => {
     expect(QUOTES.length).toBeGreaterThanOrEqual(2);
     expect(LINKS.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('has one code row: a code row is not checked for beta, so a second one is looked at first', () => {
+    expect(QUOTES.filter((row) => 'code' in row).map((row) => row.id)).toEqual(['sdk-snippet']);
   });
 
   it.each(QUOTES.map((row) => [row.id, row] as const))('%s says only what the pages it cites say', (_id, row) => {
