@@ -938,14 +938,19 @@ reads or writes the table, and a key it creates gets `production` from the
 column's default.
 
 From 0.48.0, the upgrade waits for two locks, each with its own bound: at most
-0.5 s for the lock that creating the table takes on `feature_flags`, which
-only a session writing to `feature_flags` holds up (SDK requests only read
-that table, and keep being answered), then at most 1.5 s for `api_keys`, which
-every SDK request reads. A lock that cannot be taken within its bound, or a
-deadlock, stops the upgrade with nothing applied, and it is simply run again.
-The downgrade takes the same two locks, `api_keys` first (at most 1.5 s) and
-then `feature_flags` (at most 0.5 s), and stops the same way with nothing
-changed; run it again.
+0.5 s for the lock that creating the table takes on `feature_flags`, which a
+session writing to `feature_flags`, or a vacuum, analyze or schema change of
+it, holds up (SDK requests only read that table, and keep being answered), then
+at most 1.5 s for `api_keys`, which every SDK request reads. A lock that cannot
+be taken within its bound, or a deadlock, stops the upgrade with nothing
+applied, and it is simply run again.
+
+The downgrade can wait for more than one lock, and each wait has its own
+bound: at most 1.5 s for each lock it needs on `api_keys` (the row of each
+staging or development key, then the table), then at most 0.5 s for each lock
+it needs to drop `flag_environment_settings` (on that table, then on
+`feature_flags`). A lock that cannot be taken within its bound, or a deadlock,
+stops it with nothing changed; run it again.
 
 **The downgrade loses every staging and development setting.**
 `t2011_flag_environments`'s downgrade first deactivates every staging and

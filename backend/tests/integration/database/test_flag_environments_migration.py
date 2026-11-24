@@ -8,47 +8,50 @@ tests that start from the previous release (0.48.0, whose core head is
 check and the column DROPPED and ``alembic_version`` at the previous release's
 heads, in each profile, and run the documented commands. Then:
 
-1. M1: ``alembic upgrade heads``: the ``alembic_version`` rows are this
-   release's (printed), the side table is empty, every key the previous
-   release stored is a production key, flags, schedules and safety
-   configurations keep their counts, and autogenerate is empty;
-2. M5: the upgraded database and a ``create_all``-bootstrapped one have the
-   same side table and the same ``api_keys`` column and check, from the
-   catalog;
-3. M4: every index and constraint of the tables the previous release relies
-   on (``feature_flags``, its safety configurations, the evaluation counters,
+1. ``alembic upgrade heads``: the ``alembic_version`` rows are this release's
+   (printed), the side table is empty, every key the previous release stored
+   is a production key, flags, schedules and safety configurations keep their
+   counts, and autogenerate is empty;
+2. the upgraded database and a ``create_all``-bootstrapped one have the same
+   side table and the same ``api_keys`` column and check, from the catalog;
+3. every index and constraint of the tables the previous release relies on
+   (``feature_flags``, its safety configurations, the evaluation counters,
    ``api_keys``) is unchanged but for the one check added; a key inserted
    without ``environment`` is a production key, and the checks refuse what
    the design refuses;
 4. the statements each direction runs, captured online: the upgrade's two
    blocks (the side table under 500 ms, then the ``api_keys`` steps, last,
-   under 1500 ms) with no data step, and the downgrade's two blocks in R-7's
-   order (``api_keys`` under 1500 ms, then the side table under 500 ms);
-5. the waits, each leg naming its revision, never ``heads``: a request
-   holding ``api_keys`` and a session writing to ``feature_flags`` each end
-   the upgrade at their block's bound with this revision's refusal, applying
-   nothing; readers of ``feature_flags`` and the other SDK tables do not stop
-   it; while it waits for ``feature_flags`` a key lookup still runs; and a
-   reader of either table ends the downgrade with its refusal, changing
-   nothing;
-6. M3: the previous release's code (this tree without the revision, the
-   models' additions and ``core/flag_environments.py``) creates, sets, lists,
-   builds the ruleset and evaluates on this schema exactly as this release
-   does, ignoring a staging row; this release turns the flag off through the
-   stable PUT and the previous release answers ``inactive``;
-7. M3, the staging-key leg: the previous release treats a staging key as a
+   under 1500 ms) with no data step, and the downgrade's two blocks
+   (``api_keys`` under 1500 ms, then the side table under 500 ms);
+5. the waits, each leg naming its revision, never ``heads``, and starting
+   from that revision's own rows (``REVISION_ROWS``): a request holding
+   ``api_keys`` and a session writing to ``feature_flags`` or analyzing it
+   each end the upgrade at their block's bound with this revision's refusal,
+   applying nothing, and the next run goes through; readers of
+   ``feature_flags`` and the other SDK tables do not stop it; while it waits
+   for ``feature_flags`` a key lookup still runs; a reader of any table the
+   downgrade locks ends it with its refusal, changing nothing; a downgrade
+   waits for each lock it needs on its own bound, so it can wait for more
+   than one; and a deadlock with a session updating a key ends it with the
+   same refusal;
+6. the previous release's code (this tree without the revision, the models'
+   additions and ``core/flag_environments.py``) creates, sets, lists, builds
+   the ruleset and evaluates on this schema exactly as this release does,
+   ignoring a staging row; this release turns the flag off through the stable
+   PUT and the previous release answers ``inactive``;
+7. the staging-key leg: the previous release treats a staging key as a
    production key: production's configuration on ``/evaluate``, its server
    error report counted, its evaluation counts recorded, and its assignment,
    event and identity link written into production;
-8. M8: offline (``--sql``), both directions refuse and emit nothing;
-9. M8: online, the downgrade deactivates every staging and development key,
-   then drops the check, the column and the table; the previous release then
+8. offline (``--sql``), both directions refuse and emit nothing;
+9. online, the downgrade deactivates every staging and development key, then
+   drops the check, the column and the table; the previous release then
    answers the production key and refuses the former staging key, and an
    upgrade afterwards brings the former staging key back an inactive
    production key with no settings;
-10. M8: this release, still running against the downgraded schema, answers
-    500 to a production key on ``/evaluate`` and ``/sdk/ruleset``;
-11. M6: ``alembic heads`` names exactly this revision and the modules head.
+10. this release, still running against the downgraded schema, answers 500 to
+    a production key on ``/evaluate`` and ``/sdk/ruleset``;
+11. ``alembic heads`` names exactly this revision and the modules head.
 """
 
 from __future__ import annotations
@@ -61,6 +64,7 @@ import shutil
 import subprocess
 import sys
 import textwrap
+import threading
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -98,6 +102,10 @@ PREVIOUS_ROWS = {
     FULL: {PREVIOUS_CORE_HEAD, MODULES_HEAD},
 }
 ROWS = {CORE: {CORE_HEAD}, FULL: {CORE_HEAD, MODULES_HEAD}}
+#: The rows after ``upgrade t2011_flag_environments`` and no further, and
+#: where every downgrade leg starts: this revision's own, whatever later
+#: revision the tree's head is.
+REVISION_ROWS = {CORE: {REVISION}, FULL: {REVISION, MODULES_HEAD}}
 
 TABLE = "flag_environment_settings"
 KEYS = "api_keys"
@@ -158,7 +166,7 @@ EXPECTED_KEY_CHECK = (
 )
 
 #: The tables the previous release relies on whose indexes and constraints
-#: this revision must leave as they were (M4).
+#: this revision must leave as they were.
 KEPT_TABLES = (
     "feature_flags",
     "feature_flag_safety_configs",
@@ -362,6 +370,18 @@ def _at_previous_release(test_db, profile, schema, tmp_path):
     return tree
 
 
+def _at_this_revision(test_db, profile, schema, tmp_path):
+    """A schema whose ``alembic_version`` is this revision's, named, however
+    far the tree's head is beyond it: a downgrade from here runs this
+    revision's downgrade and no other. ``create_all`` built the head's
+    objects; a later revision's stay, and nothing this revision's downgrade
+    runs reads or drops one."""
+    tree = _bootstrapped(profile, schema, tmp_path)
+    _stamp(test_db, schema, REVISION_ROWS[profile])
+    assert _rows(test_db, schema) == REVISION_ROWS[profile]
+    return tree
+
+
 def _upgrade(tree, schema: str, **extra_env) -> subprocess.CompletedProcess:
     return tree_profiles.alembic(
         tree, schema, "upgrade", "heads", extra_env=extra_env or None
@@ -496,7 +516,7 @@ def _load_revision(schema: str):
 
 
 # ---------------------------------------------------------------------------
-# 1. M1: the previous release, upgraded with `heads`
+# 1. The previous release, upgraded with `heads`
 # ---------------------------------------------------------------------------
 def _seed_previous_release(engine, schema: str) -> dict:
     """What a 0.48.0 install holds: keys, flags, a schedule, a safety config."""
@@ -577,7 +597,7 @@ def test_a_database_at_the_previous_release_gains_the_table_and_the_column_and_n
 
 
 # ---------------------------------------------------------------------------
-# 2. M5: the migration builds what create_all builds
+# 2. The migration builds what create_all builds
 # ---------------------------------------------------------------------------
 @pytest.mark.regression
 @pytest.mark.parametrize("profile", BOTH_PROFILES)
@@ -607,7 +627,7 @@ def test_an_upgraded_database_and_a_bootstrapped_one_have_the_same_table_column_
 
 
 # ---------------------------------------------------------------------------
-# 3. M4: nothing the previous release relies on moves; the checks hold
+# 3. Nothing the previous release relies on moves; the checks hold
 # ---------------------------------------------------------------------------
 #: Writes the checks and NOT NULL refuse: (case, SQL, the constraint or None
 #: for NOT NULL).
@@ -818,7 +838,7 @@ def test_the_upgrade_from_the_previous_core_head_runs_exactly_its_statements(
     captured = _captured(tree, scratch_schema, tmp_path, "upgrade", REVISION)
     for statement in captured:
         print(f"[{profile}] captured: {statement[:200]}")
-    assert _rows(test_db, scratch_schema) == ROWS[profile]
+    assert _rows(test_db, scratch_schema) == REVISION_ROWS[profile]
 
     revision = _load_revision(scratch_schema)
     remaining = _set_aside(captured)
@@ -857,10 +877,10 @@ def test_the_upgrade_from_the_previous_core_head_runs_exactly_its_statements(
 def test_the_downgrade_runs_exactly_its_statements(
     profile, test_db, scratch_schema, tmp_path
 ):
-    """R-7's order in two blocks: the ``api_keys`` block under 1500 ms (the
-    deactivating UPDATE, then the check and the column by name), then the
-    side table under 500 ms."""
-    tree = _bootstrapped(profile, scratch_schema, tmp_path)
+    """Two blocks, ``api_keys`` first: the ``api_keys`` block under 1500 ms
+    (the deactivating UPDATE, then the check and the column by name), then
+    the side table under 500 ms."""
+    tree = _at_this_revision(test_db, profile, scratch_schema, tmp_path)
     captured = _captured(
         tree, scratch_schema, tmp_path, "downgrade", PREVIOUS_CORE_HEAD
     )
@@ -996,7 +1016,7 @@ def test_the_upgrade_commits_beside_readers_of_feature_flags_and_the_other_sdk_t
         holder.close()
     assert upgrade.returncode == 0, upgrade.stderr[-3000:]
     assert "55P03" not in upgrade.stderr and "lock timeout" not in upgrade.stderr
-    assert _rows(test_db, scratch_schema) == ROWS[CORE]
+    assert _rows(test_db, scratch_schema) == REVISION_ROWS[CORE]
     assert TABLE in _tables(test_db, scratch_schema)
 
 
@@ -1006,27 +1026,57 @@ def _flag_writer(schema: str) -> str:
     return f'UPDATE "{schema}".feature_flags SET rollout_percentage = 7'
 
 
+def _analyzer(schema: str) -> str:
+    """An uncommitted ANALYZE: it holds SHARE UPDATE EXCLUSIVE on the table
+    until the transaction ends, as VACUUM and autovacuum do while they run."""
+    return f'ANALYZE "{schema}".feature_flags'
+
+
+def _schema_changer(schema: str) -> str:
+    """An uncommitted schema change of ``feature_flags``: ACCESS EXCLUSIVE."""
+    return (
+        f'ALTER TABLE "{schema}".feature_flags ALTER COLUMN rollout_percentage '
+        "SET DEFAULT 0"
+    )
+
+
+#: What holds the upgrade's lock on ``feature_flags`` up.
+FLAG_HOLDERS = {
+    "altering": _schema_changer,
+    "analyzing": _analyzer,
+    "writing": _flag_writer,
+}
+
+
 @pytest.mark.regression
-def test_a_session_writing_to_feature_flags_ends_the_upgrade_with_the_refusal(
-    test_db, scratch_schema, tmp_path
+@pytest.mark.parametrize("holder", sorted(FLAG_HOLDERS))
+def test_a_session_writing_or_analyzing_feature_flags_ends_the_upgrade_with_the_refusal(
+    holder, test_db, scratch_schema, tmp_path
 ):
     """Creating the side table takes SHARE ROW EXCLUSIVE on ``feature_flags``
-    (its foreign key), which waits behind an uncommitted flag write. The
-    500 ms bound ends that wait with this revision's refusal, naming
-    ``feature_flags``, and nothing is applied. Without the ``SET`` only the
-    leg's own ``statement_timeout`` ends it (57014), and this fails."""
+    (its foreign key), which waits behind an uncommitted flag write or schema
+    change, and behind an ANALYZE or a vacuum of the table (a vacuum holds the
+    lock mode an ANALYZE does). The 500 ms bound ends that wait with
+    this revision's refusal, naming ``feature_flags``, and nothing is applied;
+    once the session is gone, the same command runs through. Without the
+    ``SET`` only the leg's own ``statement_timeout`` ends it (57014), and this
+    fails."""
     tree = _at_previous_release(test_db, CORE, scratch_schema, tmp_path)
     _insert_flag(test_db, scratch_schema, "written-flag")
     expected = _load_revision(scratch_schema)._lock_refusal("feature_flags")
-    with _holding(test_db, _flag_writer(scratch_schema)):
+    with _holding(test_db, FLAG_HOLDERS[holder](scratch_schema)):
         upgrade = _upgrade_with_its_own_timeout(tree, scratch_schema)
-    print(f"upgrade stderr tail:\n{upgrade.stderr[-1500:]}")
+    print(f"[{holder}] upgrade stderr tail:\n{upgrade.stderr[-1500:]}")
     assert upgrade.returncode != 0
     assert expected in upgrade.stderr, upgrade.stderr[-3000:]
     assert "statement timeout" not in upgrade.stderr
     assert _rows(test_db, scratch_schema) == PREVIOUS_ROWS[CORE]
     assert TABLE not in _tables(test_db, scratch_schema)
     assert _key_column(test_db, scratch_schema) is None
+    again = _upgrade_with_its_own_timeout(tree, scratch_schema)
+    assert again.returncode == 0, again.stderr[-3000:]
+    assert _rows(test_db, scratch_schema) == REVISION_ROWS[CORE]
+    assert TABLE in _tables(test_db, scratch_schema)
 
 
 #: How long the order leg's key lookup may wait: far below the 500 ms bound
@@ -1103,35 +1153,247 @@ def test_while_the_upgrade_waits_for_feature_flags_key_lookups_still_run(
     assert _rows(test_db, scratch_schema) == PREVIOUS_ROWS[CORE]
 
 
+#: Each table the downgrade waits for a lock on, and the table whose block's
+#: refusal answers for it: dropping the side table waits for that table
+#: itself, then for ``feature_flags``, so one block's text names both.
+HELD_TABLES = {
+    "api_keys": "api_keys",
+    "feature_flags": "feature_flags",
+    "flag_environment_settings": "feature_flags",
+}
+
+
 @pytest.mark.regression
-@pytest.mark.parametrize("held", ["api_keys", "feature_flags"])
-def test_a_session_reading_either_table_ends_the_downgrade_with_its_refusal(
+@pytest.mark.parametrize("held", sorted(HELD_TABLES))
+def test_a_session_reading_a_table_the_downgrade_locks_ends_it_with_its_refusal(
     held, test_db, scratch_schema, tmp_path
 ):
-    """Dropping the column takes ACCESS EXCLUSIVE on ``api_keys``, and
-    dropping the side table ACCESS EXCLUSIVE on ``feature_flags``: each waits
-    behind a request reading that table. Each block's bound ends the wait
-    with the downgrade's refusal for that table, and nothing is changed: the
-    version rows, the column and the table are as they were, and a staging
-    key is still active (the deactivating UPDATE was rolled back). Without a
-    block's ``SET`` only the leg's own ``statement_timeout`` ends it."""
-    tree = _bootstrapped(CORE, scratch_schema, tmp_path)
+    """Dropping the column takes ACCESS EXCLUSIVE on ``api_keys``; dropping
+    the side table takes it on that table, then on ``feature_flags``: each
+    waits behind a request reading that table. Each block's bound ends the
+    wait with the downgrade's refusal, whose text names the table whichever
+    of its tables held the lock, and nothing is changed: the version rows, the
+    column and the table are as they were, and a staging key is still active
+    (the deactivating UPDATE was rolled back). Without a block's ``SET`` only
+    the leg's own ``statement_timeout`` ends it."""
+    tree = _at_this_revision(test_db, CORE, scratch_schema, tmp_path)
     user = _user(test_db, scratch_schema)
     key_id, _ = _insert_key(test_db, scratch_schema, user.id, "staging")
     flag_id = _insert_flag(test_db, scratch_schema, "downgraded-flag")
     _insert_setting(test_db, scratch_schema, flag_id, "staging")
     before = (_definition(test_db, scratch_schema), _settings(test_db, scratch_schema))
-    expected = _load_revision(scratch_schema)._downgrade_lock_refusal(held)
+    expected = _load_revision(scratch_schema)._downgrade_lock_refusal(HELD_TABLES[held])
     with _holding(test_db, f'SELECT count(*) FROM "{scratch_schema}".{held}'):
         down = _downgrade_with_its_own_timeout(tree, scratch_schema)
     print(f"[{held}] downgrade stderr tail:\n{down.stderr[-1500:]}")
     assert down.returncode != 0
     assert expected in down.stderr, down.stderr[-3000:]
+    # The text names the table this session held.
+    assert f"{scratch_schema}.{held}" in expected, expected
     assert "Refusing to upgrade" not in down.stderr
     assert "statement timeout" not in down.stderr
-    assert _rows(test_db, scratch_schema) == ROWS[CORE]
+    assert _rows(test_db, scratch_schema) == REVISION_ROWS[CORE]
     after = (_definition(test_db, scratch_schema), _settings(test_db, scratch_schema))
     assert after == before
+    assert _key_environments(test_db, scratch_schema)[key_id] == ("staging", True)
+
+
+@contextlib.contextmanager
+def _downgrading_in_the_background(tree, schema: str):
+    """``downgrade`` to the revision before this one, running in another
+    process. Yields ``(process, application_name)``; the process is ended
+    before this returns."""
+    application = f"t2011-downgrade-{uuid.uuid4().hex[:8]}"
+    environment = tree_profiles._environment(
+        tree,
+        schema,
+        {"PGAPPNAME": application, "PGOPTIONS": LEG_STATEMENT_TIMEOUT},
+    )
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "alembic",
+            "-c",
+            str(tree_profiles.alembic_ini(tree)),
+            "downgrade",
+            PREVIOUS_CORE_HEAD,
+        ],
+        cwd=str(tree),
+        env=environment,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        yield process, application
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.communicate()
+
+
+def _waiting_for(engine, application: str) -> set[tuple]:
+    """The lock requests the backend named *application* is waiting for:
+    ``(locktype, mode, relation)``; ``relation`` is None for a row lock (it
+    waits for the other session's transaction)."""
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text(
+                "SELECT l.locktype, l.mode, l.relation::regclass::text "
+                "FROM pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid "
+                "WHERE a.application_name = :app AND NOT l.granted"
+            ),
+            {"app": application},
+        ).all()
+        conn.rollback()
+    return {tuple(row) for row in rows}
+
+
+def _until_waiting_for(engine, process, application: str, wanted) -> tuple:
+    """Wait until *application*'s backend waits for a lock that *wanted* picks
+    out, and return it; fail if the process ends first."""
+    deadline = time.monotonic() + WAIT_FOR_LOCK_SECONDS
+    while time.monotonic() < deadline:
+        found = [
+            request for request in _waiting_for(engine, application) if wanted(request)
+        ]
+        if found:
+            return found[0]
+        assert process.poll() is None, (process.returncode, process.communicate()[1])
+        time.sleep(0.02)
+    raise AssertionError(f"{application} never waited for that lock")
+
+
+def _row_lock(request: tuple) -> bool:
+    return request[0] == "transactionid"
+
+
+def _api_keys_table_lock(schema: str):
+    def wanted(request: tuple) -> bool:
+        return request[1:] == ("AccessExclusiveLock", f"{schema}.{KEYS}")
+
+    return wanted
+
+
+#: How long the two-wait leg holds each lock once the migration waits for it:
+#: below each block's 1500 ms bound, so neither wait ends at the bound, and
+#: above half of it, so the two together are longer than one bound.
+HELD_SECONDS = 0.9
+
+
+@pytest.mark.regression
+def test_the_downgrade_waits_for_each_lock_it_needs_on_its_own_bound(
+    test_db, scratch_schema, tmp_path
+):
+    """Deactivating a staging key waits for another session's uncommitted
+    update of that key's row; the column's drop then waits for a session that
+    read ``api_keys``. Each wait is bounded on its own, so a downgrade that
+    meets both waits for longer than one bound and goes through."""
+    tree = _at_this_revision(test_db, CORE, scratch_schema, tmp_path)
+    user = _user(test_db, scratch_schema)
+    key_id, _ = _insert_key(test_db, scratch_schema, user.id, "staging")
+    with test_db.connect() as writer, test_db.connect() as reader:
+        writing = writer.begin()
+        writer.execute(
+            text(
+                f'UPDATE "{scratch_schema}".api_keys SET last_used_at = now() WHERE id = :id'
+            ),
+            {"id": key_id},
+        )
+        reading = reader.begin()
+        reader.execute(text(f'SELECT count(*) FROM "{scratch_schema}".api_keys'))
+        with _downgrading_in_the_background(tree, scratch_schema) as (process, name):
+            started = time.monotonic()
+            row = _until_waiting_for(test_db, process, name, _row_lock)
+            time.sleep(HELD_SECONDS)
+            writing.rollback()
+            table = _until_waiting_for(
+                test_db, process, name, _api_keys_table_lock(scratch_schema)
+            )
+            time.sleep(HELD_SECONDS)
+            reading.rollback()
+            stderr = process.communicate(timeout=120)[1]
+            waited = time.monotonic() - started
+    print(f"waits, in order: {row} then {table}; {waited:.2f} s in all")
+    assert process.returncode == 0, stderr[-3000:]
+    assert row[0] == "transactionid", row
+    assert table[1:] == ("AccessExclusiveLock", f"{scratch_schema}.{KEYS}"), table
+    assert _rows(test_db, scratch_schema) == PREVIOUS_ROWS[CORE]
+    assert TABLE not in _tables(test_db, scratch_schema)
+    with test_db.connect() as conn:
+        active = conn.execute(
+            text(f'SELECT is_active FROM "{scratch_schema}".api_keys WHERE id = :id'),
+            {"id": key_id},
+        ).scalar()
+    assert active is False
+
+
+def _deadlocks(engine) -> int:
+    """The deadlocks PostgreSQL has counted in this database."""
+    with engine.connect() as conn:
+        count = conn.execute(
+            text(
+                "SELECT deadlocks FROM pg_stat_database "
+                "WHERE datname = current_database()"
+            )
+        ).scalar()
+        conn.rollback()
+    return count
+
+
+@pytest.mark.regression
+def test_a_deadlock_with_a_session_updating_a_key_ends_the_downgrade_with_its_refusal(
+    test_db, scratch_schema, tmp_path
+):
+    """A session that read ``api_keys`` then updates a staging key's row that
+    the downgrade has already locked (what recording a key's use does): each
+    waits for the other. PostgreSQL ends the downgrade, whose wait is the
+    older one, with 40P01, and it refuses with the same text as a lock
+    timeout, with nothing changed; the other session's update goes through.
+    A lock timeout gives the same text, so this counts the deadlocks."""
+    tree = _at_this_revision(test_db, CORE, scratch_schema, tmp_path)
+    user = _user(test_db, scratch_schema)
+    key_id, _ = _insert_key(test_db, scratch_schema, user.id, "staging")
+    expected = _load_revision(scratch_schema)._downgrade_lock_refusal(KEYS)
+    before = _deadlocks(test_db)
+    update = text(
+        f'UPDATE "{scratch_schema}".api_keys SET last_used_at = now() WHERE id = :id'
+    )
+    outcome: dict = {}
+    with test_db.connect() as session:
+        transaction = session.begin()
+        session.execute(text("SET LOCAL statement_timeout = '60s'"))
+        session.execute(text(f'SELECT count(*) FROM "{scratch_schema}".api_keys'))
+
+        def update_the_key() -> None:
+            try:
+                session.execute(update, {"id": key_id})
+                outcome["updated"] = True
+            except Exception as exc:  # reported by the assertion below
+                outcome["error"] = exc
+
+        with _downgrading_in_the_background(tree, scratch_schema) as (process, name):
+            _until_waiting_for(
+                test_db, process, name, _api_keys_table_lock(scratch_schema)
+            )
+            updating = threading.Thread(target=update_the_key)
+            updating.start()
+            stderr = process.communicate(timeout=120)[1]
+            updating.join(timeout=60)
+        transaction.rollback()
+    print(f"downgrade stderr tail:\n{stderr[-1500:]}")
+    assert process.returncode != 0
+    assert expected in stderr, stderr[-3000:]
+    assert "Refusing to upgrade" not in stderr
+    assert "statement timeout" not in stderr
+    assert outcome == {"updated": True}, outcome
+    deadline = time.monotonic() + 30
+    while _deadlocks(test_db) == before and time.monotonic() < deadline:
+        time.sleep(0.1)
+    assert _deadlocks(test_db) > before, "the downgrade met no deadlock"
+    assert _rows(test_db, scratch_schema) == REVISION_ROWS[CORE]
+    assert TABLE in _tables(test_db, scratch_schema)
     assert _key_environments(test_db, scratch_schema)[key_id] == ("staging", True)
 
 
@@ -1298,7 +1560,7 @@ def _at_head(test_db, profile, built_by, schema, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# 6. M3: the previous release writes and serves flags on this schema
+# 6. The previous release writes and serves flags on this schema
 # ---------------------------------------------------------------------------
 @pytest.mark.regression
 @pytest.mark.parametrize("built_by", [UPGRADED, BOOTSTRAPPED])
@@ -1384,7 +1646,7 @@ def _token(user: User) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 7. M3: a staging key on the previous release
+# 7. A staging key on the previous release
 # ---------------------------------------------------------------------------
 def _experiment(engine, schema: str, tree, tmp_path, user: User) -> dict:
     """A running production experiment, created and started through the API."""
@@ -1588,7 +1850,7 @@ def test_the_previous_release_treats_a_staging_key_as_a_production_key(
 
 
 # ---------------------------------------------------------------------------
-# 8. M8: offline mode
+# 8. Offline mode
 # ---------------------------------------------------------------------------
 @pytest.mark.regression
 def test_offline_mode_is_refused_in_both_directions_and_emits_nothing(
@@ -1617,14 +1879,14 @@ def test_offline_mode_is_refused_in_both_directions_and_emits_nothing(
 
 
 # ---------------------------------------------------------------------------
-# 9-10. M8: online, the downgrade fails closed
+# 9-10. Online, the downgrade fails closed
 # ---------------------------------------------------------------------------
 @pytest.mark.regression
 @pytest.mark.parametrize("profile", BOTH_PROFILES)
 def test_the_downgrade_deactivates_staging_and_development_keys_then_drops_what_it_added(
     profile, test_db, scratch_schema, tmp_path
 ):
-    tree = _bootstrapped(profile, scratch_schema, tmp_path)
+    tree = _at_this_revision(test_db, profile, scratch_schema, tmp_path)
     user = _user(test_db, scratch_schema)
     keys = {
         environment: _insert_key(test_db, scratch_schema, user.id, environment)
@@ -1710,7 +1972,7 @@ def test_this_release_answers_500_to_a_production_key_on_the_downgraded_schema(
     """Why the database-first rollback's paragraph names the SDK outage: until
     every task of this release is replaced, its key lookup reads a column the
     downgrade dropped, for production keys too."""
-    tree = _bootstrapped(CORE, scratch_schema, tmp_path)
+    tree = _at_this_revision(test_db, CORE, scratch_schema, tmp_path)
     user = _user(test_db, scratch_schema)
     _, key = _insert_key(test_db, scratch_schema, user.id, "production", "sdk:ruleset")
     _insert_flag(test_db, scratch_schema, "rolled-back-flag", "ACTIVE", 100)

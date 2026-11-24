@@ -1,20 +1,21 @@
 """``t2011_flag_environments``, read without a database (#2011).
 
-* M6, without a database: its id fits ``alembic_version.version_num`` (32
-  characters), its ``down_revision`` is the literal ``t449_identity_aliases``
-  (0.48.0's core head), and the heads are exactly this revision and, in a full
-  tree, the modules head.
-* M5, without a database: the migration creates the model's table (columns,
-  types, nullability, server defaults, the named checks, the unique
-  constraint, the cascading foreign key and the ``created_at`` index) and adds
-  ``api_keys.environment`` with the model's type, default and check.
+* Its id fits ``alembic_version.version_num`` (32 characters), its
+  ``down_revision`` is the literal ``t449_identity_aliases`` (0.48.0's core
+  head), and the heads are exactly this revision and, in a full tree, the
+  modules head.
+* The migration creates the model's table (columns, types, nullability,
+  server defaults, the named checks, the unique constraint, the cascading
+  foreign key and the ``created_at`` index) and adds ``api_keys.environment``
+  with the model's type, default and check.
 * The two bounds: ``_FLAGS_LOCK_TIMEOUT`` is ``500ms`` and
   ``_KEYS_LOCK_TIMEOUT`` ``1500ms``, each written once and never a zero form,
   and their sum is the budget map's declared 2 s.
 * The order: the side table's block first, then the ``api_keys`` block, each
-  between its ``SET LOCAL lock_timeout`` and the reset; the downgrade (R-7)
-  takes ``api_keys`` first (the keys deactivated, then the check and the
-  column by name), then the table, in the same two blocks.
+  between its ``SET LOCAL lock_timeout`` and the reset; the downgrade takes
+  ``api_keys`` first (the keys deactivated, then the check and the column by
+  name), then the table, in the same two blocks. The refusal for each block
+  names every table that block locks.
 * In every block of both directions a lock timeout (55P03) or a deadlock
   (40P01) becomes that direction's refusal, worded so that it is true for
   both; any other error is raised as it was.
@@ -329,8 +330,8 @@ def test_the_upgrade_runs_the_side_table_block_then_the_api_keys_block(monkeypat
 
 
 def test_the_downgrade_runs_the_api_keys_block_then_the_side_table_block(monkeypatch):
-    """R-7's order: the keys deactivated, then the check and the column by
-    name, all in the ``api_keys`` block; then the table in the other."""
+    """The keys deactivated, then the check and the column by name, all in
+    the ``api_keys`` block; then the table in the other."""
     recorder = _Recorder()
     module = _downgraded(monkeypatch, recorder)
     assert recorder.names() == [
@@ -484,6 +485,10 @@ def test_the_downgrade_refusal_says_downgrade_and_nothing_false(table):
     bound = {"feature_flags": "500ms", "api_keys": "1500ms"}[table]
     assert message.startswith(f"Refusing to downgrade schema {SCHEMA}: ")
     assert f"{SCHEMA}.{table}" in first and bound in first
+    # Dropping the side table locks that table too: the text for the block
+    # that does it is true whichever of the two a session holds.
+    if table == "feature_flags":
+        assert f"{SCHEMA}.flag_environment_settings" in first
     assert "Nothing was changed" in last
     assert last.endswith("Run the downgrade again.")
     assert "Refusing to upgrade" not in message
@@ -513,7 +518,7 @@ def test_offline_mode_is_refused(monkeypatch, direction):
 
 #: The database test files of this revision, and how many tests each defines.
 DATABASE_TESTS = {
-    "backend/tests/integration/database/test_flag_environments_migration.py": 17,
+    "backend/tests/integration/database/test_flag_environments_migration.py": 19,
 }
 
 

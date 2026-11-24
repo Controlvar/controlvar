@@ -1459,11 +1459,11 @@ by = [
 ]
 
 [[unit]]
-text = "From 0.48.0, the upgrade waits for two locks, each with its own bound: at most 0.5 s for the lock that creating the table takes on feature_flags, which only a session writing to feature_flags holds up (SDK requests only read that table, and keep being answered), then at most 1.5 s for api_keys, which every SDK request reads."
+text = "From 0.48.0, the upgrade waits for two locks, each with its own bound: at most 0.5 s for the lock that creating the table takes on feature_flags, which a session writing to feature_flags, or a vacuum, analyze or schema change of it, holds up (SDK requests only read that table, and keep being answered), then at most 1.5 s for api_keys, which every SDK request reads."
 by = [
     "test:backend/tests/unit/db/test_flag_environments_revision.py::test_the_two_bounds_are_half_a_second_and_a_second_and_a_half_and_sum_to_the_declared_two",
     "test:backend/tests/integration/database/test_flag_environments_migration.py::test_the_upgrade_from_the_previous_core_head_runs_exactly_its_statements",
-    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_a_session_writing_to_feature_flags_ends_the_upgrade_with_the_refusal",
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_a_session_writing_or_analyzing_feature_flags_ends_the_upgrade_with_the_refusal",
     "test:backend/tests/integration/database/test_flag_environments_migration.py::test_a_request_holding_api_keys_ends_the_upgrade_with_the_refusal",
     "test:backend/tests/integration/database/test_flag_environments_migration.py::test_while_the_upgrade_waits_for_feature_flags_key_lookups_still_run",
     "test:backend/tests/integration/database/test_flag_environments_migration.py::test_the_upgrade_commits_beside_readers_of_feature_flags_and_the_other_sdk_tables",
@@ -1472,16 +1472,25 @@ by = [
 [[unit]]
 text = "A lock that cannot be taken within its bound, or a deadlock, stops the upgrade with nothing applied, and it is simply run again."
 by = [
-    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_a_session_writing_to_feature_flags_ends_the_upgrade_with_the_refusal",
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_a_session_writing_or_analyzing_feature_flags_ends_the_upgrade_with_the_refusal",
     "test:backend/tests/integration/database/test_flag_environments_migration.py::test_a_request_holding_api_keys_ends_the_upgrade_with_the_refusal",
     "test:backend/tests/unit/db/test_flag_environments_revision.py::test_a_lock_timeout_or_a_deadlock_in_any_block_refuses_with_that_blocks_text",
 ]
 
 [[unit]]
-text = "The downgrade takes the same two locks, api_keys first (at most 1.5 s) and then feature_flags (at most 0.5 s), and stops the same way with nothing changed; run it again."
+text = "The downgrade can wait for more than one lock, and each wait has its own bound: at most 1.5 s for each lock it needs on api_keys (the row of each staging or development key, then the table), then at most 0.5 s for each lock it needs to drop flag_environment_settings (on that table, then on feature_flags)."
 by = [
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_the_downgrade_waits_for_each_lock_it_needs_on_its_own_bound",
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_a_session_reading_a_table_the_downgrade_locks_ends_it_with_its_refusal",
     "test:backend/tests/integration/database/test_flag_environments_migration.py::test_the_downgrade_runs_exactly_its_statements",
-    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_a_session_reading_either_table_ends_the_downgrade_with_its_refusal",
+    "test:backend/tests/unit/db/test_flag_environments_revision.py::test_the_two_bounds_are_half_a_second_and_a_second_and_a_half_and_sum_to_the_declared_two",
+]
+
+[[unit]]
+text = "A lock that cannot be taken within its bound, or a deadlock, stops it with nothing changed; run it again."
+by = [
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_a_session_reading_a_table_the_downgrade_locks_ends_it_with_its_refusal",
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_a_deadlock_with_a_session_updating_a_key_ends_the_downgrade_with_its_refusal",
     "test:backend/tests/unit/db/test_flag_environments_revision.py::test_a_lock_timeout_or_a_deadlock_in_any_block_refuses_with_that_blocks_text",
 ]
 

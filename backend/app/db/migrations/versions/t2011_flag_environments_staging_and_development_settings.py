@@ -44,9 +44,9 @@ tables, each in its own block of ``SET LOCAL lock_timeout`` ... ``SET LOCAL
 lock_timeout TO DEFAULT``, so no later revision inherits a bound:
 
 1. ``_FLAGS_LOCK_TIMEOUT`` (500 ms): creating the table takes SHARE ROW
-   EXCLUSIVE on ``feature_flags`` (the foreign key). It waits only behind a
-   session writing to ``feature_flags``; SDK requests only read it and are
-   not blocked.
+   EXCLUSIVE on ``feature_flags`` (the foreign key). It waits behind a
+   session writing to ``feature_flags``, or a vacuum, analyze or schema
+   change of it; SDK requests only read it and are not blocked.
 2. ``_KEYS_LOCK_TIMEOUT`` (1500 ms): the column and the check take ACCESS
    EXCLUSIVE on ``api_keys``, which every SDK request reads, so new key
    lookups queue behind this step while it waits and until the upgrade
@@ -63,19 +63,24 @@ rolls back every revision of that run: nothing is applied, and running the
 upgrade again is the whole remedy.
 
 **The downgrade loses every staging and development setting and key
-binding**, and takes the same two locks, ``api_keys`` first: every key whose
-environment is not ``production`` is made inactive (so it answers 401, and is
-never served production's configuration by the release rolled back to), then
+binding**, and waits for more than one lock, each bounded on its own. The
+``api_keys`` block, whose bound is ``_KEYS_LOCK_TIMEOUT``, waits for the row of
+every key whose environment is not ``production`` (another session may hold
+it, updating when the key was last used), which is made inactive (so it
+answers 401, and is never served production's configuration by the release
+rolled back to), then for ``api_keys`` itself, whose
 ``check_api_key_environment`` and ``api_keys.environment`` are dropped by name
 (so ``test_documented_downgrade_targets.py``, which reads ``drop_column``
-calls, sees this downgrade), all within ``_KEYS_LOCK_TIMEOUT``; then the table
-within ``_FLAGS_LOCK_TIMEOUT`` (dropping its foreign key takes ACCESS
-EXCLUSIVE on ``feature_flags``). Each step runs only when its object is
-present. Production flags and keys are unaffected. It does not refuse over
-data, and nothing restores what it drops: an upgrade afterwards starts every
-flag off in staging and development, and the deactivated keys come back as
-inactive production keys. A lock timeout or a deadlock refuses it with
-``_downgrade_lock_refusal()``: nothing is changed, and it is run again.
+calls, sees this downgrade). The block that drops the table, whose bound is
+``_FLAGS_LOCK_TIMEOUT``, waits for ``flag_environment_settings`` and then for
+``feature_flags``, on which dropping the foreign key takes ACCESS EXCLUSIVE.
+Each step runs only when its object is present. Production flags and keys are
+unaffected. It does not refuse over data, and nothing restores what it drops:
+an upgrade afterwards starts every flag off in staging and development, and
+the deactivated keys come back as inactive production keys. A lock timeout or
+a deadlock refuses it with ``_downgrade_lock_refusal()``, whose text for each
+block names every table the block locks: nothing is changed, and it is run
+again.
 
 **Offline mode is refused** in both directions: each reads the catalog
 before it changes anything, so neither can be emitted as SQL.
@@ -137,7 +142,8 @@ _OFFLINE_REFUSAL = (
     "it cannot be emitted as SQL; run it online (without --sql)."
 )
 
-#: (bound, what the lock is for) per table and direction.
+#: (bound, what the lock is for) per table, upgrading. Each block waits for
+#: one lock.
 _UPGRADE_WAITS = {
     _FLAGS: (
         _FLAGS_LOCK_TIMEOUT,
@@ -145,13 +151,22 @@ _UPGRADE_WAITS = {
     ),
     _KEYS: (_KEYS_LOCK_TIMEOUT, f"to add the column {_KEY_COLUMN}"),
 }
+#: (bound, the lock the refusal says could not be taken) per table, and
+#: downgrading: the ``api_keys`` block waits only on that table (a key's row,
+#: then the table), and the block that drops the side table waits on that
+#: table and then on ``feature_flags``, so its text names both. ``{schema}``
+#: is filled in when the refusal is raised.
 _DOWNGRADE_WAITS = {
     _KEYS: (
         _KEYS_LOCK_TIMEOUT,
-        "to deactivate the staging and development keys and drop the column "
-        f"{_KEY_COLUMN}",
+        f"the lock it needs on {{schema}}.{_KEYS} to deactivate the staging and "
+        f"development keys and drop the column {_KEY_COLUMN}",
     ),
-    _FLAGS: (_FLAGS_LOCK_TIMEOUT, f"to drop {_SETTINGS}, which references it"),
+    _FLAGS: (
+        _FLAGS_LOCK_TIMEOUT,
+        f"a lock it needs to drop {{schema}}.{_SETTINGS} (on that table, or on "
+        f"{{schema}}.{_FLAGS}, which it references)",
+    ),
 }
 
 
@@ -174,12 +189,12 @@ def _lock_refusal(table: str) -> str:
 
 
 def _downgrade_lock_refusal(table: str) -> str:
-    bound, purpose = _DOWNGRADE_WAITS[table]
+    bound, lock = _DOWNGRADE_WAITS[table]
     return "\n".join(
         [
             f"Refusing to downgrade schema {_SCHEMA}: t2011_flag_environments "
-            f"could not take the lock it needs on {_SCHEMA}.{table} {purpose}, "
-            f"because another session held it (this step's bound is {bound}).",
+            f"could not take {lock.format(schema=_SCHEMA)}, because another "
+            f"session held it (this step's bound is {bound}).",
             "Nothing was changed: every revision of this downgrade was rolled "
             "back, and the database is still at the revisions it had before. "
             "Run the downgrade again.",
