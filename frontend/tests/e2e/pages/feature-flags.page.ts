@@ -46,6 +46,18 @@ export class FeatureFlagsPage {
   readonly safetyRecheck: Locator;
   readonly notFound: Locator;
 
+  // Environments (the switcher is in the dashboard header, on these pages only)
+  readonly environmentBar: Locator;
+  readonly environmentSelect: Locator;
+  readonly environmentAnnouncement: Locator;
+  readonly productionMarker: Locator;
+  readonly productionBanner: Locator;
+  readonly productionOnlyNote: Locator;
+  readonly notConfigured: Locator;
+  readonly comparison: Locator;
+  readonly comparisonToggle: Locator;
+  readonly comparisonTable: Locator;
+
   constructor(page: Page) {
     this.page = page;
     this.common = new CommonPage(page);
@@ -83,10 +95,29 @@ export class FeatureFlagsPage {
     this.safetyStatus = page.getByTestId("safety-status");
     this.safetyRecheck = page.getByTestId("safety-recheck");
     this.notFound = page.getByTestId("flag-not-found");
+
+    // Environments (src/components/feature-flags/, src/components/AppShell.tsx)
+    this.environmentBar = page.getByTestId("environment-bar");
+    this.environmentSelect = page.getByTestId("environment-select");
+    this.environmentAnnouncement = page.getByTestId("environment-announcement");
+    this.productionMarker = page.getByTestId("production-marker");
+    this.productionBanner = page.getByTestId("production-banner");
+    this.productionOnlyNote = page.getByTestId("production-only-note");
+    this.notConfigured = page.getByTestId("flag-not-configured");
+    this.comparison = page.getByTestId("environment-comparison");
+    this.comparisonToggle = page.getByTestId("environment-comparison-toggle");
+    this.comparisonTable = page.getByTestId("environment-comparison-table");
   }
 
   async goto() {
     await this.common.navigateTo("/feature-flags");
+  }
+
+  /** Choose an environment in the header, and wait for `?env=` to name it. */
+  async chooseEnvironment(environment: "development" | "staging" | "production") {
+    await this.environmentSelect.selectOption(environment);
+    await expect(this.page).toHaveURL(new RegExp(`[?&]env=${environment}(&|$)`));
+    await expect(this.environmentSelect).toHaveValue(environment);
   }
 
   async gotoNew() {
