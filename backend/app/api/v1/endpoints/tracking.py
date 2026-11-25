@@ -640,8 +640,8 @@ async def assign_users_to_experiment_batch(
     change feature flags but not experiments is refused with 403 before anyone
     is assigned.
 
-    A plain ``def``: FastAPI runs it in the thread pool, so a batch does not
-    hold the event loop while it works through its users.
+    An ``async def`` route that runs the batch in a worker thread, so a batch
+    does not hold the event loop while it works through its users.
     """
     db.close()
     return await run_in_threadpool(_assign_users_in_batch, request, db)

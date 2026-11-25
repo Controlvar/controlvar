@@ -19,7 +19,8 @@ or direct grant of it), checked on every request, so it follows role changes
 and a grant revoked or expired.  The owner is the presented key's own
 ``user_id``, read from the database, not whatever ``get_api_key`` returned.
 
-Refusals: no or unknown key -> 401 (from ``get_api_key``); a valid key without
+Refusals: no or unknown key, or a key whose owner is missing or inactive -> 401
+(from ``get_api_key``, before anything here runs); a valid key without
 the scope -> 403 (:data:`MISSING_SCOPE_DETAIL`); a scoped key whose owner
 cannot change feature flags -> 403 (:data:`OWNER_ROLE_DETAIL`); these two
 texts are the same on every route.  Batch assignment
@@ -93,7 +94,10 @@ def scope_refusal(db: Session, api_key: APIKey) -> Optional[str]:
 
     The scope first (:data:`MISSING_SCOPE_DETAIL`), then its owner, read from
     the database by the key's own ``user_id`` (:data:`OWNER_ROLE_DETAIL`:
-    missing, inactive, or unable to change feature flags).
+    missing, inactive, or unable to change feature flags). On a route behind
+    :func:`require_sdk_ruleset_key` only the last of these is ever answered,
+    with 403: ``get_api_key`` has already refused a missing or inactive owner
+    with 401. :func:`presented_key_is_server_key` answers False for all three.
     """
     if not has_scope(api_key.scopes, SDK_RULESET_SCOPE):
         return MISSING_SCOPE_DETAIL
