@@ -56,7 +56,7 @@ by = [
 [[unit]]
 text = "data-timeout-ms | How long the page may stay hidden while its changes are applied: 0 to 4000 milliseconds, 1000 by default; 0 never hides it."
 by = [
-    "test:frontend/tests/e2e/runtime/hide.runtime.spec.ts::when the API never answers",
+    "test:frontend/tests/e2e/runtime/hide.runtime.spec.ts::shows the page at ${timeout} ms when the API never answers (data-timeout-ms ${attribute ?? \"absent\"})",
     "test:sdk/visual/__tests__/runtime.test.ts::holds <html> hidden while the answer is awaited, and data-timeout-ms=0 never hides",
 ]
 
@@ -71,7 +71,7 @@ by = [
 text = "data-cookie-name | Without data-user-id, the script keeps a random id in a cookie of this name, controlvar_uid by default."
 by = [
     "test:sdk/visual/__tests__/runtime.test.ts::is a new random id in the cookie, for 30 days",
-    "test:frontend/tests/e2e/runtime/consent.runtime.spec.ts::the cookie and every key go, nothing more is sent, and the next page follows the tag",
+    "test:frontend/tests/e2e/runtime/consent.runtime.spec.ts::revokeConsent() on a tag that ${mode}: the cookie and every key go, nothing more is sent, and the next page follows the tag",
 ]
 
 [[unit]]
@@ -87,7 +87,7 @@ by = ["test:frontend/tests/e2e/runtime/csp.runtime.spec.ts::the documented snipp
 
 [[unit]]
 text = "The script needs no 'unsafe-inline' and no 'unsafe-eval', and it writes styles through the CSSOM, which style-src does not restrict:"
-by = ["test:frontend/tests/e2e/runtime/csp.runtime.spec.ts::with no violation"]
+by = ["test:frontend/tests/e2e/runtime/csp.runtime.spec.ts::every change and the hide apply under ${name}, with no violation"]
 
 [[unit]]
 text = "What the script sends"
@@ -186,7 +186,7 @@ by = ["mechanism:visual-stored-keys"]
 [[unit]]
 text = "Every key starts with controlvar_, and revokeConsent() deletes all of them, with the keys later versions of the script will use."
 by = [
-    "test:frontend/tests/e2e/runtime/consent.runtime.spec.ts::the cookie and every key go, nothing more is sent, and the next page follows the tag",
+    "test:frontend/tests/e2e/runtime/consent.runtime.spec.ts::revokeConsent() on a tag that ${mode}: the cookie and every key go, nothing more is sent, and the next page follows the tag",
     "test:sdk/visual/__tests__/consent.test.ts::deletes the cookie, the default-named one too, and every controlvar_ key, and keeps the site's own",
 ]
 
@@ -223,18 +223,18 @@ by = [
 [[unit]]
 text = "controlvar.visual.revokeConsent() stops the script: nothing more is sent from this page, and it deletes every cookie it set and every controlvar_ key in this site's localStorage and sessionStorage."
 by = [
-    "test:frontend/tests/e2e/runtime/consent.runtime.spec.ts::the cookie and every key go, nothing more is sent, and the next page follows the tag",
+    "test:frontend/tests/e2e/runtime/consent.runtime.spec.ts::revokeConsent() on a tag that ${mode}: the cookie and every key go, nothing more is sent, and the next page follows the tag",
     "test:sdk/visual/__tests__/consent.test.ts::stops every request from this page: track(), a new path and the page going away",
 ]
 
 [[unit]]
 text = "Changes already shown stay until the visitor leaves the page."
-by = ["test:frontend/tests/e2e/runtime/consent.runtime.spec.ts::the cookie and every key go, nothing more is sent, and the next page follows the tag"]
+by = ["test:frontend/tests/e2e/runtime/consent.runtime.spec.ts::revokeConsent() on a tag that ${mode}: the cookie and every key go, nothing more is sent, and the next page follows the tag"]
 
 [[unit]]
 text = "With data-require-consent, later pages wait for consent() again; without it the next page starts again, so a site that lets visitors withdraw consent sets data-require-consent."
 by = [
-    "test:frontend/tests/e2e/runtime/consent.runtime.spec.ts::the cookie and every key go, nothing more is sent, and the next page follows the tag",
+    "test:frontend/tests/e2e/runtime/consent.runtime.spec.ts::revokeConsent() on a tag that ${mode}: the cookie and every key go, nothing more is sent, and the next page follows the tag",
     "test:sdk/visual/__tests__/consent.test.ts::with data-require-consent the script waits again, and a later consent() starts with a new id",
 ]
 
@@ -251,7 +251,7 @@ by = ["exempt:advice"]
 
 [[unit]]
 text = "Events already sent are not deleted; they stay in your Controlvar database."
-by = ["test:frontend/tests/e2e/runtime/consent.runtime.spec.ts::the cookie and every key go, nothing more is sent, and the next page follows the tag"]
+by = ["test:frontend/tests/e2e/runtime/consent.runtime.spec.ts::revokeConsent() on a tag that ${mode}: the cookie and every key go, nothing more is sent, and the next page follows the tag"]
 
 [[unit]]
 text = "While the page is hidden"
@@ -261,7 +261,7 @@ by = ["exempt:label"]
 text = "While the script hides the page (until its changes are applied, and at most data-timeout-ms, 1 second by default), the browser paints nothing, so First Contentful Paint and Largest Contentful Paint are reported that much later."
 by = [
     "test:frontend/tests/e2e/runtime/hide.runtime.spec.ts::while hidden the page paints nothing: every paint, and the largest, comes after it shows",
-    "test:frontend/tests/e2e/runtime/hide.runtime.spec.ts::when the API never answers",
+    "test:frontend/tests/e2e/runtime/hide.runtime.spec.ts::shows the page at ${timeout} ms when the API never answers (data-timeout-ms ${attribute ?? \"absent\"})",
 ]
 
 [[unit]]
@@ -286,7 +286,7 @@ by = [
 [[unit]]
 text = "The preview lasts for the tab, turns every other experiment off and records no assignment, no exposure and no event; a change it cannot apply is still reported."
 by = [
-    "test:frontend/tests/e2e/runtime/real-api-preview.runtime.spec.ts::a preview link shows its variant 50 times and records nothing",
+    "test:frontend/tests/e2e/runtime/real-api-preview.runtime.spec.ts::a preview link shows its variant 50 times and records nothing; a changed or revoked link gets 404, and a visitor still gets their own variant",
     "test:frontend/tests/e2e/runtime/preview.runtime.spec.ts::shows its variant with the banner, other experiments off, the address clean and nothing recorded",
     "test:sdk/visual/__tests__/consent.test.ts::a change on <html> or on the banner is never applied, and is reported as own_ui",
 ]
@@ -294,7 +294,7 @@ by = [
 [[unit]]
 text = "No change is ever applied to the page's <html> element or to the banner."
 by = [
-    "test:frontend/tests/e2e/runtime/preview.runtime.spec.ts::in seven ways leaves [Exit preview] visible, on top and in view",
+    "test:frontend/tests/e2e/runtime/preview.runtime.spec.ts::a variant that hides ${target} in seven ways leaves [Exit preview] visible, on top and in view",
     "test:sdk/visual/__tests__/consent.test.ts::a change on <html> or on the banner is never applied, and is reported as own_ui",
 ]
 

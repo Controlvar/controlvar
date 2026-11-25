@@ -33,7 +33,12 @@ jobs:
   shard:
     name: integration-tests (shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 45 minutes, the same as the nightly's integration shards. Of 28 finished
+    # attempts of shard 3 between 2026-11-24 11:49Z and 2026-11-25 05:00Z, 23
+    # succeeded in 19.6 to 29.8 minutes and 5 were cancelled at the old
+    # 30-minute limit (30.2 to 30.3 minutes), runs 45518857911, 45519385443,
+    # 45535528868 (two attempts) and 45542931745.
+    timeout-minutes: 45
     strategy:
       # One red shard must not cancel the others: the summary needs every
       # shard's report to say which tests failed and that the rest ran.

@@ -76,6 +76,14 @@ def test_the_rule_refuses_a_target_outside_every_suite():
     # under unit's root, and run by the chart suite.
     assert rc.suite_of(f"test:{CHART_RENDER}::test_x") == "chart"
     assert rc.suite_of("test:backend/tests/unit/core/test_x.py::test_x") == "unit"
+    # A Playwright test is run by the browser suite when its project is one
+    # the suite runs, and by no suite otherwise: jest, whose root holds the
+    # tree, runs none of them.
+    e2e = "test:frontend/tests/e2e"
+    assert rc.suite_of(f"{e2e}/runtime/apply.runtime.spec.ts::x") == "browser"
+    assert rc.suite_of(f"{e2e}/dialog-focus.journey.spec.ts::x") == "browser"
+    assert rc.suite_of(f"{e2e}/accessibility.spec.ts::x") is None
+    assert rc.sdk_job_of(f"{e2e}/accessibility.spec.ts::x") is None
 
 
 # ---------------------------------------------------------------------------

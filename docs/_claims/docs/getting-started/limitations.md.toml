@@ -542,7 +542,7 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "A text change on a page React renders on the server, with no error | On a site whose pages React renders on the server (Next.js and others), a text change makes React report at least one hydration error per page view (several on React 18), which your error monitoring will record. The change still shows."
-by = ["test:frontend/tests/e2e/runtime/hydration.runtime.spec.ts::on 25 targets is kept through hydration"]
+by = ["test:frontend/tests/e2e/runtime/hydration.runtime.spec.ts::${fixture}: ${op} on 25 targets is kept through hydration"]
 
 [[unit]]
 text = "A change to a text the page keeps updating | Do not change a text your site keeps updating while the page is open (a cart count, a timer, a price that loads late): once changed, either it stops showing your site's updates or your site's update replaces the change."

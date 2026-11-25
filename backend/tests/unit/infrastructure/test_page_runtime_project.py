@@ -19,6 +19,7 @@ job stays green -- each pinned here:
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import re
 import subprocess
@@ -246,8 +247,20 @@ def test_no_page_runtime_step_can_be_skipped_or_ignored() -> None:
         assert "continue-on-error" not in step, f"{step['name']!r} may fail and pass"
 
 
-def test_only_browser_e2e_runs_the_project() -> None:
-    """playwright.config.ts says Browser E2E runs it and no other step does."""
+def _rc_evidence():
+    spec = importlib.util.spec_from_file_location(
+        "rc_evidence_for_page_runtime", REPO_ROOT / "scripts" / "rc_evidence.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_only_browser_e2e_and_the_rc_evidence_leg_run_the_project() -> None:
+    """playwright.config.ts says Browser E2E runs it, and rc-evidence.yml's
+    browser-suites job at a release tag, and no other step does. That job's
+    arguments are scripts/rc_evidence.py's (``LEGS``), not the workflow's."""
     found = []
     for path in sorted(WORKFLOWS.glob("*.yml")):
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
@@ -262,6 +275,24 @@ def test_only_browser_e2e_runs_the_project() -> None:
     in_job = sum(c.count("--project=page-runtime") for c in _commands(steps[run]))
     assert {name for name, _ in found} == {"pr-qa-gate.yml"}, found
     assert len(found) == in_job == 2, found
+    rc = _rc_evidence()
+    legs = [
+        (name, session)
+        for name, leg in rc.LEGS.items()
+        for session in leg.sessions
+        if session.runner == "playwright" and session.project == "page-runtime"
+    ]
+    assert [(name, s.args, s.check) for name, s in legs] == [
+        ("browser", ("--project=page-runtime",), "scripts/check_page_runtime_run.py")
+    ], legs
+    job = yaml.safe_load((WORKFLOWS / "rc-evidence.yml").read_text(encoding="utf-8"))[
+        "jobs"
+    ]["browser-suites"]
+    assert job["strategy"]["matrix"]["include"] == [{"suite": "browser"}]
+    text = CONFIG.read_text(encoding="utf-8")
+    said = text.split("`page-runtime`", 1)[1].split("`extended`", 1)[0]
+    assert "Browser E2E runs it" in said and "rc-evidence.yml's" in said, said
+    assert "browser-suites job" in " ".join(said.replace("*", " ").split()), said
 
 
 def test_the_project_runs_runtime_specs_under_the_launch_override() -> None:

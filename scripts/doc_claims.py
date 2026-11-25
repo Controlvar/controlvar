@@ -80,7 +80,11 @@ THE TARGETS (a closed list; anything else is refused)
     nothing). In another language the file contains the name. ``test:<path>`` alone (the whole file)
     is allowed and counted separately. A ``modules/`` target in a tree without
     ``modules/`` (``scripts/core_build.sh``'s copy) is checked for its form only,
-    and counted.
+    and counted. A Playwright test's name (a file under ``frontend/tests/e2e/``)
+    is checked here as contained in the file, and the release matches it
+    exactly (``rc_evidence.py``): the test's own title as written, or its full
+    name (its describe titles and its own, joined with `` › ``), each ``${...}``
+    standing for the text the template puts there; so cite a whole title.
 ``journey:<slug>#<step>``
     ``tests/acceptance/docs/journeys/<slug>.yaml`` exists and has that step.
 ``docex:<document>#<expected text>``

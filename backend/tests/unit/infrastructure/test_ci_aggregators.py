@@ -78,6 +78,27 @@ def _summaries() -> List[wg.Summary]:
 SUMMARIES = _summaries()
 IDS = [f"{w}:{j}" for w, j, _, _ in SUMMARIES]
 
+#: The nightly's summaries. nightly-qa.yml runs on a schedule and by hand,
+#: never for a pull request's head commit, so they report no required name
+#: and R1 does not find them: they are listed, and
+#: test_the_nightly_summaries_are_found keeps the list whole. They read
+#: toJSON(needs) and carry no stray continue-on-error, as the others. They
+#: accept only `success` (test_nightly_workflow.py runs that script), so a
+#: shard skipped after an ancestor failed is red: the closure check, which is
+#: for a summary that accepts `skipped`, is not applied to them.
+NIGHTLY = wg.WORKFLOWS / "nightly-qa.yml"
+NIGHTLY_SUMMARY_IDS = ("unit-tests", "integration-tests")
+
+
+def _nightly_summaries() -> List[wg.Summary]:
+    jobs = wg.load(NIGHTLY).get("jobs") or {}
+    return [(NIGHTLY.name, j, jobs[j], jobs) for j in NIGHTLY_SUMMARY_IDS if j in jobs]
+
+
+NIGHTLY_SUMMARIES = _nightly_summaries()
+ALL_SUMMARIES = SUMMARIES + NIGHTLY_SUMMARIES
+ALL_IDS = [f"{w}:{j}" for w, j, _, _ in ALL_SUMMARIES]
+
 
 def _reported(workflow: str, job_id: str) -> Set[str]:
     return wg.reported_names(wg.WORKFLOWS / workflow)[job_id]
@@ -89,6 +110,19 @@ def test_the_summaries_are_found():
     for workflow, job_id, _, _ in SUMMARIES:
         found |= _reported(workflow, job_id) & required
     assert found == EXPECTED
+
+
+def test_the_nightly_summaries_are_found():
+    """Every job of nightly-qa.yml that needs others and runs on exactly
+    always() is a listed summary, and every listed one is such a job. A
+    summary that lost its `if:`, or a new one, fails here rather than
+    dropping out of the checks below."""
+    jobs = wg.load(NIGHTLY).get("jobs") or {}
+    found = {
+        j for j, job in jobs.items() if _needs(job) and job.get("if") in wg.SUMMARY_IF
+    }
+    assert found == set(NIGHTLY_SUMMARY_IDS), sorted(found)
+    assert [j for _, j, _, _ in NIGHTLY_SUMMARIES] == list(NIGHTLY_SUMMARY_IDS)
 
 
 @pytest.mark.regression
@@ -157,7 +191,7 @@ def missing_ancestors(job: Dict[str, Any], jobs: Dict[str, Any]) -> Set[str]:
 
 
 @pytest.mark.regression
-@pytest.mark.parametrize("workflow, job_id, job, jobs", SUMMARIES, ids=IDS)
+@pytest.mark.parametrize("workflow, job_id, job, jobs", ALL_SUMMARIES, ids=ALL_IDS)
 def test_summary_reads_all_needs(workflow, job_id, job, jobs):
     problems = reads_all_needs(job)
     assert not problems, f"{workflow} {job_id}: " + "; ".join(problems)
@@ -174,11 +208,13 @@ def test_needs_are_transitively_closed(workflow, job_id, job, jobs):
 
 
 #: (workflow, summary job id) -> the steps that may carry `continue-on-error`,
-#: by exact name. The integration summary's download is one on purpose: no
-#: report at all is the checker's to judge, so a download that finds nothing
-#: must not end the job before it.
+#: by exact name. A shard summary's download is one on purpose: no report at
+#: all is the checker's to judge, so a download that finds nothing must not
+#: end the job before it.
 CONTINUE_ON_ERROR_STEPS = {
     ("integration-tests.yml", "integration-tests"): {"Collect the shard reports"},
+    ("nightly-qa.yml", "integration-tests"): {"Collect the shard reports"},
+    ("nightly-qa.yml", "unit-tests"): {"Collect the shard reports"},
 }
 
 
@@ -203,7 +239,7 @@ def continue_on_error(
 
 
 @pytest.mark.regression
-@pytest.mark.parametrize("workflow, job_id, job, jobs", SUMMARIES, ids=IDS)
+@pytest.mark.parametrize("workflow, job_id, job, jobs", ALL_SUMMARIES, ids=ALL_IDS)
 def test_summary_carries_no_continue_on_error(workflow, job_id, job, jobs):
     problems = continue_on_error(workflow, job_id, job, CONTINUE_ON_ERROR_STEPS)
     assert not problems, f"{workflow} {job_id}: " + "; ".join(problems)
@@ -212,7 +248,7 @@ def test_summary_carries_no_continue_on_error(workflow, job_id, job, jobs):
 def test_every_continue_on_error_exception_is_still_there():
     """An exception names a step that exists and still has the flag, so a
     renamed step cannot leave a stale name that exempts its replacement."""
-    by_key = {(w, j): job for w, j, job, _ in SUMMARIES}
+    by_key = {(w, j): job for w, j, job, _ in ALL_SUMMARIES}
     for key, names in CONTINUE_ON_ERROR_STEPS.items():
         assert key in by_key, key
         steps = {s.get("name"): s for s in by_key[key].get("steps") or []}
@@ -447,6 +483,34 @@ def test_a_notifier_outside_the_scope_is_left_alone(tmp_path):
         encoding="utf-8",
     )
     assert wg.r3_workflows([path], ["integration-tests"], _no_classified) == []
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "on, selected",
+    [
+        ("pull_request", True),
+        ("push", True),
+        ("{schedule: [{cron: '0 2 * * *'}], workflow_dispatch: null}", False),
+    ],
+    ids=["pull_request", "push", "schedule-and-dispatch"],
+)
+def test_a_summary_under_a_required_name_is_one_only_where_it_runs(
+    tmp_path, on, selected
+):
+    """nightly-qa.yml's unit summary is named `Unit Tests`, a required name,
+    and runs on a schedule and by hand. Read for every event whatever the
+    workflow's triggers, it was taken for the pull request's check, and its
+    notifier for a job that escaped R3."""
+    text = UNNAMED_TYPED.format(if_line="    if: always()\n")
+    text = text.replace("on: pull_request\n", f"on: {on}\n", 1)
+    assert f"on: {on}\n" in text
+    path = _workflow(tmp_path, text)
+    found = wg.select_summaries([path], ["integration-tests"], _no_classified)
+    assert bool(found) is selected, found
+    assert bool(wg.r3_workflows([path], ["integration-tests"], _no_classified)) is (
+        selected
+    )
 
 
 @pytest.mark.regression

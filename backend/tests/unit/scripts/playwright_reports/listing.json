@@ -1,0 +1,226 @@
+{
+ "config": {
+  "rootDir": "/work/controlvar/frontend/tests/e2e",
+  "version": "1.64.0"
+ },
+ "suites": [
+  {
+   "title": "runtime/outcomes.runtime.spec.ts",
+   "file": "runtime/outcomes.runtime.spec.ts",
+   "specs": [
+    {
+     "title": "a top-level test passes",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 8,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "skipped",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": []
+      }
+     ]
+    },
+    {
+     "title": "a test fails",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 24,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "skipped",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": []
+      }
+     ]
+    },
+    {
+     "title": "a test fails on its first attempt and passes on its retry",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 28,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "skipped",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": []
+      }
+     ]
+    },
+    {
+     "title": "a test marked test.fail() fails as expected",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 32,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "skipped",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": []
+      }
+     ]
+    },
+    {
+     "title": "a test marked test.fail() passes",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 37,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "skipped",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": []
+      }
+     ]
+    },
+    {
+     "title": "a test skipped with test.skip",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 42,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "skipped",
+       "expectedStatus": "skipped",
+       "annotations": [
+        {
+         "type": "skip",
+         "location": {
+          "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+          "line": 42,
+          "column": 6
+         }
+        }
+       ],
+       "results": []
+      }
+     ]
+    },
+    {
+     "title": "a test marked fixme",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 44,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "skipped",
+       "expectedStatus": "skipped",
+       "annotations": [
+        {
+         "type": "fixme",
+         "location": {
+          "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+          "line": 44,
+          "column": 6
+         }
+        }
+       ],
+       "results": []
+      }
+     ]
+    },
+    {
+     "title": "a test that skips itself on a condition",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 46,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "skipped",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": []
+      }
+     ]
+    },
+    {
+     "title": "every change applies under count, with no violation",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 51,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "skipped",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": []
+      }
+     ]
+    },
+    {
+     "title": "every change applies under revenue, with no violation",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 51,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "skipped",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": []
+      }
+     ]
+    }
+   ],
+   "suites": [
+    {
+     "title": "outer",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "specs": [
+      {
+       "title": "a nested test passes",
+       "file": "runtime/outcomes.runtime.spec.ts",
+       "line": 13,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "skipped",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": []
+        }
+       ]
+      }
+     ],
+     "suites": [
+      {
+       "title": "mid",
+       "file": "runtime/outcomes.runtime.spec.ts",
+       "specs": [
+        {
+         "title": "b",
+         "file": "runtime/outcomes.runtime.spec.ts",
+         "line": 18,
+         "tests": [
+          {
+           "projectName": "page-runtime",
+           "status": "skipped",
+           "expectedStatus": "passed",
+           "annotations": [],
+           "results": []
+          }
+         ]
+        }
+       ],
+       "suites": []
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-11-25T03:22:44.533Z",
+  "duration": 5.4690000000000225,
+  "expected": 0,
+  "skipped": 12,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}
