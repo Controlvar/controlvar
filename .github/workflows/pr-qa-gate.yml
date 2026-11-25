@@ -753,8 +753,8 @@ jobs:
   # `always()`, like integration-tests.yml's summary, so that it always
   # reports an explicit result and a failure names what failed. The cost:
   # when a newer push supersedes a pull request's run, the old run holds the
-  # concurrency group until this job has started and run: about 10-60 s,
-  # measured on integration-tests.yml's summary, which started 2-51 s after
+  # concurrency group until this job has started and run: about 8-15 s,
+  # measured on integration-tests.yml's summary, which started 2-4 s after
   # the last cancelled shard ended and ran 6-11 s.
   #
   # On a docs-only change it runs the tests that pin docs/ content, which is
