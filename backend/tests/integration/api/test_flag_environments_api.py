@@ -391,15 +391,20 @@ def test_the_environments_are_listed_for_every_role(client, db_session, role):
     ]
 
 
+#: A flag id no test stores. A fixed one, because it is part of the test ids,
+#: and every process that collects them must name the same tests.
+NO_FLAG = "00000000-0000-4000-8000-00000000f1a9"
+
+
 @pytest.mark.parametrize(
     "method, path",
     [
         ("GET", ENVIRONMENTS),
-        ("GET", f"{ENVIRONMENTS}/staging/feature-flag-settings?flag_id={uuid.uuid4()}"),
-        ("GET", f"{FLAGS}/{uuid.uuid4()}/environments"),
-        ("GET", f"{FLAGS}/{uuid.uuid4()}/environments/staging"),
-        ("PUT", f"{FLAGS}/{uuid.uuid4()}/environments/staging"),
-        ("POST", f"{FLAGS}/{uuid.uuid4()}/environments/staging/promote"),
+        ("GET", f"{ENVIRONMENTS}/staging/feature-flag-settings?flag_id={NO_FLAG}"),
+        ("GET", f"{FLAGS}/{NO_FLAG}/environments"),
+        ("GET", f"{FLAGS}/{NO_FLAG}/environments/staging"),
+        ("PUT", f"{FLAGS}/{NO_FLAG}/environments/staging"),
+        ("POST", f"{FLAGS}/{NO_FLAG}/environments/staging/promote"),
     ],
 )
 def test_every_route_needs_a_sign_in(client, method, path):
