@@ -65,7 +65,7 @@ export function SchedulerHealthPage() {
         {!loading && !error && schedulers.length > 0 && (
           <div className="flex flex-col gap-4">
             {schedulers.map((scheduler) => (
-              <SchedulerStatusCard key={scheduler.name} scheduler={scheduler} />
+              <SchedulerStatusCard key={scheduler.scheduler_name} scheduler={scheduler} />
             ))}
           </div>
         )}

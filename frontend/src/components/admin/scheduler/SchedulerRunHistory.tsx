@@ -2,12 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { AdminService } from '@/services/admin';
 import { SchedulerRun } from '@/types/admin';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
+import { RUN_STATUS_BADGE_CLASSES } from './runStatus';
 
 interface SchedulerRunHistoryProps {
   schedulerName: string;
 }
 
-function formatDate(isoString: string): string {
+function formatDate(isoString: string | null): string {
+  if (!isoString) return '—';
   try {
     return parseApiTimestamp(isoString).toLocaleString();
   } catch {
@@ -73,39 +75,41 @@ export function SchedulerRunHistory({ schedulerName }: SchedulerRunHistoryProps)
             <thead className="bg-slate-50 text-slate-600 uppercase tracking-wide">
               <tr>
                 <th className="px-3 py-2 text-left">Started At</th>
-                <th className="px-3 py-2 text-left">Duration (ms)</th>
-                <th className="px-3 py-2 text-left">Outcome</th>
+                <th className="px-3 py-2 text-left">Completed At</th>
+                <th className="px-3 py-2 text-left">Status</th>
+                <th className="px-3 py-2 text-left">Processed</th>
+                <th className="px-3 py-2 text-left">Failed</th>
                 <th className="px-3 py-2 text-left">Error Message</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {runs.map((run) => (
-                <tr key={run.id} data-testid={`run-row-${run.id}`} className="hover:bg-slate-50">
-                  <td className="px-3 py-2 text-slate-700">{formatDate(run.started_at)}</td>
-                  <td
-                    data-testid={`duration-${run.id}`}
-                    className="px-3 py-2 text-slate-700"
-                  >
-                    {run.duration_ms}
-                  </td>
-                  <td className="px-3 py-2">
-                    <span
-                      data-testid={`outcome-badge-${run.id}`}
-                      className={[
-                        'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
-                        run.outcome === 'success'
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800',
-                      ].join(' ')}
-                    >
-                      {run.outcome}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-slate-500">
-                    {run.outcome === 'error' && run.error_message ? run.error_message : '—'}
-                  </td>
-                </tr>
-              ))}
+              {runs.map((run) => {
+                const key = run.id ?? run.started_at;
+                return (
+                  <tr key={key} data-testid={`run-row-${key}`} className="hover:bg-slate-50">
+                    <td className="px-3 py-2 text-slate-700">{formatDate(run.started_at)}</td>
+                    <td className="px-3 py-2 text-slate-700">{formatDate(run.completed_at)}</td>
+                    <td className="px-3 py-2">
+                      <span
+                        data-testid={`status-badge-${key}`}
+                        className={[
+                          'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
+                          RUN_STATUS_BADGE_CLASSES[run.status] ?? 'bg-slate-100 text-slate-600',
+                        ].join(' ')}
+                      >
+                        {run.status}
+                      </span>
+                    </td>
+                    <td data-testid={`processed-${key}`} className="px-3 py-2 text-slate-700">
+                      {run.items_processed}
+                    </td>
+                    <td data-testid={`failed-${key}`} className="px-3 py-2 text-slate-700">
+                      {run.items_failed}
+                    </td>
+                    <td className="px-3 py-2 text-slate-500">{run.error_message || '—'}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
