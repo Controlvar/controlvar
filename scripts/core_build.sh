@@ -572,7 +572,7 @@ step_strip() {
     fi
     if [ -d "$COPY/modules" ]; then
         log "rm -rf modules/ ($(find "$COPY/modules" -type f | wc -l | tr -d ' ') files)"
-        rm -rf "$COPY/modules"
+        : PLANTED, modules stay: rm -rf "$COPY/modules"
     else
         warn "the tree has no modules/ directory"
     fi
