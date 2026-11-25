@@ -10,12 +10,16 @@ stand-in tools.  None needs a database, the build's own tools or the network.
 from __future__ import annotations
 
 import os
+import re
 import signal
 import subprocess
+import sys
 import time
 from pathlib import Path
 
 import pytest
+
+from backend.tests.shard import ENV_REPORT, ENV_SHARD
 
 _SCRIPT = Path(__file__).resolve().parents[4] / "scripts" / "core_build.sh"
 
@@ -38,9 +42,27 @@ _CORE_STEPS = [
 ]
 
 
-def run(*args: str) -> subprocess.CompletedProcess:
+#: The variables backend/tests/shard.py reads; --shard refuses them set.
+_SHARD_VARS = (ENV_SHARD, ENV_REPORT)
+
+
+def _clean_env(**extra: str) -> dict[str, str]:
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in _SHARD_VARS and k not in ("CORE_BUILD_STEPS", "CORE_BUILD_DIR")
+    }
+    env.update(extra)
+    return env
+
+
+def run(*args: str, **env: str) -> subprocess.CompletedProcess:
     return subprocess.run(
-        [str(_SCRIPT), *args], capture_output=True, text=True, timeout=60
+        [str(_SCRIPT), *args],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env=_clean_env(**env),
     )
 
 
@@ -371,3 +393,304 @@ class TestAStepThatDoesNotFinish:
         assert "core-build: OK" not in err
         assert "core-build: FAILED at step unit" in err
         assert summary(err)["unit"].startswith("FAILED"), err
+
+
+# ---------------------------------------------------------------------------
+# --shard I/N (#2126)
+# ---------------------------------------------------------------------------
+
+
+class TestShardArguments:
+    """`--shard` is refused, with exit 2 before preflight, wherever it could
+    run less than its slice or write where a report already is."""
+
+    @pytest.mark.parametrize("spec", ["1/1", "2/4", "4/4", "1/999"])
+    def test_a_spec_i_of_n_is_accepted(self, spec):
+        assert run("--shard", spec, "--list-steps").returncode == 0
+        assert run(f"--shard={spec}", "--list-steps").returncode == 0
+
+    @pytest.mark.parametrize(
+        "spec", ["0/4", "5/4", "04/4", "2-4", "/4", "2/", " 2/4", "2/4 ", "1000/1000"]
+    )
+    def test_any_other_spec_is_a_usage_error(self, spec):
+        result = run("--shard", spec, "--list-steps")
+        assert result.returncode == 2, result.stdout + result.stderr
+        assert result.stdout == ""
+
+    def test_a_shard_cannot_be_narrowed_by_steps(self):
+        result = run("--shard", "2/4", "--steps", "unit", "--list-steps")
+        assert result.returncode == 2
+        assert "cannot be combined with --steps" in result.stderr
+        result = run("--shard", "2/4", "--list-steps", CORE_BUILD_STEPS="unit")
+        assert result.returncode == 2
+        assert "cannot be combined with --steps" in result.stderr
+
+    def test_a_shard_is_of_the_core_profile(self):
+        result = run("--shard", "2/4", "--profile", "full", "--list-steps")
+        assert result.returncode == 2
+        assert "--shard runs only with --profile core" in result.stderr
+
+    @pytest.mark.parametrize("var", _SHARD_VARS)
+    def test_the_shard_variables_already_set_are_refused(self, var):
+        """Set in the caller's environment they reach every session, and the
+        second session to start stops at the first one's report."""
+        result = run("--shard", "2/4", "--list-steps", **{var: "/x"})
+        assert result.returncode == 2
+        assert f"{var} is set" in result.stderr
+
+    def test_a_shard_needs_an_absolute_report_directory(self, tmp_path):
+        result = run("--shard", "2/4")
+        assert result.returncode == 2
+        assert "--shard needs --shard-reports DIR" in result.stderr
+        result = run("--shard", "2/4", "--shard-reports", "relative/dir")
+        assert result.returncode == 2
+        assert "must be an absolute path" in result.stderr
+        result = run("--shard-reports", str(tmp_path))
+        assert result.returncode == 2
+        assert "--shard-reports needs --shard" in result.stderr
+
+    @pytest.mark.regression
+    @pytest.mark.parametrize("suite", ["unit", "integration"])
+    def test_a_directory_holding_this_shard_s_report_is_refused(self, tmp_path, suite):
+        """A second run of the same line into the same directory would stop
+        at its first session (the report exists, backend/tests/shard.py)."""
+        (tmp_path / f"shard-{suite}-2.json").write_text("")
+        result = run("--shard", "2/4", "--shard-reports", str(tmp_path))
+        assert result.returncode == 2, result.stdout + result.stderr
+        assert (
+            f"{tmp_path} already holds shard-{suite}-2.json; give a fresh directory"
+            in result.stderr
+        )
+        assert "preflight" not in result.stderr
+        # Another shard's report is not this shard's.
+        other = run("--shard", "3/4", "--shard-reports", str(tmp_path), "--list-steps")
+        assert other.returncode == 0, other.stdout + other.stderr
+
+    def test_shard_one_runs_the_sequence_and_the_others_their_slices(self):
+        whole = listed()
+        assert listed("--shard", "1/4") == whole
+        for spec in ("2/4", "3/4", "4/4"):
+            assert listed("--shard", spec) == [
+                "copy",
+                "strip",
+                "import",
+                "unit",
+                "integration",
+            ]
+
+
+#: A stand-in interpreter that records, for every `-m pytest` session, the
+#: suite it was given and the two shard variables as that session saw them.
+#: Every other call succeeds and prints nothing, except the one the secrets
+#: step reads its count of findings from (the first word, 0). FAKE_FAIL names
+#: a suite whose session fails.
+_RECORDING_PYTHON = """#!/bin/sh
+suite=""
+prev2=""
+prev1=""
+for arg in "$@"; do
+    if [ "$prev2" = "-m" ] && [ "$prev1" = "pytest" ]; then
+        suite="$arg"
+        break
+    fi
+    prev2="$prev1"
+    prev1="$arg"
+done
+if [ -n "$suite" ]; then
+    printf '%s|%s|%s\\n' "$suite" "${@SHARD@-unset}" \\
+        "${@REPORT@-unset}" >> "$FAKE_RECORD"
+    [ "$suite" = "${FAKE_FAIL:-}" ] && exit 1
+    exit 0
+fi
+if [ "${1:-}" = "-" ] && [ -n "${REPORT:-}" ]; then
+    echo "0 raw findings: "
+fi
+exit 0
+""".replace("@SHARD@", ENV_SHARD).replace("@REPORT@", ENV_REPORT)
+
+#: npm's `run build` leaves the static export the frontend step checks.
+_FAKE_NPM = """#!/bin/sh
+if [ "${1:-}" = run ] && [ "${2:-}" = build ]; then
+    mkdir -p out/_next/static
+    echo 'Separate teams into workspaces' > out/_next/static/page.js
+fi
+exit 0
+"""
+
+
+class _Shard:
+    """The script as one shard, against _Build's stand-in copy and tools (no
+    database, no network, no git repository), with what every step of the
+    sequence needs to pass and an interpreter that records each session."""
+
+    def __init__(self, tmp_path: Path) -> None:
+        base = _Build(tmp_path)
+        self.copy = base.copy
+        for path in (
+            "tests/sdk-contract/ruleset-vectors.json",
+            "backend/lambda/fn/tests/test_x.py",
+        ):
+            (self.copy / path).parent.mkdir(parents=True, exist_ok=True)
+            (self.copy / path).write_text("")
+        (self.copy / "frontend" / "node_modules").mkdir(parents=True)
+        tools = Path(base.env["PYTHON"]).parent
+        _executable(tools / "reuse", "#!/bin/sh\nexit 0\n")
+        _executable(tools / "npm", _FAKE_NPM)
+        _executable(tools / "fake-python", _RECORDING_PYTHON)
+        self.record = tmp_path / "sessions.txt"
+        self.reports = tmp_path / "reports"
+        self.env = _clean_env(
+            PATH=base.env["PATH"],
+            PYTHON=base.env["PYTHON"],
+            VIRTUAL_ENV=str(tmp_path),
+            FAKE_RECORD=str(self.record),
+        )
+
+    def run(self, spec: str, **env: str) -> tuple[int, str]:
+        done = subprocess.run(
+            [
+                str(_SCRIPT),
+                "--profile",
+                "core",
+                "--dir",
+                str(self.copy),
+                "--shard",
+                spec,
+                "--shard-reports",
+                str(self.reports),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env={**self.env, **env},
+        )
+        return done.returncode, done.stderr
+
+    def sessions(self) -> list[tuple[str, str, str]]:
+        lines = self.record.read_text().splitlines() if self.record.exists() else []
+        return [tuple(line.split("|")) for line in lines]  # type: ignore[misc]
+
+
+@pytest.fixture
+def shard(tmp_path):
+    return _Shard(tmp_path)
+
+
+class TestOnlyTheSlicedSessionsGetTheShard:
+    """The two variables reach the unit and integration sessions and no
+    other: in smoke, a Lambda session or the vectors they would cut that
+    session to a slice nothing checks, or stop it at a report that exists."""
+
+    @pytest.mark.regression
+    def test_shard_one_runs_every_session_and_slices_two(self, shard):
+        status, err = shard.run("1/4")
+        assert status == 0, err
+        assert "core-build: OK (--profile core, shard 1/4)" in err, err
+        sessions = shard.sessions()
+        suites = [s for s, _, _ in sessions]
+        assert suites == [
+            "backend/tests/unit",
+            "backend/tests/integration",
+            "backend/tests/smoke",
+            "backend/lambda/fn",
+            "tests/sdk-contract",
+        ], sessions
+        sliced = {s: (spec, report) for s, spec, report in sessions if spec != "unset"}
+        assert sorted(sliced) == ["backend/tests/integration", "backend/tests/unit"], (
+            sessions
+        )
+        assert {spec for spec, _ in sliced.values()} == {"1/4"}
+        reports = [report for _, report in sliced.values()]
+        assert reports == [
+            str(shard.reports / "shard-unit-1.json"),
+            str(shard.reports / "shard-integration-1.json"),
+        ], reports
+        assert all(os.path.isabs(r) for r in reports) and len(set(reports)) == 2
+        for suite, spec, report in sessions:
+            if suite not in sliced:
+                assert (spec, report) == ("unset", "unset"), (suite, spec, report)
+        assert shard.reports.is_dir()
+
+    @pytest.mark.regression
+    def test_another_shard_runs_its_tree_its_import_and_its_two_slices(self, shard):
+        status, err = shard.run("3/4")
+        assert status == 0, err
+        assert shard.sessions() == [
+            ("backend/tests/unit", "3/4", str(shard.reports / "shard-unit-3.json")),
+            (
+                "backend/tests/integration",
+                "3/4",
+                str(shard.reports / "shard-integration-3.json"),
+            ),
+        ]
+        outcomes = summary(err)
+        assert outcomes["import"].startswith("ok"), outcomes
+        for step in ("reuse", "secrets", "bootstrap", "smoke", "lambda", "frontend"):
+            assert outcomes[step] == "skipped", outcomes
+        assert "skipping step smoke (not in shard 3/4)" in err, err
+
+    @pytest.mark.regression
+    def test_a_failed_shard_names_itself_and_how_to_run_it_again(self, shard):
+        """The last lines say which shard failed at which step, and give the
+        line that runs that shard again locally, with a fresh directory."""
+        status, err = shard.run("2/4", FAKE_FAIL="backend/tests/unit")
+        assert status == 1, err
+        assert "core-build: FAILED at step unit (shard 2/4) (exit 1)" in err, err
+        assert (
+            "core-build: to run this shard again: scripts/core_build.sh --profile "
+            'core --shard 2/4 --shard-reports "$(mktemp -d)"'
+        ) in err, err
+        assert summary(err)["integration"] == "not run"
+        assert "core-build: OK" not in err
+
+    def test_the_repeat_line_is_accepted_by_the_script(self, tmp_path):
+        """The printed line, with its directory made, is a valid invocation."""
+        done = run("--shard", "2/4", "--shard-reports", str(tmp_path), "--list-steps")
+        assert done.returncode == 0, done.stdout + done.stderr
+        assert done.stdout.split() == ["copy", "strip", "import", "unit", "integration"]
+
+
+def _pytest_session_options() -> list[str]:
+    """The options pytest_session gives every session, after the suite."""
+    body = _SCRIPT.read_text()
+    match = re.search(r'"\$PYTHON" -m pytest "\$@" ([^)\n]*)\)', body)
+    assert match, 'pytest_session no longer runs pytest with "$@" first'
+    return match.group(1).split()
+
+
+@pytest.mark.regression
+def test_a_failing_test_is_named_in_the_short_summary(tmp_path):
+    """`-rs` alone replaced pytest's default `-rfE`: a failing test was named
+    only in the FAILURES section, far above the end of a long log. With
+    pytest_session's own options, the short summary at the end names it."""
+    (tmp_path / "test_x.py").write_text(
+        "import pytest\n\n"
+        "def test_fails():\n    assert False\n\n"
+        "@pytest.mark.skip(reason='not here')\n"
+        "def test_skipped():\n    pass\n"
+    )
+    done = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            str(tmp_path),
+            *_pytest_session_options(),
+            "-c",
+            os.devnull,
+            "--rootdir",
+            str(tmp_path),
+            "-p",
+            "no:cacheprovider",
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env=_clean_env(),
+    )
+    assert done.returncode == 1, done.stdout + done.stderr
+    tail = done.stdout.split("short test summary info", 1)
+    assert len(tail) == 2, done.stdout
+    assert "FAILED test_x.py::test_fails" in tail[1], done.stdout
+    assert "SKIPPED" in tail[1] and "not here" in tail[1], done.stdout

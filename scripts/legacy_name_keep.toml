@@ -1696,6 +1696,12 @@ count = 1
 reason = "K18: CI plumbing (env-inventory.md)"
 
 [[keep]]
+path = "scripts/core_build.sh"
+literal = "EXPERIMENTLY_TEST_SHARD"
+count = 4
+reason = "K18: CI plumbing (env-inventory.md)"
+
+[[keep]]
 path = "scripts/rc_evidence.py"
 literal = "EXPERIMENTLY_TEST_SHARD"
 count = 2

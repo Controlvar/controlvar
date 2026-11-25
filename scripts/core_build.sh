@@ -13,6 +13,10 @@
 #                                         # would run, in order, and exit 0
 #                                         # without touching anything
 #
+#   scripts/core_build.sh --profile core --shard I/N --shard-reports DIR
+#                                         # one of N shards, as the core-build
+#                                         # CI check runs it (below)
+#
 # The script NEVER touches the checkout it is run from.  It copies the working
 # tree (every file `git ls-files` knows about that is not ignored — so no venv,
 # no node_modules, no .env, no build output) into a temporary directory and
@@ -45,8 +49,9 @@
 #                exactly Base.metadata's core set and none of the tables
 #                modules-manifest.txt lists exist
 #   unit / integration / smoke
-#                three separate pytest sessions, -p no:cov -rs (each skip is
-#                listed with its reason); tests marked
+#                three separate pytest sessions, -p no:cov -rfEs (each failed
+#                or erroring test, and each skip with its reason, is listed at
+#                the end of the log); tests marked
 #                @pytest.mark.modules are skipped by backend/tests/conftest.py
 #   lambda       one pytest session per backend/lambda/<function>/ (they all
 #                define `tests.conftest`, so they cannot share a session)
@@ -66,6 +71,24 @@
 # expects the module tables to exist, `modules/backend/tests` joins the pytest
 # sessions, and `frontend` expects the module routes to be present in the
 # bundle.
+#
+# Shards (`--shard I/N --shard-reports DIR`, core profile only)
+#   N runs, I = 1..N, between them run the core sequence once, with the unit
+#   and integration sessions cut into N slices: a test belongs to slice I
+#   when sha256(its node id) % N == I-1 (backend/tests/shard.py).  Shard 1
+#   runs every step; shards 2..N run copy, strip, import, unit and
+#   integration, so every shard checks that its tree cannot import
+#   `modules`.  Only the unit and integration sessions are sliced; each
+#   writes what it collected, selected and ran to DIR/shard-unit-I.json and
+#   DIR/shard-integration-I.json, and scripts/check_test_shards.py over all N
+#   shards' reports proves every collected test ran exactly once.  I/N is
+#   `[1-9][0-9]{0,2}/[1-9][0-9]{0,2}` with I <= N.  DIR must be an absolute
+#   path; it is created when absent, and one that already holds this shard's
+#   reports is refused.  Usage errors (exit 2): --shard with --steps or
+#   CORE_BUILD_STEPS, with --profile full, without --shard-reports (except
+#   with --list-steps), or with either of backend/tests/shard.py's two
+#   variables already set; --shard-reports without --shard.  `--dir` with an
+#   existing copy reuses it, as it does for --steps.
 #
 # Environment
 #   POSTGRES_SERVER/POSTGRES_HOST, POSTGRES_PORT, POSTGRES_USER,
@@ -92,7 +115,8 @@
 # the script itself is stopped by SIGINT, SIGTERM or SIGHUP (130, 143, 129);
 # 2 for a usage error.  The summary lists every step of the sequence with its
 # outcome: ok, skipped (not asked for), FAILED, or not run (asked for, never
-# reached).
+# reached).  A shard's OK or FAILED line names the shard, and a failed shard
+# prints the command that runs it again.
 #
 # A signal sent to the script alone is acted on once the command the step is
 # running returns (bash runs a trap only between commands); one sent to the
@@ -114,6 +138,18 @@ STEPS_GIVEN=0
 [ -n "$STEPS" ] && STEPS_GIVEN=1
 LIST_STEPS=0
 BUILD_DIR="${CORE_BUILD_DIR:-}"
+# --shard I/N and --shard-reports DIR.  SHARD stays empty without --shard:
+# then nothing below differs from an unsharded run.
+SHARD=""
+SHARD_GIVEN=0
+SHARD_INDEX=""
+SHARD_REPORTS=""
+SHARD_REPORTS_GIVEN=0
+
+usage_error() {
+    printf 'core-build: %s\n' "$*" >&2
+    exit 2
+}
 
 # Every step name `run_step` knows, in order.  A --steps filter is matched
 # against this list: a name that is not here selects nothing, and an
@@ -139,6 +175,16 @@ while [ $# -gt 0 ]; do
             BUILD_DIR="${2:-}"; shift 2 ;;
         --dir=*)
             BUILD_DIR="${1#--dir=}"; shift ;;
+        --shard)
+            [ $# -ge 2 ] || usage_error "--shard needs a value, i/n (for example 2/4)"
+            SHARD="$2"; SHARD_GIVEN=1; shift 2 ;;
+        --shard=*)
+            SHARD="${1#--shard=}"; SHARD_GIVEN=1; shift ;;
+        --shard-reports)
+            [ $# -ge 2 ] || usage_error "--shard-reports needs a directory"
+            SHARD_REPORTS="$2"; SHARD_REPORTS_GIVEN=1; shift 2 ;;
+        --shard-reports=*)
+            SHARD_REPORTS="${1#--shard-reports=}"; SHARD_REPORTS_GIVEN=1; shift ;;
         -h|--help)
             usage; exit 0 ;;
         *)
@@ -150,6 +196,51 @@ case "$PROFILE" in
     core|full) ;;
     *) echo "core-build: --profile must be core or full, not '$PROFILE'" >&2; exit 2 ;;
 esac
+
+# --shard: every refusal here is a usage error, before preflight.  The two
+# variables would reach every session, and the second one to start would find
+# the first one's report and stop (exit 4); --shard sets them on the unit and
+# integration sessions alone.  A shard runs its own steps, so a --steps filter
+# beside it could only drop part of the sequence without saying so.
+if [ "$SHARD_GIVEN" = 1 ]; then
+    _shard_spec='^([1-9][0-9]{0,2})/([1-9][0-9]{0,2})$'
+    if ! [[ "$SHARD" =~ $_shard_spec ]]; then
+        usage_error "--shard must be i/n with 1 <= i <= n (for example 2/4), not '$SHARD'"
+    fi
+    SHARD_INDEX="${BASH_REMATCH[1]}"
+    [ "$SHARD_INDEX" -le "${BASH_REMATCH[2]}" ] \
+        || usage_error "--shard $SHARD: there is no shard $SHARD_INDEX of ${BASH_REMATCH[2]}"
+    unset _shard_spec
+    [ "$PROFILE" = core ] || usage_error "--shard runs only with --profile core"
+    [ "$STEPS_GIVEN" = 0 ] \
+        || usage_error "--shard runs its own steps; it cannot be combined with --steps or CORE_BUILD_STEPS"
+    for _var in EXPERIMENTLY_TEST_SHARD EXPERIMENTLY_TEST_SHARD_REPORT; do
+        [ -z "${!_var:-}" ] \
+            || usage_error "$_var is set; --shard sets it for the unit and integration sessions only, so unset it"
+    done
+    unset _var
+    if [ "$LIST_STEPS" = 0 ] && [ "$SHARD_REPORTS_GIVEN" = 0 ]; then
+        usage_error "--shard needs --shard-reports DIR, where the unit and integration sessions write their reports"
+    fi
+    if [ "$SHARD_REPORTS_GIVEN" = 1 ]; then
+        case "$SHARD_REPORTS" in
+            /*) ;;
+            *) usage_error "--shard-reports must be an absolute path, not '$SHARD_REPORTS'" ;;
+        esac
+        # A second run into the same directory would stop at the first
+        # session, whose report already exists (backend/tests/shard.py).
+        for _report in "shard-unit-$SHARD_INDEX.json" "shard-integration-$SHARD_INDEX.json"; do
+            [ ! -e "$SHARD_REPORTS/$_report" ] \
+                || usage_error "$SHARD_REPORTS already holds $_report; give a fresh directory"
+        done
+        unset _report
+    fi
+    # Shard 1 runs the whole sequence; the others run the unit and
+    # integration slices and the steps that make and check their tree.
+    [ "$SHARD_INDEX" = 1 ] || STEPS="copy,strip,import,unit,integration"
+elif [ "$SHARD_REPORTS_GIVEN" = 1 ]; then
+    usage_error "--shard-reports needs --shard"
+fi
 
 # Validate the filter AND normalise it in place.  `want_step` matches
 # ",$STEPS," against ",<name>,", so `--steps "unit, frontend"` used to
@@ -301,11 +392,19 @@ on_exit() {
     if [ "$status" -eq 0 ] && [ -n "$failed_at" ]; then
         status=1
     fi
+    local shard_note=""
+    [ -n "$SHARD" ] && shard_note=" (shard $SHARD)"
     if [ "$status" -ne 0 ]; then
         if [ -n "$failed_at" ]; then
-            printf '\ncore-build: FAILED at step %s (exit %s) after %ss\n' "$failed_at" "$status" "$total" >&2
+            printf '\ncore-build: FAILED at step %s%s (exit %s) after %ss\n' "$failed_at" "$shard_note" "$status" "$total" >&2
         else
-            printf '\ncore-build: FAILED after its last step (exit %s) after %ss\n' "$status" "$total" >&2
+            printf '\ncore-build: FAILED after its last step%s (exit %s) after %ss\n' "$shard_note" "$status" "$total" >&2
+        fi
+        if [ -n "$SHARD" ]; then
+            # The same shard again, locally: a fresh report directory each
+            # time, because a report that exists stops the session.
+            # shellcheck disable=SC2016  # printed for the reader to run
+            printf 'core-build: to run this shard again: scripts/core_build.sh --profile core --shard %s --shard-reports "$(mktemp -d)"\n' "$SHARD" >&2
         fi
         if [ -n "$SIGNALLED" ]; then
             printf 'core-build: stopped by SIG%s\n' "$SIGNALLED" >&2
@@ -318,7 +417,7 @@ on_exit() {
         fi
         exit "$status"
     fi
-    printf '\ncore-build: OK (--profile %s) in %ss\n' "$PROFILE" "$total" >&2
+    printf '\ncore-build: OK (--profile %s%s) in %ss\n' "$PROFILE" "${SHARD:+, shard $SHARD}" "$total" >&2
     if [ -n "$COPY" ] && [ -d "$COPY" ]; then
         if [ "$KEEP" = 1 ]; then
             printf 'core-build: working copy kept: %s\n' "$COPY" >&2
@@ -356,7 +455,11 @@ want_step() {
 run_step() {
     local name="$1"
     if ! want_step "$name"; then
-        log "skipping step $name (--steps $STEPS)"
+        if [ -n "$SHARD" ]; then
+            log "skipping step $name (not in shard $SHARD)"
+        else
+            log "skipping step $name (--steps $STEPS)"
+        fi
         return 0
     fi
     CURRENT_STEP="$name"
@@ -689,20 +792,39 @@ PY
 pytest_session() {
     # Each suite is its own session, from the copy's root, with the copy's
     # pyproject.toml as the configuration and its conftest as the harness.
-    # -rs lists every skipped test with its reason at the end of the log: a
-    # skip counts as a pass in the exit status, so the log is where a test
-    # that did not run shows.
+    # -rfEs lists every failed and erroring test, and every skipped test with
+    # its reason, at the end of the log (-rs alone replaced pytest's default
+    # -rfE, so a failing test was named only in the FAILURES section, far
+    # above): a skip counts as a pass in the exit status, so the log is where
+    # a test that did not run shows.
     # --durations=30 prints the 30 slowest tests of the session at the end of
     # the log; it only reports, it selects nothing.
-    (cd "$COPY" && "$PYTHON" -m pytest "$@" -p no:cov -q --tb=short -rs --durations=30)
+    (cd "$COPY" && "$PYTHON" -m pytest "$@" -p no:cov -q --tb=short -rfEs --durations=30)
+}
+
+# The unit or integration session, cut to this shard's slice under --shard.
+# The two variables are exported in a subshell around this one call, so they
+# reach that pytest and no other session: smoke, lambda and vectors run whole,
+# and a report path is used once.  Without --shard it is pytest_session.
+shard_session() {
+    local name="$1" suite="$2"
+    if [ -z "$SHARD" ]; then
+        pytest_session "$suite"
+        return
+    fi
+    (
+        export EXPERIMENTLY_TEST_SHARD="$SHARD"
+        export EXPERIMENTLY_TEST_SHARD_REPORT="$SHARD_REPORTS/shard-$name-$SHARD_INDEX.json"
+        pytest_session "$suite"
+    )
 }
 
 step_unit() {
-    pytest_session backend/tests/unit
+    shard_session unit backend/tests/unit
 }
 
 step_integration() {
-    pytest_session backend/tests/integration
+    shard_session integration backend/tests/integration
 }
 
 step_smoke() {
@@ -943,7 +1065,18 @@ if [ "$PROFILE" != full ]; then
 fi
 
 REUSING_COPY=0
-if [ -n "$STEPS" ] && [ -n "$BUILD_DIR" ] && [ -f "$BUILD_DIR/backend/app/main.py" ]; then
+if [ -n "$SHARD" ] && [ -n "$BUILD_DIR" ] && [ -f "$BUILD_DIR/backend/app/main.py" ]; then
+    # A shard against a copy an earlier `--keep` run left: its steps without
+    # copy and strip, as a --steps filter is run there.
+    REUSING_COPY=1
+    _reused=""
+    for _step in $SEQUENCE; do
+        case "$_step" in copy|strip) continue ;; esac
+        want_step "$_step" && _reused="${_reused:+$_reused,}$_step"
+    done
+    STEPS="$_reused"
+    unset _reused _step
+elif [ -n "$STEPS" ] && [ -n "$BUILD_DIR" ] && [ -f "$BUILD_DIR/backend/app/main.py" ]; then
     # Debugging: re-run some steps against a copy an earlier `--keep` run left.
     REUSING_COPY=1
     case ",$STEPS," in
@@ -966,6 +1099,11 @@ if [ "$LIST_STEPS" = 1 ]; then
 fi
 
 banner "preflight"
+if [ -n "$SHARD" ]; then
+    mkdir -p "$SHARD_REPORTS" || die "cannot create the report directory $SHARD_REPORTS"
+    log "shard $SHARD: steps $(for _step in $SEQUENCE; do want_step "$_step" && printf '%s ' "$_step"; done)"
+    log "shard $SHARD: reports in $SHARD_REPORTS"
+fi
 preflight
 
 if [ "$REUSING_COPY" = 1 ]; then

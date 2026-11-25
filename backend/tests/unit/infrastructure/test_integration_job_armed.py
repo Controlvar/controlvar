@@ -28,9 +28,10 @@ this file pins that shape, because each way it can go wrong is green:
   results loop accepts more than ``success`` (V4).
 
 ``core-build`` in ``pr-qa-gate.yml`` runs the same suite against the core
-tree through ``scripts/core_build.sh`` and is armed the same way (#899): the
-``redis`` service, the password-protected Redis started by hand, and both
-``EXPERIMENTLY_REQUIRE_*`` variables on the step that runs the script.
+tree through ``scripts/core_build.sh``, in the shards of ``core-build-shard``
+(#2126), and is armed the same way (#899): the ``redis`` service, the
+password-protected Redis started by hand, and both ``EXPERIMENTLY_REQUIRE_*``
+variables on the step that runs the script.
 
 ``integration-tests`` in ``nightly-qa.yml`` runs the suite once a night, in
 one session, and is armed the same way (#902): its ``redis`` service and its
@@ -195,7 +196,9 @@ def test_narrowing_flags_are_recognised(tokens, narrowed):
 # ---------------------------------------------------------------------------
 
 GATE = wg.WORKFLOWS / "pr-qa-gate.yml"
-CORE_JOB = "core-build"
+#: The core profile's build runs in this matrix job's shards; `core-build`
+#: is their summary (test_core_build_shards.py).
+CORE_JOB = "core-build-shard"
 CORE_STEP = "core build"
 AUTH_STEP = "Start a password-protected Redis"
 REQUIRE = ("EXPERIMENTLY_REQUIRE_REDIS", "EXPERIMENTLY_REQUIRE_REDIS_AUTH")
@@ -250,9 +253,14 @@ def test_core_build_requires_both_redis_servers():
     env = build.get("env") or {}
     assert {k: env.get(k) for k in REQUIRE} == dict.fromkeys(REQUIRE, "1"), env
     assert "EXPERIMENTLY_REQUIRE_EDITABLE" not in env, env
-    # The default step list, which includes `integration`; a `--steps` that
-    # left it out would leave the variables nothing to arm.
-    assert _tokens(build["run"]) == ["scripts/core_build.sh", "--profile", "core"]
+    # A shard of the default step list, which includes `integration` in every
+    # shard; a `--steps` that left it out would leave the variables nothing
+    # to arm, and the script refuses `--steps` beside `--shard`.
+    assert _tokens(build["run"]) == _tokens(
+        "scripts/core_build.sh --profile core"
+        " --shard ${{ matrix.shard }}/${{ strategy.job-total }}"
+        ' --shard-reports "$RUNNER_TEMP/core-build-shard-reports"'
+    )
     workflow = wg.load(GATE)
     for where, scope in (
         ("the workflow", workflow.get("env") or {}),
@@ -332,14 +340,26 @@ def _shell_function(name: str) -> List[str]:
     return [t.rstrip(")") for t in _tokens(body.group(1))]
 
 
-@pytest.mark.parametrize("function", ["step_integration", "pytest_session"])
+@pytest.mark.parametrize(
+    "function", ["step_integration", "shard_session", "pytest_session"]
+)
 def test_core_build_runs_the_whole_integration_suite(function):
-    """The integration step hands pytest_session the suite and nothing that
-    selects a subset, and pytest_session adds nothing that does either: a
-    `-k "not redis"` in either would deselect the tests this job arms."""
+    """The integration step hands the suite through shard_session (which cuts
+    it to a shard's slice under --shard, by backend/tests/shard.py) to
+    pytest_session, and nothing that selects a subset; neither function adds
+    anything that does either: a `-k "not redis"` would deselect the tests
+    this job arms."""
     tokens = _shell_function(function)
     if function == "step_integration":
-        assert tokens[:2] == ["pytest_session", "backend/tests/integration"], tokens
+        assert tokens[:3] == [
+            "shard_session",
+            "integration",
+            "backend/tests/integration",
+        ], tokens
+    elif function == "shard_session":
+        calls = [i for i, t in enumerate(tokens) if t == "pytest_session"]
+        assert len(calls) == 2, tokens
+        assert all(tokens[i + 1] == "$suite" for i in calls), tokens
     else:
         # The words after `pytest`: the `-m` of `python -m pytest` is not one.
         tokens = _pytest_args(tokens)

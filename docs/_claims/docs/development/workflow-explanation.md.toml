@@ -58,5 +58,20 @@ text = "core-build: make core-build, which runs scripts/core_build.sh."
 by = ["test:backend/tests/unit/infrastructure/test_contributor_rules.py::test_make_core_build_runs_the_core_build_script"]
 
 [[unit]]
+text = "In CI the unit and integration sessions run in four parallel jobs, core-build (shard 1) to core-build (shard 4); shard 1 also runs every other step."
+by = [
+    "test:backend/tests/unit/infrastructure/test_core_build_shards.py::test_the_shards_are_a_static_matrix_that_does_not_fail_fast",
+    "test:backend/tests/unit/infrastructure/test_core_build_shards.py::test_the_shards_between_them_run_the_core_sequence_once",
+]
+
+[[unit]]
+text = "The job named core-build reports once all have finished and is green only when every one passed and every collected test ran in exactly one of them."
+by = [
+    "test:backend/tests/unit/infrastructure/test_core_build_shards.py::test_the_summary_is_the_required_check_after_every_shard",
+    "test:backend/tests/unit/infrastructure/test_core_build_shards.py::test_the_results_step_accepts_only_success",
+    "test:backend/tests/unit/infrastructure/test_core_build_shards.py::test_the_checker_runs_after_a_failure_with_its_exact_arguments",
+]
+
+[[unit]]
 text = "The backend and dashboard suites: see the Testing Guide."
 by = ["exempt:navigation"]

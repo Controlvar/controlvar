@@ -10,8 +10,10 @@ that went green over nothing:
   ``success() &&``), a classifier that failed or timed out skipped every
   classified job and the gate merged with nothing run. Every classified job is
   now ``${{ !cancelled() && (needs.changes.result != 'success' || <lane>) }}``
-  and the three that must never skip (``core-build``, ``full-build``,
-  ``sdk-live-contract``) are ``${{ !cancelled() }}``.
+  and the three that must never skip (``core-build-shard``, ``full-build``,
+  ``sdk-live-contract``) are ``${{ !cancelled() }}``; ``core-build``, the
+  shards' summary, is ``${{ always() }}`` and needs the classifier too, so a
+  failed classifier turns it red.
 * **A partial write.** ``git diff ... | classify >> "$GITHUB_OUTPUT"`` appends
   a verdict on whatever part of the list it received, and only then does
   ``pipefail`` fail the step. The step now collects the list and the verdict
@@ -80,7 +82,8 @@ CLASSIFIED: Dict[str, Dict[str, Tuple[Optional[str], Needs]]] = {
         "smoke-tests": (RUNS_UNLESS_DOCS, "changes"),
         "frontend-tests": (RUNS_UNLESS_DOCS, "changes"),
         "sdk-contracts": (RUNS_UNLESS_DOCS, "changes"),
-        "core-build": (NEVER_SKIPS, "changes"),
+        "core-build-shard": (NEVER_SKIPS, "changes"),
+        "core-build": ("${{ always() }}", ["changes", "core-build-shard"]),
         "full-build": (NEVER_SKIPS, "changes"),
         "sdk-live-contract": (NEVER_SKIPS, "changes"),
         "browser-e2e": (RUNS_UNLESS_DOCS, "changes"),
@@ -306,7 +309,12 @@ class TestAFailedClassifierRunsEverything:
             for job_id, (cond, needs) in _gate_conditions().items()
             if needs is not None and evaluate(cond, "success", "true")
         }
-        assert ran == {"core-build", "full-build", "sdk-live-contract"}
+        assert ran == {
+            "core-build-shard",
+            "core-build",
+            "full-build",
+            "sdk-live-contract",
+        }
 
     def test_the_old_form_skips_after_a_failure(self):
         """The defect: implicit success() turns a crashed classifier into a skip."""

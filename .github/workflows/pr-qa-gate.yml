@@ -562,39 +562,48 @@ jobs:
   # The same sequence as `make core-build` / `make full-build`; the step that
   # failed is named in the last line of the log.
   #
-  # Two jobs, `core-build` and `full-build`, each reporting under its job id
-  # (the required check names). They were one `profile-build` matrix until
-  # #869; the steps are what each leg ran, with the profile written out. The
-  # environment and the Postgres service are the same in both and are kept
-  # the same by backend/tests/unit/infrastructure/test_docs_only_gate.py.
+  # The core profile runs in four jobs, `core-build (shard N)`, each
+  # `scripts/core_build.sh --profile core --shard N/4`: the unit and
+  # integration sessions are cut into four slices (a test is in slice N when
+  # sha256(its node id) % 4 == N-1, backend/tests/shard.py), shard 1 also runs
+  # every other step, and shards 2-4 run copy, strip and import before their
+  # slices, so every shard checks that its tree cannot import `modules`. The
+  # required check `core-build` is the summary job after them. `full-build`
+  # is one job, reporting under its id. The environment and the Postgres
+  # service are the same in the shards and full-build and are kept the same
+  # by backend/tests/unit/infrastructure/test_docs_only_gate.py.
   #
   # No classification `if:` at job level, only `!cancelled()` (see the
-  # `changes` job): on a docs-only change every step below is skipped except
-  # the reason and, in core-build only, the tests that pin docs/ content --
-  # which is why a docs-only pull request still starts both jobs and their
-  # Postgres service.
+  # `changes` job): on a docs-only change every step of the shards and of
+  # full-build is skipped except the printed reason, and core-build runs the
+  # tests that pin docs/ content -- which is why a docs-only pull request
+  # still starts the shards and their services.
   #
-  # Both jobs have 180 minutes. On 2026-11-03 core-build's passing runs took
-  # up to about 75.5 minutes and four runs were cancelled at the old 75-minute
-  # limit, one 3 s after its script printed OK; the limit went to 120. On
-  # 2026-11-16 the last eight passing runs took 76-116 minutes (median 98) and
-  # one was cancelled at 120 with every test session it reached passed: the
-  # same sessions as a 98-minute run that started under 2 hours earlier, on a
-  # runner about 1.25x
-  # slower (unit 42:48 vs 32:26, integration 71:06 vs 59:10). GitHub's
-  # runners vary up to 1.6x in speed for the same commit (measured 11-03).
-  # 180 gives a 98-minute run room for a 1.6x runner (about 157). The time
-  # grows with the test count (about 2-3 minutes a day since 11-03), so 180 is
-  # headroom for a few weeks, not room for more tests.
-  # full-build takes a few minutes and has the same limit only because the
-  # two jobs are kept alike. Running core-build's integration session in
-  # parallel shards behind the existing check name, as the nightly
-  # integration workflow does since #1986, is the fix for the time itself.
-  core-build:
+  # Time. As one job, core-build took 97 to 146 minutes in eight passing runs
+  # on 2026-11-25: of its script, the unit session 38-42%, integration
+  # 54-59%, smoke 2-3%, the other ten steps under 1.2 minutes together.
+  # Runners differ up to 1.6x in speed for the same commit, and the time
+  # grows about 2-3 minutes a day. A shard is about a quarter of the two
+  # sessions plus its setup, and shard 1 also 3-5 minutes of other steps: the
+  # intent is 30-55 minutes a shard, to be replaced here by the shards'
+  # measured times. The limit is 75; a shard that takes over 60 minutes means
+  # a fifth shard in the matrix, not a higher limit. full-build takes a few
+  # minutes and keeps 180.
+  core-build-shard:
+    name: core-build (shard ${{ matrix.shard }})
     needs: changes
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 75
+    strategy:
+      # One red shard must not cancel the others: the summary needs every
+      # shard's report to say which tests failed and that the rest ran.
+      fail-fast: false
+      matrix:
+        # The one hand-typed list. The total is `strategy.job-total`, never
+        # typed: a repeated or missing number leaves a shard number with no
+        # report, and the summary refuses that.
+        shard: [1, 2, 3, 4]
     services:
       postgres:
         image: postgres:16
@@ -610,8 +619,8 @@ jobs:
           --health-timeout 5s
           --health-retries 5
       # For the Redis-backed integration tests (the experiment cache, the flag
-      # reads after every writer), as in integration-tests.yml. Core-build
-      # only: full-build runs no pytest session. With the two
+      # reads after every writer), as in integration-tests.yml. The core
+      # shards only: full-build runs no pytest session. With the two
       # EXPERIMENTLY_REQUIRE_* variables on the `core build` step a missing
       # Redis fails those tests instead of skipping them (#899).
       redis:
@@ -642,60 +651,18 @@ jobs:
       - name: Docs-only change
         if: needs.changes.outputs.docs_only == 'true'
         run: |
-          echo "docs-only change: the core profile build is not needed and every build step below is skipped."
-          echo "The core leg still runs the tests that pin docs/ content."
+          echo "docs-only change: this shard builds nothing; core-build runs the tests that pin docs/ content."
 
-      # The tree and Python: for the build, or on a docs-only change for the
-      # docs tests, so no condition.
       - uses: actions/checkout@v7
+        if: needs.changes.outputs.docs_only != 'true'
 
       - name: Set up Python
+        if: needs.changes.outputs.docs_only != 'true'
         uses: actions/setup-python@v7
         with:
           python-version: '3.11'
           cache: pip
           cache-dependency-path: backend/requirements.txt
-
-      # The tests that read docs/ -- directly or through a path built from the
-      # repository root -- and would otherwise never run on the pull request
-      # that breaks them, because unit-tests and smoke-tests skip on a
-      # docs-only change. Only on a docs-only change: on any other change
-      # unit-tests and smoke-tests run every one of them already. Which docs
-      # readers are here and why the others are not is pinned, with reasons,
-      # in backend/tests/unit/infrastructure/test_docs_only_gate.py.
-      - name: Install backend dependencies (docs tests)
-        if: needs.changes.outputs.docs_only == 'true'
-        run: pip install -r backend/requirements.txt
-
-      - name: Docs content tests
-        if: needs.changes.outputs.docs_only == 'true'
-        run: >-
-          python -m pytest -p no:cov -q --tb=short --junitxml=docs-content-junit.xml
-          backend/tests/unit/scripts/test_doc_examples.py
-          backend/tests/unit/scripts/test_guide_blocks.py
-          backend/tests/unit/docs/
-          backend/tests/smoke/test_openapi_snapshot.py
-          backend/tests/smoke/test_version_sources.py
-          backend/tests/unit/infrastructure/test_dashboard_image_docs.py
-          backend/tests/unit/infrastructure/test_rollback_uses_codedeploy.py
-          backend/tests/unit/infrastructure/test_deploy_docs.py
-          backend/tests/unit/infrastructure/test_iam_actions.py
-          backend/tests/unit/infrastructure/test_rollback_runbook_env_check.py
-          backend/tests/unit/db/test_alembic_plan.py
-          modules/backend/tests/unit/services/test_sso_docs_messages.py
-          backend/tests/unit/showcase/test_showcase_quoted_docs.py
-          backend/tests/unit/ground_truth/test_contract_citations.py
-          backend/tests/unit/showcase/test_site_walkthroughs.py
-          backend/tests/unit/personas/
-
-      # On a docs-only change this is where the docs tests run, Unit Tests
-      # being skipped, so a docs test that skipped would read as a pass on
-      # most of #1142's pull requests. Nothing under backend/tests/unit/docs
-      # skips on this full checkout; the Unit Tests job checks the same
-      # directory on every other change.
-      - name: No docs content test was skipped
-        if: needs.changes.outputs.docs_only == 'true'
-        run: python3 scripts/check_junit_skips.py docs-content-junit.xml backend/tests/unit/docs
 
       - name: Set up Node.js
         if: needs.changes.outputs.docs_only != 'true'
@@ -753,13 +720,165 @@ jobs:
       # environment, so the integration session gets both variables: a Redis
       # test that skips there is a failure. No EXPERIMENTLY_REQUIRE_EDITABLE:
       # this job has no editable install, so test_the_integration_job_is_armed
-      # keeps its skip here.
+      # keeps its skip here. The shard variables are not set here: the script
+      # gives them to the unit and integration sessions alone, and refuses to
+      # run if they are already set. The report directory is outside the
+      # checkout and the copy, so a passing run's cleanup keeps it.
       - name: core build
         if: needs.changes.outputs.docs_only != 'true'
         env:
           EXPERIMENTLY_REQUIRE_REDIS: "1"
           EXPERIMENTLY_REQUIRE_REDIS_AUTH: "1"
-        run: scripts/core_build.sh --profile core
+        run: scripts/core_build.sh --profile core --shard ${{ matrix.shard }}/${{ strategy.job-total }} --shard-reports "$RUNNER_TEMP/core-build-shard-reports"
+
+      # Even when the build failed: the summary reads every shard's two
+      # reports. `overwrite`, because a re-run of one shard uploads the same
+      # name again. Three days: the summary reads them minutes later, and a
+      # unit shard's report was 5.6 MB (0.6 MB compressed) in a local run.
+      - name: Upload the shard reports
+        uses: actions/upload-artifact@v7
+        if: ${{ always() && needs.changes.outputs.docs_only != 'true' }}
+        with:
+          name: core-build-shard-report-${{ matrix.shard }}
+          path: ${{ runner.temp }}/core-build-shard-reports/
+          if-no-files-found: warn
+          overwrite: true
+          retention-days: 3
+
+  # The required check, under its id (no `name:`): green only when every shard
+  # succeeded and, on a code change, the shards between them ran every
+  # collected unit and integration test exactly once. A classifier that
+  # failed is red here too, because this job reads `changes` among its needs.
+  #
+  # `always()`, like integration-tests.yml's summary, so that it always
+  # reports an explicit result and a failure names what failed. The cost:
+  # when a newer push supersedes a pull request's run, the old run holds the
+  # concurrency group until this job has started and run: about 10-60 s,
+  # measured on integration-tests.yml's summary, which started 2-51 s after
+  # the last cancelled shard ended and ran 6-11 s.
+  #
+  # On a docs-only change it runs the tests that pin docs/ content, which is
+  # where those tests are required to pass (see the `changes` job).
+  core-build:
+    needs: [changes, core-build-shard]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Docs-only change
+        if: needs.changes.outputs.docs_only == 'true'
+        run: |
+          echo "docs-only change: the core-build (shard N) jobs build nothing; this job runs only the tests that pin docs/ content."
+
+      # The tree, for the shard checker or the docs tests, so no condition.
+      # Python 3.11 for the docs tests only: the checker is standard library
+      # only and runs on the runner's python3, as integration-tests.yml's.
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        if: needs.changes.outputs.docs_only == 'true'
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      # The tests that read docs/ -- directly or through a path built from the
+      # repository root -- and would otherwise never run on the pull request
+      # that breaks them, because unit-tests and smoke-tests skip on a
+      # docs-only change. Only on a docs-only change: on any other change
+      # unit-tests and smoke-tests run every one of them already. Which docs
+      # readers are here and why the others are not is pinned, with reasons,
+      # in backend/tests/unit/infrastructure/test_docs_only_gate.py.
+      - name: Install backend dependencies (docs tests)
+        if: needs.changes.outputs.docs_only == 'true'
+        run: pip install -r backend/requirements.txt
+
+      - name: Docs content tests
+        if: needs.changes.outputs.docs_only == 'true'
+        run: >-
+          python -m pytest -p no:cov -q --tb=short --junitxml=docs-content-junit.xml
+          backend/tests/unit/scripts/test_doc_examples.py
+          backend/tests/unit/scripts/test_guide_blocks.py
+          backend/tests/unit/docs/
+          backend/tests/smoke/test_openapi_snapshot.py
+          backend/tests/smoke/test_version_sources.py
+          backend/tests/unit/infrastructure/test_dashboard_image_docs.py
+          backend/tests/unit/infrastructure/test_rollback_uses_codedeploy.py
+          backend/tests/unit/infrastructure/test_deploy_docs.py
+          backend/tests/unit/infrastructure/test_iam_actions.py
+          backend/tests/unit/infrastructure/test_rollback_runbook_env_check.py
+          backend/tests/unit/db/test_alembic_plan.py
+          modules/backend/tests/unit/services/test_sso_docs_messages.py
+          backend/tests/unit/showcase/test_showcase_quoted_docs.py
+          backend/tests/unit/ground_truth/test_contract_citations.py
+          backend/tests/unit/showcase/test_site_walkthroughs.py
+          backend/tests/unit/personas/
+
+      # On a docs-only change this is where the docs tests run, Unit Tests
+      # being skipped, so a docs test that skipped would read as a pass on
+      # most of #1142's pull requests. Nothing under backend/tests/unit/docs
+      # skips on this full checkout; the Unit Tests job checks the same
+      # directory on every other change.
+      - name: No docs content test was skipped
+        if: needs.changes.outputs.docs_only == 'true'
+        run: python3 scripts/check_junit_skips.py docs-content-junit.xml backend/tests/unit/docs
+
+      # No report at all is the checker's to judge (it fails), so a download
+      # that finds nothing must not end the job before it.
+      - name: Collect the shard reports
+        if: needs.changes.outputs.docs_only != 'true'
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: core-build-shard-report-*
+          path: ${{ runner.temp }}/shard-reports
+
+      - name: Every job passed
+        env:
+          # The whole `needs` object; a matrix job's result covers all its
+          # legs. Only `success` passes: failure, cancelled (a timeout too)
+          # and skipped are all red. On a docs-only change the shards run
+          # only their printed reason, and succeed.
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$RESULTS" | jq -r 'to_entries[] | "\(.key)=\(.value.result)"' > results.txt
+          test -s results.txt || { printf '::error::needs produced no results\n'; exit 1; }
+          failed=0
+          while IFS='=' read -r job result; do
+            printf '  %s: %s\n' "$job" "$result"
+            case "$result" in
+              success) ;;
+              *) printf '::error::%s: %s\n' "$job" "$result"; failed=1 ;;
+            esac
+          done < results.txt
+          if [ "$failed" -ne 0 ]; then
+            printf '::error::core build failed\n'
+            exit 1
+          fi
+
+      # Even after a failed shard, so the log says which tests failed and
+      # whether the rest ran. `--only-suites`: a report of any other suite
+      # here is red, not left alone. Skips are not judged, as before the split
+      # (the single job allowed every skip; the two Redis variables already
+      # turn a Redis skip into a failure): a test in no shard, in two, or not
+      # run is still red. The sessions run with `-p no:cov`, the one plugin
+      # allowed off. Not piped: `--github-annotations` prints each problem as
+      # an annotation, and the checker's exit status is the step's.
+      - name: Every test ran in exactly one shard
+        if: ${{ always() && needs.changes.outputs.docs_only != 'true' }}
+        run: |
+          python3 scripts/check_test_shards.py \
+            --suite backend/tests/unit \
+            --suite backend/tests/integration \
+            --only-suites \
+            --github-annotations \
+            --any-skip backend/tests/unit \
+            --any-skip backend/tests/integration \
+            --allow-disabled-plugin backend/tests/unit=cov \
+            --allow-disabled-plugin backend/tests/integration=cov \
+            "$RUNNER_TEMP/shard-reports"
 
   # The full profile: the same sequence minus the pytest sessions (above), and
   # no docs tests -- core-build runs those.
@@ -792,7 +911,7 @@ jobs:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       GITLEAKS_VERSION: '8.30.1'
-      # Same versions as core-build's (see there).
+      # Same versions as the core shards' (see core-build-shard).
       REUSE_VERSION: '6.2.0'
       PIP_LICENSES_VERSION: '5.5.5'
     steps:
