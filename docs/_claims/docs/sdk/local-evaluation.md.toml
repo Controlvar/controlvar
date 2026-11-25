@@ -647,7 +647,7 @@ by = [
 ]
 
 [[unit]]
-text = "Stored is not counted: a report counts only when the key has the sdk:ruleset scope and was created by a user who can change feature flags, and the flag's safety check shows the reports it stored but did not count as uncounted_error_count."
+text = "Stored is not counted: a report counts only when the key has the sdk:ruleset scope and was created by a user who can change feature flags, and the flag's safety check shows the production reports it stored but did not count as uncounted_error_count."
 by = [
     "test:backend/tests/integration/api/test_error_report_source.py::test_a_report_sent_with_a_key_without_the_scope_does_not_roll_back",
     "test:backend/tests/integration/api/test_error_report_source.py::test_a_scoped_key_whose_owner_can_no_longer_change_flags_does_not_count",

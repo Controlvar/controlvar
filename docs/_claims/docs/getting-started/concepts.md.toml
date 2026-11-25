@@ -595,11 +595,21 @@ text = "Environments"
 by = ["exempt:label"]
 
 [[unit]]
-text = "One deployment is one environment: flags, experiments and API keys carry no environment field."
-by = ["test:backend/tests/unit/api/test_documented_limits.py::test_flags_experiments_and_keys_carry_no_environment"]
+text = "An API key belongs to one flag environment, production, staging or development, and is answered that environment's feature flags."
+by = [
+    "test:backend/tests/integration/api/test_api_key_environment_api.py::test_the_environment_is_stored_answered_listed_and_audited",
+    "test:backend/tests/integration/api/test_api_key_environment_api.py::test_a_created_key_is_answered_its_environment_and_refused_by_tracking",
+]
 
 [[unit]]
-text = "To test experiments and flags in staging before they reach production users, run staging and production as separate deployments."
+text = "Experiments and event tracking run in production only."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_flag_row_and_an_experiment_carry_no_environment",
+    "test:backend/tests/integration/api/test_key_environment_routes.py::test_a_production_only_route_refuses_another_key_and_writes_nothing",
+]
+
+[[unit]]
+text = "To test experiments in staging before they reach production users, run staging and production as separate deployments."
 by = ["exempt:advice"]
 
 [[unit]]
@@ -620,11 +630,11 @@ by = ["exempt:advice"]
 
 [[unit]]
 text = "Each deployment has its own database, so its feature flag states and experiment assignments are its own."
-by = ["test:backend/tests/unit/api/test_documented_limits.py::test_flags_experiments_and_keys_carry_no_environment"]
+by = ["test:backend/tests/unit/api/test_documented_limits.py::test_a_flag_row_and_an_experiment_carry_no_environment"]
 
 [[unit]]
 text = "A feature flag that is 100% enabled in staging has no effect in production unless you also enable it there."
-by = ["test:backend/tests/unit/api/test_documented_limits.py::test_flags_experiments_and_keys_carry_no_environment"]
+by = ["test:backend/tests/integration/api/test_api_key_environment_api.py::test_a_created_key_is_answered_its_environment_and_refused_by_tracking"]
 
 [[unit]]
 text = "Environment Variables"
@@ -634,7 +644,6 @@ by = ["exempt:label"]
 text = "Your SDK client is initialized with an API key, which is stored in the database of the deployment it was created on, so a key created on staging is unknown to a separate production deployment."
 by = [
     "test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_returns_plaintext_once",
-    "test:backend/tests/unit/api/test_documented_limits.py::test_flags_experiments_and_keys_carry_no_environment",
 ]
 
 [[unit]]

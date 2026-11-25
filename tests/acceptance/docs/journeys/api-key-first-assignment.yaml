@@ -172,10 +172,10 @@ steps:
           - main:
             - table:
               - rowgroup:
-                - row "Name Scopes Created Last used Expires Status Actions"
+                - row "Name Scopes Environment Created Last used Expires Status Actions"
               - rowgroup:
-                - row /^Docs journey first key — .* — — active Revoke$/
-    fail: the key is not listed, with no scopes, never used, active
+                - row /^Docs journey first key — Production .* — — active Revoke$/
+    fail: the key is not listed, with no scopes, for production, never used, active
   - id: evaluate
     doc: using-an-api-key
     do:
@@ -267,6 +267,7 @@ steps:
                 - row /^Docs journey first key /:
                   - cell "Docs journey first key"
                   - cell "—"
+                  - cell "Production"
                   - cell /\d{4}/
                   - cell /\d{4}/
                   - cell "—"

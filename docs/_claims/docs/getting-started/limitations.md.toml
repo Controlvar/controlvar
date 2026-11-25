@@ -280,8 +280,13 @@ text = "Deployments"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Staging and production inside one deployment | One deployment is one environment: flags, experiments and API keys carry no environment field. Run staging and production as separate deployments, each with its own API keys."
-by = ["test:backend/tests/unit/api/test_documented_limits.py::test_flags_experiments_and_keys_carry_no_environment"]
+text = "Experiments in staging or development | Experiments and event tracking run in production only. An API key belongs to production, staging or development, chosen when it is created: a staging or development key is answered that environment's feature flags, and the experiment and event-tracking routes answer it 403. To run an experiment before production, run a separate deployment, with its own API keys."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_flag_row_and_an_experiment_carry_no_environment",
+    "test:backend/tests/integration/api/test_key_environment_routes.py::test_a_production_only_route_refuses_another_key_and_writes_nothing",
+    "test:backend/tests/integration/api/test_api_key_environment_api.py::test_the_environment_is_stored_answered_listed_and_audited",
+    "test:backend/tests/integration/api/test_api_key_environment_api.py::test_a_created_key_is_answered_its_environment_and_refused_by_tracking",
+]
 
 [[unit]]
 text = "Events streamed to Kinesis, OpenSearch or DynamoDB | The API stores events in PostgreSQL and computes results from there. The full-profile CDK creates a Kinesis stream and an OpenSearch domain, and the API writes to neither."

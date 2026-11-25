@@ -9,18 +9,34 @@ from datetime import datetime
 from typing import Annotated, List, Optional
 from uuid import UUID
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_validator,
+)
 
 from backend.app.api.datetime_bounds import storable_offset
 from backend.app.core.api_key_scopes import (
+    MCP_READ_SCOPE,
     SCOPES_MAX_LENGTH,
     format_scopes,
+    has_scope,
     normalise_scope_list,
     parse_scopes,
 )
+from backend.app.core.flag_environments import PRODUCTION, FlagEnvironmentName
 
 # Length of the visible prefix (``eptk_`` + first 4 hex chars) shown in lists.
 KEY_PREFIX_LENGTH = 9
+
+#: The refusal of ``mcp:read`` on a key outside production (#2011).
+MCP_READ_NEEDS_PRODUCTION = (
+    f"{MCP_READ_SCOPE} needs a production key: the routes it opens read production "
+    f"only. Create the key for production, or without {MCP_READ_SCOPE}."
+)
 
 
 class APIKeyCreate(BaseModel):
@@ -28,6 +44,15 @@ class APIKeyCreate(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = Field(None, max_length=2000)
+    # Declared before ``scopes``: pydantic validates in this order, and the
+    # check on ``scopes`` reads it.
+    environment: FlagEnvironmentName = Field(
+        PRODUCTION,
+        description=(
+            "The flag environment the key works in. It cannot be changed later: "
+            "create another key and delete this one."
+        ),
+    )
     scopes: Optional[List[str]] = Field(
         None, description="Optional list of scope names (stored comma-separated)"
     )
@@ -74,6 +99,20 @@ class APIKeyCreate(BaseModel):
             )
         return v
 
+    @field_validator("scopes", mode="after")
+    @classmethod
+    def _mcp_read_is_for_production(cls, v, info: ValidationInfo):
+        # The mcp:read routes read production with any key, while an evaluation
+        # answers the key's environment, so one key outside production would
+        # read one environment and be answered another's (#2011). An
+        # environment that was refused is not in ``info.data`` and is refused
+        # here too.
+        if info.data.get("environment") != PRODUCTION and has_scope(
+            format_scopes(v), MCP_READ_SCOPE
+        ):
+            raise ValueError(MCP_READ_NEEDS_PRODUCTION)
+        return v
+
 
 class APIKeyRead(BaseModel):
     """
@@ -92,6 +131,9 @@ class APIKeyRead(BaseModel):
     created_at: datetime
     expires_at: Optional[datetime] = None
     last_used_at: Optional[datetime] = None
+    environment: FlagEnvironmentName = Field(
+        ..., description="The flag environment the key works in."
+    )
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -109,3 +151,6 @@ class APIKeyCreated(BaseModel):
     prefix: str
     created_at: datetime
     expires_at: Optional[datetime] = None
+    environment: FlagEnvironmentName = Field(
+        ..., description="The flag environment the key works in."
+    )

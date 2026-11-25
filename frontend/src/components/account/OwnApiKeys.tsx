@@ -5,6 +5,18 @@ import { ApiKey } from '@/types/admin';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
 import { KeyState, keyState } from '@/components/admin/api-keys/ApiKeyTable';
 import {
+  CreateKeyBody,
+  DEFAULT_KEY_ENVIRONMENT,
+  KEY_ENVIRONMENT_HELP,
+  KEY_ENVIRONMENT_LABEL,
+  KEY_ENVIRONMENTS,
+  KeyEnvironment,
+  KeyEnvironmentMismatch,
+  createApiKey,
+  createKeyErrorMessage,
+  keyEnvironmentLabel,
+} from '@/components/admin/api-keys/keyEnvironment';
+import {
   MCP_READ_SCOPE,
   MCP_READ_SCOPE_HELP,
   MCP_READ_SCOPE_LABEL,
@@ -20,27 +32,10 @@ import {
 /**
  * The caller's own keys, on the API every role already has:
  * `GET /api/v1/api-keys` (no `all`: only the caller's keys),
- * `POST /api/v1/api-keys` (always creates for the caller) and
+ * `POST /api/v1/api-keys` (`createApiKey`; always creates for the caller) and
  * `DELETE /api/v1/api-keys/{id}` (the owner may delete their own).
  */
 export const OWN_KEYS_API_PATH = '/api/v1/api-keys';
-
-/** `POST /api/v1/api-keys` body, as this page sends it. */
-interface CreateKeyBody {
-  name: string;
-  scopes?: string[];
-  expires_at?: string;
-}
-
-/** `POST /api/v1/api-keys` response: `key` is the plaintext, shown once. */
-interface CreatedKey {
-  id: string;
-  name: string;
-  key: string;
-  prefix: string;
-  created_at: string;
-  expires_at?: string | null;
-}
 
 const STATE_LABELS: Record<KeyState, string> = {
   active: 'Active',
@@ -77,14 +72,16 @@ function messageOf(err: unknown, fallback: string): string {
 
 /**
  * "Your API keys": any signed-in user lists, creates and revokes their own
- * keys. It offers one scope, `mcp:read`, with the label and help text of the
- * admin dialog's checkbox (imported, not copied), and an expiry
- * (`ownKeyExpiry.ts`). Expiry times from the API are read only through
- * `parseApiTimestamp` and `keyState`.
+ * keys. It offers the environment (`keyEnvironment.ts`), one scope,
+ * `mcp:read`, with the label and help text of the admin dialog's checkbox
+ * (imported, not copied), and an expiry (`ownKeyExpiry.ts`). Expiry times from
+ * the API are read only through `parseApiTimestamp` and `keyState`.
  */
 export function OwnApiKeys() {
   const nameId = useId();
   const nameErrorId = useId();
+  const environmentId = useId();
+  const environmentHelpId = useId();
   const mcpId = useId();
   const mcpHelpId = useId();
   const expiryId = useId();
@@ -100,6 +97,7 @@ export function OwnApiKeys() {
 
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState(false);
+  const [environment, setEnvironment] = useState<KeyEnvironment>(DEFAULT_KEY_ENVIRONMENT);
   const [mcpRead, setMcpRead] = useState(false);
   const [pickedExpiry, setPickedExpiry] = useState<ExpiryChoice | null>(null);
   const [creating, setCreating] = useState(false);
@@ -155,13 +153,14 @@ export function OwnApiKeys() {
     setNameError(false);
     setCreateError(null);
     setCreating(true);
-    const body: CreateKeyBody = { name: trimmed };
+    const body: CreateKeyBody = { name: trimmed, environment };
     if (mcpRead) body.scopes = [MCP_READ_SCOPE];
     const expiresAt = expiresAtFor(expiry);
     if (expiresAt !== undefined) body.expires_at = expiresAt;
     try {
-      const created = await apiFetch<CreatedKey>(OWN_KEYS_API_PATH, { method: 'POST', json: body });
+      const created = await createApiKey(body);
       setName('');
+      setEnvironment(DEFAULT_KEY_ENVIRONMENT);
       setMcpRead(false);
       setPickedExpiry(null);
       setRevoked(null);
@@ -169,7 +168,14 @@ export function OwnApiKeys() {
       setRevealed({ name: created.name, key: created.key });
       void load();
     } catch (err) {
-      setCreateError(messageOf(err, 'The request failed.'));
+      const message = createKeyErrorMessage(err, 'The request failed.');
+      if (err instanceof KeyEnvironmentMismatch) {
+        // A key was made. One that could not be revoked is in the list: reload it.
+        setCreateError(message);
+        void load();
+      } else {
+        setCreateError(`The key was not created: ${message}`);
+      }
     } finally {
       setCreating(false);
     }
@@ -308,6 +314,29 @@ export function OwnApiKeys() {
           </div>
 
           <div>
+            <label htmlFor={environmentId} className="block text-sm font-medium text-slate-800">
+              {KEY_ENVIRONMENT_LABEL}
+            </label>
+            <select
+              id={environmentId}
+              value={environment}
+              onChange={(e) => setEnvironment(e.target.value as KeyEnvironment)}
+              aria-describedby={environmentHelpId}
+              className={`${INPUT} sm:max-w-xs`}
+              data-testid="own-key-environment"
+            >
+              {KEY_ENVIRONMENTS.map((value) => (
+                <option key={value} value={value}>
+                  {keyEnvironmentLabel(value)}
+                </option>
+              ))}
+            </select>
+            <p id={environmentHelpId} className="mt-1 text-sm text-slate-700" data-testid="own-key-environment-help">
+              {KEY_ENVIRONMENT_HELP}
+            </p>
+          </div>
+
+          <div>
             <div className="flex items-start gap-2">
               <input
                 id={mcpId}
@@ -356,7 +385,7 @@ export function OwnApiKeys() {
 
           {createError && (
             <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" data-testid="own-key-create-error">
-              The key was not created: {createError}
+              {createError}
             </p>
           )}
 
@@ -460,6 +489,7 @@ export function OwnApiKeys() {
                 <tr>
                   <th scope="col" className="px-4 py-3">Name</th>
                   <th scope="col" className="px-4 py-3">Scopes</th>
+                  <th scope="col" className="px-4 py-3">{KEY_ENVIRONMENT_LABEL}</th>
                   <th scope="col" className="px-4 py-3">Created</th>
                   <th scope="col" className="px-4 py-3">Expires</th>
                   <th scope="col" className="px-4 py-3">Last used</th>
@@ -479,6 +509,9 @@ export function OwnApiKeys() {
                       </th>
                       <td className="px-4 py-3 font-mono text-xs text-slate-700">
                         {key.scopes && key.scopes.length > 0 ? key.scopes.join(', ') : 'None'}
+                      </td>
+                      <td className="px-4 py-3 text-slate-700" data-testid={`own-key-environment-${key.id}`}>
+                        {keyEnvironmentLabel(key.environment)}
                       </td>
                       <td className="px-4 py-3 text-slate-700">{formatWhen(key.created_at)}</td>
                       <td className="px-4 py-3 text-slate-700" data-testid={`own-key-expires-${key.id}`}>

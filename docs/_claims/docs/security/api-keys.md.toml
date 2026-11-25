@@ -124,7 +124,7 @@ by = [
 ]
 
 [[unit]]
-text = "The response carries the key's id, name, key, prefix (the key's first nine characters, eptk_ and four more), created_at and expires_at."
+text = "The response carries the key's id, name, key, prefix (the key's first nine characters, eptk_ and four more), created_at, expires_at and environment."
 by = [
     "test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_returns_plaintext_once",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
@@ -175,6 +175,21 @@ by = ["exempt:baseline"]
 text = "scopes, a list of names, at most 255 characters in all when joined with commas; a longer list answers 422 (see Scopes);"
 by = [
     "test:backend/tests/integration/api/test_api_key_scopes_length_api.py::test_1936_a_256_character_scope_answers_422_and_stores_no_key",
+]
+
+[[unit]]
+text = "environment, the flag environment the key works in: production (the default), staging or development."
+by = [
+    "test:backend/tests/integration/api/test_api_key_environment_api.py::test_a_create_that_names_no_environment_is_answered_as_before_plus_the_field",
+    "test:backend/tests/integration/api/test_api_key_environment_api.py::test_the_environment_is_stored_answered_listed_and_audited",
+    "test:backend/tests/integration/api/test_api_key_environment_api.py::test_a_created_key_is_answered_its_environment_and_refused_by_tracking",
+]
+
+[[unit]]
+text = "It can't be changed later, and mcp:read is for production keys;"
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_no_route_changes_an_api_key",
+    "test:backend/tests/integration/api/test_api_key_environment_api.py::test_mcp_read_outside_production_is_refused_and_writes_nothing",
 ]
 
 [[unit]]
@@ -568,7 +583,7 @@ text = "It prints each of your keys, including the one created above:"
 by = ["journey:api-key-first-assignment#dismiss"]
 
 [[unit]]
-text = "Each key also carries its id, description, user_id, created_at, expires_at and last_used_at."
+text = "Each key also carries its id, description, user_id, created_at, expires_at, last_used_at and environment."
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot"]
 
 [[unit]]

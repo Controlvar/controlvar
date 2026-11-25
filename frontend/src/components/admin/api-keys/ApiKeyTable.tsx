@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { ApiKey } from '@/types/admin';
 import { apiFetch } from '@/services/api';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
+import { KEY_ENVIRONMENT_LABEL, keyEnvironmentLabel } from '@/components/admin/api-keys/keyEnvironment';
 import { InlineConfirm } from '@/components/ui/InlineConfirm';
 
 interface ApiKeyTableProps {
@@ -249,6 +250,7 @@ export function ApiKeyTable({ onCreateKey, refreshToken = 0 }: ApiKeyTableProps)
               <tr>
                 <th className="px-6 py-3 text-left">Name</th>
                 <th className="px-6 py-3 text-left">Scopes</th>
+                <th className="px-6 py-3 text-left">{KEY_ENVIRONMENT_LABEL}</th>
                 <th className="px-6 py-3 text-left">Created</th>
                 <th className="px-6 py-3 text-left">Last used</th>
                 <th className="px-6 py-3 text-left">Expires</th>
@@ -269,6 +271,9 @@ export function ApiKeyTable({ onCreateKey, refreshToken = 0 }: ApiKeyTableProps)
                     </td>
                     <td className="px-6 py-4 text-slate-600 font-mono text-xs">
                       {key.scopes && key.scopes.length > 0 ? key.scopes.join(', ') : '—'}
+                    </td>
+                    <td data-testid={`environment-${key.id}`} className="px-6 py-4 text-slate-600">
+                      {keyEnvironmentLabel(key.environment)}
                     </td>
                     <td data-testid={`created-at-${key.id}`} className="px-6 py-4 text-slate-600">
                       {formatDate(key.created_at)}

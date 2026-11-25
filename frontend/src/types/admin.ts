@@ -197,6 +197,8 @@ export interface ApiKey {
   created_at: string;
   expires_at?: string | null;
   last_used_at?: string | null;
+  /** `production`, `staging` or `development`. An earlier release leaves it out. */
+  environment?: string;
 }
 
 /**

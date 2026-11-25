@@ -1,7 +1,7 @@
 """API keys and flag settings of each flag environment, for integration tests (#2011).
 
-No request can create a key outside production, so the tests write its row, and
-they write a flag's settings there too: through the models, and a key of the
+The tests that use these write the rows: through the models, so a key can be
+one no request makes (``mcp:read`` outside production), and a key of the
 previous release as it inserts one.
 """
 

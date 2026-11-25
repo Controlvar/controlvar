@@ -728,8 +728,8 @@ curl -s -X POST localhost:8000/api/v1/tracking/errors \
 
 It prints `"crash"`, the stored row's `error_type`.
 
-A report sent with `$KEY`, or with any other key without the `sdk:ruleset` scope, is accepted
-(`201`) and stored the same way, but does not count toward the error rate or automatic
+A report sent with `$KEY`, or with any other production key without the `sdk:ruleset` scope, is
+accepted (`201`) and stored the same way, but does not count toward the error rate or automatic
 rollback: the flag's safety check shows it in `details.uncounted_error_count` (see
 [Which errors count](safety.md#which-errors-count)).
 

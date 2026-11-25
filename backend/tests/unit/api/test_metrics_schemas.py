@@ -226,3 +226,21 @@ def test_the_summary_error_rate_description_names_the_rule_and_three_differences
     assert "uncounted_error_count" in schema["required"]
     assert schema["properties"]["uncounted_error_count"]["type"] == "integer"
     assert schema["properties"]["uncounted_error_count"]["minimum"] == 0
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    ("field", "sentence"),
+    [
+        ("error_rate", "Errors with a staging or development key are in neither."),
+        ("uncounted_error_count", "but none sent with a staging or development key."),
+    ],
+)
+def test_the_summary_says_errors_outside_production_are_in_neither_number(
+    field, sentence
+):
+    """Since a key can be created for staging or development (#2011), the
+    reports that do not count are not all in ``uncounted_error_count``."""
+    schema = MetricsSummary.model_json_schema()
+    description = " ".join(schema["properties"][field]["description"].split())
+    assert sentence in description

@@ -63,7 +63,7 @@ A revenue, count, duration or custom metric whose variants have the same distrib
 
 | What you might expect | What happens instead |
 |---|---|
-| Staging and production inside one deployment | One deployment is one environment: flags, experiments and API keys carry no environment field. Run staging and production as separate deployments, each with its own API keys. |
+| Experiments in staging or development | Experiments and event tracking run in production only. An API key belongs to `production`, `staging` or `development`, chosen when it is created: a `staging` or `development` key is answered that environment's feature flags, and the experiment and event-tracking routes answer it `403`. To run an experiment before production, run a separate deployment, with its own API keys. |
 | Events streamed to Kinesis, OpenSearch or DynamoDB | The API stores events in PostgreSQL and computes results from there. The full-profile CDK creates a Kinesis stream and an OpenSearch domain, and the API writes to neither. |
 
 ## Sign-in and access

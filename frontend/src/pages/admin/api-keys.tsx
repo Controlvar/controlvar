@@ -8,6 +8,8 @@ import { useDeferredAnnouncement } from '@/components/ui/Dialog';
 export function ApiKeysPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [newKeyBanner, setNewKeyBanner] = useState<string | null>(null);
+  // Why there is no key, when the dialog was closed before the answer came.
+  const [mismatch, setMismatch] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   // What the live region says. Cleared (not switched back) when the "copied"
   // state wears off, so nothing is announced a second time. "Key created" is
@@ -22,6 +24,17 @@ export function ApiKeysPage() {
     announceAfterClose('Key created');
     // Ask the table to refetch
     setTableKey((prev) => prev + 1);
+  };
+
+  const handleMismatch = (message: string, shown: boolean) => {
+    if (!shown) setMismatch(message);
+    // A key that could not be revoked is in the list: refetch it.
+    setTableKey((prev) => prev + 1);
+  };
+
+  const openDialog = () => {
+    setMismatch(null);
+    setModalOpen(true);
   };
 
   return (
@@ -89,12 +102,23 @@ export function ApiKeysPage() {
           </div>
         )}
 
-        <ApiKeyTable refreshToken={tableKey} onCreateKey={() => setModalOpen(true)} />
+        {mismatch && (
+          <p
+            role="alert"
+            data-testid="key-environment-mismatch"
+            className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800"
+          >
+            {mismatch}
+          </p>
+        )}
+
+        <ApiKeyTable refreshToken={tableKey} onCreateKey={openDialog} />
 
         <CreateApiKeyModal
           isOpen={modalOpen}
           onClose={() => setModalOpen(false)}
           onSuccess={handleKeyCreated}
+          onMismatch={handleMismatch}
         />
       </div>
     </AdminLayout>

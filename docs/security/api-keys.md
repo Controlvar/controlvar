@@ -63,8 +63,8 @@ jq '{name, prefix}' <<<"$CREATED"
 <!-- expect: "name": "Production Checkout Service" -->
 
 The API answers `201 Created`. The response carries the key's `id`, `name`, `key`,
-`prefix` (the key's first nine characters, `eptk_` and four more), `created_at` and
-`expires_at`. This saves the key in `$KEY` and its id in `$KEY_ID`, and prints:
+`prefix` (the key's first nine characters, `eptk_` and four more), `created_at`,
+`expires_at` and `environment`. This saves the key in `$KEY` and its id in `$KEY_ID`, and prints:
 
 ```json
 {
@@ -82,6 +82,8 @@ The request takes:
 - `description`;
 - `scopes`, a list of names, at most 255 characters in all when joined with commas; a longer
   list answers `422` (see [Scopes](#scopes));
+- `environment`, the flag environment the key works in: `production` (the default), `staging`
+  or `development`. It can't be changed later, and `mcp:read` is for production keys;
 - `expires_at`, an ISO 8601 time after which the key stops working. Leave it out for a
   key that doesn't expire.
 
@@ -266,8 +268,8 @@ It prints each of your keys, including the one created above:
 }
 ```
 
-Each key also carries its `id`, `description`, `user_id`, `created_at`, `expires_at` and
-`last_used_at`. The list holds only your own keys. An ADMIN, or any superuser, can add `?all=true` to list
+Each key also carries its `id`, `description`, `user_id`, `created_at`, `expires_at`,
+`last_used_at` and `environment`. The list holds only your own keys. An ADMIN, or any superuser, can add `?all=true` to list
 every user's keys. The list leaves out inactive keys unless you add
 `?include_inactive=true`.
 

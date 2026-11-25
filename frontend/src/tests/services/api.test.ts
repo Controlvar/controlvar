@@ -29,6 +29,7 @@ import {
 } from '@/services/api';
 import { AdminService } from '@/services/admin';
 import { ResultsService } from '@/services/results';
+import { mismatchMessage } from '@/components/admin/api-keys/keyEnvironment';
 import { UserTable, deleteTimedOutMessage } from '@/components/admin/users/UserTable';
 import { overrideErrorCopy } from '@/components/experiments/BanditWeightsOverride';
 import { UNREACHABLE, errorCopy } from '@/components/experiments/ExperimentManageSection';
@@ -919,6 +920,9 @@ describe('without AbortSignal.any (#1040 D6)', () => {
 const STATUS_ZERO_SITES: Record<string, { count: number; kind: string }> = {
   // The definition: ApiError.isNetworkError and its comparison.
   'services/api.ts': { count: 2, kind: 'definition' },
+  // mismatchMessage (a new API key that could not be revoked, #2011): every
+  // status 0, timed out or not, says "no answer" and that the key may still exist.
+  'components/admin/api-keys/keyEnvironment.ts': { count: 1, kind: 'outcome-unknown' },
   // overrideErrorCopy ("Set weights by hand", #1957): returns `err.message` for
   // every status 0, so a timed-out PUT says its outcome is unknown.
   'components/experiments/BanditWeightsOverride.tsx': { count: 1, kind: 'passes-message' },
@@ -1103,8 +1107,16 @@ describe('each status-0 place says what a time-out means (#1040 D7)', () => {
 
   // One check per classified core file (the modules' two are in
   // modules/frontend/src/tests/services/request-timeouts.test.ts). Each says
-  // the time-out text exactly, and keeps its own unreachable line otherwise.
+  // the time-out text exactly, and keeps its own unreachable line otherwise,
+  // except keyEnvironment.ts, which says the same short reason for both.
   const CHECKS: Record<string, (write: ApiError, read: ApiError) => void> = {
+    'components/admin/api-keys/keyEnvironment.ts': (write) => {
+      for (const err of [write, unreachable()]) {
+        expect(mismatchMessage('staging', 'ci', err)).toContain(
+          'and revoking it failed (no answer). The key “ci” may still exist: revoke it in the list on this page.',
+        );
+      }
+    },
     'components/experiments/BanditWeightsOverride.tsx': (write) => {
       expect(overrideErrorCopy(write)).toBe(WRITE_TEXT);
       expect(overrideErrorCopy(unreachable())).toBe(unreachableMessage());

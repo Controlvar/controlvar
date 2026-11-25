@@ -144,6 +144,13 @@ by = [
 ]
 
 [[unit]]
+text = "Errors with a staging or development key are stored and are in neither number."
+by = [
+    "test:backend/tests/integration/api/test_environment_safety.py::test_errors_of_another_environment_never_roll_production_back",
+    "test:backend/tests/integration/api/test_api_key_environment_api.py::test_a_created_keys_errors_outside_production_are_in_neither_number",
+]
+
+[[unit]]
 text = "To have app errors count, send them to your server and forward them from there with a server-side key; see Reporting client-side errors."
 by = ["exempt:advice"]
 
@@ -163,9 +170,10 @@ by = [
 ]
 
 [[unit]]
-text = "GET /api/v1/metrics/summary counts errors by the same rule: its error_rate leaves out the reports that do not count, and its uncounted_error_count is the number of them in its period."
+text = "GET /api/v1/metrics/summary counts errors by the same rule: its error_rate leaves out the reports that do not count, and its uncounted_error_count is the number of them in its period, in production."
 by = [
     "test:backend/tests/integration/api/test_metrics_summary_error_rule.py::test_the_summary_counts_errors_by_the_safety_checks_rule",
+    "test:backend/tests/integration/api/test_api_key_environment_api.py::test_a_created_keys_errors_outside_production_are_in_neither_number",
 ]
 
 [[unit]]
@@ -524,7 +532,7 @@ text = "Each metric's details holds its warning_threshold, critical_threshold, c
 by = ["test:backend/tests/integration/api/test_safety_defaults_and_manual_rollback.py::test_each_metric_of_a_check_carries_its_thresholds_and_whether_it_was_measured"]
 
 [[unit]]
-text = "The response also carries feature_flag_id, last_checked and details, with the window's error_count, total_evaluations and uncounted_error_count: the error reports that were stored but do not count (see Which errors count)."
+text = "The response also carries feature_flag_id, last_checked and details, with the window's error_count, total_evaluations and uncounted_error_count: the production error reports that were stored but do not count (see Which errors count)."
 by = [
     "test:backend/tests/integration/api/test_error_report_source.py::test_the_check_endpoint_shows_the_reports_it_does_not_count",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",

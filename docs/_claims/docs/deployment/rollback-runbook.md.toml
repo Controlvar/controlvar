@@ -471,6 +471,58 @@ text = "Rolling back past flag environments"
 by = ["exempt:label"]
 
 [[unit]]
+text = "These steps are for an API rolled back alone: where the database is downgraded below t2011_flag_environments first, the only order for Docker Compose and Helm, the downgrade deactivates every staging and development API key (below)."
+by = [
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_the_downgrade_deactivates_staging_and_development_keys_then_drops_what_it_added",
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_release_refuses_a_database_a_newer_release_migrated",
+]
+
+[[unit]]
+text = "Before rolling the API back below 0.49.0, an ADMIN lists all keys and deletes every key whose environment is not production."
+by = ["test:backend/tests/integration/api/test_api_key_environment_api.py::test_an_admin_lists_every_users_keys_and_deletes_the_ones_outside_production"]
+
+[[unit]]
+text = "After an alarm rollback, or any rollback already made, 0.48.0's list has no environment."
+by = ["test:backend/tests/integration/database/test_api_key_environment_previous_release.py::test_the_rollback_runbooks_steps_work_on_the_previous_release"]
+
+[[unit]]
+text = "Delete every key whose created_at is later than the createTime of the first CodeDeploy deployment of 0.49.0 or a later release: its canary serves that release before the traffic shift."
+by = [
+    "test:backend/tests/integration/database/test_api_key_environment_previous_release.py::test_the_rollback_runbooks_steps_work_on_the_previous_release",
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_api_canary_is_fifteen_minutes",
+]
+
+[[unit]]
+text = "That is a superset; recreate any production key among them through the API, or in the dashboard once it is back on 0.48.0 too."
+by = [
+    "test:backend/tests/integration/database/test_api_key_environment_previous_release.py::test_the_previous_release_makes_a_production_key_when_asked_for_staging",
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_a_database_at_the_previous_release_gains_the_table_and_the_column_and_no_data",
+    "test:frontend/src/tests/admin/keyEnvironment.test.ts::an answer that names no environment is refused for a Production key too",
+]
+
+[[unit]]
+text = "Read createTime in UTC, as created_at is: TZ=UTC aws deploy get-deployment --deployment-id <id> --query deploymentInfo.createTime --output text (<id> is the CodeDeploy deployment in that deploy's run summary)."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Instead of either, an operator with database access can run this, which turns off only the keys outside production (if you changed POSTGRES_SCHEMA, write yours for experimentation): UPDATE experimentation.api_keys SET is_active=false WHERE environment <> 'production'."
+by = [
+    "test:backend/tests/integration/database/test_api_key_environment_previous_release.py::test_the_rollback_runbooks_steps_work_on_the_previous_release",
+    "test:backend/tests/unit/db/test_schema_name.py::test_the_schema_is_resolved_the_same_way_everywhere",
+]
+
+[[unit]]
+text = "In the dashboard a superuser lists and deletes keys on Admin > API Keys with 'All users (admin)' ticked, where Created is in the browser's time zone; an ADMIN who is not a superuser uses the API."
+by = [
+    "test:frontend/src/tests/admin/ApiKeyTable.test.tsx::\"All users\" and \"Include inactive\" toggles add the query parameters",
+    "test:frontend/src/tests/admin/ApiKeyTable.test.tsx::shows created_at, last used and expiry per row",
+    "test:frontend/src/tests/utils/apiTimestamp.test.ts::is right on both sides of a daylight-saving change",
+    "test:frontend/src/tests/admin/ApiKeysPage.environment.test.tsx::names each key's environment, and a dash where the API did not say",
+    "test:frontend/src/tests/admin/withAdminGuard.test.tsx::refuses a non-superuser by default, whatever their role",
+    "test:backend/tests/integration/api/test_api_key_environment_api.py::test_an_admin_lists_every_users_keys_and_deletes_the_ones_outside_production",
+]
+
+[[unit]]
 text = "Rolling back below t2011_flag_environments loses every staging and development flag setting and deactivates every staging and development API key: the downgrade sets those keys inactive, then removes the column and the table."
 by = [
     "test:backend/tests/integration/database/test_flag_environments_migration.py::test_the_downgrade_deactivates_staging_and_development_keys_then_drops_what_it_added",
@@ -1149,6 +1201,14 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "If the release that served before the deploy has no segment targeting, disable segment-targeted flags and pause segment-targeted experiments now (Rolling back past segment targeting)."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "API keys."
+by = ["exempt:label"]
+
+[[unit]]
+text = "If the release that served before the deploy is older than 0.49.0, turn off the staging and development API keys made on the new release now (Rolling back past flag environments)."
 by = ["exempt:instruction"]
 
 [[unit]]

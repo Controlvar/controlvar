@@ -1493,14 +1493,16 @@ by = [
 ]
 
 [[unit]]
-text = "POST /api/v1/tracking/assign, POST /api/v1/tracking/assign/batch (beta), POST /api/v1/tracking/alias (beta), POST /api/v1/tracking/track, POST /api/v1/tracking/events, POST /api/v1/tracking/batch, GET /api/v1/tracking/assignments/{user_id}, POST /api/v1/tracking/visual (beta), POST /api/v1/tracking/visual/preview (beta), GET /api/v1/tracking/split-url/routes (beta, full profile), POST /api/v1/tracking/split-url/assign (beta, full profile) | #2011 | An API key belongs to one flag environment, and these operations run in production only. A key of staging or development answers 403 with the detail This API key belongs to the staging environment. Experiments and event tracking run in production only; use a production key. (or development), and nothing is written. No operation creates such a key yet: every key is a production key, and a production key is answered as before. The OpenAPI documents of these operations do not change."
+text = "POST /api/v1/tracking/assign, POST /api/v1/tracking/assign/batch (beta), POST /api/v1/tracking/alias (beta), POST /api/v1/tracking/track, POST /api/v1/tracking/events, POST /api/v1/tracking/batch, GET /api/v1/tracking/assignments/{user_id}, POST /api/v1/tracking/visual (beta), POST /api/v1/tracking/visual/preview (beta), GET /api/v1/tracking/split-url/routes (beta, full profile), POST /api/v1/tracking/split-url/assign (beta, full profile) | #2011 | An API key belongs to one flag environment, and these operations run in production only. A key of staging or development answers 403 with the detail This API key belongs to the staging environment. Experiments and event tracking run in production only; use a production key. (or development), and nothing is written. Only POST /api/v1/api-keys with such an environment creates such a key: every key made without one is a production key, and a production key is answered as before. The OpenAPI documents of these operations do not change."
 by = [
     "test:backend/tests/integration/api/test_key_environment_routes.py::test_every_key_route_is_in_exactly_one_class_and_the_counts_are_exact",
     "test:backend/tests/integration/api/test_key_environment_routes.py::test_a_production_only_route_refuses_another_key_and_writes_nothing",
     "test:modules/backend/tests/integration/split_url/test_split_url_key_environment.py::test_the_assign_route_refuses_another_environments_key_and_records_nothing",
     "test:modules/backend/tests/integration/split_url/test_split_url_key_environment.py::test_the_routes_table_refuses_another_environments_key",
     "test:backend/tests/integration/database/test_flag_environments_migration.py::test_the_upgrade_changes_no_answer_whatever_the_deployments_environment",
-    "test:backend/tests/unit/api/test_documented_limits.py::test_flags_experiments_and_keys_carry_no_environment",
+    "test:backend/tests/integration/api/test_api_key_environment_api.py::test_a_create_that_names_no_environment_is_answered_as_before_plus_the_field",
+    "test:backend/tests/integration/api/test_api_key_environment_api.py::test_a_created_key_is_answered_its_environment_and_refused_by_tracking",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_no_route_changes_an_api_key",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
@@ -1527,6 +1529,32 @@ by = [
     "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_flag_on_outside_production_is_not_stale",
     "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_segment_used_only_in_staging_is_in_use_and_names_staging",
     "test:backend/tests/integration/api/test_segment_in_use.py::test_a_disabled_flag_and_a_paused_experiment_block",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "POST /api/v1/api-keys, GET /api/v1/api-keys | #2011 | The create takes an optional environment, production (the default), staging or development, and answers the one it stored; the list names each key's. Any other value, null included, answers 422 at [\"body\", \"environment\"] with Input should be 'production', 'staging' or 'development'. mcp:read on a staging or development key answers 422 at [\"body\", \"scopes\"] with Value error, mcp:read needs a production key: the routes it opens read production only. Create the key for production, or without mcp:read. Neither refusal writes anything. No operation changes a key's environment. Who may create a key, and a key with sdk:ruleset, does not change. A create without environment makes a production key and is answered as before plus the field. 0.48.0 ignores environment: it makes a production key whatever it is sent and answers without the field, so check the one in the answer. The api_key_create and api_key_revoke audit entries record it. The OpenAPI document changes: APIKeyCreate gains the optional environment, and APIKeyCreated and APIKeyRead the required environment, in both snapshots."
+by = [
+    "test:backend/tests/integration/api/test_api_key_environment_api.py::test_the_environment_is_stored_answered_listed_and_audited",
+    "test:backend/tests/integration/api/test_api_key_environment_api.py::test_any_other_value_is_the_standard_422_and_writes_nothing",
+    "test:backend/tests/integration/api/test_api_key_environment_api.py::test_mcp_read_outside_production_is_refused_and_writes_nothing",
+    "test:backend/tests/integration/api/test_api_key_environment_api.py::test_every_role_creates_a_key_for_every_environment",
+    "test:backend/tests/integration/api/test_api_key_environment_api.py::test_the_sdk_ruleset_rule_is_the_same_in_every_environment",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_no_route_changes_an_api_key",
+    "test:backend/tests/integration/api/test_api_key_environment_api.py::test_a_create_that_names_no_environment_is_answered_as_before_plus_the_field",
+    "test:backend/tests/integration/database/test_api_key_environment_previous_release.py::test_the_previous_release_makes_a_production_key_when_asked_for_staging",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "GET /api/v1/metrics/summary, POST /api/v1/tracking/errors, POST /api/v1/tracking/errors/batch, GET /api/v1/safety/feature-flags/{feature_flag_id}/check | #2011 | An error with a staging or development key is stored and is in neither error_rate nor uncounted_error_count, nor in the safety check's two counts. A production key's is counted as before. The OpenAPI document changes in the first two operations' descriptions and those of MetricsSummary.error_rate and MetricsSummary.uncounted_error_count. See Which errors count."
+by = [
+    "test:backend/tests/integration/api/test_key_environment_routes.py::test_an_error_report_of_another_environment_is_stored_and_counted_in_neither_set",
+    "test:backend/tests/integration/api/test_api_key_environment_api.py::test_a_created_keys_errors_outside_production_are_in_neither_number",
+    "test:backend/tests/integration/api/test_environment_safety.py::test_errors_of_another_environment_never_roll_production_back",
+    "test:backend/tests/integration/api/test_metrics_summary_error_rule.py::test_the_summary_counts_errors_by_the_safety_checks_rule",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
