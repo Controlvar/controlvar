@@ -93,7 +93,9 @@ Scopes are stored with the key and returned when you list keys. **Two scopes are
 `sdk:ruleset` and `mcp:read`.** Every endpoint that accepts an API key, except the ones
 listed below for each and the two a web page calls
 ([Refused in a web page](#refused-in-a-web-page)), accepts any active key, whatever its
-scopes. Names such as `read`, `write` or `admin` on existing keys are labels only: no route
+scopes, except that the routes where experiments and event tracking run refuse a `staging`
+or `development` key
+([Flag environments](../feature-flags/environments.md#keys-and-environments)). Names such as `read`, `write` or `admin` on existing keys are labels only: no route
 requires one, though the two routes a web page calls refuse a key that carries any scope.
 
 Scope names are matched exactly and case-sensitively: the stored list is split on commas and
@@ -107,8 +109,8 @@ each entry is trimmed, so `"read, sdk:ruleset "` carries `sdk:ruleset`, while `S
 of users to an experiment, or one that links an anonymous id to a known id. These routes answer
 `403` to a key that does not carry it:
 
-- `GET /api/v1/sdk/ruleset` (beta), which returns every feature flag's targeting rules in the
-  form a server-side SDK evaluates locally;
+- `GET /api/v1/sdk/ruleset` (beta), which returns every feature flag's targeting rules, those of
+  the key's environment, in the form a server-side SDK evaluates locally;
 - `POST /api/v1/tracking/evaluations` (beta), where a server-side SDK reports how many times
   it evaluated each flag locally, so safety monitoring can still compute each flag's error
   rate;
@@ -131,7 +133,7 @@ such a key on a server and never ship it to a browser or a mobile app.
   for linking ids.
   Leave it unticked for any other key; the key is then created
   with no scopes. The dashboard's API Keys page needs a superuser account; any other user
-  creates keys through the API.
+  creates keys through the API, or on **Your API keys**.
 - Through the API, send `"scopes": ["sdk:ruleset"]`.
 
 **Only users who can change feature flags can create a key with the `sdk:ruleset` scope:**
@@ -169,8 +171,9 @@ The scope opens nothing else. The routes that create, change or delete flags or 
 and the routes that manage users, still take a user login, and a request that carries a bearer
 token is judged on the token alone.
 
-Every role can create a key with `mcp:read`: through the API, send `"scopes": ["mcp:read"]`.
-Keys already labelled `mcp:read` gain that access when the instance is upgraded to a
+Every role can create a production key with `mcp:read`: through the API, send
+`"scopes": ["mcp:read"]`. A `staging` or `development` key cannot carry it, and the request
+answers `422`. Keys already labelled `mcp:read` gain that access when the instance is upgraded to a
 version that enforces the scope. An ADMIN lists every user's keys, with their scopes, with
 `GET /api/v1/api-keys?all=true`.
 
@@ -324,7 +327,7 @@ working on that date.
 
 ### Zero-Downtime Rotation Procedure
 
-1. Create a new API key with the same name and scopes as the old key.
+1. Create a new API key with the same name, scopes and environment as the old key.
 2. Update your service's secrets (Secrets Manager, environment variables, and so on) to the
    new key.
 3. Deploy or restart the service so it uses the new key.

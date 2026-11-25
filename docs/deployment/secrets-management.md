@@ -348,29 +348,31 @@ KEY_HASH=$(printf '%s' "$LEAKED_KEY" | shasum -a 256 | cut -d' ' -f1)
 
 Then, connected to Aurora, deactivate that row (every request with the key then gets 401). The
 `RETURNING` clause prints what steps 2 and 4 need: the key's owner (`user_id`), its `scopes`
-(empty when it has none, otherwise a comma-separated list such as `sdk:ruleset`) and when it was
-last used:
+(empty when it has none, otherwise a comma-separated list such as `sdk:ruleset`), its
+`environment` (`production`, `staging` or `development`) and when it was last used:
 
 ```sql
-UPDATE experimentation.api_keys SET is_active = false WHERE key = '<KEY_HASH>' RETURNING id, name, user_id, scopes, last_used_at;
+UPDATE experimentation.api_keys SET is_active = false WHERE key = '<KEY_HASH>' RETURNING id, name, user_id, scopes, environment, last_used_at;
 ```
 
 Step 2: Issue a replacement, owned by the person who owned the old key. A key belongs to whoever
 creates it: `POST /api/v1/api-keys` always creates the key for the caller, so a key an ADMIN
 creates on someone else's behalf is the ADMIN's own, and it stops working when that ADMIN's
 account is deactivated. So the owner (`user_id` from step 1) signs in as themselves
-([Authentication](../api/auth.md)) and creates the replacement with the `scopes` step 1 printed,
-as a JSON list:
+([Authentication](../api/auth.md)) and creates the replacement with the `scopes` and the `environment` step 1 printed,
+the scopes as a JSON list:
 
 ```bash
 curl -X POST \
   -H "Authorization: Bearer $OWNER_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name": "Replacement key", "scopes": ["sdk:ruleset"]}' \
+  -d '{"name": "Replacement key", "scopes": ["sdk:ruleset"], "environment": "production"}' \
   https://app.example.com/api/v1/api-keys
 ```
 
-Leave `scopes` out when step 1 printed none. A server SDK that evaluates flags locally uses a key
+Leave `scopes` out when step 1 printed none. Name the `environment` the old key had: a key made
+without one is a production key, so a replacement for a `staging` or `development` key that
+leaves it out is answered production's flags. A server SDK that evaluates flags locally uses a key
 with the `sdk:ruleset` scope: its replacement needs the same scope, because
 `GET /api/v1/sdk/ruleset` answers 403 to a key without it. Only users who can change feature
 flags (ADMIN, DEVELOPER, a superuser, or in the full profile anyone whose custom role or direct

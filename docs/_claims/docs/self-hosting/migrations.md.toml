@@ -1480,7 +1480,41 @@ by = [
 ]
 
 [[unit]]
-text = "From 0.48.0, the upgrade waits for two locks, each with its own bound: at most 0.5 s for the lock that creating the table takes on feature_flags, which a session writing to feature_flags, or a vacuum, analyze or schema change of it, holds up (SDK requests only read that table, and keep being answered), then at most 1.5 s for api_keys, which every SDK request reads."
+text = "It has no concept of environments, though: while a task still runs 0.48.0 against the upgraded database, during a rolling upgrade and after an API-only rollback, it treats a staging or development key as a production key, and a key it creates is a production key even when the request asks for staging or development."
+by = [
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_the_previous_release_treats_a_staging_key_as_a_production_key",
+    "test:backend/tests/integration/database/test_api_key_environment_previous_release.py::test_the_previous_release_makes_a_production_key_when_asked_for_staging",
+]
+
+[[unit]]
+text = "Flag environments says what that task does with such a key."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "If the upgrade to 0.49.0 stops with a lock-timeout message, re-run it: every revision runs in one transaction, so nothing was applied."
+by = [
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_a_request_holding_api_keys_ends_the_upgrade_with_the_refusal",
+    "test:backend/tests/unit/db/test_upgrade_lock_budget.py::test_every_revision_each_release_runs_is_declared_and_the_sum_fits",
+]
+
+[[unit]]
+text = "While it runs, an SDK request can wait up to 3 seconds at most: the upgrade waits at most 3 seconds in all for its locks, and SDK requests queue behind the api_keys lock, which t2011_flag_environments takes (at most 1.5 seconds to take) and the upgrade holds until it commits, through the wait of t2012_flag_split (at most 1 second); a request that reads feature_flags during that wait queues behind it too, for at most 1 second."
+by = [
+    "test:backend/tests/unit/db/test_upgrade_lock_budget.py::test_0_49_0_starts_at_0_48_0s_released_heads_and_declares_three_seconds",
+    "test:backend/tests/integration/database/test_flag_split_migration.py::test_a_session_reading_feature_flags_ends_the_upgrade_with_the_refusal",
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_a_request_holding_api_keys_ends_the_upgrade_with_the_refusal",
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_while_the_upgrade_waits_for_feature_flags_key_lookups_still_run",
+]
+
+[[unit]]
+text = "An SDK whose timeout is shorter answers its fallback meanwhile (the edge SDK's default is 500 ms, and it answers enabled: false)."
+by = [
+    "test:backend/tests/unit/sdk/test_edge_default_timeout.py::test_the_default_timeout_is_500_ms_and_the_client_uses_it",
+    "test:backend/tests/unit/sdk/test_edge_default_timeout.py::test_a_request_that_times_out_resolves_to_the_disabled_evaluation",
+]
+
+[[unit]]
+text = "From 0.48.0, t2011_flag_environments waits for two locks, each with its own bound: at most 0.5 s for the lock that creating the table takes on feature_flags, which a session writing to feature_flags, or a vacuum, analyze or schema change of it, holds up (SDK requests only read that table, and keep being answered), then at most 1.5 s for api_keys, which every SDK request reads."
 by = [
     "test:backend/tests/unit/db/test_flag_environments_revision.py::test_the_two_bounds_are_half_a_second_and_a_second_and_a_half_and_sum_to_the_declared_two",
     "test:backend/tests/integration/database/test_flag_environments_migration.py::test_the_upgrade_from_the_previous_core_head_runs_exactly_its_statements",

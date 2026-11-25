@@ -306,16 +306,20 @@ by = [
 ]
 
 [[unit]]
-text = "mcp:read lets a key read flags, experiments and results on four read operations, listed below; any role can create a key with it."
+text = "mcp:read lets a key read flags, experiments and results on four read operations, listed below; any role can create a production key with it."
 by = [
     "test:backend/tests/smoke/test_mcp_read_routes.py::test_the_mcp_read_routes_are_exactly_these",
     "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_each_role_reads_the_four_operations_with_an_mcp_read_key",
     "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_the_scope_carries_no_role_rule_on_creation",
+    "test:backend/tests/integration/api/test_api_key_environment_api.py::test_mcp_read_outside_production_is_refused_and_writes_nothing",
 ]
 
 [[unit]]
-text = "Every other endpoint that takes an API key accepts any active key, whatever its scopes; see Scopes."
-by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_with_created_key"]
+text = "Every other endpoint that takes an API key accepts any active key, whatever its scopes, except that the routes for experiments and event tracking refuse a staging or development key (Flag environments); see Scopes."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_with_created_key",
+    "test:backend/tests/integration/api/test_key_environment_routes.py::test_a_production_only_route_refuses_another_key_and_writes_nothing",
+]
 
 [[unit]]
 text = "Using an API Key"

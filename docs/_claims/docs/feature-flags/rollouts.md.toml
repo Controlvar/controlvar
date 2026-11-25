@@ -62,6 +62,32 @@ by = [
 ]
 
 [[unit]]
+text = "Environments"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A rollout schedule runs in production: each stage sets the flag's production rollout percentage, and a stage never changes the flag's staging or development settings."
+by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_a_rollout_schedule_changes_production_only"]
+
+[[unit]]
+text = "In Staging and Development the flag's page shows no schedule and says Rollout schedules, safety monitoring and experiments run in Production only."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-environments.test.tsx::Staging shows Staging's settings, the production-only line, and no schedule, safety or manage controls",
+    "test:backend/tests/unit/api/test_environment_words.py::test_each_dashboard_word_is_in_the_dashboard",
+]
+
+[[unit]]
+text = "Promoting a flag into Production copies its status, rollout percentage and targeting rules, and leaves its schedules as they are, so the next stage that starts sets the rollout percentage again."
+by = [
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_promotion_copies_all_three_fields_and_nothing_else",
+    "test:frontend/src/tests/pages/feature-flag-promote.test.tsx::is named when Production has one, as not copied and not changed",
+]
+
+[[unit]]
+text = "See Flag environments."
+by = ["exempt:navigation"]
+
+[[unit]]
 text = "In the Dashboard"
 by = ["exempt:label"]
 

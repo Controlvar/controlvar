@@ -194,11 +194,11 @@ This would target enterprise users in the US or Canada who have had their accoun
 
 ## Environments
 
-An API key belongs to one flag environment, `production`, `staging` or `development`, and is answered that environment's feature flags. Experiments and event tracking run in production only. To test experiments in staging before they reach production users, run staging and production as separate deployments.
+An API key belongs to one flag environment, `production`, `staging` or `development`, and is answered that environment's feature flags. Experiments and event tracking run in production only. To test experiments in staging before they reach production users, run staging and production as separate deployments. [Flag environments](../feature-flags/environments.md) says how to configure, test and promote a flag in each.
 
-### Staging vs Production
+### Staging vs Production deployments
 
-| Environment | Purpose |
+| Deployment | Purpose |
 |-------------|---------|
 | **staging** | Test experiment logic, SDK integration, and targeting rules before launch |
 | **production** | Live experiments and flags serving real users |

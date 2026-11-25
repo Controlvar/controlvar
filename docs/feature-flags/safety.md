@@ -54,7 +54,8 @@ percentage, not a fraction, which can exceed 100 when errors outnumber those eva
 ### What the error rate divides by
 
 `error_rate` divides the errors that count by every evaluation of the flag in the same 15-minute
-window, whichever API key asked for it, your app's own key included. Each
+window, whichever production API key asked for it, your app's own key included. The evaluations
+that a `staging` or `development` key asks for are not recorded. Each
 `GET /api/v1/feature-flags/user/{user_id}` counts as one evaluation of every active flag.
 Evaluation counts that a server-side SDK reports after evaluating locally count too; see
 [Local evaluation](../sdk/local-evaluation.md#safety-monitoring-and-the-dashboard).
@@ -62,6 +63,13 @@ Evaluation counts that a server-side SDK reports after evaluating locally count 
 `error_count` counts errors only, so it does not change with how often the flag is evaluated. To
 roll back on a number of errors whatever the traffic, set a `critical_threshold` on `error_count`,
 alone or beside `error_rate`.
+
+### Environments
+
+Safety monitoring measures production only. A rollback, automatic or manual, changes the flag's
+production settings: what this page says a rollback does to a flag is what it does for a
+production key, and the flag's settings in staging and development stay as they were. See
+[Flag environments](environments.md#what-runs-in-production-only).
 
 ---
 
@@ -530,5 +538,6 @@ flag, give that flag its own configuration without one.
 
 ### Test the rollback path
 
-Before a major launch, trigger a manual rollback in staging to confirm that the flag turns off as
-expected. A manual rollback sends no Slack alert or webhook event; only an automatic rollback does.
+Before a major launch, trigger a manual rollback on a staging installation of the platform (a
+separate deployment, not the staging environment: a rollback changes production settings only) to
+confirm that the flag turns off as expected. A manual rollback sends no Slack alert or webhook event; only an automatic rollback does.

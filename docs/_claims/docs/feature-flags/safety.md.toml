@@ -188,12 +188,32 @@ text = "What the error rate divides by"
 by = ["exempt:label"]
 
 [[unit]]
-text = "error_rate divides the errors that count by every evaluation of the flag in the same 15-minute window, whichever API key asked for it, your app's own key included."
+text = "error_rate divides the errors that count by every evaluation of the flag in the same 15-minute window, whichever production API key asked for it, your app's own key included."
 by = [
     "journey:feature-flag-safety#unhealthy",
     "journey:feature-flag-safety#control-healthy",
     "test:backend/tests/integration/api/test_safety_defaults_and_manual_rollback.py::test_the_check_reads_the_last_15_minutes_of_errors_and_latency",
 ]
+
+[[unit]]
+text = "The evaluations that a staging or development key asks for are not recorded."
+by = ["test:backend/tests/integration/api/test_environment_evaluation.py::test_evaluations_outside_production_are_not_counted_anywhere"]
+
+[[unit]]
+text = "Environments"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Safety monitoring measures production only."
+by = ["test:backend/tests/integration/api/test_environment_safety.py::test_errors_of_another_environment_never_roll_production_back"]
+
+[[unit]]
+text = "A rollback, automatic or manual, changes the flag's production settings: what this page says a rollback does to a flag is what it does for a production key, and the flag's settings in staging and development stay as they were."
+by = ["test:backend/tests/integration/api/test_environment_safety.py::test_errors_of_another_environment_never_roll_production_back"]
+
+[[unit]]
+text = "See Flag environments."
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Each GET /api/v1/feature-flags/user/{user_id} counts as one evaluation of every active flag."
@@ -1015,8 +1035,11 @@ text = "Test the rollback path"
 by = ["exempt:advice"]
 
 [[unit]]
-text = "Before a major launch, trigger a manual rollback in staging to confirm that the flag turns off as expected."
-by = ["exempt:advice"]
+text = "Before a major launch, trigger a manual rollback on a staging installation of the platform (a separate deployment, not the staging environment: a rollback changes production settings only) to confirm that the flag turns off as expected."
+by = [
+    "test:backend/tests/integration/api/test_environment_manual_rollback.py::test_a_manual_rollback_changes_production_and_neither_other_environment",
+    "test:backend/tests/integration/api/test_environment_safety.py::test_errors_of_another_environment_never_roll_production_back",
+]
 
 [[unit]]
 text = "A manual rollback sends no Slack alert or webhook event; only an automatic rollback does."

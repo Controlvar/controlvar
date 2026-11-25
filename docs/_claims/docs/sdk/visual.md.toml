@@ -40,8 +40,9 @@ by = [
 ]
 
 [[unit]]
-text = "data-api-key | An API key with no scopes, made for your website. A key with any scope is refused, because anyone who opens the page can read it."
+text = "data-api-key | An API key with no scopes, made for your website. A key with any scope is refused, because anyone who opens the page can read it, and so is a staging or development key, because experiments run in production only."
 by = [
+    "test:backend/tests/integration/api/test_key_environment_routes.py::test_a_production_only_route_refuses_another_key_and_writes_nothing",
     "test:backend/tests/integration/api/test_visual_tracking_api.py::test_a_key_with_any_scope_is_refused",
     "test:backend/tests/integration/api/test_visual_tracking_api.py::test_a_key_with_no_scopes_is_served",
 ]

@@ -7,6 +7,15 @@ flags. Each client, though, keeps serving an answer it already has until that an
 same goes for any change to a flag: its rollout percentage, its rules, a rollback to a lower
 percentage.
 
+## Environments
+
+A flag has settings in each [environment](environments.md), and turning it off changes the
+settings of one. The switch on a flag's page turns it off in the environment the page shows.
+`"is_active": false` on `PUT /api/v1/feature-flags/{id}`, `POST …/deactivate` and a safety
+rollback to 0% turn it off in production. Production stays on when the flag is turned off in
+staging, and staging stays as it was when it is turned off in production. Archiving a flag turns
+it off in every environment. The times below hold in every environment.
+
 ## How long each client takes
 
 With the defaults, every client below serves the change within 5 minutes, the next time your code

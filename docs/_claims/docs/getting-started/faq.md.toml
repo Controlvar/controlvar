@@ -826,8 +826,10 @@ by = [
 ]
 
 [[unit]]
-text = "Any active key authenticates every SDK route (flag evaluation, tracking) as the user who created it; its scopes do not narrow that."
+text = "Any active key authenticates every SDK route (flag evaluation, tracking) as the user who created it; its scopes do not narrow that, but its environment does: a staging or development key is answered that environment's flags and refused on the experiment and event-tracking routes (see Flag environments)."
 by = [
+    "test:backend/tests/integration/api/test_key_environment_routes.py::test_a_scoped_route_answers_the_presented_keys_environment",
+    "test:backend/tests/integration/api/test_key_environment_routes.py::test_a_production_only_route_refuses_another_key_and_writes_nothing",
     "test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these",
     "test:backend/tests/smoke/test_sdk_scoped_routes.py::test_every_route_under_the_sdk_prefix_requires_the_scope",
     "journey:api-key-first-assignment#ruleset-scope",
@@ -836,7 +838,7 @@ by = [
 ]
 
 [[unit]]
-text = "The one exception is the server-side SDK routes (GET /api/v1/sdk/ruleset, POST /api/v1/tracking/evaluations, POST /api/v1/tracking/assign/batch), which require the sdk:ruleset scope."
+text = "The one exception to the scopes is the server-side SDK routes (GET /api/v1/sdk/ruleset, POST /api/v1/tracking/evaluations, POST /api/v1/tracking/assign/batch), which require the sdk:ruleset scope."
 by = [
     "test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these",
     "test:backend/tests/smoke/test_sdk_scoped_routes.py::test_every_route_under_the_sdk_prefix_requires_the_scope",

@@ -914,8 +914,10 @@ class ExperimentationClient:
 
         Returns ``True`` exactly when the server answered 201: the report is stored. It
         counts toward the flag's error rate and automatic rollback only when this client's
-        key is a server-side key (the ``sdk:ruleset`` scope, created by a user who can change
-        flags); the flag's safety check shows the others as ``uncounted_error_count``.
+        key is a server-side key (a production key with the ``sdk:ruleset`` scope, created by a
+        user who can change flags); the flag's safety check shows the other production reports
+        as ``uncounted_error_count``, and a report sent with a staging or development key is in
+        neither.
         Returns ``False``, and logs a warning, on any other answer (401, 404, 422, a 429
         after its one retry, 5xx) or a network failure. The server checks the report (it
         needs ``feature_flag_key`` or ``experiment_key``); the SDK does not. ``timestamp``

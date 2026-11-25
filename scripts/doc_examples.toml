@@ -12,8 +12,8 @@
 # scripts/doc_examples.py), and each page's residual counts can only fall.
 
 [meta]
-documents = 61
-exec = 348
+documents = 62
+exec = 355
 universe = [
     ".github/pull_request_template.md",
     ".github/qa-templates/README.md",
@@ -86,6 +86,7 @@ universe = [
     "docs/development/testing-guide.md",
     "docs/development/workflow-explanation.md",
     "docs/feature-flags/create.md",
+    "docs/feature-flags/environments.md",
     "docs/feature-flags/kill-switch.md",
     "docs/feature-flags/rollouts.md",
     "docs/feature-flags/safety.md",
@@ -227,6 +228,13 @@ environment = "stack"
 exec = 14
 skip = 1
 expects = 22
+
+[[document]]
+path = "docs/feature-flags/environments.md"
+environment = "stack"
+exec = 7
+skip = 0
+expects = 12
 
 [[document]]
 path = "docs/sdk/local-evaluation.md"

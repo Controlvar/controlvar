@@ -222,8 +222,9 @@ by = [
 ]
 
 [[unit]]
-text = "Every endpoint that accepts an API key, except the ones listed below for each and the two a web page calls (Refused in a web page), accepts any active key, whatever its scopes."
+text = "Every endpoint that accepts an API key, except the ones listed below for each and the two a web page calls (Refused in a web page), accepts any active key, whatever its scopes, except that the routes where experiments and event tracking run refuse a staging or development key (Flag environments)."
 by = [
+    "test:backend/tests/integration/api/test_key_environment_routes.py::test_a_production_only_route_refuses_another_key_and_writes_nothing",
     "test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these",
     "test:backend/tests/smoke/test_page_key_routes.py::test_the_page_key_routes_are_exactly_these",
     "test:backend/tests/unit/api/test_route_surface_rules.py::test_the_ruleset_scope_and_its_owner_rule",
@@ -265,8 +266,9 @@ by = [
 ]
 
 [[unit]]
-text = "GET /api/v1/sdk/ruleset (beta), which returns every feature flag's targeting rules in the form a server-side SDK evaluates locally;"
+text = "GET /api/v1/sdk/ruleset (beta), which returns every feature flag's targeting rules, those of the key's environment, in the form a server-side SDK evaluates locally;"
 by = [
+    "test:backend/tests/integration/api/test_environment_evaluation.py::test_each_environments_ruleset_has_its_own_version",
     "test:backend/tests/integration/api/test_sdk_ruleset_api.py",
     "test:backend/tests/unit/services/test_sdk_ruleset_vectors.py",
 ]
@@ -318,8 +320,9 @@ text = "Leave it unticked for any other key; the key is then created with no sco
 by = ["journey:api-key-first-assignment#dismiss"]
 
 [[unit]]
-text = "The dashboard's API Keys page needs a superuser account; any other user creates keys through the API."
+text = "The dashboard's API Keys page needs a superuser account; any other user creates keys through the API, or on Your API keys."
 by = [
+    "test:frontend/src/tests/pages/account-api-keys-environment.test.tsx::sends %s and shows the key the API says is one",
     "test:frontend/src/tests/admin/withAdminGuard.test.tsx::refuses a non-superuser by default, whatever their role",
     "test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_keys_without_the_scope_are_unchanged",
 ]
@@ -457,8 +460,15 @@ by = [
 ]
 
 [[unit]]
-text = "Every role can create a key with mcp:read: through the API, send \"scopes\": [\"mcp:read\"]."
-by = ["test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_the_scope_carries_no_role_rule_on_creation"]
+text = "Every role can create a production key with mcp:read: through the API, send \"scopes\": [\"mcp:read\"]."
+by = [
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_the_scope_carries_no_role_rule_on_creation",
+    "test:backend/tests/integration/api/test_api_key_environment_api.py::test_mcp_read_with_no_environment_named_is_accepted_as_before",
+]
+
+[[unit]]
+text = "A staging or development key cannot carry it, and the request answers 422."
+by = ["test:backend/tests/integration/api/test_api_key_environment_api.py::test_mcp_read_outside_production_is_refused_and_writes_nothing"]
 
 [[unit]]
 text = "Keys already labelled mcp:read gain that access when the instance is upgraded to a version that enforces the scope."
@@ -697,8 +707,11 @@ text = "Zero-Downtime Rotation Procedure"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Create a new API key with the same name and scopes as the old key."
-by = ["test:backend/tests/unit/api/test_route_surface_rules.py::test_a_new_key_may_repeat_the_old_ones_name_and_scopes_and_leaves_it_working"]
+text = "Create a new API key with the same name, scopes and environment as the old key."
+by = [
+    "test:backend/tests/unit/api/test_route_surface_rules.py::test_a_new_key_may_repeat_the_old_ones_name_and_scopes_and_leaves_it_working",
+    "test:backend/tests/integration/api/test_api_key_environment_api.py::test_the_environment_is_stored_answered_listed_and_audited",
+]
 
 [[unit]]
 text = "Update your service's secrets (Secrets Manager, environment variables, and so on) to the new key."
