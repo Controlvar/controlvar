@@ -102,9 +102,7 @@ def split_bucket(user_id: str, flag_key: str) -> int:
     return int.from_bytes(digest, "big") % 100
 
 
-def split_value(
-    user_id: str, flag_key: str, split: Sequence[Mapping[str, Any]]
-) -> Any:
+def split_value(user_id: str, flag_key: str, split: Sequence[Mapping[str, Any]]) -> Any:
     """The value of *split* (``[{"value", "weight"}, ...]``, whole weights that
     add up to 100) an enabled user gets: the entries take the buckets in the
     order they are stored, each as many as its weight."""
