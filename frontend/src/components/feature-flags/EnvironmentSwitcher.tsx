@@ -14,7 +14,8 @@ import {
  * and the URL names it. It follows what is on screen, not the select, so Back
  * and Forward are said too, and it never names another environment than the
  * select does. It is empty for the first environment shown (nothing changed),
- * while one is loading, and after a load that failed.
+ * for a new one until it has loaded, and after a load that failed. Once said,
+ * it stays beside a later load of the same environment, and is not said again.
  */
 function useAnnouncement({
   environment,

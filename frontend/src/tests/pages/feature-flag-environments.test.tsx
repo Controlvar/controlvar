@@ -232,7 +232,7 @@ function watchStatus(): { wrong: string[] } {
     const shown = chosen?.selectedOptions[0]?.textContent ?? '';
     if (said !== '' && said !== `Showing ${shown}.`) seen.wrong.push(`"${said}" while the select is ${shown}`);
     // Never said of a page that is loading, or that failed to load.
-    for (const testId of ['flag-loading', 'flag-error']) {
+    for (const testId of ['flag-loading', 'flag-error', 'flag-not-found']) {
       if (said !== '' && document.querySelector(`[data-testid="${testId}"]`)) seen.wrong.push(`"${said}" beside ${testId}`);
     }
   }).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
@@ -460,6 +460,27 @@ describe('the status says the environment on screen', () => {
     expect(status()).toBe('');
     await choose('production');
     await waitFor(() => expect(status()).toBe('Showing Production.'));
+    expect(seen.wrong).toEqual([]);
+  });
+
+  it('says nothing after a switch to a flag that is not there, which is an alert', async () => {
+    install({}, [
+      {
+        path: '/api/v1/feature-flags/flag-1/environments/staging',
+        handler: () => {
+          throw apiError(404, 'Feature flag not found');
+        },
+      },
+    ]);
+    renderPage();
+    const seen = watchStatus();
+    await screen.findByTestId('flag-detail');
+    fireEvent.change(select(), { target: { value: 'staging' } });
+    const missing = await screen.findByTestId('flag-not-found');
+    expect(missing).toHaveAttribute('role', 'alert');
+    expect(missing).toHaveTextContent('Feature flag not found');
+    await settle();
+    expect(status()).toBe('');
     expect(seen.wrong).toEqual([]);
   });
 

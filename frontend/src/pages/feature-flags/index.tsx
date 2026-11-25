@@ -318,7 +318,8 @@ export default function FeatureFlagsPage() {
 
   return (
     <div className="flex-1 bg-slate-50">
-      <PageTitle title={environmentLabel ? `Feature Flags in ${environmentLabel}` : 'Feature Flags'} />
+      {/* Not while the rows load: on Back the list renders once with the environment just left. */}
+      <PageTitle title={environmentLabel && !busy ? `Feature Flags in ${environmentLabel}` : 'Feature Flags'} />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">

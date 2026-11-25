@@ -13,7 +13,7 @@ import React from 'react';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import FeatureFlagsPage from '@/pages/feature-flags/index';
 import { EnvironmentSwitcher } from '@/components/feature-flags/EnvironmentSwitcher';
-import { FlagEnvironmentProvider } from '@/contexts/FlagEnvironmentContext';
+import { FlagEnvironmentProvider, useFlagEnvironment } from '@/contexts/FlagEnvironmentContext';
 import { apiFetch, ApiFetchOptions, buildQuery } from '@/services/api';
 import { FeatureFlagListItem, FlagEnvironmentSettings } from '@/services/featureFlags';
 import { NEW_FLAGS_IN_PRODUCTION, PRODUCTION_BANNER } from '@/utils/flagEnvironments';
@@ -249,6 +249,41 @@ describe('the flag list in Staging and Development', () => {
     expect(document.title).toBe('Feature Flags in Staging · Controlvar');
     fireEvent.change(screen.getByLabelText('Environment'), { target: { value: 'production' } });
     await waitFor(() => expect(document.title).toBe('Feature Flags · Controlvar'));
+  });
+
+  it('Back to the list in another environment never titles the page with the one just left', async () => {
+    install();
+    const titles: string[] = [];
+    /** The page's title at every commit, as a screen reader's route announcement would read it. */
+    function Titles() {
+      useFlagEnvironment();
+      React.useLayoutEffect(() => {
+        titles.push(document.title);
+      });
+      return null;
+    }
+    // The provider outlives a page, as in _app: first another page, in Staging.
+    const at = (env: string, page: React.ReactNode) => {
+      mockRouter = makeRouter({ pathname: '/feature-flags', asPath: `/feature-flags?env=${env}`, query: { env } });
+      return (
+        <FlagEnvironmentProvider>
+          <EnvironmentSwitcher />
+          {page}
+          <Titles />
+        </FlagEnvironmentProvider>
+      );
+    };
+    const { rerender } = renderInAppRoot(at('staging', <p>another page</p>));
+    await waitFor(() => expect(screen.getByLabelText('Environment')).toHaveValue('staging'));
+    titles.length = 0;
+
+    // Back: the URL names Production, and the list mounts.
+    rerender(at('production', <FeatureFlagsPage />));
+    await screen.findByTestId('flags-table');
+    expect(screen.getByLabelText('Environment')).toHaveValue('production');
+    expect(titles.length).toBeGreaterThan(1);
+    expect(titles.filter((title) => title.includes('Staging'))).toEqual([]);
+    expect(document.title).toBe('Feature Flags · Controlvar');
   });
 
   it('says so when no listed flag has a setting in Development', async () => {

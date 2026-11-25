@@ -20,6 +20,11 @@ html:has(#environment-bar) {
   scroll-padding-top: 9rem;
 }
 
+/* The select is in that header, so focusing it must not scroll the page. */
+#environment-bar select {
+  scroll-margin-top: -9rem;
+}
+
 /* Custom gradient backgrounds */
 .gradient-radial {
   background: radial-gradient(circle, var(--tw-gradient-stops));

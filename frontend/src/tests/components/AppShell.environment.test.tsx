@@ -116,8 +116,13 @@ describe('the environment switcher in the header', () => {
     const css = fs.readFileSync(path.resolve(__dirname, '../../styles/globals.css'), 'utf8');
     const rule = /html:has\(#([\w-]+)\)\s*\{\s*scroll-padding-top:\s*9rem;\s*\}/.exec(css);
     expect(rule).not.toBeNull();
-    expect(await screen.findByTestId('environment-bar')).toHaveAttribute('id', rule![1]);
+    const bar = await screen.findByTestId('environment-bar');
+    expect(bar).toHaveAttribute('id', rule![1]);
     expect(screen.getByRole('banner')).toHaveClass('sticky');
+    // The select is in the header: it takes that room back, so the page does not move when it is focused.
+    const back = /#([\w-]+) select\s*\{\s*scroll-margin-top:\s*-9rem;\s*\}/.exec(css);
+    expect(back?.[1]).toBe(rule![1]);
+    expect(bar).toContainElement(await screen.findByLabelText('Environment'));
   });
 
   it('follows ?env= in the URL', async () => {

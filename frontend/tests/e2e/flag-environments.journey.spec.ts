@@ -79,6 +79,21 @@ async function tokenIn(page: Page): Promise<string> {
   return token as string;
 }
 
+/** Watch Next's route announcer from now on; the result answers what it has said, in order. */
+async function routeAnnouncements(page: Page): Promise<() => Promise<string[]>> {
+  await page.evaluate(() => {
+    const said: string[] = [];
+    (window as Window & { __announced?: string[] }).__announced = said;
+    const announcer = document.querySelector("#__next-route-announcer__");
+    if (!announcer) throw new Error("Next's route announcer is not on the page");
+    new MutationObserver(() => {
+      const text = announcer.textContent ?? "";
+      if (text && text !== said[said.length - 1]) said.push(text);
+    }).observe(announcer, { childList: true, characterData: true, subtree: true });
+  });
+  return () => page.evaluate(() => (window as Window & { __announced?: string[] }).__announced ?? []);
+}
+
 /** The flag changes the page sends from now on, as `METHOD path` with the flag's id left out. */
 function flagChanges(page: Page, id: string): string[] {
   const sent: string[] = [];
@@ -439,11 +454,14 @@ test.describe("Journey: a flag in each environment", () => {
     await flags.chooseEnvironment("staging");
     await expect(flags.environmentAnnouncement).toHaveText("Showing Staging.");
 
-    // Back to the list, whose URL names Production.
+    // Back to the list, whose URL names Production: neither the status nor
+    // Next's own announcement of the page's title names Staging.
+    const said = await routeAnnouncements(page);
     await page.goBack();
     await expect(flags.flagList).toHaveAttribute("data-environment", "production", { timeout: 15_000 });
     await expect(flags.environmentSelect).toHaveValue("production");
     await expect(flags.environmentAnnouncement).toHaveText("Showing Production.");
+    await expect.poll(said, { message: "what Next announced on Back" }).toEqual(["Feature Flags · Controlvar"]);
 
     // A load that fails is an alert; the status does not say the environment is shown.
     await openFlag(page, "production");
@@ -564,6 +582,23 @@ test.describe("Journey: a flag in each environment", () => {
           { message: `${what} is below the header` },
         )
         .toBeGreaterThanOrEqual(0);
+    }
+
+    // The select is in the header, so focusing it moves nothing, at any size.
+    for (const size of [{ width: 320, height: 256 }, PHONE, { width: 1280, height: 720 }]) {
+      await page.setViewportSize(size);
+      const before = await page.evaluate(() => {
+        (document.activeElement as HTMLElement | null)?.blur();
+        window.scrollTo({ top: 300, behavior: "instant" });
+        return window.scrollY;
+      });
+      expect(before, `the page scrolls at ${size.width} px`).toBe(300);
+      await flags.environmentSelect.focus();
+      // A smooth scroll would be under way: the wait can only make a page that moves fail.
+      const after = await page.evaluate(
+        () => new Promise<number>((done) => setTimeout(() => done(window.scrollY), 700)),
+      );
+      expect(after, `focusing the select does not scroll the page at ${size.width} px`).toBe(before);
     }
   });
 
