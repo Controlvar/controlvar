@@ -2,8 +2,7 @@
 
 * IA-M2: its id fits ``alembic_version.version_num`` (32 characters), its
   ``down_revision`` is the literal ``t1812_user_totp`` (0.47.0's core head),
-  and its only child is ``t2011_flag_environments`` (#2011), the core head
-  since.
+  and its only child is ``t2011_flag_environments`` (#2011).
 * IA-M5, without a database: the migration creates the model's columns with
   the model's types, nullability and server defaults, the model's named check
   and index, and no foreign key.
@@ -61,10 +60,10 @@ def test_it_extends_0_47_0s_core_head_and_fits_the_version_table():
     assert len(revision.revision) <= 32
 
 
-def test_this_revision_is_extended_by_the_core_head_and_nothing_else():
+def test_this_revision_is_extended_by_t2011_flag_environments_and_nothing_else():
     """0.48.0 shipped this revision as the core head; ``t2011_flag_environments``
-    (#2011) is its only child, and the heads test is that revision's now
-    (``test_flag_environments_revision.py``)."""
+    (#2011) is its only child, and the heads test is the core head's now
+    (``test_flag_split_revision.py``)."""
     script = _script()
     children = [
         r.revision

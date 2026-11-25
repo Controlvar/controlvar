@@ -35,12 +35,13 @@ pytestmark = [pytest.mark.integration]
 #: This revision, and the core revision it extends.
 REVISION = "t1812_user_totp"
 PREVIOUS_CORE_HEAD = "4955571d232c"
-#: The core head of this tree: ``t2011_flag_environments`` (#2011), after
-#: ``t449_identity_aliases`` (#449), the revision after this one.
-CORE_HEAD = "t2011_flag_environments"
+#: The core head of this tree: ``t2012_flag_split`` (#2012), after
+#: ``t2011_flag_environments`` (#2011) and ``t449_identity_aliases`` (#449), the
+#: revision after this one.
+CORE_HEAD = "t2012_flag_split"
 #: Tables a later core revision's downgrade drops: a downgrade from the head to
-#: this test's target unapplies ``t449_identity_aliases`` and
-#: ``t2011_flag_environments`` too.
+#: this test's target unapplies ``t449_identity_aliases``,
+#: ``t2011_flag_environments`` and ``t2012_flag_split`` too.
 LATER_DOWNGRADE_TABLES = {"identity_aliases", "flag_environment_settings"}
 MODULES_HEAD = "modules_0005_redshift"
 

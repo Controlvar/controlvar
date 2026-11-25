@@ -91,7 +91,8 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini history
 Output, for example:
 
 ```text
-t449_identity_aliases -> t2011_flag_environments (head), Flag environments: each flag's staging and development settings, and each key's environment
+t2011_flag_environments -> t2012_flag_split (head), Flag split: a nullable split on each feature flag and each flag environment setting
+t449_identity_aliases -> t2011_flag_environments, Flag environments: each flag's staging and development settings, and each key's environment
 t1812_user_totp -> t449_identity_aliases, Identity aliases: the table that links an anonymous id to a known id
 4955571d232c -> t1812_user_totp, Two-step sign-in: each local account's authenticator secret and recovery codes
 c448_balance_within -> 4955571d232c, Visual experiments: page changes, pages and goals, and the editor's tokens
@@ -121,7 +122,7 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini current
 Output, for a full install (a core install prints the first line only):
 
 ```text
-t2011_flag_environments (head)
+t2012_flag_split (head)
 modules_0005_redshift (head)
 ```
 
@@ -464,11 +465,17 @@ drops the table `identity_aliases`: every link between an anonymous id and a
 known id (see
 [`t449_identity_aliases`](#t449_identity_aliases-adds-the-identity-aliases-table)).
 
-Past `t2011_flag_environments` it first runs that revision's downgrade, which
+Past `t2011_flag_environments` it also runs that revision's downgrade, which
 deactivates every staging and development API key and drops the column
 `api_keys.environment` and the table `flag_environment_settings`: every
 staging and development flag setting (see
 [`t2011_flag_environments`](#t2011_flag_environments-adds-each-flags-staging-and-development-settings)).
+
+Past `t2012_flag_split` it first runs that revision's downgrade, which drops
+`feature_flags.split` and `flag_environment_settings.split`. **So it also stops
+while any flag has a split or a rule value**: that downgrade refuses, names
+those flags, and changes nothing (see
+[`t2012_flag_split`](#t2012_flag_split-adds-a-split-to-each-flag-and-each-flag-environment-setting)).
 
 ### `d29a479daafe` records who each global holdout covers
 
@@ -567,6 +574,11 @@ revision's downgrade, which deactivates every staging and development API key
 and drops `api_keys.environment` and the table `flag_environment_settings`,
 every staging and development flag setting (see
 [`t2011_flag_environments`](#t2011_flag_environments-adds-each-flags-staging-and-development-settings)).
+From a release that carries `t2012_flag_split`, it also runs that revision's
+downgrade, which drops `feature_flags.split` and
+`flag_environment_settings.split` and refuses while any flag has a split or a
+rule value (see
+[`t2012_flag_split`](#t2012_flag_split-adds-a-split-to-each-flag-and-each-flag-environment-setting)).
 
 ### `4c2c09a2b3e8` keeps rollback records without a safety configuration
 
@@ -644,11 +656,16 @@ From a release that carries `t449_identity_aliases`, it also runs that
 revision's downgrade, which drops the table `identity_aliases`, every link
 between an anonymous id and a known id (see
 [`t449_identity_aliases`](#t449_identity_aliases-adds-the-identity-aliases-table)).
-From a release that carries `t2011_flag_environments`, it first runs that
+From a release that carries `t2011_flag_environments`, it also runs that
 revision's downgrade, which deactivates every staging and development API key
 and drops `api_keys.environment` and the table `flag_environment_settings`,
 every staging and development flag setting (see
 [`t2011_flag_environments`](#t2011_flag_environments-adds-each-flags-staging-and-development-settings)).
+From a release that carries `t2012_flag_split`, it first runs that revision's
+downgrade, which drops `feature_flags.split` and
+`flag_environment_settings.split` and refuses while any flag has a split or a
+rule value (see
+[`t2012_flag_split`](#t2012_flag_split-adds-a-split-to-each-flag-and-each-flag-environment-setting)).
 
 ### `85dd4796bb8b` stores an event sent again with its event_id once
 
@@ -723,11 +740,16 @@ From a release that carries `t449_identity_aliases`, it also runs that
 revision's downgrade, which drops the table `identity_aliases`, every link
 between an anonymous id and a known id (see
 [`t449_identity_aliases`](#t449_identity_aliases-adds-the-identity-aliases-table)).
-From a release that carries `t2011_flag_environments`, it first runs that
+From a release that carries `t2011_flag_environments`, it also runs that
 revision's downgrade, which deactivates every staging and development API key
 and drops `api_keys.environment` and the table `flag_environment_settings`,
 every staging and development flag setting (see
 [`t2011_flag_environments`](#t2011_flag_environments-adds-each-flags-staging-and-development-settings)).
+From a release that carries `t2012_flag_split`, it first runs that revision's
+downgrade, which drops `feature_flags.split` and
+`flag_environment_settings.split` and refuses while any flag has a split or a
+rule value (see
+[`t2012_flag_split`](#t2012_flag_split-adds-a-split-to-each-flag-and-each-flag-environment-setting)).
 
 On Helm, run the same command in an API pod with `kubectl exec`. Once the
 database is at the previous release's heads, start the previous release. The
@@ -788,11 +810,16 @@ From a release that carries `t449_identity_aliases`, it also runs that
 revision's downgrade, which drops the table `identity_aliases`, every link
 between an anonymous id and a known id (see
 [`t449_identity_aliases`](#t449_identity_aliases-adds-the-identity-aliases-table)).
-From a release that carries `t2011_flag_environments`, it first runs that
+From a release that carries `t2011_flag_environments`, it also runs that
 revision's downgrade, which deactivates every staging and development API key
 and drops `api_keys.environment` and the table `flag_environment_settings`,
 every staging and development flag setting (see
 [`t2011_flag_environments`](#t2011_flag_environments-adds-each-flags-staging-and-development-settings)).
+From a release that carries `t2012_flag_split`, it first runs that revision's
+downgrade, which drops `feature_flags.split` and
+`flag_environment_settings.split` and refuses while any flag has a split or a
+rule value (see
+[`t2012_flag_split`](#t2012_flag_split-adds-a-split-to-each-flag-and-each-flag-environment-setting)).
 
 On Helm, run the same command in an API pod with `kubectl exec`. The upgrade
 cannot be emitted as SQL (`--sql`).
@@ -829,11 +856,16 @@ From a release that carries `t449_identity_aliases`, it also runs that
 revision's downgrade, which drops the table `identity_aliases`, every link
 between an anonymous id and a known id (see
 [`t449_identity_aliases`](#t449_identity_aliases-adds-the-identity-aliases-table)).
-From a release that carries `t2011_flag_environments`, it first runs that
+From a release that carries `t2011_flag_environments`, it also runs that
 revision's downgrade, which deactivates every staging and development API key
 and drops `api_keys.environment` and the table `flag_environment_settings`,
 every staging and development flag setting (see
 [`t2011_flag_environments`](#t2011_flag_environments-adds-each-flags-staging-and-development-settings)).
+From a release that carries `t2012_flag_split`, it first runs that revision's
+downgrade, which drops `feature_flags.split` and
+`flag_environment_settings.split` and refuses while any flag has a split or a
+rule value (see
+[`t2012_flag_split`](#t2012_flag_split-adds-a-split-to-each-flag-and-each-flag-environment-setting)).
 
 On Helm, run the same command in an API pod with `kubectl exec`.
 
@@ -864,11 +896,16 @@ From a release that carries `t449_identity_aliases`, it also runs that
 revision's downgrade, which drops the table `identity_aliases`, every link
 between an anonymous id and a known id (see
 [`t449_identity_aliases`](#t449_identity_aliases-adds-the-identity-aliases-table)).
-From a release that carries `t2011_flag_environments`, it first runs that
+From a release that carries `t2011_flag_environments`, it also runs that
 revision's downgrade, which deactivates every staging and development API key
 and drops `api_keys.environment` and the table `flag_environment_settings`,
 every staging and development flag setting (see
 [`t2011_flag_environments`](#t2011_flag_environments-adds-each-flags-staging-and-development-settings)).
+From a release that carries `t2012_flag_split`, it first runs that revision's
+downgrade, which drops `feature_flags.split` and
+`flag_environment_settings.split` and refuses while any flag has a split or a
+rule value (see
+[`t2012_flag_split`](#t2012_flag_split-adds-a-split-to-each-flag-and-each-flag-environment-setting)).
 
 On Helm, run the same command in an API pod with `kubectl exec`.
 
@@ -909,11 +946,16 @@ alone:
 docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade t1812_user_totp
 ```
 
-From a release that carries `t2011_flag_environments`, it first runs that
+From a release that carries `t2011_flag_environments`, it also runs that
 revision's downgrade, which deactivates every staging and development API key
 and drops `api_keys.environment` and the table `flag_environment_settings`,
 every staging and development flag setting (see
 [`t2011_flag_environments`](#t2011_flag_environments-adds-each-flags-staging-and-development-settings)).
+From a release that carries `t2012_flag_split`, it first runs that revision's
+downgrade, which drops `feature_flags.split` and
+`flag_environment_settings.split` and refuses while any flag has a split or a
+rule value (see
+[`t2012_flag_split`](#t2012_flag_split-adds-a-split-to-each-flag-and-each-flag-environment-setting)).
 
 On Helm, run the same command in an API pod with `kubectl exec`.
 
@@ -963,12 +1005,18 @@ then answer 401; they are never served production's configuration. Production
 flags and keys are unaffected. Upgrading again does not restore the settings,
 and the deactivated keys stay inactive. It does not refuse over data. Neither
 its upgrade nor its downgrade can be emitted as SQL (`--sql`). This revision's
-own `down_revision` is `t449_identity_aliases`; this undoes this revision
-alone:
+own `down_revision` is `t449_identity_aliases`; from a release that carries no
+later revision, this undoes this revision alone:
 
 ```{.bash skip reason="destructive: deactivates every staging and development key and drops flag_environment_settings"}
 docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade t449_identity_aliases
 ```
+
+From a release that carries `t2012_flag_split`, it first runs that revision's
+downgrade, which drops `feature_flags.split` and
+`flag_environment_settings.split` and refuses while any flag has a split or a
+rule value (see
+[`t2012_flag_split`](#t2012_flag_split-adds-a-split-to-each-flag-and-each-flag-environment-setting)).
 
 On Helm, run the same command in an API pod with `kubectl exec`.
 
@@ -979,15 +1027,73 @@ Until every API container or pod of this release has been replaced, each
 answers `500` to every request that presents an API key, production keys
 included: the SDKs it serves get errors from evaluation
 (`/api/v1/feature-flags/evaluate/{key}`) and from the ruleset
-(`/api/v1/sdk/ruleset`). The dashboard's flag list (`GET /api/v1/feature-flags/`)
-answers `500` too once a flag is old enough to be stale. Deleting a flag,
-archiving or deleting a segment and listing a segment's experiments answer `500`,
-as does every route that reads or changes a flag's staging or development
-settings, its list of environments included, and the signed-in API key list,
-create and delete; a bulk archive answers `200` with every flag failed; reading,
-updating and deactivating a flag, a bulk disable and a flag's production
-environment `PUT` still answer `200`. Start the previous release straight after
-the downgrade.
+(`/api/v1/sdk/ruleset`). `t2012_flag_split` is undone first, so every flag
+read and flag change answers `500` too, the dashboard's flag list included, and a
+bulk toggle `200` with every flag failed. Archiving or deleting a segment and
+listing a segment's experiments answer `500`, as do the signed-in API key list,
+create and delete. Start the previous release straight after the downgrade.
+
+### `t2012_flag_split` adds a split to each flag and each flag environment setting
+
+This revision adds the column `split` (`jsonb`) to `feature_flags`, for a flag's
+split in production, and to `flag_environment_settings`, for its split in
+staging or development. It is empty on every row. The columns are storage only:
+no request sets a split or a rule value (a value of its own that a targeting
+rule carries), and no evaluation reads one, so SDKs get the same answers as
+before.
+
+The previous release, 0.48.0, runs against this schema unchanged: a flag it
+creates has no split, and a flag it updates keeps the one it has.
+
+From 0.48.0, this upgrade waits at most 1 s for the lock it needs on
+`feature_flags`, behind any session that has read that table and not ended its
+transaction; `t2011_flag_environments`, in the same run, has the lock on
+`api_keys` by then, so new SDK requests wait with it. From a database already at
+`t2011_flag_environments` it waits at most 1 s for each of `feature_flags` and
+`flag_environment_settings`. A lock that cannot be taken within its bound, or a
+deadlock, stops the upgrade with nothing applied, no other revision of the same
+run included, and it is simply run again.
+
+**The downgrade refuses while any flag has a split or a rule value.**
+`t2012_flag_split`'s downgrade drops `feature_flags.split` and
+`flag_environment_settings.split`. So while any flag has a split or a rule value
+in any environment it refuses, names those flags, and changes nothing:
+
+```text
+Refusing to downgrade schema experimentation: t2012_flag_split found 2 feature flag(s) with a split or a rule value: checkout-copy (production), price-tier (development, staging). ...
+```
+
+To go on, clear them while the release that wrote them is still serving (the
+database is downgraded before the API is rolled back), or restore the backup
+taken before the upgrade. A boolean flag's rule value refuses nothing. With
+nothing to clear, the downgrade drops the two columns and nothing else. It waits
+at most 1 s for each of `feature_flags` and `flag_environment_settings`; a lock
+that cannot be taken within its bound, or a deadlock, stops it with nothing
+changed, and it is run again. Neither its upgrade nor its downgrade can be
+emitted as SQL (`--sql`), with or without a flag to name. This revision's own
+`down_revision` is `t2011_flag_environments`; this undoes this revision alone:
+
+```{.bash skip reason="destructive: drops feature_flags.split and flag_environment_settings.split"}
+docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade t2011_flag_environments
+```
+
+A downgrade that also undoes `t2011_flag_environments` is one run. It holds
+`feature_flags` while it waits for `api_keys`, and an SDK request reads
+`api_keys` first, so the two can deadlock: the downgrade stops with nothing
+changed, and is run again, or the SDK requests waiting then fail, or both.
+
+On Helm, run the same command in an API pod with `kubectl exec`.
+
+Downgrading the database first, with this release still running, is the only
+order under Docker Compose and Helm
+([An Older Image Against a Newer Database](#an-older-image-against-a-newer-database)).
+Once the downgrade has committed, this release answers `500` to every flag
+evaluation, flag read and flag change, and to a ruleset request with a staging
+or development key, until the API is rolled back. A bulk toggle answers `200`
+with every flag failed, and a ruleset request with a production key is still
+answered, unless the run also undoes `t2011_flag_environments`: then every
+request that presents an API key answers `500`. Start the previous release
+straight after the downgrade.
 
 Roll back to a specific revision:
 

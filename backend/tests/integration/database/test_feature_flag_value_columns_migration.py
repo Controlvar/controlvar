@@ -60,7 +60,9 @@ pytestmark = [pytest.mark.integration]
 #: This revision, and the core revision it extends.
 REVISION = "607c51a59bf5"
 PREVIOUS_CORE_HEAD = "4c2c09a2b3e8"
-#: The core head of this tree: ``t2011_flag_environments`` (#2011), whose
+#: The core head of this tree: ``t2012_flag_split`` (#2012), whose downgrade
+#: drops ``feature_flags.split`` and ``flag_environment_settings.split``, after
+#: ``t2011_flag_environments`` (#2011), whose
 #: downgrade drops the table ``flag_environment_settings`` and
 #: ``api_keys.environment``, after ``t449_identity_aliases`` (#449), whose
 #: downgrade drops the table ``identity_aliases``, after ``t1812_user_totp``
@@ -72,7 +74,7 @@ PREVIOUS_CORE_HEAD = "4c2c09a2b3e8"
 #: ``rollout_stages.started_at`` and refuses nothing, after ``85dd4796bb8b``
 #: (#1543), the revision after this one, whose downgrade drops the table
 #: ``event_dedup_keys``.
-CORE_HEAD = "t2011_flag_environments"
+CORE_HEAD = "t2012_flag_split"
 #: Tables a later core revision's downgrade drops: a downgrade from the head to
 #: this test's target unapplies those revisions too.
 LATER_DOWNGRADE_TABLES = {
@@ -83,6 +85,8 @@ LATER_DOWNGRADE_TABLES = {
     "identity_aliases",
     "flag_environment_settings",
 }
+#: ``feature_flags`` columns a later core revision's downgrade drops, too.
+LATER_DOWNGRADE_COLUMNS = {"split"}
 #: The modules branch's head in this tree, recorded on both sides of every
 #: step here: this file is about the core chain.
 MODULES_HEAD = "modules_0005_redshift"
@@ -804,7 +808,8 @@ def test_downgrade_removes_the_columns_and_the_check_and_nothing_else(
     _report(profile, "after downgrade", test_db, scratch_schema)
 
     assert _rows(test_db, scratch_schema) == PREVIOUS_ROWS[profile]
-    assert _all_columns(test_db, scratch_schema) == columns - set(COLUMNS)
+    dropped = set(COLUMNS) | LATER_DOWNGRADE_COLUMNS
+    assert _all_columns(test_db, scratch_schema) == columns - dropped
     assert _checks(test_db, scratch_schema) == {
         name: definition for name, definition in checks.items() if name != CHECK
     }

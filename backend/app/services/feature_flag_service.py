@@ -83,6 +83,10 @@ REASON_ERROR = "error"
 # tuple, not a set: a stored operator can be any JSON value, a list among them.
 _LEGACY_OPERATORS = ("eq", "ne", "gt", "lt", "contains", "in")
 
+#: ``update_feature_flag``'s ``split`` when the caller passes none: the stored
+#: split is kept. Not ``None``, which clears it.
+KEEP_SPLIT: Any = object()
+
 
 class FlagStatusReadOnly(Exception):
     """A request's ``status`` differs from the flag's status.
@@ -367,6 +371,7 @@ class FeatureFlagService:
         flag_data: FeatureFlagUpdate,
         *,
         record: Optional[Callable[[FeatureFlag], None]] = None,
+        split: Any = KEEP_SPLIT,
     ) -> Optional[FeatureFlag]:
         """Update an existing feature flag; returns the stored row, or None.
 
@@ -385,6 +390,11 @@ class FeatureFlagService:
 
         ``record``, when given, writes the audit entries in the same
         transaction (see ``_commit``).
+
+        ``split``, when given, is stored as the flag's split in the same
+        transaction, as it is, unchecked, and ``None`` clears it; left out, the
+        stored split is kept. No request field sets it: a promotion into
+        production passes the split it copies (``flag_environments.py``, #2012).
 
         Raises:
             FlagStatusReadOnly: a sent ``status`` differs from the stored one.
@@ -419,6 +429,8 @@ class FeatureFlagService:
         try:
             for field, value in update_data.items():
                 setattr(flag, field, value)
+            if split is not KEEP_SPLIT:
+                flag.split = split
 
             # Commit changes
             self._commit(flag, record)

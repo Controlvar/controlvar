@@ -45,11 +45,14 @@ CORE_VERSIONS = REPO_ROOT / "backend" / "app" / "db" / "migrations" / "versions"
 
 pytestmark = pytest.mark.unit
 
-#: The core chain's head: each flag's staging and development settings, and
-#: each API key's environment (#2011).
-CORE_HEAD = "t2011_flag_environments"
+#: The core chain's head: a nullable split on each flag and each flag
+#: environment setting (#2012).
+CORE_HEAD = "t2012_flag_split"
+#: Each flag's staging and development settings, and each API key's
+#: environment (#2011), the revision before it.
+FLAG_ENVIRONMENTS = "t2011_flag_environments"
 #: The table that links an anonymous id to a known id (#449), the revision
-#: before it.
+#: before that.
 IDENTITY_ALIASES = "t449_identity_aliases"
 #: Each local account's two-step sign-in secret and recovery codes (#1812), the
 #: revision before that.
@@ -168,6 +171,7 @@ CORE_PLAN = [
     VISUAL,
     TOTP,
     IDENTITY_ALIASES,
+    FLAG_ENVIRONMENTS,
     CORE_HEAD,
 ]
 
@@ -176,7 +180,7 @@ CORE_PLAN = [
 #: whole reason the edge exists, and before the core marker and everything the
 #: core chain adds after it.
 FULL_PLAN = [
-    *CORE_PLAN[:-18],
+    *CORE_PLAN[:-19],
     *MODULES_BRANCH_PLAN,
     CORE_MARKER,
     SDK_COUNTERS,
@@ -195,6 +199,7 @@ FULL_PLAN = [
     VISUAL,
     TOTP,
     IDENTITY_ALIASES,
+    FLAG_ENVIRONMENTS,
     CORE_HEAD,
 ]
 
@@ -315,9 +320,9 @@ def test_unapplying_the_branch_is_one_revision_and_modules_at_base_is_all_of_the
     assert _downgrade_plan(script, UNAPPLY_WHOLE_MODULES_BRANCH) == list(
         reversed(MODULES_BRANCH_PLAN)
     )
-    # 47: the 42 core revisions (through t2011_flag_environments, #2011) and
-    # the branch's 5.
-    assert len(_downgrade_plan(script, "modules@base")) == len(FULL_PLAN) == 47
+    # 48: the 43 core revisions (through t2012_flag_split, #2012) and the
+    # branch's 5.
+    assert len(_downgrade_plan(script, "modules@base")) == len(FULL_PLAN) == 48
 
 
 #: A command line, not a mention of one: the three documents all warn about

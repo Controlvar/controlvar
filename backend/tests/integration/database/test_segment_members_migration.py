@@ -43,12 +43,13 @@ pytestmark = [pytest.mark.integration]
 #: This revision, and the core revision it extends.
 REVISION = "37dcb2969766"
 PREVIOUS_CORE_HEAD = "d29a479daafe"
-#: The core head of this tree: ``t2011_flag_environments`` (#2011), after
-#: ``t449_identity_aliases`` (#449), ``t1812_user_totp`` (#1812),
-#: ``4955571d232c`` (#1545), ``c448_balance_within`` (#448), ``7b6b4b4fe246``
-#: (#1528), ``85dd4796bb8b`` (#1543), ``607c51a59bf5`` (#1497) and
-#: ``4c2c09a2b3e8`` (#1206), the revision after this one.
-CORE_HEAD = "t2011_flag_environments"
+#: The core head of this tree: ``t2012_flag_split`` (#2012), after
+#: ``t2011_flag_environments`` (#2011), ``t449_identity_aliases`` (#449),
+#: ``t1812_user_totp`` (#1812), ``4955571d232c`` (#1545),
+#: ``c448_balance_within`` (#448), ``7b6b4b4fe246`` (#1528), ``85dd4796bb8b``
+#: (#1543), ``607c51a59bf5`` (#1497) and ``4c2c09a2b3e8`` (#1206), the revision
+#: after this one.
+CORE_HEAD = "t2012_flag_split"
 #: Tables that a later core revision's downgrade drops: a downgrade from the
 #: head to this test's target unapplies those revisions too.
 #: ``85dd4796bb8b`` (#1543) drops ``event_dedup_keys``; ``7b6b4b4fe246``

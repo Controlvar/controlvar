@@ -1,12 +1,13 @@
 """Flag environments: production, staging and development in one install (#2011).
 
 A feature flag has one configuration per environment: whether it is on, its
-targeting rules and its rollout percentage. The set is fixed here, in code;
-there is no table of environments.
+targeting rules, its rollout percentage and its split (#2012, stored only: no
+request sets one and no evaluation reads one yet). The set is fixed here, in
+code; there is no table of environments.
 
 * ``production`` is the default, and its configuration is the flag row itself:
   ``feature_flags.status``, ``targeting_rules`` and ``rollout_percentage``,
-  exactly where the previous release reads and writes them.
+  exactly where the previous release reads and writes them, and ``split``.
 * ``staging`` and ``development`` are side rows in
   ``flag_environment_settings`` (``FlagEnvironmentSetting``), at most one per
   flag and environment, and only once someone configures the flag there. With
@@ -66,11 +67,12 @@ SETTING_IDENTITY_COLUMNS: Tuple[str, ...] = (
 )
 
 #: The fields an environment's configuration decides; every other attribute of
-#: a flag (key, id, name, value type and values) is the flag row's.
+#: a flag (key, id, name, value type, on value and off value) is the flag row's.
 ENVIRONMENT_FIELDS: Tuple[str, ...] = (
     "status",
     "targeting_rules",
     "rollout_percentage",
+    "split",
 )
 
 _ARCHIVED = FeatureFlagStatus.ARCHIVED.value
@@ -93,11 +95,13 @@ def _refused(name: Any) -> ValueError:
 class FlagInEnvironment:
     """A flag as one non-production environment serves it. Read-only.
 
-    ``status``, ``targeting_rules`` and ``rollout_percentage`` are the
-    environment's (:data:`ENVIRONMENT_FIELDS`). Every other attribute --
-    ``key``, ``id``, ``name``, ``value_type``, ``on_value``, ``off_value``,
-    ``updated_at`` and the rest -- is read from the flag row. ``configured``
-    says whether the environment has a side row; ``environment`` names it.
+    ``status``, ``targeting_rules``, ``rollout_percentage`` and ``split`` are
+    the environment's (:data:`ENVIRONMENT_FIELDS`); ``split`` is ``None`` with
+    no side row. Every other attribute -- ``key``, ``id``, ``name``,
+    ``value_type``, ``on_value``, ``off_value``, ``updated_at`` and the rest --
+    is read from the flag row, so a per-environment field this class left out
+    would answer production's. ``configured`` says whether the environment has
+    a side row; ``environment`` names it.
     """
 
     __slots__ = (
@@ -107,6 +111,7 @@ class FlagInEnvironment:
         "status",
         "targeting_rules",
         "rollout_percentage",
+        "split",
     )
 
     def __init__(self, flag: Any, setting: Any, environment: str) -> None:
@@ -123,6 +128,7 @@ class FlagInEnvironment:
             "status": status,
             "targeting_rules": None if setting is None else setting.targeting_rules,
             "rollout_percentage": 0 if setting is None else setting.rollout_percentage,
+            "split": None if setting is None else setting.split,
         }
         for name, value in values.items():
             object.__setattr__(self, name, value)
@@ -153,10 +159,10 @@ def flag_in_environment(flag: Any, setting: Optional[Any], environment: str) -> 
     * ``production``: the flag row itself, unchanged. It has no side row, so
       *setting* must be ``None``.
     * ``staging`` or ``development``: a :class:`FlagInEnvironment`. With no
-      side row the flag is off there (``INACTIVE``, no rules, 0%). An archived
-      flag row is ``ARCHIVED`` in every environment, whatever its side rows
-      say. Otherwise the side row decides: ``ACTIVE`` when ``is_active``, with
-      its rules and percentage.
+      side row the flag is off there (``INACTIVE``, no rules, 0%, no split). An
+      archived flag row is ``ARCHIVED`` in every environment, whatever its side
+      rows say. Otherwise the side row decides: ``ACTIVE`` when ``is_active``,
+      with its rules, percentage and split.
 
     Raises ``ValueError`` for a name outside :data:`FLAG_ENVIRONMENTS`, for a
     side row given with production, and for a side row of another flag or

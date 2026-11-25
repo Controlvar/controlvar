@@ -43,17 +43,20 @@ pytestmark = [pytest.mark.integration]
 #: This revision, and the core revision it extends: ``7b6b4b4fe246`` (#1528).
 REVISION = "c448_balance_within"
 PREVIOUS_CORE_HEAD = "7b6b4b4fe246"
-#: The core head of this tree: ``t2011_flag_environments`` (#2011), whose
-#: downgrade drops ``flag_environment_settings`` and ``api_keys.environment``,
-#: after ``t449_identity_aliases`` (#449), whose downgrade drops
+#: The core head of this tree: ``t2012_flag_split`` (#2012), whose downgrade
+#: drops ``feature_flags.split`` and ``flag_environment_settings.split``, after
+#: ``t2011_flag_environments`` (#2011), whose downgrade drops
+#: ``flag_environment_settings`` and ``api_keys.environment``, after
+#: ``t449_identity_aliases`` (#449), whose downgrade drops
 #: ``identity_aliases``, after ``t1812_user_totp`` (#1812), whose downgrade
 #: drops ``user_totp``, after ``4955571d232c`` (#1545), the revision after this
 #: one, whose downgrade drops ``visual_tokens``, ``experiments.visual_config``
 #: and ``variants.visual_changes``.
-CORE_HEAD = "t2011_flag_environments"
+CORE_HEAD = "t2012_flag_split"
 #: What a later core revision's downgrade drops: a downgrade from the head to
 #: this test's target unapplies ``4955571d232c``, ``t1812_user_totp``,
-#: ``t449_identity_aliases`` and ``t2011_flag_environments`` too.
+#: ``t449_identity_aliases``, ``t2011_flag_environments`` and
+#: ``t2012_flag_split`` too.
 LATER_DOWNGRADE_TABLES = {
     "visual_tokens",
     "user_totp",
