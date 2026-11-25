@@ -67,8 +67,8 @@ INVENTORY: Dict[str, str] = {
     "._count_assignments_by_variant": PER_ROW,
     _A + "event_counts": RESOLVED_AT_WRITE,
     _A + "value_totals": RESOLVED_AT_WRITE,
-    _A + "calculate_metric_results": PER_ROW,
-    _A + "calculate_experiment_summary": PER_ROW,
+    _A + "_assignment_count": PER_ROW,
+    _A + "_experiment_totals": PER_ROW,
     _A + "get_daily_results": PER_ROW,
     _A + "_bayesian_observations": PER_ROW,
     # assign_user's helpers, each called with the holder or an id never

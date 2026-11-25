@@ -80,9 +80,9 @@ INVENTORY: Dict[str, str] = {
     "backend/app/api/v1/endpoints/tracking.py::_variant_at_receipt": READS,
     "backend/app/core/bandit_scheduler.py::BanditScheduler._count_assignments_by_variant": READS,
     "backend/app/core/bandit_scheduler.py::BanditScheduler._stats_from_postgres": READS,
+    "backend/app/services/analysis_service.py::AnalysisService._assignment_count": READS,
     "backend/app/services/analysis_service.py::AnalysisService._bayesian_observations": READS,
-    "backend/app/services/analysis_service.py::AnalysisService.calculate_experiment_summary": READS,
-    "backend/app/services/analysis_service.py::AnalysisService.calculate_metric_results": READS,
+    "backend/app/services/analysis_service.py::AnalysisService._experiment_totals": READS,
     "backend/app/services/analysis_service.py::AnalysisService.get_daily_results": READS,
     # assign_user's helpers: the stored-row lookup, and the sticky answer
     # (named here by its ``Assignment`` annotation; it reads through
