@@ -18,10 +18,21 @@ import {
   FeatureFlagListItem,
   FeatureFlagStatus,
   FeatureFlagsService,
+  FlagEnvironmentSettings,
   isFlagOn,
 } from '@/services/featureFlags';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
 import { flagValueType, typeLabel } from '@/utils/flagValues';
+import { useFlagEnvironment } from '@/contexts/FlagEnvironmentContext';
+import { ProductionBanner } from '@/components/feature-flags/FlagEnvironmentSections';
+import {
+  FLAG_ENVIRONMENT_LABELS,
+  NEW_FLAGS_IN_PRODUCTION,
+  NonProductionEnvironment,
+  inEnvironmentUrl,
+  noFlagsConfiguredText,
+  notConfiguredText,
+} from '@/utils/flagEnvironments';
 
 const STATUS_FILTERS: Array<{ label: string; value: FeatureFlagStatus | 'all' }> = [
   { label: 'All', value: 'all' },
@@ -52,8 +63,42 @@ function staleReasonText(reason: string, days: number | undefined): string {
 }
 
 function formatDate(value: string): string {
+  // Empty only for a flag never set in Staging or Development.
+  if (!value) return '—';
   const d = parseApiTimestamp(value);
   return Number.isNaN(d.getTime()) ? value : d.toLocaleDateString();
+}
+
+/**
+ * A listed flag as it is in Staging or Development: that environment's on/off,
+ * rollout and last change (empty when never set). An archived flag stays
+ * archived. A stale mark is about the flag in every environment and is shown in
+ * Production's list only, so the view is never stale.
+ */
+function inEnvironment(flag: FeatureFlagListItem, settings: FlagEnvironmentSettings): FeatureFlagListItem {
+  return {
+    ...flag,
+    status: isFlagArchived(flag) ? flag.status : settings.status,
+    is_active: isFlagArchived(flag) ? false : settings.is_active,
+    rollout_percentage: settings.rollout_percentage,
+    targeting_rules: settings.targeting_rules,
+    updated_at: settings.updated_at ?? '',
+    stale: false,
+    stale_reasons: [],
+  };
+}
+
+/** A listed flag with no setting in the environment: off there, and never changed. */
+function unconfigured(environment: string): FlagEnvironmentSettings {
+  return {
+    environment,
+    status: 'inactive',
+    is_active: false,
+    rollout_percentage: 0,
+    targeting_rules: null,
+    configured: false,
+    updated_at: null,
+  };
 }
 
 export default function FeatureFlagsPage() {
@@ -68,6 +113,16 @@ export default function FeatureFlagsPage() {
   const createPending = !canCreate && permissionsLoading;
   // A read-only demo puts the demo note where "+ New Flag" or the role note would be.
   const demo = useDemoMode();
+  // Production lists the flags as before. Staging and Development list the
+  // same flags with their settings there (the batch route), and a switch
+  // changes the setting through the environment's route.
+  const { environment, reportShown, switchable } = useFlagEnvironment();
+  const otherEnvironment: NonProductionEnvironment | null =
+    environment && environment !== 'production' ? environment : null;
+  const production = environment === 'production';
+  // Settings by flag id in `otherEnvironment`, and the environment the rows were loaded for.
+  const [envSettings, setEnvSettings] = useState<Record<string, FlagEnvironmentSettings>>({});
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<FeatureFlagStatus | 'all'>('all');
   const [staleFilter, setStaleFilter] = useState<'any' | 'stale'>('any');
   const [staleDays, setStaleDays] = useState<number | undefined>(undefined);
@@ -99,34 +154,101 @@ export default function FeatureFlagsPage() {
   const requestSeq = useRef(0);
 
   const load = useCallback(async () => {
+    if (!environment) return;
     requestSeq.current += 1;
     const seq = requestSeq.current;
     const isCurrent = () => seq === requestSeq.current;
+    const inEnvironment = environment === 'production' ? null : environment;
 
     setLoading(true);
     setError(null);
     try {
       // `stale` is sent only while "Stale" is pressed: "Any" sends no parameter.
-      const data = await FeatureFlagsService.list({
-        ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
-        ...(staleFilter === 'stale' ? { stale: true } : {}),
-      });
+      // The status is Production's, and stale is about every environment: both
+      // are asked in Production only.
+      const data = await FeatureFlagsService.list(
+        inEnvironment
+          ? {}
+          : {
+              ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
+              ...(staleFilter === 'stale' ? { stale: true } : {}),
+            },
+      );
+      const items = data.items ?? [];
+      const settings = inEnvironment
+        ? await FeatureFlagsService.listEnvironmentSettings(
+            inEnvironment,
+            items.map((f) => f.id),
+          )
+        : {};
       if (!isCurrent()) return;
       setStaleDays(data.stale_days);
       setEvaluationsSeen(data.evaluations_seen !== false);
-      setFlags(data.items ?? []);
-      setTotalFlags(data.total ?? (data.items ?? []).length);
+      setFlags(items);
+      setEnvSettings(settings);
+      setTotalFlags(data.total ?? items.length);
+      setLoadedFor(environment);
     } catch (err) {
       if (!isCurrent()) return;
+      setLoadedFor(environment);
       setError(err instanceof Error ? err.message : 'Failed to load feature flags');
     } finally {
       if (isCurrent()) setLoading(false);
     }
-  }, [statusFilter, staleFilter]);
+  }, [statusFilter, staleFilter, environment]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // A failed switch in one environment says nothing about another, and an
+  // answer that arrives after the environment was changed is not shown.
+  const shownEnvironment = useRef(environment);
+  useEffect(() => {
+    shownEnvironment.current = environment;
+    setToggleErrors({});
+  }, [environment]);
+
+  /** On/off in Staging or Development: the environment's PUT, never the flag's enable or disable. */
+  const handleEnvironmentToggle = async (flag: FeatureFlagListItem, env: NonProductionEnvironment) => {
+    const previous = envSettings[flag.id] ?? unconfigured(env);
+    const next = !isFlagOn(previous);
+    const optimistic: FlagEnvironmentSettings = {
+      ...previous,
+      is_active: next,
+      status: next ? 'active' : 'inactive',
+      configured: true,
+    };
+    const stillShown = () => shownEnvironment.current === env;
+    setToggleErrors((e) => {
+      const copy = { ...e };
+      delete copy[flag.id];
+      return copy;
+    });
+    setToggling((t) => ({ ...t, [flag.id]: true }));
+    setEnvSettings((current) => ({ ...current, [flag.id]: optimistic }));
+    try {
+      // The PUT answers the setting as it now is.
+      const saved = await FeatureFlagsService.updateInEnvironment(flag.id, env, { is_active: next });
+      if (stillShown()) setEnvSettings((current) => ({ ...current, [flag.id]: saved }));
+    } catch (err) {
+      if (!stillShown()) return;
+      setEnvSettings((current) => ({ ...current, [flag.id]: previous }));
+      setToggleErrors((e) => ({
+        ...e,
+        [flag.id]:
+          err instanceof Error
+            ? err.message
+            : `Failed to turn ${next ? 'on' : 'off'} ${flag.key} in ${FLAG_ENVIRONMENT_LABELS[env]}`,
+      }));
+    } finally {
+      setToggling((t) => {
+        const copy = { ...t };
+        delete copy[flag.id];
+        return copy;
+      });
+    }
+  };
 
   /**
    * Optimistic on/off: flip locally, call enable/disable, and on failure revert
@@ -134,6 +256,10 @@ export default function FeatureFlagsPage() {
    * succeeded while this request was in flight.
    */
   const handleToggle = async (flag: FeatureFlagListItem) => {
+    if (otherEnvironment) {
+      await handleEnvironmentToggle(flag, otherEnvironment);
+      return;
+    }
     const next = !isFlagOn(flag);
     const previousStatus = flag.status;
     const previousIsActive = flag.is_active;
@@ -163,6 +289,7 @@ export default function FeatureFlagsPage() {
           f.id === flag.id ? { ...f, status: previousStatus, is_active: previousIsActive } : f,
         ),
       );
+      if (shownEnvironment.current !== 'production') return;
       setToggleErrors((e) => ({
         ...e,
         [flag.id]:
@@ -177,11 +304,28 @@ export default function FeatureFlagsPage() {
     }
   };
 
-  const isEmpty = !loading && !error && flags.length === 0;
+  // Until the rows belong to the environment on screen, the list shows its
+  // loading state: one environment's state is never shown under another's name.
+  const busy = loading || loadedFor !== environment;
+  // What is on screen, for the environment switcher's status.
+  const failed = error !== null;
+  useEffect(() => {
+    reportShown(environment && !busy ? { environment, loaded: !failed } : null);
+    return () => reportShown(null);
+  }, [environment, busy, failed, reportShown]);
+  const isEmpty = !busy && !error && flags.length === 0;
+  // Outside Production: no flag has a setting there yet (the list holds every flag).
+  const noneConfigured =
+    otherEnvironment !== null &&
+    flags.length > 0 &&
+    totalFlags <= flags.length &&
+    !flags.some((f) => envSettings[f.id]?.configured === true);
+  const environmentLabel = otherEnvironment ? FLAG_ENVIRONMENT_LABELS[otherEnvironment] : null;
 
   return (
     <div className="flex-1 bg-slate-50">
-      <PageTitle title="Feature Flags" />
+      {/* Not while the rows load: on Back the list renders once with the environment just left. */}
+      <PageTitle title={environmentLabel && !busy ? `Feature Flags in ${environmentLabel}` : 'Feature Flags'} />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
@@ -194,19 +338,28 @@ export default function FeatureFlagsPage() {
           {demo ? (
             <DemoNote action={DEMO_FLAGS_ACTION} className="text-sm text-slate-600 max-w-md" />
           ) : canCreate ? (
-            <Link
-              href="/feature-flags/new"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-              data-testid="new-flag-btn"
-            >
-              + New Flag
-            </Link>
+            // A new flag's settings are Production's, so it is created from there.
+            production ? (
+              <Link
+                href="/feature-flags/new"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                data-testid="new-flag-btn"
+              >
+                + New Flag
+              </Link>
+            ) : (
+              <p className="text-sm text-slate-600" data-testid="flags-created-in-production">
+                {NEW_FLAGS_IN_PRODUCTION}
+              </p>
+            )
           ) : createPending ? null : (
             <p className="text-sm text-slate-600" data-testid="flags-role-note">
               {FLAG_ROLE_NOTE}
             </p>
           )}
         </div>
+
+        {production && canChange && !demo && <ProductionBanner className="mb-6" />}
 
         {announcesDelete && (
           <p
@@ -229,6 +382,8 @@ export default function FeatureFlagsPage() {
           </p>
         )}
 
+        {/* The status is Production's, and stale is about every environment: both are offered in Production only. */}
+        {production && (
         <div className="flex gap-x-6 gap-y-2 mb-6 flex-wrap">
         <div
           className="flex gap-2 flex-wrap"
@@ -277,15 +432,30 @@ export default function FeatureFlagsPage() {
           ))}
         </div>
         </div>
+        )}
 
-        {staleFilter === 'stale' && (
+        {production && staleFilter === 'stale' && (
           <p data-testid="flag-stale-hint" className="text-xs text-slate-500 mb-3">
             Stale is a suggestion: nothing is changed or archived for you. A flag tagged permanent
             is never stale; tags are set through the API.
           </p>
         )}
 
-        {!loading && !error && !evaluationsSeen && (
+        {/* On the page before its text, which is announced once the rows have loaded. */}
+        {otherEnvironment && (
+          <div role="status">
+            {!busy && !error && noneConfigured && (
+              <p
+                data-testid="flags-environment-empty"
+                className="mb-4 rounded-lg bg-white border border-slate-200 p-3 text-sm text-slate-700"
+              >
+                {noFlagsConfiguredText(otherEnvironment)}
+              </p>
+            )}
+          </div>
+        )}
+
+        {production && !busy && !error && !evaluationsSeen && (
           <p
             role="status"
             data-testid="flag-stale-notice"
@@ -297,14 +467,14 @@ export default function FeatureFlagsPage() {
           </p>
         )}
 
-        {loading && (
+        {busy && (
           <div className="text-center py-12" data-testid="flags-loading">
             <div className="inline-block w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
             <p className="text-slate-500 mt-2 text-sm">Loading feature flags...</p>
           </div>
         )}
 
-        {!loading && error && (
+        {!busy && error && (
           <div
             role="alert"
             className="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-700 flex items-center justify-between gap-4"
@@ -328,13 +498,15 @@ export default function FeatureFlagsPage() {
             data-testid="flags-empty"
           >
             <p className="text-slate-500 mb-4">
-              {staleFilter === 'stale'
-                ? 'No stale flags right now.'
-                : statusFilter === 'all'
-                  ? 'No feature flags yet'
-                  : 'No flags match this filter'}
+              {!production
+                ? 'No feature flags yet'
+                : staleFilter === 'stale'
+                  ? 'No stale flags right now.'
+                  : statusFilter === 'all'
+                    ? 'No feature flags yet'
+                    : 'No flags match this filter'}
             </p>
-            {statusFilter === 'all' && staleFilter === 'any' ? (
+            {!production ? null : statusFilter === 'all' && staleFilter === 'any' ? (
               canCreate && (
                 <Link
                   href="/feature-flags/new"
@@ -372,10 +544,11 @@ export default function FeatureFlagsPage() {
           </div>
         )}
 
-        {!loading && !error && flags.length > 0 && (
+        {!busy && !error && flags.length > 0 && (
           <div
             className="bg-white rounded-lg border border-slate-200 overflow-x-auto"
             data-testid="flags-table"
+            data-environment={environment ?? undefined}
           >
             <table className="w-full text-sm">
               <thead className="bg-slate-50 border-b border-slate-200">
@@ -392,7 +565,12 @@ export default function FeatureFlagsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {flags.map((flag) => {
+                {flags.map((listed) => {
+                  // Outside Production the row is the flag as it is there
+                  // (`inEnvironment`): none means off, and the row says it was
+                  // never set. In Production it is the listed flag itself.
+                  const settings = otherEnvironment ? (envSettings[listed.id] ?? unconfigured(otherEnvironment)) : null;
+                  const flag = settings ? inEnvironment(listed, settings) : listed;
                   const on = isFlagOn(flag);
                   // The API refuses to turn an archived flag on (400), so its
                   // row has no switch: it says to unarchive it first, which is
@@ -409,7 +587,7 @@ export default function FeatureFlagsPage() {
                       <td className="px-4 py-3 font-mono text-xs text-slate-700">{flag.key}</td>
                       <td className="px-4 py-3">
                         <Link
-                          href={`/feature-flags/${flag.id}`}
+                          href={inEnvironmentUrl(`/feature-flags/${flag.id}`, switchable ? environment : null)}
                           className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
                           data-testid="flag-link"
                         >
@@ -439,6 +617,11 @@ export default function FeatureFlagsPage() {
                           >
                             {archived ? ARCHIVED_LABEL : on ? 'On' : 'Off'}
                           </span>
+                          {otherEnvironment && settings && !settings.configured && (
+                            <span className="text-xs text-slate-700" data-testid="flag-not-configured">
+                              {notConfiguredText(otherEnvironment)}
+                            </span>
+                          )}
                           {/* From the server's `stale`, never from tags or rules read here (#1808). */}
                           {flag.stale === true && (
                             <span
@@ -469,7 +652,7 @@ export default function FeatureFlagsPage() {
                             <FlagToggle
                               on={on}
                               disabled={Boolean(toggling[flag.id])}
-                              label={`Turn ${flag.key} ${on ? 'off' : 'on'}`}
+                              label={`Turn ${flag.key} ${on ? 'off' : 'on'}${environmentLabel ? ` in ${environmentLabel}` : ''}`}
                               onChange={() => void handleToggle(flag)}
                               data-testid={`flag-toggle-${flag.key}`}
                             />

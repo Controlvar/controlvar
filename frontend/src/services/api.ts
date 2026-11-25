@@ -268,10 +268,20 @@ export function messageForDetail(status: number, detail: unknown): string {
 // Request helpers
 // ---------------------------------------------------------------------------
 
-export type QueryValue = string | number | boolean | null | undefined;
+/**
+ * One query parameter's value. An array repeats the parameter once per item,
+ * in order (`flag_id=a&flag_id=b`); an empty array sends nothing.
+ */
+export type QueryValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | ReadonlyArray<string | number | boolean>;
 
 export interface ApiFetchOptions extends Omit<RequestInit, 'body' | 'headers'> {
-  /** Query-string parameters; `undefined`/`null` values are omitted. */
+  /** Query-string parameters; `undefined`/`null` values are omitted, arrays repeat the key. */
   query?: Record<string, QueryValue>;
   /** JSON body (serialised with `JSON.stringify`, sets `Content-Type`). */
   json?: unknown;
@@ -399,6 +409,10 @@ export function buildQuery(query?: Record<string, QueryValue>): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
     if (value === undefined || value === null) continue;
+    if (Array.isArray(value)) {
+      for (const item of value) params.append(key, String(item));
+      continue;
+    }
     params.set(key, String(value));
   }
   const encoded = params.toString();

@@ -1,6 +1,7 @@
 import { TargetingRules } from '@/types/targeting';
 import type { SafetyCheckResponse } from '@/types/safety';
 import type { ValueFlagType } from '@/utils/flagValues';
+import type { FlagEnvironment, NonProductionEnvironment } from '@/utils/flagEnvironments';
 import { apiFetch } from '@/services/api';
 
 export type FeatureFlagStatus = 'active' | 'inactive' | 'archived';
@@ -187,7 +188,55 @@ export interface RolloutScheduleListResponse {
   limit: number;
 }
 
+// ---------------------------------------------------------------------------
+// Flag environments (beta): `/api/v1/feature-flags/{id}/environments` and
+// `/api/v1/environments/{environment}/feature-flag-settings`
+// ---------------------------------------------------------------------------
+
+/**
+ * A flag's settings in one environment. Production's come from the flag row
+ * and are always `configured`. A flag with no setting in Staging or
+ * Development is off there: `configured: false`, `is_active: false`, 0%, no
+ * rules and `updated_at: null`.
+ */
+export interface FlagEnvironmentSettings {
+  environment: FlagEnvironment | string;
+  status: FeatureFlagStatus | string;
+  is_active: boolean;
+  rollout_percentage: number;
+  targeting_rules: TargetingRules | Record<string, unknown> | null;
+  configured: boolean;
+  updated_at: string | null;
+}
+
+/** `GET /feature-flags/{id}/environments`: the flag in every environment. */
+export interface FlagEnvironmentsResponse {
+  flag_id: string;
+  key: string;
+  environments: FlagEnvironmentSettings[];
+}
+
+/** `GET /environments/{environment}/feature-flag-settings`: settings by flag id. */
+export interface EnvironmentFlagSettingsResponse {
+  environment: string;
+  settings: Record<string, FlagEnvironmentSettings>;
+}
+
+/**
+ * The body of `PUT /feature-flags/{id}/environments/{environment}`: only the
+ * fields sent change; `targeting_rules: null` clears the rules.
+ */
+export interface UpdateFlagEnvironmentRequest {
+  is_active?: boolean;
+  rollout_percentage?: number;
+  targeting_rules?: TargetingRules | Record<string, unknown> | null;
+}
+
+/** The batch route takes 1 to 100 `flag_id` parameters per request. */
+export const ENVIRONMENT_SETTINGS_BATCH = 100;
+
 const BASE = '/api/v1/feature-flags';
+const ENVIRONMENTS_BASE = '/api/v1/environments';
 
 export const FeatureFlagsService = {
   /** `status` is matched against the DB enum (`ACTIVE`/`INACTIVE`/`ARCHIVED`). */
@@ -270,5 +319,57 @@ export const FeatureFlagsService = {
    */
   async safetyCheck(flagId: string): Promise<SafetyCheckResponse> {
     return apiFetch<SafetyCheckResponse>(`/api/v1/safety/feature-flags/${flagId}/check`);
+  },
+
+  /** `GET /feature-flags/{id}/environments` (beta): the flag in all three environments. */
+  async getEnvironments(id: string): Promise<FlagEnvironmentsResponse> {
+    return apiFetch<FlagEnvironmentsResponse>(`${BASE}/${id}/environments`);
+  },
+
+  /**
+   * `GET /feature-flags/{id}/environments/{environment}` (beta), for Staging
+   * or Development. Production is read from the flag itself (`get`).
+   */
+  async getInEnvironment(id: string, environment: NonProductionEnvironment): Promise<FlagEnvironmentSettings> {
+    return apiFetch<FlagEnvironmentSettings>(`${BASE}/${id}/environments/${environment}`);
+  },
+
+  /**
+   * `PUT /feature-flags/{id}/environments/{environment}` (beta): change a
+   * flag in Staging or Development, and answer its settings there as changed.
+   * Production is never changed here: a Production change uses `update` and
+   * `setEnabled`, the stable routes.
+   */
+  async updateInEnvironment(
+    id: string,
+    environment: NonProductionEnvironment,
+    data: UpdateFlagEnvironmentRequest,
+  ): Promise<FlagEnvironmentSettings> {
+    return apiFetch<FlagEnvironmentSettings>(`${BASE}/${id}/environments/${environment}`, {
+      method: 'PUT',
+      json: data,
+    });
+  },
+
+  /**
+   * `GET /environments/{environment}/feature-flag-settings` (beta): the
+   * settings of the given flags in Staging or Development, as one map. The
+   * route takes at most {@link ENVIRONMENT_SETTINGS_BATCH} ids, so a longer
+   * list is asked for in parts; no ids asks for nothing.
+   */
+  async listEnvironmentSettings(
+    environment: NonProductionEnvironment,
+    flagIds: readonly string[],
+  ): Promise<Record<string, FlagEnvironmentSettings>> {
+    const settings: Record<string, FlagEnvironmentSettings> = {};
+    for (let start = 0; start < flagIds.length; start += ENVIRONMENT_SETTINGS_BATCH) {
+      const part = flagIds.slice(start, start + ENVIRONMENT_SETTINGS_BATCH);
+      const res = await apiFetch<EnvironmentFlagSettingsResponse>(
+        `${ENVIRONMENTS_BASE}/${environment}/feature-flag-settings`,
+        { query: { flag_id: part } },
+      );
+      Object.assign(settings, res.settings ?? {});
+    }
+    return settings;
   },
 };
