@@ -1,0 +1,20 @@
+{
+ "config": {
+  "rootDir": "/work/controlvar/frontend/tests/e2e",
+  "version": "1.64.0"
+ },
+ "suites": [],
+ "errors": [
+  {
+   "message": "Error: No tests found"
+  }
+ ],
+ "stats": {
+  "startTime": "2026-11-25T03:22:44.883Z",
+  "duration": 7.405000000000001,
+  "expected": 0,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

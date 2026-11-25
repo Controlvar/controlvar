@@ -31,7 +31,10 @@ name: RC evidence
 # pinned -- and the demo apps' simulators; `deps` is what each installs, as
 # its pull request job does), the jest ones in the jest-suites matrix (the
 # frontend, sdk/js and the two demo apps), whose reports are written as JUnit
-# too. The list is
+# too, and the dashboard's Playwright projects that claims cite (journeys and
+# page-runtime) in the browser-suites job, on the stack pr-qa-gate.yml's
+# Browser E2E builds (the same services, env and setup steps, without its
+# caches), their JSON reports written as JUnit too. The list is
 # LEGS in scripts/rc_evidence.py. Their JUnit reports and the verifier's
 # record (the run table, the verdicts it read, the reports) are kept 90 days.
 # The table is in the log and the record, not the step summary: it names run
@@ -353,9 +356,165 @@ jobs:
           retention-days: 90
           if-no-files-found: warn
 
+  # The Playwright projects claims cite, on the stack pr-qa-gate.yml's Browser
+  # E2E builds: its services, its job env and its setup steps, by name, with
+  # the same run and env (the workflow test pins them), without its caches.
+  # The two projects then run in one step, journeys first, each whole, as the
+  # browser suite in scripts/rc_evidence.py runs them; the page-runtime project
+  # is listed and its run checked against the listing, as there. The sdk/visual
+  # pack and the fixtures are built before the journeys here, since the suite
+  # runs both projects in one step.
+  browser-suites:
+    name: browser suites (${{ matrix.suite }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: browser
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: experimentation
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      APP_ENV: development
+      ENVIRONMENT: development
+      AUTH_PROVIDER: local
+      DEV_AUTH_BYPASS: 'false'
+      POSTGRES_SERVER: localhost
+      POSTGRES_PORT: '5432'
+      POSTGRES_DB: experimentation
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_SCHEMA: experimentation
+      REDIS_HOST: localhost
+      REDIS_PORT: '6379'
+      SECRET_KEY: ci-only-browser-e2e-secret-key-0123456789abcdef0123456789
+      SAFETY_CHECK_INTERVAL_MINUTES: '60'
+      ROLLOUT_CHECK_INTERVAL_MINUTES: '60'
+      BANDIT_UPDATE_INTERVAL_MINUTES: '60'
+    steps:
+      - name: Dispatched at a release tag
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s\n' "$REF" | grep -Eqx 'refs/tags/v[0-9]+\.[0-9]+\.[0-9]+'; then
+            printf '%s\n' '::error title=RC evidence::dispatch this at a release tag: gh workflow run rc-evidence.yml --ref vX.Y.Z'
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Install dashboard dependencies
+        run: cd frontend && npm ci
+
+      - name: Install chromium only
+        run: cd frontend && npx playwright install --with-deps chromium
+
+      - name: Bootstrap the database
+        run: python -m backend.app.db.bootstrap
+
+      - name: Seed the demo data
+        run: python backend/scripts/seed_demo_data.py
+
+      - name: Start the API
+        run: |
+          python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 \
+            --log-level warning > api.log 2>&1 &
+          deadline=$((SECONDS + 90))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            curl -sf localhost:8000/health/ready >/dev/null && exit 0
+            sleep 1
+          done
+          echo "the API did not become healthy"; tail -n 100 api.log; exit 1
+
+      - name: Build the dashboard (static export)
+        env:
+          NEXT_PUBLIC_API_URL: ''
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: cd frontend && npm run build
+
+      - name: Pack the browser script (sdk/visual)
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/visual-pack"
+          mkdir -p "$out"
+          cd sdk/visual
+          npm ci --no-audit --no-fund
+          npm run build
+          npm pack --pack-destination "$out"
+          tarballs=("$out"/*.tgz)
+          if [ "${#tarballs[@]}" -ne 1 ] || [ ! -f "${tarballs[0]}" ]; then
+            echo "expected exactly one tarball in $out"; ls -la "$out"; exit 1
+          fi
+          tar -xzf "${tarballs[0]}" -C "$out"
+          test -f "$out/package/dist/controlvar-visual.js"
+          echo "VISUAL_PACKAGE_DIR=$out/package" >> "$GITHUB_ENV"
+
+      - name: Build the page-runtime fixtures
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: cd frontend && node tests/e2e/runtime/fixtures/build.mjs
+
+      # Both projects at the API started above, as the pull request job's two
+      # run steps point them (real-api.runtime.spec.ts passes the script's
+      # requests on to it).
+      - name: Run the suite
+        env:
+          SUITE: ${{ matrix.suite }}
+          PLAYWRIGHT_API_URL: http://localhost:8000
+        run: python scripts/rc_evidence.py --suite "$SUITE" --junit-dir "$RUNNER_TEMP/junit"
+
+      - name: Upload the JUnit reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: rc-evidence-junit-${{ matrix.suite }}
+          path: ${{ runner.temp }}/junit
+          retention-days: 90
+          if-no-files-found: warn
+
   verify:
     name: RC evidence
-    needs: [python-suites, jest-suites]
+    needs: [python-suites, jest-suites, browser-suites]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 30

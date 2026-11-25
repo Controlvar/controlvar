@@ -1,0 +1,25 @@
+{
+ "config": {
+  "rootDir": "/work/controlvar/frontend/tests/e2e",
+  "version": "1.64.0"
+ },
+ "suites": [],
+ "errors": [
+  {
+   "message": "Error: duplicate test title \"one title twice\", first declared in runtime/duplicate.runtime.spec.ts:4",
+   "location": {
+    "file": "/work/controlvar/frontend/tests/e2e/runtime/duplicate.runtime.spec.ts",
+    "line": 6,
+    "column": 5
+   }
+  }
+ ],
+ "stats": {
+  "startTime": "2026-11-25T03:22:45.629Z",
+  "duration": 33.05799999999999,
+  "expected": 0,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

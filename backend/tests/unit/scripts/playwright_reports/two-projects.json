@@ -1,0 +1,854 @@
+{
+ "config": {
+  "rootDir": "/work/controlvar/frontend/tests/e2e",
+  "version": "1.64.0"
+ },
+ "suites": [
+  {
+   "title": "runtime/outcomes.runtime.spec.ts",
+   "file": "runtime/outcomes.runtime.spec.ts",
+   "specs": [
+    {
+     "title": "a top-level test passes",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 8,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "a test fails",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 24,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "unexpected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "failed",
+         "retry": 0,
+         "annotations": [],
+         "errors": [
+          {
+           "message": "Error: VISUAL_PACKAGE_DIR is not set\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n\n  23 |\n  24 | test(\"a test fails\", () => {\n> 25 |   expect(1, \"VISUAL_PACKAGE_DIR is not set\").toBe(2);\n     |                                              ^\n  26 | });\n  27 |\n  28 | test(\"a test fails on its first attempt and passes on its retry\", () => {\n    at /work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts:25:46",
+           "location": {
+            "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+            "column": 46,
+            "line": 25
+           }
+          }
+         ]
+        },
+        {
+         "status": "failed",
+         "retry": 1,
+         "annotations": [],
+         "errors": [
+          {
+           "message": "Error: VISUAL_PACKAGE_DIR is not set\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n\n  23 |\n  24 | test(\"a test fails\", () => {\n> 25 |   expect(1, \"VISUAL_PACKAGE_DIR is not set\").toBe(2);\n     |                                              ^\n  26 | });\n  27 |\n  28 | test(\"a test fails on its first attempt and passes on its retry\", () => {\n    at /work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts:25:46",
+           "location": {
+            "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+            "column": 46,
+            "line": 25
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "a test fails on its first attempt and passes on its retry",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 28,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "flaky",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "failed",
+         "retry": 0,
+         "annotations": [],
+         "errors": [
+          {
+           "message": "Error: the first attempt fails\n\n  27 |\n  28 | test(\"a test fails on its first attempt and passes on its retry\", () => {\n> 29 |   if (test.info().retry === 0) throw new Error(\"the first attempt fails\");\n     |                                      ^\n  30 | });\n  31 |\n  32 | test(\"a test marked test.fail() fails as expected\", () => {\n    at /work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts:29:38",
+           "location": {
+            "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+            "column": 38,
+            "line": 29
+           }
+          }
+         ]
+        },
+        {
+         "status": "passed",
+         "retry": 1,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "a test marked test.fail() fails as expected",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 32,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "failed",
+       "annotations": [
+        {
+         "type": "fail",
+         "location": {
+          "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+          "line": 33,
+          "column": 8
+         }
+        }
+       ],
+       "results": [
+        {
+         "status": "failed",
+         "retry": 0,
+         "annotations": [
+          {
+           "type": "fail",
+           "location": {
+            "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+            "line": 33,
+            "column": 8
+           }
+          }
+         ],
+         "errors": [
+          {
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n\n  32 | test(\"a test marked test.fail() fails as expected\", () => {\n  33 |   test.fail();\n> 34 |   expect(1).toBe(2);\n     |             ^\n  35 | });\n  36 |\n  37 | test(\"a test marked test.fail() passes\", () => {\n    at /work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts:34:13",
+           "location": {
+            "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+            "column": 13,
+            "line": 34
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "a test marked test.fail() passes",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 37,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "unexpected",
+       "expectedStatus": "failed",
+       "annotations": [
+        {
+         "type": "fail",
+         "location": {
+          "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+          "line": 38,
+          "column": 8
+         }
+        }
+       ],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [
+          {
+           "type": "fail",
+           "location": {
+            "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+            "line": 38,
+            "column": 8
+           }
+          }
+         ],
+         "errors": []
+        },
+        {
+         "status": "passed",
+         "retry": 1,
+         "annotations": [
+          {
+           "type": "fail",
+           "location": {
+            "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+            "line": 38,
+            "column": 8
+           }
+          }
+         ],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "a test skipped with test.skip",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 42,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "skipped",
+       "expectedStatus": "skipped",
+       "annotations": [
+        {
+         "type": "skip",
+         "location": {
+          "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+          "line": 42,
+          "column": 6
+         }
+        }
+       ],
+       "results": [
+        {
+         "status": "skipped",
+         "retry": 0,
+         "annotations": [
+          {
+           "type": "skip",
+           "location": {
+            "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+            "line": 42,
+            "column": 6
+           }
+          }
+         ],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "a test marked fixme",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 44,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "skipped",
+       "expectedStatus": "skipped",
+       "annotations": [
+        {
+         "type": "fixme",
+         "location": {
+          "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+          "line": 44,
+          "column": 6
+         }
+        }
+       ],
+       "results": [
+        {
+         "status": "skipped",
+         "retry": 0,
+         "annotations": [
+          {
+           "type": "fixme",
+           "location": {
+            "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+            "line": 44,
+            "column": 6
+           }
+          }
+         ],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "a test that skips itself on a condition",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 46,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "skipped",
+       "expectedStatus": "skipped",
+       "annotations": [
+        {
+         "type": "skip",
+         "description": "the condition holds",
+         "location": {
+          "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+          "line": 47,
+          "column": 8
+         }
+        }
+       ],
+       "results": [
+        {
+         "status": "skipped",
+         "retry": 0,
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "the condition holds",
+           "location": {
+            "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+            "line": 47,
+            "column": 8
+           }
+          }
+         ],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "every change applies under count, with no violation",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 51,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "every change applies under revenue, with no violation",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 51,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "a top-level test passes",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 8,
+     "tests": [
+      {
+       "projectName": "extended",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "a test fails",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 24,
+     "tests": [
+      {
+       "projectName": "extended",
+       "status": "unexpected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "failed",
+         "retry": 0,
+         "annotations": [],
+         "errors": [
+          {
+           "message": "Error: VISUAL_PACKAGE_DIR is not set\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n\n  23 |\n  24 | test(\"a test fails\", () => {\n> 25 |   expect(1, \"VISUAL_PACKAGE_DIR is not set\").toBe(2);\n     |                                              ^\n  26 | });\n  27 |\n  28 | test(\"a test fails on its first attempt and passes on its retry\", () => {\n    at /work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts:25:46",
+           "location": {
+            "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+            "column": 46,
+            "line": 25
+           }
+          }
+         ]
+        },
+        {
+         "status": "failed",
+         "retry": 1,
+         "annotations": [],
+         "errors": [
+          {
+           "message": "Error: VISUAL_PACKAGE_DIR is not set\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n\n  23 |\n  24 | test(\"a test fails\", () => {\n> 25 |   expect(1, \"VISUAL_PACKAGE_DIR is not set\").toBe(2);\n     |                                              ^\n  26 | });\n  27 |\n  28 | test(\"a test fails on its first attempt and passes on its retry\", () => {\n    at /work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts:25:46",
+           "location": {
+            "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+            "column": 46,
+            "line": 25
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "a test fails on its first attempt and passes on its retry",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 28,
+     "tests": [
+      {
+       "projectName": "extended",
+       "status": "flaky",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "failed",
+         "retry": 0,
+         "annotations": [],
+         "errors": [
+          {
+           "message": "Error: the first attempt fails\n\n  27 |\n  28 | test(\"a test fails on its first attempt and passes on its retry\", () => {\n> 29 |   if (test.info().retry === 0) throw new Error(\"the first attempt fails\");\n     |                                      ^\n  30 | });\n  31 |\n  32 | test(\"a test marked test.fail() fails as expected\", () => {\n    at /work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts:29:38",
+           "location": {
+            "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+            "column": 38,
+            "line": 29
+           }
+          }
+         ]
+        },
+        {
+         "status": "passed",
+         "retry": 1,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "a test marked test.fail() fails as expected",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 32,
+     "tests": [
+      {
+       "projectName": "extended",
+       "status": "expected",
+       "expectedStatus": "failed",
+       "annotations": [
+        {
+         "type": "fail",
+         "location": {
+          "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+          "line": 33,
+          "column": 8
+         }
+        }
+       ],
+       "results": [
+        {
+         "status": "failed",
+         "retry": 0,
+         "annotations": [
+          {
+           "type": "fail",
+           "location": {
+            "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+            "line": 33,
+            "column": 8
+           }
+          }
+         ],
+         "errors": [
+          {
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n\n  32 | test(\"a test marked test.fail() fails as expected\", () => {\n  33 |   test.fail();\n> 34 |   expect(1).toBe(2);\n     |             ^\n  35 | });\n  36 |\n  37 | test(\"a test marked test.fail() passes\", () => {\n    at /work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts:34:13",
+           "location": {
+            "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+            "column": 13,
+            "line": 34
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "a test marked test.fail() passes",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 37,
+     "tests": [
+      {
+       "projectName": "extended",
+       "status": "unexpected",
+       "expectedStatus": "failed",
+       "annotations": [
+        {
+         "type": "fail",
+         "location": {
+          "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+          "line": 38,
+          "column": 8
+         }
+        }
+       ],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [
+          {
+           "type": "fail",
+           "location": {
+            "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+            "line": 38,
+            "column": 8
+           }
+          }
+         ],
+         "errors": []
+        },
+        {
+         "status": "passed",
+         "retry": 1,
+         "annotations": [
+          {
+           "type": "fail",
+           "location": {
+            "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+            "line": 38,
+            "column": 8
+           }
+          }
+         ],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "a test skipped with test.skip",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 42,
+     "tests": [
+      {
+       "projectName": "extended",
+       "status": "skipped",
+       "expectedStatus": "skipped",
+       "annotations": [
+        {
+         "type": "skip",
+         "location": {
+          "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+          "line": 42,
+          "column": 6
+         }
+        }
+       ],
+       "results": [
+        {
+         "status": "skipped",
+         "retry": 0,
+         "annotations": [
+          {
+           "type": "skip",
+           "location": {
+            "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+            "line": 42,
+            "column": 6
+           }
+          }
+         ],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "a test marked fixme",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 44,
+     "tests": [
+      {
+       "projectName": "extended",
+       "status": "skipped",
+       "expectedStatus": "skipped",
+       "annotations": [
+        {
+         "type": "fixme",
+         "location": {
+          "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+          "line": 44,
+          "column": 6
+         }
+        }
+       ],
+       "results": [
+        {
+         "status": "skipped",
+         "retry": 0,
+         "annotations": [
+          {
+           "type": "fixme",
+           "location": {
+            "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+            "line": 44,
+            "column": 6
+           }
+          }
+         ],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "a test that skips itself on a condition",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 46,
+     "tests": [
+      {
+       "projectName": "extended",
+       "status": "skipped",
+       "expectedStatus": "skipped",
+       "annotations": [
+        {
+         "type": "skip",
+         "description": "the condition holds",
+         "location": {
+          "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+          "line": 47,
+          "column": 8
+         }
+        }
+       ],
+       "results": [
+        {
+         "status": "skipped",
+         "retry": 0,
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "the condition holds",
+           "location": {
+            "file": "/work/controlvar/frontend/tests/e2e/runtime/outcomes.runtime.spec.ts",
+            "line": 47,
+            "column": 8
+           }
+          }
+         ],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "every change applies under count, with no violation",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 51,
+     "tests": [
+      {
+       "projectName": "extended",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "every change applies under revenue, with no violation",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "line": 51,
+     "tests": [
+      {
+       "projectName": "extended",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "suites": [
+    {
+     "title": "outer",
+     "file": "runtime/outcomes.runtime.spec.ts",
+     "specs": [
+      {
+       "title": "a nested test passes",
+       "file": "runtime/outcomes.runtime.spec.ts",
+       "line": 13,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "a nested test passes",
+       "file": "runtime/outcomes.runtime.spec.ts",
+       "line": 13,
+       "tests": [
+        {
+         "projectName": "extended",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "suites": [
+      {
+       "title": "mid",
+       "file": "runtime/outcomes.runtime.spec.ts",
+       "specs": [
+        {
+         "title": "b",
+         "file": "runtime/outcomes.runtime.spec.ts",
+         "line": 18,
+         "tests": [
+          {
+           "projectName": "page-runtime",
+           "status": "expected",
+           "expectedStatus": "passed",
+           "annotations": [],
+           "results": [
+            {
+             "status": "passed",
+             "retry": 0,
+             "annotations": [],
+             "errors": []
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "title": "b",
+         "file": "runtime/outcomes.runtime.spec.ts",
+         "line": 18,
+         "tests": [
+          {
+           "projectName": "extended",
+           "status": "expected",
+           "expectedStatus": "passed",
+           "annotations": [],
+           "results": [
+            {
+             "status": "passed",
+             "retry": 0,
+             "annotations": [],
+             "errors": []
+            }
+           ]
+          }
+         ]
+        }
+       ],
+       "suites": []
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-11-25T03:22:41.806Z",
+  "duration": 2367.8779999999997,
+  "expected": 12,
+  "skipped": 6,
+  "unexpected": 4,
+  "flaky": 2
+ }
+}

@@ -1,0 +1,20 @@
+{
+ "config": {
+  "rootDir": "/work/controlvar/frontend/tests/e2e",
+  "version": "1.64.0"
+ },
+ "suites": [],
+ "errors": [
+  {
+   "message": "Error: Process from config.webServer was not able to start. Exit code: 3"
+  }
+ ],
+ "stats": {
+  "startTime": "2026-11-25T03:22:46.054Z",
+  "duration": 32.20400000000001,
+  "expected": 0,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

@@ -233,7 +233,33 @@ SUITE_CASES = {
     "demo-streampulse-simulator.xml": [
         ("demo.streampulse.simulator.test_story", "test_the_story_runs", "passed"),
     ],
+    # The browser suite's two Playwright projects, as playwright_junit writes
+    # them: the spec's repository path, the full name and the own title.
+    "journeys.xml": [
+        (
+            "frontend/tests/e2e/sign-in.journey.spec.ts",
+            "signing in › an analyst signs in",
+            "passed",
+            "an analyst signs in",
+        ),
+    ],
+    "page-runtime.xml": [
+        (
+            "frontend/tests/e2e/runtime/apply.runtime.spec.ts",
+            "applying › every operation applies",
+            "passed",
+            "every operation applies",
+        ),
+    ],
 }
+#: The Playwright JSON reports regenerate.py wrote, and the JUnit golden of
+#: the real one; the probe's reports are of a copy at PROBE_ROOT, the real
+#: one of GitHub's runner's checkout.
+REPORTS = pathlib.Path(__file__).resolve().parent / "playwright_reports"
+PROBE_ROOT = pathlib.Path("/work/controlvar")
+RUNNER_ROOT = pathlib.Path("/home/runner/work/controlvar/controlvar")
+#: The probe's spec, which every outcome in outcomes.json is a test of.
+OUTCOMES = "frontend/tests/e2e/runtime/outcomes.runtime.spec.ts"
 GOOD_CASES = [
     ("backend.tests.unit.x.test_alpha", "test_one", "passed"),
     ("backend.tests.unit.x.test_alpha", "test_many[a]", "passed"),
@@ -1554,6 +1580,452 @@ def test_the_verify_job_reads_its_own_reports(world):
 
 
 # ---------------------------------------------------------------------------
+# E4 (#2124): the Playwright tests claims cite, judged by project, file and
+# title, from the browser suite's reports
+# ---------------------------------------------------------------------------
+APPLY = "frontend/tests/e2e/runtime/apply.runtime.spec.ts"
+CITED = f"test:{APPLY}::at most five reports per page view"
+
+
+@pytest.mark.regression
+def test_a_cited_page_runtime_test_is_found_in_its_project_report(world):
+    """Every frontend/tests/e2e target went to the frontend's jest, whose
+    report holds no Playwright test, so a test that ran and passed read as
+    missing. The golden is the real page-runtime run of Browser E2E (run
+    45525986412), written as JUnit."""
+    world.registry.targets.append((CITED, "docs/sdk/visual.md"))
+    world.suite_reports["page-runtime.xml"] = (REPORTS / "page-runtime.xml").read_text()
+    out = world.tmp / "record"
+    code, text = world.main(out=out)
+    checks = json.loads((out / "runs.json").read_text())["checks"]
+    said = [p for c in checks for p in c["problems"] if p.startswith(CITED)]
+    assert said == [], said
+    assert code == 0, text
+    assert rc.suite_of(CITED) != "frontend"
+
+
+def test_the_converter_turns_the_real_report_into_the_golden(tmp_path):
+    """regenerate.py's `real`: the trimmed run report of Browser E2E, as the
+    golden the regression test judges, one passed case per test."""
+    out = tmp_path / "page-runtime.xml"
+    report = REPORTS / "page-runtime-run.json"
+    assert rc.playwright_junit(report, out, "page-runtime", RUNNER_ROOT) == 106
+    assert out.read_bytes() == (REPORTS / "page-runtime.xml").read_bytes()
+    cases = rc.read_junit(out)
+    assert {c.outcome for c in cases} == {"passed"}
+    assert json.loads(report.read_text())["stats"]["expected"] == len(cases)
+
+
+def test_the_six_titles_as_written_match_the_tests_that_fill_them_in():
+    """The six citations re-spelled as their titles are written: each
+    ``${...}`` matches every test its template made, in the real run."""
+    cases = rc.read_junit(REPORTS / "page-runtime.xml")
+    runtime = "frontend/tests/e2e/runtime"
+    for target, count in (
+        (
+            f"{runtime}/consent.runtime.spec.ts::revokeConsent() on a tag that"
+            " ${mode}: the cookie and every key go, nothing more is sent, and the"
+            " next page follows the tag",
+            2,
+        ),
+        (
+            f"{runtime}/csp.runtime.spec.ts::every change and the hide apply under"
+            " ${name}, with no violation",
+            2,
+        ),
+        (
+            f"{runtime}/hide.runtime.spec.ts::shows the page at ${{timeout}} ms when"
+            ' the API never answers (data-timeout-ms ${attribute ?? "absent"})',
+            2,
+        ),
+        (
+            f"{runtime}/hydration.runtime.spec.ts::${{fixture}}: ${{op}} on 25"
+            " targets is kept through hydration",
+            20,
+        ),
+        (
+            f"{runtime}/preview.runtime.spec.ts::a variant that hides ${{target}} in"
+            " seven ways leaves [Exit preview] visible, on top and in view",
+            4,
+        ),
+        (
+            f"{runtime}/real-api-preview.runtime.spec.ts::a preview link shows its"
+            " variant 50 times and records nothing; a changed or revoked link gets"
+            " 404, and a visitor still gets their own variant",
+            1,
+        ),
+    ):
+        path, name = target.split("::", 1)
+        pattern = rc.playwright_title_pattern(name)
+        hits = [c for c in cases if c.classname == path and pattern.fullmatch(c.title)]
+        assert len(hits) == count, (target, len(hits))
+        assert rc.target_problem(f"test:{target}", cases, "x") is None
+
+
+def _converted(tmp_path: pathlib.Path, name: str, project: str = "page-runtime"):
+    """regenerate.py's probe report *name*, written as JUnit; its cases."""
+    out = tmp_path / f"{name}.xml"
+    rc.playwright_junit(REPORTS / f"{name}.json", out, project, PROBE_ROOT)
+    return out, rc.read_junit(out)
+
+
+#: outcomes.json's tests, as the converter reads them: (full name, outcome,
+#: kind, message). Playwright exits 0 on the retry and reads it, and both
+#: test.fail() ones, as passed in its own JUnit.
+OUTCOMES_READ = [
+    ("a top-level test passes", "passed", "", ""),
+    ("a test fails", "failed", "failed", "Error: VISUAL_PACKAGE_DIR is not set"),
+    (
+        "a test fails on its first attempt and passes on its retry",
+        "failed",
+        "flaky",
+        "passed only on retry 1",
+    ),
+    (
+        "a test marked test.fail() fails as expected",
+        "failed",
+        "test.fail",
+        "marked test.fail()",
+    ),
+    ("a test marked test.fail() passes", "failed", "test.fail", "marked test.fail()"),
+    ("a test skipped with test.skip", "skipped", "skip", ""),
+    ("a test marked fixme", "skipped", "fixme", ""),
+    (
+        "a test that skips itself on a condition",
+        "skipped",
+        "skip",
+        "the condition holds",
+    ),
+    ("every change applies under count, with no violation", "passed", "", ""),
+    ("every change applies under revenue, with no violation", "passed", "", ""),
+    ("outer › a nested test passes", "passed", "", ""),
+    ("outer › mid › b", "passed", "", ""),
+]
+
+
+def test_the_converter_reads_each_outcome_of_a_real_run(tmp_path):
+    _, cases = _converted(tmp_path, "outcomes")
+    assert [(c.name, c.outcome, c.kind, c.message) for c in cases] == OUTCOMES_READ
+    assert {c.classname for c in cases} == {OUTCOMES}
+    titles = [c.title for c in cases]
+    assert titles[-2:] == ["a nested test passes", "b"]
+
+
+def test_a_case_of_another_project_in_the_report_fails(tmp_path):
+    """The session ran --project=page-runtime: a test of any other project in
+    its report is not one it ran, and fails."""
+    _, cases = _converted(tmp_path, "two-projects")
+    ours = [c for c in cases if c.kind != "project"]
+    theirs = [c for c in cases if c.kind == "project"]
+    assert [(c.name, c.outcome, c.kind, c.message) for c in ours] == OUTCOMES_READ
+    assert len(theirs) == len(OUTCOMES_READ)
+    assert {(c.outcome, c.message) for c in theirs} == {
+        ("failed", "a test of project extended, not page-runtime")
+    }
+
+
+def test_a_listing_passed_off_as_a_run_reads_as_skipped(tmp_path):
+    _, cases = _converted(tmp_path, "listing")
+    assert {c.outcome for c in cases} == {"skipped"}
+    assert [c.kind for c in cases].count("did not run") == 10
+
+
+@pytest.mark.parametrize(
+    "name, where, message",
+    [
+        (
+            "load-error",
+            [
+                "frontend/tests/e2e/runtime/load-error.runtime.spec.ts",
+                "frontend/tests/e2e",
+            ],
+            ["Error: this spec does not load", "Error: No tests found"],
+        ),
+        (
+            "duplicate-title",
+            ["frontend/tests/e2e/runtime/duplicate.runtime.spec.ts"],
+            [
+                'Error: duplicate test title "one title twice", first declared in'
+                " runtime/duplicate.runtime.spec.ts:4"
+            ],
+        ),
+        (
+            "server-down",
+            ["frontend/tests/e2e"],
+            [
+                "Error: Process from config.webServer was not able to start. Exit"
+                " code: 3"
+            ],
+        ),
+        ("no-tests", ["frontend/tests/e2e"], ["Error: No tests found"]),
+    ],
+)
+def test_each_error_the_run_reported_is_a_failed_case(tmp_path, name, where, message):
+    """Playwright's own JUnit holds no test and no error for these."""
+    _, cases = _converted(tmp_path, name)
+    assert [c.classname for c in cases] == where
+    assert [c.message for c in cases] == message
+    assert {(c.name, c.outcome, c.kind) for c in cases} == {
+        ("(the run reported an error)", "failed", "error")
+    }
+
+
+@pytest.mark.parametrize(
+    "text, error",
+    [
+        (None, FileNotFoundError),
+        ("", ValueError),
+        ("[]", ValueError),
+        ('{"suites": [], "errors": []}', ValueError),  # no rootDir
+        ("cut", ValueError),
+    ],
+    ids=["missing", "empty", "not-a-report", "no-root", "cut-short"],
+)
+def test_a_report_that_cannot_be_read_whole_is_refused(tmp_path, text, error):
+    report = tmp_path / "run.json"
+    if text == "cut":
+        whole = (REPORTS / "outcomes.json").read_text()
+        text = whole[: len(whole) // 2]
+    if text is not None:
+        report.write_text(text)
+    with pytest.raises(error):
+        rc.playwright_junit(report, tmp_path / "out.xml", "page-runtime", PROBE_ROOT)
+
+
+def test_a_report_from_outside_the_repository_is_refused(tmp_path):
+    with pytest.raises(ValueError, match="rootDir is not in the repository"):
+        rc.playwright_junit(
+            REPORTS / "outcomes.json", tmp_path / "x.xml", "page-runtime", RUNNER_ROOT
+        )
+
+
+def _claim_problems(world: World) -> List[str]:
+    """The E4 claim-tests check's problems, as runs.json lists each one."""
+    out = world.tmp / "record"
+    world.main(out=out)
+    checks = json.loads((out / "runs.json").read_text())["checks"]
+    (claims,) = [c for c in checks if c["subject"] == "claim tests"]
+    return claims["problems"]
+
+
+@pytest.fixture
+def outcomes_world(world, tmp_path):
+    """A world whose page-runtime report is outcomes.json, written as JUnit."""
+    out, _ = _converted(tmp_path, "outcomes")
+    world.suite_reports["page-runtime.xml"] = out.read_text()
+    return world
+
+
+def _cite(world: World, name: Optional[str], path: str = OUTCOMES) -> str:
+    target = f"test:{path}" + ("" if name is None else f"::{name}")
+    world.registry.targets.append((target, "docs/sdk/visual.md"))
+    return target
+
+
+@pytest.mark.parametrize(
+    "name, line",
+    [
+        ("a test fails", "failed in page-runtime at {short}"),
+        (
+            "a test fails on its first attempt and passes on its retry",
+            "passed in page-runtime only on retry 1 at {short}",
+        ),
+        (
+            "a test marked test.fail() fails as expected",
+            "marked test.fail() in page-runtime: an expected failure holds no claim",
+        ),
+        (
+            "a test marked test.fail() passes",
+            "marked test.fail() in page-runtime: an expected failure holds no claim",
+        ),
+        (
+            "a test that skips itself on a condition",
+            "skipped in page-runtime at {short} (skip: the condition holds)",
+        ),
+        ("a test marked fixme", "skipped in page-runtime at {short} (fixme)"),
+        (
+            "with no violation",
+            f"no test in {OUTCOMES} has this title at {{short}}; it is part of 2"
+            " titles there: cite one as written",
+        ),
+        (
+            "a test that was renamed",
+            f"no test in {OUTCOMES} has this title at {{short}}",
+        ),
+        # A placeholder takes no describe title (` › `): `${x}` cannot be
+        # "outer › mid", and `b`'s own title is not the target.
+        ("${x} › b", f"no test in {OUTCOMES} has this title at {{short}}"),
+        (
+            "${x}",
+            "a title made only of placeholders (${...}) names every test of its file",
+        ),
+        (
+            "${a} ${b} ${c} ${d}",
+            "4 placeholders (${...}) in one title; cite a title with at most 3",
+        ),
+        (None, "failed in page-runtime at {short}"),
+    ],
+)
+def test_each_playwright_target_line_says_what_happened(outcomes_world, name, line):
+    target = _cite(outcomes_world, name)
+    problems = _claim_problems(outcomes_world)
+    said = line.replace("{short}", RC[:12])
+    assert f"{target}: {said}" in problems, problems
+    assert [p for p in problems if p.startswith(f"{target}: ")] == [f"{target}: {said}"]
+    assert not [p for p in problems if "not in the suites' JUnit" in p]
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "a top-level test passes",
+        "a nested test passes",
+        "outer › a nested test passes",
+        "b",
+        "outer › mid › b",
+        "every change applies under ${kind}, with no violation",
+    ],
+)
+def test_a_playwright_target_that_passed_first_time_holds(outcomes_world, name):
+    target = _cite(outcomes_world, name)
+    assert not [p for p in _claim_problems(outcomes_world) if p.startswith(target)]
+
+
+def test_a_failing_playwright_test_names_its_project_and_first_error(outcomes_world):
+    assert (
+        "suite page-runtime: 4 tests failed or errored in page-runtime.xml (first:"
+        f" {OUTCOMES}::a test fails; Error: VISUAL_PACKAGE_DIR is not set)"
+    ) in _claim_problems(outcomes_world)
+
+
+@pytest.mark.parametrize(
+    "target, line",
+    [
+        (
+            "test:frontend/tests/e2e/accessibility.spec.ts::has no violation",
+            "Playwright project extended runs it, and no rc-evidence leg runs extended",
+        ),
+        (
+            "test:frontend/tests/e2e/marketing.site.spec.ts::fits a phone",
+            "Playwright project site runs it, and no rc-evidence leg runs site",
+        ),
+        (
+            "test:frontend/tests/e2e/fixtures/launch.fixture.ts",
+            "no Playwright project runs frontend/tests/e2e/fixtures/launch.fixture.ts",
+        ),
+    ],
+)
+def test_a_playwright_target_no_leg_runs_is_named_with_its_project(world, target, line):
+    """In place of ``no suite in SUITES runs it`` (and never read as missing
+    from a report): the project that runs it, or that none does."""
+    world.registry.targets.append((target, "docs/c.md"))
+    problems = _claim_problems(world)
+    assert f"{target}: {line}" in problems, problems
+    assert not [
+        p for p in problems if p.startswith(target) and p != f"{target}: {line}"
+    ]
+    assert rc.suite_of(target) is None
+
+
+def test_a_project_no_leg_runs_is_named_even_when_the_suites_did_not_run(world):
+    world.set_runs("rc-evidence.yml", [])
+    target = "test:frontend/tests/e2e/accessibility.spec.ts::has no violation"
+    world.registry.targets.append((target, "docs/c.md"))
+    _fails(
+        world,
+        "the suites did not run at the RC",
+        f"{target}: Playwright project extended runs it, and no rc-evidence leg"
+        " runs extended",
+    )
+
+
+def test_a_target_of_a_project_with_no_report_is_named_as_not_judged(world):
+    world.suite_reports["page-runtime.xml"] = None
+    _cite(world, "a top-level test passes")
+    problems = _claim_problems(world)
+    assert "suite page-runtime: no readable JUnit report page-runtime.xml" in problems
+    assert (
+        f"test:{OUTCOMES}::a top-level test passes: not judged: page-runtime left no"
+        f" report at {RC[:12]}"
+    ) in problems
+
+
+def test_an_empty_playwright_report_is_named_by_its_project(world):
+    world.suite_reports["journeys.xml"] = _junit([])
+    assert "suite journeys: journeys.xml holds no test" in _claim_problems(world)
+
+
+def test_a_spec_that_did_not_load_is_its_error_and_its_targets_are_not_found(
+    world, tmp_path
+):
+    """No test of the project ran; the converter's error case names why."""
+    out, _ = _converted(tmp_path, "load-error")
+    world.suite_reports["page-runtime.xml"] = out.read_text()
+    path = "frontend/tests/e2e/runtime/load-error.runtime.spec.ts"
+    target = _cite(world, "never declared", path)
+    problems = _claim_problems(world)
+    assert f"{target}: no test in {path} has this title at {RC[:12]}" in problems
+    assert (
+        "suite page-runtime: 2 tests failed or errored in page-runtime.xml (first:"
+        f" {path}::(the run reported an error); Error: this spec does not load)"
+    ) in problems
+
+
+def test_playwright_tests_are_routed_to_their_project_before_jest():
+    """jest's root holds frontend/tests/e2e, but its testMatch is
+    ``*.test.ts(x)``: only the browser suite's session of the file's project
+    runs a Playwright spec."""
+    assert rc.suite_of(CITED) == "browser"
+    assert rc.session_of(CITED)[1].project == "page-runtime"
+    journey = "test:frontend/tests/e2e/dialog-focus.journey.spec.ts::x"
+    assert rc.session_of(journey)[1].project == "journeys"
+    assert rc.suite_of("test:frontend/src/tests/a.test.tsx::x") == "frontend"
+    (frontend,) = rc.SUITES["frontend"]
+    assert not frontend.runs(APPLY) and frontend.runs("frontend/src/tests/a.test.tsx")
+    assert rc.playwright_projects_of(APPLY) == ["page-runtime"]
+    assert rc.playwright_projects_of(
+        "frontend/tests/e2e/visual-regression.spec.ts"
+    ) == ["visual"]
+    assert rc.playwright_projects_of("frontend/src/tests/a.spec.ts") == []
+    # The jest rules, unchanged (scripts/doc_claims.py loads them).
+    assert rc.JEST_FILE.fullmatch("tests/e2e/runtime/apply.runtime.spec.ts")
+    assert rc.jest_title_pattern("judges a %s metric").fullmatch(
+        "judges a count metric"
+    )
+
+
+def test_the_browser_suite_runs_its_projects_in_the_pull_request_jobs_order():
+    sessions = rc.SUITES["browser"]
+    assert [(s.report, s.args, s.check) for s in sessions] == [
+        ("journeys.xml", ("--project=journeys",), ""),
+        (
+            "page-runtime.xml",
+            ("--project=page-runtime",),
+            "scripts/check_page_runtime_run.py",
+        ),
+    ]
+    assert {s.runner for s in sessions} == {"playwright"}
+    assert rc.suite_job("browser") == "browser suites (browser)"
+    assert rc.suite_job("browser") in rc.REQUIRED_JOBS["rc-evidence.yml"]
+    assert (REPO_ROOT / sessions[1].check).is_file()
+
+
+@pytest.mark.parametrize(
+    "session",
+    [
+        rc.Invocation("x.xml", ("--project=extended", "--grep=x"), runner="playwright"),
+        rc.Invocation("x.xml", ("--project=nightly",), runner="playwright"),
+        rc.Invocation("x.xml", (), runner="playwright"),
+    ],
+    ids=["more-than-the-project", "no-such-project", "no-project"],
+)
+def test_a_playwright_session_runs_one_project_of_the_config(monkeypatch, session):
+    monkeypatch.setattr(rc, "SUITES", {"browser": (session,)})
+    with pytest.raises(ValueError, match="runs one project"):
+        rc._legs()
+
+
+# ---------------------------------------------------------------------------
 # The sharded suites (#1895): every shard reports, and every shard's report
 # is read
 # ---------------------------------------------------------------------------
@@ -2152,6 +2624,131 @@ def test_the_sdk_js_suite_runs_jest_in_its_own_tree(tmp_path):
     assert "--ci" in seen["command"]
     cases = rc.read_junit(tmp_path / "sdk-js.xml")
     assert rc.target_problem(SDK_JS, cases, "x") is None
+
+
+def _as_project(node: Dict[str, Any], project: str) -> None:
+    """Every test of a report's suite tree, as one of *project*."""
+    for spec in node.get("specs", []):
+        for test in spec["tests"]:
+            test["projectName"] = project
+    for child in node.get("suites", []):
+        _as_project(child, project)
+
+
+def _browser_runner(calls: List[Tuple[List[str], str, Dict[str, str]]], run: str):
+    """A runner for the browser suite: each Playwright run writes regenerate.py's
+    report *run* (the listing writes listing.json) where the session asks, as
+    a run of the project it names in this tree's frontend/tests/e2e; the check
+    exits 0."""
+
+    class Done:
+        returncode = 0
+
+    def runner(command, cwd, env, check):
+        calls.append((command, cwd, env))
+        assert check is False
+        if command[:3] == ["npx", "playwright", "test"]:
+            name = "listing" if "--list" in command else run
+            data = json.loads((REPORTS / f"{name}.json").read_text())
+            data["config"]["rootDir"] = str(rc.ROOT / rc.PLAYWRIGHT_ROOT)
+            (project,) = [
+                a.split("=", 1)[1] for a in command if a.startswith("--project=")
+            ]
+            for suite in data["suites"]:
+                _as_project(suite, project)
+            out = env["PLAYWRIGHT_JSON_OUTPUT_FILE"]
+            pathlib.Path(out).write_text(json.dumps(data))
+        return Done()
+
+    return runner
+
+
+def test_the_browser_suite_runs_each_project_as_browser_e2e_does(tmp_path, monkeypatch):
+    """Each project whole, journeys first; page-runtime listed before its run
+    and checked after it, as the pull request job's steps do; each JSON report
+    where the session says, whatever the job's environment names."""
+    for name in rc.PLAYWRIGHT_JSON_VARIABLES:
+        monkeypatch.setenv(name, str(tmp_path / "elsewhere.json"))
+    calls: List[Tuple[List[str], str, Dict[str, str]]] = []
+    assert (
+        rc.run_suite(
+            "browser", tmp_path, runner=_browser_runner(calls, "page-runtime-run")
+        )
+        == 0
+    )
+    frontend = str(rc.ROOT / "frontend")
+    assert [(c[0], c[1]) for c in calls] == [
+        (
+            ["npx", "playwright", "test", "--project=journeys", "--reporter=list,json"],
+            frontend,
+        ),
+        (
+            [
+                "npx",
+                "playwright",
+                "test",
+                "--project=page-runtime",
+                "--list",
+                "--reporter=json",
+            ],
+            frontend,
+        ),
+        (
+            [
+                "npx",
+                "playwright",
+                "test",
+                "--project=page-runtime",
+                "--reporter=list,json",
+            ],
+            frontend,
+        ),
+        (
+            [
+                sys.executable,
+                "scripts/check_page_runtime_run.py",
+                str(tmp_path / "page-runtime.list.json"),
+                str(tmp_path / "page-runtime.playwright.json"),
+                "frontend/tests/e2e",
+            ],
+            str(rc.ROOT),
+        ),
+    ]
+    written = [c[2].get("PLAYWRIGHT_JSON_OUTPUT_FILE") for c in calls[:3]]
+    assert written == [
+        str(tmp_path / "journeys.playwright.json"),
+        str(tmp_path / "page-runtime.list.json"),
+        str(tmp_path / "page-runtime.playwright.json"),
+    ]
+    for _, _, env in calls:
+        assert "PLAYWRIGHT_JSON_OUTPUT_NAME" not in env
+        assert "PLAYWRIGHT_JSON_OUTPUT_DIR" not in env
+    assert len(rc.read_junit(tmp_path / "page-runtime.xml")) == 106
+
+
+def test_a_browser_suite_whose_test_passed_only_on_its_retry_fails(tmp_path, capsys):
+    """Playwright exits 0 then; the leg does not."""
+    calls: List[Tuple[List[str], str, Dict[str, str]]] = []
+    assert (
+        rc.run_suite("browser", tmp_path, runner=_browser_runner(calls, "outcomes"))
+        == 1
+    )
+    said = capsys.readouterr().out
+    assert "rc-evidence: suite browser: journeys.xml: 4 tests did not pass" in said
+    assert "rc-evidence: suite browser: page-runtime.xml: 4 tests did not pass" in said
+
+
+def test_a_browser_suite_that_wrote_no_report_fails_and_reads_no_old_one(tmp_path):
+    (tmp_path / "page-runtime.playwright.json").write_text(
+        (REPORTS / "page-runtime-run.json").read_text()
+    )
+
+    class Done:
+        returncode = 0
+
+    assert rc.run_suite("browser", tmp_path, runner=lambda c, **k: Done()) == 1
+    assert not (tmp_path / "page-runtime.playwright.json").exists()
+    assert not (tmp_path / "page-runtime.xml").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -2977,4 +3574,14 @@ def test_a_whole_class_target_needs_every_case_of_its_class_to_pass():
     assert rc.target_problem(target, skipped, "x") == f"{target}: skipped at x"
     assert rc.target_problem(target, passed[2:], "x") == (
         f"{target}: not in the suites' JUnit at x"
+    )
+
+
+def test_a_title_is_looked_up_in_its_own_file_only(outcomes_world):
+    """A test of another file with the cited title holds nothing."""
+    other = "frontend/tests/e2e/runtime/apply.runtime.spec.ts"
+    target = _cite(outcomes_world, "a top-level test passes", other)
+    assert (
+        f"{target}: no test in {other} has this title at {RC[:12]}"
+        in _claim_problems(outcomes_world)
     )
