@@ -1,8 +1,8 @@
 """API keys and flag settings of each flag environment, for integration tests (#2011).
 
-No request can create a key outside production or configure a flag in one, so
-the tests write the rows: through the models, and a key of the previous release
-as it inserts one.
+No request can create a key outside production, so the tests write its row, and
+they write a flag's settings there too: through the models, and a key of the
+previous release as it inserts one.
 """
 
 from __future__ import annotations

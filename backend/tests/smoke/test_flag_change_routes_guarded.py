@@ -3,9 +3,9 @@
 The per-flag rule (``can_act_on_feature_flag``) only protects the routes that
 call it.  Two of the routes that change flags once called nothing at all, so
 this pins the exact set of mutating routes under ``/feature-flags``,
-``/rollout-schedules`` and ``/safety`` and says, for each, what guards it.  A new
-mutating route there fails ``test_the_inventory_is_exact`` until it is classified
-here -- that is the point.
+``/environments``, ``/rollout-schedules`` and ``/safety`` and says, for each,
+what guards it.  A new mutating route there fails ``test_the_inventory_is_exact``
+until it is classified here -- that is the point.
 
 Routes are read through ``effective_route_contexts``: FastAPI >= 0.141 keeps
 ``include_router`` as a lazy entry, so plain ``app.routes`` holds only a handful
@@ -17,6 +17,7 @@ from __future__ import annotations
 import inspect
 
 import pytest
+from fastapi import APIRouter, FastAPI
 from fastapi.routing import APIRoute
 
 from backend.app.api import deps
@@ -24,7 +25,12 @@ from backend.app.main import app
 
 pytestmark = [pytest.mark.smoke, pytest.mark.regression]
 
-PREFIXES = ("/api/v1/feature-flags", "/api/v1/rollout-schedules", "/api/v1/safety")
+PREFIXES = (
+    "/api/v1/feature-flags",
+    "/api/v1/environments",
+    "/api/v1/rollout-schedules",
+    "/api/v1/safety",
+)
 MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
 
 # How each route is guarded.
@@ -49,6 +55,12 @@ INVENTORY = {
     ("POST", "/api/v1/feature-flags/{flag_id}/enable"): FLAG_RULE,
     ("POST", "/api/v1/feature-flags/{flag_id}/disable"): FLAG_RULE,
     ("POST", "/api/v1/feature-flags/{flag_id}/unarchive"): FLAG_RULE,
+    # A flag's settings per environment (#2011).
+    ("PUT", "/api/v1/feature-flags/{flag_id}/environments/{environment}"): FLAG_RULE,
+    (
+        "POST",
+        "/api/v1/feature-flags/{flag_id}/environments/{target}/promote",
+    ): FLAG_RULE,
     ("POST", "/api/v1/rollout-schedules/"): ROLLOUT_RULE,
     ("PUT", "/api/v1/rollout-schedules/{schedule_id}"): ROLLOUT_RULE,
     ("DELETE", "/api/v1/rollout-schedules/{schedule_id}"): ROLLOUT_RULE,
@@ -106,7 +118,26 @@ def test_the_inventory_is_exact():
         f"unclassified: {sorted(found - set(INVENTORY))}; "
         f"gone: {sorted(set(INVENTORY) - found)}"
     )
-    assert len(INVENTORY) == 25
+    assert len(INVENTORY) == 27
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/v1/feature-flags/{flag_id}/environments/{environment}",
+        "/api/v1/environments/{environment}",
+        "/api/v1/environments/{environment}/promote",
+        "/api/v1/rollout-schedules/{schedule_id}",
+        "/api/v1/safety/settings",
+    ],
+)
+def test_a_mutating_route_under_each_prefix_is_seen(path):
+    """On an application with one such route, the walk finds it."""
+    router = APIRouter()
+    router.add_api_route(path, lambda: None, methods=["POST"])
+    probe = FastAPI()
+    probe.include_router(router)
+    assert set(_mutating_routes(probe)) == {("POST", path)}
 
 
 @pytest.mark.parametrize("key", sorted(INVENTORY), ids=lambda k: f"{k[0]} {k[1]}")

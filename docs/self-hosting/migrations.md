@@ -979,8 +979,15 @@ Until every API container or pod of this release has been replaced, each
 answers `500` to every request that presents an API key, production keys
 included: the SDKs it serves get errors from evaluation
 (`/api/v1/feature-flags/evaluate/{key}`) and from the ruleset
-(`/api/v1/sdk/ruleset`). Start the previous release straight after the
-downgrade.
+(`/api/v1/sdk/ruleset`). The dashboard's flag list (`GET /api/v1/feature-flags/`)
+answers `500` too once a flag is old enough to be stale. Deleting a flag,
+archiving or deleting a segment and listing a segment's experiments answer `500`,
+as does every route that reads or changes a flag's staging or development
+settings, its list of environments included, and the signed-in API key list,
+create and delete; a bulk archive answers `200` with every flag failed; reading,
+updating and deactivating a flag, a bulk disable and a flag's production
+environment `PUT` still answer `200`. Start the previous release straight after
+the downgrade.
 
 Roll back to a specific revision:
 

@@ -25,7 +25,7 @@ that write one in this release:
 | Action | `resource_type` | Written when | Profile |
 |---|---|---|---|
 | `CREATE` | `feature_flag` | `POST /api/v1/feature-flags/` | every |
-| `UPDATE` | `feature_flag` | `PUT /api/v1/feature-flags/{id}` | every |
+| `UPDATE` | `feature_flag` | `PUT /api/v1/feature-flags/{id}`; `PUT /api/v1/feature-flags/{id}/environments/production` and a promotion into production (beta) | every |
 | `DELETE` | `feature_flag` | `DELETE /api/v1/feature-flags/{id}` | every |
 | `CREATE` | `experiment` | `POST /api/v1/experiments/` | every |
 | `UPDATE` | `experiment` | `PUT /api/v1/experiments/{id}` | every |
@@ -42,8 +42,9 @@ key and name (a flag) or name (an experiment), and a delete the old key, name an
 flag) or name, status and owner (an experiment). Field names containing `password`, `token`,
 `api_key` or `secret` are replaced with `[REDACTED]`.
 
-Not recorded here: sign-ins, role changes, API key changes, flag status changes and
-experiment start, pause and completion, which go to the [audit log](audit-logging.md);
+Not recorded here: sign-ins, role changes, API key changes, flag status changes, a flag's
+settings in staging and development, and experiment start, pause and completion, which go to
+the [audit log](audit-logging.md);
 sign-outs and failed sign-ins, which neither records; and reading, reporting on or
 exporting this trail. `AuditAction` defines `READ`,
 `LOGIN`, `LOGOUT`, `LOGIN_FAILED`, `ROLE_GRANT`, `ROLE_REVOKE`, `KEY_REVOKE`, `EXPORT` and

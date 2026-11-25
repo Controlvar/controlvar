@@ -194,11 +194,12 @@ text = "feature_flag (read) | Every built-in role already has it."
 by = ["test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair"]
 
 [[unit]]
-text = "feature_flag (update) | Change any flag: on and off, targeting, values, rollout and rollout schedules, including bulk toggle. Also: create and use server-side SDK keys (API keys with the sdk:ruleset scope); assigning users in a batch with such a key also needs experiment (update)."
+text = "feature_flag (update) | Change any flag: on and off, targeting, values, rollout and rollout schedules, including bulk toggle, and its settings in each environment and promoting them (beta). Also: create and use server-side SDK keys (API keys with the sdk:ruleset scope); assigning users in a batch with such a key also needs experiment (update)."
 by = [
     "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
     "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_bulk_toggle_follows_a_flag_update_grant",
     "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_rollout_schedule_changes_follow_a_flag_update_grant",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_environment_changes_follow_a_flag_update_grant",
     "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
 ]
 

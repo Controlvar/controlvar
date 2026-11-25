@@ -6,18 +6,26 @@ route modules under ``backend/app/api/v1/endpoints/`` -- and finds each site
 that:
 
 * sets an experiment's ``status`` to an ``ExperimentStatus`` member;
-* sets ``rollout_percentage`` (a flag's rollout);
+* sets a flag's ``status``: to a ``FeatureFlagStatus`` member, to what
+  ``transition`` answers, or to a name bound to either in that module;
+* sets ``rollout_percentage`` or ``targeting_rules`` (a flag's, in any
+  environment);
 * sets ``role``, ``is_superuser`` or ``is_active``;
 * constructs a ``User``;
-* writes an account's two-step sign-in (#1812): ``insert``, ``pg_insert``,
-  ``update`` or ``delete`` called with ``UserTOTP`` first, or a ``UserTOTP``
-  constructed. The table is written with statements, not by setting
-  attributes, so its sites are the statements.
+* writes an account's two-step sign-in (#1812) or a flag's settings in staging
+  or development (#2011): ``insert``, ``pg_insert``, ``update`` or ``delete``
+  called with ``UserTOTP`` or ``FlagEnvironmentSetting`` first, or one of them
+  constructed. Those tables are written with statements, not by setting
+  attributes, so their sites are the statements.
 
 It finds them syntactically, so a site is any assignment to one of those
-attributes, whatever the object. A dynamic ``setattr`` is not seen, nor is an
-ORM ``session.delete(row)`` or ``query(UserTOTP).delete()``, a statement on
-``UserTOTP.__table__`` rather than ``UserTOTP`` itself, or raw SQL.
+attributes, whatever the object. An ORM ``session.delete(row)`` or
+``query(Model).delete()`` is not seen here, nor is a statement on
+``Model.__table__`` rather than ``Model`` itself, a session's bulk methods or
+raw SQL; for ``FlagEnvironmentSetting``, ``test_flag_environment_writers.py``
+refuses those and says what it does not see. A ``setattr`` whose attribute is
+not written out sets any attribute, so every one in ``backend/app`` is listed
+in ``DYNAMIC_SETATTR``, with what it sets.
 
 ``SITES`` names each one -- module, function, kind, and how many times the
 function does it -- and classifies it:
@@ -59,7 +67,13 @@ APP = REPO_ROOT / "backend" / "app"
 ROUTES = "backend/app/api/v1/endpoints/"
 
 #: Attributes whose assignment is a site, whatever the value.
-ATTRIBUTES = ("rollout_percentage", "role", "is_superuser", "is_active")
+ATTRIBUTES = (
+    "rollout_percentage",
+    "targeting_rules",
+    "role",
+    "is_superuser",
+    "is_active",
+)
 
 
 @dataclass(frozen=True)
@@ -113,6 +127,11 @@ SITES: Dict[Tuple[str, str, str], Tuple[int, object]] = {
         "SafetyService.execute_rollback",
         "rollout_percentage",
     ): (2, Audited(A.SAFETY_ROLLBACK)),
+    (
+        "backend/app/services/safety_service.py",
+        "SafetyService.execute_rollback",
+        "flag status",
+    ): (1, Audited(A.SAFETY_ROLLBACK)),
     # --- Cognito sign-in: group role sync and the first sign-in --------------
     (
         "backend/app/services/cognito_accounts.py",
@@ -170,6 +189,38 @@ SITES: Dict[Tuple[str, str, str], Tuple[int, object]] = {
         "CRUDUser.create",
         "User()",
     ): (1, RouteReached(("crud_user",))),
+    (
+        "backend/app/services/feature_flag_service.py",
+        "FeatureFlagService.activate_feature_flag",
+        "flag status",
+    ): (1, RouteReached()),
+    (
+        "backend/app/services/feature_flag_service.py",
+        "FeatureFlagService.deactivate_feature_flag",
+        "flag status",
+    ): (1, RouteReached()),
+    (
+        "backend/app/crud/crud_feature_flag.py",
+        "CRUDFeatureFlag.activate",
+        "flag status",
+    ): (1, RouteReached(("crud_feature_flag",))),
+    (
+        "backend/app/crud/crud_feature_flag.py",
+        "CRUDFeatureFlag.deactivate",
+        "flag status",
+    ): (1, RouteReached(("crud_feature_flag",))),
+    # --- a flag's settings in staging and development (#2011) ---------------
+    # The environment PUT and promotion; bulk archive.
+    (
+        "backend/app/services/flag_environment_service.py",
+        "FlagEnvironmentService.save_environment_setting",
+        "flag_environment_settings insert",
+    ): (1, RouteReached()),
+    (
+        "backend/app/services/flag_environment_service.py",
+        "turn_off_environment_settings",
+        "flag_environment_settings update",
+    ): (1, RouteReached()),
     # --- not on the audited event list --------------------------------------
     ("backend/app/api/deps.py", "_get_or_create_dev_user", "User()"): (1, DEV_USER),
     ("backend/app/api/deps_dev.py", "get_current_user_dev", "User()"): (1, DEV_USER),
@@ -178,6 +229,18 @@ SITES: Dict[Tuple[str, str, str], Tuple[int, object]] = {
         Exempt(
             "the first administrator, made by the bootstrap when the "
             "database is created, before anyone can sign in"
+        ),
+    ),
+    (
+        "backend/app/services/experiment_service.py",
+        "stamp_rollout_rule_id",
+        "targeting_rules",
+    ): (
+        1,
+        Exempt(
+            "an experiment's own rule, given the experiment's id when it "
+            "starts, which admits the users it would have; the start writes "
+            "its entry"
         ),
     ),
     # --- two-step sign-in (#1812): every write to user_totp --------------------
@@ -241,30 +304,159 @@ SITES: Dict[Tuple[str, str, str], Tuple[int, object]] = {
     ),
 }
 
-#: The calls that write ``user_totp`` when ``UserTOTP`` is their first
-#: argument, and the kind each site is recorded as.
-_TOTP_WRITES = {
-    "insert": "user_totp insert",
-    "pg_insert": "user_totp insert",
-    "update": "user_totp update",
-    "delete": "user_totp delete",
+#: (module, function, object) -> (how many times, what it sets), for every
+#: ``setattr`` in ``backend/app``, routes included, whose attribute name is
+#: not written out.
+DYNAMIC_SETATTR: Dict[Tuple[str, str, str], Tuple[int, str]] = {
+    # --- a flag ---------------------------------------------------------------
+    (
+        "backend/app/services/feature_flag_service.py",
+        "FeatureFlagService.update_feature_flag",
+        "flag",
+    ): (
+        1,
+        "the fields a flag update sent; every caller passes record= "
+        "(test_flag_audit_strict_sites.py)",
+    ),
+    (
+        "backend/app/core/flag_environments.py",
+        "FlagInEnvironment.__init__",
+        "self",
+    ): (1, "a read-only view of a flag in an environment, not a stored row"),
+    # --- rows of other tables ---------------------------------------------------
+    ("backend/app/crud/base.py", "CRUDBase.update", "db_obj"): (
+        1,
+        "any model's row; nothing in backend/app calls update on a crud object",
+    ),
+    ("backend/app/api/v1/endpoints/admin.py", "update_user", "user"): (1, "a user"),
+    ("backend/app/api/v1/endpoints/users.py", "update_user", "user"): (1, "a user"),
+    (
+        "backend/app/api/v1/endpoints/notifications.py",
+        "update_my_preferences",
+        "prefs",
+    ): (1, "a user's notification preferences"),
+    ("backend/app/services/analysis_snapshot_service.py", "_apply", "row"): (
+        1,
+        "an analysis snapshot",
+    ),
+    (
+        "backend/app/services/experiment_service.py",
+        "ExperimentService.update_experiment",
+        "experiment",
+    ): (1, "an experiment"),
+    (
+        "backend/app/services/llm_experiment_service.py",
+        "LLMExperimentService.update_experiment",
+        "experiment",
+    ): (1, "an LLM experiment"),
+    (
+        "backend/app/services/llm_experiment_service.py",
+        "LLMExperimentService.update_variant",
+        "variant",
+    ): (1, "an LLM experiment's variant"),
+    (
+        "backend/app/services/rollout_service.py",
+        "RolloutService.update_rollout_schedule",
+        "schedule",
+    ): (1, "a rollout schedule"),
+    (
+        "backend/app/services/rollout_service.py",
+        "RolloutService.update_rollout_stage",
+        "stage",
+    ): (1, "a rollout stage"),
+    (
+        "backend/app/services/safety_service.py",
+        "SafetyService.create_or_update_feature_flag_safety_config",
+        "existing",
+    ): (1, "a flag's safety configuration"),
+    (
+        "backend/app/services/safety_service.py",
+        "SafetyService.update_feature_flag_safety_config",
+        "db_obj",
+    ): (1, "a flag's safety configuration"),
+    (
+        "backend/app/services/safety_service.py",
+        "SafetyService.create_or_update_safety_settings",
+        "existing",
+    ): (1, "the safety settings"),
+    (
+        "backend/app/services/safety_service.py",
+        "SafetyService.update_safety_settings",
+        "db_obj",
+    ): (1, "the safety settings"),
+    # --- not a stored row -------------------------------------------------------
+    ("backend/app/api/off_loop_route.py", "off_loop", "handler"): (
+        1,
+        "a marker on a route's function",
+    ),
+    ("backend/app/api/v1/endpoints/tracking.py", "_assign_users_in_batch", "counts"): (
+        1,
+        "a response's counts",
+    ),
+    ("backend/app/schemas/experiment.py", "ScheduleConfig.validate_dates", "self"): (
+        1,
+        "a request model's dates",
+    ),
+}
+
+#: The models written with statements, and their tables.
+_STATEMENT_MODELS = {
+    "UserTOTP": "user_totp",
+    "FlagEnvironmentSetting": "flag_environment_settings",
+}
+#: The calls that write such a table when the model is their first argument,
+#: and the kind each site is recorded as, after the table.
+_STATEMENTS = {
+    "insert": "insert",
+    "pg_insert": "insert",
+    "update": "update",
+    "delete": "delete",
 }
 
 
-def _totp_write_kind(node: ast.Call):
-    func = node.func
-    if isinstance(func, ast.Name):
-        name = func.id
-    elif isinstance(func, ast.Attribute):
-        name = func.attr
-    else:
-        return None
-    if name == "UserTOTP":
-        return "UserTOTP()"
-    first = node.args[0] if node.args else None
-    if name in _TOTP_WRITES and isinstance(first, ast.Name) and first.id == "UserTOTP":
-        return _TOTP_WRITES[name]
+def _named(node):
+    """The last name of ``x`` or ``a.b.x``, or None."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
     return None
+
+
+def statement_kind(node: ast.Call):
+    """How a call writes a model in ``_STATEMENT_MODELS``, or None."""
+    name = _named(node.func)
+    if name in _STATEMENT_MODELS:
+        return f"{name}()"
+    model = _named(node.args[0]) if node.args else None
+    if name in _STATEMENTS and model in _STATEMENT_MODELS:
+        return f"{_STATEMENT_MODELS[model]} {_STATEMENTS[name]}"
+    return None
+
+
+def _answers_a_flag_status(value: ast.AST, names: Set[str]) -> bool:
+    """Whether *value* reads ``FeatureFlagStatus``, calls ``transition``, or
+    reads a name bound to either."""
+    return any(
+        (isinstance(sub, ast.Call) and _named(sub.func) == "transition")
+        or (
+            isinstance(sub, ast.Name)
+            and (sub.id in names or sub.id == "FeatureFlagStatus")
+        )
+        for sub in ast.walk(value)
+    )
+
+
+def _flag_status_names(tree: ast.Module) -> Set[str]:
+    """The names the module binds to a flag's status, anywhere in it."""
+    names: Set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Assign, ast.AnnAssign, ast.NamedExpr)):
+            if node.value is None or not _answers_a_flag_status(node.value, set()):
+                continue
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            names |= {t.id for t in targets if isinstance(t, ast.Name)}
+    return names
 
 
 # --- reading the source -------------------------------------------------------
@@ -303,7 +495,7 @@ class _Walker(ast.NodeVisitor):
     visit_ClassDef = _scoped
 
 
-def _site_kind(target: ast.expr, value: ast.expr):
+def _site_kind(target: ast.expr, value: ast.expr, flag_statuses: Set[str]):
     if not isinstance(target, ast.Attribute):
         return None
     if target.attr == "status":
@@ -313,6 +505,8 @@ def _site_kind(target: ast.expr, value: ast.expr):
             and value.value.id == "ExperimentStatus"
         ):
             return f"status={value.attr}"
+        if _answers_a_flag_status(value, flag_statuses):
+            return "flag status"
         return None
     if target.attr in ATTRIBUTES:
         return target.attr
@@ -322,19 +516,21 @@ def _site_kind(target: ast.expr, value: ast.expr):
 def sites_in(rel: str, tree: ast.Module) -> Counter:
     """(module, function, kind) -> count, for one module."""
     found: Counter = Counter()
+    flag_statuses = _flag_status_names(tree)
 
     class V(_Walker):
         def visit_Assign(self, node):
             for target in node.targets:
-                kind = _site_kind(target, node.value)
+                kind = _site_kind(target, node.value, flag_statuses)
                 if kind:
                     found[(rel, self.qualname, kind)] += 1
             self.generic_visit(node)
 
         def visit_AnnAssign(self, node):
-            kind = _site_kind(node.target, node.value) if node.value else None
-            if kind:
-                found[(rel, self.qualname, kind)] += 1
+            if node.value:
+                kind = _site_kind(node.target, node.value, flag_statuses)
+                if kind:
+                    found[(rel, self.qualname, kind)] += 1
             self.generic_visit(node)
 
         def visit_Call(self, node):
@@ -343,9 +539,27 @@ def sites_in(rel: str, tree: ast.Module) -> Counter:
                 isinstance(func, ast.Attribute) and func.attr == "User"
             ):
                 found[(rel, self.qualname, "User()")] += 1
-            totp_kind = _totp_write_kind(node)
-            if totp_kind:
-                found[(rel, self.qualname, totp_kind)] += 1
+            statement = statement_kind(node)
+            if statement:
+                found[(rel, self.qualname, statement)] += 1
+            self.generic_visit(node)
+
+    V().visit(tree)
+    return found
+
+
+def dynamic_setattrs_in(rel: str, tree: ast.Module) -> Counter:
+    """(module, function, object) -> count of the ``setattr`` and
+    ``__setattr__`` calls whose attribute name is not written out."""
+    found: Counter = Counter()
+
+    class V(_Walker):
+        def visit_Call(self, node):
+            if _named(node.func) in ("setattr", "__setattr__") and node.args:
+                # ``object.__setattr__(self, name, value)`` and the plain form.
+                name = node.args[1] if len(node.args) > 1 else None
+                if not (isinstance(name, ast.Constant) and isinstance(name.value, str)):
+                    found[(rel, self.qualname, ast.unparse(node.args[0]))] += 1
             self.generic_visit(node)
 
     V().visit(tree)
@@ -449,7 +663,24 @@ def test_the_sites_are_exact():
         f"{sorted((k, n) for k, n in found.items() if expected.get(k) != n)}; "
         f"gone: {sorted(k for k in expected if k not in found)}"
     )
-    assert sum(expected.values()) == 29
+    assert sum(expected.values()) == 37
+
+
+def test_every_dynamic_setattr_is_listed():
+    """A ``setattr`` whose attribute is not written out can set a flag's or a
+    side row's columns without being a site above: a loop over a change's
+    items, for example. Every one in ``backend/app`` is listed with what it
+    sets, and only ``update_feature_flag`` sets a flag's."""
+    found: Counter = Counter()
+    for rel, tree in _modules():
+        found.update(dynamic_setattrs_in(rel, tree))
+    expected = Counter({key: count for key, (count, _) in DYNAMIC_SETATTR.items()})
+    assert found == expected, (
+        f"unlisted or miscounted: "
+        f"{sorted((k, n) for k, n in found.items() if expected.get(k) != n)}; "
+        f"gone: {sorted(k for k in expected if k not in found)}"
+    )
+    assert all(what.strip() for _, what in DYNAMIC_SETATTR.values())
 
 
 @pytest.mark.parametrize(
@@ -514,6 +745,13 @@ def test_the_scanner_finds_each_kind_of_site():
         "        UserTOTP(user_id=u)\n"
         "        db.execute(update(Other))\n"
         "        db.execute(select(UserTOTP))\n"
+        "        f.targeting_rules = None\n"
+        "        f.status = transition(f.status, FlagVerb.ON).value\n"
+        "        db.execute(update(FlagEnvironmentSetting).values(is_active=False))\n"
+        "        db.execute(models.delete(models.FlagEnvironmentSetting))\n"
+        "        db.execute(pg_insert(FlagEnvironmentSetting).values(environment='x'))\n"
+        "        FlagEnvironmentSetting(environment='staging')\n"
+        "        db.execute(select(FlagEnvironmentSetting))\n"
     )
     assert found == Counter(
         {
@@ -529,9 +767,46 @@ def test_the_scanner_finds_each_kind_of_site():
                 "user_totp delete",
                 "user_totp insert",
                 "UserTOTP()",
+                "targeting_rules",
+                "flag status",
+                "flag_environment_settings update",
+                "flag_environment_settings delete",
+                "flag_environment_settings insert",
+                "FlagEnvironmentSetting()",
             )
         }
     )
+
+
+@pytest.mark.parametrize(
+    "line, found",
+    [
+        ("f.status = FeatureFlagStatus.ACTIVE", True),
+        ("f.status = FeatureFlagStatus('ACTIVE').value", True),
+        ("f.status = transition(f.status, FlagVerb.OFF)", True),
+        ("new = transition(f.status, verb); f.status = new.value", True),
+        ("f.status = 'x'", False),
+        ("f.status = RolloutStageStatus.COMPLETED", False),
+    ],
+)
+def test_the_scanner_finds_each_way_to_set_a_flags_status(line, found):
+    sites = _scan(f"def tick(f, verb):\n    {line}\n")
+    assert sites == (Counter({("x.py", "tick", "flag status"): 1}) if found else {})
+
+
+@pytest.mark.parametrize(
+    "line, listed",
+    [
+        ("setattr(flag, field, value)", "flag"),
+        ("setattr(row, f'{name}_at', value)", "row"),
+        ("object.__setattr__(flag, name, value)", "flag"),
+        ("setattr(flag, 'status', value)", None),
+    ],
+)
+def test_the_scanner_lists_a_setattr_whose_attribute_is_not_written_out(line, listed):
+    source = f"def apply(flag, row, change):\n    for x in change:\n        {line}\n"
+    found = dynamic_setattrs_in("x.py", ast.parse(source))
+    assert found == (Counter({("x.py", "apply", listed): 1}) if listed else {})
 
 
 def test_a_reference_from_module_level_is_a_root():

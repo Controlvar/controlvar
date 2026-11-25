@@ -1011,7 +1011,8 @@ def test_the_walker_is_called_from_write_paths_only():
         ("backend/app/schemas/segment.py", "_checked_segment_rules"),
     }
     # _validate_targeting runs only for the request schemas (the wizard
-    # launch builds an ExperimentCreate) and the check script.
+    # launch builds an ExperimentCreate; a promotion builds the environment
+    # PUT's body, #2011) and the check script.
     assert _callers("_validate_targeting") == {
         (adapter, "validate_experiment_targeting"),
         (adapter, "validate_flag_targeting"),
@@ -1021,6 +1022,7 @@ def test_the_walker_is_called_from_write_paths_only():
     )
     assert {file for file, _ in callers} == {
         "backend/app/schemas/feature_flag.py",
+        "backend/app/schemas/flag_environment.py",
         "backend/app/schemas/experiment.py",
         "backend/scripts/check_targeting_rules.py",
     }

@@ -359,6 +359,10 @@ text = "Remove the segment from those rules, or archive the flag, then archive t
 by = ["exempt:baseline"]
 
 [[unit]]
+text = "A flag whose staging or development rules (beta) use the segment is listed too, with environments, every environment whose rules do."
+by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_a_segment_used_only_in_staging_is_in_use_and_names_staging"]
+
+[[unit]]
 text = "Limits"
 by = ["exempt:baseline"]
 

@@ -513,6 +513,37 @@ def test_enable_and_disable_that_change_nothing_still_write_one_entry(
     assert flag_status == start
 
 
+@pytest.mark.parametrize(
+    "path, body, action, v2_delta",
+    [
+        ("staging", {"is_active": True}, "feature_flag_environment_update", 0),
+        ("production", {"is_active": True}, "feature_flag_update", 1),
+        ("staging/promote", {"from": "production"}, "feature_flag_promote", 0),
+    ],
+    ids=["staging", "production", "promote"],
+)
+def test_flag_environment_changes(
+    client, fresh, db_session, developer, path, body, action, v2_delta
+):
+    """A flag's settings per environment (#2011). A promotion into production
+    writes two entries: ``test_flag_environments_api.py``."""
+    flag = _flag(db_session)
+    w = Written(fresh)
+    response = client.request(
+        "POST" if path.endswith("promote") else "PUT",
+        f"{V1}/feature-flags/{flag.id}/environments/{path}",
+        json=body,
+        headers=_auth(developer),
+    )
+    assert response.status_code == 200, response.text
+    row = _one(w, action, "feature_flag", flag.id, developer, v2_delta=v2_delta)
+    old, new = _values(row)
+    if path == "production":
+        assert (old, new) == ({"status": "INACTIVE"}, {"status": "ACTIVE"})
+    else:
+        assert old["environment"] == new["environment"] == "staging"
+
+
 def test_bulk_toggle_one_entry_per_flag(client, fresh, db_session, developer):
     flags = [_flag(db_session) for _ in range(2)]
     w = Written(fresh)

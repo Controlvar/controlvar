@@ -9,7 +9,7 @@ GET  /api/v1/audit-logs/stream          — SSE stream of recent audit events (l
 import asyncio
 import json
 import logging
-from typing import Optional
+from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -42,6 +42,9 @@ from backend.app.schemas.advanced_toggle import (
 )
 from backend.app.services.audit_service import AuditActor, AuditService
 from backend.app.services.feature_flag_service import FlagVerb, transition
+from backend.app.services.flag_environment_service import (
+    turn_off_environment_settings,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +56,20 @@ _ACTIONS = {
 }
 
 router = APIRouter(route_class=OffLoopRoute)
+
+
+def _recorded(old_status: str, new_status: str, turned_off: List[str]):
+    """``(before, after)`` of a flag's entry: the two statuses, and the
+    environments an archive turned the flag off in, when there is one."""
+    if not turned_off:
+        return old_status, new_status
+    return tuple(
+        {
+            "status": status,
+            "environments": {name: {"is_active": on} for name in turned_off},
+        }
+        for status, on in ((old_status, True), (new_status, False))
+    )
 
 
 @router.post(
@@ -81,8 +98,8 @@ async def bulk_toggle_flags(
     """
     results = []
     audit_log_ids = []
-    # (flag id, name, action, old status, new status) of each flag changed, to
-    # be recorded in the transaction that commits the changes.
+    # (flag id, name, action, before, after) of each flag changed, to be
+    # recorded in the transaction that commits the changes.
     changed = []
     # Read now: after a flag's write fails, the session cannot load it.
     actor = AuditActor.of(current_user)
@@ -149,7 +166,15 @@ async def bulk_toggle_flags(
             if new_status != old_status:
                 flag.status = new_status
             db.flush()
-            changed.append((flag.id, flag.name, action_type, old_status, new_status))
+            # Archiving turns the flag off in staging and development too
+            # (#2011), in the same commit; unarchiving leaves them off.
+            turned_off = (
+                turn_off_environment_settings(db, flag.id)
+                if verb is FlagVerb.ARCHIVE
+                else []
+            )
+            before, after = _recorded(old_status, new_status, turned_off)
+            changed.append((flag.id, flag.name, action_type, before, after))
 
             results.append(
                 BulkToggleResult(
@@ -183,7 +208,7 @@ async def bulk_toggle_flags(
     # failure here, of an entry or of the commit, answers 500 with nothing
     # saved, never a per-flag success that was not kept.
     try:
-        for flag_id, flag_name, action_type, old_status, new_status in changed:
+        for flag_id, flag_name, action_type, before, after in changed:
             with AuditService.audit_with_change(
                 db,
                 action=action_type,
@@ -197,8 +222,8 @@ async def bulk_toggle_flags(
                     entity_type=EntityType.FEATURE_FLAG,
                     entity_id=flag_id,
                     entity_name=flag_name,
-                    before=old_status,
-                    after=new_status,
+                    before=before,
+                    after=after,
                     reason=request.reason,
                 )
             audit_log_ids.append(str(entry.id))

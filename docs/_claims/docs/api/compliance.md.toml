@@ -71,8 +71,12 @@ text = "CREATE | feature_flag | POST /api/v1/feature-flags/ | every"
 by = ["test:backend/tests/integration/api/test_change_audit_saved.py::test_audit_record_is_saved"]
 
 [[unit]]
-text = "UPDATE | feature_flag | PUT /api/v1/feature-flags/{id} | every"
-by = ["test:backend/tests/integration/api/test_change_audit_saved.py::test_audit_record_is_saved"]
+text = "UPDATE | feature_flag | PUT /api/v1/feature-flags/{id}; PUT /api/v1/feature-flags/{id}/environments/production and a promotion into production (beta) | every"
+by = [
+    "test:backend/tests/integration/api/test_change_audit_saved.py::test_audit_record_is_saved",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_put_to_production_is_the_stable_put",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_promotion_into_production_also_records_what_a_flag_update_records",
+]
 
 [[unit]]
 text = "DELETE | feature_flag | DELETE /api/v1/feature-flags/{id} | every"
@@ -118,8 +122,10 @@ by = [
 ]
 
 [[unit]]
-text = "Not recorded here: sign-ins, role changes, API key changes, flag status changes and experiment start, pause and completion, which go to the audit log; sign-outs and failed sign-ins, which neither records; and reading, reporting on or exporting this trail."
+text = "Not recorded here: sign-ins, role changes, API key changes, flag status changes, a flag's settings in staging and development, and experiment start, pause and completion, which go to the audit log; sign-outs and failed sign-ins, which neither records; and reading, reporting on or exporting this trail."
 by = [
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_an_environment_change_records_what_changed_and_where",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_promotion_records_both_environments_and_the_change",
     "test:backend/tests/unit/services/test_compliance_trail_writers.py::test_flag_status_changes_and_experiment_lifecycle_write_no_event",
     "test:backend/tests/unit/services/test_compliance_trail_writers.py::test_only_these_actions_write_an_event",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_failed_sign_in_writes_nothing",
