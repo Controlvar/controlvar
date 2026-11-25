@@ -34,14 +34,12 @@ export const COMPOSE_GUIDE_URL = `${REPO_URL}/blob/main/deploy/compose/README.md
 export const ROADMAP_URL = `${REPO_URL}/blob/main/ROADMAP.md`;
 
 /**
- * The facts strip's checkable facts (site design 2026-11-11, BORROW 1): the
- * licence, the changelog, and the tests that hold the statistics to known
- * answers. Each is a file or a folder of this repository, which
+ * What checks two of the items of "Specific to Controlvar" (Specifics.tsx):
+ * the licence, and the tests that hold the statistics to known answers. Each
+ * is a file or a folder of this repository, which
  * `tests/pages/home-page.test.tsx` holds to the working tree.
  */
 export const LICENSE_URL = `${REPO_URL}/blob/main/LICENSE`;
-
-export const CHANGELOG_URL = `${REPO_URL}/blob/main/CHANGELOG.md`;
 
 export const STATS_TESTS_URL = `${REPO_URL}/tree/main/backend/tests/unit/stats_validation`;
 

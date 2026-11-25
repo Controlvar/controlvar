@@ -151,6 +151,9 @@ describe('HomePage (/)', () => {
     [['\\d+%\\s+(\\w+\\s+)?(uptime|hit rate|cache hit|pass rate|coverage)'], 'the same'],
     [['start', 'free', 'trial'], 'there is no paid tier to trial'],
     [['pricing'], 'there is no price'],
+    [['\\b(paid|free|pro|premium|enterprise|business)', '(tier|plan|edition|version)s?\\b'], 'there are no tiers'],
+    [['per', 'seat'], 'there is no price'],
+    [['\\$\\d'], 'the same'],
   ];
 
   /**
@@ -158,7 +161,8 @@ describe('HomePage (/)', () => {
    * `sdk/` had outgrown, local bucketing that matched the server exactly (the
    * SDKs bucket nothing; the server decides), a benchmark that runs nightly
    * described as running locally, the AWS name used as a hyphenated
-   * adjective or a possessive noun.
+   * adjective or a possessive noun. And two that no docs page makes (#2040):
+   * where the assignment data stays, and what is not hosted.
    *
    * The fragments are concatenated, not joined with whitespace, so each entry
    * is exactly the regular expression it reads as once put together; they are
@@ -173,6 +177,37 @@ describe('HomePage (/)', () => {
     [['four', 'teen'], 'the SDK count drifted from sdk/; the list is derived now'],
     [['byte\\s+for', '\\s+byte'], 'the SDKs do not bucket locally'],
     [['asserted\\s+on\\s+every', '\\s+local\\s+run'], 'the benchmarks run nightly, not locally'],
+    [['never', '\\s+leaves?\\b'], 'no docs page says where the assignment data stays'],
+    [['\\bhos', 'ted\\s+(tier|plan|version|service)'], 'no docs page says what is hosted, or is not'],
+  ];
+
+  /**
+   * Other products, by name (#2040): the page says what Controlvar is and
+   * compares it with nothing. The names the walkthroughs' narration may not say
+   * (`tests/acceptance/showcase/capture/narration.py`), and a few more. A list
+   * knows only its names: a comparison that names none of them is for review.
+   */
+  const otherProducts = [
+    'Optimizely',
+    'LaunchDarkly',
+    'Statsig',
+    'GrowthBook',
+    'Eppo',
+    'PostHog',
+    'Flagsmith',
+    'ConfigCat',
+    'Unleash',
+    'Amplitude',
+    'Split.io',
+    'VWO',
+    'AB Tasty',
+    'Kameleoon',
+    'DevCycle',
+    'Datadog',
+    'Flipt',
+    'FeatBit',
+    'Mixpanel',
+    'AppConfig',
   ];
 
   /**
@@ -225,6 +260,10 @@ describe('HomePage (/)', () => {
 
     it.each(unclaimed)('claims no accessibility standard: %s (%s)', (parts) => {
       expect(text()).not.toMatch(new RegExp((parts as string[]).join(''), 'i'));
+    });
+
+    it.each(otherProducts)('names no other product: %s', (name) => {
+      expect(text()).not.toMatch(new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i'));
     });
 
     it('renders the marketing section only in the marketing build', () => {

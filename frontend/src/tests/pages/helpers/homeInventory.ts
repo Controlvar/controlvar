@@ -59,8 +59,10 @@ const BOOKS = "the Controlvar books' README (amarkanday/controlvar-books, #1859)
 const SD = 'site design 2026-11-11 (design-review-v1.md)';
 /** Its competitor study's BORROW list, of which items 1 and 7 were taken (competitors-v1.md). */
 const BORROW = 'site design 2026-11-11, competitors-v1.md BORROW';
-/** D380: the capability page and the roadmap, linked from the facts strip and the footer (and the docs hub). */
+/** The capability page and the roadmap, linked from the footer (and the docs hub). */
 const LINKS = 'D380, what Controlvar does and the roadmap';
+/** What the first screen says, and what is specific to Controlvar (#2040). */
+const SPECIFIC = '#2040';
 /** The public read-only demo (D381): the hosted demo plan's UX draft (plan-hosted-demo/drafts/v1-ux-designer.md, WORDS: Site). */
 const DEMO = 'D381, the hosted demo plan (v1-ux-designer.md, WORDS: Site)';
 
@@ -94,12 +96,12 @@ export const TYPED: readonly Row[] = [
   },
 
   // Hero.
-  { tag: 'p', text: 'Open source · Apache-2.0', source: `${UX} Hero pill; ${MAIN}:63` },
+  { tag: 'p', text: 'Open source · Apache-2.0 · Pre-1.0', source: `${SPECIFIC}; README.md: the licences, and "pre-1.0"` },
   { tag: 'h1', text: 'A/B testing and feature flags you run yourself.', source: `${MAIN}:71` },
   {
     tag: 'p',
-    text: 'Controlvar is an open-source experimentation platform: experiments, feature flags, targeting rules and statistics, deployed on your own infrastructure so the assignment data never leaves it.',
-    source: `${MAIN}:74-76`,
+    text: 'Controlvar is an open-source experimentation platform for engineering teams that run their experiments and feature flags on their own infrastructure.',
+    source: `${SPECIFIC}; README.md: the licences, and "Self-host it"`,
   },
   { tag: 'div', text: 'Get started', source: `${MAIN}:83` },
   // The marketing build's second button was "Try the power calculator" (main:90); the calculator is
@@ -112,36 +114,39 @@ export const TYPED: readonly Row[] = [
     build: 'marketing',
   },
   { tag: 'div', text: 'Sign in to the dashboard', source: `${MAIN}:97 (index.test.tsx; check-platform-export.mjs)`, build: 'platform' },
+  // The row under the buttons. The platform build has no /walkthroughs page.
+  { tag: 'p', text: 'Docs · Walkthroughs · Source', source: `${SPECIFIC}: the header's words`, build: 'marketing' },
+  { tag: 'p', text: 'Docs · Source', source: `${SPECIFIC}: the header's words`, build: 'platform' },
   // Hero B (SD): the "Run it locally" box, its commands and its two lines moved to step 1.
 
-  // Facts strip: four checkable facts, each linked (SD item 2; BORROW 1). The deploy fact took in
-  // the "Deploy it yourself" cards (SD item 8) and "No hosted tier"; the SDK fact is the SDK chips'.
-  { tag: 'aria-label', text: 'At a glance', source: `${UX} Facts strip` },
-  { tag: 'dt', text: 'Apache-2.0, SDKs MIT', source: `${UX} Facts 1; ${MAIN}:175` },
+  // Specific to Controlvar: six items, each with the link that checks it, in the place of the facts
+  // strip. A sentence that names a capability is a quote (dataRows); the headings, the licence, the
+  // statistics tests, the links' words and the closing line are typed.
+  { tag: 'h2', text: 'Specific to Controlvar', source: `${SPECIFIC}: the section's heading` },
+  { tag: 'h3', text: 'Apache-2.0, SDKs MIT', source: `${UX} Facts 1; ${MAIN}:175` },
   {
-    tag: 'dd',
+    tag: 'p',
     text: 'The core and full builds are both free and have the same licence. Read the LICENSE.',
     source: `${MAIN}:102; ${BORROW} 1: LICENSE`,
   },
-  { tag: 'dt', text: 'Compose, Helm or AWS CDK', source: `${UX} Facts 3; ${MAIN}:128` },
+  { tag: 'h3', text: 'Flags that roll themselves back', source: `${SPECIFIC}; docs/feature-flags/safety.md: once automatic rollbacks are on` },
+  { tag: 'p', text: 'Safety Monitoring →', source: `${SPECIFIC}; docs/feature-flags/safety.md title` },
+  { tag: 'h3', text: 'Corrected for several variants', source: `${SPECIFIC}; docs/api/endpoints.md "How results are judged": the correction across one experiment's treatments` },
+  { tag: 'p', text: 'How results are judged →', source: `${SPECIFIC}; docs/api/endpoints.md, the section docs/capabilities.md links` },
+  { tag: 'h3', text: 'Sequential testing', source: `${SPECIFIC}; docs/capabilities.md: its list item's name; its quote says "Beta"` },
+  { tag: 'p', text: 'Sequential Testing & Early Stopping →', source: `${SPECIFIC}; docs/api/sequential-testing.md title` },
+  { tag: 'h3', text: 'Compose, Helm or AWS CDK', source: `${UX} Facts 3; ${MAIN}:128` },
+  { tag: 'h3', text: 'Tested statistics', source: `${BORROW} 1: the statistics code` },
   {
-    tag: 'dd',
-    text: 'One machine, Kubernetes, or your own AWS account. There is no hosted tier.',
-    source: `${UX} Facts 3 and 4; ${MAIN}:128; ${SD} item 2: the three deploy guides`,
-  },
-  { tag: 'dt', text: 'Tested statistics', source: `${BORROW} 1: the statistics code` },
-  {
-    tag: 'dd',
+    tag: 'p',
     text: 'Tests check the analysis against known answers: the false-positive rate of A/A tests, interval coverage and a planted lift.',
     source: 'backend/tests/unit/stats_validation: test_golden_aa_significance_rate, test_golden_interval_coverage, test_golden_planted_lift',
   },
-  { tag: 'dt', text: 'Public releases', source: `${BORROW} 1: Releases/CHANGELOG` },
   {
-    tag: 'dd',
-    text: 'Versions are published on the Releases page, and the CHANGELOG says what changed in each.',
-    source: `${BORROW} 1: Releases/CHANGELOG (release-please, release-please-config.json)`,
+    tag: 'p',
+    text: 'What Controlvar does not do is in Limitations; its main capabilities are in What Controlvar does today.',
+    source: `${SPECIFIC}; docs/capabilities.md: its first paragraph`,
   },
-  { tag: 'p', text: 'See everything it does →', source: `${LINKS}: the capability page, docs/capabilities.md` },
 
   // How it works. Step 1 spans the row and holds the hero's commands and its localhost line (SD item 3).
   { tag: 'h2', text: 'How it works', source: `${UX} How it works (the issue's own words)` },
@@ -197,11 +202,7 @@ export const TYPED: readonly Row[] = [
 
   // Row 1: rollouts and safety.
   { tag: 'h2', text: 'Roll features out gradually, with automatic rollback', source: `${UX} Row 1; feature-flags/index.tsx:134` },
-  {
-    tag: 'p',
-    text: 'Sticky assignment, gradual rollouts with configurable stages, and automated safety rollback on error-rate and latency thresholds once you turn it on.',
-    source: `${MAIN}:112`,
-  },
+  { tag: 'p', text: 'Sticky assignment, and gradual rollouts with configurable stages.', source: `${MAIN}:112; the rollback is a quote` },
   {
     tag: 'li',
     // #1204: flag targeting refuses json_path, so "JSON path" left this flags
@@ -238,8 +239,6 @@ export const TYPED: readonly Row[] = [
   // Walkthroughs: the homepage's teaser (SD item 7); its cards are read from the manifest.
   { tag: 'h2', text: 'Walkthroughs', source: `${SD} item 7: the teaser; Walkthroughs.tsx's heading (#1290)`, build: 'marketing' },
   { tag: 'p', text: 'All the walkthroughs →', source: `${SD} item 7: the link to /walkthroughs, with no count`, build: 'marketing' },
-
-  // The "Deploy it yourself" cards are folded into the facts strip (SD item 8).
 
   // Closing band.
   { tag: 'h2', text: 'Open source', source: `${MAIN}:131` },
@@ -289,8 +288,23 @@ export function dataRows(build: Build): Row[] {
   const rows: Row[] = [
     { tag: 'p', text: quoteWords('revenue-metric'), source: 'content/home-quotes.json revenue-metric' },
     { tag: 'p', text: quoteWords('aws-installer'), source: 'content/home-quotes.json aws-installer' },
+    // The items of Specific to Controlvar that are quotes, the deployment item's each after its guide's name.
+    ...['specific-rollback', 'specific-correction', 'specific-sequential'].map((id) => ({
+      tag: 'p',
+      text: quoteWords(id),
+      source: `content/home-quotes.json ${id}`,
+    })),
+    ...[
+      ['Docker Compose', 'specific-compose'],
+      ['Kubernetes', 'specific-kubernetes'],
+      ['AWS CDK', 'specific-cdk'],
+    ].map(([guide, id]) => ({
+      tag: 'p',
+      text: `${guide}: ${quoteWords(id)}`,
+      source: `content/home-quotes.json ${id}, after the name docs/capabilities.md links`,
+    })),
     // The product rows' bullets that are quotes.
-    ...['local-evaluation', 'sequential-testing', 'exclusion-and-holdout', 'audit-log-download'].map((id) => ({
+    ...['rollback-on-a-breach', 'local-evaluation', 'sequential-testing', 'exclusion-and-holdout', 'audit-log-download'].map((id) => ({
       tag: 'li',
       text: quoteWords(id),
       source: `content/home-quotes.json ${id}`,

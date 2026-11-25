@@ -4,7 +4,7 @@
  * `controlvar.com` has no API: `POST /api/v1/auth/login` returns the
  * site's own HTML with a 404. Three "Sign in" controls pointed at it. A dead
  * login button reads as a broken product rather than as software you run
- * yourself, and the homepage already says there is no hosted tier.
+ * yourself, and there is no hosted tier to sign in to.
  *
  * The flag is MOCKED rather than set through the environment. SITE_MODE is
  * read at module load, so varying it for real needs `isolateModules`, which

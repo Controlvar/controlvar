@@ -35,8 +35,9 @@ const ROWS: Row[] = [
     id: 'rollouts',
     icon: icon(['M4 22V4', 'M4 4h12l-2 4 2 4H4']),
     heading: 'Roll features out gradually, with automatic rollback',
-    body: 'Sticky assignment, gradual rollouts with configurable stages, and automated safety rollback on error-rate and latency thresholds once you turn it on.',
+    body: 'Sticky assignment, and gradual rollouts with configurable stages.',
     bullets: [
+      { quote: 'rollback-on-a-breach' },
       'Targeting with 20+ operators: semantic version comparison, geo-distance, time windows and array operations',
       'Switch a flag on and off, and find each change in the audit log',
       { quote: 'local-evaluation' },

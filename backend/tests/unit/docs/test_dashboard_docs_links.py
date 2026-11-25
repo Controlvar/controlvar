@@ -16,6 +16,10 @@ a `docsUrl(` call that is not one literal page followed by `,` or `)` (double
 quotes, a variable, a template literal, a concatenation), which the scan would
 otherwise skip silently; the Jest file has the same rule (#1459, PE 6).
 
+`test_the_specifics_section_links_pages_the_nav_lists` is the docs side of a
+second Jest check, in `frontend/src/tests/pages/home-page.test.tsx`: the pages
+the homepage's "Specific to Controlvar" links are in the mkdocs nav (#2040).
+
 Needs no Node and no node_modules: it reads files only.
 """
 
@@ -46,6 +50,9 @@ SKIPPED_DIRS = ("tests", "__mocks__", "node_modules")
 SOURCE = re.compile(r"\.(ts|tsx)$")
 TEST_FILE = re.compile(r"\.test\.tsx?$")
 DEFINING_MODULE = os.path.join("services", "docs.ts")
+#: The homepage's "Specific to Controlvar": its links are outside its quotes,
+#: so the quotes' own nav rule never sees them.
+SPECIFICS = SRC_ROOT / "components" / "homepage" / "Specifics.tsx"
 
 
 def _source_files(directory: Path) -> List[Path]:
@@ -130,6 +137,23 @@ def test_every_call_is_one_the_rule_can_see():
     assert unseen == [], (
         "docsUrl() calls the docs-link rule cannot resolve (it matches only "
         "docsUrl('<page>')):\n" + "\n".join(unseen)
+    )
+
+
+def test_the_specifics_section_links_pages_the_nav_lists():
+    """`links docs pages that exist and that the nav of mkdocs.yml lists` in
+    home-page.test.tsx, which a change to mkdocs.yml alone does not run."""
+    pages = [m.group(1) for m in CALL.finditer(SPECIFICS.read_text(encoding="utf-8"))]
+    # The count the Jest test has: an empty scan cannot pass.
+    assert len(pages) == 7, f"{_rel(SPECIFICS)} links {pages}"
+    nav = (REPO_ROOT / "mkdocs.yml").read_text(encoding="utf-8")
+    missing = [
+        page
+        for page in pages
+        if not re.search(rf"^\s+- [^:\n]+: {re.escape(page)}\.md\s*$", nav, re.M)
+    ]
+    assert missing == [], (
+        f"{_rel(SPECIFICS)} links pages mkdocs.yml's nav does not list: {missing}"
     )
 
 
