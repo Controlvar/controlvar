@@ -2017,6 +2017,13 @@ text = "401 | an unknown, expired or revoked key | Invalid API Key"
 by = ["test:backend/tests/unit/api/test_dependency_injection.py"]
 
 [[unit]]
+text = "401 | the key's owner is inactive | Invalid API Key"
+by = [
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_the_route_refuses_each_key_as_batch_assignment_does",
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestScope::test_an_inactive_owner_is_401",
+]
+
+[[unit]]
 text = "403 | the key lacks the scope | This API key does not have the 'sdk:ruleset' scope. Create a key with the 'sdk:ruleset' scope for server-side SDK use."
 by = [
     "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_a_key_without_the_scope_is_403",
@@ -2025,7 +2032,7 @@ by = [
 count = 2
 
 [[unit]]
-text = "403 | the key's owner can no longer change feature flags: inactive, or given feature_flag (update) neither by their role nor, in the full profile, by a custom role or direct grant | This key's owner can no longer change feature flags, so the key is refused for server-side SDK use."
+text = "403 | the key's owner can no longer change feature flags: given feature_flag (update) neither by their role nor, in the full profile, by a custom role or direct grant | This key's owner can no longer change feature flags, so the key is refused for server-side SDK use."
 by = [
     "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_a_scoped_key_whose_owner_lost_the_role_is_403",
     "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",

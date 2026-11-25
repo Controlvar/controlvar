@@ -1187,8 +1187,9 @@ their public `key`, except `POST /api/v1/tracking/events`, which takes ids. They
 |---|---|---|
 | 401 | no key | `API key missing` |
 | 401 | an unknown, expired or revoked key | `Invalid API Key` |
+| 401 | the key's owner is inactive | `Invalid API Key` |
 | 403 | the key lacks the scope | `This API key does not have the 'sdk:ruleset' scope. Create a key with the 'sdk:ruleset' scope for server-side SDK use.` |
-| 403 | the key's owner can no longer change feature flags: inactive, or given `feature_flag (update)` neither by their role nor, in the full profile, by a custom role or direct grant | `This key's owner can no longer change feature flags, so the key is refused for server-side SDK use.` |
+| 403 | the key's owner can no longer change feature flags: given `feature_flag (update)` neither by their role nor, in the full profile, by a custom role or direct grant | `This key's owner can no longer change feature flags, so the key is refused for server-side SDK use.` |
 | 403 | the key's owner can change feature flags but not experiments; nobody is assigned | `This key's owner cannot change experiments, so the key cannot assign users in a batch, and nobody was assigned. Use a server-side key whose owner can change experiments.` |
 | 404 | no ACTIVE experiment has that key | `Active experiment with key 'spring-email' not found` |
 | 409 | the experiment was paused, completed or deleted (or its variants changed) during the request | `The experiment changed during the request. Users earlier in the list may already be assigned; resending the same request is safe.` |
