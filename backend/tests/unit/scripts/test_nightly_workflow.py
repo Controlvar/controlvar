@@ -1,16 +1,22 @@
-"""``nightly-qa.yml``: the unit job has room to finish, and a timeout files the issue (#1695).
+"""``nightly-qa.yml``: the long suites run in shards with room to finish, and a timeout files the issue (#1695).
 
 On 2026-11-02 and 2026-11-03 the nightly ``Unit Tests`` job hit its 30 minute
 ``timeout-minutes`` (pytest at 98%). A timed-out job's result is ``cancelled``,
 not ``failure``, so ``nightly-failure-issue`` (``if: failure()``) was skipped
 and nobody was told. Pinned here:
 
-* the unit job's timeout is at least 45 minutes;
-* the integration suite runs in four shards (``integration-shard``), each with
-  room to finish: the single job took up to 79.8 minutes against its 100 minute
-  limit (it was cancelled at 75 on 2026-11-13, run 43357047435). The job
-  ``integration-tests`` (``Integration Tests``) is the summary: it needs the
-  shards, and its checker proves every test ran in exactly one;
+* the unit and integration suites each run in four shards (``unit-shard``,
+  ``integration-shard``), each with room to finish and a limit under the
+  single job's: one unit session took 59 minutes against 90 on 2026-11-24
+  (#2125), one integration session up to 79.8 against 100 (it was cancelled
+  at 75 on 2026-11-13, run 43357047435). The job that kept the old id and
+  name (``unit-tests``, ``Unit Tests``; ``integration-tests``, ``Integration
+  Tests``) is the summary: it needs the shards, and its checker proves every
+  test ran in exactly one (the unit summary's with ``--only-suites``: a
+  report of another suite is red there, not left alone);
+* the unit shards run the single job's command, services and environment,
+  plus the shard variables, and the jobs that needed the unit job need its
+  summary;
 * the issue job runs when a job it needs is ``failure`` or ``cancelled`` and
   not when all of them succeeded (the expression is evaluated, not only
   compared as a string);
@@ -20,6 +26,8 @@ and nobody was told. Pinned here:
 
 from __future__ import annotations
 
+import dataclasses
+import fnmatch
 import json
 import os
 import re
@@ -27,7 +35,7 @@ import shlex
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 import pytest
 
@@ -39,11 +47,77 @@ NIGHTLY = (
     Path(__file__).resolve().parents[4] / ".github" / "workflows" / "nightly-qa.yml"
 )
 ISSUE_JOB = "nightly-failure-issue"
-MIN_UNIT_MINUTES = 45
-MIN_INTEGRATION_MINUTES = 100
-MIN_SHARD_MINUTES = 30
-SHARD_JOB = "integration-shard"
-SUMMARY_JOB = "integration-tests"
+SUMMARY_MINUTES = 10
+#: backend/tests/shard.py's two variables: the slice, and the report.
+SHARD_VAR = "EXPERIMENTLY_TEST_SHARD"
+REPORT_VAR = "EXPERIMENTLY_TEST_SHARD_REPORT"
+
+
+@dataclasses.dataclass(frozen=True)
+class Sharded:
+    """A suite the nightly runs in shards, and the summary named for it."""
+
+    shard_job: str
+    summary_job: str
+    name: str
+    #: The tree the shards run, as pytest is given it and the checker names it.
+    suite: str
+    #: A shard's limit: at least this, from the shard times measured...
+    min_minutes: int
+    #: ...and under the single job's last limit, or the split bought nothing.
+    single_minutes: int
+    #: The checker's skip allowance, exactly.
+    skips: Tuple[str, ...]
+    #: The flags between the suite and the skips (the unit summary's two).
+    only: Tuple[str, ...]
+
+
+SHARDED = {
+    # rc-evidence.yml's four unit shards took up to 33.2 minutes a job.
+    "unit": Sharded(
+        shard_job="unit-shard",
+        summary_job="unit-tests",
+        name="Unit Tests",
+        suite="backend/tests/unit",
+        min_minutes=40,
+        single_minutes=90,
+        skips=("--any-skip", "backend/tests/unit"),
+        only=("--only-suites", "--github-annotations"),
+    ),
+    # A quarter of a 79.8 minute session plus setup; under 30 would time out
+    # on a slow runner.
+    "integration": Sharded(
+        shard_job="integration-shard",
+        summary_job="integration-tests",
+        name="Integration Tests",
+        suite="backend/tests/integration",
+        min_minutes=30,
+        single_minutes=100,
+        skips=(
+            "--allow-skip",
+            "backend/tests/integration=absolute-timing benchmark; "
+            "set RUN_BENCHMARKS=1 to run it",
+        ),
+        only=(),
+    ),
+}
+SUITES = sorted(SHARDED)
+
+#: The single unit job's command and step environment before the split.
+UNIT_COMMAND = "python -m pytest backend/tests/unit/ -p no:cov -q --tb=short"
+UNIT_ENV = {
+    "APP_ENV": "test",
+    "TESTING": "true",
+    "POSTGRES_SERVER": "localhost",
+    "POSTGRES_HOST": "localhost",
+    "POSTGRES_PORT": 5432,
+    "POSTGRES_DB": "experimentation",
+    "POSTGRES_SCHEMA": "experimentation",
+    "POSTGRES_USER": "postgres",
+    "POSTGRES_PASSWORD": "postgres",
+}
+#: The jobs that needed the single unit job, and need its summary now.
+NEEDS_UNIT = {"integration-shard", "smoke-tests", "e2e-tests"}
 
 
 def _jobs() -> Dict[str, Any]:
@@ -53,6 +127,22 @@ def _jobs() -> Dict[str, Any]:
 def _needs(job: Dict[str, Any]) -> List[str]:
     needs = job.get("needs") or []
     return [needs] if isinstance(needs, str) else list(needs)
+
+
+def _step(job_name: str, step_name: str) -> Dict[str, Any]:
+    steps = [s for s in _jobs()[job_name]["steps"] if s.get("name") == step_name]
+    assert len(steps) == 1, (job_name, step_name, steps)
+    return steps[0]
+
+
+def _suite_step(sharded: Sharded) -> Dict[str, Any]:
+    steps = [
+        s
+        for s in _jobs()[sharded.shard_job]["steps"]
+        if f"{sharded.suite}/" in s.get("run", "")
+    ]
+    assert len(steps) == 1, steps
+    return steps[0]
 
 
 def issue_job_runs(expression: str, results: List[str]) -> bool:
@@ -77,70 +167,114 @@ def issue_job_runs(expression: str, results: List[str]) -> bool:
     return bool(eval(text, {"__builtins__": {}}, {}))  # the text was checked above
 
 
-def test_the_unit_job_has_room_to_finish():
-    timeout = _jobs()["unit-tests"]["timeout-minutes"]
-    assert timeout >= MIN_UNIT_MINUTES, (
-        f"unit-tests has timeout-minutes: {timeout}; the suite needs about 30.5 "
-        f"minutes, so anything under {MIN_UNIT_MINUTES} times out (#1695)"
+@pytest.mark.parametrize("suite", SUITES)
+def test_the_shards_have_room_to_finish(suite):
+    sharded = SHARDED[suite]
+    timeout = _jobs()[sharded.shard_job].get("timeout-minutes")
+    assert isinstance(timeout, int), (
+        f"{sharded.shard_job} has no timeout-minutes ({timeout!r}): GitHub's "
+        "default is 360"
+    )
+    assert sharded.min_minutes <= timeout < sharded.single_minutes, (
+        f"{sharded.shard_job} has timeout-minutes: {timeout}; a shard needs at "
+        f"least {sharded.min_minutes} and under {sharded.single_minutes} (the "
+        "single job's limit) or the split bought nothing"
     )
 
 
-def test_the_integration_shards_have_room_to_finish():
-    """One session took up to 79.8 minutes against a 100 minute limit (U2,
-    0.48.0), so the suite runs in four shards; a shard is about a quarter of
-    that plus setup, and anything under 30 minutes would time out on a slow
-    runner."""
-    timeout = _jobs()[SHARD_JOB]["timeout-minutes"]
-    assert MIN_SHARD_MINUTES <= timeout < MIN_INTEGRATION_MINUTES, (
-        f"{SHARD_JOB} has timeout-minutes: {timeout}; a shard needs at least "
-        f"{MIN_SHARD_MINUTES} and under {MIN_INTEGRATION_MINUTES} (the old "
-        f"single job's limit) or the split bought nothing"
-    )
-
-
-def test_the_integration_shards_are_a_static_matrix_that_does_not_fail_fast():
-    job = _jobs()[SHARD_JOB]
+@pytest.mark.parametrize("suite", SUITES)
+def test_the_shards_are_a_static_matrix_that_does_not_fail_fast(suite):
+    sharded = SHARDED[suite]
+    job = _jobs()[sharded.shard_job]
     strategy = job.get("strategy") or {}
     assert strategy.get("fail-fast") is False, strategy
     assert strategy.get("matrix") == {"shard": [1, 2, 3, 4]}, strategy
     assert "continue-on-error" not in job
+    assert job.get("name") == f"{sharded.name} (shard ${{{{ matrix.shard }}}})"
 
 
-def test_the_integration_summary_keeps_its_name_and_reads_the_shards():
-    summary = _jobs()[SUMMARY_JOB]
-    assert summary.get("name") == "Integration Tests", summary.get("name")
-    assert _needs(summary) == [SHARD_JOB]
+@pytest.mark.parametrize("suite", SUITES)
+def test_the_summary_keeps_its_name_and_reads_the_shards(suite):
+    sharded = SHARDED[suite]
+    summary = _jobs()[sharded.summary_job]
+    assert summary.get("name") == sharded.name, summary.get("name")
+    assert _needs(summary) == [sharded.shard_job]
     assert summary.get("if") == "always()"
-    assert SUMMARY_JOB in _needs(_jobs()[ISSUE_JOB]), "the issue job lost the summary"
+    assert summary.get("timeout-minutes") == SUMMARY_MINUTES, summary
+    issue_needs = _needs(_jobs()[ISSUE_JOB])
+    assert sharded.summary_job in issue_needs, "the issue job lost the summary"
+    assert sharded.shard_job in issue_needs, "the issue job lost the shards"
 
 
-def _step(job_name: str, step_name: str) -> Dict[str, Any]:
-    steps = [s for s in _jobs()[job_name]["steps"] if s.get("name") == step_name]
-    assert len(steps) == 1, (job_name, step_name, steps)
-    return steps[0]
-
-
-def test_the_shard_env_is_on_the_suite_step_and_the_report_is_uploaded():
-    step = [
-        s
-        for s in _jobs()[SHARD_JOB]["steps"]
-        if "backend/tests/integration/" in s.get("run", "")
-    ]
-    assert len(step) == 1, step
-    env = step[0]["env"]
-    assert (
-        env["EXPERIMENTLY_TEST_SHARD"]
-        == "${{ matrix.shard }}/${{ strategy.job-total }}"
+@pytest.mark.parametrize("suite", SUITES)
+def test_the_shard_env_is_on_the_suite_step_and_the_report_is_uploaded(suite):
+    sharded = SHARDED[suite]
+    env = _suite_step(sharded)["env"]
+    assert env[SHARD_VAR] == "${{ matrix.shard }}/${{ strategy.job-total }}"
+    assert env[REPORT_VAR] == (
+        f"${{{{ runner.temp }}}}/shard-{suite}-${{{{ matrix.shard }}}}.json"
     )
-    assert env["EXPERIMENTLY_TEST_SHARD_REPORT"] == (
-        "${{ runner.temp }}/shard-integration-${{ matrix.shard }}.json"
-    )
-    upload = _step(SHARD_JOB, "Upload the shard report")
+    upload = _step(sharded.shard_job, "Upload the shard report")
     assert upload["if"] == "always()"
-    assert upload["with"]["name"] == "shard-report-integration-${{ matrix.shard }}"
+    assert upload["with"]["name"] == f"shard-report-{suite}-${{{{ matrix.shard }}}}"
+    assert upload["with"]["path"] == env[REPORT_VAR]
     assert upload["with"]["overwrite"] is True
     # and nowhere else: in the job's env it would slice other steps too
-    assert not set(env) & set(_jobs()[SHARD_JOB].get("env") or {})
+    assert not set(env) & set(_jobs()[sharded.shard_job].get("env") or {})
+
+
+def test_no_suite_s_download_matches_another_suite_s_reports():
+    """Each summary downloads its own shards' reports only. A pattern that
+    also matched the other suite's would hand the checker reports it has to
+    sort by their `suite`, and one that matched none of its own leaves it
+    nothing to prove."""
+    for mine in SUITES:
+        pattern = _step(SHARDED[mine].summary_job, "Collect the shard reports")["with"][
+            "pattern"
+        ]
+        for other in SUITES:
+            template = _step(SHARDED[other].shard_job, "Upload the shard report")[
+                "with"
+            ]["name"]
+            names = [
+                template.replace("${{ matrix.shard }}", str(n)) for n in (1, 2, 3, 4)
+            ]
+            matched = [n for n in names if fnmatch.fnmatchcase(n, pattern)]
+            assert matched == (names if other == mine else []), (
+                mine,
+                pattern,
+                other,
+                matched,
+            )
+
+
+def test_the_unit_shards_run_the_single_job_s_command_services_and_env():
+    """The split changes where the tests run, not which or how: the single
+    job's pytest command, its Postgres and its step environment, plus the
+    two shard variables."""
+    sharded = SHARDED["unit"]
+    job = _jobs()[sharded.shard_job]
+    step = _suite_step(sharded)
+    assert step["run"] == UNIT_COMMAND, step["run"]
+    env = dict(step["env"])
+    env.pop(SHARD_VAR)
+    env.pop(REPORT_VAR)
+    assert env == UNIT_ENV, env
+    assert set(job.get("services") or {}) == {"postgres"}, job.get("services")
+    assert job["services"]["postgres"] == _jobs()["smoke-tests"]["services"]["postgres"]
+    install = _step(sharded.shard_job, "Install dependencies")["run"]
+    assert "pip install -e . --no-deps" in install, install
+
+
+def test_the_jobs_that_needed_the_unit_job_need_its_summary():
+    """`needs: unit-shard` would start a job while the summary that proves
+    the partition has not run; only the summary and the issue job read the
+    shards."""
+    jobs = _jobs()
+    on_summary = {j for j, job in jobs.items() if "unit-tests" in _needs(job)}
+    on_shards = {j for j, job in jobs.items() if "unit-shard" in _needs(job)}
+    assert on_summary == NEEDS_UNIT | {ISSUE_JOB}, sorted(on_summary)
+    assert on_shards == {"unit-tests", ISSUE_JOB}, sorted(on_shards)
 
 
 def test_the_shards_require_the_editable_install_as_the_pr_gate_does():
@@ -148,44 +282,43 @@ def test_the_shards_require_the_editable_install_as_the_pr_gate_does():
     test_the_integration_job_is_armed (it skips unless
     the editable-install switch is "1") and the summary's checker refused the
     skip. The shards install the package editable; they have to say so."""
-    step = [
-        s
-        for s in _jobs()[SHARD_JOB]["steps"]
-        if "backend/tests/integration/" in s.get("run", "")
-    ]
-    assert len(step) == 1, step
-    assert step[0]["env"].get("EXPERIMENTLY_REQUIRE_EDITABLE") == "1", step[0]["env"]
-    install = _step(SHARD_JOB, "Install dependencies")["run"]
+    sharded = SHARDED["integration"]
+    step = _suite_step(sharded)
+    assert step["env"].get("EXPERIMENTLY_REQUIRE_EDITABLE") == "1", step["env"]
+    install = _step(sharded.shard_job, "Install dependencies")["run"]
     assert "pip install -e . --no-deps" in install, install
 
 
-def test_the_summary_runs_the_shard_checker_over_the_downloaded_reports():
+@pytest.mark.parametrize("suite", SUITES)
+def test_the_summary_runs_the_shard_checker_over_the_downloaded_reports(suite):
     """The one gate that notices a shard that collected nothing (no report), a
     test in no shard, and a test in two. Its exact arguments are pinned: a
     second allowed skip or plugin would be a hole."""
-    run = _step(SUMMARY_JOB, "Every test ran in exactly one shard")["run"]
-    tokens = shlex.split(run.replace("\\\n", " "))
+    sharded = SHARDED[suite]
+    step = _step(sharded.summary_job, "Every test ran in exactly one shard")
+    tokens = shlex.split(step["run"].replace("\\\n", " "))
     assert tokens == [
         "python3",
         "scripts/check_test_shards.py",
         "--suite",
-        "backend/tests/integration",
-        "--allow-skip",
-        "backend/tests/integration=absolute-timing benchmark; "
-        "set RUN_BENCHMARKS=1 to run it",
+        sharded.suite,
+        *sharded.only,
+        *sharded.skips,
         "--allow-disabled-plugin",
-        "backend/tests/integration=cov",
+        f"{sharded.suite}=cov",
         "$RUNNER_TEMP/shard-reports",
     ], tokens
-    assert _step(SUMMARY_JOB, "Every test ran in exactly one shard")["if"] == "always()"
-    download = _step(SUMMARY_JOB, "Collect the shard reports")["with"]
-    assert download["pattern"] == "shard-report-integration-*"
+    assert step["if"] == "always()"
+    download = _step(sharded.summary_job, "Collect the shard reports")["with"]
+    assert download["pattern"] == f"shard-report-{suite}-*"
     assert download["path"] == "${{ runner.temp }}/shard-reports"
 
 
-def test_the_summary_refuses_a_shard_that_is_not_success():
+@pytest.mark.parametrize("suite", SUITES)
+def test_the_summary_refuses_a_shard_that_is_not_success(suite):
     """Run the results step's script, as the runner does, over toJSON(needs)."""
-    script = _step(SUMMARY_JOB, "Every shard passed")["run"]
+    sharded = SHARDED[suite]
+    script = _step(sharded.summary_job, "Every shard passed")["run"]
     for result, ok in (
         ("success", True),
         ("failure", False),
@@ -196,7 +329,7 @@ def test_the_summary_refuses_a_shard_that_is_not_success():
             ["bash", "--noprofile", "--norc", "-e", "-c", script],
             env={
                 **os.environ,
-                "RESULTS": json.dumps({SHARD_JOB: {"result": result}}),
+                "RESULTS": json.dumps({sharded.shard_job: {"result": result}}),
             },
             capture_output=True,
             text=True,
