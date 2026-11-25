@@ -73,7 +73,10 @@ export const TYPED: readonly Row[] = [
   // The header: the row and the phone menu (hidden until opened, still in the DOM). Books and
   // Walkthroughs are the marketing build's pages (SD item 0); the call to action sits outside
   // the menu at every width (BORROW 7), so it is a link of the row's div, not of a nav.
-  { tag: 'div', text: 'CControlvar', source: `${HEADER}: Wordmark` },
+  // The wordmark: the "C" and the word in the platform build; the logo in the marketing build,
+  // an image named "Controlvar" with no text, because the home page is not a link to itself.
+  { tag: 'div', text: 'CControlvar', source: `${HEADER}: Wordmark`, build: 'platform' },
+  { tag: 'aria-label', text: 'Controlvar', source: `${HEADER}: Wordmark, the logo (LogoLockup.tsx, #2040)`, build: 'marketing' },
   { tag: 'aria-label', text: 'Main', source: `${HEADER}: the row's nav` },
   { tag: 'aria-label', text: 'Main', source: `${HEADER}: the menu's nav` },
   { tag: 'aria-label', text: 'Menu', source: `${HEADER}: the menu button` },
@@ -251,7 +254,8 @@ export const TYPED: readonly Row[] = [
   { tag: 'div', text: 'Source', source: `${UX} Closing band (the header's word)` },
 
   // Footer.
-  { tag: 'div', text: 'CControlvar', source: 'Wordmark.tsx, unlinked' },
+  { tag: 'div', text: 'CControlvar', source: 'Wordmark.tsx, unlinked', build: 'platform' },
+  { tag: 'aria-label', text: 'Controlvar', source: 'Wordmark.tsx, unlinked: the logo (LogoLockup.tsx, #2040)', build: 'marketing' },
   { tag: 'p', text: 'Open-source A/B testing and feature flags you run on your own infrastructure.', source: `${MAIN}:63` },
   { tag: 'aria-label', text: 'Footer', source: `${UX} Footer` },
   { tag: 'p', text: 'Product', source: `${UX} Footer` },

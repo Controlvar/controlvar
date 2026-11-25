@@ -30,7 +30,11 @@
  *     `Sitemap:` line in robots.txt (the plain public/robots.txt has none), or
  *     a `<link rel="canonical">` in a page. They name controlvar.com's pages,
  *     and the marketing build writes them (scripts/marketing-seo.mjs), never
- *     public/, which every export, the dashboard image's among them, gets.
+ *     public/, which every export, the dashboard image's among them, gets;
+ *   - any .html or .js file carries the logo's path data (#2040). The public
+ *     site draws the Controlvar logo from 5.6 kB of path data, and the
+ *     dashboard keeps its "C"; components/Wordmark.tsx drops the logo from the
+ *     platform build, and this fails the export where that stopped working.
  */
 import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
@@ -43,6 +47,14 @@ const MEDIA_REFERENCE = /(?<![\w.~%/-])\/media\//;
 const SCREENS_REFERENCE = /(?<![\w.~%/-])\/screens\//;
 // Any <link> whose rel is canonical, in either attribute order or quote style.
 const CANONICAL_LINK = /<link\b[^>]*\brel\s*=\s*["']?canonical\b/i;
+/**
+ * The start of the logo's glyph path (components/LogoLockup.tsx): its first two
+ * commands and the start of the third, as written. Minifiers leave a path's `d`
+ * string alone. If the drawing were ever re-spelled, scripts/site-pages.test.mjs
+ * fails on the marketing export's footer (it must contain this string), so a
+ * stale literal is noticed there rather than passing here for nothing.
+ */
+export const LOGO_PATH_START = 'M95.23 46.49L95.23 46.49Q91.51 46.49';
 /** The marketing build's own pages (src/pages/walkthroughs.tsx, src/pages/books.tsx). */
 export const MARKETING_ONLY_PAGES = ['walkthroughs', 'books'];
 
@@ -79,6 +91,9 @@ export function platformProblems(outDir) {
       problems.push(`${relative(outDir, path)} has a <link rel="canonical">: it is the marketing build's only`);
     }
     if (MEDIA_FILE.test(path)) problems.push(`the platform export carries ${relative(outDir, path)}`);
+    if (/\.(html|js)$/.test(path) && readFileSync(path, 'utf8').includes(LOGO_PATH_START)) {
+      problems.push(`${relative(outDir, path)} carries the logo's path data: the logo is the marketing build's only`);
+    }
   }
   return problems;
 }
@@ -100,7 +115,7 @@ if (invokedAsScript()) {
     process.exitCode = 1;
   } else {
     console.log(
-      `check-platform-export: ${outDir}: no walkthrough section, no media, no screenshot, no sitemap or canonical link and no ${MARKETING_ONLY_PAGES.map((p) => `/${p}`).join(' or ')} page; the platform homepage is there`,
+      `check-platform-export: ${outDir}: no walkthrough section, no media, no screenshot, no sitemap or canonical link, no logo path data and no ${MARKETING_ONLY_PAGES.map((p) => `/${p}`).join(' or ')} page; the platform homepage is there`,
     );
   }
 }

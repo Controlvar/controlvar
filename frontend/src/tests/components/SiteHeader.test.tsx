@@ -16,7 +16,7 @@
 import fs from 'fs';
 import path from 'path';
 import React from 'react';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { SITE_MENU_ID, SOURCE_URL, SiteHeader, siteLinks } from '@/components/SiteHeader';
@@ -191,7 +191,25 @@ it('does not link the wordmark to the page it is on', () => {
   mockPathname = '/';
   render(<SiteHeader />);
   expect(screen.queryByRole('link', { name: 'Controlvar home' })).toBeNull();
-  expect(screen.getByText('Controlvar')).toBeInTheDocument();
+  // The marketing build's logo is an image named "Controlvar", with no text beside it.
+  const logo = screen.getByRole('img', { name: 'Controlvar' });
+  expect(logo.closest('[data-testid="site-header-row"]')).not.toBeNull();
+  expect(screen.queryByText('Controlvar')).toBeNull();
+});
+
+it('names the logo "Controlvar home" once where it links, and the platform build keeps its "C"', () => {
+  mockPathname = '/docs';
+  render(<SiteHeader />);
+  const home = screen.getByRole('link', { name: 'Controlvar home' });
+  const logo = home.querySelector('svg') as SVGElement;
+  expect(logo).toHaveAttribute('aria-hidden', 'true');
+  expect(home.textContent).toBe('');
+  expect(screen.queryByRole('img')).toBeNull();
+  cleanup();
+  mode.mockReturnValue(false);
+  render(<SiteHeader />);
+  expect(screen.getByLabelText('Controlvar home')).toHaveTextContent(/^CControlvar$/);
+  expect(document.querySelector('svg[viewBox="0 0 273 64"]')).toBeNull();
 });
 
 /**
@@ -217,7 +235,7 @@ describe('one header on the marketing site', () => {
     expect(headers[0]).toHaveAttribute('data-testid', 'site-header');
     expect(container.querySelector('nav[aria-label="Primary"]')).toBeNull();
     const row = within(headers[0] as HTMLElement).getByTestId('site-header-row');
-    const result = { header: (headers[0] as HTMLElement).className, row: row.className, first: row.firstElementChild?.textContent };
+    const result = { header: (headers[0] as HTMLElement).className, row: row.className, first: row.firstElementChild?.querySelector('svg') ? 'the logo' : row.firstElementChild?.textContent };
     unmount();
     return result;
   };
@@ -225,7 +243,7 @@ describe('one header on the marketing site', () => {
   it('renders SiteHeader, with one row layout, on all of them', async () => {
     const rows: Array<Awaited<ReturnType<typeof rowOf>>> = [];
     for (const [pathname, make] of PAGES) rows.push(await rowOf(pathname, make));
-    expect(rows[0].first).toBe('CControlvar');
+    expect(rows[0].first).toBe('the logo');
     rows.slice(1).forEach((row) => expect(row).toEqual(rows[0]));
   });
 });
