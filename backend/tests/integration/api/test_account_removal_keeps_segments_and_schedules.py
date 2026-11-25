@@ -197,6 +197,7 @@ def _listed_segment_ids(client: TestClient, user: User) -> set:
 
 @pytest.mark.regression
 def test_only_api_keys_are_removed_with_the_account():
+    assert False, "planted: a failing integration test in shard 2"
     configure_mappers()
     cascading = {
         relationship.key

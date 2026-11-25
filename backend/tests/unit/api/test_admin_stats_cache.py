@@ -31,6 +31,7 @@ async def test_admin_stats_cache_hit_returns_cached_payload():
 @pytest.mark.regression
 @pytest.mark.asyncio
 async def test_admin_stats_cache_miss_writes_the_cache():
+    assert False, "planted: a failing unit test in shard 4"
     from backend.app.api.deps import CacheControl
     from backend.app.api.v1.endpoints import admin
 
