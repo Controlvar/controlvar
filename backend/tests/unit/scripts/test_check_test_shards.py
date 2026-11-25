@@ -335,6 +335,11 @@ class Fixtures:
                 # through collection; --lf deselects them after the shard hook.
                 return run_shards(root, out, 2, "--lf", cache=True, target=LF_FILE)
             return run_shards(root, out, 2, "--lf", cache=True)
+        if name == "other_suite":
+            # Another suite (one file of the tree, named on the command
+            # line), in two shards.
+            root = _write_tree(where / "tree", None)
+            return run_shards(root, out, 2, target=LF_FILE)
         if name == "generator_disabled":
             root = _write_tree(where / "tree", "generator")
             return run_shards(root, out, 2, env={"PYTEST_ADDOPTS": "-p no:gen_plugin"})
@@ -870,6 +875,128 @@ def test_only_the_named_suite_is_checked(fixtures, tmp_path):
     missing = check("--suite", "backend/tests/integration", *reports)
     assert missing.returncode == 1
     assert "backend/tests/integration: no shard report for this suite" in missing.stdout
+
+
+def test_only_suites_refuses_a_report_of_a_suite_not_named(fixtures, tmp_path):
+    """A clean run of the named suite, and another suite that ran 1 of its 2
+    shards, in one directory. Without the flag the other report is left
+    alone, rc 0; with ``--only-suites`` it is a problem, rc 1."""
+    directory = tmp_path / "reports"
+    directory.mkdir()
+    for index, path in enumerate(fixtures.get("clean"), start=1):
+        (directory / f"shard-{SUITE}-{index}.json").write_bytes(path.read_bytes())
+    first, _second = fixtures.get("other_suite")
+    other = _load(first)
+    assert (other["suite"], other["shard"], other["of"]) == (LF_FILE, 1, 2)
+    stray = directory / "shard-other-1.json"
+    stray.write_bytes(first.read_bytes())
+    default = check("--suite", SUITE, "--any-skip", SUITE, directory)
+    assert default.returncode == 0, default.stdout
+    only = check("--suite", SUITE, "--only-suites", "--any-skip", SUITE, directory)
+    assert only.returncode == 1, only.stdout
+    assert problems(only) == [f"PROBLEM: {stray}: suite {LF_FILE} is not a --suite"], (
+        only.stdout
+    )
+    both = check(
+        "--suite",
+        SUITE,
+        "--suite",
+        LF_FILE,
+        "--only-suites",
+        "--any-skip",
+        SUITE,
+        "--any-skip",
+        LF_FILE,
+        directory,
+    )
+    assert both.returncode == 1, both.stdout
+    # Named, the other suite is checked like any other: its missing shard.
+    found = problems(both)
+    assert f"PROBLEM: {LF_FILE}: shard(s) [2] of 2 have no report" in found, found
+    assert not [line for line in found if "is not a --suite" in line], found
+
+
+def annotations(result: subprocess.CompletedProcess) -> list[str]:
+    return [line for line in result.stdout.splitlines() if line.startswith("::")]
+
+
+def test_github_annotations_repeat_each_problem_and_only_with_the_flag(fixtures):
+    """A failed record: rc 1 either way. With ``--github-annotations`` each
+    PROBLEM line is followed by ``::error::`` and the same text, so the
+    workflow step needs no pipe to show it; without the flag there is none."""
+    args = ("--suite", SUITE, "--allow-skip", f"{SUITE}={ALLOWED}")
+    plain = check(*args, *fixtures.get("failing"))
+    assert plain.returncode == 1, plain.stdout
+    assert annotations(plain) == [], plain.stdout
+    flagged = check(*args, "--github-annotations", *fixtures.get("failing"))
+    assert flagged.returncode == 1, flagged.stdout
+    found = problems(flagged)
+    assert any(p.endswith("tests/test_fails.py::test_fails failed") for p in found)
+    assert found == problems(plain)
+    assert annotations(flagged) == [
+        "::error::" + p[len("PROBLEM: ") :] for p in found
+    ], flagged.stdout
+
+
+def test_github_annotations_cover_a_bad_report_and_no_report(fixtures, tmp_path):
+    bad = tmp_path / "shard-bad.json"
+    bad.write_text("")
+    result = check("--suite", SUITE, "--github-annotations", bad)
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "refusing a bad report" in result.stderr
+    assert annotations(result) == [
+        f"::error::refusing a bad report: {bad}: empty (the session did not "
+        "finish writing it)"
+    ], result.stdout
+    empty = tmp_path / "none"
+    empty.mkdir()
+    nothing = check("--suite", SUITE, "--github-annotations", empty)
+    assert nothing.returncode == 1, nothing.stdout
+    assert annotations(nothing) == [f"::error::no shard report found in {empty}"]
+
+
+def test_a_value_read_from_a_report_stays_on_its_line(fixtures, tmp_path):
+    """A suite, and a failed record's node id, each with a newline and a
+    percent sign in it. Each PROBLEM line shows the newline escaped, and its
+    annotation escapes the percent sign as a workflow command's data requires:
+    no line of the output starts with anything the report wrote."""
+
+    def edit(index, doc):
+        doc["suite"] = "elsewhere 100%\n::warning::x"
+
+    def edit_record(index, doc):
+        doc["ran"][0]["nodeid"] = "tests/odd 100%\n::warning::y"
+        doc["ran"][0]["outcome"] = "failed"
+
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    (stray,) = _edited(tmp_path / "a", [fixtures.get("clean")[0]], edit)
+    first, *rest = fixtures.get("clean")
+    (odd,) = _edited(tmp_path / "b", [first], edit_record)
+    result = check(
+        "--suite",
+        SUITE,
+        "--only-suites",
+        "--github-annotations",
+        "--any-skip",
+        SUITE,
+        stray,
+        odd,
+        *rest,
+    )
+    assert result.returncode == 1, result.stdout
+    lines = result.stdout.splitlines()
+    assert not [line for line in lines if line.startswith("::warning")], lines
+    suite = f"{stray}: suite elsewhere 100%\\n::warning::x is not a --suite"
+    assert f"PROBLEM: {suite}" in lines, lines
+    assert "::error::" + suite.replace("%", "%25") in lines, lines
+    record = "tests/odd 100%\\n::warning::y failed"
+    assert [line for line in lines if line.endswith(record)], lines
+    assert [
+        line
+        for line in annotations(result)
+        if line.endswith(record.replace("%", "%25"))
+    ], lines
 
 
 def test_no_reports_at_all_is_refused(tmp_path):
