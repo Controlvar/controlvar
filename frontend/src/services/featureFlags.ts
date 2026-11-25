@@ -352,6 +352,20 @@ export const FeatureFlagsService = {
   },
 
   /**
+   * `POST /feature-flags/{id}/environments/{target}/promote` (beta): copy the
+   * status, rollout percentage and targeting rules of the flag in `from`
+   * into `target`, and answer the flag's settings in `target` as copied.
+   * Nothing else is copied. Promotion into Production is this route too: the
+   * API writes it through the same code as `PUT /feature-flags/{id}`.
+   */
+  async promote(id: string, target: FlagEnvironment, from: FlagEnvironment): Promise<FlagEnvironmentSettings> {
+    return apiFetch<FlagEnvironmentSettings>(`${BASE}/${id}/environments/${target}/promote`, {
+      method: 'POST',
+      json: { from },
+    });
+  },
+
+  /**
    * `GET /environments/{environment}/feature-flag-settings` (beta): the
    * settings of the given flags in Staging or Development, as one map. The
    * route takes at most {@link ENVIRONMENT_SETTINGS_BATCH} ids, so a longer

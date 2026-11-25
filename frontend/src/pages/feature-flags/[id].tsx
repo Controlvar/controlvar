@@ -53,6 +53,8 @@ import {
   isFlagArchived,
 } from '@/components/feature-flags/ArchivedFlag';
 import { FlagManageSection, FlagStatusChange } from '@/components/feature-flags/FlagManageSection';
+import { PromoteFlag } from '@/components/feature-flags/PromoteFlag';
+import { promotionTarget } from '@/utils/flagPromotion';
 import { RolloutScheduleManager } from '@/components/feature-flags/RolloutScheduleManager';
 import {
   FlagValueFields,
@@ -629,6 +631,8 @@ function FlagInEnvironment({
   // Off there because nothing was ever set there: "Off", with the reason beside it.
   const notConfigured = otherEnvironment !== null && envSettings !== null && !envSettings.configured;
   const environmentLabel = otherEnvironment ? FLAG_ENVIRONMENT_LABELS[otherEnvironment] : null;
+  // Where this environment's settings are promoted to: null in Production.
+  const promotionInto = promotionTarget(environment);
   // In Production the banner says what a change here reaches; a user who
   // cannot change the flag, or a read-only demo, is not editing.
   const showProductionBanner = production && canChange && !demo;
@@ -721,6 +725,18 @@ function FlagInEnvironment({
             </div>
           </div>
           {archived && <ArchivedFlagNote />}
+          {/* Development is promoted to Staging and Staging to Production, by a user who may
+              change the target (the same permission as a change there), never an archived
+              flag. The dialog reads both environments itself. */}
+          {environment && promotionInto && canChange && !demo && !archived && (
+            <PromoteFlag
+              flagId={flag.id}
+              flagKey={flag.key}
+              source={environment}
+              target={promotionInto}
+              onPromoted={() => setChangeCount((n) => n + 1)}
+            />
+          )}
           {demo ? (
             <DemoNote action={DEMO_FLAGS_ACTION} className="mt-4 text-sm text-slate-600" />
           ) : (
