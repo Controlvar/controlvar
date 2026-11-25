@@ -56,9 +56,10 @@ PREVIOUS_CORE_HEAD = "d12cbd384bbe"
 #: ``7b6b4b4fe246`` (when each rollout stage started), ``c448_balance_within``
 #: (balance the split within groups), ``4955571d232c`` (visual experiments),
 #: ``t1812_user_totp`` (two-step sign-in), ``t449_identity_aliases``
-#: (identity aliases) and ``t2011_flag_environments`` (flag environments) find
-#: their objects already built by ``create_all`` and add none.
-CORE_HEAD = "t2011_flag_environments"
+#: (identity aliases), ``t2011_flag_environments`` (flag environments) and
+#: ``t2012_flag_split`` (flag splits) find their objects already built by
+#: ``create_all`` and add none.
+CORE_HEAD = "t2012_flag_split"
 #: Tables that a later core revision's downgrade drops: a downgrade from the
 #: head to this test's target unapplies those revisions too.  ``d29a479daafe``
 #: (#445) drops ``holdout_population``; ``37dcb2969766`` (#440) drops
@@ -79,8 +80,9 @@ LATER_DOWNGRADE_TABLES = {
     "flag_environment_settings",
 }
 #: ``feature_flags`` columns a later core revision's downgrade drops:
-#: ``607c51a59bf5`` (#1497) drops a flag's value type and its two values.
-LATER_DOWNGRADE_COLUMNS = {"value_type", "on_value", "off_value"}
+#: ``607c51a59bf5`` (#1497) drops a flag's value type and its two values;
+#: ``t2012_flag_split`` (#2012) drops its split.
+LATER_DOWNGRADE_COLUMNS = {"value_type", "on_value", "off_value", "split"}
 #: The modules branch's head in this tree, recorded on both sides of every
 #: step here: this file is about the core chain.
 MODULES_HEAD = "modules_0005_redshift"

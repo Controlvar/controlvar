@@ -28,6 +28,9 @@ disagree:
   the API answers 422 first rather than letting that become a 500.
 
 Every message names the field and never the value.
+
+:func:`rule_values` reads the values a flag's targeting rules carry (#2012).
+Storage only: no request accepts one and no evaluation serves one yet.
 """
 
 from __future__ import annotations
@@ -35,7 +38,7 @@ from __future__ import annotations
 import logging
 import math
 from collections.abc import Iterable, Mapping
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic_core import PydanticCustomError
 
@@ -352,3 +355,47 @@ def served_value(flag: Any, enabled: bool) -> Tuple[bool, Any]:
     if pair is None:
         return False, None
     return True, pair[0] if enabled else pair[1]
+
+
+#: The id of the one rule a dashboard-shape value without an id stands for:
+#: ``targeting_adapter.DASHBOARD_RULE_ID``, which is not imported here so that
+#: the adapter can import this module.
+_DASHBOARD_RULE_ID = "dashboard"
+
+
+def rule_values(stored_rules: Any) -> Dict[str, Any]:
+    """``{rule id: value}``: the rules in *stored_rules* that carry a value.
+
+    *stored_rules* is a flag's ``targeting_rules`` as stored, in any shape. A
+    rule carries a value when it has the key ``value``, whatever the key
+    holds; a condition's ``value`` is not one. The shape is told apart as
+    ``targeting_adapter.normalise_targeting_rules`` tells it:
+
+    * the dashboard shape (it has ``groups``) is one rule, whose ``value`` is
+      the top-level key and whose id is the stored ``id`` or ``dashboard``;
+    * the native shape (it has ``rules`` and no ``groups``) has one rule per
+      entry of ``rules``, and ``default_rule``;
+    * nothing else has one: no rules, the legacy list, an object that is
+      neither shape.
+
+    Pure. It does not look at the flag's type, and whether a value may be
+    served is :func:`value_error`'s question, not this one's.
+    """
+    if not isinstance(stored_rules, dict):
+        return {}
+    if "groups" in stored_rules:
+        if "value" not in stored_rules:
+            return {}
+        return {
+            str(stored_rules.get("id") or _DASHBOARD_RULE_ID): stored_rules["value"]
+        }
+    if "rules" not in stored_rules:
+        return {}
+    rules = stored_rules["rules"]
+    native = [*(rules if isinstance(rules, list) else ())]
+    native.append(stored_rules.get("default_rule"))
+    return {
+        str(rule.get("id", "")): rule["value"]
+        for rule in native
+        if isinstance(rule, dict) and "value" in rule
+    }

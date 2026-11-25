@@ -60,7 +60,8 @@ pytestmark = [pytest.mark.integration]
 #: which reached main before it.
 REVISION = "7b6b4b4fe246"
 PREVIOUS_CORE_HEAD = "85dd4796bb8b"
-#: The core head of this tree: ``t2011_flag_environments`` (#2011), whose
+#: The core head of this tree: ``t2012_flag_split`` (#2012), whose downgrade
+#: drops two columns and no table, after ``t2011_flag_environments`` (#2011), whose
 #: downgrade drops ``flag_environment_settings`` and ``api_keys.environment``,
 #: after ``t449_identity_aliases`` (#449), whose downgrade drops
 #: ``identity_aliases``, after ``t1812_user_totp`` (#1812),
@@ -69,7 +70,7 @@ PREVIOUS_CORE_HEAD = "85dd4796bb8b"
 #: ``variants``, after ``c448_balance_within`` (#448), the revision after this
 #: one, whose downgrade drops the table ``balance_group_counters`` and four
 #: columns of ``experiments`` and ``assignments``.
-CORE_HEAD = "t2011_flag_environments"
+CORE_HEAD = "t2012_flag_split"
 #: The core revisions after this one today, newer than release N-1 too: the
 #: walk from the revision graph below must find each of them.
 LATER_REVISIONS = ("c448_balance_within", "4955571d232c", "t1812_user_totp")

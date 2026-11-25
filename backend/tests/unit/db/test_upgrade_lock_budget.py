@@ -60,14 +60,20 @@ class Release:
 
 
 #: Oldest first; a release's walk ends where the next one's starts. A revision
-#: declares the sum of its blocks' bounds. 0.48.0's upgrade starts at 0.47.0's
-#: heads and runs ``t449_identity_aliases``, whose ``SET LOCAL lock_timeout =
-#: '250ms'`` bounds its one wait (behind a concurrent creation of the same
-#: table). 0.49.0's starts at 0.48.0's released heads and runs
+#: declares the sum of its blocks' bounds, leaving out a block on a table that
+#: an earlier revision of the same run creates: no other session can hold a
+#: lock on it, so that block waits for nothing. 0.48.0's upgrade starts at
+#: 0.47.0's heads and runs ``t449_identity_aliases``, whose ``SET LOCAL
+#: lock_timeout = '250ms'`` bounds its one wait (behind a concurrent creation of
+#: the same table). 0.49.0's starts at 0.48.0's released heads and runs
 #: ``t2011_flag_environments``, which has two blocks: ``'500ms'`` for the lock
 #: its new table's foreign key takes on ``feature_flags``, then ``'1500ms'``
-#: for ``api_keys``, 2 s in all; #2012's ``t2012`` adds its 1 s here, for a
-#: planned 0.49.0 sum of 3 s. A tuple of records, not a dict keyed by release:
+#: for ``api_keys``, 2 s in all; then ``t2012_flag_split``, which has two blocks
+#: of ``'1s'``, one for ``feature_flags`` and one for the table
+#: ``t2011_flag_environments`` created, 1 s in all. 0.49.0's sum is 3 s. From a
+#: database already at ``t2011_flag_environments`` (an install from ``main``,
+#: which no release left) both of ``t2012_flag_split``'s blocks can wait, 2 s in
+#: all. A tuple of records, not a dict keyed by release:
 #: ``test_engine_versions_frozen.py`` reads a dict keyed ``N.N.N`` as a table of
 #: stats-engine pins, and these are product releases.
 RELEASES: Tuple[Release, ...] = (
@@ -76,11 +82,12 @@ RELEASES: Tuple[Release, ...] = (
         start_heads=("t1812_user_totp", "modules_0005_redshift"),
         declared={"t449_identity_aliases": 0.25},
     ),
-    # t2011: 500 ms on feature_flags, then 1500 ms on api_keys.
+    # t2011: 500 ms on feature_flags, then 1500 ms on api_keys. t2012: 1 s on
+    # feature_flags.
     Release(
         name="0.49.0",
         start_heads=("t449_identity_aliases", "modules_0005_redshift"),
-        declared={"t2011_flag_environments": 2},
+        declared={"t2011_flag_environments": 2, "t2012_flag_split": 1},
     ),
 )
 
@@ -206,18 +213,21 @@ def test_0_48_0_runs_t449_alone_from_0_47_0_and_declares_a_quarter_second():
     assert entry.declared == {"t449_identity_aliases": 0.25}
 
 
-def test_0_49_0_starts_at_0_48_0s_released_heads_and_t2011_declares_two_seconds():
+def test_0_49_0_starts_at_0_48_0s_released_heads_and_declares_three_seconds():
     """0.48.0's walk now ends at 0.48.0's released heads, which shipped in
     v0.48.0 (``t449_identity_aliases`` and, where the modules branch exists,
     ``modules_0005_redshift``), and 0.49.0's starts there. In both profiles
-    0.49.0's upgrade runs ``t2011_flag_environments`` and declares 2 s, of the
-    planned 3 s with #2012's revision."""
+    0.49.0's upgrade runs ``t2011_flag_environments``, which declares 2 s, and
+    ``t2012_flag_split``, which declares 1 s."""
     entry = release("0.49.0")
     assert entry.start_heads == ("t449_identity_aliases", "modules_0005_redshift")
     assert end_heads("0.48.0") == entry.start_heads
-    assert walk(_script(), entry, end_heads("0.49.0")) == ["t2011_flag_environments"]
-    assert entry.declared == {"t2011_flag_environments": 2}
-    assert sum(entry.declared.values()) == 2
+    assert walk(_script(), entry, end_heads("0.49.0")) == [
+        "t2011_flag_environments",
+        "t2012_flag_split",
+    ]
+    assert entry.declared == {"t2011_flag_environments": 2, "t2012_flag_split": 1}
+    assert sum(entry.declared.values()) == 3
 
 
 def test_a_declared_bound_is_a_positive_number_or_zero():

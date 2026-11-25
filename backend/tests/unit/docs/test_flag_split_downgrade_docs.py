@@ -1,0 +1,175 @@
+"""Every documented downgrade target below ``t2012_flag_split`` says it refuses (#2012).
+
+``test_documented_downgrade_targets.py`` already holds a documented target to
+saying that it drops the two ``split`` columns (the revision's downgrade calls
+``drop_column``). What an operator most needs to know about this downgrade is
+the other thing it does: it refuses while any flag has a split or a rule value,
+so a rollback to the release before stops there until they are cleared. So
+wherever the self-hosting migrations page, the rollback runbook or the Database
+Migration workflow's help names a target that unapplies this revision, the same
+section (for the workflow, the same line) names ``t2012_flag_split`` with
+"refuse", "refuses", "refused" or "refusing" within 200 characters of it. Same
+reader of targets, same planner, same window.
+"""
+
+from __future__ import annotations
+
+import re
+from typing import Dict, List
+
+import pytest
+
+from backend.tests.unit.docs.test_documented_downgrade_targets import (
+    ANNOUNCE_WINDOW,
+    DB_MIGRATE,
+    MIGRATIONS_PAGE,
+    ROLLBACK_RUNBOOK,
+    Mention,
+    _markdown_sections,
+    _script,
+    mentions,
+    unapplied,
+)
+
+pytestmark = [pytest.mark.unit, pytest.mark.regression]
+
+REVISION = "t2012_flag_split"
+#: "refuse", "refuses", "refused" or "refusing", as a word.
+_REFUSE_WORD = r"\brefus(?:e|es|ed|ing)\b"
+
+
+def announces_the_refusal(context: str) -> bool:
+    """Whether *context* names this revision with a refusing word within
+    ``ANNOUNCE_WINDOW`` characters, in either order. Both quantifiers are
+    bounded."""
+    rev = re.escape(REVISION)
+    window = f".{{0,{ANNOUNCE_WINDOW}}}"
+    pattern = rf"\b{rev}\b{window}{_REFUSE_WORD}|{_REFUSE_WORD}{window}\b{rev}\b"
+    return re.search(pattern, context, re.S | re.I) is not None
+
+
+def crossings(found: List[Mention]) -> List[Mention]:
+    """The documented targets whose downgrade unapplies this revision."""
+    script = _script()
+    known = {r.revision for r in script.walk_revisions()}
+    return [
+        mention
+        for mention in found
+        if mention.target in known and REVISION in unapplied(script, mention.target)
+    ]
+
+
+def unannounced(found: List[Mention]) -> Dict[str, List[str]]:
+    """``{"source": [targets]}`` that cross this revision and do not say so."""
+    problems: Dict[str, List[str]] = {}
+    for mention in crossings(found):
+        if not announces_the_refusal(mention.context):
+            targets = problems.setdefault(mention.source, [])
+            if mention.target not in targets:
+                targets.append(mention.target)
+    return problems
+
+
+def test_each_document_names_a_target_that_crosses_this_revision():
+    """Without this, a reader that found no crossing would pass the check
+    below having checked nothing."""
+    sources = {mention.source for mention in crossings(mentions())}
+    expected = {"migrations.md", "rollback-runbook.md"}
+    if DB_MIGRATE.is_file():
+        expected.add("db-migrate.yml")
+    assert sources == expected, sources
+
+
+def test_every_target_that_crosses_this_revision_says_it_refuses():
+    problems = unannounced(mentions())
+    assert problems == {}, (
+        f"A documented downgrade target unapplies {REVISION}, whose downgrade "
+        "refuses while any flag has a split or a rule value, and the document "
+        f"does not say so where it names the target: {problems}"
+    )
+
+
+def test_a_target_whose_section_leaves_the_revision_out_is_reported():
+    """The check fires on a section that names a crossing target and says
+    nothing about this revision, and on one that names it for its drop alone."""
+    for page in (
+        "## Undo\n\n```bash\nalembic downgrade t2011_flag_environments\n```\n",
+        "## Undo\n\nThis runs t2012_flag_split's downgrade, which drops two "
+        "columns.\n\n```bash\nalembic downgrade t2011_flag_environments\n```\n",
+    ):
+        found = [m for m in mentions(page=page) if m.source == "migrations.md"]
+        assert [m.target for m in found] == ["t2011_flag_environments"]
+        assert unannounced(found)["migrations.md"] == ["t2011_flag_environments"]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "t2012_flag_split's downgrade refuses while a flag has a split.",
+        "It refused to go on: t2012_flag_split.",
+    ],
+)
+def test_a_refusing_word_next_to_the_revision_announces_it(text):
+    assert announces_the_refusal(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "t2012_flag_split is cited. Its refusal is described elsewhere.",
+        "t2012_flag_split " + "x" * (ANNOUNCE_WINDOW + 1) + " refuses.",
+    ],
+)
+def test_a_distant_or_missing_refusing_word_does_not_announce_it(text):
+    assert not announces_the_refusal(text)
+
+
+def _section(path, heading: str) -> str:
+    """The section of *path* under *heading*, on one line."""
+    (found,) = [
+        section
+        for section in _markdown_sections(path.read_text(encoding="utf-8"))
+        if section.startswith(f"### {heading}\n")
+    ]
+    return " ".join(found.split())
+
+
+#: What the runbook's and the migrations page's own sections tell an operator,
+#: in the runbook's words: what is dropped, that it refuses and changes
+#: nothing, when to clear, and what the release still serving answers.
+RUNBOOK_SECTION = "Rolling back past flag splits"
+PAGE_SECTION = (
+    "`t2012_flag_split` adds a split to each flag and each flag environment setting"
+)
+
+
+@pytest.mark.parametrize(
+    "said",
+    [
+        "drops `feature_flags.split` and `flag_environment_settings.split`",
+        "in any environment: it names those flags and changes nothing",
+        "while the release that wrote them is still serving (the database is "
+        "downgraded before the API is rolled back), or restore the backup taken "
+        "before the upgrade",
+        "answers `500` to every flag evaluation and flag read until the API is "
+        "rolled back",
+    ],
+)
+def test_the_runbooks_section_says_what_an_operator_must_know(said):
+    assert said in _section(ROLLBACK_RUNBOOK, RUNBOOK_SECTION)
+
+
+def test_the_migrations_page_shows_the_refusal_the_migration_raises():
+    """The sample in the page is the start of the refusal's own text."""
+    revision = _script().get_revision(REVISION).module
+    sample = revision._in_use_refusal(
+        {"checkout-copy": ["production"], "price-tier": ["development", "staging"]}
+    ).replace(f"schema {revision._SCHEMA}:", "schema experimentation:")
+    (shown,) = [
+        line
+        for line in MIGRATIONS_PAGE.read_text(encoding="utf-8").splitlines()
+        if line.startswith("Refusing to downgrade schema experimentation: t2012")
+    ]
+    assert shown.endswith(" ...")
+    assert sample.startswith(shown.removesuffix(" ..."))
+    assert shown in _section(MIGRATIONS_PAGE, PAGE_SECTION)

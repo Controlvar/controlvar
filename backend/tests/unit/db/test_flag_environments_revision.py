@@ -2,11 +2,11 @@
 
 * Its id fits ``alembic_version.version_num`` (32 characters), its
   ``down_revision`` is the literal ``t449_identity_aliases`` (0.48.0's core
-  head), and the heads are exactly this revision and, in a full tree, the
-  modules head.
+  head), and its only child is ``t2012_flag_split`` (#2012).
 * The migration creates the model's table (columns, types, nullability,
   server defaults, the named checks, the unique constraint, the cascading
-  foreign key and the ``created_at`` index) and adds ``api_keys.environment``
+  foreign key and the ``created_at`` index), all but the column a later
+  revision adds (``LATER_COLUMNS``), and adds ``api_keys.environment``
   with the model's type, default and check.
 * The two bounds: ``_FLAGS_LOCK_TIMEOUT`` is ``500ms`` and
   ``_KEYS_LOCK_TIMEOUT`` ``1500ms``, each written once and never a zero form,
@@ -51,6 +51,9 @@ REVISION = "t2011_flag_environments"
 REPO_ROOT = Path(__file__).resolve().parents[4]
 #: What a test schema is called while these tests import the models.
 SCHEMA = FlagEnvironmentSetting.__table__.schema
+#: The model's columns of the side table that a later revision adds:
+#: ``t2012_flag_split`` (#2012), held by ``test_flag_split_revision.py``.
+LATER_COLUMNS = {"split"}
 
 
 def _path() -> Path:
@@ -79,11 +82,18 @@ def test_it_extends_0_48_0s_core_head_and_fits_the_version_table():
     assert len(revision.revision) <= 32
 
 
-def test_the_heads_are_this_revision_and_in_a_full_tree_the_modules_head():
-    expected = {REVISION}
-    if (REPO_ROOT / "modules").is_dir():
-        expected.add("modules_0005_redshift")
-    assert set(_script().get_heads()) == expected
+def test_this_revision_is_extended_by_t2012_flag_split_and_nothing_else():
+    """``t2012_flag_split`` (#2012) is its only child, and the heads test is
+    the core head's now (``test_flag_split_revision.py``)."""
+    script = _script()
+    children = [
+        r.revision
+        for r in script.walk_revisions()
+        if r.down_revision == REVISION
+        or (isinstance(r.down_revision, tuple) and REVISION in r.down_revision)
+    ]
+    assert children == ["t2012_flag_split"]
+    assert REVISION not in script.get_heads()
 
 
 class _Recorder:
@@ -188,8 +198,11 @@ def test_the_migration_creates_the_models_table(monkeypatch):
     assert name == "flag_environment_settings" == model.name
     made = sa.Table(name, sa.MetaData(), *items, schema=kwargs["schema"])
     assert made.schema == model.schema
-    assert list(made.columns.keys()) == list(model.columns.keys())
-    assert list(model.columns.keys()) == [
+    assert LATER_COLUMNS <= set(model.columns.keys())
+    model_columns = [c for c in model.columns if c.name not in LATER_COLUMNS]
+    names = [c.name for c in model_columns]
+    assert list(made.columns.keys()) == names
+    assert names == [
         "feature_flag_id",
         "environment",
         "is_active",
@@ -199,7 +212,7 @@ def test_the_migration_creates_the_models_table(monkeypatch):
         "created_at",
         "updated_at",
     ]
-    for column in model.columns:
+    for column in model_columns:
         created = made.columns[column.name]
         assert type(created.type).__name__ == type(column.type).__name__, column.name
         assert getattr(created.type, "length", None) == getattr(

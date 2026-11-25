@@ -28,6 +28,7 @@ from typing import get_args
 
 import pytest
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import JSONB
 
 from backend.app.core import flag_environments
 from backend.app.core.flag_environments import (
@@ -280,6 +281,55 @@ def test_a_side_row_of_another_environment_or_flag_is_refused():
         flag_in_environment(flag, other, STAGING)
 
 
+#: A production split and a staging one, told apart by their values.
+PRODUCTION_SPLIT = [
+    {"value": "red", "weight": 50},
+    {"value": "green", "weight": 30},
+    {"value": "blue", "weight": 20},
+]
+STAGING_SPLIT = [
+    {"value": "red", "weight": 10},
+    {"value": "green", "weight": 10},
+    {"value": "blue", "weight": 80},
+]
+
+
+@pytest.mark.regression
+def test_each_environment_has_its_own_split_and_no_side_row_has_none():
+    """The view serves the side row's split, never the flag row's: ``split`` is
+    a column of both, and an attribute the view did not carry would be read
+    from the flag row."""
+    flag = _flag(split=PRODUCTION_SPLIT)
+    setting = _setting(flag, STAGING)
+    setting.split = STAGING_SPLIT
+    staging = flag_in_environment(flag, setting, STAGING)
+    development = flag_in_environment(flag, None, DEVELOPMENT)
+    assert staging.split == STAGING_SPLIT, "staging answered production's split"
+    assert development.split is None, "development answered production's split"
+    # Production's is the flag row's, and is what it was.
+    assert flag_in_environment(flag, None, PRODUCTION).split == PRODUCTION_SPLIT
+    assert flag.split == PRODUCTION_SPLIT
+
+
+@pytest.mark.regression
+def test_a_staging_row_without_a_split_has_none_whatever_productions_is():
+    flag = _flag(split=PRODUCTION_SPLIT)
+    view = flag_in_environment(flag, _setting(flag, STAGING), STAGING)
+    assert view.split is None, "staging answered production's split"
+    with pytest.raises(AttributeError, match="read-only"):
+        view.split = STAGING_SPLIT
+    assert flag.split == PRODUCTION_SPLIT
+
+
+def test_the_split_columns_are_nullable_json_with_no_default():
+    for model in (FeatureFlag, FlagEnvironmentSetting):
+        column = model.__table__.columns["split"]
+        assert isinstance(column.type, JSONB), model.__name__
+        assert column.type.none_as_null is True, model.__name__
+        assert column.nullable is True, model.__name__
+        assert column.default is None and column.server_default is None, model.__name__
+
+
 def test_the_view_works_on_duck_typed_rows():
     """The ruleset route loads columns, not models: a namespace with the same
     attributes is a flag here too."""
@@ -292,6 +342,7 @@ def test_the_view_works_on_duck_typed_rows():
         is_active=True,
         targeting_rules=None,
         rollout_percentage=60,
+        split=None,
     )
     view = flag_in_environment(flag, setting, STAGING)
     assert (view.status, view.rollout_percentage, view.key) == (
@@ -330,8 +381,23 @@ def test_the_per_environment_fields_are_the_side_rows_columns():
     columns = [c.name for c in FlagEnvironmentSetting.__table__.columns]
     assert set(SETTING_IDENTITY_COLUMNS) <= set(columns)
     served = [c for c in columns if c not in SETTING_IDENTITY_COLUMNS]
-    assert sorted(served) == ["is_active", "rollout_percentage", "targeting_rules"]
-    assert ENVIRONMENT_FIELDS == ("status", "targeting_rules", "rollout_percentage")
+    assert sorted(served) == [
+        "is_active",
+        "rollout_percentage",
+        "split",
+        "targeting_rules",
+    ]
+    assert ENVIRONMENT_FIELDS == (
+        "status",
+        "targeting_rules",
+        "rollout_percentage",
+        "split",
+    )
+    # Exactly: the side row's columns that are not its identity, is_active read
+    # as status, computed from the model.
+    assert set(ENVIRONMENT_FIELDS) == {
+        "status" if column == "is_active" else column for column in served
+    }
     assert set(FlagInEnvironment.__slots__) >= set(ENVIRONMENT_FIELDS)
     for column in served:
         if column != "is_active":

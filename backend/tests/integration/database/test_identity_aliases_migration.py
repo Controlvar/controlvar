@@ -27,8 +27,8 @@ run the documented commands. Then:
    own ``statement_timeout`` and asserts no elapsed time;
 6. the downgrade drops the table with every link, leaves assignments and
    events, and an upgrade afterwards creates the table empty;
-7. ``alembic heads`` names exactly the core head (``t2011_flag_environments``
-   since #2011, which extends this revision) and the modules head.
+7. ``alembic heads`` names exactly the core head (``t2012_flag_split`` since
+   #2012, two revisions after this one) and the modules head.
 """
 
 from __future__ import annotations
@@ -54,13 +54,15 @@ pytestmark = [pytest.mark.integration]
 #: This revision, and the core revision it extends (0.47.0's core head).
 REVISION = "t449_identity_aliases"
 PREVIOUS_CORE_HEAD = "t1812_user_totp"
-#: The core head of this tree: ``t2011_flag_environments`` (#2011), the
-#: revision after this one, whose downgrade drops ``flag_environment_settings``
-#: and ``api_keys.environment``.
-CORE_HEAD = "t2011_flag_environments"
+#: The core head of this tree: ``t2012_flag_split`` (#2012), whose downgrade
+#: drops two columns and no table, after ``t2011_flag_environments`` (#2011),
+#: the revision after this one, whose downgrade drops
+#: ``flag_environment_settings`` and ``api_keys.environment``.
+CORE_HEAD = "t2012_flag_split"
 MODULES_HEAD = "modules_0005_redshift"
 #: Tables a later core revision's downgrade drops: a downgrade from the head to
-#: this test's target unapplies ``t2011_flag_environments`` too.
+#: this test's target unapplies ``t2011_flag_environments`` and
+#: ``t2012_flag_split`` too.
 LATER_DOWNGRADE_TABLES = {"flag_environment_settings"}
 
 PREVIOUS_ROWS = {

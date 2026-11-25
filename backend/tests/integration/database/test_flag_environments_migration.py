@@ -57,7 +57,8 @@ heads, in each profile, and run the documented commands. Then:
     previous release, are answered as before to a key it created, in a
     ``development`` and in a ``production`` deployment, and the ruleset and
     its ETag are the same bytes;
-12. ``alembic heads`` names exactly this revision and the modules head.
+12. ``alembic heads`` names exactly the core head (``t2012_flag_split`` since
+    #2012, which extends this revision) and the modules head.
 """
 
 from __future__ import annotations
@@ -111,9 +112,16 @@ pytestmark = [pytest.mark.integration]
 #: This revision, and the core revision it extends (0.48.0's core head).
 REVISION = "t2011_flag_environments"
 PREVIOUS_CORE_HEAD = "t449_identity_aliases"
-#: The core head of this tree.
-CORE_HEAD = "t2011_flag_environments"
+#: The core head of this tree: ``t2012_flag_split`` (#2012), the revision after
+#: this one, whose downgrade drops ``feature_flags.split`` and
+#: ``flag_environment_settings.split``.
+CORE_HEAD = "t2012_flag_split"
 MODULES_HEAD = "modules_0005_redshift"
+#: The core revisions after this one, which the previous release does not have
+#: either, and the side table's columns they add: this file compares what this
+#: revision makes, and ``test_flag_split_migration.py`` compares ``split``.
+LATER_REVISIONS = ("t2012_flag_split",)
+LATER_COLUMNS = {"split"}
 
 PREVIOUS_ROWS = {
     CORE: {PREVIOUS_CORE_HEAD},
@@ -290,8 +298,10 @@ def _indexes(engine, schema: str, table: str = TABLE) -> set[str]:
 
 
 def _definition(engine, schema: str) -> tuple:
+    """What this revision makes; a later revision's column of the side table is
+    left out (its place differs by path: last in an upgraded database)."""
     return (
-        _columns(engine, schema),
+        [c for c in _columns(engine, schema) if c[0] not in LATER_COLUMNS],
         _constraints(engine, schema),
         _indexes(engine, schema),
         _key_column(engine, schema),
@@ -364,11 +374,14 @@ def _bootstrapped(profile, schema, tmp_path):
 
 def _to_previous_release(engine, profile, schema) -> None:
     """Turn a bootstrapped *schema* into what 0.48.0 left: no side table, no
-    key column or check, 0.48.0's heads."""
+    key column or check, nothing a later revision adds, 0.48.0's heads."""
     with engine.begin() as conn:
         # IF EXISTS: a plant that removes them from the model leaves create_all
         # without them, and the test must reach the assertion that says so.
         conn.execute(text(f'DROP TABLE IF EXISTS "{schema}".{TABLE}'))
+        conn.execute(
+            text(f'ALTER TABLE "{schema}".feature_flags DROP COLUMN IF EXISTS split')
+        )
         conn.execute(
             text(
                 f'ALTER TABLE "{schema}".api_keys DROP CONSTRAINT IF EXISTS {KEY_CHECK}'
@@ -392,8 +405,8 @@ def _at_this_revision(test_db, profile, schema, tmp_path):
     """A schema whose ``alembic_version`` is this revision's, named, however
     far the tree's head is beyond it: a downgrade from here runs this
     revision's downgrade and no other. ``create_all`` built the head's
-    objects; a later revision's stay, and nothing this revision's downgrade
-    runs reads or drops one."""
+    objects; a later revision's stay, but for its column of the side table,
+    which goes with the table."""
     tree = _bootstrapped(profile, schema, tmp_path)
     _stamp(test_db, schema, REVISION_ROWS[profile])
     assert _rows(test_db, schema) == REVISION_ROWS[profile]
@@ -1432,6 +1445,13 @@ _MODEL_DECLARATIONS = {
             ),
             "",
         ),
+        (
+            re.compile(
+                r"(?ms)^    # The flag's split in production \(#2012\).*?"
+                r"^    split = Column\([^\n]*\)\n"
+            ),
+            "",
+        ),
     ),
     ("backend", "app", "models", "api_key.py"): (
         (
@@ -1519,9 +1539,9 @@ _WITHOUT_SIDE_ROWS = {
 
 
 def _previous_release(profile: str, tmp_path) -> Path:
-    """Release N-1 (0.48.0): a copy of this tree without the revision, the
-    models' additions and the environment routes, where every key is a
-    production key and nothing reads or writes a side row.
+    """Release N-1 (0.48.0): a copy of this tree without the revision and the
+    ones after it, the models' additions and the environment routes, where every
+    key is a production key and nothing reads or writes a side row.
     ``core/flag_environments.py`` stays: the names of the environments, and a
     view of a side row that nothing left in the copy makes."""
     destination = tmp_path / "release-n-minus-1"
@@ -1530,8 +1550,9 @@ def _previous_release(profile: str, tmp_path) -> Path:
     else:
         tree = tree_profiles.core_tree(destination)
     versions = tree / "backend" / "app" / "db" / "migrations" / "versions"
-    (revision_file,) = versions.glob(f"{REVISION}_*.py")
-    revision_file.unlink()
+    for revision in (REVISION, *LATER_REVISIONS):
+        (revision_file,) = versions.glob(f"{revision}_*.py")
+        revision_file.unlink()
     for parts, (line, stub) in _WITHOUT_SIDE_ROWS.items():
         module = tree.joinpath(*parts)
         assert line in module.read_text(encoding="utf-8"), f"{module}: update it"

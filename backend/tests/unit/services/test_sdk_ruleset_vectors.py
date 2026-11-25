@@ -9,6 +9,9 @@
   SDK has to answer itself, are pinned here. A generator that stops marking
   cases ``must_local`` -- or loses a class of them -- fails, and so does an SDK
   that defers everything (its job asserts the same count).
+* **What was there before.** The flags with neither a split nor a rule value,
+  their entries and their cases are pinned by digest (#2012): a regeneration
+  that changes one of them fails even though it matches the server.
 * **One operator list.** The builder's local operators equal the list in the
   file and the launch set, literally.
 * **Coherence.** A reference local evaluator, written from the ruleset
@@ -33,7 +36,7 @@ from typing import Any, Dict, Optional
 
 import pytest
 
-from backend.app.core.flag_values import BOOLEAN, VALUE_TYPES
+from backend.app.core.flag_values import BOOLEAN, VALUE_TYPES, rule_values
 from backend.app.services import sdk_ruleset
 from backend.scripts import generate_ruleset_vectors as generator
 
@@ -116,6 +119,38 @@ def test_the_counts_are_pinned(vectors):
     }
     assert recount == vectors["counts"]
     assert vectors["counts"] == EXPECTED_COUNTS
+
+
+def without_split_or_rule_value(vectors: Dict[str, Any]) -> Dict[str, Any]:
+    """The part of the file about flags with neither a split nor a rule value:
+    their stored rows, their ruleset entries and their cases, in file order.
+    Today that is all of it (#2012 stores both and serves neither)."""
+    stored = [
+        flag
+        for flag in vectors["stored_flags"]
+        if "split" not in flag and not rule_values(flag["targeting_rules"])
+    ]
+    keys = {flag["key"] for flag in stored}
+    return {
+        "stored_flags": stored,
+        "entries": [e for e in vectors["ruleset"]["flags"] if e["key"] in keys],
+        "cases": [case for case in vectors["cases"] if case["flag"] in keys],
+    }
+
+
+@pytest.mark.regression
+def test_the_flags_without_a_split_or_a_rule_value_are_what_they_were(vectors):
+    """Regenerating the file absorbs a change to every entry already in it, and
+    the drift test above then passes. This holds the 161 flags, their entries
+    and their 2242 cases, byte for byte, to what they were before any flag had
+    a split or a rule value (#2012): adding such flags to the corpus leaves it
+    alone, and changing what another flag is sent or answered does not."""
+    part = without_split_or_rule_value(vectors)
+    sizes = {name: len(items) for name, items in part.items()}
+    assert sizes == {"stored_flags": 161, "entries": 161, "cases": 2242}
+    text = json.dumps(part, separators=(",", ":"))
+    digest = hashlib.sha256(text.encode("ascii")).hexdigest()
+    assert digest == "81100959e800f9e25cab996892a66914d283340cd42f0a111a8849dd65b2c10c"
 
 
 def test_the_local_operator_list_is_one_list(vectors):

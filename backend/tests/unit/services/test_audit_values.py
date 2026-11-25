@@ -117,6 +117,7 @@ FLAG_COLUMNS_NOT_AUDITED = {
     "default_value": "always false (D40); deprecated, dropped after launch",
     "tags": "labels, not behaviour",
     "workspace_id": "the workspaces module's column; nothing in the core reads it",
+    "split": "no request sets it yet (#2012); recorded by name once one does",
 }
 
 
