@@ -198,7 +198,9 @@ class TestScope:
         key = _key(client, developer, ["sdk:ruleset"])["key"]
         developer.is_active = False
         db_session.commit()
-        assert _get(client, key).status_code == 401
+        response = _get(client, key)
+        assert response.status_code == 401
+        assert response.json() == {"detail": "Invalid API Key"}
 
     def test_overriding_get_api_key_does_not_bypass_the_scope(self, client, developer):
         plain = _key(client, developer)["key"]
