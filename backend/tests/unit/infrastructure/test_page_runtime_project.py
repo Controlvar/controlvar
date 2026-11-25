@@ -201,6 +201,34 @@ def test_the_counts_are_checked_after_the_run() -> None:
     assert check > run, "the counts are checked before the run"
 
 
+def test_the_two_json_reports_are_kept_as_an_artifact_on_every_run() -> None:
+    steps = _browser_e2e_steps()
+    check = _one_step(
+        steps, "scripts/check_page_runtime_run.py", "checks the page-runtime counts"
+    )
+    kept = _named(steps, "Keep the page-runtime JSON reports")
+    assert kept > check, "the reports are kept before the check has run"
+    step = steps[kept]
+    assert step["uses"] == "actions/upload-artifact@v7", step["uses"]
+    # Not failure(): a passing run keeps them too. Not !cancelled(): a run
+    # cancelled at its time limit leaves a partial report worth keeping.
+    assert step["if"] == "${{ always() }}", step.get("if")
+    assert "continue-on-error" not in step
+    with_ = step["with"]
+    paths = [p for p in with_["path"].splitlines() if p.strip()]
+    assert paths == [
+        "${{ runner.temp }}/page-runtime-list.json",
+        "${{ runner.temp }}/page-runtime-run.json",
+    ], paths
+    assert with_["retention-days"] == 7, with_["retention-days"]
+    assert with_["if-no-files-found"] == "warn", with_["if-no-files-found"]
+    assert with_["overwrite"] is True, with_
+    # The job's own classification still skips it on a docs-only change.
+    job = yaml.safe_load(PR_QA_GATE.read_text(encoding="utf-8"))["jobs"]["browser-e2e"]
+    assert job["name"] == "Browser E2E"
+    assert "docs_only != 'true'" in job["if"], job["if"]
+
+
 def test_no_page_runtime_step_can_be_skipped_or_ignored() -> None:
     steps = _browser_e2e_steps()
     for needle in (

@@ -1053,6 +1053,23 @@ jobs:
         run: |
           python3 scripts/check_page_runtime_run.py "$RUNNER_TEMP/page-runtime-list.json" \
             "$RUNNER_TEMP/page-runtime-run.json" frontend/tests/e2e
+      # Kept for 7 days on every run, passed, failed or cancelled, so a reader
+      # can open the listing and the run report the check above compared. A run
+      # cancelled at its time limit leaves a partial run report that still shows
+      # which test was running; whatever reads it refuses an incomplete one.
+      # overwrite: a re-run of the job reuses the artifact name. A missing file
+      # is a warning here; whatever reads the report refuses a missing one.
+      - name: Keep the page-runtime JSON reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: page-runtime-reports
+          path: |
+            ${{ runner.temp }}/page-runtime-list.json
+            ${{ runner.temp }}/page-runtime-run.json
+          retention-days: 7
+          if-no-files-found: warn
+          overwrite: true
 
       # --- Two-step sign-in required for a role (#1812, U9 of PR 4). A second
       # API process on :8002 with LOCAL_AUTH_2FA_REQUIRED_ROLES=ANALYST, the
