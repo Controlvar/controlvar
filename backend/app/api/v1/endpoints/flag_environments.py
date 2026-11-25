@@ -69,7 +69,7 @@ from backend.app.schemas.flag_environment import (
     FlagPromotion,
 )
 from backend.app.services.audit_service import AuditService, audit_changes
-from backend.app.services.feature_flag_service import FeatureFlagService
+from backend.app.services.feature_flag_service import KEEP_SPLIT, FeatureFlagService
 from backend.app.services.flag_environment_service import (
     FlagEnvironmentService,
     audit_setting,
@@ -139,10 +139,16 @@ def _readable_flag(db: Session, flag_id: UUID, current_user: User) -> FeatureFla
     return flag
 
 
+def _as_requested(changes: Dict[str, Any]) -> Dict[str, Any]:
+    """The part of *changes* a request can send: all but the split, which only
+    a promotion's changes have (#2012)."""
+    return {name: value for name, value in changes.items() if name != "split"}
+
+
 def _rechecked(changes: Dict[str, Any]) -> None:
     """Refuse settings a PUT would refuse, with the PUT's own 422."""
     try:
-        FlagEnvironmentUpdate(**changes)
+        FlagEnvironmentUpdate(**_as_requested(changes))
     except ValidationError as refused:
         raise RequestValidationError(
             [
@@ -222,7 +228,10 @@ def _save(
                 record_change(None)
 
         updated_row = FeatureFlagService(db).update_feature_flag(
-            flag, FeatureFlagUpdate(**changes), record=record
+            flag,
+            FeatureFlagUpdate(**_as_requested(changes)),
+            record=record,
+            split=changes.get("split", KEEP_SPLIT),
         )
         return FlagEnvironmentSettings.of(updated_row, None, PRODUCTION)
     except ArchivedFlagError:

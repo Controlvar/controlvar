@@ -1027,15 +1027,11 @@ Until every API container or pod of this release has been replaced, each
 answers `500` to every request that presents an API key, production keys
 included: the SDKs it serves get errors from evaluation
 (`/api/v1/feature-flags/evaluate/{key}`) and from the ruleset
-(`/api/v1/sdk/ruleset`). The dashboard's flag list (`GET /api/v1/feature-flags/`)
-answers `500` too once a flag is old enough to be stale. Deleting a flag,
-archiving or deleting a segment and listing a segment's experiments answer `500`,
-as does every route that reads or changes a flag's staging or development
-settings, its list of environments included, and the signed-in API key list,
-create and delete; a bulk archive answers `200` with every flag failed; reading,
-updating and deactivating a flag, a bulk disable and a flag's production
-environment `PUT` still answer `200`. Start the previous release straight after
-the downgrade.
+(`/api/v1/sdk/ruleset`). `t2012_flag_split` is undone first, so every flag
+read and flag change answers `500` too, the dashboard's flag list included, and a
+bulk toggle `200` with every flag failed. Archiving or deleting a segment and
+listing a segment's experiments answer `500`, as do the signed-in API key list,
+create and delete. Start the previous release straight after the downgrade.
 
 ### `t2012_flag_split` adds a split to each flag and each flag environment setting
 
@@ -1084,7 +1080,7 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrad
 A downgrade that also undoes `t2011_flag_environments` is one run. It holds
 `feature_flags` while it waits for `api_keys`, and an SDK request reads
 `api_keys` first, so the two can deadlock: the downgrade stops with nothing
-changed, and is run again, or the SDK requests waiting then fail.
+changed, and is run again, or the SDK requests waiting then fail, or both.
 
 On Helm, run the same command in an API pod with `kubectl exec`.
 
@@ -1092,8 +1088,12 @@ Downgrading the database first, with this release still running, is the only
 order under Docker Compose and Helm
 ([An Older Image Against a Newer Database](#an-older-image-against-a-newer-database)).
 Once the downgrade has committed, this release answers `500` to every flag
-evaluation and flag read until the API is rolled back. Start the previous
-release straight after the downgrade.
+evaluation, flag read and flag change, and to a ruleset request with a staging
+or development key, until the API is rolled back. A bulk toggle answers `200`
+with every flag failed, and a ruleset request with a production key is still
+answered, unless the run also undoes `t2011_flag_environments`: then every
+request that presents an API key answers `500`. Start the previous release
+straight after the downgrade.
 
 Roll back to a specific revision:
 

@@ -881,7 +881,7 @@ def test_promotion_copies_exactly_the_per_environment_fields():
     or named an identity column."""
     columns = {c.name for c in FlagEnvironmentSetting.__table__.columns}
     copied = columns - set(SETTING_IDENTITY_COLUMNS)
-    assert copied == {"is_active", "rollout_percentage", "targeting_rules"}
+    assert copied == {"is_active", "rollout_percentage", "targeting_rules", "split"}
     assert set(service.SETTING_FIELDS) == copied
     assert set(service.NOT_CONFIGURED) == copied
     flag = FeatureFlag(
@@ -1076,6 +1076,264 @@ def test_a_promotion_checks_the_rules_again(
         assert response.json() == put.json()
     assert _state(fresh, flag.id) == before
     assert _entries(fresh, flag.id) == []
+
+
+# --- promotion and the split (#2012) ------------------------------------------
+
+#: A split per environment, no two the same. No request sets one: these are
+#: stored through the models.
+SPLITS = {
+    "production": [{"value": "red", "weight": 50}, {"value": "blue", "weight": 50}],
+    "staging": [{"value": "red", "weight": 10}, {"value": "blue", "weight": 90}],
+    "development": None,
+}
+
+
+def _flag_with_splits(db_session, owner, splits=SPLITS, **columns):
+    """A string flag configured in every environment, with *splits*; the rest of
+    its settings are *columns*, or the same everywhere."""
+    settings_in = {"status": ACTIVE, "rollout": 20, "rules": _rules(), **columns}
+    flag = _flag(
+        db_session,
+        owner,
+        **settings_in,
+        value_type="string",
+        on_value="on",
+        off_value="off",
+        split=splits["production"],
+    )
+    for name in NON_PRODUCTION:
+        row = _setting(db_session, flag, name, True, 20, _rules())
+        row.split = splits[name]
+    db_session.commit()
+    return flag
+
+
+def _splits(fresh, flag_id):
+    """``{environment: split}`` as stored; a JSON null is not SQL NULL."""
+    session = fresh()
+    try:
+        rows = session.execute(
+            text(
+                "SELECT 'production', split::text FROM feature_flags WHERE id = :id "
+                "UNION ALL SELECT environment, split::text "
+                "FROM flag_environment_settings WHERE feature_flag_id = :id"
+            ),
+            {"id": flag_id},
+        ).all()
+    finally:
+        session.close()
+    return {
+        name: "JSON null" if stored == "null" else stored and json.loads(stored)
+        for name, stored in rows
+    }
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("source, target", PAIRS, ids=lambda v: v)
+def test_promotion_copies_the_split_and_changes_no_other(
+    client, fresh, db_session, developer, source, target
+):
+    flag = _flag_with_splits(db_session, developer)
+    assert _splits(fresh, flag.id) == SPLITS
+    response = _promote(client, developer, flag.id, source, target)
+    assert response.status_code == 200, response.text
+    assert "split" not in response.json()
+    assert _splits(fresh, flag.id) == {**SPLITS, target: SPLITS[source]}
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("stored", [SPLITS["production"], None], ids=["split", "none"])
+@pytest.mark.parametrize(
+    "source, target", [pair for pair in PAIRS if pair[1] != "production"], ids=str
+)
+def test_promoting_into_an_environment_nobody_configured_copies_the_split(
+    client, fresh, db_session, developer, source, target, stored
+):
+    """The target has no side row yet: the promotion makes it."""
+    flag = _flag(
+        db_session,
+        developer,
+        ACTIVE,
+        20,
+        split=stored if source == "production" else None,
+    )
+    if source != "production":
+        row = _setting(db_session, flag, source, True, 20)
+        row.split = stored
+        db_session.commit()
+    before = _splits(fresh, flag.id)
+    assert target not in before
+    response = _promote(client, developer, flag.id, source, target)
+    assert response.status_code == 200, response.text
+    assert _splits(fresh, flag.id) == {**before, target: stored}
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("state", [INACTIVE, ARCHIVED], ids=["off", "archived"])
+@pytest.mark.parametrize("source, target", PAIRS, ids=lambda v: v)
+def test_promoting_from_an_environment_that_is_off_copies_its_split(
+    client, fresh, db_session, developer, source, target, state
+):
+    flag = _flag_with_splits(db_session, developer, status=state)
+    db_session.query(FlagEnvironmentSetting).filter_by(feature_flag_id=flag.id).update(
+        {"is_active": False}
+    )
+    db_session.commit()
+    response = _promote(client, developer, flag.id, source, target)
+    assert response.status_code == 200, response.text
+    assert response.json()["is_active"] is False
+    assert _splits(fresh, flag.id) == {**SPLITS, target: SPLITS[source]}
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("source, target", PAIRS, ids=lambda v: v)
+def test_a_promotion_copies_what_is_stored_when_it_has_the_lock(
+    client, fresh, db_session, developer, source, target
+):
+    """What another session stores until then is what is copied."""
+    flag = _flag_with_splits(db_session, developer)
+    newer = [{"value": "green", "weight": 30}, {"value": "blue", "weight": 70}]
+    lock = routes.lock_flag
+
+    def stored_by_another_then_locked(db, flag_id):
+        session = fresh()
+        if source == "production":
+            session.get(FeatureFlag, flag_id).split = newer
+        else:
+            session.query(FlagEnvironmentSetting).filter_by(
+                feature_flag_id=flag_id, environment=source
+            ).one().split = newer
+        session.commit()
+        session.close()
+        return lock(db, flag_id)
+
+    with patch.object(routes, "lock_flag", side_effect=stored_by_another_then_locked):
+        response = _promote(client, developer, flag.id, source, target)
+    assert response.status_code == 200, response.text
+    assert _splits(fresh, flag.id) == {**SPLITS, source: newer, target: newer}
+
+
+@pytest.mark.parametrize("target", ["production", "development"])
+def test_promoting_from_an_environment_nobody_configured_clears_the_split(
+    client, fresh, db_session, developer, target
+):
+    flag = _flag(db_session, developer, ACTIVE, 20, split=SPLITS["production"])
+    row = _setting(db_session, flag, "development")
+    row.split = SPLITS["staging"]
+    db_session.commit()
+    stored = {"production": SPLITS["production"], "development": SPLITS["staging"]}
+    assert _splits(fresh, flag.id) == stored
+    response = _promote(client, developer, flag.id, "staging", target)
+    assert response.status_code == 200, response.text
+    assert _splits(fresh, flag.id) == {**stored, target: None}
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("environment", FLAG_ENVIRONMENTS)
+def test_a_put_keeps_the_split_and_cannot_set_one(
+    client, fresh, db_session, developer, environment
+):
+    flag = _flag_with_splits(db_session, developer)
+    body = {"rollout_percentage": 7, "is_active": False, "targeting_rules": None}
+    response = _put(client, developer, flag.id, environment, body)
+    assert response.status_code == 200, response.text
+    assert _splits(fresh, flag.id) == SPLITS
+    for sent in (SPLITS["staging"], None):
+        refused = _put(client, developer, flag.id, environment, {"split": sent})
+        assert refused.status_code == 422, refused.text
+        assert [(e["type"], e["loc"]) for e in refused.json()["detail"]] == [
+            ("extra_forbidden", ["body", "split"])
+        ]
+    assert _splits(fresh, flag.id) == SPLITS
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "source, target",
+    [
+        ("staging", "production"),
+        ("development", "production"),
+        ("production", "staging"),
+        ("staging", "development"),
+    ],
+    ids=lambda v: v,
+)
+def test_a_promotion_that_changes_only_the_split_names_it(
+    client, fresh, db_session, developer, source, target
+):
+    """By its name, never what it holds, in each entry of the promotion."""
+    flag = _flag_with_splits(db_session, developer)
+    assert _promote(client, developer, flag.id, source, target).status_code == 200
+    where = {"environment": target, "from": source, "to": target}
+    by_action = {e.action_type: e for e in _entries(fresh, flag.id)}
+    promoted = by_action.pop("feature_flag_promote")
+    assert _values(promoted) == (where, {**where, "changed_fields": ["split"]})
+    if target == "production":
+        updated = by_action.pop("feature_flag_update")
+        assert _values(updated) == (None, {"changed_fields": ["split"]})
+        assert "red" not in (updated.new_value or "")
+    assert by_action == {}
+    assert "red" not in promoted.old_value + promoted.new_value
+
+    # Promoted again, it changes nothing and names nothing.
+    assert _promote(client, developer, flag.id, source, target).status_code == 200
+    again = [e for e in _entries(fresh, flag.id) if e.id != promoted.id]
+    latest = [e for e in again if e.action_type == "feature_flag_promote"]
+    assert [_values(e) for e in latest] == [(where, where)]
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("target", ["staging", "production"])
+def test_a_promotion_that_cannot_be_recorded_copies_no_split(
+    client, fresh, db_session, developer, target
+):
+    flag = _flag_with_splits(db_session, developer)
+    source = "staging" if target == "production" else "production"
+    with patch.object(
+        routes.AuditService, "record", side_effect=RuntimeError("no entry")
+    ):
+        response = _promote(client, developer, flag.id, source, target)
+    assert response.status_code == 500, response.text
+    assert _splits(fresh, flag.id) == SPLITS
+    assert _entries(fresh, flag.id) == []
+
+
+@pytest.mark.regression
+def test_production_answers_as_staging_did_after_a_promotion(
+    client, db_session, developer, key_of
+):
+    """For a flag with a split, user by user; staging and development answer as
+    before. (No evaluation serves a split yet.)"""
+    flag = _flag_with_splits(db_session, developer, rollout=10, rules=None)
+    staging = (
+        db_session.query(FlagEnvironmentSetting)
+        .filter_by(feature_flag_id=flag.id, environment="staging")
+        .one()
+    )
+    staging.rollout_percentage, staging.targeting_rules = 60, None
+    db_session.commit()
+    users = [f"user-{n}" for n in range(40)]
+
+    def answers(name):
+        found = {}
+        for user_id in users:
+            response = client.get(
+                f"{FLAGS}/evaluate/{flag.key}",
+                params={"user_id": user_id},
+                headers=key_of[name],
+            )
+            assert response.status_code == 200, response.text
+            body = response.json()
+            found[user_id] = (body["enabled"], body["value"], body["reason"])
+        return found
+
+    before = {name: answers(name) for name in FLAG_ENVIRONMENTS}
+    assert before["production"] != before["staging"]
+    response = _promote(client, developer, flag.id, "staging", "production")
+    assert response.status_code == 200, response.text
+    after = {name: answers(name) for name in FLAG_ENVIRONMENTS}
+    assert after == {**before, "production": before["staging"]}
 
 
 # --- audit --------------------------------------------------------------------

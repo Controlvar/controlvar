@@ -146,6 +146,27 @@ RUNBOOK_SECTION = "Rolling back past flag splits"
 PAGE_SECTION = (
     "`t2012_flag_split` adds a split to each flag and each flag environment setting"
 )
+#: What the release still serving answers, as
+#: ``test_flag_split_migration.py`` measures it.
+SERVING = (
+    "answers `500` to every flag evaluation, flag read and flag change, and to a "
+    "ruleset request with a staging or development key, until the API is rolled back",
+    "a bulk toggle answers `200` with every flag failed, and a ruleset request with "
+    "a production key is still answered, unless the run also undoes "
+    "`t2011_flag_environments`: then every request that presents an API key answers "
+    "`500`",
+)
+#: The migrations page's section about ``t2011_flag_environments``.
+ENVIRONMENTS_SECTION = (
+    "`t2011_flag_environments` adds each flag's staging and development settings"
+)
+#: What the sections about ``t2011_flag_environments`` say: a downgrade past it
+#: undoes this revision first.
+FIRST = (
+    "`t2012_flag_split` is undone first, so every flag read and flag change answers "
+    "`500` too, the dashboard's flag list included, and a bulk toggle `200` with "
+    "every flag failed"
+)
 
 
 @pytest.mark.parametrize(
@@ -156,25 +177,43 @@ PAGE_SECTION = (
         "while the release that wrote them is still serving (the database is "
         "downgraded before the API is rolled back), or restore the backup taken "
         "before the upgrade",
-        "answers `500` to every flag evaluation and flag read until the API is "
-        "rolled back",
-        "with nothing changed, and is run again, or the SDK requests waiting then fail",
+        *SERVING,
+        "with nothing changed, and is run again, or the SDK requests waiting then "
+        "fail, or both",
     ],
 )
 def test_the_runbooks_section_says_what_an_operator_must_know(said):
-    assert said in _section(ROLLBACK_RUNBOOK, RUNBOOK_SECTION)
+    section = _section(ROLLBACK_RUNBOOK, RUNBOOK_SECTION)
+    assert said in section.replace("A bulk toggle", "a bulk toggle")
 
 
 @pytest.mark.parametrize(
     "said",
     [
-        "answers `500` to every flag evaluation and flag read until the API is "
-        "rolled back",
-        "with nothing changed, and is run again, or the SDK requests waiting then fail",
+        *SERVING,
+        "with nothing changed, and is run again, or the SDK requests waiting then "
+        "fail, or both",
     ],
 )
 def test_the_migrations_pages_section_says_it_too(said):
-    assert said in _section(MIGRATIONS_PAGE, PAGE_SECTION)
+    section = _section(MIGRATIONS_PAGE, PAGE_SECTION)
+    assert said in section.replace("A bulk toggle", "a bulk toggle")
+
+
+@pytest.mark.parametrize(
+    "path, heading",
+    [
+        (ROLLBACK_RUNBOOK, "Rolling back past flag environments"),
+        (MIGRATIONS_PAGE, ENVIRONMENTS_SECTION),
+    ],
+    ids=["runbook", "page"],
+)
+def test_the_sections_about_t2011_say_that_this_revision_is_undone_first(path, heading):
+    """A downgrade past it drops the split columns too, so none of the flag
+    routes that revision alone would leave answering still does."""
+    section = _section(path, heading)
+    assert FIRST in section
+    assert "still answer" not in section
 
 
 @pytest.mark.skipif(
@@ -188,10 +227,21 @@ def test_the_workflows_help_says_what_the_release_still_serving_answers():
     _, _, rest = description.partition(f"from a release that carries {REVISION} ")
     clause, undone, _ = rest.partition("t2011_flag_environments undoes it alone")
     assert undone, "the clause about this revision is gone"
-    assert (
-        "once it has committed, the release still serving answers 500 to every flag "
-        "evaluation and flag read until the API is rolled back" in clause
-    ), clause
+    said = "; ".join(
+        ["once it has committed, the release still serving " + SERVING[0], SERVING[1]]
+    ).replace("`", "")
+    # The workflow names no deployment environment outside its list, so it says
+    # which flag environments without their names (as t2011's clause does).
+    for name, stands_for in (
+        (
+            "a staging or development key",
+            "a key of the two non-default flag environments",
+        ),
+        ("a production key", "a key of the default one"),
+    ):
+        assert name in said
+        said = said.replace(name, stands_for)
+    assert said in clause, clause
 
 
 def test_the_migrations_page_shows_the_refusal_the_migration_raises():

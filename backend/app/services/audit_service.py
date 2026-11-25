@@ -99,10 +99,11 @@ AUDIT_VALUE_FIELDS: Dict[EntityType, Tuple[str, ...]] = {
 #: ``off_value`` are user-authored content of up to 8 KiB, like its rules: a
 #: value recorded beside them could push the whole entry over
 #: ``AUDIT_VALUE_MAX`` and lose the ``rollout_percentage`` change with it
-#: (Plan F ruling 3). An experiment's three analysis configurations (CUPED,
-#: sequential testing, Bayesian) are JSON objects and are named the same way;
-#: the two switches that turn sequential and Bayesian analysis on are values
-#: (#848).
+#: (Plan F ruling 3). A flag's ``split`` is such values, and is named the same
+#: way: only a promotion into production changes it (#2012). An experiment's
+#: three analysis configurations (CUPED, sequential testing, Bayesian) are JSON
+#: objects and are named the same way; the two switches that turn sequential and
+#: Bayesian analysis on are values (#848).
 AUDIT_NAME_ONLY_FIELDS: Dict[EntityType, Tuple[str, ...]] = {
     EntityType.FEATURE_FLAG: (
         "description",
@@ -110,6 +111,7 @@ AUDIT_NAME_ONLY_FIELDS: Dict[EntityType, Tuple[str, ...]] = {
         "variants",
         "on_value",
         "off_value",
+        "split",
     ),
     # visual_config (#1545): a visual experiment's pages and goals, named
     # only; its contents (URLs, selectors) are never stored in an entry.

@@ -47,18 +47,22 @@ from backend.app.models.feature_flag import (
 
 #: The settings one environment has of a flag, and the settings a promotion
 #: copies: every column of ``FlagEnvironmentSetting`` that is not an identity
-#: column (``SETTING_IDENTITY_COLUMNS``), as a change sends them.
+#: column (``SETTING_IDENTITY_COLUMNS``), as a change sends them. No request
+#: sends a ``split`` (#2012): only a promotion's changes have one.
 SETTING_FIELDS: Tuple[str, ...] = (
     "is_active",
     "targeting_rules",
     "rollout_percentage",
+    "split",
 )
 
-#: A flag nobody configured in an environment: off, with no rules and 0%.
+#: A flag nobody configured in an environment: off, with no rules, 0% and no
+#: split.
 NOT_CONFIGURED: Dict[str, Any] = {
     "is_active": False,
     "targeting_rules": None,
     "rollout_percentage": 0,
+    "split": None,
 }
 
 #: A side row by flag and environment.
@@ -112,6 +116,7 @@ def effective_settings(
         "is_active": flag_status_name(view.status) == FeatureFlagStatus.ACTIVE.value,
         "targeting_rules": view.targeting_rules,
         "rollout_percentage": view.rollout_percentage,
+        "split": view.split,
     }
 
 
@@ -161,7 +166,7 @@ def audit_setting(
     """A snapshot of *flag* in *environment* for ``audit_changes``.
 
     Whether it is configured there, and its on/off and percentage as they are
-    stored; the rules are named only (``#``), never recorded.
+    stored; the rules and the split are named only (``#``), never recorded.
     """
     if environment == PRODUCTION:
         stored = effective_settings(flag, None, PRODUCTION)
@@ -174,6 +179,7 @@ def audit_setting(
         "is_active": stored["is_active"],
         "rollout_percentage": stored["rollout_percentage"],
         "#targeting_rules": stored["targeting_rules"],
+        "#split": stored["split"],
     }
 
 

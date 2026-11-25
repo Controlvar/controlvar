@@ -393,8 +393,8 @@ class FeatureFlagService:
 
         ``split``, when given, is stored as the flag's split in the same
         transaction, as it is, unchecked, and ``None`` clears it; left out, the
-        stored split is kept. For internal callers (#2012): no request field
-        sets it, and no caller passes it yet.
+        stored split is kept. No request field sets it: a promotion into
+        production passes the split it copies (``flag_environments.py``, #2012).
 
         Raises:
             FlagStatusReadOnly: a sent ``status`` differs from the stored one.

@@ -45,7 +45,8 @@ Then:
 10. offline (``--sql``), both directions refuse and emit no DDL, with and
     without a flag in use;
 11. this release, still running against the downgraded schema, answers 500 to
-    every flag evaluation and flag read; the ruleset still answers;
+    every flag evaluation, flag read and flag change, and to the ruleset of a
+    staging or development key; a production key's ruleset still answers;
 12. one downgrade from this revision to 0.48.0's head, met by an SDK request
     that has read ``api_keys`` and then reads ``feature_flags``, ends in success
     or in a refusal with nothing changed, and never hangs;
@@ -718,6 +719,18 @@ _ADDED = {
             r"                flag\.split = split\n"
         ),
     ),
+    # A promotion's copy, and its audit entry's name for it.
+    ("services", "flag_environment_service.py"): (
+        re.compile(r'(?m)^    "split",\n'),
+        re.compile(r'(?m)^    "split": None,\n'),
+        re.compile(r'(?m)^        "split": view\.split,\n'),
+        re.compile(r'(?m)^        "#split": stored\["split"\],\n'),
+    ),
+    ("api", "v1", "endpoints", "flag_environments.py"): (
+        re.compile(r"(?m)\bKEEP_SPLIT, (?=FeatureFlagService$)"),
+        re.compile(r'(?m)^            split=changes\.get\("split", KEEP_SPLIT\),\n'),
+    ),
+    ("services", "audit_service.py"): (re.compile(r'(?m)^        "split",\n'),),
 }
 
 
@@ -1657,43 +1670,163 @@ def test_offline_mode_is_refused_in_both_directions_and_emits_nothing(
 # 11. This release on the downgraded schema
 # ---------------------------------------------------------------------------
 @pytest.mark.regression
+@pytest.mark.parametrize("target", [PREVIOUS_CORE_HEAD, RELEASED_CORE_HEAD])
 def test_this_release_answers_500_to_flag_evaluations_and_reads_on_the_downgraded_schema(
-    test_db, scratch_schema, tmp_path
+    test_db, scratch_schema, tmp_path, target
 ):
     """Why the database-first rollback's paragraph names the outage: until every
-    task of this release is replaced, it selects a column the downgrade
-    dropped. The ruleset route selects its own columns, and not that one."""
+    task of this release is replaced, it selects a column the downgrade dropped,
+    from the flag rows and from the side rows. The ruleset of a production key is
+    built from its own columns of the flag rows, and not that one; a staging or
+    development key's reads the side rows. A run that goes on to 0.48.0's head
+    undoes ``t2011_flag_environments`` too, and no request that presents a key, no
+    signed-in API key route and no segment route that reads the flags is answered."""
     tree = _at_this_revision(test_db, CORE, scratch_schema, tmp_path)
     user = _user(test_db, scratch_schema)
-    _, key = _insert_key(test_db, scratch_schema, user.id, "production", "sdk:ruleset")
     flag_id = _insert_flag(test_db, scratch_schema, "rolled-back-flag")
-    sdk = {"X-API-Key": key}
     signed_in = {"Authorization": f"Bearer {_token(user)}"}
     flags_url = "/api/v1/feature-flags/"
-    requests = {
-        "evaluate": _evaluate("rolled-back-flag", "u1", key),
-        "evaluate (POST)": [
-            "POST",
-            f"{flags_url}evaluate/rolled-back-flag",
-            sdk,
-            {"user_id": "u1"},
-        ],
-        "a user's flags": ["GET", f"{flags_url}user/u1", sdk, None],
-        "one flag": ["GET", flags_url + flag_id, signed_in, None],
+    flag = flags_url + flag_id
+    environments = f"{flag}/environments"
+    requests = {}
+    for environment, source in (
+        ("production", "staging"),
+        ("staging", "development"),
+        ("development", "staging"),
+    ):
+        _, key = _insert_key(
+            test_db, scratch_schema, user.id, environment, "sdk:ruleset"
+        )
+        sdk = {"X-API-Key": key}
+        requests |= {
+            f"evaluate, {environment}": _evaluate("rolled-back-flag", "u1", key),
+            f"evaluate (POST), {environment}": [
+                "POST",
+                f"{flags_url}evaluate/rolled-back-flag",
+                sdk,
+                {"user_id": "u1"},
+            ],
+            f"a user's flags, {environment}": [
+                "GET",
+                f"{flags_url}user/u1",
+                sdk,
+                None,
+            ],
+            f"ruleset, {environment}": _ruleset(key),
+            f"the flag in {environment}": [
+                "GET",
+                f"{environments}/{environment}",
+                signed_in,
+                None,
+            ],
+            f"change it in {environment}": [
+                "PUT",
+                f"{environments}/{environment}",
+                signed_in,
+                {"rollout_percentage": 100},
+            ],
+            f"promote it into {environment}": [
+                "POST",
+                f"{environments}/{environment}/promote",
+                signed_in,
+                {"from": source},
+            ],
+            f"several flags in {environment}": [
+                "GET",
+                f"/api/v1/environments/{environment}/feature-flag-settings"
+                f"?flag_id={flag_id}",
+                signed_in,
+                None,
+            ],
+        }
+    requests |= {
+        "the flag everywhere": ["GET", environments, signed_in, None],
+        "one flag": ["GET", flag, signed_in, None],
         "the flags": ["GET", flags_url, signed_in, None],
-        "ruleset": _ruleset(key),
+        "change the flag": ["PUT", flag, signed_in, {"rollout_percentage": 100}],
+        "turn it off": ["POST", f"{flag}/deactivate", signed_in, None],
+        "the environments": ["GET", "/api/v1/environments", signed_in, None],
+    }
+    # A segment, and a key of its own to delete.
+    segments, keys = "/api/v1/segments", "/api/v1/api-keys"
+    condition = {"attribute": "country", "operator": "equals", "value": "US"}
+    rules = {"groups": [{"conditions": [condition]}]}
+    create = ["POST", f"{segments}/", signed_in, {"name": "Rolled", "rules": rules}]
+    ((status, made, _),) = _answers(tree, scratch_schema, tmp_path, [create])
+    assert status == 201, made
+    segment = f"{segments}/{made['id']}"
+    key_id, _ = _insert_key(test_db, scratch_schema, user.id, "production")
+    requests |= {
+        "a segment's experiments": [
+            "GET",
+            f"{segment}/experiments",
+            signed_in,
+            None,
+        ],
+        "the keys": ["GET", keys, signed_in, None],
     }
 
-    def statuses() -> dict[str, int]:
-        answered = _answers(tree, scratch_schema, tmp_path, list(requests.values()))
-        return dict(zip(requests, (status for status, _, _ in answered)))
+    # Asked after the downgrade only: each would change what the others ask.
+    new = {"key": "another-flag", "name": "Another"}
+    bulk = {"flag_ids": [flag_id]}
+    once = {
+        "archive a segment": ["PUT", segment, signed_in, {"status": "archived"}],
+        "delete a segment": ["DELETE", segment, signed_in, None],
+        "create a key": ["POST", keys, signed_in, {"name": "Rolled"}],
+        "create a staging key": [
+            "POST",
+            keys,
+            signed_in,
+            {"name": "Rolled", "environment": "staging"},
+        ],
+        "delete a key": ["DELETE", f"{keys}/{key_id}", signed_in, None],
+        "create a flag": ["POST", flags_url, signed_in, new],
+        "turn it on": ["POST", f"{flag}/activate", signed_in, None],
+        "unarchive it": ["POST", f"{flag}/unarchive", signed_in, None],
+        "delete it": ["DELETE", flag, signed_in, None],
+        **{
+            f"bulk {action}": [
+                "POST",
+                f"{flags_url}bulk-toggle",
+                signed_in,
+                {**bulk, "action": action},
+            ]
+            for action in ("enable", "disable", "archive")
+        },
+    }
 
-    assert statuses() == dict.fromkeys(requests, 200)
-    down = tree_profiles.alembic(tree, scratch_schema, "downgrade", PREVIOUS_CORE_HEAD)
+    def answers(asked) -> dict[str, tuple]:
+        answered = _answers(tree, scratch_schema, tmp_path, list(asked.values()))
+        return dict(zip(asked, answered))
+
+    before = answers(requests)
+    assert {name: a[0] for name, a in before.items()} == dict.fromkeys(requests, 200)
+    down = tree_profiles.alembic(tree, scratch_schema, "downgrade", target)
     assert down.returncode == 0, down.stderr[-3000:]
-    measured = statuses()
+    after = answers({**requests, **once})
+    measured = {name: answer[0] for name, answer in after.items()}
     print(f"on the downgraded schema: {measured}")
-    assert measured == {**dict.fromkeys(requests, 500), "ruleset": 200}
+    bulk_names = [name for name in once if name.startswith("bulk ")]
+    # With ``t2011_flag_environments`` left in place.
+    answered = {
+        "ruleset, production": 200,
+        "archive a segment": 200,
+        "delete a segment": 204,
+        "the keys": 200,
+        "create a key": 201,
+        "create a staging key": 201,
+        "delete a key": 204,
+    }
+    assert measured == {
+        **dict.fromkeys([*requests, *once], 500),
+        **dict.fromkeys(bulk_names, 200),
+        "the environments": 200,
+        **(answered if target == PREVIOUS_CORE_HEAD else {}),
+    }
+    # A bulk toggle answers 200 and says it changed nothing.
+    for name in bulk_names:
+        body = after[name][1]
+        assert (body["succeeded"], body["failed"]) == (0, 1), (name, body)
 
 
 # ---------------------------------------------------------------------------

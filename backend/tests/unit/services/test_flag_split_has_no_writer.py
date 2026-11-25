@@ -1,27 +1,33 @@
-"""Nothing writes a flag's split (#2012): the columns are stored and not used.
+"""Nothing sets a flag's split (#2012): a promotion copies one, and that is all.
 
 ``t2012_flag_split`` adds ``feature_flags.split`` and
 ``flag_environment_settings.split``, before anything can set one:
 
-* a flag create or update request refuses a split and a rule's own value, and
-  the flag responses have no such field;
-* of what the scan sees, the only place a split is assigned is
-  ``FeatureFlagService.update_feature_flag``, which no caller passes one to,
-  and the only attribute read of one is the view of a flag in an environment;
+* a flag create, update, environment or promotion request refuses a split, and
+  the first three a rule's own value; the flag responses have no such field;
+* of what the scan sees, a split is written by a promotion alone, which copies
+  it with the rest of an environment's settings: into production through
+  ``FeatureFlagService.update_feature_flag``, which only ``_save`` of
+  ``flag_environments.py`` passes one to, and into staging or development as
+  one of ``flag_environment_service``'s ``SETTING_FIELDS``. A split comes from
+  ``effective_settings``, which only the promotion (and its audit entry) calls;
+* the only attribute reads of one are the view of a flag in an environment and
+  ``effective_settings``. No evaluation, ruleset or response reads one;
 * the generic writer that would copy any column, ``crud_feature_flag``, is
   used for reading only.
 
 The scan parses every Python file under :data:`ROOTS` but the migrations, and
-compares what it sees with an exact list, so a writer of a kind it sees fails
-here until it is meant. It sees the attribute assigned or deleted, the keyword
-argument, the name as a string, a variable, class attribute or parameter of
-that name, and SQL whose text the source shows (a string, an f-string but for
-its fields, or ``+`` of them) when an UPDATE assigns the column or an INSERT's
-list of columns names it.
+compares what it sees, function by function, with an exact list, so a writer of
+a kind it sees fails here until it is meant. It sees the attribute assigned or
+deleted, the keyword argument, the name as a string, a variable, class attribute
+or parameter of that name, and SQL whose text the source shows (a string, an
+f-string but for its fields, or ``+`` of them) when an UPDATE assigns the column
+or an INSERT's list of columns names it.
 
 It does not see a name built at run time (``setattr(flag, "spl" + "it", parts)``),
 SQL built at run time (the column in a field, a variable or a ``join``), an
-INSERT that lists no columns, or code outside :data:`ROOTS`.
+INSERT that lists no columns, code outside :data:`ROOTS`, or one of these
+functions called under another name.
 """
 
 from __future__ import annotations
@@ -29,8 +35,9 @@ from __future__ import annotations
 import ast
 import functools
 import re
+from collections import Counter
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterator, List, Optional, Set, Tuple
 
 import pytest
 from pydantic import ValidationError
@@ -40,6 +47,11 @@ from backend.app.schemas.feature_flag import (
     FeatureFlagListItem,
     FeatureFlagRead,
     FeatureFlagUpdate,
+)
+from backend.app.schemas.flag_environment import (
+    FlagEnvironmentSettings,
+    FlagEnvironmentUpdate,
+    FlagPromotion,
 )
 
 pytestmark = [pytest.mark.unit, pytest.mark.regression]
@@ -145,24 +157,88 @@ def uses(tree: ast.AST) -> List[str]:
     return sorted(found)
 
 
+#: What is outside every function of :func:`functions`.
+MODULE = "<module>"
+
+
+def functions(tree: ast.AST) -> Iterator[Tuple[str, ast.AST]]:
+    """Each top-level function of *tree*, and each method as ``Class.method``."""
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            yield node.name, node
+        elif isinstance(node, ast.ClassDef):
+            for item in node.body:
+                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    yield f"{node.name}.{item.name}", item
+
+
+def by_function(tree: ast.AST, count) -> Dict[str, List[str]]:
+    """``{function: what count finds there}``, and what it finds elsewhere."""
+    rest = Counter(count(tree))
+    found = {}
+    for name, node in functions(tree):
+        if kinds := count(node):
+            found[name] = kinds
+            rest -= Counter(kinds)
+    if rest:
+        found[MODULE] = sorted(rest.elements())
+    return found
+
+
+ENVIRONMENTS = "backend/app/core/flag_environments.py"
+ROUTES = "backend/app/api/v1/endpoints/flag_environments.py"
+SETTINGS = "backend/app/services/flag_environment_service.py"
+SERVICE = "backend/app/services/feature_flag_service.py"
+
 #: Every use there is. ``models/feature_flag.py`` declares the two columns;
 #: ``core/flag_environments.py`` names the field in the two lists and the
-#: mapping of the read-only view; the service takes the internal parameter and
-#: assigns it. ``core/balanced_blocks.py``'s keyword fills a message about an
-#: experiment's traffic split, not a column.
-EXPECTED: Dict[str, List[str]] = {
-    "backend/app/core/balanced_blocks.py": ["keyword argument"],
-    "backend/app/core/flag_environments.py": ["string"] * 3,
-    "backend/app/models/feature_flag.py": ["name assigned"] * 2,
-    "backend/app/services/feature_flag_service.py": ["attribute assigned", "parameter"],
+#: mapping of the read-only view. A promotion copies it: ``SETTING_FIELDS``,
+#: ``NOT_CONFIGURED`` and ``effective_settings`` name it, the route passes it to
+#: the service beside the request (which leaves it out, ``_as_requested``), and
+#: the service takes the parameter and assigns it. ``audit_setting`` and
+#: ``AUDIT_NAME_ONLY_FIELDS`` name it in an entry. ``core/balanced_blocks.py``'s
+#: keyword fills a message about an experiment's traffic split, not a column.
+EXPECTED: Dict[str, Dict[str, List[str]]] = {
+    "backend/app/core/balanced_blocks.py": {"balance_problem": ["keyword argument"]},
+    ENVIRONMENTS: {
+        "FlagInEnvironment.__init__": ["string"],
+        MODULE: ["string", "string"],
+    },
+    "backend/app/models/feature_flag.py": {MODULE: ["name assigned"] * 2},
+    "backend/app/services/audit_service.py": {MODULE: ["string"]},
+    SERVICE: {
+        "FeatureFlagService.update_feature_flag": ["attribute assigned", "parameter"]
+    },
+    SETTINGS: {
+        "audit_setting": ["string"],
+        "effective_settings": ["string"],
+        MODULE: ["string", "string"],
+    },
+    ROUTES: {
+        "_as_requested": ["string"],
+        "_save": ["keyword argument", "string"],
+    },
 }
 
 
-def test_the_only_writer_is_the_services_unused_parameter():
+def test_the_only_writer_is_a_promotion():
     sources = _sources()
     assert len(sources) > 200, "the scan found too few files: it is broken"
-    found = {name: uses(tree) for name, tree in sources.items()}
+    found = {name: by_function(tree, uses) for name, tree in sources.items()}
     assert {name: kinds for name, kinds in found.items() if kinds} == EXPECTED
+
+
+def test_what_is_found_is_told_by_function():
+    planted = ast.parse(
+        "flag.split = 1\n"
+        "def f(split):\n    def g():\n        flag.split = 2\n"
+        "class C:\n    split = 3\n    async def m(self):\n        setattr(x, 'split', 4)\n"
+    )
+    assert by_function(planted, uses) == {
+        "f": ["attribute assigned", "parameter"],
+        "C.m": ["string"],
+        MODULE: ["attribute assigned", "name assigned"],
+    }
 
 
 @pytest.mark.parametrize(
@@ -250,25 +326,59 @@ def test_the_scan_sees_each_way_of_writing_one(planted, kinds):
     assert uses(ast.parse(planted)) == kinds
 
 
-def _calls(sources: Dict[str, ast.AST], method: str) -> List[Tuple[str, ast.Call]]:
-    return [
-        (name, node)
-        for name, tree in sources.items()
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == method
-    ]
+def calls(called: str) -> Dict[Tuple[str, str], List[ast.Call]]:
+    """Each call of *called*, as a name or an attribute, by file and function."""
+    found: Dict[Tuple[str, str], List[ast.Call]] = {}
+    for name, tree in _sources().items():
+        inside = {
+            id(node): function
+            for function, body in functions(tree)
+            for node in ast.walk(body)
+        }
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            if called in (
+                getattr(node.func, "id", None),
+                getattr(node.func, "attr", None),
+            ):
+                where = (name, inside.get(id(node), MODULE))
+                found.setdefault(where, []).append(node)
+    return found
 
 
-def test_no_caller_passes_the_service_a_split():
-    calls = _calls(_sources(), "update_feature_flag")
-    assert calls, "the scan found no caller: it is broken"
+def test_only_a_promotion_passes_the_service_a_split():
+    """``_save`` passes one: the split in *changes*, and only a promotion's
+    changes have one (the test after this)."""
     # A bare ``**`` is a keyword whose name is None: it could carry one.
-    passed = [
-        (name, [keyword.arg for keyword in call.keywords]) for name, call in calls
-    ]
-    assert all(keywords in ([], ["record"]) for _, keywords in passed), passed
+    passed = {
+        where: [[keyword.arg for keyword in call.keywords] for call in found]
+        for where, found in calls("update_feature_flag").items()
+    }
+    assert passed == {
+        ("backend/app/api/v1/endpoints/feature_flags.py", "update_feature_flag"): [
+            ["record"]
+        ],
+        (ROUTES, "_save"): [["record", "split"]],
+    }
+
+
+def callers(called: str) -> Set[Tuple[str, str]]:
+    return set(calls(called))
+
+
+def test_a_split_reaches_a_writer_from_a_promotion_alone():
+    """The writers of a flag's settings are given a request's fields, which have
+    no split, or a promotion's, which ``effective_settings`` reads."""
+    assert callers("effective_settings") == {
+        (ROUTES, "promote_flag_environment"),
+        (SETTINGS, "audit_setting"),
+    }
+    assert callers("_save") == {
+        (ROUTES, "promote_flag_environment"),
+        (ROUTES, "update_flag_environment"),
+    }
+    assert callers("save_environment_setting") == {(ROUTES, "_save")}
 
 
 def test_the_generic_writer_is_used_for_reading_only():
@@ -304,9 +414,35 @@ def test_a_request_that_sends_a_split_is_refused(model, sent):
     ]
 
 
+@pytest.mark.parametrize("sent", [PARTS, [], None], ids=["parts", "empty", "null"])
+@pytest.mark.parametrize(
+    "model, body",
+    [
+        (FlagEnvironmentUpdate, {"rollout_percentage": 5}),
+        (FlagPromotion, {"from": "staging"}),
+    ],
+    ids=["environment", "promotion"],
+)
+def test_an_environment_request_that_sends_a_split_is_refused(model, body, sent):
+    model.model_validate(body)
+    with pytest.raises(ValidationError) as refused:
+        model.model_validate({**body, SPLIT: sent})
+    assert [(e["type"], e["loc"]) for e in refused.value.errors()] == [
+        ("extra_forbidden", (SPLIT,))
+    ]
+
+
 @pytest.mark.parametrize(
     "model",
-    [FeatureFlagCreate, FeatureFlagUpdate, FeatureFlagRead, FeatureFlagListItem],
+    [
+        FeatureFlagCreate,
+        FeatureFlagUpdate,
+        FeatureFlagRead,
+        FeatureFlagListItem,
+        FlagEnvironmentUpdate,
+        FlagEnvironmentSettings,
+        FlagPromotion,
+    ],
 )
 def test_no_request_or_response_model_has_the_field(model):
     assert SPLIT not in model.model_fields
@@ -351,22 +487,35 @@ def test_a_request_that_sends_a_rule_value_is_refused(model, shape):
     assert [e["loc"] for e in raised.value.errors()] == [("targeting_rules",)]
 
 
-def reads(tree: ast.AST) -> int:
-    """How many times *tree* reads an attribute called ``split`` that it does
-    not call (``"a b".split(...)`` is a call)."""
+@pytest.mark.parametrize("shape", sorted(RULE_VALUES))
+def test_an_environment_request_that_sends_a_rule_value_is_refused(shape):
+    accepted, refused = RULE_VALUES[shape]
+    FlagEnvironmentUpdate.model_validate({"targeting_rules": accepted})
+    with pytest.raises(ValidationError, match="unknown key") as raised:
+        FlagEnvironmentUpdate.model_validate({"targeting_rules": refused})
+    assert [e["loc"] for e in raised.value.errors()] == [("targeting_rules",)]
+
+
+def reads(tree: ast.AST) -> List[str]:
+    """``read``, once for each attribute called ``split`` that *tree* reads and
+    does not call (``"a b".split(...)`` is a call)."""
     called = {id(node.func) for node in ast.walk(tree) if isinstance(node, ast.Call)}
-    return sum(
-        isinstance(node, ast.Attribute)
+    return [
+        "read"
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Attribute)
         and node.attr == SPLIT
         and isinstance(node.ctx, ast.Load)
         and id(node) not in called
-        for node in ast.walk(tree)
-    )
+    ]
 
 
-def test_the_only_reader_is_the_environment_view():
-    found = {name: reads(tree) for name, tree in _sources().items()}
-    assert {name: count for name, count in found.items() if count} == {
-        "backend/app/core/flag_environments.py": 1
+def test_the_only_readers_are_the_environment_view_and_a_promotion():
+    found = {name: by_function(tree, reads) for name, tree in _sources().items()}
+    assert {name: places for name, places in found.items() if places} == {
+        ENVIRONMENTS: {"FlagInEnvironment.__init__": ["read"]},
+        SETTINGS: {"effective_settings": ["read"]},
     }
-    assert reads(ast.parse("value = flag.split\nwords = 'a b'.split(' ')\n")) == 1
+    assert reads(ast.parse("value = flag.split\nwords = 'a b'.split(' ')\n")) == [
+        "read"
+    ]
