@@ -16,13 +16,19 @@ gates hold it to the golden vectors and to the docs runner on 20,000 ids.
 (O-FLAG). It is a different function, held to the documented example, to the
 docs runner's copy and to the rollout-decided cases of
 ``tests/sdk-contract/ruleset-vectors.json``.
+
+``split_bucket`` and ``split_value`` are which of a flag's split values an
+enabled user is served (O-SPLIT): the flag rollout's reading of another text,
+held to the docs runner's copy of that reading and to every case of the same
+file that a split decides.
 """
 
 from __future__ import annotations
 
 import hashlib
 import struct
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 #: 2^32, the divisor the SDK contract gives.
 DIVISOR = 4294967296
@@ -80,3 +86,35 @@ def flag_bucket(user_id: str, flag_key: str) -> int:
         f"{user_id}:{flag_key}".encode("utf-8"), usedforsecurity=False
     ).digest()
     return int.from_bytes(digest, "big") % 100
+
+
+def split_bucket(user_id: str, flag_key: str) -> int:
+    """The user's bucket in [0, 100) among a flag's split values (O-SPLIT).
+
+    The whole MD5 digest of ``"{user_id}:{flag_key}:split"``, read as a
+    big-endian integer, modulo 100: :func:`flag_bucket`'s reading of another
+    text, so which value a user gets does not follow from whether the flag is
+    on for them. ``user-123`` and ``my-flag`` are bucket 49.
+    """
+    digest = hashlib.md5(
+        f"{user_id}:{flag_key}:split".encode("utf-8"), usedforsecurity=False
+    ).digest()
+    return int.from_bytes(digest, "big") % 100
+
+
+def split_value(
+    user_id: str, flag_key: str, split: Sequence[Mapping[str, Any]]
+) -> Any:
+    """The value of *split* (``[{"value", "weight"}, ...]``, whole weights that
+    add up to 100) an enabled user gets: the entries take the buckets in the
+    order they are stored, each as many as its weight."""
+    total = sum(entry["weight"] for entry in split)
+    if total != 100:
+        raise ValueError(f"the weights of a split add up to 100, not {total}")
+    position = split_bucket(user_id, flag_key)
+    upper = 0
+    for entry in split:
+        upper += entry["weight"]
+        if position < upper:
+            return entry["value"]
+    raise AssertionError("a bucket is below 100")

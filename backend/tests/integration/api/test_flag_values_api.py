@@ -1066,7 +1066,8 @@ def test_both_evaluate_routes_answer_with_evaluation_answer(
     key = flag["key"]
     built, recorded = [], []
 
-    def fake_answer(flag_key, db_flag, evaluation):
+    def fake_answer(flag_key, db_flag, evaluation, user_id):
+        assert user_id == "user-1"
         built.append(
             (flag_key, db_flag.key, evaluation["enabled"], evaluation["reason"])
         )

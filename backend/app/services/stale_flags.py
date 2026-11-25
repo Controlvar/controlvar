@@ -11,7 +11,9 @@ in this order:
     the installation recorded at least one flag evaluation since the cutoff
     (``evaluations_seen``), and none of this flag;
 ``on_for_everyone``
-    ACTIVE at 100% with no targeting rules, and unchanged since the cutoff;
+    ACTIVE at 100% with no targeting rules and no split, and unchanged since
+    the cutoff. A flag with a split does not serve its on value, even when one
+    of its values has all the weight (#2012);
 ``off_for_everyone``
     INACTIVE (whatever its rules), or ACTIVE at 0% with no targeting rules, and
     unchanged since the cutoff.
@@ -147,7 +149,11 @@ def _one_answer(flag: Any, cutoff: datetime) -> List[str]:
         return []
     if not has_no_rules(flag.targeting_rules, owner=f"flag:{flag.key}"):
         return []
-    return [ON_FOR_EVERYONE if percentage == 100 else OFF_FOR_EVERYONE]
+    if percentage == 0:
+        return [OFF_FOR_EVERYONE]
+    if flag.split is not None:
+        return []
+    return [ON_FOR_EVERYONE]
 
 
 def classify(

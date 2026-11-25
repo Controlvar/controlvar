@@ -43,7 +43,7 @@ VECTORS = json.loads(VECTORS_PATH.read_text(encoding="utf-8"))
 
 #: Pinned. A change here is a change to what this SDK must answer locally: it moves only with a
 #: regenerated vectors file (and the backend pin in test_sdk_ruleset_vectors.py).
-EXPECTED_COUNTS = {"cases": 2242, "flags": 161, "must_local": 1333}
+EXPECTED_COUNTS = {"cases": 2406, "flags": 172, "must_local": 1337}
 
 RULESET = index_ruleset(VECTORS["ruleset"])
 
@@ -113,8 +113,9 @@ def test_no_local_answer_differs_from_the_server():
 def test_every_value_flags_must_local_case_is_answered_locally_with_the_servers_value_and_type():
     flags = {flag["key"]: flag for flag in VECTORS["ruleset"]["flags"]}
     value_cases = [(case, result) for case, result in RESULTS if "expected_value" in case and case["must_local"]]
-    # Every value type the ruleset names, each as a local and an inactive/archived flag (F5's corpus).
-    assert len(value_cases) == 39
+    # Every value type the ruleset names, each as a local and an inactive/archived flag (F5's corpus),
+    # and 4 of a flag with a split, inactive and archived (#2012; active, it is remote).
+    assert len(value_cases) == 43
     assert sorted({flags[case["flag"]].get("value_type") for case, _ in value_cases}) == sorted(VALUE_TYPES)
     wrong = [
         (case["id"], result)
@@ -128,7 +129,7 @@ def test_every_value_flags_must_local_case_is_answered_locally_with_the_servers_
 
 def test_a_boolean_flags_local_answer_is_its_enabled_typed_boolean():
     boolean = [(case, result) for case, result in RESULTS if "expected_value" not in case and result is not DEFER]
-    assert len(boolean) == EXPECTED_COUNTS["must_local"] - 39
+    assert len(boolean) == EXPECTED_COUNTS["must_local"] - 43
     assert all(result["value"] is result["enabled"] and result["value_type"] == "boolean" for _, result in boolean)
 
 

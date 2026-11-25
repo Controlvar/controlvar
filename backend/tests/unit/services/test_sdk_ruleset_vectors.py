@@ -24,6 +24,10 @@
   as an active local flag, an active remote flag, an inactive flag and an
   archived flag, classified from the file itself, each entry carrying exactly
   the value fields its class carries and each case its ``expected_value``.
+* **Splits and rules' own values** (#2012). What those flags add to the counts
+  is exact; active, each is exactly a remote entry; every value each of them
+  serves is the ``expected_value`` of exactly the stated number of cases; and
+  the generator's value is the route's own function's.
 """
 
 from __future__ import annotations
@@ -36,6 +40,8 @@ from typing import Any, Dict, Optional
 
 import pytest
 
+from backend.app.api.v1.endpoints import feature_flags as route
+from backend.app.core import flag_values
 from backend.app.core.flag_values import BOOLEAN, VALUE_TYPES, rule_values
 from backend.app.services import sdk_ruleset
 from backend.scripts import generate_ruleset_vectors as generator
@@ -46,8 +52,14 @@ pytestmark = pytest.mark.unit
 #: regenerate the vectors and say why in the pull request. The same numbers
 #: are pinned in sdk/js/__tests__/evaluator.test.ts and
 #: sdk/python/tests/test_evaluator.py. #1497 (F5) added the 12 value flags:
-#: 51 cases, 39 of them must_local.
-EXPECTED_COUNTS = {"flags": 161, "cases": 2242, "must_local": 1333}
+#: 51 cases, 39 of them must_local. #2012 added the flags with a split or a
+#: rule's own value (MULTI_WAY_COUNTS below): 11, with 164 cases, 4 of them
+#: must_local.
+EXPECTED_COUNTS = {"flags": 172, "cases": 2406, "must_local": 1337}
+
+#: What the flags with a split or a rule's own value add: only an inactive and
+#: an archived one are answered locally.
+MULTI_WAY_COUNTS = {"flags": 11, "cases": 164, "must_local": 4}
 
 #: The launch local-operator set (engine names).
 LAUNCH_LOCAL_OPERATORS = {
@@ -124,7 +136,7 @@ def test_the_counts_are_pinned(vectors):
 def without_split_or_rule_value(vectors: Dict[str, Any]) -> Dict[str, Any]:
     """The part of the file about flags with neither a split nor a rule value:
     their stored rows, their ruleset entries and their cases, in file order.
-    Today that is all of it (#2012 stores both and serves neither)."""
+    What the file was before any flag in it had either (#2012)."""
     stored = [
         flag
         for flag in vectors["stored_flags"]
@@ -344,11 +356,18 @@ def _value_class(stored: Dict[str, Any], entry: Dict[str, Any]) -> str:
     return f"active-{entry['evaluation']}"
 
 
-def _valued(vectors):
-    """``(stored, entry, cases)`` for every flag of a type with a value."""
+def _has_split_or_rule_value(stored: Dict[str, Any]) -> bool:
+    return "split" in stored or bool(rule_values(stored["targeting_rules"]))
+
+
+def _valued(vectors, multi_way: bool = False):
+    """``(stored, entry, cases)`` for every flag of a type with a value: those
+    that serve their two values alone, or, with *multi_way*, the others."""
     entries = {entry["key"]: entry for entry in vectors["ruleset"]["flags"]}
     for stored in vectors["stored_flags"]:
         if stored.get("value_type", BOOLEAN) == BOOLEAN:
+            continue
+        if _has_split_or_rule_value(stored) is not multi_way:
             continue
         cases = [case for case in vectors["cases"] if case["flag"] == stored["key"]]
         yield stored, entries[stored["key"]], cases
@@ -392,7 +411,8 @@ def test_a_boolean_flag_entry_and_case_carry_no_value(vectors):
         for stored in vectors["stored_flags"]
         if "value_type" not in stored
     }
-    assert len(boolean) == EXPECTED_COUNTS["flags"] - 12
+    # The 12 value flags, and the 11 with a split or a rule's own value.
+    assert len(boolean) == EXPECTED_COUNTS["flags"] - 23
     for entry in vectors["ruleset"]["flags"]:
         if entry["key"] in boolean:
             assert not set(entry) & VALUE_FIELDS, entry
@@ -467,6 +487,103 @@ def test_each_value_class_carries_its_answer(
     assert case["must_local"] is must_local
     assert case["expected"]["reason"] == reason
     assert _json(case["expected_value"]) == _json(value)
+
+
+# ---------------------------------------------------------------------------
+# Splits and rules' own values (#2012)
+# ---------------------------------------------------------------------------
+
+
+def test_the_counts_move_by_exactly_what_the_multi_way_flags_add(vectors):
+    """And no flag that was there before is answered locally less, or more:
+    one made remote, or a split's made local, moves one of the two numbers."""
+    added = list(_valued(vectors, multi_way=True))
+    cases = [case for _, _, flag_cases in added for case in flag_cases]
+    local = [case for case in cases if case["must_local"]]
+    found = {"flags": len(added), "cases": len(cases), "must_local": len(local)}
+    assert found == MULTI_WAY_COUNTS
+    assert {case["flag"] for case in local} == {
+        "split-string-inactive",
+        "split-string-archived",
+    }
+    before = without_split_or_rule_value(vectors)["cases"]
+    assert sum(1 for case in before if case["must_local"]) == 1333
+    assert len(before) + len(cases) == len(vectors["cases"])
+
+
+def test_a_flag_with_a_split_or_a_rule_value_is_remote_while_it_is_active(vectors):
+    """Exactly the entry any other remote flag is: neither the values nor the
+    rules are in it. Inactive and archived, exactly a value flag's entry."""
+    classes = {}
+    for stored, entry, _ in _valued(vectors, multi_way=True):
+        value_class = _value_class(stored, entry)
+        if stored["status"] == "ACTIVE":
+            expected = {"key": stored["key"], "active": True, "evaluation": "remote"}
+        else:
+            expected = {
+                "key": stored["key"],
+                "active": False,
+                "value_type": stored["value_type"],
+                "off_value": stored["off_value"],
+            }
+        assert entry == expected
+        classes[value_class] = classes.get(value_class, 0) + 1
+    assert classes == {"active-remote": 9, "inactive": 1, "archived": 1}
+
+
+#: Each value each flag serves, and to how many of its cases. The split's were
+#: worked out by the ground-truth copy (``ground_truth.hashing``), which
+#: ``backend/tests/unit/ground_truth/test_hashing.py`` holds to every one of
+#: these cases too. A weight of 0 is served to nobody.
+SERVED = {
+    "split-string": {'"red"': 8, '"green"': 6, '"blue"': 12},
+    "split-string-30": {'"red"': 5, '"green"': 2, '"blue"': 1, '"off-copy"': 32},
+    "split-string-inactive": {'"off-copy"': 2},
+    "split-string-archived": {'"off-copy"': 2},
+    "split-rule": {'"red"': 3, '"green"': 3, '"blue"': 6, '"off-copy"': 1},
+    "split-zero-weight": {'"red"': 6, '"blue"': 6},
+    "split-number": {"1": 4, "20": 5, "30.5": 3},
+    "split-json": {
+        '{"color": "red"}': 4,
+        '{"color": "green", "size": 2}': 4,
+        '["plain"]': 4,
+    },
+    "rule-value": {'"pro-copy"': 2, '"on-copy"': 4, '"off-copy"': 8},
+    "rule-value-split": {"99": 6, "1": 6, "20": 2, "30.5": 4},
+    "rule-value-half": {
+        '{"tier": "pro"}': 7,
+        '["everyone"]': 1,
+        '["fallback"]': 5,
+    },
+}
+
+
+def test_every_value_of_a_flag_with_a_split_or_a_rule_value_is_served(vectors):
+    found = {}
+    for stored, _, cases in _valued(vectors, multi_way=True):
+        served = found.setdefault(stored["key"], {})
+        for case in cases:
+            value = _json(case["expected_value"])
+            served[value] = served.get(value, 0) + 1
+    assert found == SERVED
+    # Each value of each active flag is served to somebody, so a reader that
+    # dropped one, or a generator that dropped the column, is caught: the
+    # split's (one of weight 0 to nobody), each rule's own.
+    for stored, _, _ in _valued(vectors, multi_way=True):
+        if stored["status"] != "ACTIVE":
+            continue
+        split = stored.get("split", [])
+        own = rule_values(stored["targeting_rules"]).values()
+        values = [*(e["value"] for e in split if e["weight"]), *own]
+        assert values, stored["key"]
+        assert {_json(value) for value in values} <= set(found[stored["key"]])
+    types = {stored["value_type"] for stored, _, _ in _valued(vectors, multi_way=True)}
+    assert types == set(VALUED_TYPES)
+
+
+def test_the_generator_serves_with_the_routes_own_function():
+    """One function: the generator's values cannot differ from the route's."""
+    assert generator.serve is flag_values.serve is route.serve
 
 
 def test_every_local_operator_and_reason_is_exercised_locally(vectors):
@@ -700,7 +817,8 @@ def test_the_reference_evaluator_answers_exactly_the_must_local_cases(vectors):
             extra.append(case["id"])
     assert not wrong, f"{len(wrong)} local answers differ from the server: {wrong[:5]}"
     # Every value flag's must_local case was answered with its value: 13 per
-    # value type (9 local, 2 inactive, 2 archived).
-    assert values == 39
+    # value type (9 local, 2 inactive, 2 archived), and 4 of a flag with a
+    # split (2 inactive, 2 archived).
+    assert values == 43
     assert not missed, f"{len(missed)} must_local cases deferred: {missed[:10]}"
     assert not extra, f"{len(extra)} cases answered but not must_local: {extra[:10]}"

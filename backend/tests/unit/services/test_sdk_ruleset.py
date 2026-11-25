@@ -434,6 +434,121 @@ def test_an_inactive_flags_off_value_moves_the_version():
 
 
 # ---------------------------------------------------------------------------
+# A split, and a rule's own value (#2012)
+# ---------------------------------------------------------------------------
+
+SPLITS = {
+    "string": ["red", "green", "blue"],
+    "number": [1, 20, 30.5],
+    "json": [{"a": 1}, {"a": 2}, []],
+}
+REMOTE = {"key": "flag", "active": True, "evaluation": "remote"}
+
+
+def _split_of(value_type):
+    return [
+        {"value": value, "weight": weight}
+        for value, weight in zip(SPLITS[value_type], (34, 33, 33))
+    ]
+
+
+def _with_value(value_type):
+    """The native rules with a value of their own, which a local entry's rules
+    would otherwise be."""
+    rules = _native(_c("a", "eq", "x"))
+    rules["rules"][0]["value"] = SPLITS[value_type][0]
+    return rules
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("value_type", sorted(PAIRS))
+@pytest.mark.parametrize("has", ["split", "rule value", "default rule value", "both"])
+def test_an_active_flag_with_a_split_or_a_rule_value_is_exactly_remote(value_type, has):
+    rules = _native(_c("a", "eq", "x"))
+    if has in ("rule value", "both"):
+        rules = _with_value(value_type)
+    if has == "default rule value":
+        rules["default_rule"] = {**_with_value(value_type)["rules"][0], "id": "all"}
+    split = _split_of(value_type) if has in ("split", "both") else None
+    flag = _valued(value_type, rules=rules, rollout=50, split=split)
+    assert build_flag_entry(flag) == REMOTE
+    # The control: without either it is the local entry it was.
+    plain = _valued(value_type, rules=_native(_c("a", "eq", "x")), rollout=50)
+    assert build_flag_entry(plain)["evaluation"] == "local"
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "status", [FeatureFlagStatus.INACTIVE, FeatureFlagStatus.ARCHIVED]
+)
+@pytest.mark.parametrize("value_type", sorted(PAIRS))
+def test_an_inactive_flag_with_a_split_is_the_entry_it_was(value_type, status):
+    """So turning one off reaches a local client at its next refresh."""
+    flag = _valued(
+        value_type,
+        rules=_with_value(value_type),
+        split=_split_of(value_type),
+        status=status,
+    )
+    plain = _valued(value_type, status=status)
+    assert build_flag_entry(flag) == build_flag_entry(plain)
+    assert build_flag_entry(flag) == {
+        "key": "flag",
+        "active": False,
+        "value_type": value_type,
+        "off_value": PAIRS[value_type][1],
+    }
+
+
+@pytest.mark.parametrize(
+    "status", [FeatureFlagStatus.ACTIVE, FeatureFlagStatus.INACTIVE]
+)
+def test_a_boolean_flag_never_reads_either(status):
+    """Only a direct database write could leave one on a boolean flag; its
+    entry is the one it has without."""
+    rules = _native(_c("a", "eq", "x"))
+    stray = _with_value("string")
+    flag = _flag(rules=stray, rollout=25, status=status, split=_split_of("string"))
+    assert build_flag_entry(flag) == build_flag_entry(
+        _flag(rules=rules, rollout=25, status=status)
+    )
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "status", [FeatureFlagStatus.ACTIVE, FeatureFlagStatus.ARCHIVED]
+)
+@pytest.mark.parametrize("stored", ["a split", "a rule value"])
+def test_a_split_or_a_rule_value_outside_the_rules_is_remote(status, stored):
+    """As any stored value outside them, whatever the status: the SDK asks the
+    server, which answers it without a value."""
+    bad_split = _split_of("string")[:2]
+    bad_rules = _native(_c("a", "eq", "x"))
+    bad_rules["rules"][0]["value"] = 5
+    fields = {"split": bad_split} if stored == "a split" else {"rules": bad_rules}
+    assert build_flag_entry(_valued("string", status=status, **fields)) == REMOTE
+
+
+def test_a_flag_with_a_split_moves_no_other_entry():
+    """The document of every other flag is the one it was, and only the flag's
+    own entry moves the version."""
+    others = [
+        _valued("string", key="a", rules=_native(_c("a", "eq", "x"))),
+        _flag(key="b", rollout=50),
+        _valued("json", key="c", status=FeatureFlagStatus.INACTIVE),
+    ]
+    with_one = build_ruleset([*others, _valued("string", split=_split_of("string"))])
+    without = build_ruleset(others)
+    assert [e for e in with_one["flags"] if e["key"] != "flag"] == without["flags"]
+    assert (with_one["schema"], with_one["bucketing"]) == (1, "md5-mod100-v1")
+    # A change of weights is not in the document: every SDK asks the server.
+    weights = _split_of("string")
+    weights[0]["weight"], weights[1]["weight"] = 33, 34
+    again = build_ruleset([*others, _valued("string", split=weights)])
+    assert again["version"] == with_one["version"] != without["version"]
+
+
+# ---------------------------------------------------------------------------
 # Patterns are classified by name: never compiled, never run
 # ---------------------------------------------------------------------------
 

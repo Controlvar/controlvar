@@ -6,8 +6,9 @@
 * The legacy list, no rules and an object that is neither shape carry none.
 * The key is the rule's id as the evaluator reads it, checked against
   ``targeting_adapter.normalise_targeting_rules`` on every shape it reads.
-* It is pure: it changes nothing it is given, and no file of ``backend/app`` or
-  ``modules/backend/app`` names or imports it yet (``_references``).
+* It is pure: it changes nothing it is given, and of ``backend/app`` and
+  ``modules/backend/app`` only the functions that serve a flag name it
+  (``_references``).
 
 ``backend/tests/integration/database/test_flag_split_migration.py`` holds
 ``t2012_flag_split``'s SQL to the same answers, over :data:`STORED_RULES`.
@@ -236,20 +237,31 @@ def _references(tree: ast.AST) -> list:
     return lines
 
 
-def _callers() -> list:
-    """Each reference ``_references`` sees in ``backend/app`` and
-    ``modules/backend/app``."""
-    found = []
+def _callers() -> dict:
+    """How many references ``_references`` sees in each top-level function of
+    ``backend/app`` and ``modules/backend/app``, by ``(file, function)``;
+    ``<module>`` is what is in none (an import, a method)."""
+    found: dict = {}
     for root in (APP, REPO_ROOT / "modules" / "backend" / "app"):
         for path in sorted(root.rglob("*.py")) if root.is_dir() else ():
             tree = ast.parse(path.read_text(encoding="utf-8"))
-            name = path.relative_to(REPO_ROOT)
-            found += [f"{name}:{line}" for line in _references(tree)]
+            name = str(path.relative_to(REPO_ROOT))
+            for node in tree.body:
+                where = node.name if isinstance(node, ast.FunctionDef) else "<module>"
+                if lines := _references(node):
+                    found[(name, where)] = found.get((name, where), 0) + len(lines)
     return found
 
 
-def test_nothing_in_the_application_calls_it_yet():
-    assert _callers() == []
+def test_only_serving_a_flag_calls_it():
+    """What a flag serves and whether it can be served; whether its ruleset
+    entry is remote. All in ``flag_values``, which nothing imports it from."""
+    values = "backend/app/core/flag_values.py"
+    assert _callers() == {
+        (values, "_unservable"): 1,
+        (values, "serve"): 1,
+        (values, "has_split_or_rule_value"): 1,
+    }
 
 
 @pytest.mark.parametrize(

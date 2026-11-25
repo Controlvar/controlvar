@@ -36,14 +36,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * client's own HTTP call and JSON mapping read it, as they read a server's.
  *
  * <p>One test, not one per vector: it counts the vectors it answered and checked, and requires
- * 49, so an empty or truncated file fails here instead of running nothing.
+ * 56, so an empty or truncated file fails here instead of running nothing.
  */
 class ValueVectorsTest {
 
     /** Surefire runs this module in sdk/java/core. */
     private static final Path VECTORS = Paths.get("..", "..", "..", "tests", "sdk-contract", "value-vectors.json");
-    /** Pinned: 35 served + 14 malformed (backend/tests/unit/services/test_sdk_value_vectors.py). */
-    private static final int EXPECTED = 49;
+    /** Pinned: 42 served + 14 malformed (backend/tests/unit/services/test_sdk_value_vectors.py). */
+    private static final int EXPECTED = 56;
     private static final User USER = User.builder("value-vector-user").build();
     private static final String FLAG_KEY = "value-vector";
 

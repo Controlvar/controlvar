@@ -1037,10 +1037,9 @@ create and delete. Start the previous release straight after the downgrade.
 
 This revision adds the column `split` (`jsonb`) to `feature_flags`, for a flag's
 split in production, and to `flag_environment_settings`, for its split in
-staging or development. It is empty on every row. The columns are storage only:
-no request sets a split or a rule value (a value of its own that a targeting
-rule carries), and no evaluation reads one, so SDKs get the same answers as
-before.
+staging or development. It is empty on every row. No request sets a split or a
+rule value (a value of its own that a targeting rule carries) yet, so SDKs get
+the same answers as before.
 
 The previous release, 0.48.0, runs against this schema unchanged: a flag it
 creates has no split, and a flag it updates keeps the one it has.
@@ -1088,12 +1087,10 @@ Downgrading the database first, with this release still running, is the only
 order under Docker Compose and Helm
 ([An Older Image Against a Newer Database](#an-older-image-against-a-newer-database)).
 Once the downgrade has committed, this release answers `500` to every flag
-evaluation, flag read and flag change, and to a ruleset request with a staging
-or development key, until the API is rolled back. A bulk toggle answers `200`
-with every flag failed, and a ruleset request with a production key is still
-answered, unless the run also undoes `t2011_flag_environments`: then every
-request that presents an API key answers `500`. Start the previous release
-straight after the downgrade.
+evaluation, flag read, flag change and ruleset request, until the API is rolled
+back. A bulk toggle answers `200` with every flag failed. If the run also undoes
+`t2011_flag_environments`, every request that presents an API key answers `500`.
+Start the previous release straight after the downgrade.
 
 Roll back to a specific revision:
 

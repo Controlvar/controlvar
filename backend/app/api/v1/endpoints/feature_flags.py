@@ -43,7 +43,7 @@ from backend.app.core.context_limits import (
     check_context_text,
 )
 from backend.app.core.flag_environments import PRODUCTION
-from backend.app.core.flag_values import flag_value_type, served_value
+from backend.app.core.flag_values import flag_value_type, serve
 from backend.app.core.logger import unexpected_failure
 from backend.app.core.metrics import record_flag_evaluation
 from backend.app.core.permissions import (
@@ -1211,9 +1211,10 @@ class FlagEvaluationRequest(BaseModel):
 
 
 def evaluation_answer(
-    flag_key: str, db_flag: Any, evaluation: Dict[str, Any]
+    flag_key: str, db_flag: Any, evaluation: Dict[str, Any], user_id: str
 ) -> Dict[str, Any]:
-    """The body the evaluate endpoints send for *evaluation* of *db_flag*.
+    """The body the evaluate endpoints send *user_id* for *evaluation* of
+    *db_flag* for them.
 
     Pure: no database, no metric. ``backend/scripts/generate_value_vectors.py``
     builds the served half of ``tests/sdk-contract/value-vectors.json`` with it,
@@ -1221,7 +1222,7 @@ def evaluation_answer(
     function's (#1810).
     """
     answer: Dict[str, Any] = {"key": flag_key, "enabled": evaluation["enabled"]}
-    servable, value = served_value(db_flag, evaluation["enabled"])
+    servable, value = serve(db_flag, evaluation, user_id)
     if servable:
         answer["value"] = value
     answer["value_type"] = flag_value_type(db_flag)
@@ -1249,13 +1250,15 @@ def _evaluate_flag_by_key(
     rather than 404: the client should treat it as "off", not as an error.
     Only an unknown key is a 404.
 
-    ``value`` is what the flag serves this user (#1497): its ``on_value`` when
-    ``enabled``, its ``off_value`` otherwise, so every way a flag is off --
-    inactive, archived, no match, outside the percentage, ``reason: "error"``
-    -- serves the off value; a boolean flag's ``value`` is ``enabled``. A
-    stored value outside the value rules is answered with no ``value`` key
-    (``flag_values.served_value``). ``config`` is always ``None``: the value
-    travels in ``value``, never in ``config``.
+    ``value`` is what the flag serves this user (#1497), by
+    ``flag_values.serve``: its ``off_value`` unless ``enabled``, so every way a
+    flag is off -- inactive, archived, no match, outside the percentage,
+    ``reason: "error"`` -- serves the off value; a boolean flag's ``value`` is
+    ``enabled``. When ``enabled`` it is the matched rule's own value or the
+    value of the flag's split, where one is stored (#2012: no request sets
+    either yet), and otherwise the flag's ``on_value``. A stored value outside
+    the value rules is answered with no ``value`` key. ``config`` is always
+    ``None``: the value travels in ``value``, never in ``config``.
     """
     db_flag = db.query(FeatureFlag).filter(FeatureFlag.key == flag_key).first()
     if not db_flag:
@@ -1270,10 +1273,10 @@ def _evaluate_flag_by_key(
         evaluation = feature_flag_service.evaluate_flag_detailed(
             served, user_id, context, record_metrics=False
         )
-        return evaluation_answer(flag_key, served, evaluation)
+        return evaluation_answer(flag_key, served, evaluation, user_id)
     evaluation = feature_flag_service.evaluate_flag_detailed(db_flag, user_id, context)
     record_flag_evaluation(flag_key, "enabled" if evaluation["enabled"] else "disabled")
-    return evaluation_answer(flag_key, db_flag, evaluation)
+    return evaluation_answer(flag_key, db_flag, evaluation, user_id)
 
 
 @router.get(

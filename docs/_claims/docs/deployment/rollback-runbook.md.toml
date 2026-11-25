@@ -630,12 +630,19 @@ text = "Clear them first while the release that wrote them is still serving (the
 by = ["test:backend/tests/integration/database/test_flag_split_migration.py::test_with_nothing_in_use_the_downgrade_drops_both_columns_and_nothing_else"]
 
 [[unit]]
-text = "Once the downgrade has committed, the release still serving answers 500 to every flag evaluation, flag read and flag change, and to a ruleset request with a staging or development key, until the API is rolled back."
+text = "Once the downgrade has committed, the release still serving answers 500 to every flag evaluation, flag read, flag change and ruleset request, until the API is rolled back."
 by = ["test:backend/tests/integration/database/test_flag_split_migration.py::test_this_release_answers_500_to_flag_evaluations_and_reads_on_the_downgraded_schema"]
 
 [[unit]]
-text = "A bulk toggle answers 200 with every flag failed, and a ruleset request with a production key is still answered, unless the run also undoes t2011_flag_environments: then every request that presents an API key answers 500 (Rolling back past flag environments)."
+text = "A bulk toggle answers 200 with every flag failed."
 by = ["test:backend/tests/integration/database/test_flag_split_migration.py::test_this_release_answers_500_to_flag_evaluations_and_reads_on_the_downgraded_schema"]
+
+[[unit]]
+text = "If the run also undoes t2011_flag_environments, every request that presents an API key answers 500 (Rolling back past flag environments)."
+by = [
+    "test:backend/tests/integration/database/test_flag_split_migration.py::test_this_release_answers_500_to_flag_evaluations_and_reads_on_the_downgraded_schema",
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_this_release_answers_500_to_a_production_key_on_the_downgraded_schema",
+]
 
 [[unit]]
 text = "The downgrade waits at most 1 s for each of feature_flags and flag_environment_settings, behind any session that has read it and not ended its transaction."
@@ -1696,7 +1703,7 @@ by = [
 ]
 
 [[unit]]
-text = "Until the API is rolled back, the release still serving answers 500 to every flag evaluation, flag read and flag change, and to a ruleset request with a staging or development key (Rolling back past flag splits)."
+text = "Until the API is rolled back, the release still serving answers 500 to every flag evaluation, flag read, flag change and ruleset request (Rolling back past flag splits)."
 by = ["test:backend/tests/integration/database/test_flag_split_migration.py::test_this_release_answers_500_to_flag_evaluations_and_reads_on_the_downgraded_schema"]
 
 [[unit]]

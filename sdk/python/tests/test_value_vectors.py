@@ -8,7 +8,7 @@ malformed half is answers no server sends.
 
 One test, not one per vector: pytest over an empty parametrize list passes as
 "skipped", so the test counts the vectors it answered and checked, and
-requires 49.
+requires 56.
 """
 
 from __future__ import annotations
@@ -21,8 +21,8 @@ from controlvar import ExperimentationClient, ExperimentationError
 from controlvar.testing import FakeTransport
 
 VECTORS_PATH = Path(__file__).resolve().parents[3] / "tests" / "sdk-contract" / "value-vectors.json"
-#: Pinned: 35 served + 14 malformed (backend/tests/unit/services/test_sdk_value_vectors.py).
-EXPECTED = 49
+#: Pinned: 42 served + 14 malformed (backend/tests/unit/services/test_sdk_value_vectors.py).
+EXPECTED = 56
 USER_ID = "value-vector-user"
 
 

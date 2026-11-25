@@ -27,9 +27,9 @@ The contract, in order, for a getter of type X:
 
 Two halves:
 
-* ``served`` (35): what this server answers. Each body is built from an
+* ``served`` (42): what this server answers. Each body is built from an
   in-memory flag by the route's own code: the flag service's
-  ``evaluate_flag_detailed`` and the route's ``evaluation_answer`` (32), or
+  ``evaluate_flag_detailed`` and the route's ``evaluation_answer`` (39), or
   the route's 404 for an unknown key (3). ``expect``, ``error_code`` and
   ``reported`` are NOT read from those bodies: they come from the case table
   below (each flag's stored values and the getter's type), so a change in
@@ -97,6 +97,17 @@ UNKNOWN_KEY = "vector-unknown"
 TYPE_MISMATCH = "TYPE_MISMATCH"
 INVALID_RESPONSE = "INVALID_RESPONSE"
 
+#: A rule every user matches: they send no ``plan``.
+EVERY_USER: Dict[str, Any] = {
+    "logical_operator": "AND",
+    "groups": [
+        {
+            "logical_operator": "AND",
+            "conditions": [{"attribute": "plan", "operator": "is_null", "value": None}],
+        }
+    ],
+}
+
 #: The flags of the served half: what each row stores. ``unservable`` marks a
 #: stored value outside the value rules (only a direct database write can
 #: leave one); the route answers such a flag without ``value``. The string,
@@ -148,6 +159,65 @@ FLAGS: Dict[str, Dict[str, Any]] = {
         "off_value": ["fallback"],
         "unservable": True,
     },
+    # A split, and a rule with a value of its own that matches every user
+    # (#2012): ``served_on`` is what USER_ID is served while the flag is on
+    # for them, in place of the on value. Its split values are written here,
+    # not read from a body; test_sdk_value_vectors.py holds them to the split's
+    # own hash.
+    "vector-split-string": {
+        "value_type": STRING,
+        "on_value": "on-copy",
+        "off_value": "off-copy",
+        "split": [
+            {"value": "red", "weight": 34},
+            {"value": "green", "weight": 33},
+            {"value": "blue", "weight": 33},
+        ],
+        "served_on": "blue",
+    },
+    "vector-split-number": {
+        "value_type": NUMBER,
+        "on_value": 10,
+        "off_value": 2.5,
+        "split": [
+            {"value": 1, "weight": 34},
+            {"value": 20, "weight": 33},
+            {"value": 30.5, "weight": 33},
+        ],
+        "served_on": 30.5,
+    },
+    "vector-split-json": {
+        "value_type": JSON,
+        "on_value": {"color": "blue"},
+        "off_value": ["fallback"],
+        "split": [
+            {"value": {"color": "red"}, "weight": 34},
+            {"value": {"color": "green", "size": 2}, "weight": 33},
+            {"value": ["plain"], "weight": 33},
+        ],
+        "served_on": {"color": "green", "size": 2},
+    },
+    "vector-rule-value-string": {
+        "value_type": STRING,
+        "on_value": "on-copy",
+        "off_value": "off-copy",
+        "targeting_rules": {**EVERY_USER, "value": "rule-copy"},
+        "served_on": "rule-copy",
+    },
+    "vector-rule-value-number": {
+        "value_type": NUMBER,
+        "on_value": 10,
+        "off_value": 2.5,
+        "targeting_rules": {**EVERY_USER, "value": 99},
+        "served_on": 99,
+    },
+    "vector-rule-value-json": {
+        "value_type": JSON,
+        "on_value": {"color": "blue"},
+        "off_value": ["fallback"],
+        "targeting_rules": {**EVERY_USER, "value": {"tier": "pro"}},
+        "served_on": {"tier": "pro"},
+    },
 }
 
 #: The served half's cases: (flag key, on or off, getter). "on" is the flag
@@ -176,6 +246,14 @@ SERVED_CASES: List[Tuple[str, str, str]] = [
     ("vector-unservable-number", "on", NUMBER),
     ("vector-unservable-json", "on", JSON),
     *((UNKNOWN_KEY, "unknown", getter) for getter in GETTERS),
+    # A split's value and a rule's own (#2012), each type; off, the off value.
+    ("vector-split-string", "on", STRING),
+    ("vector-split-string", "off", STRING),
+    ("vector-split-number", "on", NUMBER),
+    ("vector-split-json", "on", JSON),
+    ("vector-rule-value-string", "on", STRING),
+    ("vector-rule-value-number", "on", NUMBER),
+    ("vector-rule-value-json", "on", JSON),
 ]
 
 
@@ -316,17 +394,18 @@ def _quiet_logs() -> Iterator[None]:
 
 def stored_flag(key: str, state: str) -> FeatureFlag:
     """A transient ``FeatureFlag`` carrying what the row would: a boolean flag
-    stores no values (both columns NULL)."""
+    stores no values (both columns NULL). Never saved."""
     spec = FLAGS[key]
     return FeatureFlag(
         key=key,
         name=key,
         status=FeatureFlagStatus[spec.get("status", "ACTIVE")],
         rollout_percentage=100 if state == "on" or "status" in spec else 0,
-        targeting_rules=None,
+        targeting_rules=spec.get("targeting_rules"),
         value_type=spec["value_type"],
         on_value=spec.get("on_value"),
         off_value=spec.get("off_value"),
+        split=spec.get("split"),
     )
 
 
@@ -345,14 +424,16 @@ def server_response(key: str, state: str) -> Dict[str, Any]:
         mock.patch.object(MetricsService, "log_error"),
     ):
         evaluation = FeatureFlagService(db=None).evaluate_flag_detailed(flag, USER_ID)
-    return {"status": 200, "body": route.evaluation_answer(key, flag, evaluation)}
+    body = route.evaluation_answer(key, flag, evaluation, USER_ID)
+    return {"status": 200, "body": body}
 
 
 def expectation(key: str, state: str, getter: str) -> Tuple[Any, Optional[str]]:
     """``(expect, error_code)`` from the case table, never from a body: an
     unknown key is the default with no code compared; an unservable flag has
     no value (INVALID_RESPONSE); a getter of another type than the flag's is
-    TYPE_MISMATCH; otherwise the stored on value (on) or off value (off)."""
+    TYPE_MISMATCH; otherwise the stored on value (on) or off value (off), or,
+    on, what the flag's split or rule serves instead (``served_on``)."""
     if key == UNKNOWN_KEY:
         return "default", None
     spec = FLAGS[key]
@@ -360,7 +441,9 @@ def expectation(key: str, state: str, getter: str) -> Tuple[Any, Optional[str]]:
         return "default", INVALID_RESPONSE
     if spec["value_type"] != getter:
         return "default", TYPE_MISMATCH
-    return (spec["on_value"] if state == "on" else spec["off_value"]), None
+    if state == "off":
+        return spec["off_value"], None
+    return spec.get("served_on", spec["on_value"]), None
 
 
 def vector(

@@ -11,8 +11,10 @@
   ``flag_environments.py`` passes one to, and into staging or development as
   one of ``flag_environment_service``'s ``SETTING_FIELDS``. A split comes from
   ``effective_settings``, which only the promotion (and its audit entry) calls;
-* the only attribute reads of one are the view of a flag in an environment and
-  ``effective_settings``. No evaluation, ruleset or response reads one;
+* the only attribute reads of one are the view of a flag in an environment,
+  ``effective_settings``, the column the ruleset's query loads and the
+  stale-flag hint; ``flag_values`` reads it by name in one function, for what a
+  flag serves and for its ruleset entry. No response carries one;
 * the generic writer that would copy any column, ``crud_feature_flag``, is
   used for reading only.
 
@@ -186,6 +188,9 @@ def by_function(tree: ast.AST, count) -> Dict[str, List[str]]:
 
 
 ENVIRONMENTS = "backend/app/core/flag_environments.py"
+VALUES = "backend/app/core/flag_values.py"
+RULESET_ROUTE = "backend/app/api/v1/endpoints/sdk.py"
+STALE = "backend/app/services/stale_flags.py"
 ROUTES = "backend/app/api/v1/endpoints/flag_environments.py"
 SETTINGS = "backend/app/services/flag_environment_service.py"
 SERVICE = "backend/app/services/feature_flag_service.py"
@@ -198,8 +203,27 @@ SERVICE = "backend/app/services/feature_flag_service.py"
 #: the service takes the parameter and assigns it. ``audit_setting`` and
 #: ``AUDIT_NAME_ONLY_FIELDS`` name it in an entry. ``core/balanced_blocks.py``'s
 #: keyword fills a message about an experiment's traffic split, not a column.
+#: Serving one writes none: ``core/flag_values.py`` reads it by name in one
+#: function, and its variables and parameters are called that; the two vector
+#: generators build a transient row of their own corpus, never saved.
 EXPECTED: Dict[str, Dict[str, List[str]]] = {
     "backend/app/core/balanced_blocks.py": {"balance_problem": ["keyword argument"]},
+    VALUES: {
+        "_split_of": ["string"],
+        "_unservable": ["name assigned"],
+        "serve": ["name assigned"],
+        "split_errors": ["parameter"],
+        "split_value": ["parameter"],
+    },
+    "backend/scripts/generate_ruleset_vectors.py": {
+        "Corpus.flag": ["parameter", "string"],
+        "_multi_way_flags": ["keyword argument", "string"],
+        "stored_flag": ["keyword argument", "string"],
+    },
+    "backend/scripts/generate_value_vectors.py": {
+        "stored_flag": ["keyword argument", "string"],
+        MODULE: ["string"] * 3,
+    },
     ENVIRONMENTS: {
         "FlagInEnvironment.__init__": ["string"],
         MODULE: ["string", "string"],
@@ -510,11 +534,16 @@ def reads(tree: ast.AST) -> List[str]:
     ]
 
 
-def test_the_only_readers_are_the_environment_view_and_a_promotion():
+def test_the_only_readers_are_the_environment_view_a_promotion_and_serving():
+    """Serving one: the ruleset's query loads the column, the stale-flag hint
+    asks whether there is one, and ``flag_values._split_of`` (in EXPECTED above,
+    read by name) is the rest."""
     found = {name: by_function(tree, reads) for name, tree in _sources().items()}
     assert {name: places for name, places in found.items() if places} == {
         ENVIRONMENTS: {"FlagInEnvironment.__init__": ["read"]},
         SETTINGS: {"effective_settings": ["read"]},
+        RULESET_ROUTE: {"_ruleset_response": ["read"]},
+        STALE: {"_one_answer": ["read"]},
     }
     assert reads(ast.parse("value = flag.split\nwords = 'a b'.split(' ')\n")) == [
         "read"

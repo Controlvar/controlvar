@@ -11,26 +11,35 @@ WHERE BUCKETING HAPPENS, and with what:
       assignment_service._hash_user_to_variant   key = experiment.key (UUID fallback), bucket_of
       (endpoints/openfeature.py _evaluate_flag used it too; the module was removed, #241, #737)
 
-    its own MD5("{user}:{flag.key}") read as the FULL 128-bit digest, % 100
-      feature_flag_service._evaluate_percentage_rollout
+    core/flag_values.percent_bucket (the FULL 128-bit digest, % 100), over
+      MD5("{user}:{flag.key}")          feature_flag_service._evaluate_percentage_rollout
           the flag rollout function: the flag's rollout_percentage and a
           matched targeting rule's rollout_percentage both go through it.
           int(md5(f"{user}:{key}").hexdigest(), 16) % 100 -- for
           user-123 / my-flag that is bucket 79, where bucket_of gives 69.
+      MD5("{user}:{flag.key}:split")    flag_values.split_bucket
+          which value of a flag's split a user the flag is on for is served:
+          the entries take the 100 buckets in stored order, by weight (#2012).
+          For user-123 / my-flag that is bucket 49.
 
     other functions, each its own
-      global_holdout_service / mutual_exclusion_service
-          MD5("{user}:{salt}"), first 4 bytes LE, % 100 (holdout) or / 2^32 (MEG)
-      endpoints/tracking.py (bandit routing)
+      services/global_holdout_service.holdout_bucket
+          MD5("{user}:{salt}"), first 4 bytes LE, % 100
+      services/mutual_exclusion_service.MutualExclusionService._normalized_hash
+          MD5("{user}:{salt}"), first 4 bytes LE, / 2^32
+      services/bandit_routing.pick_variant
           MD5("{user}:{experiment.id}:bandit"), full digest, % 10000
       core/rules_engine.should_include_in_rollout
           MD5("{user}:{rule.id}"), full digest, % 100
-      services/rules_evaluation_service (percentage_bucket operator)
+      services/rules_evaluation_service.RulesEvaluationService._evaluate_percentage_bucket
           MD5("{user}"), full digest, % 100
-      services/llm_experiment_service
+      services/llm_experiment_service.LLMExperimentService._hash_bucket
           MD5("{experiment_id}:{user}"), full digest, % 10000
       backend/lambda/shared/consistent_hash.py
           its own salted hasher ("{key}_traffic", "{key}_variant")
+
+Every other MD5 in ``backend/app`` is a cache key or the like, and decides no
+bucket; ``backend/tests/unit/core/test_bucketing_catalogue.py`` lists both.
 
 Changing any of these re-buckets users, so none is changed in passing; a site
 moves to this module only as a deliberate, stated change.

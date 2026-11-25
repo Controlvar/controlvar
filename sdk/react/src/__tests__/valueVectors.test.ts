@@ -10,7 +10,7 @@
  * vector's `error_code` is compared with `error.code` when it is not null; a null code is not
  * compared (this SDK reports a 404 or a 503 as `REQUEST_FAILED`).
  *
- * One test, not one per vector: it counts the vectors it answered and checked, and requires 49,
+ * One test, not one per vector: it counts the vectors it answered and checked, and requires 56,
  * so an empty or truncated file fails here instead of running nothing.
  */
 import React from 'react';
@@ -34,8 +34,8 @@ interface Vector {
 }
 
 const VECTORS_PATH = join(__dirname, '..', '..', '..', '..', 'tests', 'sdk-contract', 'value-vectors.json');
-/** Pinned: 35 served + 14 malformed (backend/tests/unit/services/test_sdk_value_vectors.py). */
-const EXPECTED = 49;
+/** Pinned: 42 served + 14 malformed (backend/tests/unit/services/test_sdk_value_vectors.py). */
+const EXPECTED = 56;
 const FLAG_KEY = 'value-vector';
 const USER = { userId: 'value-vector-user' };
 const config: SdkConfig = { apiKey: 'test-key', baseUrl: 'https://api.example.com' };

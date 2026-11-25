@@ -83,6 +83,7 @@ if str(_LIBRARY_ROOT) not in sys.path:
     sys.path.insert(0, str(_LIBRARY_ROOT))
 
 from ground_truth.hashing import flag_bucket as oracle_flag_bucket
+from ground_truth.hashing import split_value as oracle_split_value
 
 # ---------------------------------------------------------------------------
 # Rules, in the two stored shapes the evaluators read
@@ -458,6 +459,140 @@ def test_p1_a_rule_matched_user_is_off_after_a_rollback_to_0(admin_client, db_se
     assert stored.status == FeatureFlagStatus.INACTIVE
     assert stored.rollout_percentage == 0
     assert stored.targeting_rules == _dashboard_rule()  # rules are left as written
+
+
+# ---------------------------------------------------------------------------
+# A flag with a split and a rule's own value (#2012)
+# ---------------------------------------------------------------------------
+
+SPLIT = [
+    {"value": "red", "weight": 34},
+    {"value": "green", "weight": 33},
+    {"value": "blue", "weight": 33},
+]
+
+
+def _multi_way(db_session, name: str, rollout: int, **fields) -> FeatureFlag:
+    """A string flag with a split, and a rule (``country eq US``, at 30%) with a
+    value of its own."""
+    rules = _native_rule(30)
+    rules["rules"][0]["value"] = "us-copy"
+    row = FeatureFlag(
+        key=f"{PREFIX}{name}",
+        name=f"r629 {name}",
+        status=FeatureFlagStatus.ACTIVE,
+        rollout_percentage=rollout,
+        **{
+            "targeting_rules": rules,
+            "value_type": "string",
+            "on_value": "on",
+            "off_value": "off",
+            "split": SPLIT,
+            **fields,
+        },
+    )
+    db_session.add(row)
+    db_session.commit()
+    db_session.refresh(row)
+    return row
+
+
+def _bodies(client, key: str, context: dict) -> dict[str, dict]:
+    """``GET /evaluate``'s whole body for every user."""
+    out = {}
+    for user in USERS:
+        resp = client.get(
+            f"{FLAGS}/evaluate/{key}",
+            params={"user_id": user, "context": json.dumps(context)},
+        )
+        assert resp.status_code == 200, resp.text
+        out[user] = resp.json()
+    return out
+
+
+def _expected_value(key: str, user: str, percentage: int, own=None) -> str:
+    """What the ground-truth copy says: the off value outside *percentage*,
+    inside it the rule's own value or the split's."""
+    if oracle_flag_bucket(user, key) >= percentage:
+        return "off"
+    return own if own is not None else oracle_split_value(user, key, SPLIT)
+
+
+def _values(bodies: dict[str, dict]) -> dict[str, str]:
+    return {user: body["value"] for user, body in bodies.items()}
+
+
+def test_a_rollback_to_0_gives_every_user_of_a_split_the_off_value(
+    admin_client, db_session
+):
+    """The users its rule gave a value of its own among them."""
+    flag = _multi_way(db_session, "split", 60)
+    for context, percentage, own in ((MATCHED, 30, "us-copy"), (UNMATCHED, 60, None)):
+        before = _values(_bodies(admin_client, flag.key, context))
+        assert before == {
+            u: _expected_value(flag.key, u, percentage, own) for u in USERS
+        }
+    assert set(before.values()) == {"red", "green", "blue", "off"}
+
+    body = _rollback(admin_client, flag, 0)
+
+    assert body["success"] is True, body
+    for context in (MATCHED, UNMATCHED):
+        after = _bodies(admin_client, flag.key, context)
+        wrong = [
+            f"user {user} got {answer['value']!r} after a rollback to 0%"
+            for user, answer in after.items()
+            if (answer["enabled"], answer["reason"], answer["value"])
+            != (False, "inactive", "off")
+        ]
+        assert wrong == [], wrong[:5]
+    stored = _stored(db_session, flag)
+    assert (stored.status, stored.split) == (FeatureFlagStatus.INACTIVE, SPLIT)
+
+
+def test_a_partial_rollback_lowers_only_the_percentage_of_a_split(
+    admin_client, db_session
+):
+    """The users a rule matched keep its percentage and its value; the split is
+    stored as it was; and the users still enabled keep their value."""
+    flag = _multi_way(db_session, "split-partial", 60)
+    matched = _values(_bodies(admin_client, flag.key, MATCHED))
+    unmatched = _values(_bodies(admin_client, flag.key, UNMATCHED))
+
+    body = _rollback(admin_client, flag, 20)
+
+    assert body["success"] is True, body
+    stored = _stored(db_session, flag)
+    assert (stored.status, stored.rollout_percentage) == (FeatureFlagStatus.ACTIVE, 20)
+    assert json.dumps(stored.split) == json.dumps(SPLIT)
+    assert _values(_bodies(admin_client, flag.key, MATCHED)) == matched
+    after = _values(_bodies(admin_client, flag.key, UNMATCHED))
+    assert after == {u: _expected_value(flag.key, u, 20) for u in USERS}
+    still_on = {u for u, value in after.items() if value != "off"}
+    assert still_on == _under(20, flag.key)
+    assert {u: after[u] for u in still_on} == {u: unmatched[u] for u in still_on}
+    assert len(set(after.values())) == 4
+
+
+def test_a_rollout_stage_raises_only_the_percentage_of_a_split(
+    admin_client, db_session, session_factory
+):
+    flag = _multi_way(db_session, "split-stage", 20, targeting_rules=None)
+    before = _values(_bodies(admin_client, flag.key, UNMATCHED))
+    on_before = {u for u, value in before.items() if value != "off"}
+    _schedule(db_session, flag)
+    columns = {c.name for c in FeatureFlag.__table__.columns}
+    row = {name: getattr(flag, name) for name in columns}
+
+    _rollout_tick(session_factory)
+
+    stored = _stored(db_session, flag)
+    changed = {name for name in columns if getattr(stored, name) != row[name]}
+    assert changed == {"rollout_percentage", "updated_at"}
+    assert stored.rollout_percentage == 80 and stored.split == SPLIT
+    after = _values(_bodies(admin_client, flag.key, UNMATCHED))
+    assert after == {u: _expected_value(flag.key, u, 80) for u in USERS}
+    assert {u: after[u] for u in on_before} == {u: before[u] for u in on_before}
 
 
 def test_p2_a_default_rule_user_is_off_after_a_rollback_to_0(

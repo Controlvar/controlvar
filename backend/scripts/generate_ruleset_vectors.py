@@ -25,7 +25,11 @@ What the SDKs check against it (in their own jobs):
   not read values compares ``expected`` exactly as before; one that does
   gives exactly that value, compared as JSON, whenever it answers locally.
   The corpus holds every such type as an active local flag, an active remote
-  flag, an inactive flag and an archived flag.
+  flag, an inactive flag and an archived flag;
+* a flag with a split, or with a targeting rule that has a value of its own
+  (#2012), is a remote entry while it is active: an SDK asks the server for
+  every one of its cases, and ``expected_value`` is the split's value or the
+  rule's. Its ``stored_flags`` line has the ``split``; no other flag's does.
 
 ``must_local`` is the domain rule of the local evaluator, applied on the
 server side: the flag is ``evaluation: "local"`` (or inactive), ``user_id``
@@ -91,7 +95,7 @@ from backend.app.core.flag_values import (
     STRING,
     VALUE_TYPES,
     is_portable_number,
-    served_value,
+    serve,
 )
 from backend.app.core.rules_engine import evaluate_rule
 from backend.app.core.targeting_adapter import (
@@ -219,10 +223,12 @@ class Corpus:
         rollout_percentage: int = 0,
         status: str = "ACTIVE",
         values: Optional[Tuple[str, Any, Any]] = None,
+        split: Optional[List[Dict[str, Any]]] = None,
     ) -> str:
         """A stored flag. *values* is ``(value_type, on_value, off_value)`` for
         a string, number or json flag; a boolean flag stores none, as its row
-        does, and its line in the file is the one it had before #1497."""
+        does, and its line in the file is the one it had before #1497. A flag
+        with no *split* names none, as its line did before #2012."""
         assert key not in self.flags, key
         self.flags[key] = {
             "key": key,
@@ -236,6 +242,9 @@ class Corpus:
             self.flags[key].update(
                 value_type=value_type, on_value=on_value, off_value=off_value
             )
+        if split is not None:
+            assert values is not None, key
+            self.flags[key]["split"] = split
         return key
 
     def case(self, key: str, user_id: str, context: Optional[Dict[str, Any]]) -> None:
@@ -303,6 +312,7 @@ def build_corpus() -> Corpus:
     _remote_flags(corpus)
     _segment_flags(corpus)
     _value_flags(corpus)
+    _multi_way_flags(corpus)
     return corpus
 
 
@@ -816,6 +826,124 @@ def _value_flags(corpus: Corpus) -> None:
             corpus.case(key, USER, None)
 
 
+#: The split of each value type the corpus serves (#2012): three values that
+#: are neither the type's on value nor its off value, so what a case expects
+#: says where it came from.
+SPLITS: Dict[str, List[Dict[str, Any]]] = {
+    STRING: [
+        {"value": "red", "weight": 34},
+        {"value": "green", "weight": 33},
+        {"value": "blue", "weight": 33},
+    ],
+    NUMBER: [
+        {"value": 1, "weight": 34},
+        {"value": 20, "weight": 33},
+        {"value": 30.5, "weight": 33},
+    ],
+    JSON: [
+        {"value": {"color": "red"}, "weight": 34},
+        {"value": {"color": "green", "size": 2}, "weight": 33},
+        {"value": ["plain"], "weight": 33},
+    ],
+}
+#: A split whose middle value has no weight: it takes no bucket.
+SPLIT_WITH_A_ZERO: List[Dict[str, Any]] = [
+    {"value": "red", "weight": 50},
+    {"value": "green", "weight": 0},
+    {"value": "blue", "weight": 50},
+]
+
+
+def _multi_way_flags(corpus: Corpus) -> None:
+    """Flags with a split, and flags with a rule's own value (#2012).
+
+    Active, each is a remote entry: an SDK asks the server, so every case
+    carries the server's value and none is ``must_local``. Inactive and
+    archived, the split's flag is the entry of any other string flag.
+    """
+    pro = cond("plan", "equals", "pro")
+    users = [f"user-{index}" for index in range(12)]
+
+    def split_flag(key: str, value_type: str = STRING, rules=None, **fields) -> str:
+        fields.setdefault("split", SPLITS[value_type])
+        values = (value_type, *VALUE_PAIRS[value_type])
+        return corpus.flag(key, rules, values=values, **fields)
+
+    # On for everyone: the split decides, for the odd ids too.
+    key = split_flag("split-string", rollout_percentage=100)
+    for user in [*USERS, "user-123"]:
+        corpus.case(key, user, None)
+    # On for some: every value still reaches some of them.
+    key = split_flag("split-string-30", rollout_percentage=30)
+    for index in range(40):
+        corpus.case(key, f"user-{index}", None)
+    for status in ("INACTIVE", "ARCHIVED"):
+        key = split_flag(
+            f"split-string-{status.lower()}", rollout_percentage=100, status=status
+        )
+        corpus.case(key, USER, {"plan": "pro"})
+        corpus.case(key, USER, None)
+    # A rule without a value: the users it matches get the split's.
+    key = split_flag("split-rule", rules=dashboard(pro))
+    for user in users:
+        corpus.case(key, user, {"plan": "pro"})
+    corpus.case(key, USER, {"plan": "free"})
+    key = split_flag(
+        "split-zero-weight", split=SPLIT_WITH_A_ZERO, rollout_percentage=100
+    )
+    for user in users:
+        corpus.case(key, user, None)
+    for value_type in (NUMBER, JSON):
+        key = split_flag(f"split-{value_type}", value_type, rollout_percentage=100)
+        for user in users:
+            corpus.case(key, user, None)
+
+    # A rule's own value, and no split: the rollout serves the two values.
+    key = corpus.flag(
+        "rule-value",
+        {**dashboard(pro), "value": "pro-copy"},
+        rollout_percentage=50,
+        values=(STRING, *VALUE_PAIRS[STRING]),
+    )
+    for user in users[:2]:
+        corpus.case(key, user, {"plan": "pro"})
+    for user in users:
+        corpus.case(key, user, {"plan": "free"})
+    # A rule's own value wins over the split; a rule without one, and the
+    # rollout, serve the split's.
+    key = split_flag(
+        "rule-value-split",
+        NUMBER,
+        native(
+            {**nrule("pro", group("and", cond("plan", "eq", "pro"))), "value": 99},
+            nrule("team", group("and", cond("plan", "eq", "team"))),
+        ),
+        rollout_percentage=100,
+    )
+    for plan in ("pro", "team", "free"):
+        for user in users[:6]:
+            corpus.case(key, user, {"plan": plan})
+    # A rule at 50% serves its own value to the users inside, and the off value
+    # to those it matched outside; the default rule has a value of its own.
+    key = corpus.flag(
+        "rule-value-half",
+        native(
+            {
+                **nrule("half", group("and", cond("plan", "eq", "pro")), rollout=50),
+                "value": {"tier": "pro"},
+            },
+            default_rule={
+                **nrule("everyone", group("and", cond("plan", "eq", "pro"))),
+                "value": ["everyone"],
+            },
+        ),
+        values=(JSON, *VALUE_PAIRS[JSON]),
+    )
+    for user in users:
+        corpus.case(key, user, {"plan": "pro"})
+    corpus.case(key, USER, {"plan": "free"})
+
+
 # ---------------------------------------------------------------------------
 # Evaluation
 # ---------------------------------------------------------------------------
@@ -830,7 +958,7 @@ def stored_flag(spec: Dict[str, Any]) -> FeatureFlag:
     """A transient ``FeatureFlag`` carrying exactly what the database would.
 
     A boolean flag's ``value_type`` is ``boolean`` and its two value columns
-    NULL, as the ``check_flag_values`` constraint requires.
+    NULL, as the ``check_flag_values`` constraint requires. Never saved.
     """
     return FeatureFlag(
         key=spec["key"],
@@ -841,13 +969,14 @@ def stored_flag(spec: Dict[str, Any]) -> FeatureFlag:
         value_type=spec.get("value_type", BOOLEAN),
         on_value=_roundtrip(spec.get("on_value")),
         off_value=_roundtrip(spec.get("off_value")),
+        split=_roundtrip(spec.get("split")),
     )
 
 
-def server_answer(
+def server_evaluation(
     flag: FeatureFlag, user_id: str, context: Optional[Dict[str, Any]]
 ) -> Dict[str, Any]:
-    """The flag service's answer, with metrics recording switched off."""
+    """The flag service's evaluation, with metrics recording switched off."""
     with (
         mock.patch.object(MetricsService, "record_flag_evaluation"),
         mock.patch.object(MetricsService, "log_error"),
@@ -855,19 +984,30 @@ def server_answer(
             feature_flag_service, "resolve_segment_memberships", stub_memberships
         ),
     ):
-        result = FeatureFlagService(db=None).evaluate_flag_detailed(
+        return FeatureFlagService(db=None).evaluate_flag_detailed(
             flag, user_id, context
         )
-    return {"enabled": bool(result["enabled"]), "reason": result["reason"]}
 
 
-def server_value(flag: FeatureFlag, answer: Dict[str, Any]) -> Any:
-    """The ``value`` ``/feature-flags/evaluate/{key}`` answers with *answer*.
+def expected_answer(evaluation: Dict[str, Any]) -> Dict[str, Any]:
+    """What a case expects of the flag service's *evaluation*."""
+    return {"enabled": bool(evaluation["enabled"]), "reason": evaluation["reason"]}
 
-    The route's own ``served_value``. Every corpus value is within the value
-    rules, so every value flag here has one to serve.
+
+def server_answer(
+    flag: FeatureFlag, user_id: str, context: Optional[Dict[str, Any]]
+) -> Dict[str, Any]:
+    return expected_answer(server_evaluation(flag, user_id, context))
+
+
+def server_value(flag: FeatureFlag, evaluation: Dict[str, Any], user_id: str) -> Any:
+    """The ``value`` ``/feature-flags/evaluate/{key}`` answers *user_id* with
+    *evaluation*.
+
+    The route's own ``serve``. Every corpus value is within the value rules, so
+    every value flag here has one to serve.
     """
-    servable, value = served_value(flag, answer["enabled"])
+    servable, value = serve(flag, evaluation, user_id)
     assert servable, flag.key
     return value
 
@@ -964,15 +1104,16 @@ def iter_cases(corpus: Corpus) -> Iterator[Dict[str, Any]]:
     for key, user_id, context in corpus.cases:
         context = _roundtrip(context)
         counters[key] = counters.get(key, 0) + 1
+        evaluation = server_evaluation(flags[key], user_id, context)
         case: Dict[str, Any] = {
             "id": f"{key}#{counters[key]}",
             "flag": key,
             "user_id": user_id,
             "context": context,
-            "expected": server_answer(flags[key], user_id, context),
+            "expected": expected_answer(evaluation),
         }
         if "value_type" in corpus.flags[key]:
-            case["expected_value"] = server_value(flags[key], case["expected"])
+            case["expected_value"] = server_value(flags[key], evaluation, user_id)
         case["must_local"] = must_answer_locally(
             corpus.flags[key], entries[key], user_id, context
         )

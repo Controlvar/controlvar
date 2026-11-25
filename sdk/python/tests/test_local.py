@@ -154,7 +154,7 @@ def test_the_vectors_through_get_feature_flag(no_thread):
     # The flags this ruleset sends to the server are exactly its active "remote" ones, computed here
     # from the file so the list cannot drift without this failing.
     remote_keys = sorted(f["key"] for f in VECTORS["ruleset"]["flags"] if f.get("active") and f.get("evaluation") == "remote")
-    assert len(remote_keys) == 45
+    assert len(remote_keys) == 54
     assert client.status().server_evaluated_flags == remote_keys
 
     wrong, unsendable = [], []
@@ -200,7 +200,7 @@ def test_the_vectors_through_get_feature_flag(no_thread):
         client.clear_cache()
     assert wrong == []
     assert unsendable and all(not c["must_local"] and not is_well_formed(c["user_id"]) for c in unsendable)
-    assert local_answers == 1333
+    assert local_answers == 1337
     # Every case that was not answered locally and could be sent reached the fake server (and had its
     # context checked above); the rest are the unsendable lone-surrogate ids.
     assert local_answers + reached_server + len(unsendable) == len(VECTORS["cases"])

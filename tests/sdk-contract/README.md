@@ -108,9 +108,10 @@ python -m backend.scripts.generate_value_vectors
 python -m backend.scripts.generate_value_vectors --check
 ```
 
-- `served` (35): bodies the server builds, by the evaluate route's own `evaluation_answer` from
+- `served` (42): bodies the server builds, by the evaluate route's own `evaluation_answer` from
   in-memory flags (each value type on and off, a boolean flag, falsy values, an inactive flag, a
-  stored value outside the value rules), and the route's 404 for an unknown key. Their `expect`,
+  stored value outside the value rules, a split's value and a rule's own value of each type), and
+  the route's 404 for an unknown key. Their `expect`,
   `error_code` and `reported` come from the generator's case table (the flag's stored values and
   the getter's type), not from the bodies and not from any SDK.
 - `malformed` (14): answers no current server sends, written in the generator: a server from
@@ -122,7 +123,7 @@ The JavaScript SDK (`sdk/js/__tests__/value-vectors.test.ts`), the Python SDK
 the React Native SDK (`sdk/react-native/__tests__/valueVectors.test.ts`), the Java SDK
 (`sdk/java/core/src/test/java/com/controlvar/sdk/ValueVectorsTest.java`) and the .NET SDK
 (`sdk/dotnet/tests/Controlvar.Tests/ValueVectorsTests.cs`) each answer every vector in one test
-that counts the vectors it answered and checked and requires 49, so an empty file fails instead
+that counts the vectors it answered and checked and requires 56, so an empty file fails instead
 of running nothing. They run in the `js`, `python`, `react`, `react-native`, `java` and `dotnet`
 jobs of `SDK Unit Tests` (the .NET one on all three of its test legs). The Go SDK does not read this
 file: its getters are methods of an evaluation result with no error channel, and it answers four of
@@ -130,7 +131,7 @@ the malformed vectors differently (no `value_type`; a number beyond 2^53-1; json
 decoded into an `any`), none of which a server sends.
 
 `backend/tests/unit/services/test_sdk_value_vectors.py` fails when the file is stale (in-process,
-no database, no `.git`), pins 35 and 14, checks that every served body as the server builds it
+no database, no `.git`), pins 42 and 14, checks that every served body as the server builds it
 now carries what its case expects, and that the generator loads nothing from under `sdk/`.
 `backend/tests/integration/api/test_flag_values_api.py` checks that both evaluate routes answer
 with `evaluation_answer` and that the 404 body is the route's.
@@ -157,7 +158,7 @@ directory. A harness (`harness/published_js_ruleset.cjs` under node, required by
   and the sentinel answers `{enabled: false, reason: "inactive"}`. A release that refuses the
   format passes only if its pin says `format-refused`, which is a decision taken in that file;
 - answers: every case is DEFER or exactly the server's `{enabled, reason}`, and the cases it
-  answers locally are exactly the `must_local` ones (1333 today; the count is logged). Where a
+  answers locally are exactly the `must_local` ones (1337 today; the count is logged). Where a
   release returns a `value` (0.3.0 does) it must equal the case's `expected_value` as JSON, or
   `enabled` for a boolean flag; 0.1.1 and 0.2.0 read none (a value flag reaches them as on or
   off) and are compared on `enabled` and `reason` alone.
