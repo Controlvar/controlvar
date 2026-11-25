@@ -34,6 +34,7 @@ from backend.app.api.v1.endpoints import results as results_endpoints
 from backend.app.main import app
 from backend.app.models.user import User
 from backend.app.services import analysis_service as analysis_module
+from backend.app.services import results_batch
 from backend.app.services.analysis_service import AnalysisService
 from backend.app.services.export_service import ExportService
 from backend.app.services.sufficient_stats_analysis import (
@@ -318,14 +319,24 @@ def test_an_unknown_method_raised_by_the_analysis_is_a_500(harness, monkeypatch)
 
 
 def test_the_export_does_not_read_an_unknown_method_as_no_results(monkeypatch):
-    """``_results_for`` turns a ``ValueError`` into blank columns; this is not
-    one, so it reaches the export route's own failure handling."""
+    """The export turns a ``ValueError`` into blank columns; this is not one,
+    so it reaches the export route's own failure handling."""
     experiment = _experiment(_ALL_THREE, "benjamini-hochberg", 0.95)
 
-    def converting_units(_db, _experiment_id, variant_id, event):
-        return _THREE.converted[(event, str(variant_id))]
-
-    monkeypatch.setattr(analysis_module, "count_converting_users", converting_units)
+    monkeypatch.setattr(
+        results_batch,
+        "load_group",
+        lambda _db, _ids: results_batch.GroupReads(
+            experiments={experiment.id: experiment},
+        ),
+    )
+    monkeypatch.setattr(
+        results_batch,
+        "load_rows",
+        lambda _db, _experiments: results_batch.EventRows(
+            assignments={experiment.id: dict(_THREE.units)}
+        ),
+    )
     service = ExportService(_FakeSession(experiment, _THREE))
     with pytest.raises(UnknownCorrectionMethodError):
         service._variants_to_rows([experiment])

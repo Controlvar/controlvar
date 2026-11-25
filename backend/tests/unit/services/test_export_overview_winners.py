@@ -11,7 +11,9 @@ It used to count saved reports through a column they do not have, swallow
 the error and answer 0 for every request.
 
 The database is a list of experiments and the analysis a fake that answers
-each experiment's results by id and records every call it is asked.
+each experiment's results by id and records every call it is asked. The batch
+that asks (``results_batch.results_many``, #1817) is the real one; only what it
+reads from the database is replaced.
 """
 
 from __future__ import annotations
@@ -19,9 +21,10 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 from unittest.mock import patch
 
 import pytest
@@ -33,9 +36,10 @@ from backend.app.main import app
 from backend.app.models.experiment import Experiment, ExperimentStatus
 from backend.app.models.user import UserRole
 from backend.app.schemas.export import ExportFormat, ExportRequest
+from backend.app.services import results_batch
+from backend.app.services.analysis_service import AnalysisService
 from backend.app.services.export_service import ExportService
 
-ANALYSIS = "backend.app.services.export_service.AnalysisService"
 JAN = datetime(2026, 1, 1, tzinfo=timezone.utc)
 FEB = JAN + timedelta(days=31)
 
@@ -90,7 +94,7 @@ class _Db:
 
 
 class _Analyses:
-    """Stands in for ``AnalysisService``: each experiment's results by id.
+    """Stands in for ``get_experiment_results``: each experiment's results by id.
 
     ``calls`` records the arguments of every ``get_experiment_results`` call.
     An answer that is an exception is raised.
@@ -100,15 +104,30 @@ class _Analyses:
         self.answers = answers
         self.calls: List[Tuple[tuple, dict]] = []
 
-    def __call__(self, db: Any) -> "_Analyses":
-        return self
-
-    def get_experiment_results(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+    def get_experiment_results(
+        self, service: AnalysisService, *args: Any, **kwargs: Any
+    ) -> Dict[str, Any]:
         self.calls.append((args, kwargs))
         answer = self.answers[args[0]]
         if isinstance(answer, Exception):
             raise answer
         return answer
+
+    @contextmanager
+    def answering(self) -> Iterator[None]:
+        """The batch asks these, and reads nothing from the database."""
+        with (
+            patch.object(
+                results_batch, "load_group", lambda db, ids: results_batch.GroupReads()
+            ),
+            patch.object(
+                AnalysisService,
+                "get_experiment_results",
+                autospec=True,
+                side_effect=self.get_experiment_results,
+            ),
+        ):
+            yield
 
 
 def _experiment(created_at: datetime = JAN, status=ExperimentStatus.ACTIVE):
@@ -151,7 +170,7 @@ def _no_winner():
 
 def _overview(experiments, answers, start=None, end=None):
     analyses = _Analyses(answers)
-    with patch(ANALYSIS, analyses):
+    with analyses.answering():
         report = ExportService(_Db(experiments)).generate_platform_overview(
             start_date=start, end_date=end
         )
@@ -192,7 +211,7 @@ def test_the_count_is_the_export_winner_column_for_the_same_period():
     }
     service = ExportService(_Db(experiments))
 
-    with patch(ANALYSIS, _Analyses(answers)):
+    with _Analyses(answers).answering():
         report = service.generate_platform_overview(start_date=JAN, end_date=FEB)
         content, _ = service.export_experiments(
             ExportRequest(format=ExportFormat.JSON, start_date=JAN, end_date=FEB)
@@ -249,7 +268,7 @@ def test_an_analysis_error_fails_the_overview():
         failing.id: RuntimeError("database went away"),
     }
 
-    with patch(ANALYSIS, _Analyses(answers)):
+    with _Analyses(answers).answering():
         with pytest.raises(RuntimeError, match="database went away"):
             ExportService(_Db([healthy, failing])).generate_platform_overview()
 
@@ -260,12 +279,11 @@ def test_an_analysis_error_answers_500_and_never_0():
     user = SimpleNamespace(
         id=uuid.uuid4(), role=UserRole.ADMIN, is_active=True, is_superuser=False
     )
+    analyses = _Analyses({experiment.id: RuntimeError("database went away")})
     app.dependency_overrides[deps.get_current_active_user] = lambda: user
     app.dependency_overrides[deps.get_db] = lambda: _Db([experiment])
     try:
-        with patch(
-            ANALYSIS, _Analyses({experiment.id: RuntimeError("database went away")})
-        ):
+        with analyses.answering():
             response = TestClient(app, raise_server_exceptions=False).get(
                 "/api/v1/export/reports/overview"
             )
@@ -273,6 +291,8 @@ def test_an_analysis_error_answers_500_and_never_0():
         app.dependency_overrides.pop(deps.get_current_active_user, None)
         app.dependency_overrides.pop(deps.get_db, None)
 
+    # The 500 is the analysis error's: the analysis was asked, once.
+    assert len(analyses.calls) == 1
     assert response.status_code == 500
     assert "experiments_with_winners" not in response.text
     assert "database went away" not in response.text
@@ -287,7 +307,7 @@ def test_an_experiment_whose_results_cannot_be_computed_is_not_counted(caplog):
         **{e.id: _won(e) for e in won},
     }
 
-    with caplog.at_level(logging.INFO, logger="backend.app.services.export_service"):
+    with caplog.at_level(logging.INFO, logger="backend.app.services.results_batch"):
         report, _ = _overview([cannot] + won, answers)
 
     assert report.experiments_with_winners == 2
@@ -307,7 +327,7 @@ def test_one_analysis_per_experiment_and_none_for_an_empty_period():
     # An export and the overview on one service compute each result once.
     shared = _Analyses(answers)
     service = ExportService(_Db(experiments))
-    with patch(ANALYSIS, shared):
+    with shared.answering():
         service.export_experiments(ExportRequest(format=ExportFormat.JSON))
         report = service.generate_platform_overview()
     assert report.experiments_with_winners == 3
