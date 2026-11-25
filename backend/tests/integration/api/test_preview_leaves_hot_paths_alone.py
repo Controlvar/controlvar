@@ -125,14 +125,18 @@ BALANCED_STICKY_REPEAT = [
 ]
 
 #: ``GET /feature-flags/evaluate/{key}`` with a context, a flag at 100%.
+#:
+#: Re-recorded for #2012: both reads of the flag row select one more column,
+#: ``feature_flags.split``, which the evaluation does not use. No statement,
+#: join or filter is added.
 FLAG_EVALUATE = [
     ("SET search_path TO test_experimentation", "ff5c96ca3f3a2d4d"),
-    ("SELECT feature_flags", "3ef8f6e666d27638"),
+    ("SELECT feature_flags", "007d955ac819baac"),
     ("INSERT raw_metrics", "fd0a8005b25de354"),
     ("SELECT raw_metrics", "b0caed01a9fe2077"),
     ("INSERT raw_metrics", "fd0a8005b25de354"),
     ("SELECT raw_metrics", "b0caed01a9fe2077"),
-    ("SELECT feature_flags", "0ac4844d985ed346"),
+    ("SELECT feature_flags", "4fca93d67167fe74"),
 ]
 
 
