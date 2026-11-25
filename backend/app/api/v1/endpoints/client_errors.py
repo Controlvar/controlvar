@@ -23,6 +23,13 @@ An app whose errors should count sends them to its own server, which forwards
 them with a server-side key. Every valid key is accepted: neither route
 answers 403.
 
+Safety monitoring measures production only (#2011). A report sent with a key
+of another flag environment is stored with that environment in
+``request_data["environment"]`` and counts in neither number, whatever its
+source: not in ``error_count``, not in ``uncounted_error_count``
+(``metric.production_error_filter``). A production key's report has no such
+key, as before.
+
 Stored rows are timed by the server on receipt; a ``timestamp`` sent by the
 client is kept in the row's metadata as ``client_timestamp``. ``stack_trace``
 and ``metadata`` are bounded in UTF-8 bytes (``STACK_TRACE_MAX_BYTES``,
@@ -38,14 +45,16 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps
+from backend.app.api.key_environment import presented_environment
 from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.sdk_scope import presented_key_is_server_key
+from backend.app.core.flag_environments import PRODUCTION
 from backend.app.core.logger import (
     failure_detail,
     failure_label,
@@ -54,6 +63,7 @@ from backend.app.core.logger import (
 from backend.app.models.experiment import Experiment
 from backend.app.models.feature_flag import FeatureFlag
 from backend.app.models.metrics.metric import (
+    REPORT_ENVIRONMENT,
     REPORT_SOURCE_CLIENT,
     REPORT_SOURCE_SERVER,
     ErrorLog,
@@ -256,14 +266,21 @@ def report_source(db: Session, api_key_header: Optional[str]) -> str:
 
 
 def _request_data(
-    report: ClientErrorRequest, experiment_id: Optional[UUID], source: str
+    report: ClientErrorRequest,
+    experiment_id: Optional[UUID],
+    environment: str,
+    source: str,
 ) -> Dict[str, Any]:
     """The ``request_data`` JSON stored with the row.
 
-    ``source`` is set here, from the presented key (:func:`report_source`);
-    the request body has no way to set it.
+    ``source`` and ``environment`` are set here, from the presented key
+    (:func:`report_source`, ``key_environment.presented_environment``); the
+    request body has no way to set them. Production's environment is not
+    stored.
     """
     data: Dict[str, Any] = {"source": source}
+    if environment != PRODUCTION:
+        data[REPORT_ENVIRONMENT] = environment
     if report.feature_flag_key:
         data["feature_flag_key"] = report.feature_flag_key
     if report.experiment_key:
@@ -277,6 +294,7 @@ def _to_error_log_create(
     report: ClientErrorRequest,
     feature_flag_id: Optional[UUID],
     experiment_id: Optional[UUID],
+    environment: str,
     source: str,
 ) -> ErrorLogCreate:
     return ErrorLogCreate(
@@ -285,7 +303,7 @@ def _to_error_log_create(
         user_id=report.user_id,
         message=report.message[:_MESSAGE_MAX],
         stack_trace=_truncate_utf8(report.stack_trace, STACK_TRACE_MAX_BYTES),
-        request_data=_request_data(report, experiment_id, source),
+        request_data=_request_data(report, experiment_id, environment, source),
         metadata=_stored_metadata(report),
         # Server receive time (naive UTC, like the column).
         timestamp=datetime.now(timezone.utc).replace(tzinfo=None),
@@ -316,6 +334,7 @@ def _response(row: ErrorLog, experiment_id: Optional[UUID]) -> ClientErrorRespon
     response_description="Returns the stored error log entry",
 )
 async def report_client_error(
+    http_request: Request,
     report: ClientErrorRequest = Body(..., description="Error report"),
     db: Session = Depends(deps.get_db),
     api_key_info: Dict[str, Any] = Depends(deps.get_api_key),
@@ -342,29 +361,36 @@ async def report_client_error(
         HTTPException 404: If ``feature_flag_key`` or ``experiment_key`` is unknown
         HTTPException 422: If neither key is given or the body is invalid
     """
+    # Read here, after the key dependency has run; the worker gets the name.
+    environment = presented_environment(http_request)
     # Closes ``db`` before it returns: the source is read and the report
     # stored in a worker thread on the same session, closed again when the
     # work is done.
     db.close()
-    return await run_in_threadpool(_report_in_worker, report, api_key_header, db)
+    return await run_in_threadpool(
+        _report_in_worker, report, api_key_header, environment, db
+    )
 
 
 def _report_in_worker(
-    report: ClientErrorRequest, api_key_header: Optional[str], db: Session
+    report: ClientErrorRequest,
+    api_key_header: Optional[str],
+    environment: str,
+    db: Session,
 ) -> ClientErrorResponse:
-    """:func:`report_one` on *db*, stamped with the presented key's
-    :func:`report_source`, in a worker thread; closes *db*."""
+    """:func:`report_one` on *db*, stamped with *environment* and the
+    presented key's :func:`report_source`, in a worker thread; closes *db*."""
     try:
-        return report_one(report, report_source(db, api_key_header), db)
+        return report_one(report, environment, report_source(db, api_key_header), db)
     finally:
         db.close()
 
 
 def report_one(
-    report: ClientErrorRequest, source: str, db: Session
+    report: ClientErrorRequest, environment: str, source: str, db: Session
 ) -> ClientErrorResponse:
     """``POST /api/v1/tracking/errors``'s answer for *report*, stamped
-    *source*, worked out on *db*, which is left open.
+    *environment* and *source*, worked out on *db*, which is left open.
 
     Synchronous: it reads and writes through *db* as it goes, so call it from
     a worker thread, never from a coroutine on the event loop. Raises the
@@ -379,7 +405,9 @@ def report_one(
     try:
         row = MetricsService.log_error(
             db=db,
-            data=_to_error_log_create(report, feature_flag_id, experiment_id, source),
+            data=_to_error_log_create(
+                report, feature_flag_id, experiment_id, environment, source
+            ),
         )
     except Exception as exc:
         db.rollback()
@@ -403,6 +431,7 @@ def report_one(
     response_description="Returns batch processing results",
 )
 async def report_client_errors_batch(
+    http_request: Request,
     request: ClientErrorBatchRequest = Body(..., description="Batch of error reports"),
     db: Session = Depends(deps.get_db),
     api_key_info: Dict[str, Any] = Depends(deps.get_api_key),
@@ -427,29 +456,39 @@ async def report_client_errors_batch(
         HTTPException 413: If more than 100 reports are sent
         HTTPException 422: If the batch is malformed
     """
+    # Read here, after the key dependency has run; the worker gets the name.
+    environment = presented_environment(http_request)
     # Closes ``db`` before it returns: the source is read and the reports
     # stored in a worker thread on the same session, closed again when the
     # work is done.
     db.close()
-    return await run_in_threadpool(_report_batch_in_worker, request, api_key_header, db)
+    return await run_in_threadpool(
+        _report_batch_in_worker, request, api_key_header, environment, db
+    )
 
 
 def _report_batch_in_worker(
-    request: ClientErrorBatchRequest, api_key_header: Optional[str], db: Session
+    request: ClientErrorBatchRequest,
+    api_key_header: Optional[str],
+    environment: str,
+    db: Session,
 ) -> ClientErrorBatchResponse:
-    """:func:`report_batch_one` on *db*, stamped with the presented key's
-    :func:`report_source`, in a worker thread; closes *db*."""
+    """:func:`report_batch_one` on *db*, stamped with *environment* and the
+    presented key's :func:`report_source`, in a worker thread; closes *db*."""
     try:
-        return report_batch_one(request, report_source(db, api_key_header), db)
+        return report_batch_one(
+            request, environment, report_source(db, api_key_header), db
+        )
     finally:
         db.close()
 
 
 def report_batch_one(
-    request: ClientErrorBatchRequest, source: str, db: Session
+    request: ClientErrorBatchRequest, environment: str, source: str, db: Session
 ) -> ClientErrorBatchResponse:
     """``POST /api/v1/tracking/errors/batch``'s answer for *request*, every
-    report stamped *source*, worked out on *db*, which is left open.
+    report stamped *environment* and *source*, worked out on *db*, which is
+    left open.
 
     Synchronous: it reads and writes through *db* as it goes, so call it from
     a worker thread, never from a coroutine on the event loop. Raises the
@@ -471,7 +510,9 @@ def report_batch_one(
     for index, report in enumerate(request.errors):
         try:
             feature_flag_id, experiment_id = _resolve_targets(db, report)
-            data = _to_error_log_create(report, feature_flag_id, experiment_id, source)
+            data = _to_error_log_create(
+                report, feature_flag_id, experiment_id, environment, source
+            )
             rows.append(
                 ErrorLog(
                     error_type=data.error_type,

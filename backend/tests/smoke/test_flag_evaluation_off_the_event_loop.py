@@ -7,7 +7,9 @@ session again when it is done. Each handler is found through the route walk,
 as in ``test_assign_route_off_the_event_loop.py``, so it is the function
 actually routed; the route's function in ``feature_flags`` that the worker
 runs is replaced by a stub that records its thread, its arguments and what
-had been done with the session when it ran.
+had been done with the session when it ran. One of those arguments is the
+presented key's flag environment, which the handler reads from the request
+(#2011).
 
 Each handler is written ``async def``. Every router's ``OffLoopRoute`` would
 turn a plain ``def`` into a coroutine on the route, so neither the route walk
@@ -23,6 +25,7 @@ from typing import Any, Dict
 from unittest.mock import MagicMock, call
 
 import pytest
+from fastapi import Request
 
 from backend.app.api.v1.endpoints import feature_flags
 from backend.app.main import app
@@ -33,7 +36,7 @@ pytestmark = [pytest.mark.smoke]
 BODY = MagicMock(name="FlagEvaluationRequest")
 
 #: (method, path, the function the worker runs, the handler's arguments other
-#: than the session, in the order that function takes them).
+#: than the session and the request, in the order that function takes them).
 ROUTES = [
     pytest.param(
         "GET",
@@ -71,12 +74,21 @@ def _routed(path: str, method: str):
     return found
 
 
+def _request(environment: str) -> Request:
+    """A request whose key ``deps.get_api_key`` admitted in *environment*."""
+    request = Request({"type": "http", "headers": []})
+    request.state.flag_environment = environment
+    return request
+
+
+@pytest.mark.parametrize("environment", ["production", "staging", "development"])
 @pytest.mark.parametrize("method, path, worker_function, arguments", ROUTES)
 async def test_the_evaluation_runs_in_one_worker_trip_after_the_session_is_closed(
     method: str,
     path: str,
     worker_function: str,
     arguments: Dict[str, Any],
+    environment: str,
     monkeypatch,
 ):
     routed = _routed(path, method)
@@ -89,7 +101,15 @@ async def test_the_evaluation_runs_in_one_worker_trip_after_the_session_is_close
         return "the answer"
 
     monkeypatch.setattr(feature_flags, worker_function, stub)
-    answer = await routed[0].endpoint(**arguments, db=db, api_key_info=MagicMock())
+    answer = await routed[0].endpoint(
+        **arguments,
+        http_request=_request(environment),
+        db=db,
+        api_key_info=MagicMock(),
+    )
+    # The worker is also given the presented key's environment (#2011), which
+    # the handler read from the request, before the session.
+    arguments = {**arguments, "environment": environment}
     assert answer == "the answer"
     assert len(seen) == 1, seen
     thread, args, at_entry = seen[0]

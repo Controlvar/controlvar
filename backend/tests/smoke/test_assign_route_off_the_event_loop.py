@@ -6,6 +6,7 @@ who calls its handler in process.
   through the route walk, as in ``test_assign_batch_route.py``, so it is the
   function actually routed; ``tracking.assign_one`` is replaced by a stub that
   records its thread and what had been done with the session when it ran.
+* A key of another flag environment is refused before either (#2011).
 * The handler is written ``async def``. Every router's ``OffLoopRoute`` would
   turn a plain ``def`` into a coroutine on the route, so the route walk alone
   cannot tell, but the module function stays what was written, and the split
@@ -30,7 +31,9 @@ from typing import Tuple
 from unittest.mock import MagicMock, call
 
 import pytest
+from fastapi import HTTPException, Request
 
+from backend.app.api.key_environment import production_only_detail
 from backend.app.api.v1.endpoints import tracking
 from backend.app.main import app
 from backend.tests.smoke.modules_manifest import REPO_ROOT
@@ -57,6 +60,13 @@ def _routed(path: str, method: str):
     return found
 
 
+def _request(environment: str) -> Request:
+    """A request whose key ``deps.get_api_key`` admitted in *environment*."""
+    request = Request({"type": "http", "headers": []})
+    request.state.flag_environment = environment
+    return request
+
+
 async def test_the_assignment_runs_in_one_worker_trip_after_the_session_is_closed(
     monkeypatch,
 ):
@@ -71,7 +81,10 @@ async def test_the_assignment_runs_in_one_worker_trip_after_the_session_is_close
 
     monkeypatch.setattr(tracking, "assign_one", stub)
     answer = await routed[0].endpoint(
-        request=MagicMock(), db=db, api_key_info=MagicMock()
+        http_request=_request("production"),
+        request=MagicMock(),
+        db=db,
+        api_key_info=MagicMock(),
     )
     assert answer == "the answer"
     assert len(seen) == 1, seen
@@ -87,6 +100,28 @@ async def test_the_assignment_runs_in_one_worker_trip_after_the_session_is_close
         f"the session after the handler returned: {db.mock_calls}, want the "
         "handler's close() and then the worker's"
     )
+
+
+@pytest.mark.parametrize("environment", ["staging", "development"])
+async def test_a_key_of_another_environment_is_refused_before_the_session_is_touched(
+    environment, monkeypatch
+):
+    """#2011: experiments run in production only. The handler refuses the key
+    before it closes the session or takes a worker thread."""
+    routed = _routed(PATH, "POST")
+    assert len(routed) == 1, routed
+    db, assigned = MagicMock(), []
+    monkeypatch.setattr(tracking, "assign_one", lambda *args: assigned.append(args))
+    with pytest.raises(HTTPException) as refused:
+        await routed[0].endpoint(
+            http_request=_request(environment),
+            request=MagicMock(),
+            db=db,
+            api_key_info=MagicMock(),
+        )
+    assert refused.value.status_code == 403
+    assert refused.value.detail == production_only_detail(environment)
+    assert (assigned, db.mock_calls) == ([], [])
 
 
 def test_the_handler_is_written_as_a_coroutine_function():

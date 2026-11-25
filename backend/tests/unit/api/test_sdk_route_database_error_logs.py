@@ -493,6 +493,7 @@ def test_a_failed_last_used_write_is_logged_by_its_class_and_sqlstate_only(
         id=key_id,
         is_valid=True,
         user_id=uuid.uuid4(),
+        environment="production",
         update_last_used=_raising(_undefined_column()),
     )
     session = _Session({APIKey: key, User: SimpleNamespace(is_active=True)})

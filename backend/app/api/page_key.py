@@ -18,12 +18,17 @@ whose owner is inactive). It then reads the **presented** key's own row, by
 the hash of the header, so another key of the same owner decides nothing.
 Every other route that takes an API key is unchanged: the refusal is here,
 never in ``deps.get_api_key``.
+
+Visual experiments run in production only (#2011), so a key with no scopes
+whose flag environment is staging or development is refused with 403 too, by
+the same row (``key_environment.refuse_non_production``).
 """
 
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.key_environment import refuse_non_production
 from backend.app.core.api_key_scopes import parse_scopes
 from backend.app.core.security import hash_api_key
 from backend.app.models.api_key import APIKey
@@ -49,7 +54,8 @@ async def require_page_key(
     api_key_header: str = Depends(deps.API_KEY_HEADER),
     owner: User = Depends(deps.get_api_key),
 ) -> User:
-    """The presented key's owner, if the key has no scopes; else 403.
+    """The presented key's owner, if the key has no scopes and is a production
+    key; else 403.
 
     Runs one query, the presented key's row, on the request's session and on
     the event loop, so the loop waits for that one round trip. It checks
@@ -70,4 +76,5 @@ async def require_page_key(
     refusal = page_key_refusal(api_key)
     if refusal is not None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=refusal)
+    refuse_non_production(api_key.environment)
     return owner

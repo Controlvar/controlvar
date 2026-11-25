@@ -8,7 +8,9 @@ counts toward the flag's error rate and can roll the flag back, and so does a
 ``"client"`` row that an update rewrites. So a new writer is not harmless by
 default: it has to decide what its rows mean. Error reports from ``POST /api/v1/tracking/errors[/batch]``
 stamp ``"server"`` or ``"client"`` from the presented key; flag evaluations
-that fail on the server write ``{"context": ...}`` and count on purpose.
+that fail on the server write ``{"context": ...}`` and count on purpose. Either
+kind written for a key outside production also names its environment in
+``request_data["environment"]`` and is counted in no number (#2011).
 
 This pins the exact set of writers, as (file, enclosing function), across
 ``backend/app``, ``modules``, ``backend/lambda``, ``backend/scripts`` and

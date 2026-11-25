@@ -18,6 +18,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    and_,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.declarative import declared_attr
@@ -181,25 +182,50 @@ REPORT_SOURCE_SERVER = "server"
 #: (``SafetyService.get_error_metrics`` reports it as ``uncounted_error_count``).
 REPORT_SOURCE_CLIENT = "client"
 
+#: The key of ``request_data`` that names the flag environment of a row written
+#: for a staging or development API key (#2011): an error report it sent, or a
+#: flag evaluation of its own that failed. A production row has no such key.
+REPORT_ENVIRONMENT = "environment"
+
+
+def production_error_filter() -> ColumnElement[bool]:
+    """The ``error_logs`` rows of production: those with no
+    :data:`REPORT_ENVIRONMENT`.
+
+    Safety monitoring and the metrics summary measure production only (#2011),
+    so this is part of both filters below, and a row of another environment is
+    in neither number. ``->>`` is NULL for a row with no such key, and for
+    ``request_data`` that is SQL ``NULL``, JSON ``null`` or an array.
+    """
+    return ErrorLog.request_data[REPORT_ENVIRONMENT].astext.is_(None)
+
 
 def counted_error_filter() -> ColumnElement[bool]:
     """The ``error_logs`` rows that count toward a flag's error numbers.
 
     The one rule, shared by the safety check (``SafetyService.get_error_metrics``)
-    and the metrics summary (``MetricsService.get_metrics_summary``): every row
-    except those whose ``request_data->>'source'`` is :data:`REPORT_SOURCE_CLIENT`.
+    and the metrics summary (``MetricsService.get_metrics_summary``): every
+    production row (:func:`production_error_filter`) except those whose
+    ``request_data->>'source'`` is :data:`REPORT_SOURCE_CLIENT`.
     The test is ``IS DISTINCT FROM``, so rows with no ``source`` count: flag
     evaluations that failed on the server (``{"context": ...}``) and rows whose
     ``request_data`` is SQL ``NULL`` or JSON ``null``. A plain ``!=`` would drop
     those, because it is NULL, not true, for them.
     """
-    return ErrorLog.request_data["source"].astext.is_distinct_from(REPORT_SOURCE_CLIENT)
+    return and_(
+        ErrorLog.request_data["source"].astext.is_distinct_from(REPORT_SOURCE_CLIENT),
+        production_error_filter(),
+    )
 
 
 def uncounted_error_filter() -> ColumnElement[bool]:
-    """The ``error_logs`` rows that are stored but do not count: the complement
-    of :func:`counted_error_filter`, reported as ``uncounted_error_count``."""
-    return ErrorLog.request_data["source"].astext == REPORT_SOURCE_CLIENT
+    """The production rows that are stored but do not count: with
+    :func:`counted_error_filter`, every production row, reported as
+    ``uncounted_error_count``."""
+    return and_(
+        ErrorLog.request_data["source"].astext == REPORT_SOURCE_CLIENT,
+        production_error_filter(),
+    )
 
 
 class ErrorLog(Base, BaseModel):
@@ -212,9 +238,10 @@ class ErrorLog(Base, BaseModel):
     Rows come from flag evaluations that fail on the server
     (``request_data = {"context": ...}``) and from error reports
     (``request_data["source"]`` is :data:`REPORT_SOURCE_SERVER` or
-    :data:`REPORT_SOURCE_CLIENT`). Safety monitoring and the metrics summary
-    count every row except those stamped :data:`REPORT_SOURCE_CLIENT`
-    (:func:`counted_error_filter`).
+    :data:`REPORT_SOURCE_CLIENT`). A row written for a staging or development
+    key also names its environment (:data:`REPORT_ENVIRONMENT`). Safety
+    monitoring and the metrics summary count every production row except those
+    stamped :data:`REPORT_SOURCE_CLIENT` (:func:`counted_error_filter`).
     """
 
     __tablename__ = "error_logs"

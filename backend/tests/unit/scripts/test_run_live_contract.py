@@ -35,6 +35,11 @@ SETTINGS = {
         "file-local-key",
     ),
 }
+#: The staging environment's two keys (#2011), each under its one name.
+STAGING_KEYS = {
+    "CONTROLVAR_STAGING_API_KEY": "staging-key",
+    "CONTROLVAR_LOCAL_STAGING_API_KEY": "staging-local-key",
+}
 #: Three distinct values per setting: neither is a default, and neither is the
 #: 127.0.0.1:8000 CI sets.
 NEW = {"url": "http://127.0.0.1:9", "key": "new-key", "local": "new-local-key"}
@@ -123,16 +128,25 @@ def runner(monkeypatch, tmp_path):
     spec.loader.exec_module(module)
     monkeypatch.setattr(module, "KEY_FILE", tmp_path / "no-key")
     monkeypatch.setattr(module, "LOCAL_KEY_FILE", tmp_path / "no-local-key")
+    monkeypatch.setattr(module, "STAGING_KEY_FILE", tmp_path / "no-staging-key")
+    monkeypatch.setattr(
+        module, "STAGING_LOCAL_KEY_FILE", tmp_path / "no-staging-local-key"
+    )
     monkeypatch.setattr(module, "backend_healthy", lambda api_url: True)
     # Every name each setting is read under, so a developer's shell cannot
     # stand in for the value a test sets.
     for name in (
         *(n for names in SETTINGS.values() for n in names[:2]),
+        *STAGING_KEYS,
         "CONTRACT_EXPERIMENT_KEY",
         "CONTRACT_FLAG_KEY",
     ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("CONTROLVAR_API_KEY", "contract-key")
+    # The staging row passes, unless a test says otherwise.
+    for name, value in STAGING_KEYS.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr(module, "check_staging", lambda *args: ("PASS", "ok"))
     # No database here: the one event sent twice is one stored row, unless a
     # test says otherwise.
     monkeypatch.setattr(module, "_event_rows", lambda user_id, event_name: 1)
@@ -1092,6 +1106,159 @@ def test_the_smokes_are_given_each_setting_under_both_names(monkeypatch, runner)
     name, old, _ = SETTINGS["local"]
     assert local and local[0][name] == "scoped"
     assert local[0][old] == runner.DECOY_KEY != "scoped"
+
+
+# ---------------------------------------------------------------------------
+# A key answers its own flag environment (#2011)
+# ---------------------------------------------------------------------------
+
+#: What the server answers, by key: the two flags, production's and staging's.
+SERVED = {
+    "contract-key": {"sdk_contract_flag": True, "sdk_contract_targeted": False},
+    "staging-key": {"sdk_contract_flag": False, "sdk_contract_targeted": True},
+}
+
+
+def _staging(module, monkeypatch, served, ruleset_key="staging-key"):
+    """The runner's own ``check_staging`` against a server that serves *served*,
+    and the ruleset of *ruleset_key*'s environment."""
+
+    def evaluate(api_url, key, flag_key):
+        return 200, {"enabled": served[key][flag_key]}
+
+    def ruleset(api_url, key, etag=""):
+        assert key == "staging-local-key"
+        flags = [
+            {"key": flag, "active": on, **({"rollout_percentage": 100} if on else {})}
+            for flag, on in served[ruleset_key].items()
+        ]
+        return 200, {}, json.dumps({"flags": flags}).encode()
+
+    monkeypatch.setattr(module, "_evaluate_request", evaluate)
+    monkeypatch.setattr(module, "_ruleset_request", ruleset)
+    return module.check_staging(
+        "http://127.0.0.1:9",
+        "contract-key",
+        "staging-key",
+        "staging-local-key",
+        "sdk_contract_flag",
+        "sdk_contract_targeted",
+    )
+
+
+@pytest.fixture
+def staging_runner(monkeypatch):
+    """The runner with its own ``check_staging``."""
+    spec = importlib.util.spec_from_file_location(
+        "run_live_contract_staging_under_test", RUNNER
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_staging_keys_answered_stagings_pass(staging_runner, monkeypatch):
+    status, detail = _staging(staging_runner, monkeypatch, SERVED)
+    assert status == "PASS", detail
+
+
+@pytest.mark.regression
+def test_staging_keys_answered_productions_fail_the_row(staging_runner, monkeypatch):
+    """What a seed that names no environment makes: two more production keys."""
+    served = {**SERVED, "staging-key": SERVED["contract-key"]}
+    status, detail = _staging(staging_runner, monkeypatch, served)
+    assert status == "FAIL"
+    assert detail == (
+        "evaluate 'sdk_contract_flag' with the staging key: expected off, got on; "
+        "evaluate 'sdk_contract_targeted' with the staging key: expected on, got "
+        "off; ruleset 'sdk_contract_flag' with the staging key: expected off, got "
+        "on; ruleset 'sdk_contract_targeted' with the staging key: expected on, got "
+        "off"
+    )
+
+
+def test_a_production_key_answered_stagings_fails_the_row(staging_runner, monkeypatch):
+    served = {**SERVED, "contract-key": SERVED["staging-key"]}
+    status, detail = _staging(staging_runner, monkeypatch, served)
+    assert status == "FAIL"
+    assert (
+        "evaluate 'sdk_contract_flag' with the production key: expected on, got off"
+        in detail
+    )
+
+
+def test_a_ruleset_of_the_other_environment_fails_the_row(staging_runner, monkeypatch):
+    status, detail = _staging(
+        staging_runner, monkeypatch, SERVED, ruleset_key="contract-key"
+    )
+    assert status == "FAIL"
+    assert detail.startswith(
+        "ruleset 'sdk_contract_flag' with the staging key: expected off, got on"
+    )
+
+
+def test_the_row_is_run_with_the_seeds_staging_keys_before_the_sdks(
+    monkeypatch, runner, capsys
+):
+    asked = []
+    monkeypatch.setattr(
+        runner, "check_staging", lambda *args: asked.append(args) or ("FAIL", "planted")
+    )
+    monkeypatch.setattr(runner.shutil, "which", lambda tool: f"/usr/bin/{tool}")
+    status, ran = run_main(monkeypatch, runner, "--sdk", "go")
+    assert asked == [
+        (
+            "http://localhost:8000",
+            "contract-key",
+            "staging-key",
+            "staging-local-key",
+            "sdk_contract_flag",
+            "sdk_contract_targeted",
+        )
+    ]
+    assert status == 1
+    out = " ".join(capsys.readouterr().out.split())
+    assert "FAIL ruleset (staging) planted" in out
+    assert out.index("ruleset (staging)") < out.index("PASS go")
+    # No SDK row is given a staging key.
+    assert not {"staging-key", "staging-local-key"} & {
+        value for name, value in ran[0][1].items() if name not in STAGING_KEYS
+    }
+
+
+@pytest.mark.parametrize("missing", sorted(STAGING_KEYS))
+def test_a_missing_staging_key_fails_under_strict_and_is_skipped_otherwise(
+    monkeypatch, runner, capsys, missing
+):
+    monkeypatch.delenv(missing)
+    monkeypatch.setattr(
+        runner, "check_staging", lambda *args: pytest.fail("must not run")
+    )
+    monkeypatch.setattr(runner.shutil, "which", lambda tool: f"/usr/bin/{tool}")
+    assert run_main(monkeypatch, runner, "--sdk", "go")[0] == 0
+    out = " ".join(capsys.readouterr().out.split())
+    assert "SKIP ruleset (staging) no staging keys: run seed_sdk_contract.py" in out
+    assert run_main(monkeypatch, runner, "--sdk", "go", "--strict")[0] == 1
+    out = " ".join(capsys.readouterr().out.split())
+    assert "FAIL ruleset (staging) no staging keys" in out
+
+
+def test_the_seed_configures_staging_the_other_way_round_from_production(runner):
+    """What the row judges: the flag that is on at 100% in production is off in
+    staging, and the one at 0% is on at 100%, so either key answering the other
+    environment is seen on both."""
+    from backend.scripts import seed_sdk_contract as seed
+
+    assert seed.STAGING_SETTINGS == {
+        seed.FLAG_KEY: (False, 0),
+        seed.TARGETED_FLAG_KEY: (True, 100),
+    }
+    for seeded, read in (
+        (seed.KEY_FILE, RUNNER.parent / ".api_key"),
+        (seed.STAGING_KEY_FILE, RUNNER.parent / ".api_key_staging"),
+        (seed.STAGING_LOCAL_KEY_FILE, RUNNER.parent / ".api_key_local_staging"),
+    ):
+        assert seeded == read
 
 
 # ---------------------------------------------------------------------------

@@ -579,7 +579,9 @@ def test_two_equal_ids_are_refused_before_linking_and_logged_nowhere(
     root = logging.getLogger()
     handler, level = Everything(), root.level
     app.dependency_overrides[deps.get_db] = stub_db
-    app.dependency_overrides[sdk_scope.require_sdk_ruleset_key] = lambda: MagicMock()
+    app.dependency_overrides[sdk_scope.require_sdk_ruleset_key] = lambda: MagicMock(
+        environment="production"
+    )
     root.addHandler(handler)
     root.setLevel(logging.DEBUG)
     try:

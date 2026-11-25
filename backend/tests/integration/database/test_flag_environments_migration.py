@@ -34,11 +34,12 @@ heads, in each profile, and run the documented commands. Then:
    waits for each lock it needs on its own bound, so it can wait for more
    than one; and a deadlock with a session updating a key ends it with the
    same refusal;
-6. the previous release's code (this tree without the revision, the models'
-   additions and ``core/flag_environments.py``) creates, sets, lists, builds
-   the ruleset and evaluates on this schema exactly as this release does,
-   ignoring a staging row; this release turns the flag off through the stable
-   PUT and the previous release answers ``inactive``;
+6. the previous release's code (this tree without the revision and the
+   models' additions, where every key is a production key and nothing reads a
+   side row) creates, sets, lists, builds the ruleset and evaluates on this
+   schema exactly as this release does, through its routes too, ignoring a
+   staging row; this release turns the flag off through the stable PUT and the
+   previous release answers ``inactive``;
 7. the staging-key leg: the previous release treats a staging key as a
    production key: production's configuration on ``/evaluate``, its server
    error report counted, its evaluation counts recorded, and its assignment,
@@ -51,7 +52,11 @@ heads, in each profile, and run the documented commands. Then:
    production key with no settings;
 10. this release, still running against the downgraded schema, answers 500 to
     a production key on ``/evaluate`` and ``/sdk/ruleset``;
-11. ``alembic heads`` names exactly this revision and the modules head.
+11. the upgrade changes no answer: the contract vectors' flags, stored by the
+    previous release, are answered as before to a key it created, in a
+    ``development`` and in a ``production`` deployment, and the ruleset and
+    its ETag are the same bytes;
+12. ``alembic heads`` names exactly this revision and the modules head.
 """
 
 from __future__ import annotations
@@ -60,6 +65,7 @@ import contextlib
 import importlib.util
 import json
 import re
+import secrets
 import shutil
 import subprocess
 import sys
@@ -83,8 +89,19 @@ from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
 from backend.app.models.metrics.metric import ErrorLog, counted_error_filter
 from backend.app.models.rollout_schedule import RolloutSchedule
 from backend.app.models.safety import FeatureFlagSafetyConfig
+from backend.app.models.segment import (
+    Segment,
+    SegmentKind,
+    SegmentMember,
+    SegmentStatus,
+)
 from backend.app.models.user import User, UserRole
 from backend.app.services.feature_flag_service import FeatureFlagService
+from backend.scripts.generate_ruleset_vectors import (
+    VECTOR_SEGMENT,
+    VECTOR_SEGMENT_MEMBERS,
+    VECTORS_PATH,
+)
 from backend.tests.integration.database import tree_profiles
 from backend.tests.integration.database.tree_profiles import CORE, FULL
 
@@ -1400,31 +1417,70 @@ def test_a_deadlock_with_a_session_updating_a_key_ends_the_downgrade_with_its_re
 # ---------------------------------------------------------------------------
 # The previous release's code, and this release's, in a subprocess
 # ---------------------------------------------------------------------------
-#: The model's additions and the module the previous release does not have;
-#: if one is not found exactly once, the test says so rather than testing the
-#: wrong tree.
+#: The model's additions, which the previous release does not have, each with
+#: what stands for it in the copy; if one is not found exactly once, the test
+#: says so rather than testing the wrong tree. 0.48.0 has no environments, so
+#: there every key is a production key: ``APIKey.environment`` is a plain
+#: attribute of the class, with no column, and nothing reads the database's.
 _MODEL_DECLARATIONS = {
     ("backend", "app", "models", "feature_flag.py"): (
-        re.compile(
-            r"(?ms)^#: The checks and the unique constraint of "
-            r"``flag_environment_settings``.*?(?=^class FeatureFlagOverride\b)"
+        (
+            re.compile(
+                r"(?ms)^#: The checks and the unique constraint of "
+                r"``flag_environment_settings``.*?(?=^class FeatureFlagOverride\b)"
+            ),
+            "",
         ),
     ),
     ("backend", "app", "models", "api_key.py"): (
-        re.compile(
-            r"(?ms)^    # The flag environment this key serves \(#2011\).*?^    \)\n"
+        (
+            re.compile(
+                r"(?ms)^    # The flag environment this key serves \(#2011\).*?^    \)\n"
+            ),
+            '    environment = "production"\n',
         ),
-        re.compile(
-            r"(?ms)^ +CheckConstraint\(\s*API_KEY_ENVIRONMENT_CHECK_SQL, "
-            r"name=API_KEY_ENVIRONMENT_CHECK\s*\),\n"
+        (
+            re.compile(
+                r"(?ms)^ +CheckConstraint\(\s*API_KEY_ENVIRONMENT_CHECK_SQL, "
+                r"name=API_KEY_ENVIRONMENT_CHECK\s*\),\n"
+            ),
+            "",
         ),
     ),
 }
 
+#: The one module that reads the side rows, as 0.48.0 answers: from the flag
+#: rows alone. Asked about any other environment, it fails the request.
+_FLAG_ROWS_ONLY = textwrap.dedent(
+    """
+    from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
+
+
+    def served_flag(db, flag, environment):
+        assert environment == "production", environment
+        return flag
+
+
+    def served_flags(db, flags, environment):
+        assert environment == "production", environment
+        return flags
+
+
+    def flags_on_in(db, environment):
+        assert environment == "production", environment
+        return (
+            db.query(FeatureFlag)
+            .filter(FeatureFlag.status == FeatureFlagStatus.ACTIVE.value)
+            .all()
+        )
+    """
+)
+
 
 def _previous_release(profile: str, tmp_path) -> Path:
-    """Release N-1 (0.48.0): a copy of this tree without the revision, the
-    models' additions and ``core/flag_environments.py``."""
+    """Release N-1 (0.48.0): a copy of this tree without the revision and the
+    models' additions, where every key is a production key and nothing reads a
+    side row."""
     destination = tmp_path / "release-n-minus-1"
     if profile == FULL:
         tree = tree_profiles.full_tree(destination)
@@ -1433,12 +1489,14 @@ def _previous_release(profile: str, tmp_path) -> Path:
     versions = tree / "backend" / "app" / "db" / "migrations" / "versions"
     (revision_file,) = versions.glob(f"{REVISION}_*.py")
     revision_file.unlink()
-    (tree / "backend" / "app" / "core" / "flag_environments.py").unlink()
+    reads = tree / "backend" / "app" / "services" / "flag_environment_reads.py"
+    assert "def served_flag(" in reads.read_text(encoding="utf-8"), reads
+    reads.write_text(_FLAG_ROWS_ONLY, encoding="utf-8")
     for parts, declarations in _MODEL_DECLARATIONS.items():
         model = tree.joinpath(*parts)
         source = model.read_text(encoding="utf-8")
-        for declaration in declarations:
-            source, found = declaration.subn("", source)
+        for declaration, replacement in declarations:
+            source, found = declaration.subn(replacement, source)
             assert found == 1, f"{found} matches of {declaration.pattern}: update it"
         model.write_text(source, encoding="utf-8")
     return tree
@@ -1607,6 +1665,26 @@ def test_the_previous_release_writes_and_serves_flags_on_this_schema(
     assert answers == this_release, "N-1 and N answer the same production flag"
     enabled = sum(1 for on, _ in answers.values() if on)
     assert 0 < enabled < len(USERS), enabled
+    assert _settings(test_db, scratch_schema) == staging_before
+
+    # N's own route, with the same production key, answers the flag N-1 wrote
+    # the same for every user: it needs no row of its own for production.
+    through_the_route = _client(
+        release_n,
+        scratch_schema,
+        tmp_path,
+        [_evaluate("previous-release-flag", u, key) for u in USERS],
+    )
+    n_answers = {}
+    for user_id, (status, body) in zip(USERS, through_the_route["answers"]):
+        assert status == 200, body
+        n_answers[user_id] = [body["enabled"], body["reason"]]
+    differing = [u for u in USERS if n_answers[u] != answers[u]]
+    assert not differing, (
+        f"previous-release-flag: N answers {json.dumps(n_answers[differing[0]])} for "
+        f"{sum(1 for u in USERS if n_answers[u] == n_answers[differing[0]])}/"
+        f"{len(USERS)}; N-1 answered {json.dumps([True, 'rollout'])} for {enabled}"
+    )
     assert _settings(test_db, scratch_schema) == staging_before
 
     # In reverse: this release turns the flag off through the stable PUT, and
@@ -1991,7 +2069,255 @@ def test_this_release_answers_500_to_a_production_key_on_the_downgraded_schema(
 
 
 # ---------------------------------------------------------------------------
-# 11. The heads
+# 11. An upgrade changes no answer
+# ---------------------------------------------------------------------------
+#: Runs in a tree, against a schema: every vector case through ``GET
+#: /evaluate`` and one ``GET /sdk/ruleset``, with one key and no dependency
+#: override. ``argv[1]`` names a JSON file with the key and the cases,
+#: ``argv[2]`` the file the answers are written to.
+_VECTORS = textwrap.dedent(
+    """
+    import json
+    import sys
+    from pathlib import Path
+    from urllib.parse import quote
+
+    from backend.app.models import register_core_models
+
+    register_core_models()
+
+    from fastapi.testclient import TestClient
+
+    from backend.app.core.config import settings
+    from backend.app.main import app
+    from backend.app.services.metrics_service import MetricsService
+
+    # The metric row of each evaluation is not what this checks, and writing
+    # two of them per case dominates the run: as the vectors' other HTTP run,
+    # the write is stubbed. The answer is the unmodified route's and service's.
+    MetricsService.record_flag_evaluation = staticmethod(lambda **_: None)
+
+    plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+    headers = {"X-API-Key": plan["key"]}
+    client = TestClient(app, raise_server_exceptions=False)
+    answers = []
+    for case in plan["cases"]:
+        params = {"user_id": case["user_id"]}
+        if case["context"] is not None:
+            params["context"] = json.dumps(case["context"])
+        response = client.get(
+            "/api/v1/feature-flags/evaluate/" + quote(case["flag"], safe=""),
+            params=params,
+            headers=headers,
+        )
+        body = response.json()
+        answers.append(
+            {
+                "status": response.status_code,
+                "answer": {k: body.get(k) for k in ("enabled", "reason")},
+                "value": json.dumps(body.get("value"), sort_keys=True),
+            }
+        )
+    ruleset = client.get("/api/v1/sdk/ruleset", headers=headers)
+    report = {
+        "deployment": settings.ENVIRONMENT,
+        "answers": answers,
+        "ruleset": [ruleset.status_code, ruleset.headers.get("etag"), ruleset.text],
+    }
+    Path(sys.argv[2]).write_text(json.dumps(report), encoding="utf-8")
+    """
+)
+
+
+def _deployment(name: str) -> dict:
+    """The settings of a deployment whose ``ENVIRONMENT`` is *name*. Production
+    refuses to start with the defaults, so it is given settings it accepts."""
+    given = {
+        "ENVIRONMENT": name,
+        "AUTH_PROVIDER": "local",
+        "SDK_RATE_LIMIT_PER_MINUTE": "1000000",
+    }
+    if name == "production":
+        given.update(
+            {
+                "SECRET_KEY": secrets.token_hex(32),
+                "AUDIT_HMAC_KEY": secrets.token_hex(32),
+                "FIRST_SUPERUSER_PASSWORD": secrets.token_urlsafe(24),
+                "PUBLIC_BASE_URL": "https://controlvar.example.com",
+                "ALLOWED_HOSTS": "testserver",
+            }
+        )
+    return given
+
+
+def _vector_answers(tree, schema: str, tmp_path, key: str, cases, deployment: str):
+    script = tmp_path / f"vectors-{uuid.uuid4().hex[:6]}.py"
+    script.write_text(_VECTORS, encoding="utf-8")
+    plan, answers = script.with_suffix(".plan.json"), script.with_suffix(".json")
+    plan.write_text(json.dumps({"key": key, "cases": cases}), encoding="utf-8")
+    done = tree_profiles.run(
+        tree, [str(script), str(plan), str(answers)], schema, _deployment(deployment)
+    )
+    assert done.returncode == 0, done.stdout[-2000:] + done.stderr[-4000:]
+    report = json.loads(answers.read_text(encoding="utf-8"))
+    assert report["deployment"] == deployment
+    return report
+
+
+def _has_lone_surrogate(value) -> bool:
+    if isinstance(value, str):
+        return any(0xD800 <= ord(ch) <= 0xDFFF for ch in value)
+    if isinstance(value, dict):
+        return any(
+            _has_lone_surrogate(k) or _has_lone_surrogate(v) for k, v in value.items()
+        )
+    return isinstance(value, list) and any(map(_has_lone_surrogate, value))
+
+
+def _store_vectors(engine, schema: str, vectors: dict) -> None:
+    """The vectors' 161 flags, as 0.48.0 stores a flag, and their segment."""
+    with engine.begin() as conn:
+        for spec in vectors["stored_flags"]:
+            conn.execute(
+                text(
+                    f'INSERT INTO "{schema}".feature_flags (id, key, name, status, '
+                    "rollout_percentage, targeting_rules, value_type, on_value, "
+                    "off_value, created_at, updated_at) VALUES (:id, :key, :name, "
+                    ":status, :pct, CAST(:rules AS jsonb), :type, "
+                    "CAST(:on AS jsonb), CAST(:off AS jsonb), now(), now())"
+                ),
+                {
+                    "id": str(uuid.uuid4()),
+                    "key": spec["key"],
+                    "name": spec["key"][:100],
+                    "status": spec["status"],
+                    "pct": spec["rollout_percentage"],
+                    "rules": _json_or_null(spec["targeting_rules"]),
+                    "type": spec.get("value_type", "boolean"),
+                    "on": _json_or_null(spec.get("on_value")),
+                    "off": _json_or_null(spec.get("off_value")),
+                },
+            )
+    with _session(engine, schema) as db:
+        segment = uuid.UUID(VECTOR_SEGMENT)
+        db.add(
+            Segment(
+                id=segment,
+                name="Vector segment",
+                kind=SegmentKind.ID_LIST.value,
+                status=SegmentStatus.ACTIVE,
+            )
+        )
+        db.flush()
+        for member in VECTOR_SEGMENT_MEMBERS[VECTOR_SEGMENT]:
+            db.add(SegmentMember(segment_id=segment, member_id=member))
+        db.commit()
+
+
+def _json_or_null(value):
+    return None if value is None else json.dumps(value)
+
+
+def _flag_rows(engine, schema: str) -> list[dict]:
+    with engine.connect() as conn:
+        return list(
+            conn.execute(
+                text(
+                    f'SELECT to_jsonb(f) FROM "{schema}".feature_flags f ORDER BY f.id'
+                )
+            ).scalars()
+        )
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("profile", BOTH_PROFILES)
+def test_the_upgrade_changes_no_answer_whatever_the_deployments_environment(
+    profile, test_db, scratch_schema, tmp_path
+):
+    """The contract vectors' flags, stored by 0.48.0, are answered after the
+    upgrade exactly as before it, to a key 0.48.0 created: in a deployment
+    whose ``ENVIRONMENT`` is ``production`` and in one whose is
+    ``development``. The ruleset and its ETag are the bytes 0.48.0 serves from
+    the rows it stored, which the upgrade leaves as they were.
+
+    2231 of the 2242 cases are sent; the other 11 hold a lone surrogate, which
+    no client can put in a URL."""
+    vectors = json.loads(VECTORS_PATH.read_text(encoding="utf-8"))
+    cases = [
+        case
+        for case in vectors["cases"]
+        if not _has_lone_surrogate([case["user_id"], case["context"]])
+    ]
+    assert len(vectors["cases"]) == vectors["counts"]["cases"] == 2242
+    assert len(cases) == 2242 - 11
+
+    tree = _at_previous_release(test_db, profile, scratch_schema, tmp_path)
+    user = _user(test_db, scratch_schema)
+    key_id, key = _insert_previous_release_key(
+        test_db, scratch_schema, user.id, scopes="sdk:ruleset"
+    )
+    _store_vectors(test_db, scratch_schema, vectors)
+    stored = _flag_rows(test_db, scratch_schema)
+    assert len(stored) == len(vectors["stored_flags"]) == 161
+
+    upgrade = _upgrade(tree, scratch_schema)
+    assert upgrade.returncode == 0, upgrade.stderr[-3000:]
+    assert _rows(test_db, scratch_schema) == ROWS[profile]
+    assert _key_environments(test_db, scratch_schema)[key_id] == ("production", True)
+    # Column by column of 0.48.0's: a later revision may add one.
+    upgraded = _flag_rows(test_db, scratch_schema)
+    assert [
+        {column: row[column] for column in old}
+        for old, row in zip(stored, upgraded, strict=True)
+    ] == stored
+    # What 0.48.0 answers from those rows. Its copy runs on the upgraded schema
+    # because it maps every column a later revision adds.
+    previous = _previous_release(profile, tmp_path)
+    before = _vector_answers(
+        previous, scratch_schema, tmp_path, key, [], "development"
+    )["ruleset"]
+    assert before[0] == 200, before
+    assert json.loads(before[2])["flags"] == vectors["ruleset"]["flags"]
+    # Staging and development rows that would answer differently, for every
+    # flag: nothing a production key is answered reads one.
+    with test_db.begin() as conn:
+        for environment in ("staging", "development"):
+            conn.execute(
+                text(
+                    f'INSERT INTO "{scratch_schema}".{TABLE} (id, feature_flag_id, '
+                    "environment, is_active, rollout_percentage, created_at, "
+                    "updated_at) SELECT gen_random_uuid(), id, :env, "
+                    "status <> 'ACTIVE', 100 - rollout_percentage, now(), now() "
+                    f'FROM "{scratch_schema}".feature_flags'
+                ),
+                {"env": environment},
+            )
+    for deployment in ("development", "production"):
+        after = _vector_answers(tree, scratch_schema, tmp_path, key, cases, deployment)
+        changed = []
+        for case, got in zip(cases, after["answers"], strict=True):
+            assert got["status"] == 200, (case["id"], got)
+            if got["answer"] != case["expected"] or (
+                "expected_value" in case
+                and got["value"] != json.dumps(case["expected_value"], sort_keys=True)
+            ):
+                changed.append((case, got))
+        print(f"[{profile}] ENVIRONMENT={deployment}: {len(after['answers'])} answered")
+        assert not changed, (
+            f"{len(changed)} of {len(cases)} cases changed on upgrade; first "
+            f"{changed[0][0]['flag']}/{changed[0][0]['user_id']}: expected "
+            f"{list(changed[0][0]['expected'].values())} got "
+            f"{list(changed[0][1]['answer'].values())} (ENVIRONMENT={deployment})"
+        )
+        assert len(after["answers"]) + 11 == 2242
+        assert after["ruleset"] == before, (
+            f"the ruleset changed on upgrade (ENVIRONMENT={deployment})"
+        )
+    shutil.rmtree(previous, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# 12. The heads
 # ---------------------------------------------------------------------------
 HEADS = {CORE: {CORE_HEAD}, FULL: {CORE_HEAD, MODULES_HEAD}}
 

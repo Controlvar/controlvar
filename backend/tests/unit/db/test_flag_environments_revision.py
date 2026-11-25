@@ -520,7 +520,7 @@ def test_offline_mode_is_refused(monkeypatch, direction):
 
 #: The database test files of this revision, and how many tests each defines.
 DATABASE_TESTS = {
-    "backend/tests/integration/database/test_flag_environments_migration.py": 19,
+    "backend/tests/integration/database/test_flag_environments_migration.py": 20,
 }
 
 

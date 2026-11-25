@@ -8866,7 +8866,8 @@
           "code": {
             "enum": [
               "unknown_flag",
-              "ceiling"
+              "ceiling",
+              "environment"
             ],
             "title": "Code",
             "type": "string"

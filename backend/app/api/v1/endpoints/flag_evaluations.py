@@ -12,10 +12,15 @@ The route requires an API key carrying the ``sdk:ruleset`` scope, the same
 scope that grants the local-evaluation ruleset: only a server evaluating flags
 locally has anything to report here.  It is mounted under the ``/tracking``
 prefix, so it shares the SDK rate limit.
+
+Safety monitoring measures production only (#2011), so a key of another flag
+environment records nothing: the answer is 201 with ``accepted: 0`` and every
+flag listed in ``errors`` with code ``environment``. The report never reaches
+the counters, whose caps are production's.
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import List, Literal
+from typing import Iterator, List, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, status
@@ -26,10 +31,12 @@ from starlette.concurrency import run_in_threadpool
 from backend.app.api import deps
 from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.sdk_scope import require_sdk_ruleset_key
+from backend.app.core.flag_environments import PRODUCTION
 from backend.app.models.api_key import APIKey
 from backend.app.schemas.storable_text import StorableTextModel
 from backend.app.services.sdk_evaluation_service import (
     EvaluationReport,
+    merge_reports,
     record_local_evaluations,
 )
 
@@ -100,7 +107,7 @@ class FlagEvaluationError(BaseModel):
     """A flag whose count was not, or not fully, recorded."""
 
     flag_key: str
-    code: Literal["unknown_flag", "ceiling"]
+    code: Literal["unknown_flag", "ceiling", "environment"]
     message: str
     requested: int
     accepted: int
@@ -146,9 +153,46 @@ async def report_flag_evaluations(
         HTTPException 403: If the API key does not have the ``sdk:ruleset`` scope
         HTTPException 422: If the report is malformed
     """
-    api_key_id = api_key.id
+    api_key_id, environment = api_key.id, api_key.environment
     db.close()
+    if environment != PRODUCTION:
+        return _not_recorded(report, environment)
     return await run_in_threadpool(_record_flag_evaluations, report, db, api_key_id)
+
+
+def _entries(report: FlagEvaluationReport) -> Iterator[EvaluationReport]:
+    """*report*'s entries as the service takes them, in the order sent."""
+    for entry in report.evaluations:
+        yield EvaluationReport(
+            flag_key=entry.flag_key,
+            count=entry.count,
+            enabled_count=entry.enabled_count,
+            window_start=_naive_utc(entry.window_start),
+            window_end=_naive_utc(entry.window_end),
+        )
+
+
+def _not_recorded(
+    report: FlagEvaluationReport, environment: str
+) -> FlagEvaluationReportResponse:
+    """The answer to a key of *environment*, which is not production: nothing
+    recorded, one error per flag key (entries for the same flag merged)."""
+    return FlagEvaluationReportResponse(
+        accepted=0,
+        errors=[
+            FlagEvaluationError(
+                flag_key=merged.flag_key,
+                code="environment",
+                message=(
+                    "Evaluation counts are recorded in production only; this API "
+                    f"key belongs to the {environment} environment"
+                ),
+                requested=merged.count,
+                accepted=0,
+            )
+            for merged in merge_reports(_entries(report))
+        ],
+    )
 
 
 def _record_flag_evaluations(
@@ -158,19 +202,7 @@ def _record_flag_evaluations(
     try:
         received_at = datetime.utcnow()
         result = record_local_evaluations(
-            db,
-            api_key_id,
-            (
-                EvaluationReport(
-                    flag_key=entry.flag_key,
-                    count=entry.count,
-                    enabled_count=entry.enabled_count,
-                    window_start=_naive_utc(entry.window_start),
-                    window_end=_naive_utc(entry.window_end),
-                )
-                for entry in report.evaluations
-            ),
-            received_at=received_at,
+            db, api_key_id, _entries(report), received_at=received_at
         )
         return FlagEvaluationReportResponse(
             accepted=result.accepted,

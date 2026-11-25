@@ -11,15 +11,32 @@ import uuid
 from datetime import datetime, timezone
 from typing import Annotated, Any, Dict, List, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    HTTPException,
+    Path,
+    Query,
+    Request,
+    status,
+)
 from pydantic import ValidationError
 from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps
+from backend.app.api.key_environment import (
+    presented_environment,
+    refuse_non_production,
+)
 from backend.app.api.off_loop_route import OffLoopRoute, release_request_sessions
-from backend.app.api.sdk_scope import require_batch_assign_key, require_sdk_ruleset_key
+from backend.app.api.sdk_scope import (
+    require_batch_assign_key,
+    require_production_ruleset_key,
+    require_sdk_ruleset_key,
+)
 from backend.app.core.context_limits import check_context
 from backend.app.core.logger import (
     failure_detail,
@@ -360,6 +377,7 @@ def get_tracking():
     response_description="Returns the variant assignment for the user",
 )
 async def assign_user_to_experiment(
+    http_request: Request,
     request: AssignmentRequest = Body(..., description="Assignment request data"),
     db: Session = Depends(deps.get_db),
     api_key_info: Dict[str, Any] = Depends(deps.get_api_key),
@@ -413,6 +431,10 @@ async def assign_user_to_experiment(
             control variant
         HTTPException 500: If there's an error during assignment
     """
+    # Experiments run in production only (#2011): a staging or development key
+    # is refused before anything is read or written. ``http_request`` is a
+    # parameter with no default, so an in-process caller passes its own.
+    refuse_non_production(presented_environment(http_request))
     # Closes ``db`` before it returns: the assignment runs in a worker thread
     # on the same session, closed again when the work is done. A caller must
     # not use ORM objects it loaded on ``db`` after this call (the split URL
@@ -793,6 +815,8 @@ ALIAS_FAILURE_SENTENCE = "Could not link the two ids"
     summary="Link an anonymous id to a known user id (beta)",
     response_description="The two ids as sent, and whether this request stored the link",
     openapi_extra={"x-stability": "beta"},
+    # Links are production's only (#2011): the key below, refused outside it.
+    dependencies=[Depends(require_production_ruleset_key)],
     responses={
         401: {
             "description": "No API key, or an unknown, expired or revoked one, or "
@@ -872,6 +896,7 @@ async def link_anonymous_id(
     response_description="Returns confirmation of event tracking",
 )
 async def track_event(
+    http_request: Request,
     request: EventRequest = Body(..., description="Event data to track"),
     db: Session = Depends(deps.get_db),
     api_key_info: Dict[str, Any] = Depends(deps.get_api_key),
@@ -906,6 +931,8 @@ async def track_event(
         HTTPException 401: If the API key is invalid
         HTTPException 422: If the event data is invalid
     """
+    # Event tracking runs in production only, as assignment does (#2011).
+    refuse_non_production(presented_environment(http_request))
     # Closes ``db`` before it returns: the event is stored in a worker thread
     # on the same session, closed again when the work is done.
     db.close()
@@ -1037,6 +1064,7 @@ def track_one(request: EventRequest, db: Session) -> EventResponse:
     },
 )
 async def track_event_by_ids(
+    http_request: Request,
     event_data: EventCreate = Body(
         ..., description="Event data keyed by experiment/flag ids"
     ),
@@ -1057,6 +1085,8 @@ async def track_event_by_ids(
 
     **Authentication**: Requires a valid API key in the X-API-Key header.
     """
+    # Event tracking runs in production only, as assignment does (#2011).
+    refuse_non_production(presented_environment(http_request))
     # Closes ``db`` before it returns: the event is stored in a worker thread
     # on the same session, closed again when the work is done.
     db.close()
@@ -1145,6 +1175,7 @@ def track_by_ids_one(event_data: EventCreate, db: Session) -> EventResponse:
     response_description="Returns batch processing results",
 )
 async def track_events_batch(
+    http_request: Request,
     request: EventBatchRequest = Body(
         ...,
         description="Batch of events to track",
@@ -1197,6 +1228,8 @@ async def track_events_batch(
         HTTPException 413: If the batch size exceeds the limit
         HTTPException 422: If the batch request format is invalid
     """
+    # Event tracking runs in production only, as assignment does (#2011).
+    refuse_non_production(presented_environment(http_request))
     # Closes ``db`` before it returns: the batch is stored in a worker thread
     # on the same session, closed again when the work is done.
     db.close()
@@ -1371,6 +1404,7 @@ def track_batch_one(request: EventBatchRequest, db: Session) -> EventBatchRespon
     response_description="Returns all active experiment assignments for a user",
 )
 async def get_user_assignments(
+    http_request: Request,
     user_id: Annotated[
         str, Path(description="ID of the user"), storable_text_param("user_id")
     ],
@@ -1395,6 +1429,8 @@ async def get_user_assignments(
         HTTPException 401: If the API key is invalid
         HTTPException 404: If user has no assignments
     """
+    # Assignments are production's only (#2011).
+    refuse_non_production(presented_environment(http_request))
     # Closes ``db`` before it returns: the assignments are read in a worker
     # thread on the same session, closed again when the work is done.
     db.close()

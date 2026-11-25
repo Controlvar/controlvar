@@ -14,6 +14,11 @@ Each response carries ``ETag: "<version>"``. A poll that sends the ETag back in
 ``If-None-Match`` gets ``304 Not Modified`` with no body while nothing that
 affects evaluation has changed.
 
+A key gets the ruleset of its own flag environment (#2011): a production key
+the flag rows, a staging or development key what that environment serves for
+each flag. The document's format is the same in every environment, and it does
+not name one.
+
 The route is ``x-stability: beta``: its shape may still change. The document's
 ``schema`` integer is how a released SDK recognises a format it does not know.
 """
@@ -32,6 +37,7 @@ from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.sdk_scope import require_sdk_ruleset_key
 from backend.app.models.api_key import APIKey
 from backend.app.models.feature_flag import FeatureFlag
+from backend.app.services.flag_environment_reads import served_flags
 from backend.app.services.sdk_ruleset import build_ruleset, canonical_json
 
 router = APIRouter(route_class=OffLoopRoute)
@@ -230,12 +236,16 @@ async def get_ruleset(
     answer from the server expires (up to 300 s by default in the 0.1.1 and
     0.2.0 SDKs); `getAllFlags` always asks the server.
     """
+    # The presented key's environment (#2011), before the close detaches its row.
+    environment = api_key.environment
     db.close()
-    return await run_in_threadpool(_ruleset_response, request, db)
+    return await run_in_threadpool(_ruleset_response, request, environment, db)
 
 
-def _ruleset_response(request: Request, db: Session) -> Response:
-    """The ruleset response for *request*, read on *db*; closes *db*."""
+def _ruleset_response(request: Request, environment: str, db: Session) -> Response:
+    """The ruleset response for *request* in *environment*, read on *db*;
+    closes *db*. The version, and so the ETag, is over what that environment
+    serves."""
     try:
         # Every column the builder reads, loaded by this one query: a column
         # left out would be loaded by one more query per flag (PF-2).
@@ -254,7 +264,7 @@ def _ruleset_response(request: Request, db: Session) -> Response:
             )
             .all()
         )
-        ruleset = build_ruleset(flags)
+        ruleset = build_ruleset(served_flags(db, flags, environment))
         headers = {
             "ETag": f'"{ruleset["version"]}"',
             "Cache-Control": "private, no-cache",

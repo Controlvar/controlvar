@@ -347,7 +347,8 @@ class MetricsService:
         Errors are counted by the safety check's rule
         (``counted_error_filter()``): an error report the check does not count
         is left out of ``error_rate`` and counted in ``uncounted_error_count``
-        instead. ``error_rate`` still differs from the check's in its period
+        instead; one sent with a staging or development key (#2011) is in
+        neither. ``error_rate`` still differs from the check's in its period
         (``start_date`` to ``end_date`` here, the last 15 minutes there), its
         denominator (the aggregated flag evaluations of ``period`` here, the
         raw evaluations there) and its unit (a percentage here, a fraction

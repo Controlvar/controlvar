@@ -14,6 +14,10 @@ registration (a core deployment does not serve them, and answers 404):
   same assignment row, exposure, global holdout, mutual exclusion, targeting
   and bandit choice as that route gives.
 
+Split URL experiments run in production only (#2011): both routes refuse a
+staging or development key with 403 before they read anything, through the
+core's ``key_environment.require_production_key``.
+
 The SPEC is ``docs/api/split-url.md``.
 """
 
@@ -22,11 +26,12 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Literal, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session, joinedload
 
 from backend.app.api import deps
+from backend.app.api.key_environment import require_production_key
 from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.v1.endpoints import tracking
 from backend.app.core.context_limits import check_context
@@ -236,7 +241,7 @@ _KEY_RESPONSES: Dict[int | str, Dict[str, Any]] = {
 async def get_split_url_routes(
     response: Response,
     db: Session = Depends(deps.get_db),
-    api_key_info: Dict[str, Any] = Depends(deps.get_api_key),
+    api_key_info: Dict[str, Any] = Depends(require_production_key),
 ) -> SplitUrlRoutesResponse:
     """
     Every ACTIVE split URL experiment's entry: the control URL's host (lower
@@ -299,9 +304,10 @@ def _answer(
     },
 )
 async def assign_split_url_visitor(
+    http_request: Request,
     request: SplitUrlAssignRequest = Body(..., description="The visitor's request"),
     db: Session = Depends(deps.get_db),
-    api_key_info: Dict[str, Any] = Depends(deps.get_api_key),
+    api_key_info: Dict[str, Any] = Depends(require_production_key),
 ) -> SplitUrlAssignResponse:
     """
     Where to send the visitor who asked for ``host`` + ``path``.
@@ -389,6 +395,7 @@ async def assign_split_url_visitor(
         )
 
     answer = await tracking.assign_user_to_experiment(
+        http_request=http_request,
         request=AssignmentRequest(
             experiment_key=request.experiment_key,
             user_id=request.user_id,

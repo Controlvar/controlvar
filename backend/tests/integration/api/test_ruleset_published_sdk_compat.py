@@ -33,6 +33,10 @@ published wheels must still answer every value flag's ``enabled`` and
 * In server mode its ``get_feature_flag``, ``is_feature_enabled`` and
   ``get_all_flags`` read the same answers as ``/evaluate`` and the bulk route,
   and every bulk value is a boolean.
+* A key stored before keys had an environment (#2011) is a production key:
+  each wheel answers exactly production's ``/evaluate`` with it, whatever the
+  flags are configured to serve in staging; a staging change does not move its
+  ruleset; and a production kill switch does reach it.
 
 It needs the network (the wheels come from PyPI); there is no skip.
 """
@@ -57,9 +61,10 @@ from backend.app.core.config import settings
 from backend.app.core.flag_values import VALUE_TYPES
 from backend.app.core.security import create_local_access_token, get_password_hash
 from backend.app.main import app
-from backend.app.models.feature_flag import FeatureFlag
+from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
 from backend.app.models.segment import Segment, SegmentKind, SegmentStatus
 from backend.app.models.user import User, UserRole
+from backend.tests.integration.key_environments import configure, environment_key
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 _spec = importlib.util.spec_from_file_location(
@@ -640,3 +645,109 @@ def test_the_published_wheel_reads_the_route_and_obeys_both_kill_switches(
         enabled = next(results)
         assert type(enabled) is bool and enabled == answer["enabled"], key
     assert next(results) == bulk_body
+
+
+def _configure_the_other_way_round(db_session, stored, percentage):
+    """Every flag in staging as production is not: on where production is off,
+    and off where it is on, with no rules."""
+    for flag in stored["flags"].values():
+        row = db_session.get(FeatureFlag, uuid.UUID(flag["id"]))
+        configure(
+            db_session,
+            row,
+            "staging",
+            is_active=row.status != FeatureFlagStatus.ACTIVE,
+            rollout_percentage=percentage,
+        )
+
+
+@pytest.mark.parametrize("artefact", PYTHON_ARTEFACTS, ids=lambda a: a.version)
+def test_a_published_wheel_with_an_old_key_sees_production_whatever_staging_serves(
+    client, db_session, stored, artefact, artefact_cache, tmp_path
+):
+    keys = stored["keys"]
+    # A key row of before #2011: no environment is named in the INSERT.
+    old_key = environment_key(db_session, stored["developer"], None, "sdk:ruleset")[
+        "X-API-Key"
+    ]
+    _configure_the_other_way_round(db_session, stored, 100)
+
+    first = _ruleset(client, old_key)
+    probes = _probes(keys.values())
+    expected = [
+        _evaluate(client, old_key, p["flag"], p["user_id"], p["context"])
+        for p in probes
+    ]
+    # Production's answers, on and off.
+    assert {answer["enabled"] for answer in expected} == {True, False}
+
+    # A staging change, and a poll after it; what it answered is checked below.
+    _configure_the_other_way_round(db_session, stored, 60)
+    etag = first.headers["etag"]
+    poll = client.get(RULESET, headers={"X-API-Key": old_key, "If-None-Match": etag})
+
+    # A production kill switch reaches it, while staging has the flag on.
+    deactivated = client.post(
+        f"{FLAGS}/{stored['flags']['rollout']['id']}/deactivate",
+        headers=_auth(stored["developer"]),
+    )
+    assert deactivated.status_code == 200, deactivated.text
+    row = db_session.get(FeatureFlag, uuid.UUID(stored["flags"]["rollout"]["id"]))
+    configure(db_session, row, "staging", is_active=True, rollout_percentage=100)
+    second = _ruleset(client, old_key, etag)
+    assert second.headers["etag"] != etag
+    probes_second = _probes([keys["rollout"]])
+
+    extraction = tmp_path / "artefact"
+    root = ps.extract(artefact, ps.fetch(artefact, artefact_cache), extraction)
+    plan = {
+        "steps": [
+            {
+                "body_file": _write(tmp_path / "first.json", first.content),
+                "etag": etag,
+                "probes": probes,
+            },
+            {
+                "status": 304,
+                "body_file": _write(tmp_path / "unchanged", poll.content),
+                "etag": etag,
+                "probes": probes,
+            },
+            {
+                "body_file": _write(tmp_path / "second.json", second.content),
+                "etag": second.headers["etag"],
+                "probes": probes_second,
+            },
+        ]
+    }
+    plan_file = tmp_path / "plan.json"
+    plan_file.write_text(json.dumps(plan), encoding="utf-8")
+    report = ps.run_harness(
+        artefact, root, tmp_path / "cwd", {"plan": str(plan_file)}, mode="sequence"
+    )
+    ps.check_identity(artefact, extraction, report)
+
+    steps = report["steps"]
+    assert [step["if_none_match"] for step in steps] == [None, etag, etag]
+    shape_of = {key: shape for shape, key in keys.items()}
+    problems, answered = [], 0
+    for step in steps[:2]:
+        for probe, answer, server in zip(probes, step["probes"], expected, strict=True):
+            remote = ALL_SHAPES[shape_of[probe["flag"]]][1] == "remote"
+            answered += not remote
+            if answer != ("DEFER" if remote else server):
+                problems.append(
+                    f"release {artefact.version} answered {probe['flag']} "
+                    f"{json.dumps(list(answer.values()) if answer != 'DEFER' else answer)}; "
+                    f"/evaluate answered {json.dumps(list(server.values()))}"
+                )
+    assert not problems, problems[:5]
+    local_shapes = [s for s, (_, e) in ALL_SHAPES.items() if e != "remote"]
+    assert answered == 2 * len(local_shapes) * len(USERS) * len(CONTEXTS)
+    assert steps[2]["probes"] and all(a == INACTIVE for a in steps[2]["probes"])
+
+    # The route's own half: production's entries, unmoved by the staging change.
+    entries = {entry["key"]: entry for entry in first.json()["flags"]}
+    for shape, (_, evaluation) in ALL_SHAPES.items():
+        assert entries[keys[shape]]["active"] is (evaluation is not None), shape
+    assert poll.status_code == 304, "a staging change moved a production key's ruleset"
