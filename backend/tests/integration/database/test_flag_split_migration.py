@@ -42,7 +42,7 @@ Then:
    and changes nothing; it finds a rule's value exactly where
    ``flag_values.rule_values`` does; a split written while it waits for its
    lock is seen; once cleared, it drops both columns by name and nothing else;
-10. offline (``--sql``), both directions refuse and emit nothing, with and
+10. offline (``--sql``), both directions refuse and emit no DDL, with and
     without a flag in use;
 11. this release, still running against the downgraded schema, answers 500 to
     every flag evaluation and flag read; the ruleset still answers;

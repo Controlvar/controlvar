@@ -24,8 +24,8 @@ existence checks read ``pg_catalog`` only.
 **Each wait is bounded.** Each ``ALTER TABLE`` takes ACCESS EXCLUSIVE on its
 table, with ``SET LOCAL lock_timeout = '1s'`` (``_LOCK_TIMEOUT``) straight
 before it and ``SET LOCAL lock_timeout TO DEFAULT`` straight after, so no later
-revision inherits the bound. ``feature_flags`` comes first, as a reader that
-finds a flag and then its setting takes them. Upgrading from 0.48.0, the same
+revision inherits the bound. ``feature_flags`` comes first, to match a reader
+that would find a flag and then its setting. Upgrading from 0.48.0, the same
 run creates ``flag_environment_settings`` (``t2011_flag_environments``), so
 only the ``feature_flags`` step can wait: the declared bound, 1 s, is this
 revision's entry in ``backend/tests/unit/db/test_upgrade_lock_budget.py``. From

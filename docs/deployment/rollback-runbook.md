@@ -359,7 +359,7 @@ stops with nothing changed, and is simply run again. A downgrade that also
 undoes `t2011_flag_environments` is one run: it holds `feature_flags` while it
 waits for `api_keys`, and an SDK request reads `api_keys` first, so the two can
 deadlock. The downgrade then stops with nothing changed, and is run again, or
-that request fails.
+the SDK requests waiting then fail.
 
 ### Step 1: Find the Previous Task Definition ARN
 

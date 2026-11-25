@@ -10,6 +10,10 @@ Migration workflow's help names a target that unapplies this revision, the same
 section (for the workflow, the same line) names ``t2012_flag_split`` with
 "refuse", "refuses", "refused" or "refusing" within 200 characters of it. Same
 reader of targets, same planner, same window.
+
+And what each of the three says about the release still serving once the
+downgrade has committed, and the page and the runbook about a downgrade that
+undoes ``t2011_flag_environments`` too.
 """
 
 from __future__ import annotations
@@ -18,6 +22,7 @@ import re
 from typing import Dict, List
 
 import pytest
+import yaml
 
 from backend.tests.unit.docs.test_documented_downgrade_targets import (
     ANNOUNCE_WINDOW,
@@ -153,10 +158,40 @@ PAGE_SECTION = (
         "before the upgrade",
         "answers `500` to every flag evaluation and flag read until the API is "
         "rolled back",
+        "with nothing changed, and is run again, or the SDK requests waiting then fail",
     ],
 )
 def test_the_runbooks_section_says_what_an_operator_must_know(said):
     assert said in _section(ROLLBACK_RUNBOOK, RUNBOOK_SECTION)
+
+
+@pytest.mark.parametrize(
+    "said",
+    [
+        "answers `500` to every flag evaluation and flag read until the API is "
+        "rolled back",
+        "with nothing changed, and is run again, or the SDK requests waiting then fail",
+    ],
+)
+def test_the_migrations_pages_section_says_it_too(said):
+    assert said in _section(MIGRATIONS_PAGE, PAGE_SECTION)
+
+
+@pytest.mark.skipif(
+    not DB_MIGRATE.is_file(), reason="this tree has no .github/workflows"
+)
+def test_the_workflows_help_says_what_the_release_still_serving_answers():
+    """In the target's description, inside the clause about this revision."""
+    workflow = yaml.safe_load(DB_MIGRATE.read_text(encoding="utf-8"))
+    # PyYAML reads the key ``on`` as the boolean True.
+    description = workflow[True]["workflow_dispatch"]["inputs"]["target"]["description"]
+    _, _, rest = description.partition(f"from a release that carries {REVISION} ")
+    clause, undone, _ = rest.partition("t2011_flag_environments undoes it alone")
+    assert undone, "the clause about this revision is gone"
+    assert (
+        "once it has committed, the release still serving answers 500 to every flag "
+        "evaluation and flag read until the API is rolled back" in clause
+    ), clause
 
 
 def test_the_migrations_page_shows_the_refusal_the_migration_raises():

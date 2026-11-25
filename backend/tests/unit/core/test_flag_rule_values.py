@@ -6,8 +6,8 @@
 * The legacy list, no rules and an object that is neither shape carry none.
 * The key is the rule's id as the evaluator reads it, checked against
   ``targeting_adapter.normalise_targeting_rules`` on every shape it reads.
-* It is pure: it changes nothing it is given, and nothing in the application
-  calls it yet.
+* It is pure: it changes nothing it is given, and no file of ``backend/app`` or
+  ``modules/backend/app`` names or imports it yet (``_references``).
 
 ``backend/tests/integration/database/test_flag_split_migration.py`` holds
 ``t2012_flag_split``'s SQL to the same answers, over :data:`STORED_RULES`.
@@ -218,24 +218,50 @@ def test_the_dashboard_rule_id_is_the_adapters():
     assert flag_values._DASHBOARD_RULE_ID == targeting_adapter.DASHBOARD_RULE_ID
 
 
+def _references(tree: ast.AST) -> list:
+    """The line of each name, attribute and ``from`` import of ``rule_values``
+    in *tree*, whatever the import calls it. Not seen: a name built at run time
+    (``getattr``)."""
+    lines = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            names = [node.id]
+        elif isinstance(node, ast.Attribute):
+            names = [node.attr]
+        elif isinstance(node, ast.ImportFrom):
+            names = [alias.name for alias in node.names]
+        else:
+            continue
+        lines += [node.lineno] * names.count("rule_values")
+    return lines
+
+
 def _callers() -> list:
-    """Every reference to ``rule_values`` in the application's code."""
+    """Each reference ``_references`` sees in ``backend/app`` and
+    ``modules/backend/app``."""
     found = []
     for root in (APP, REPO_ROOT / "modules" / "backend" / "app"):
         for path in sorted(root.rglob("*.py")) if root.is_dir() else ():
             tree = ast.parse(path.read_text(encoding="utf-8"))
-            for node in ast.walk(tree):
-                name = (
-                    node.id
-                    if isinstance(node, ast.Name)
-                    else node.attr
-                    if isinstance(node, ast.Attribute)
-                    else None
-                )
-                if name == "rule_values":
-                    found.append(f"{path.relative_to(REPO_ROOT)}:{node.lineno}")
+            name = path.relative_to(REPO_ROOT)
+            found += [f"{name}:{line}" for line in _references(tree)]
     return found
 
 
 def test_nothing_in_the_application_calls_it_yet():
     assert _callers() == []
+
+
+@pytest.mark.parametrize(
+    "planted, lines",
+    [
+        ("from x.flag_values import rule_values\n", [1]),
+        ("from x.flag_values import served_value, rule_values as _rv\n", [1]),
+        ("from x import flag_values\n\nflag_values.rule_values({})\n", [3]),
+        ("from x.flag_values import *\nrule_values({})\n", [2]),
+        ("def rule_values(stored):\n    return {}\n", []),
+        ("getattr(flag_values, 'rule_' + 'values')({})\n", []),
+    ],
+)
+def test_the_callers_scan_sees_each_reference(planted, lines):
+    assert _references(ast.parse(planted)) == lines

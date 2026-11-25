@@ -3,25 +3,34 @@
 ``t2012_flag_split`` adds ``feature_flags.split`` and
 ``flag_environment_settings.split``, before anything can set one:
 
-* no request field sets a split or a rule's own value, and no response carries
-  a split;
-* in the application's code the only place a split is assigned is
+* a flag create or update request refuses a split and a rule's own value, and
+  the flag responses have no such field;
+* of what the scan sees, the only place a split is assigned is
   ``FeatureFlagService.update_feature_flag``, which no caller passes one to,
-  and the only place one is read is the view of a flag in an environment;
+  and the only attribute read of one is the view of a flag in an environment;
 * the generic writer that would copy any column, ``crud_feature_flag``, is
   used for reading only.
 
-The scan reads every Python file of the application (core and modules), the
-Lambda functions and the scripts, through ``ast``, and compares with an exact
-list, so a writer added anywhere fails here until it is meant.
+The scan parses every Python file under :data:`ROOTS` but the migrations, and
+compares what it sees with an exact list, so a writer of a kind it sees fails
+here until it is meant. It sees the attribute assigned or deleted, the keyword
+argument, the name as a string, a variable, class attribute or parameter of
+that name, and SQL whose text the source shows (a string, an f-string but for
+its fields, or ``+`` of them) when an UPDATE assigns the column or an INSERT's
+list of columns names it.
+
+It does not see a name built at run time (``setattr(flag, "spl" + "it", parts)``),
+SQL built at run time (the column in a field, a variable or a ``join``), an
+INSERT that lists no columns, or code outside :data:`ROOTS`.
 """
 
 from __future__ import annotations
 
 import ast
 import functools
+import re
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import pytest
 from pydantic import ValidationError
@@ -63,11 +72,60 @@ def _sources() -> Dict[str, ast.AST]:
     return found
 
 
+#: SQL that writes a column called ``split`` by its name: an UPDATE's SET list,
+#: up to its WHERE, that assigns it, alone or in ``(a, b) = (...)``; an INSERT
+#: whose list of columns names it. ``UPDATE`` and ``SET`` may have a table
+#: between them, or nothing (``ON CONFLICT ... DO UPDATE SET``).
+_SQL_WRITE = re.compile(
+    r"""
+    \bupdate\b [^;]{0,200}? \bset\b
+        (?: (?!\bwhere\b) [^;] ){0,2000}?
+        (?<![\w.]) (?: "?split"? \s* =(?!=) | \( [^()=]{0,500} \bsplit\b [^()=]{0,500} \) \s* = )
+    | \binsert\b \s* (?: into\b (?: (?!\b(?:values|select|default)\b) [^();] ){0,200} )?
+        \( [^()]{0,2000} (?<![\w.]) "?split"? \b [^()]{0,2000} \)
+    """,
+    re.I | re.S | re.X,
+)
+
+
+def _text(node: ast.AST) -> Optional[str]:
+    """The text of *node* as the source shows it, or None if it shows none: a
+    string, an f-string with ``?`` for each field, or ``+`` of them with ``?``
+    for an operand that is not one."""
+    if isinstance(node, ast.Constant):
+        return node.value if isinstance(node.value, str) else None
+    if isinstance(node, ast.JoinedStr):
+        return "".join(
+            part.value if isinstance(part, ast.Constant) else "?"
+            for part in node.values
+        )
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        parts = [_text(node.left), _text(node.right)]
+        if parts != [None, None]:
+            return "".join("?" if part is None else part for part in parts)
+    return None
+
+
+def sql_writes(tree: ast.AST) -> int:
+    """How many of *tree*'s texts are SQL that writes the column: a text that
+    does is counted once, and not again for the parts it is made of."""
+    count, nodes = 0, [tree]
+    while nodes:
+        node = nodes.pop()
+        text = _text(node)
+        if text is not None and _SQL_WRITE.search(text):
+            count += 1
+        else:
+            nodes.extend(ast.iter_child_nodes(node))
+    return count
+
+
 def uses(tree: ast.AST) -> List[str]:
     """Each way *tree* could write a column called ``split``: an attribute
     assigned, a keyword argument, the name as a string (``setattr``, a dict
-    key of ``.values(...)``), and a class attribute or a parameter."""
-    found = []
+    key of ``.values(...)``), a variable, class attribute or parameter, and SQL
+    (``sql_writes``)."""
+    found = ["SQL"] * sql_writes(tree)
     for node in ast.walk(tree):
         if (
             isinstance(node, ast.Attribute)
@@ -119,6 +177,73 @@ def test_the_only_writer_is_the_services_unused_parameter():
         ("update(FeatureFlag).values({'split': parts})\n", ["string"]),
         ("class Body:\n    split: list\n", ["name assigned"]),
         ("'a b'.split(' ')\nparts = flag.split\n", []),
+        pytest.param(
+            """db.execute(text("UPDATE feature_flags SET split = '[]'"))\n""",
+            ["SQL"],
+            id="update",
+        ),
+        pytest.param(
+            'sql = f"""update only {schema}.feature_flags as f\n'
+            "SET rollout_percentage = 5, split='{parts}'\n"
+            'WHERE f.key = {key}"""\n',
+            ["SQL"],
+            id="update-f-string",
+        ),
+        pytest.param(
+            "sql = 'UPDATE ' + table + ' SET ' + '\"split\" = NULL'\n",
+            ["SQL"],
+            id="update-added",
+        ),
+        pytest.param(
+            "sql = 'UPDATE t ' 'SET a = 1, ' 'split = 2'\n",
+            ["SQL"],
+            id="update-adjacent",
+        ),
+        pytest.param(
+            "sql = 'UPDATE t SET split = %s' % parts\n", ["SQL"], id="update-percent"
+        ),
+        pytest.param(
+            "sql = 'UPDATE t SET (a, split) = (1, 2)'\n", ["SQL"], id="update-list"
+        ),
+        pytest.param(
+            "sql = 'INSERT INTO flags (id, split) VALUES (1, 2)'\n",
+            ["SQL"],
+            id="insert",
+        ),
+        pytest.param(
+            "sql = 'INSERT INTO t (id) VALUES (1) ON CONFLICT (id) '\\\n"
+            "    'DO UPDATE SET split = EXCLUDED.split'\n",
+            ["SQL"],
+            id="upsert",
+        ),
+        # Read, not written.
+        pytest.param(
+            "sql = 'SELECT split FROM feature_flags WHERE split = 1'\n",
+            [],
+            id="select",
+        ),
+        pytest.param(
+            "sql = 'UPDATE t SET a = split_part(b, c, 1) WHERE split = 2'\n",
+            [],
+            id="update-where",
+        ),
+        pytest.param(
+            "sql = \"INSERT INTO t (a) VALUES ('split')\"\n", [], id="insert-value"
+        ),
+        # Not seen: the name, or the SQL, is built at run time.
+        pytest.param(
+            "setattr(flag, 'spl' + 'it', parts)\n", [], id="unseen-computed-setattr"
+        ),
+        pytest.param(
+            "sql = f'UPDATE feature_flags SET {column} = 1'\n",
+            [],
+            id="unseen-column-in-a-field",
+        ),
+        pytest.param(
+            "sql = 'INSERT INTO feature_flags VALUES (1, 2, 3)'\n",
+            [],
+            id="unseen-insert-without-columns",
+        ),
     ],
 )
 def test_the_scan_sees_each_way_of_writing_one(planted, kinds):

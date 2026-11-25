@@ -646,7 +646,7 @@ by = [
 ]
 
 [[unit]]
-text = "The downgrade then stops with nothing changed, and is run again, or that request fails."
+text = "The downgrade then stops with nothing changed, and is run again, or the SDK requests waiting then fail."
 by = [
     "test:backend/tests/integration/database/test_flag_split_migration.py::test_a_one_run_downgrade_that_waits_for_an_sdk_request_refuses_and_changes_nothing",
     "test:backend/tests/integration/database/test_flag_split_migration.py::test_a_one_run_downgrade_met_by_an_sdk_request_that_waits_first_runs_through",

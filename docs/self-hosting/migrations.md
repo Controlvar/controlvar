@@ -1084,7 +1084,7 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrad
 A downgrade that also undoes `t2011_flag_environments` is one run. It holds
 `feature_flags` while it waits for `api_keys`, and an SDK request reads
 `api_keys` first, so the two can deadlock: the downgrade stops with nothing
-changed, and is run again, or that request fails.
+changed, and is run again, or the SDK requests waiting then fail.
 
 On Helm, run the same command in an API pod with `kubectl exec`.
 
