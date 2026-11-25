@@ -746,7 +746,9 @@ def generate(root: Path, rows, documents=("docs/guide.md",), **kw) -> int:
     )
 
 
-def test_generate_writes_a_registry_check_accepts_but_for_new_units(tmp_path, capsys):
+def test_generate_writes_a_registry_check_refuses_only_for_new_units_and_debt(
+    tmp_path, capsys
+):
     root = build(tmp_path)
     assert generate(root, base_rows()) == 0
     out = capsys.readouterr().out
@@ -754,7 +756,9 @@ def test_generate_writes_a_registry_check_accepts_but_for_new_units(tmp_path, ca
     assert (root / dc.registry_path("docs/guide.md")).is_file()
     problems = check(root).problems
     unregistered = sorted(p for p in problems if "unregistered unit" in p)
-    assert len(unregistered) == len(problems), problems
+    untested = sorted(p for p in problems if "refuses an untested unit" in p)
+    assert len(unregistered) + len(untested) == len(problems), problems
+    assert [p.split(": ")[2] for p in untested] == ["untested:A", "untested:T"]
     assert sorted(p.split("'")[1] for p in unregistered) == sorted(
         [
             "A sentence written since then.",
@@ -1079,7 +1083,8 @@ def git(root: Path, *args: str) -> str:
 
 def test_generate_reads_the_audited_commit_with_git(tmp_path, capsys):
     """End to end: the old page is committed, the page edited after it; the
-    rows' lines are the committed page's, and the result passes check."""
+    rows' lines are the committed page's, and what check refuses of the result
+    is what the author still has to write."""
     root = build(tmp_path, {**FILES, "docs/guide.md": OLD_GUIDE})
     git(root, "init", "-q")
     git(root, "add", "-A")
@@ -1090,7 +1095,9 @@ def test_generate_reads_the_audited_commit_with_git(tmp_path, capsys):
     assert dc.run_generate(root, [audit], sha, ["docs/guide.md"]) == 0
     assert "rows 12: mapped" in capsys.readouterr().out
     problems = check(root).problems
-    assert all("unregistered unit" in p for p in problems), problems
+    assert all(
+        "unregistered unit" in p or "refuses an untested unit" in p for p in problems
+    ), problems
     assert dc.run_generate(root, [audit], "notasha", ["docs/guide.md"]) == 2
     assert "is not a commit id" in capsys.readouterr().out
     assert dc.run_generate(root, [audit], "0" * 40, ["docs/guide.md"]) == 2

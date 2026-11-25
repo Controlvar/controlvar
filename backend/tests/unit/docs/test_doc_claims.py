@@ -544,6 +544,16 @@ def test_quotes():
     assert "Retries stop after `three` attempts."
 """
 
+CLIENT_TS = """// it('only in a comment', () => {});
+const said = "it('only in a string', () => {})";
+describe('the client', () => {
+  it('caches a flag', () => {});
+  it.each(['memory', 'disk'])('%s: keeps a flag', () => {});
+  it.skip('retries a flag', () => {});
+  it(`reads ${said}`, () => {});
+});
+"""
+
 JOURNEY = """guide: guide.md
 steps:
   - id: archive
@@ -578,7 +588,10 @@ def base() -> Dict[str, Any]:
             "tests/helpers.py": "def test_x():\n    pass\n",
             "backend/app/test_core.py": "def test_x():\n    pass\n",
             "backend/tests/unit/docs/test_wording.py": WORDING_PY,
-            "sdk/js/tests/client.test.ts": "it('caches a flag', () => {});\n",
+            "sdk/js/tests/client.test.ts": CLIENT_TS,
+            "sdk/js/tests/cache.test.ts": "it('stores a flag', () => {});\n",
+            "sdk/go/client_test.go": "func TestCaches(t *testing.T) {}\n",
+            "frontend/tests/e2e/flag.spec.ts": "test.describe('a flag', () => {});\n",
             "modules/tests/test_mod.py": "def test_m():\n    pass\n",
             f"{dc.JOURNEYS}/demo.yaml": JOURNEY,
             dc.DOCS_GATE: 'DOCS_TESTS = ("backend/tests/unit/docs/",)\n'
@@ -598,7 +611,7 @@ def base() -> Dict[str, Any]:
                 unit("Run the check:", 'docex:docs/guide.md#"ok"'),
                 unit("Setting | Default", "exempt:label"),
                 unit("TIMEOUT | 30 s", "mechanism:reads-guide"),
-                unit("Retries stop after three attempts.", "untested:T"),
+                unit("Retries stop after three attempts.", "exempt:baseline"),
             ],
             "docs/ops.md": [
                 unit(
@@ -611,7 +624,7 @@ def base() -> Dict[str, Any]:
             "SECURITY.md": [unit("We answer within two days.", "exempt:policy")],
         },
         "ledger": [
-            ("untested:T", "docs/guide.md", "Retries stop after three attempts."),
+            ("exempt:baseline", "docs/guide.md", "Retries stop after three attempts."),
         ],
         "pending": ["docs/later.md", "hub.tsx#desc", "run.sh#header"],
         "deferred": [],
@@ -687,10 +700,10 @@ def retarget(document: str, text: str, *by: str, **extra: Any) -> Callable:
         entry["by"] = list(by)
         entry.update(extra)
         if (
-            by[:1] != ("untested:T",)
-            and ("untested:T", document, text) in tree["ledger"]
+            by[:1] != ("exempt:baseline",)
+            and ("exempt:baseline", document, text) in tree["ledger"]
         ):
-            tree["ledger"].remove(("untested:T", document, text))
+            tree["ledger"].remove(("exempt:baseline", document, text))
 
     return plant
 
@@ -853,12 +866,17 @@ PLANTED = [
     ),
     (
         "another language, name gone",
+        retarget("docs/guide.md", GUIDE_TEXT, "test:sdk/go/client_test.go::TestStores"),
+        "does not contain 'TestStores'",
+    ),
+    (
+        "a Playwright test, name gone",
         retarget(
             "docs/guide.md",
             GUIDE_TEXT,
-            "test:sdk/js/tests/client.test.ts::caches nothing",
+            "test:frontend/tests/e2e/flag.spec.ts::an experiment",
         ),
-        "does not contain 'caches nothing'",
+        "does not contain 'an experiment'",
     ),
     (
         "a modules/ target that is gone",
@@ -1246,6 +1264,149 @@ def test_each_refusal_fires(tmp_path, plant, refusal):
     assert any(refusal in p for p in problems), "\n".join(problems) or "no problem"
 
 
+CLIENT = "sdk/js/tests/client.test.ts"
+
+
+def jest_problems(tmp_path: Path, name: str, plant: Callable = lambda t: None):
+    """The problems of the tree when a unit's target is *name* in CLIENT."""
+    tree = base()
+    retarget("docs/guide.md", GUIDE_TEXT, f"test:{CLIENT}::{name}")(tree)
+    plant(tree)
+    return build(tmp_path, tree).problems
+
+
+def rename(tree: Dict[str, Any]) -> None:
+    edit(tree, CLIENT, "'caches a flag'", "'stores a flag'")
+
+
+def rename_and_keep_elsewhere(tree: Dict[str, Any]) -> None:
+    rename(tree)
+    edit(tree, "sdk/js/tests/cache.test.ts", "'stores a flag'", "'caches a flag'")
+
+
+#: (id, the target's name, a change to the tree, the refusal after the path).
+JEST_REFUSED = [
+    (
+        "a describe block",
+        "the client",
+        None,
+        "no test is titled 'the client' (a describe block is: name a test in it)",
+    ),
+    (
+        "a title with its end cut",
+        "caches a",
+        None,
+        "no test is titled 'caches a'; one is titled 'caches a flag'",
+    ),
+    (
+        "an .each title without its placeholder",
+        "keeps a flag",
+        None,
+        "no test is titled 'keeps a flag'; one is titled '%s: keeps a flag'",
+    ),
+    (
+        "a row the table does not have",
+        "floppy: keeps a flag",
+        None,
+        "no test is titled 'floppy: keeps a flag'",
+    ),
+    ("a comment", "only in a comment", None, "no test is titled 'only in a comment'"),
+    ("a string", "only in a string", None, "no test is titled 'only in a string'"),
+    ("a renamed test", "caches a flag", rename, "no test is titled 'caches a flag'"),
+    (
+        "a title another file has",
+        "caches a flag",
+        rename_and_keep_elsewhere,
+        "no test is titled 'caches a flag'",
+    ),
+    (
+        "a title that cannot be read",
+        "reads a flag",
+        None,
+        "no test is titled 'reads a flag'; the title at line 7 cannot be read",
+    ),
+    ("a skipped test", "retries a flag", None, "the test at line 6 is skipped"),
+    (
+        "a file with .only",
+        "caches a flag",
+        lambda t: edit(t, CLIENT, "it('caches", "it.only('caches"),
+        "line 4 is .only",
+    ),
+    (
+        "a file that does not scan",
+        "caches a flag",
+        lambda t: edit(t, CLIENT, "\n});\n", "\n"),
+        "its titles cannot be read: a bracket is not closed at line 3",
+    ),
+]
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "name, plant, refusal",
+    [c[1:] for c in JEST_REFUSED],
+    ids=[c[0] for c in JEST_REFUSED],
+)
+def test_a_jest_name_that_is_not_a_whole_title_is_refused(
+    tmp_path, name, plant, refusal
+):
+    """A name anywhere in the file passed, and only a release found that jest
+    reports no such test (#1819)."""
+    problems = jest_problems(tmp_path, name, plant or (lambda t: None))
+    wanted = f"test:{CLIENT}::{name}: {CLIENT}: {refusal}"
+    assert any(wanted in p for p in problems), "\n".join(problems) or "no problem"
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "caches a flag",
+        "the client caches a flag",
+        "%s: keeps a flag",
+        "memory: keeps a flag",
+        "the client disk: keeps a flag",
+    ],
+)
+def test_a_jest_target_names_a_whole_title(tmp_path, name):
+    assert not jest_problems(tmp_path, name)
+
+
+@pytest.mark.parametrize(
+    "target",
+    ["frontend/tests/e2e/flag.spec.ts::a flag", "sdk/go/client_test.go::TestCaches"],
+)
+def test_a_playwright_or_go_target_is_looked_for_in_its_file(tmp_path, target):
+    tree = base()
+    retarget("docs/guide.md", GUIDE_TEXT, f"test:{target}")(tree)
+    assert not build(tmp_path, tree).problems
+
+
+def test_every_script_test_but_playwrights_is_jests():
+    """Each is held to its titles; Playwright's are not read (their directory is
+    the one its configuration names)."""
+    for path in ("sdk/react/src/a.test.tsx", "frontend/src/a.test.ts", "x/a.spec.js"):
+        assert dc.is_jest(path), path
+    playwright = dc._load(dc.RC_EVIDENCE).PLAYWRIGHT_ROOT
+    for path in ("sdk/go/client_test.go", f"{playwright}/a.spec.ts"):
+        assert not dc.is_jest(path), path
+    config = (REPO_ROOT / "frontend/playwright.config.ts").read_text(encoding="utf-8")
+    assert f'testDir: "./{playwright.split("/", 1)[1]}"' in config
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("kind", dc.UNTESTED_KINDS)
+def test_an_untested_unit_is_refused(tmp_path, kind):
+    """It passed while the ledger listed it, and only a release refused it
+    (#1819)."""
+    tree = base()
+    retarget("docs/guide.md", RETRY, f"untested:{kind}")(tree)
+    tree["ledger"].append((f"untested:{kind}", "docs/guide.md", RETRY))
+    assert build(tmp_path, tree).problems == [
+        f"{dc.registry_path('docs/guide.md')}: {RETRY!r}: untested:{kind}: a release"
+        " refuses an untested unit: name what verifies it, reword it, or cut it"
+    ]
+
+
 OLD_RUN = "https://github.com/getexperimently/experimently/actions/runs/123"
 OLD_COMMENT = (
     "https://github.com/getexperimently/experimently/issues/12#issuecomment-345"
@@ -1417,14 +1578,14 @@ def test_the_counts_add_up(tmp_path):
     counts = result.counts
     assert counts["units"] == 12  # 8 on the guide (one twice), 2, 1, 1
     assert counts["dispositions"] == {
+        "exempt:baseline": 1,
         "exempt:intent": 1,
         "exempt:label": 2,
         "exempt:policy": 1,
-        "untested:T": 1,
         "verified": 7,
     }
     assert counts["tagged X"] == 0
-    assert counts["ledger"] == {"untested:T": 1}
+    assert counts["ledger"] == {"exempt:baseline": 1}
     assert counts["out of scope"] == {"CONTRIBUTING.md": "contributor"}
     assert collections.Counter(counts["targets"]) == collections.Counter(
         {
