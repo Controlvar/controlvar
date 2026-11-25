@@ -43,7 +43,7 @@ import {
   pageProblems,
   parseVtt,
 } from './check-site-media.mjs';
-import { MARKETING_ONLY_PAGES, platformProblems } from './check-platform-export.mjs';
+import { LOGO_PATH_START, MARKETING_ONLY_PAGES, platformProblems } from './check-platform-export.mjs';
 
 const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const headers = (pairs = {}) => new Headers(pairs);
@@ -746,6 +746,21 @@ describe('platformProblems', () => {
       rmSync(dir, { recursive: true });
     }
     assert.match(platformProblems(join(tmpdir(), 'no-such-export-dir'))[0], /is missing/);
+  });
+
+  // #2040: the logo's path data is the marketing build's only. A chunk or a page of the
+  // platform export that carries it means the logo was bundled into the dashboard.
+  it('fails the logo\'s path data in a script or a page, and passes other path data', () => {
+    const dir = platform();
+    mkdirSync(join(dir, '_next', 'static'), { recursive: true });
+    writeFileSync(join(dir, '_next', 'static', 'a.js'), 'var d="M0 0L10 10Q5 5 1 1Z";');
+    assert.deepEqual(platformProblems(dir), []);
+    writeFileSync(join(dir, '_next', 'static', 'a.js'), `var d="${LOGO_PATH_START} 88.59 44.76";`);
+    assert.ok(platformProblems(dir).some((p) => /_next\/static\/a\.js carries the logo's path data/.test(p)), platformProblems(dir).join('\n'));
+    writeFileSync(join(dir, '_next', 'static', 'a.js'), 'var d="";');
+    writeFileSync(join(dir, 'index.html'), `<a href="/login">Sign in to the dashboard</a><svg><path d="${LOGO_PATH_START}"/></svg>`);
+    assert.ok(platformProblems(dir).some((p) => /index\.html carries the logo's path data/.test(p)), platformProblems(dir).join('\n'));
+    rmSync(dir, { recursive: true });
   });
 
   // #1459 PE 2: the homepage's screenshots are the marketing build's only. The

@@ -28,6 +28,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { LOGO_PATH_START } from './check-platform-export.mjs';
 
 const OUT = fileURLToPath(new URL('../out/', import.meta.url));
 
@@ -74,6 +75,9 @@ describe("every page ends with the site's footer", () => {
       const footers = [...markup(name).matchAll(/<footer\b[\s\S]*?<\/footer>/gi)].map((m) => m[0]);
       assert.equal(footers.length, 1, `out/${name} has ${footers.length} <footer>`);
       assert.match(footers[0], /<nav\b[^>]*aria-label="Footer"/, `out/${name}: the footer is not the site's`);
+      // The public site shows the logo (#2040). This is what fails when the marketing build loses it
+      // (components/Wordmark.tsx's condition), and when LOGO_PATH_START no longer matches the drawing.
+      assert.ok(footers[0].includes(LOGO_PATH_START), `out/${name}: the footer has no logo (or LOGO_PATH_START is stale)`);
       // What Controlvar does (the capability page on the docs site) and the roadmap (D380).
       assert.ok(DOCS_SITE, 'no NEXT_PUBLIC_DOCS_URL in package.json build:marketing');
       const links = [...footers[0].matchAll(/<a\b[^>]*\bhref="([^"]*)"[^>]*>([^<]*)<\/a>/g)].map((m) => `${m[2]} ${m[1]}`);

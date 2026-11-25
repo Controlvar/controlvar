@@ -23,6 +23,15 @@ module.exports = {
   images: {
     unoptimized: true,
   },
+  // Always defined, "marketing" or "platform". An unset NEXT_PUBLIC_ variable is
+  // not replaced at build time, so `process.env.NEXT_PUBLIC_SITE_MODE ===
+  // 'marketing'` stayed a runtime test in the platform build and the bundler
+  // could not drop what it guards (components/Wordmark.tsx: the logo's path
+  // data, which only the public site ships). Any value but "marketing" means
+  // platform, as in utils/site-mode.ts.
+  env: {
+    NEXT_PUBLIC_SITE_MODE: process.env.NEXT_PUBLIC_SITE_MODE === 'marketing' ? 'marketing' : 'platform',
+  },
   typescript: {
     tsconfigPath: full ? 'tsconfig.json' : 'tsconfig.core.json',
   },
