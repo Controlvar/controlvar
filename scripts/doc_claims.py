@@ -77,14 +77,21 @@ THE TARGETS (a closed list; anything else is refused)
     Python the function, or the class and method, is found by parsing the
     file, its name starts with ``test`` (a class with ``Test``), and one marked
     ``benchmark`` is refused (skipped unless RUN_BENCHMARKS=1, so it would hold
-    nothing). In another language the file contains the name. ``test:<path>`` alone (the whole file)
+    nothing). In a jest file (any JavaScript or TypeScript test but Playwright's)
+    the name is the whole title of a test that is not skipped, or its full name
+    (its describe titles and its own): the names the release matches in jest's
+    report (``rc_evidence.py``). An ``.each`` title is named as written, or with
+    one row filled in. ``scripts/jest_titles.py`` reads the titles from the
+    source; a title it cannot read is refused. In another language the file
+    contains the name, and so does a Playwright test's (a file under
+    ``rc_evidence.PLAYWRIGHT_ROOT``, ``frontend/tests/e2e``), which the release
+    matches exactly: the test's own title as written, or its full name (its
+    describe titles and its own, joined with `` › ``), each ``${...}`` standing
+    for the text the template puts there; so cite a whole title.
+    ``test:<path>`` alone (the whole file)
     is allowed and counted separately. A ``modules/`` target in a tree without
     ``modules/`` (``scripts/core_build.sh``'s copy) is checked for its form only,
-    and counted. A Playwright test's name (a file under ``frontend/tests/e2e/``)
-    is checked here as contained in the file, and the release matches it
-    exactly (``rc_evidence.py``): the test's own title as written, or its full
-    name (its describe titles and its own, joined with `` › ``), each ``${...}``
-    standing for the text the template puts there; so cite a whole title.
+    and counted.
 ``journey:<slug>#<step>``
     ``tests/acceptance/docs/journeys/<slug>.yaml`` exists and has that step.
 ``docex:<document>#<expected text>``
@@ -108,7 +115,11 @@ THE TARGETS (a closed list; anything else is refused)
     document of class ``aws`` or on a unit the entry tags ``tag = "X"`` (one
     the audit could not verify); ``policy`` only in ``POLICY_DOCUMENTS``.
 ``untested:<T|S|X|A>`` and ``exempt:baseline``
-    debt and not-yet-classified units: each has a line in the ledger.
+    debt and not-yet-classified units: each has a line in the ledger. An
+    ``untested:`` unit is what ``generate`` writes for a claim nothing verifies
+    yet. ``check`` refuses every one: the release does, its check runs only once
+    the tag exists, and a release can be cut from any commit of main, so none is
+    merged. Name what verifies it, reword it, or cut it.
 
 *Dated* means the unit says ``as of vX.Y.Z`` or ``on YYYY-MM-DD`` in those
 words (the first letter may be a capital).
@@ -225,6 +236,9 @@ JOURNEYS = "tests/acceptance/docs/journeys"
 ENROLMENT = "scripts/doc_examples.toml"
 #: Doc Examples' own fence and tag parser, from this checkout: one parser.
 DOC_EXAMPLES = pathlib.Path(__file__).resolve().parent / "doc_examples.py"
+#: The reader of a jest file's titles, and the release's rule for a jest name.
+JEST_TITLES = DOC_EXAMPLES.with_name("jest_titles.py")
+RC_EVIDENCE = DOC_EXAMPLES.with_name("rc_evidence.py")
 MARKDOWN = "markdown"
 #: The named surfaces this file reads, by the inventory's extractor name: a
 #: file read whole, and the comment block at the top of a file.
@@ -2156,14 +2170,19 @@ def inventory_documents(
     return found, out
 
 
-def _load_doc_examples() -> Any:
-    name = "_doc_claims_doc_examples"
+def _load(path: pathlib.Path) -> Any:
+    """A script of this checkout, loaded by path."""
+    name = f"_doc_claims_{path.stem}"
     if name not in sys.modules:
-        spec = importlib.util.spec_from_file_location(name, DOC_EXAMPLES)
+        spec = importlib.util.spec_from_file_location(name, path)
         module = importlib.util.module_from_spec(spec)
         sys.modules[name] = module  # dataclasses looks its module up
         spec.loader.exec_module(module)
     return sys.modules[name]
+
+
+def _load_doc_examples() -> Any:
+    return _load(DOC_EXAMPLES)
 
 
 def _marked_benchmark(node: ast.AST) -> bool:
@@ -2211,6 +2230,7 @@ class Context:
         self._quoted: Dict[str, Set[str]] = {}
         self._enrolled: Optional[Any] = None
         self._blocks: Dict[str, Any] = {}
+        self._jest: Dict[str, Any] = {}
         self._gate: Optional[Tuple[Set[str], Tuple[str, ...], Optional[str]]] = None
 
     def gate_lists(self) -> Tuple[Set[str], Tuple[str, ...], Optional[str]]:
@@ -2340,6 +2360,23 @@ class Context:
                 self._enrolled = f"scripts/doc_examples.toml: {refusal}"
         return self._enrolled
 
+    def jest_problem(self, rel: str, name: str) -> Optional[str]:
+        """Why *name* is not the whole title, or the full name, of a test of
+        the jest file *rel*, by the release's rule; None when it is."""
+        if rel not in self._jest:
+            titles = _load(JEST_TITLES)
+            try:
+                source = titles.read(
+                    self.text(rel) or "", jsx=rel.endswith(("x", "js"))
+                )
+                self._jest[rel] = titles.Names(
+                    source, _load(RC_EVIDENCE).jest_title_pattern
+                )
+            except titles.Unreadable as refusal:
+                self._jest[rel] = f"its titles cannot be read: {refusal}"
+        names = self._jest[rel]
+        return names if isinstance(names, str) else names.problem(name)
+
     def exec_blocks(self, rel: str) -> Any:
         """The exec blocks of an enrolled document, or the refusal text."""
         if rel not in self._blocks:
@@ -2455,6 +2492,16 @@ def docs_reads_problem(text: Optional[str], tree: Any) -> Optional[str]:
     return None
 
 
+def is_jest(path: str) -> bool:
+    """Whether *path* is a JavaScript or TypeScript test that is not
+    Playwright's (``rc_evidence.PLAYWRIGHT_ROOT``): jest's, or node's own
+    (``frontend/scripts``), which declares its tests the same way."""
+    release = _load(RC_EVIDENCE)
+    return not path.startswith(release.PLAYWRIGHT_ROOT + "/") and bool(
+        release.JEST_FILE.fullmatch(path)
+    )
+
+
 def test_problem(
     ctx: Context, target: str, *, mechanism: bool = False
 ) -> Optional[str]:
@@ -2494,6 +2541,9 @@ def test_problem(
         return f"{path} does not exist"
     if path.endswith(".py"):
         return _python_problem(ctx, path, name)
+    if name is not None and is_jest(path):
+        problem = ctx.jest_problem(path, name)
+        return f"{path}: {problem}" if problem else None
     if name is not None:
         pattern = r"(?<![\w$])" + re.escape(name) + r"(?![\w$])"
         if not re.search(pattern, text):
@@ -2810,6 +2860,11 @@ def check(
                 dispositions[head] += count
             else:
                 dispositions["verified"] += count
+            if kind_of(head) == "untested":
+                problems.append(
+                    f"{rel}: {entry['text'][:80]!r}: {head}: a release refuses an"
+                    " untested unit: name what verifies it, reword it, or cut it"
+                )
             if head in LEDGER_KINDS:
                 want_ledger.add((head, path, unit_hash(entry["text"])))
 
