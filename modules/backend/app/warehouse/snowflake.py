@@ -517,6 +517,11 @@ class _Pending(Exception):
     """The statement is still running (a 202)."""
 
 
+def _is_zero_count(value: object) -> bool:
+    """True for a count Snowflake wrote as digits that are all zero (``"0"``)."""
+    return isinstance(value, str) and value.strip().isdigit() and int(value) == 0
+
+
 class SnowflakeAdapter:
     """One Snowflake connection's calls, each made within the caller's Deadline.
 
@@ -782,10 +787,21 @@ class SnowflakeAdapter:
         return handle, rows, elapsed
 
     @staticmethod
-    def _check_utc(rows: List[Dict[str, Optional[str]]]) -> None:
+    def _check_utc(
+        rows: List[Dict[str, Optional[str]]], *, preview: bool = False
+    ) -> None:
+        """Every row must report a UTC offset.
+
+        A preview of a window with no rows reports a NULL offset (``MIN`` over
+        no rows); only a preview row whose ``total_rows`` is 0 may do that.
+        """
         for row in rows:
-            if not is_utc_session_offset(row.get("session_offset")):
-                raise WarehouseError(_C.TIMEZONE_NOT_UTC, warehouse=WAREHOUSE)
+            offset = row.get("session_offset")
+            if is_utc_session_offset(offset):
+                continue
+            if preview and offset is None and _is_zero_count(row.get("total_rows")):
+                continue
+            raise WarehouseError(_C.TIMEZONE_NOT_UTC, warehouse=WAREHOUSE)
 
     # -- operations ------------------------------------------------------
 
@@ -799,7 +815,7 @@ class SnowflakeAdapter:
         databases = {table[0] for table in query.tables if table}
         database = next(iter(databases)) if len(databases) == 1 else None
         handle, rows, elapsed = self._execute(query.sql, deadline, database)
-        self._check_utc(rows)
+        self._check_utc(rows, preview=query.kind == "preview")
         return QueryResult(
             rows=tuple(rows),
             statement_handle=handle,

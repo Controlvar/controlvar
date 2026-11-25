@@ -29,9 +29,12 @@ from modules.backend.app.services.warehouse_query_builder import (
     AssignmentMapping,
     BuiltQuery,
     MetricMapping,
+    build_assignment_preview_query,
     build_diagnostics_query,
+    build_metric_preview_query,
     build_metric_query,
 )
+from modules.backend.app.services.warehouse_runner import parse_preview_rows
 from modules.backend.app.services.warehouse_sufficient_stats import (
     parse_diagnostics_rows,
     parse_float,
@@ -1104,3 +1107,141 @@ def test_every_request_is_to_the_account_host(key):
     assert fake.connects and {c[0] for c in fake.connects} == {"93.184.216.34"}
     assert {r.host for r in fake.requests} == {HOST}
     assert all(r.path.startswith(sf.STATEMENTS_PATH) for r in fake.requests)
+
+
+# -- a preview of a window with no rows ---------------------------------------
+
+_PREVIEW_COLUMNS = (
+    "TOTAL_ROWS",
+    "NULL_UNIT_ROWS",
+    "NULL_VALUE_ROWS",
+    "EARLIEST",
+    "LATEST",
+    "SESSION_OFFSET",
+)
+_PREVIEW_METRIC = MetricMapping(
+    table=("ANALYTICS", "PUBLIC", "ORDERS"),
+    unit_id="USER_ID",
+    event_at="EVENT_AT",
+    metric_type="proportion",
+)
+
+
+def _answer(columns, rows):
+    status, body = recorded("result_metric")
+    body["resultSetMetaData"]["rowType"] = [
+        {"name": name, "type": "text", "nullable": True} for name in columns
+    ]
+    body["resultSetMetaData"]["numRows"] = len(rows)
+    body["resultSetMetaData"]["partitionInfo"] = [
+        {"rowCount": len(rows), "uncompressedSize": 64}
+    ]
+    body["data"] = rows
+    return status, body
+
+
+def _metric_preview_answer(total, offset):
+    return _answer(_PREVIEW_COLUMNS, [[total, "0", "0", None, None, offset]])
+
+
+def _run_metric_preview(key, answer):
+    fake = NetworkFake(happy(status=[answer]))
+    query = build_metric_preview_query(SNOWFLAKE_SQL, _PREVIEW_METRIC, WINDOW)
+    return adapter(key, fake).run_query(query, Deadline(30))
+
+
+@pytest.mark.regression
+def test_metric_preview_of_a_window_with_no_rows_reports_zero_rows(key):
+    """``MIN`` over no rows is NULL, which is not a session outside UTC."""
+    result = _run_metric_preview(key, _metric_preview_answer("0", None))
+    summary = parse_preview_rows(
+        "metric", list(result.rows), expect_session_offset=True
+    )
+    assert summary["total_rows"] == 0
+    assert summary["earliest"] is None and summary["latest"] is None
+
+
+@pytest.mark.regression
+def test_assignment_preview_of_a_window_with_no_rows_reports_zero_rows(key):
+    columns = (
+        "TOTAL_ROWS",
+        "NULL_UNIT_ROWS",
+        "NULL_VARIANT_ROWS",
+        "EARLIEST",
+        "LATEST",
+        "VARIANT",
+        "UNITS",
+        "SESSION_OFFSET",
+    )
+    answer = _answer(columns, [["0", "0", "0", None, None, None, None, None]])
+    fake = NetworkFake(happy(status=[answer]))
+    query = build_assignment_preview_query(
+        SNOWFLAKE_SQL, ASSIGNMENT, WINDOW, "checkout-test"
+    )
+    result = adapter(key, fake).run_query(query, Deadline(30))
+    summary = parse_preview_rows(
+        "assignment", list(result.rows), expect_session_offset=True
+    )
+    assert summary["total_rows"] == 0
+    assert summary["variants"] == []
+
+
+@pytest.mark.parametrize("total", ["1", "7", "10", "01"])
+@pytest.mark.parametrize("offset", [None, "+01:00", "-07:00", ""])
+def test_metric_preview_with_rows_still_needs_a_utc_offset(key, total, offset):
+    with pytest.raises(WarehouseError) as err:
+        _run_metric_preview(key, _metric_preview_answer(total, offset))
+    assert err.value.code is C.TIMEZONE_NOT_UTC
+
+
+@pytest.mark.parametrize("offset", ["+01:00", "-07:00", "UTC", "", "z", "Z "])
+def test_metric_preview_with_no_rows_and_an_offset_that_is_not_utc_is_refused(
+    key, offset
+):
+    with pytest.raises(WarehouseError) as err:
+        _run_metric_preview(key, _metric_preview_answer("0", offset))
+    assert err.value.code is C.TIMEZONE_NOT_UTC
+
+
+@pytest.mark.parametrize("offset", ["Z", "+00:00"])
+def test_metric_preview_with_no_rows_and_a_utc_offset_is_read(key, offset):
+    result = _run_metric_preview(key, _metric_preview_answer("0", offset))
+    assert result.rows[0]["total_rows"] == "0"
+
+
+@pytest.mark.parametrize("total", [None, "", "x", "-1", "0.5"])
+def test_a_preview_whose_count_is_not_zero_does_not_excuse_a_null_offset(key, total):
+    with pytest.raises(WarehouseError) as err:
+        _run_metric_preview(key, _metric_preview_answer(total, None))
+    assert err.value.code is C.TIMEZONE_NOT_UTC
+
+
+def test_a_preview_without_a_count_column_does_not_excuse_a_null_offset(key):
+    answer = _answer(("SESSION_OFFSET",), [[None]])
+    with pytest.raises(WarehouseError) as err:
+        _run_metric_preview(key, answer)
+    assert err.value.code is C.TIMEZONE_NOT_UTC
+
+
+@pytest.mark.parametrize("kind", ["metric", "diagnostics"])
+def test_only_a_preview_may_leave_the_offset_null(key, kind):
+    """An analysis statement with a zero count and a NULL offset is still refused."""
+    answer = _metric_preview_answer("0", None)
+    fake = NetworkFake(happy(status=[answer]))
+    query = BuiltQuery(kind=kind, dialect="snowflake", sql="SELECT 1")
+    with pytest.raises(WarehouseError) as err:
+        adapter(key, fake).run_query(query, Deadline(30))
+    assert err.value.code is C.TIMEZONE_NOT_UTC
+
+
+def test_the_connection_test_with_a_zero_count_and_a_null_offset_is_refused(key):
+    status, body = recorded("real_connection_test")
+    body["resultSetMetaData"]["rowType"].append(
+        {"name": "TOTAL_ROWS", "type": "text", "nullable": True}
+    )
+    body["data"][0][2] = None
+    body["data"][0].append("0")
+    fake = NetworkFake(happy(status=[(status, body)]))
+    with pytest.raises(WarehouseError) as err:
+        adapter(key, fake).check_connection(Deadline(30))
+    assert err.value.code is C.TIMEZONE_NOT_UTC
