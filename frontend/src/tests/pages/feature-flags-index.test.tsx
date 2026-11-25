@@ -114,11 +114,11 @@ describe('FeatureFlagsPage', () => {
     const toggle = screen.getByTestId('flag-toggle-checkout_v2');
     fireEvent.click(toggle);
 
-    // Optimistic: flips immediately, disabled while in flight.
+    // Optimistic: flips immediately; aria-disabled (not disabled, so focus stays) while in flight.
     expect(toggle).toHaveAttribute('aria-checked', 'true');
-    expect(toggle).toBeDisabled();
+    expect(toggle).toHaveAttribute('aria-disabled', 'true');
 
-    await waitFor(() => expect(toggle).not.toBeDisabled());
+    await waitFor(() => expect(toggle).not.toHaveAttribute('aria-disabled'));
     expect(toggle).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByTestId('flag-status-pill')).toHaveTextContent('On');
 
@@ -126,6 +126,78 @@ describe('FeatureFlagsPage', () => {
     expect(path).toBe('/api/v1/feature-flags/flag-1/enable');
     expect(options?.method).toBe('POST');
     expect(options?.json).toEqual({ reason: null });
+  });
+
+  it('keeps focus on the switch while the request runs, and ignores a second press', async () => {
+    let answer: (v: unknown) => void = () => undefined;
+    const pending = new Promise((resolve) => {
+      answer = resolve;
+    });
+    mockedApiFetch.mockImplementation(
+      routedApi([
+        { path: '/api/v1/feature-flags', handler: () => list([flag({ is_active: false })]) },
+        { method: 'POST', path: '/api/v1/feature-flags/flag-1/enable', handler: () => pending },
+      ]) as unknown as typeof apiFetch,
+    );
+    render(<FeatureFlagsPage />);
+    await screen.findByTestId('flags-table');
+    const toggle = screen.getByTestId('flag-toggle-checkout_v2');
+    toggle.focus();
+    fireEvent.click(toggle);
+    await waitFor(() => expect(toggleCalls()).toHaveLength(1));
+    expect(toggle).toHaveAttribute('aria-disabled', 'true');
+    expect(toggle).not.toBeDisabled();
+    expect(toggle).toHaveFocus();
+    fireEvent.click(toggle);
+    expect(toggleCalls()).toHaveLength(1);
+    await act(async () => {
+      answer({ id: 'flag-1', key: 'checkout_v2', name: 'Checkout v2', status: 'active', updated_at: '2026-09-11T00:00:00Z', audit_log_id: null });
+    });
+    await waitFor(() => expect(toggle).not.toHaveAttribute('aria-disabled'));
+    expect(toggle).toHaveFocus();
+  });
+
+  it('two presses in one tick send one request', async () => {
+    mockedApiFetch.mockImplementation(
+      routedApi([
+        { path: '/api/v1/feature-flags', handler: () => list([flag({ is_active: false })]) },
+        { method: 'POST', path: '/api/v1/feature-flags/flag-1/enable', handler: () => new Promise(() => undefined) },
+      ]) as unknown as typeof apiFetch,
+    );
+    render(<FeatureFlagsPage />);
+    await screen.findByTestId('flags-table');
+    const toggle = screen.getByTestId('flag-toggle-checkout_v2');
+    // Both presses land before React renders: the pending state has not changed yet.
+    act(() => {
+      toggle.click();
+      toggle.click();
+    });
+    await waitFor(() => expect(toggleCalls()).toHaveLength(1));
+    expect(toggleCalls()).toHaveLength(1);
+  });
+
+  it('after a refused switch, the next press sends a new request', async () => {
+    mockedApiFetch.mockImplementation(
+      routedApi([
+        { path: '/api/v1/feature-flags', handler: () => list([flag({ is_active: false })]) },
+        {
+          method: 'POST',
+          path: '/api/v1/feature-flags/flag-1/enable',
+          handler: () => {
+            throw apiError(403, 'Not enough permissions to enable this feature flag');
+          },
+        },
+      ]) as unknown as typeof apiFetch,
+    );
+    render(<FeatureFlagsPage />);
+    await screen.findByTestId('flags-table');
+    const toggle = screen.getByTestId('flag-toggle-checkout_v2');
+    fireEvent.click(toggle);
+    expect(await screen.findByTestId('flag-toggle-error')).toBeInTheDocument();
+    await waitFor(() => expect(toggle).not.toHaveAttribute('aria-disabled'));
+    expect(toggleCalls()).toHaveLength(1);
+    fireEvent.click(toggle);
+    await waitFor(() => expect(toggleCalls()).toHaveLength(2));
   });
 
   it('turns a flag off via POST /disable', async () => {
@@ -170,7 +242,7 @@ describe('FeatureFlagsPage', () => {
       'Not enough permissions to enable this feature flag',
     );
     expect(toggle).toHaveAttribute('aria-checked', 'false');
-    expect(toggle).not.toBeDisabled();
+    expect(toggle).not.toHaveAttribute('aria-disabled');
     expect(screen.getByTestId('flag-status-pill')).toHaveTextContent('Off');
   });
 
@@ -218,7 +290,7 @@ describe('FeatureFlagsPage', () => {
     // A is flipped first and stays in flight; B is flipped next and succeeds.
     fireEvent.click(toggleA);
     fireEvent.click(toggleB);
-    await waitFor(() => expect(toggleB).not.toBeDisabled());
+    await waitFor(() => expect(toggleB).not.toHaveAttribute('aria-disabled'));
     expect(toggleB).toHaveAttribute('aria-checked', 'true');
 
     // Now A fails: only A may revert — B is already on server-side.
