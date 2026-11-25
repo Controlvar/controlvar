@@ -3,7 +3,7 @@ import json
 import logging
 import math
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 from uuid import UUID
 
 import numpy as np
@@ -214,11 +214,39 @@ class AnalysisService:
             "srm": srm,
         }
 
+    def get_experiment_results_many(
+        self, experiment_ids: Iterable[UUID]
+    ) -> Dict[str, Optional[Dict[str, Any]]]:
+        """
+        The results of several experiments, read together (#1817).
+
+        Each is what ``get_experiment_results(id, include_bayesian=False)``
+        returns, but for the last digits of a number computed from per-user
+        sums of inexact values, under the experiment's stored confidence level
+        and correction method. ``results_batch`` says what is read together.
+
+        Args:
+            experiment_ids: the experiments' ids. A repeated id is answered
+                once, in the place it has first.
+
+        Returns:
+            ``{str(id): results}`` in the order of the ids. The results are
+            None where ``get_experiment_results`` raises ``ValueError`` (no
+            such experiment, no control variant), which is logged at INFO.
+            Any other exception is raised.
+        """
+        # Imported here: results_batch subclasses this service.
+        from backend.app.services.results_batch import results_many
+
+        return results_many(self.db, experiment_ids)
+
     # ------------------------------------------------------------------
     # What get_experiment_results reads from the database
     # ------------------------------------------------------------------
     # The five methods below, event_counts and value_totals are every read it
-    # makes with include_bayesian=False.
+    # makes with include_bayesian=False. results_batch.py overrides each of
+    # them with a read for several experiments at once; a read that goes
+    # through none of them runs once per experiment there.
 
     def _load_experiment(self, experiment_id: Union[str, UUID]) -> Optional[Experiment]:
         """The experiment with its variants and metrics, or None."""

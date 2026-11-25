@@ -98,6 +98,11 @@ INVENTORY: Dict[str, str] = {
     _I + "_get_experiment_users": STATED_LIMIT,
     "backend/app/services/mutual_exclusion_service.py::MutualExclusionService"
     ".has_sibling_assignment": RESOLVED_IN_CODE,
+    "backend/app/services/results_batch.py::assigned_pairs": RESOLVED_AT_WRITE,
+    "backend/app/services/results_batch.py::assignment_counts": PER_ROW,
+    "backend/app/services/results_batch.py::experiment_totals": PER_ROW,
+    "backend/app/services/results_batch.py::legacy_rows": RESOLVED_AT_WRITE,
+    "backend/app/services/results_batch.py::metric_rows": RESOLVED_AT_WRITE,
     "backend/app/services/results_streaming_service.py::ResultsStreamingService"
     "._compute_variant_results": PER_ROW,
     "backend/app/services/segment_breakdown.py::user_values": RESOLVED_AT_WRITE,
@@ -118,8 +123,8 @@ BY_HAND = {
 
 #: Per class, at this base, in both profiles (modules/backend/app has none).
 COUNTS = {
-    PER_ROW: 16,
-    RESOLVED_AT_WRITE: 6,
+    PER_ROW: 18,
+    RESOLVED_AT_WRITE: 9,
     RESOLVED_IN_CODE: 9,
     NOT_ROUTED: 3,
     STATED_LIMIT: 5,

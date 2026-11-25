@@ -106,6 +106,9 @@ INVENTORY: Dict[str, str] = {
     "backend/app/services/interaction_detection_service.py::InteractionDetectionService._get_experiment_users": READS,
     "backend/app/services/interaction_detection_service.py::InteractionDetectionService._shared_assignments": READS,
     "backend/app/services/mutual_exclusion_service.py::MutualExclusionService.has_sibling_assignment": READS,
+    "backend/app/services/results_batch.py::assigned_pairs": READS,
+    "backend/app/services/results_batch.py::assignment_counts": READS,
+    "backend/app/services/results_batch.py::experiment_totals": READS,
     "backend/app/services/results_streaming_service.py::ResultsStreamingService._compute_variant_results": READS,
     "backend/app/services/srm_service.py::compute_srm_for_experiment": READS,
 }

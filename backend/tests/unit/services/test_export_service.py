@@ -12,18 +12,16 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from backend.app.schemas.export import ExportFormat, ExportRequest, ExportScope
+from backend.app.services import results_batch
+from backend.app.services.analysis_service import AnalysisService
 from backend.app.services.export_service import ExportService
 
 
 @pytest.fixture
 def mock_db():
-    db = MagicMock()
-    # The results computation reads the experiment's stored analysis
-    # settings (#580); a MagicMock's own attributes are not a method.
-    experiment = db.query.return_value.options.return_value.filter.return_value
-    experiment.first.return_value.correction_method = "benjamini_hochberg"
-    experiment.first.return_value.confidence_level = 0.95
-    return db
+    """A session in which the results' read finds no experiment, so the result
+    columns are empty."""
+    return MagicMock()
 
 
 @pytest.fixture
@@ -297,10 +295,17 @@ class TestPlatformOverviewReport:
             "exp-002": {"summary": {"winning_variant_id": None}},
         }
 
-        with patch("backend.app.services.export_service.AnalysisService") as analysis:
-            analysis.return_value.get_experiment_results.side_effect = (
-                lambda experiment_id, **_: results[experiment_id]
-            )
+        with (
+            patch.object(
+                results_batch, "load_group", lambda db, ids: results_batch.GroupReads()
+            ),
+            patch.object(
+                AnalysisService,
+                "get_experiment_results",
+                autospec=True,
+                side_effect=lambda _service, experiment_id, **_: results[experiment_id],
+            ),
+        ):
             report = ExportService(mock_db).generate_platform_overview()
 
         assert report.experiments_with_winners == 1

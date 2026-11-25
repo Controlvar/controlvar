@@ -45,7 +45,7 @@ from backend.app.core.stats_engine import ENGINE_VERSION
 from backend.app.main import app
 from backend.app.models.user import User
 from backend.app.services import analysis_service as analysis_module
-from backend.app.services import sufficient_stats_analysis
+from backend.app.services import results_batch, sufficient_stats_analysis
 from backend.app.services.analysis_service import AnalysisService
 from backend.app.services.export_service import ExportService
 from backend.tests.unit.services import (
@@ -412,11 +412,33 @@ def test_the_service_default_is_the_stored_setting(fake_counts):
     assert _purchase_a(output)["adjusted_p_value"] == pytest.approx(_P_A_BH, rel=1e-9)
 
 
-def test_the_variant_export_and_report_rows_are_the_stored_setting(fake_counts):
+def test_the_variant_export_and_report_rows_are_the_stored_setting(
+    fake_counts, monkeypatch
+):
     """``/export/variants`` and the report's variant rows share
-    ``_variants_to_rows``; purchase is the primary metric."""
+    ``_variants_to_rows``; purchase is the primary metric. The export reads
+    its experiments' counts together (``results_batch``), so the fixture's are
+    what that read answers; the computation on them is the real one."""
     fake_counts(_THREE)
     experiment = _experiment(_ALL_THREE)
+    monkeypatch.setattr(
+        results_batch,
+        "load_group",
+        lambda _db, _ids: results_batch.GroupReads(
+            experiments={experiment.id: experiment},
+        ),
+    )
+    monkeypatch.setattr(
+        results_batch,
+        "load_rows",
+        lambda _db, _experiments: results_batch.EventRows(
+            assignments={experiment.id: dict(_THREE.units)},
+            users={
+                (experiment.id, event, variant_id): [(1, None)] * converted
+                for (event, variant_id), converted in _THREE.converted.items()
+            },
+        ),
+    )
     rows = ExportService(_FakeSession(experiment, _THREE))._variants_to_rows(
         [experiment]
     )

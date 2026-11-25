@@ -14,6 +14,13 @@ just to exclude exposure rows.  Every analysis path (results engine, streaming
 results, bandit scheduler, segment breakdowns) must use these helpers so the
 same event is counted the same way everywhere.
 
+``results_batch`` reads the conversions of several metrics in one statement:
+it selects them with ``any_conversion_event_filter`` and
+``conversion_event_filter(None)``, and tells the metrics apart by keying each
+row by its ``event_name``.  That key is ``conversion_event_filter``'s name
+equality written a second time, so a change to how a name matches is made in
+both.
+
 A binary conversion metric counts **converting users**, not conversion events:
 a user assigned to a variant who sent one or more matching conversion events
 counts once (#233).  ``count_converting_users`` is that one definition, and
