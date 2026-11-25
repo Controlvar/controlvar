@@ -309,6 +309,70 @@ describe('the flag list in Staging and Development', () => {
     expect(within(row('dark_mode')).queryByTestId('flag-not-configured')).toBeNull();
   });
 
+  it("a row's switch in Development changes Development, and no other environment", async () => {
+    install();
+    renderList('development');
+    await screen.findByTestId('flags-table');
+    fireEvent.click(within(row('dark_mode')).getByRole('switch', { name: 'Turn dark_mode on in Development' }));
+    await waitFor(() => expect(within(row('dark_mode')).getByTestId('flag-status-pill')).toHaveTextContent('On'));
+    expect(calls().filter((c) => !c.startsWith('GET '))).toEqual(['PUT /api/v1/feature-flags/f2/environments/development']);
+  });
+
+  it('a refused Staging switch says so, and the row shows the flag as it was', async () => {
+    install({}, FLAGS, [
+      {
+        method: 'PUT',
+        path: '/api/v1/feature-flags/f2/environments/staging',
+        handler: () => {
+          throw apiError(500, 'Could not update the feature flag.');
+        },
+      },
+    ]);
+    renderList('staging');
+    await screen.findByTestId('flags-table');
+    fireEvent.click(within(row('dark_mode')).getByRole('switch', { name: 'Turn dark_mode on in Staging' }));
+    expect(await screen.findByTestId('flag-toggle-error-f2')).toHaveTextContent('Could not update the feature flag.');
+    expect(within(row('dark_mode')).getByTestId('flag-status-pill')).toHaveTextContent('Off');
+    expect(within(row('dark_mode')).getByTestId('flag-not-configured')).toHaveTextContent('Not configured in Staging');
+    expect(within(row('dark_mode')).getByRole('switch', { name: 'Turn dark_mode on in Staging' })).toBeEnabled();
+  });
+
+  it.each(['VIEWER', 'ANALYST'])('%s reads the list in Staging and Development and is offered no change', async (role) => {
+    mockAuth.mockReturnValue({
+      status: 'authenticated',
+      user: { id: 'u1', email: 'u1@example.com', username: 'u1', role, is_superuser: false },
+    });
+    for (const env of ['staging', 'development']) {
+      install();
+      const { unmount } = renderList(env);
+      await screen.findByTestId('flags-table');
+      expect(screen.queryByRole('switch')).toBeNull();
+      expect(screen.queryByTestId('new-flag-btn')).toBeNull();
+      expect(screen.queryByTestId('flags-created-in-production')).toBeNull();
+      unmount();
+    }
+  });
+
+  it("a row opens the flag in the environment the list shows, from its own link", async () => {
+    install();
+    renderList('staging');
+    await screen.findByTestId('flags-table');
+    const link = () => within(row('dark_mode')).getByTestId('flag-link');
+    expect(link()).toHaveAttribute('href', '/feature-flags/f2?env=staging');
+    fireEvent.change(screen.getByLabelText('Environment'), { target: { value: 'production' } });
+    await waitFor(() => expect(link()).toHaveAttribute('href', '/feature-flags/f2?env=production'));
+  });
+
+  it('does not say that no flag is configured when the list holds only some of them', async () => {
+    install({}, FLAGS, [
+      { path: '/api/v1/feature-flags', handler: () => ({ items: FLAGS, total: 120, skip: 0, limit: 100 }) },
+    ]);
+    renderList('staging');
+    await screen.findByTestId('flags-table');
+    expect(screen.getByTestId('flag-limit-notice')).toHaveTextContent('Showing 2 of 120 flags.');
+    expect(screen.queryByTestId('flags-environment-empty')).toBeNull();
+  });
+
   it("shows what the PUT answered in the row, and does not read the setting again", async () => {
     install({}, FLAGS, [
       {
@@ -346,6 +410,21 @@ describe('the flag list in Staging and Development', () => {
     expect(within(row('checkout_v2')).getByTestId('flag-status-pill')).toHaveTextContent('On');
     expect(within(row('dark_mode')).getByTestId('flag-status-pill')).toHaveTextContent('Off');
     expect(within(row('dark_mode')).getByTestId('flag-not-configured')).toHaveTextContent('Not configured in Staging');
+  });
+
+  it("never shows one environment's rows under another's name, at any change of the document", async () => {
+    install();
+    renderList('staging');
+    const table = await screen.findByTestId('flags-table');
+    const renamed: string[] = [];
+    const observer = new MutationObserver((records) => {
+      for (const record of records) renamed.push(`${record.oldValue} rows became ${table.getAttribute('data-environment')}`);
+    });
+    observer.observe(table, { attributes: true, attributeOldValue: true, attributeFilter: ['data-environment'] });
+    fireEvent.change(screen.getByLabelText('Environment'), { target: { value: 'development' } });
+    await waitFor(() => expect(screen.getByTestId('flags-table')).toHaveAttribute('data-environment', 'development'));
+    expect(renamed).toEqual([]);
+    observer.disconnect();
   });
 
   it('a Staging switch that answers after a move to Development leaves the Development row as it was', async () => {

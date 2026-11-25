@@ -35,6 +35,7 @@ import {
   FLAG_ENVIRONMENT_LABELS,
   FlagEnvironment,
   NonProductionEnvironment,
+  inEnvironmentUrl,
   notConfiguredText,
 } from '@/utils/flagEnvironments';
 import {
@@ -205,7 +206,7 @@ function FlagInEnvironment({
   onLoading: (loading: boolean) => void;
 }) {
   const router = useRouter();
-  const { reportShown } = useFlagEnvironment();
+  const { reportShown, switchable } = useFlagEnvironment();
   const rawId = router.query.id;
   const id = typeof rawId === 'string' ? rawId : undefined;
   const auth = useOptionalAuth();
@@ -585,6 +586,9 @@ function FlagInEnvironment({
     }
   };
 
+  // Back to the list in the environment on screen.
+  const listUrl = inEnvironmentUrl('/feature-flags', switchable ? environment : null);
+
   // FeatureFlagDetailPage shows the loading state.
   if (loading) return null;
 
@@ -607,7 +611,7 @@ function FlagInEnvironment({
           {!notFound && loadError?.message && (
             <p className="text-sm text-red-600 mb-4">{loadError.message}</p>
           )}
-          <Link href="/feature-flags" className="text-blue-600 hover:underline text-sm">
+          <Link href={listUrl} className="text-blue-600 hover:underline text-sm">
             &larr; Back to Feature Flags
           </Link>
         </div>
@@ -652,7 +656,7 @@ function FlagInEnvironment({
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="flex items-center gap-4 mb-4">
-          <Link href="/feature-flags" className="text-slate-500 hover:text-slate-700 text-sm">
+          <Link href={listUrl} className="text-slate-500 hover:text-slate-700 text-sm">
             &larr; Feature Flags
           </Link>
         </div>

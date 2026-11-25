@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useId, useState } from 'react';
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { FeatureFlagsService, FlagEnvironmentSettings, FlagEnvironmentsResponse } from '@/services/featureFlags';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
+import { isNoRules } from '@/utils/experimentTargeting';
 import {
   FLAG_ENVIRONMENTS,
   FLAG_ENVIRONMENT_LABELS,
@@ -52,7 +53,8 @@ function statusText(settings: FlagEnvironmentSettings): string {
 
 /** Targeting rules in a few words: the dashboard shape's groups and conditions, or "None". */
 export function rulesSummary(rules: unknown): string {
-  if (rules === null || rules === undefined) return 'None';
+  // `{}` is what the builder saves when its last rule is removed.
+  if (isNoRules(rules)) return 'None';
   if (typeof rules !== 'object') return 'Set';
   const groups = (rules as { groups?: unknown }).groups;
   if (!Array.isArray(groups)) return 'Set';
@@ -89,15 +91,22 @@ export function EnvironmentComparison({ flagId, refreshKey = 0 }: { flagId: stri
   const [loading, setLoading] = useState(false);
   const regionId = useId();
 
+  // Two loads can overlap (opened, then a change): only the latest is shown.
+  const requestSeq = useRef(0);
   const load = useCallback(async () => {
+    requestSeq.current += 1;
+    const seq = requestSeq.current;
     setLoading(true);
     setError(null);
     try {
-      setData(await FeatureFlagsService.getEnvironments(flagId));
+      const answer = await FeatureFlagsService.getEnvironments(flagId);
+      if (seq === requestSeq.current) setData(answer);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load the environments.');
+      if (seq === requestSeq.current) {
+        setError(err instanceof Error ? err.message : 'Could not load the environments.');
+      }
     } finally {
-      setLoading(false);
+      if (seq === requestSeq.current) setLoading(false);
     }
   }, [flagId]);
 
@@ -195,7 +204,7 @@ export function EnvironmentComparison({ flagId, refreshKey = 0 }: { flagId: stri
                       {rulesSummary(settings.targeting_rules)}
                       {env !== 'production' &&
                         production &&
-                        settings.targeting_rules != null &&
+                        !isNoRules(settings.targeting_rules) &&
                         sameRules(settings.targeting_rules, production.targeting_rules) && (
                           <span className="block text-xs text-slate-600">Same as Production</span>
                         )}

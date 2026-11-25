@@ -29,6 +29,7 @@ import {
   FLAG_ENVIRONMENT_LABELS,
   NEW_FLAGS_IN_PRODUCTION,
   NonProductionEnvironment,
+  inEnvironmentUrl,
   noFlagsConfiguredText,
   notConfiguredText,
 } from '@/utils/flagEnvironments';
@@ -71,7 +72,8 @@ function formatDate(value: string): string {
 /**
  * A listed flag as it is in Staging or Development: that environment's on/off,
  * rollout and last change (empty when never set). An archived flag stays
- * archived. Stale is measured in Production, so the view is never stale.
+ * archived. A stale mark is about the flag in every environment and is shown in
+ * Production's list only, so the view is never stale.
  */
 function inEnvironment(flag: FeatureFlagListItem, settings: FlagEnvironmentSettings): FeatureFlagListItem {
   return {
@@ -114,7 +116,7 @@ export default function FeatureFlagsPage() {
   // Production lists the flags as before. Staging and Development list the
   // same flags with their settings there (the batch route), and a switch
   // changes the setting through the environment's route.
-  const { environment, reportShown } = useFlagEnvironment();
+  const { environment, reportShown, switchable } = useFlagEnvironment();
   const otherEnvironment: NonProductionEnvironment | null =
     environment && environment !== 'production' ? environment : null;
   const production = environment === 'production';
@@ -162,7 +164,8 @@ export default function FeatureFlagsPage() {
     setError(null);
     try {
       // `stale` is sent only while "Stale" is pressed: "Any" sends no parameter.
-      // Both filters read Production's state, so outside it neither is sent.
+      // The status is Production's, and stale is about every environment: both
+      // are asked in Production only.
       const data = await FeatureFlagsService.list(
         inEnvironment
           ? {}
@@ -311,9 +314,12 @@ export default function FeatureFlagsPage() {
     return () => reportShown(null);
   }, [environment, busy, failed, reportShown]);
   const isEmpty = !busy && !error && flags.length === 0;
-  // Outside Production: no listed flag has a setting there yet.
+  // Outside Production: no flag has a setting there yet (the list holds every flag).
   const noneConfigured =
-    otherEnvironment !== null && flags.length > 0 && !flags.some((f) => envSettings[f.id]?.configured === true);
+    otherEnvironment !== null &&
+    flags.length > 0 &&
+    totalFlags <= flags.length &&
+    !flags.some((f) => envSettings[f.id]?.configured === true);
   const environmentLabel = otherEnvironment ? FLAG_ENVIRONMENT_LABELS[otherEnvironment] : null;
 
   return (
@@ -376,7 +382,7 @@ export default function FeatureFlagsPage() {
           </p>
         )}
 
-        {/* Both filters ask the server about Production's state, so they are Production's. */}
+        {/* The status is Production's, and stale is about every environment: both are offered in Production only. */}
         {production && (
         <div className="flex gap-x-6 gap-y-2 mb-6 flex-wrap">
         <div
@@ -581,7 +587,7 @@ export default function FeatureFlagsPage() {
                       <td className="px-4 py-3 font-mono text-xs text-slate-700">{flag.key}</td>
                       <td className="px-4 py-3">
                         <Link
-                          href={`/feature-flags/${flag.id}`}
+                          href={inEnvironmentUrl(`/feature-flags/${flag.id}`, switchable ? environment : null)}
                           className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
                           data-testid="flag-link"
                         >

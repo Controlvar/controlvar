@@ -52,6 +52,15 @@ export function parseFlagEnvironment(value: unknown): FlagEnvironment | null {
   return isFlagEnvironment(value) ? value : null;
 }
 
+/**
+ * *path* (a flag page) with the environment on screen in its URL, so a reload, a
+ * new tab or a copied link opens the same one. Null (nothing to choose, or not
+ * resolved yet) leaves the path as it is.
+ */
+export function inEnvironmentUrl(path: string, environment: FlagEnvironment | null): string {
+  return environment ? `${path}?${FLAG_ENVIRONMENT_QUERY}=${environment}` : path;
+}
+
 export function flagEnvironmentApplies(pathname: string): boolean {
   return FLAG_ENVIRONMENT_PAGES.includes(pathname);
 }
@@ -77,7 +86,7 @@ export const PRODUCTION_ONLY_NOTE = 'Rollout schedules, safety monitoring and ex
 
 /** Outside Production: what the flag's page does not change there. */
 export const SHARED_SETTINGS_NOTE =
-  "A flag's name, values, archive and delete apply in every environment; change them in Production.";
+  "A flag's values, and archiving or deleting it, apply in every environment, so they are done in Production only.";
 
 /** On the flag list outside Production, where "+ New Flag" would be. */
 export const NEW_FLAGS_IN_PRODUCTION = 'New flags are created in Production.';
@@ -87,7 +96,7 @@ export function notConfiguredText(environment: NonProductionEnvironment): string
   return `Not configured in ${FLAG_ENVIRONMENT_LABELS[environment]}`;
 }
 
-/** The flag list outside Production when no listed flag has a setting there. */
+/** The flag list outside Production, when it holds every flag and none has a setting there. */
 export function noFlagsConfiguredText(environment: NonProductionEnvironment): string {
   return environment === 'staging'
     ? 'No flags configured in Staging yet. Promote a flag from Development, or configure one here.'

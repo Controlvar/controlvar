@@ -21,6 +21,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import axe from 'axe-core';
 import FeatureFlagDetailPage from '@/pages/feature-flags/[id]';
 import { EnvironmentSwitcher } from '@/components/feature-flags/EnvironmentSwitcher';
+import { rulesSummary } from '@/components/feature-flags/FlagEnvironmentSections';
 import { FlagEnvironmentProvider, flagEnvironmentStorageKey } from '@/contexts/FlagEnvironmentContext';
 import { apiFetch, ApiFetchOptions } from '@/services/api';
 import { FeatureFlag, FlagEnvironmentSettings, UpdateFlagEnvironmentRequest } from '@/services/featureFlags';
@@ -28,7 +29,6 @@ import {
   PRODUCTION_BANNER,
   PRODUCTION_MARKER,
   PRODUCTION_ONLY_NOTE,
-  SHARED_SETTINGS_NOTE,
 } from '@/utils/flagEnvironments';
 import { shapeErrors } from '@/tests/helpers/openapiShape';
 import { renderInAppRoot } from '@/tests/helpers/renderInAppRoot';
@@ -231,7 +231,7 @@ function watchStatus(): { wrong: string[] } {
     const chosen = document.querySelector<HTMLSelectElement>('[data-testid="environment-select"]');
     const shown = chosen?.selectedOptions[0]?.textContent ?? '';
     if (said !== '' && said !== `Showing ${shown}.`) seen.wrong.push(`"${said}" while the select is ${shown}`);
-    // Never said of a page that is loading, or that failed to load.
+    // Never said of a new environment that is loading, or of a load that failed.
     for (const testId of ['flag-loading', 'flag-error', 'flag-not-found']) {
       if (said !== '' && document.querySelector(`[data-testid="${testId}"]`)) seen.wrong.push(`"${said}" beside ${testId}`);
     }
@@ -479,6 +479,7 @@ describe('the status says the environment on screen', () => {
     const missing = await screen.findByTestId('flag-not-found');
     expect(missing).toHaveAttribute('role', 'alert');
     expect(missing).toHaveTextContent('Feature flag not found');
+    expect(within(missing).getByRole('link')).toHaveAttribute('href', '/feature-flags?env=staging');
     await settle();
     expect(status()).toBe('');
     expect(seen.wrong).toEqual([]);
@@ -542,6 +543,39 @@ describe('a save goes to the route of the environment on screen', () => {
     expect(callsTo('PUT /api/v1/feature-flags/flag-1')).toBe(1);
     expect(bodyOf('PUT /api/v1/feature-flags/flag-1')).toEqual({ rollout_percentage: 60 });
     expect(anyEnvironmentRoute()).toEqual([]);
+  });
+
+  it.each(['staging', 'development'] as const)('a save in %s goes to that environment and to no other', async (env) => {
+    mockRouter = makeRouter({ pathname: '/feature-flags/[id]', query: { id: 'flag-1', env } });
+    install();
+    renderPage();
+    await screen.findByTestId('flag-detail');
+    await setSlider(61);
+    fireEvent.click(screen.getByTestId('save-flag'));
+    await screen.findByTestId('save-success');
+    expect(calls().filter((c) => !c.startsWith('GET '))).toEqual([`PUT /api/v1/feature-flags/flag-1/environments/${env}`]);
+    expect(bodyOf(`PUT /api/v1/feature-flags/flag-1/environments/${env}`)).toEqual({ rollout_percentage: 61 });
+  });
+
+  it('a refused Staging switch says so, and the page shows the flag as it was', async () => {
+    mockRouter = makeRouter({ pathname: '/feature-flags/[id]', query: { id: 'flag-1', env: 'staging' } });
+    install({}, [
+      {
+        method: 'PUT',
+        path: '/api/v1/feature-flags/flag-1/environments/staging',
+        handler: () => {
+          throw apiError(500, 'Could not update the feature flag (request ID: 8a5e6c1e).');
+        },
+      },
+    ]);
+    renderPage();
+    await screen.findByTestId('flag-detail');
+    fireEvent.click(screen.getByRole('switch', { name: 'Turn checkout_v2 off in Staging' }));
+    expect(await screen.findByTestId('flag-toggle-error')).toHaveTextContent(
+      'Could not update the feature flag (request ID: 8a5e6c1e).',
+    );
+    expect(screen.getByTestId('flag-status')).toHaveTextContent('On');
+    expect(screen.getByRole('switch', { name: 'Turn checkout_v2 off in Staging' })).toBeEnabled();
   });
 
   it('turning a flag on in Development goes to the Development route, not to enable', async () => {
@@ -758,6 +792,34 @@ describe('the page in each environment', () => {
     expect(screen.queryByTestId('production-banner')).toBeNull();
   });
 
+  it.each(['VIEWER', 'ANALYST'])('%s reads the flag in Staging and Development and is offered no change', async (role) => {
+    signIn(role);
+    for (const env of ['staging', 'development']) {
+      mockRouter = makeRouter({ pathname: '/feature-flags/[id]', query: { id: 'flag-1', env } });
+      install();
+      const { unmount } = renderPage();
+      await screen.findByTestId('flag-detail');
+      expect(select().value).toBe(env);
+      expect(screen.getByTestId('flag-role-note')).toBeInTheDocument();
+      expect(screen.queryByRole('switch')).toBeNull();
+      expect(screen.queryByTestId('save-flag')).toBeNull();
+      expect(screen.queryByTestId('add-group')).toBeNull();
+      expect(screen.getByTestId('rollout-percentage')).toBeDisabled();
+      unmount();
+    }
+  });
+
+  it('the links back to the list keep the environment on screen', async () => {
+    mockRouter = makeRouter({ pathname: '/feature-flags/[id]', query: { id: 'flag-1', env: 'staging' } });
+    install();
+    renderPage();
+    await screen.findByTestId('flag-detail');
+    const back = () => screen.getByRole('link', { name: /Feature Flags/ });
+    expect(back()).toHaveAttribute('href', '/feature-flags?env=staging');
+    await choose('production');
+    expect(back()).toHaveAttribute('href', '/feature-flags?env=production');
+  });
+
   it("Staging shows Staging's settings, the production-only line, and no schedule, safety or manage controls", async () => {
     mockRouter = makeRouter({ pathname: '/feature-flags/[id]', query: { id: 'flag-1', env: 'staging' } });
     install();
@@ -767,7 +829,9 @@ describe('the page in each environment', () => {
     expect(screen.getByTestId('rollout-value')).toHaveTextContent('40%');
     expect(screen.getByDisplayValue('beta')).toBeInTheDocument();
     expect(screen.getByTestId('production-only-note')).toHaveTextContent(PRODUCTION_ONLY_NOTE);
-    expect(screen.getByTestId('shared-settings-note')).toHaveTextContent(SHARED_SETTINGS_NOTE);
+    expect(screen.getByTestId('shared-settings-note').textContent).toBe(
+      "A flag's values, and archiving or deleting it, apply in every environment, so they are done in Production only.",
+    );
     expect(screen.queryByTestId('production-banner')).toBeNull();
     expect(screen.queryByTestId('rollout-schedule-section')).toBeNull();
     expect(screen.queryByTestId('safety-section')).toBeNull();
@@ -853,6 +917,76 @@ describe('Compare environments', () => {
     const region = screen.getByRole('region', { name: 'checkout_v2 in each environment' });
     expect(region).toHaveAttribute('tabindex', '0');
     expect(region).toContainElement(table);
+  });
+
+  it('says None of no groups, whatever the API stored beside them', () => {
+    expect(rulesSummary({ logical_operator: 'and', groups: [] })).toBe('None');
+    expect(rulesSummary({ groups: [], rollout_percentage: 50 })).toBe('None');
+  });
+
+  it('says None of rules that are none, in each form the API answers', async () => {
+    install({ development: settings('development', { configured: true, targeting_rules: {} }) }, [
+      {
+        path: '/api/v1/feature-flags/flag-1/environments',
+        handler: () => ({
+          flag_id: 'flag-1',
+          key: 'checkout_v2',
+          environments: [
+            // What the builder saves when its last rule is removed.
+            settings('production', { configured: true, targeting_rules: {} }),
+            settings('staging', { configured: true, targeting_rules: { logical_operator: 'AND', groups: [] } }),
+            settings('development', { configured: true, targeting_rules: {} }),
+          ],
+        }),
+      },
+    ]);
+    renderPage();
+    await screen.findByTestId('flag-detail');
+    fireEvent.click(screen.getByRole('button', { name: /Compare environments/ }));
+    const table = await screen.findByTestId('environment-comparison-table');
+    const rules = Array.from(within(table).getByTestId('compare-rules').querySelectorAll('td')).map((td) => td.textContent);
+    expect(rules).toEqual(['None', 'None', 'None']);
+  });
+
+  it('keeps the newest answer when an older one arrives after it', async () => {
+    mockRouter = makeRouter({ pathname: '/feature-flags/[id]', query: { id: 'flag-1', env: 'staging' } });
+    const [older, newer] = [later<unknown>(), later<unknown>()];
+    const answers = [older, newer];
+    install({}, [{ path: '/api/v1/feature-flags/flag-1/environments', handler: () => answers.shift()!.promise }]);
+    renderPage();
+    await screen.findByTestId('flag-detail');
+    fireEvent.click(screen.getByRole('button', { name: /Compare environments/ }));
+    await setSlider(70);
+    fireEvent.click(screen.getByTestId('save-flag'));
+    await screen.findByTestId('save-success');
+    await waitFor(() => expect(callsTo('GET /api/v1/feature-flags/flag-1/environments')).toBe(2));
+    const at = (percentage: number) => ({
+      flag_id: 'flag-1',
+      key: 'checkout_v2',
+      environments: [settings('production'), settings('staging', { rollout_percentage: percentage }), settings('development')],
+    });
+    await act(async () => newer.give(at(70)));
+    await act(async () => older.give(at(40)));
+    const rollout = Array.from(screen.getByTestId('compare-rollout').querySelectorAll('td')).map((td) => td.textContent);
+    expect(rollout).toEqual(['0%', '70%', '0%']);
+  });
+
+  it('does not show an older failure beside the newest answer', async () => {
+    mockRouter = makeRouter({ pathname: '/feature-flags/[id]', query: { id: 'flag-1', env: 'staging' } });
+    const older = later<unknown>();
+    let asked = 0;
+    const newest = { flag_id: 'flag-1', key: 'checkout_v2', environments: [settings('production'), STAGING(), settings('development')] };
+    install({}, [
+      { path: '/api/v1/feature-flags/flag-1/environments', handler: () => (asked++ === 0 ? older.promise : newest) },
+    ]);
+    renderPage();
+    await screen.findByTestId('flag-detail');
+    fireEvent.click(screen.getByRole('button', { name: /Compare environments/ }));
+    fireEvent.click(screen.getByTestId('save-flag'));
+    await screen.findByTestId('environment-comparison-table');
+    await act(async () => older.refuse(apiError(503, 'Service unavailable')));
+    expect(screen.queryByTestId('environment-comparison-error')).toBeNull();
+    expect(screen.getByTestId('environment-comparison-table')).toBeInTheDocument();
   });
 
   it('loads again after a change made on the page', async () => {

@@ -385,12 +385,24 @@ test.describe("Journey: a flag in each environment", () => {
     await expect(flags.productionBanner).toBeVisible();
 
     // A row opens the flag's page in the environment the list shows: here one a
-    // link named, not the stored one. The row's own link names none.
+    // link named, not the stored one. The URL names it, so a reload stays there.
     await openList(page, "staging");
     await row.getByTestId("flag-link").click();
     await expect(flags.detailKey).toHaveText(key, { timeout: 15_000 });
     await expect(flags.environmentSelect).toHaveValue("staging");
     await expect(flags.rolloutValue).toHaveText("60%");
+    await page.reload();
+    await expect(flags.rolloutValue).toHaveText("60%", { timeout: 15_000 });
+    await expect(flags.environmentSelect).toHaveValue("staging");
+
+    // And a save on Development's own page changes Development only.
+    const changed = await stored(page);
+    await flags.chooseEnvironment("development");
+    await expect(flags.rolloutValue).toHaveText("0%");
+    await flags.setRolloutPercentage(15);
+    const saved = await stored(page);
+    expectUnchanged(saved, changed, ["production", "staging"]);
+    expect(saved.development).toMatchObject({ is_active: true, rollout_percentage: 15, configured: true });
   });
 
   test("the choice is the user's own, and a link wins over it", async ({
@@ -537,7 +549,7 @@ test.describe("Journey: a flag in each environment", () => {
     developerPage: page,
   }) => {
     const before = await stored(page);
-    expect(before.development).toMatchObject({ is_active: true, rollout_percentage: 0 });
+    expect(before.development).toMatchObject({ is_active: true, rollout_percentage: 15 });
     const flags = await openList(page, "staging");
     const row = flags.getFlagRow(key);
     await expect(row).toContainText("75%");
