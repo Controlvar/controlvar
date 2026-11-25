@@ -38,7 +38,7 @@ export function ArchivedFlagNote() {
         href={ARCHIVED_DOCS_URL}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-blue-600 hover:underline"
+        className="text-blue-600 underline"
       >
         {ARCHIVED_DOCS_LINK}
       </a>

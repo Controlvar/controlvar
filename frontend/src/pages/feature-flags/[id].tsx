@@ -1018,7 +1018,7 @@ function FlagInEnvironment({
                   {usesNotGroups(stored) ? NOT_GROUPS_NOTE : OUTSIDE_BUILDER_NOTE}{' '}
                   <a
                     href={docsUrl('api/endpoints', 'targeting-rules')}
-                    className="text-blue-600 hover:underline"
+                    className="text-blue-600 underline"
                     target="_blank"
                     rel="noreferrer"
                   >
@@ -1070,7 +1070,7 @@ function FlagInEnvironment({
                           setRules(createEmptyRules());
                           setFocusAddGroup({});
                         }}
-                        className="px-3 py-1.5 rounded-md text-sm font-medium bg-amber-600 text-white hover:bg-amber-700"
+                        className="px-3 py-1.5 rounded-md text-sm font-medium bg-amber-700 text-white hover:bg-amber-800"
                         data-testid="targeting-replace-yes"
                       >
                         Start with no rules

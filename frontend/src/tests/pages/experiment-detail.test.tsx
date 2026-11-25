@@ -392,6 +392,9 @@ describe('ExperimentDetailPage — lifecycle actions', () => {
     expect(screen.getByTestId('experiment-status')).toHaveTextContent('Active');
 
     fireEvent.click(screen.getByTestId('action-complete'));
+    // White on amber-700 is 5.0:1; on amber-600 it was 3.2:1, under the 4.5:1 button text needs.
+    expect(screen.getByTestId('confirm-yes')).toHaveClass('bg-amber-700');
+    expect(screen.getByTestId('confirm-yes')).not.toHaveClass('bg-amber-600');
     fireEvent.click(screen.getByTestId('confirm-yes'));
     await waitFor(() => expect(screen.getByTestId('experiment-status')).toHaveTextContent('Completed'));
     expect(calledWith('POST', '/api/v1/experiments/exp-1/complete')).toBe(true);
