@@ -65,6 +65,19 @@ def test_the_walk_can_tell_async_from_sync():
     assert inspect.iscoroutinefunction(routed[0].endpoint)
 
 
+@pytest.mark.regression
+def test_the_description_says_what_the_route_is():
+    """The served description agrees with the route: it is ``async def`` and
+    works in a worker thread, not a plain ``def`` run by FastAPI's pool."""
+    routed = _routed(PATH, "POST")
+    assert len(routed) == 1, routed
+    assert inspect.iscoroutinefunction(routed[0].endpoint)
+    snapshot = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
+    description = " ".join(snapshot["paths"][PATH]["post"]["description"].split())
+    assert "plain ``def``" not in description
+    assert "``async def`` route that runs the batch in a worker thread" in description
+
+
 def test_the_batch_route_is_in_the_stable_snapshot_as_beta():
     snapshot = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
     operation = snapshot["paths"][PATH]["post"]
