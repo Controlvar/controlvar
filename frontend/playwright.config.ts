@@ -36,7 +36,9 @@ import { launchOptions } from "./tests/e2e/launch";
  *     `npm pack` tarball, unpacked (see tests/e2e/runtime/runtime.fixture.ts),
  *     and the framework sites under tests/e2e/runtime/fixtures built (`node
  *     tests/e2e/runtime/fixtures/build.mjs`). Browser E2E runs it after the
- *     journeys and checks its counts; no other workflow step does.
+ *     journeys and checks its counts, and so does rc-evidence.yml's
+ *     browser-suites job at a release tag (the `browser` suite of
+ *     scripts/rc_evidence.py); no other workflow step does.
  *   - `extended` — everything else under tests/e2e (accessibility and the
  *     older specs); nightly territory, not a PR gate, but a failure there
  *     fails the night.

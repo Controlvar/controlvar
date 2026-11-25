@@ -56,7 +56,11 @@ Then:
   render tests (with the helm chart.yml pins), the CDK stack tests, the two
   published SDKs' own suites (``sdk/python``'s pytest,
   ``sdk/js``'s jest), the SDK contract self-tests, the demo apps' jest and their
-  simulators' tests, and the frontend's jest. A sharded suite (unit and
+  simulators' tests, the frontend's jest, and the dashboard's two Playwright
+  projects that claims cite, ``journeys`` and ``page-runtime``, run as Browser
+  E2E runs them (the ``browser`` suite; its JSON reports are written as JUnit
+  too, and the page-runtime run is checked against its listing by
+  ``scripts/check_page_runtime_run.py``, as there). A sharded suite (unit and
   integration) is one job per shard, and each shard leaves its own reports:
   one missing fails, naming the shard. Its shards' reports
   (``backend/tests/shard.py``'s) must show, by
@@ -68,7 +72,13 @@ Then:
   function matches itself and its parametrized cases; a jest target's name
   matches the tests of its file whose full name or own title is exactly it
   (a ``test.each`` title as written, ``%s`` and the like, matches every test
-  that fills it in); a
+  that fills it in); a Playwright target's name (under ``frontend/tests/e2e``)
+  matches the tests of its file whose own title or full name (its describe
+  titles and its own, joined with `` › ``) is exactly it, each ``${...}`` of a
+  title as written (at most three) standing for any text without a ``›``; a
+  test that passed only on its retry, or that is marked ``test.fail()``, holds
+  no claim; a file of a Playwright project no suite here runs is named with its
+  project, and a target whose project left no report is named as not judged; a
   whole-file or whole-class target needs one pass and no failure or skip. Any
   failed or errored case in any report fails E4, whether or not a target names
   it. A
@@ -144,7 +154,7 @@ renamed or transferred repository needs no edit here. ``--plan``'s commands
 look the name up the same way.
 
 Standard library only. It runs ``gh``, ``git rev-parse HEAD`` and, for
-``--suite``, pytest or jest.
+``--suite``, pytest, jest or Playwright.
 """
 
 from __future__ import annotations
@@ -220,16 +230,17 @@ WORKFLOWS: Tuple[Workflow, ...] = (
     Workflow(
         "rc-evidence.yml",
         "E4",
-        plan="when every run above has finished: the suites at the tag (pytest"
-        " and jest), then this verifier",
+        plan="when every run above has finished: the suites at the tag (pytest,"
+        " jest and Playwright), then this verifier",
     ),
 )
 SELF = "rc-evidence.yml"
 #: The rc-evidence.yml job that runs the verifier, and its suites jobs: the
-#: python-suites matrix and the jest-suites matrix.
+#: python-suites matrix, the jest-suites matrix and the browser-suites job.
 VERIFY_JOB = "RC evidence"
 SUITE_JOB = "python suites ({})"
 JEST_SUITE_JOB = "jest suites ({})"
+BROWSER_SUITE_JOB = "browser suites ({})"
 JUNIT_ARTIFACT = "rc-evidence-junit-{}"
 
 #: The SDK jobs of sdk-unit-tests.yml (its LINUX and HEAVY lists). `mcp` is
@@ -264,12 +275,60 @@ ALLOWED_SKIPS: Dict[Tuple[str, str], str] = {
 }
 
 
+#: The dashboard's Playwright tests (frontend/playwright.config.ts's
+#: testDir), which jest does not run: its testMatch is ``*.test.ts(x)``.
+PLAYWRIGHT_ROOT = "frontend/tests/e2e"
+#: frontend/playwright.config.ts's projects, in its order: each one's name,
+#: ``testMatch`` and ``testIgnore``, the patterns Playwright searches a spec's
+#: path with. A literal, so nothing is read at import;
+#: backend/tests/unit/scripts/test_rc_evidence_workflow.py pins it to the
+#: config.
+PLAYWRIGHT_PROJECTS: Tuple[Tuple[str, str, Tuple[str, ...]], ...] = (
+    ("journeys", r"\.journey\.spec\.ts$", ()),
+    ("sso", r"\.sso\.spec\.ts$", ()),
+    ("required-roles", r"\.required-roles\.spec\.ts$", ()),
+    (
+        "extended",
+        r"\.spec\.ts$",
+        (
+            r"\.journey\.spec\.ts$",
+            r"\.sso\.spec\.ts$",
+            r"\.required-roles\.spec\.ts$",
+            r"\.site\.spec\.ts$",
+            r"\.launch\.spec\.ts$",
+            r"\.runtime\.spec\.ts$",
+            r"visual-regression\.spec\.ts$",
+        ),
+    ),
+    ("site", r"\.site\.spec\.ts$", ()),
+    ("launch", r"\.launch\.spec\.ts$", ()),
+    ("page-runtime", r"\.runtime\.spec\.ts$", ()),
+    ("visual", r"visual-regression\.spec\.ts$", ()),
+)
+
+
+def playwright_projects_of(path: str) -> List[str]:
+    """The Playwright projects that run the file *path* (a repository path):
+    each whose ``testMatch`` finds it and no ``testIgnore`` does. Empty for a
+    path outside ``PLAYWRIGHT_ROOT`` or a file no project runs."""
+    if not path.startswith(PLAYWRIGHT_ROOT + "/"):
+        return []
+    spec = path[len(PLAYWRIGHT_ROOT) + 1 :]
+    return [
+        name
+        for name, match, ignore in PLAYWRIGHT_PROJECTS
+        if re.search(match, spec) and not any(re.search(i, spec) for i in ignore)
+    ]
+
+
 @dataclasses.dataclass(frozen=True)
 class Invocation:
     """One session of a suite: its JUnit file, arguments, extra env and runner:
-    ``pytest`` from the repository root, or ``jest`` in the npm project ``cwd``
+    ``pytest`` from the repository root, ``jest`` in the npm project ``cwd``
     (``npm ci`` has run there), whose own ``--json`` report is written out as
-    JUnit (``jest_junit``)."""
+    JUnit (``jest_junit``), or ``playwright`` there, one project
+    (``--project=<name>``, the only argument), whose JSON report is written out
+    as JUnit (``playwright_junit``)."""
 
     report: str
     args: Tuple[str, ...]
@@ -284,13 +343,27 @@ class Invocation:
     #: In a leg: which of the ``shards`` this session is (1..shards); 0 when
     #: it runs whole.
     shard: int = 0
+    #: playwright: a script the session runs after the project, as
+    #: ``<script> <listing> <run report> <testDir>``: the project is listed
+    #: first (``--list``), as the pull request job lists it.
+    check: str = ""
+
+    @property
+    def project(self) -> str:
+        """playwright: the project its ``--project=`` argument names."""
+        named = [
+            a[len("--project=") :] for a in self.args if a.startswith("--project=")
+        ]
+        return named[0] if len(named) == 1 else ""
 
     @property
     def roots(self) -> Tuple[str, ...]:
-        """The trees this session runs: pytest's path arguments, or jest's
-        project and the trees its config adds."""
+        """The trees this session runs: pytest's path arguments, jest's
+        project and the trees its config adds, or Playwright's testDir."""
         if self.runner == "jest":
             return (self.cwd, *self.also)
+        if self.runner == "playwright":
+            return (PLAYWRIGHT_ROOT,)
         return tuple(
             a.rstrip("/") for a in self.args if "/" in a and not a.startswith("-")
         )
@@ -306,7 +379,13 @@ class Invocation:
         )
 
     def runs(self, path: str) -> bool:
-        """Whether the file *path* is in a tree this session runs."""
+        """Whether the file *path* is in a tree this session runs: for
+        Playwright, a file of its project; jest runs no file under
+        ``PLAYWRIGHT_ROOT``."""
+        if self.runner == "playwright":
+            return self.project in playwright_projects_of(path)
+        if self.runner == "jest" and path.startswith(PLAYWRIGHT_ROOT + "/"):
+            return False
         return any(path.startswith(root + "/") for root in self.roots) and not any(
             path.startswith(tree + "/") for tree in self.ignored
         )
@@ -325,7 +404,8 @@ _INTEGRATION_ENV: Tuple[Tuple[str, str], ...] = (
 #: sdk-unit-tests.yml), without -x or --passWithNoTests: the tag's whole tree.
 #: Each is one job, except a suite with a sharded session, which is one job per
 #: shard (``LEGS``). The pytest ones are the python-suites matrix, the jest
-#: ones the jest-suites matrix. sdk/python has its own rootdir (the
+#: ones the jest-suites matrix, the Playwright one the browser-suites job.
+#: sdk/python has its own rootdir (the
 #: pyproject.toml beside its tests), so ``--rootdir=.`` names its cases from
 #: the repository root, as every other report does; the two demo simulators
 #: each import a module named ``traffic`` and are a session each.
@@ -437,6 +517,23 @@ SUITES: Dict[str, Tuple[Invocation, ...]] = {
     "demo-streampulse": (
         Invocation("demo-streampulse.xml", (), runner="jest", cwd="demo/streampulse"),
     ),
+    # The two Playwright projects claims cite, in the order pr-qa-gate.yml's
+    # Browser E2E runs them, each whole, on the stack that job builds
+    # (rc-evidence.yml's browser-suites job builds it the same way). The
+    # page-runtime project is listed first and its run checked against the
+    # listing, as there.
+    "browser": (
+        Invocation(
+            "journeys.xml", ("--project=journeys",), runner="playwright", cwd="frontend"
+        ),
+        Invocation(
+            "page-runtime.xml",
+            ("--project=page-runtime",),
+            runner="playwright",
+            cwd="frontend",
+            check="scripts/check_page_runtime_run.py",
+        ),
+    ),
 }
 PYTEST = ("-p", "no:cov", "-q", "--tb=short")
 #: backend/tests/shard.py's two variables: a session's slice (``i/n``), and
@@ -481,7 +578,17 @@ class Leg:
 
 def _legs() -> Dict[str, Leg]:
     legs: Dict[str, Leg] = {}
+    projects = [name for name, _, _ in PLAYWRIGHT_PROJECTS]
     for suite, invocations in SUITES.items():
+        if len({i.runner for i in invocations}) != 1:
+            raise ValueError(f"suite {suite}: its sessions have one runner")
+        for i in invocations:
+            if i.runner == "playwright" and (
+                i.args != (f"--project={i.project}",) or i.project not in projects
+            ):
+                raise ValueError(
+                    f"suite {suite}: a Playwright session runs one project"
+                )
         sharded = [i for i in invocations if i.shards]
         if (
             len(sharded) > 1
@@ -541,9 +648,17 @@ def is_jest(name: str) -> bool:
     return all(i.runner == "jest" for i in SUITES[name])
 
 
+def runner_of(name: str) -> str:
+    """Suite *name*'s runner: pytest, jest or playwright (one per suite)."""
+    return SUITES[name][0].runner
+
+
 def suite_job(name: str) -> str:
     """The rc-evidence.yml job that runs leg *name* (``LEGS``)."""
-    return (JEST_SUITE_JOB if is_jest(LEGS[name].suite) else SUITE_JOB).format(name)
+    job = {"jest": JEST_SUITE_JOB, "playwright": BROWSER_SUITE_JOB}.get(
+        runner_of(LEGS[name].suite), SUITE_JOB
+    )
+    return job.format(name)
 
 
 def _suite_words(text: str) -> str:
@@ -618,11 +733,31 @@ def session_of(target: str) -> Optional[Tuple[str, Invocation]]:
     if not match:
         return None
     path = match.group("path")
+    # A Playwright test is run only by the session of its project: no jest
+    # session runs a file under PLAYWRIGHT_ROOT (``Invocation.runs``).
     for name, invocations in SUITES.items():
         for invocation in invocations:
             if invocation.runs(path):
                 return name, invocation
     return None
+
+
+def outside_problem(target: str) -> Optional[str]:
+    """Why no session in SUITES runs *target*'s file; None when one does. A
+    Playwright test (under ``PLAYWRIGHT_ROOT``) is named with its project."""
+    if session_of(target) is not None:
+        return None
+    match = TEST_TARGET.fullmatch(target)
+    path = match.group("path") if match else ""
+    if not path.startswith(PLAYWRIGHT_ROOT + "/"):
+        return f"{target}: no suite in SUITES runs it"
+    projects = playwright_projects_of(path)
+    if not projects:
+        return f"{target}: no Playwright project runs {path}"
+    return (
+        f"{target}: Playwright project {projects[0]} runs it, and no rc-evidence"
+        f" leg runs {projects[0]}"
+    )
 
 
 def suite_of(target: str) -> Optional[str]:
@@ -1201,23 +1336,35 @@ class Case:
     name: str
     outcome: str  # passed, failed, skipped
     title: str = ""  # jest: the test's own title (``name`` is its full name)
+    #: The failure's or skip's ``type`` and ``message`` (cut to MESSAGE_MAX):
+    #: what playwright_junit says of a test that did not pass.
+    kind: str = ""
+    message: str = ""
+
+
+#: How much of a failure's or skip's message a Case keeps.
+MESSAGE_MAX = 400
 
 
 def read_junit(path: pathlib.Path) -> List[Case]:
     cases = []
     for case in ET.parse(path).getroot().iter("testcase"):
-        if case.find("failure") is not None or case.find("error") is not None:
+        found = case.find("failure")
+        if found is None:
+            found = case.find("error")
+        if found is not None:
             outcome = "failed"
-        elif case.find("skipped") is not None:
-            outcome = "skipped"
         else:
-            outcome = "passed"
+            found = case.find("skipped")
+            outcome = "passed" if found is None else "skipped"
         cases.append(
             Case(
                 case.get("classname") or "",
                 case.get("name") or "",
                 outcome,
                 case.get("title") or "",
+                "" if found is None else (found.get("type") or "")[:MESSAGE_MAX],
+                "" if found is None else (found.get("message") or "")[:MESSAGE_MAX],
             )
         )
     return cases
@@ -1229,6 +1376,8 @@ def target_problem(target: str, cases: Sequence[Case], short: str) -> Optional[s
     if not match:
         return f"{target}: not test:<path>[::<name>]"
     path, name = match.group("path"), match.group("name")
+    if path.startswith(PLAYWRIGHT_ROOT + "/"):
+        return playwright_problem(target, path, name, cases, short)
     if any(
         path.startswith(root + "/") and JEST_FILE.fullmatch(path[len(root) + 1 :])
         for root in JEST_ROOTS
@@ -1371,6 +1520,241 @@ def jest_junit(
     top = ET.Element("testsuites")
     top.append(suite)
     ET.ElementTree(top).write(out, encoding="utf-8", xml_declaration=True)
+    return count
+
+
+# ---------------------------------------------------------------------------
+# Playwright: its JSON report as JUnit, and a target's test by its title
+# ---------------------------------------------------------------------------
+#: A template literal's placeholder in a Playwright title as written.
+PLAYWRIGHT_PLACEHOLDER = re.compile(r"\$\{[^{}\n]{1,200}\}")
+#: The most placeholders a target's title may hold: each one multiplies the
+#: ways a title can be tried (four over a 2,000-character title took 51 s).
+PLAYWRIGHT_PLACEHOLDERS_MAX = 3
+#: What Playwright joins describe titles and a test's own with.
+TITLE_JOIN = " › "
+#: The terminal colour codes in Playwright's error messages.
+ANSI = re.compile(r"\x1b\[[0-9;]{0,20}[A-Za-z]")
+#: What the converter says of a test that passed only on a retry.
+RETRY = re.compile(r"passed only on retry ([0-9]{1,4})")
+
+
+def playwright_title_pattern(name: str) -> "re.Pattern[str]":
+    """*name* exactly, except that each ``${...}`` stands for the text the
+    template put there: any text without a ``›``, so a placeholder never
+    takes a describe title."""
+    parts: List[str] = []
+    end = 0
+    for found in PLAYWRIGHT_PLACEHOLDER.finditer(name):
+        parts.append(re.escape(name[end : found.start()]))
+        parts.append("[^\n›]{1,500}?")
+        end = found.end()
+    parts.append(re.escape(name[end:]))
+    return re.compile("".join(parts))
+
+
+def playwright_name_problem(name: str) -> Optional[str]:
+    """Why a Playwright target's title is refused before any report is read:
+    one made only of placeholders (it would stand for every test of its file),
+    or one with more than PLAYWRIGHT_PLACEHOLDERS_MAX."""
+    placeholders = PLAYWRIGHT_PLACEHOLDER.findall(name)
+    if len(placeholders) > PLAYWRIGHT_PLACEHOLDERS_MAX:
+        return (
+            f"{len(placeholders)} placeholders (${{...}}) in one title; cite a"
+            f" title with at most {PLAYWRIGHT_PLACEHOLDERS_MAX}"
+        )
+    if placeholders and not PLAYWRIGHT_PLACEHOLDER.sub("", name).strip():
+        return "a title made only of placeholders (${...}) names every test of its file"
+    return None
+
+
+def playwright_problem(
+    target: str, path: str, name: Optional[str], cases: Sequence[Case], short: str
+) -> Optional[str]:
+    """Why the Playwright target is not a test of its project that passed
+    first time; None when it is. Its tests are those of its file whose own
+    title or full name is exactly the name (``playwright_title_pattern``), and
+    every one of them must have passed."""
+    projects = playwright_projects_of(path)
+    project = projects[0] if projects else "no project"
+    mine = [c for c in cases if c.classname == path]
+    if name is None:
+        hits = mine
+        if not hits:
+            return f"{target}: no test in {path} at {short}"
+    else:
+        refused = playwright_name_problem(name)
+        if refused:
+            return f"{target}: {refused}"
+        pattern = playwright_title_pattern(name)
+        hits = [
+            c for c in mine if pattern.fullmatch(c.title) or pattern.fullmatch(c.name)
+        ]
+        if not hits:
+            problem = f"{target}: no test in {path} has this title at {short}"
+            # Contained as written, not searched with the pattern: a search
+            # with three placeholders over a long title takes minutes.
+            part = sum(1 for c in mine if name in c.title or name in c.name)
+            if part:
+                problem += f"; it is part of {part} titles there: cite one as written"
+            return problem
+    failed = [c for c in hits if c.outcome == "failed"]
+    if any(c.kind not in ("flaky", "test.fail") for c in failed):
+        return f"{target}: failed in {project} at {short}"
+    if any(c.kind == "test.fail" for c in failed):
+        return (
+            f"{target}: marked test.fail() in {project}: an expected failure holds"
+            " no claim"
+        )
+    if failed:
+        retry = RETRY.search(failed[0].message)
+        return (
+            f"{target}: passed in {project} only on retry"
+            f" {retry.group(1) if retry else '?'} at {short}"
+        )
+    skipped = [c for c in hits if c.outcome == "skipped"]
+    if skipped:
+        first = skipped[0]
+        reason = f"{first.kind}: {first.message}" if first.message else first.kind
+        return f"{target}: skipped in {project} at {short} ({reason})"
+    return None
+
+
+def _first_line(text: Any, limit: int) -> str:
+    """The first line of *text* that holds anything, without colour codes,
+    its spaces folded, cut to *limit* (the text is cut before it is read)."""
+    for line in ANSI.sub("", str(text or "")[:4000]).splitlines():
+        if line.strip():
+            return " ".join(line.split())[:limit]
+    return ""
+
+
+def _relative(path: str, root: pathlib.Path) -> Optional[str]:
+    """*path* (absolute) relative to *root*, as given or with both resolved;
+    None when it is not under *root*."""
+    for inner, outer in (
+        (pathlib.PurePosixPath(path), pathlib.PurePosixPath(root.as_posix())),
+        (pathlib.Path(path).resolve(), root.resolve()),
+    ):
+        try:
+            return inner.relative_to(outer).as_posix()
+        except ValueError:
+            continue
+    return None
+
+
+def _playwright_outcome(test: Dict[str, Any], project: str) -> Tuple[str, str, str]:
+    """One test's outcome in a Playwright JSON report: ``(outcome, kind,
+    message)``. It passed only when it is of *project*, Playwright expected it
+    to pass, and its one attempt passed."""
+    name = str(test.get("projectName"))
+    if name != project:
+        return "failed", "project", f"a test of project {name[:60]}, not {project}"
+    status = test.get("status")
+    results = [r for r in test.get("results") or [] if isinstance(r, dict)]
+    if status == "skipped":
+        notes = [
+            a
+            for a in test.get("annotations") or []
+            if isinstance(a, dict) and a.get("type") in ("skip", "fixme")
+        ]
+        if not notes:
+            return "skipped", "did not run", ""
+        return (
+            "skipped",
+            str(notes[0]["type"]),
+            _first_line(notes[0].get("description"), 120),
+        )
+    if test.get("expectedStatus") == "failed":
+        return "failed", "test.fail", "marked test.fail()"
+    statuses = [r.get("status") for r in results]
+    if status == "expected" and test.get("expectedStatus") == "passed":
+        if statuses == ["passed"]:
+            return "passed", "", ""
+    if "passed" in statuses:
+        retry = results[statuses.index("passed")].get("retry")
+        return "failed", "flaky", f"passed only on retry {retry}"
+    for result in results:
+        for error in result.get("errors") or []:
+            if isinstance(error, dict) and _first_line(error.get("message"), 200):
+                return "failed", "failed", _first_line(error.get("message"), 200)
+    return "failed", "failed", f"ended {str(status)[:40]}"
+
+
+def playwright_junit(
+    report: pathlib.Path, out: pathlib.Path, project: str, root: pathlib.Path = ROOT
+) -> int:
+    """A Playwright JSON report (``--reporter=json``) of the session that ran
+    *project*, written as JUnit; the number of test cases.
+
+    One case per test: its classname the spec's repository path (the report's
+    ``rootDir`` must be under *root*), its name the test's full name (its
+    describe titles and its own, joined by `` › ``), and a ``title``
+    attribute, its own title. Playwright exits 0 on a test that passed only on
+    its retry, and its own JUnit reads such a test, and an expected failure, as
+    passed; here a test passes only when ``_playwright_outcome`` says so. A
+    failure's ``type`` is ``failed``, ``flaky`` (passed only on a retry),
+    ``test.fail`` (marked to fail) or ``project`` (a test of another project);
+    a skip's is ``skip``, ``fixme`` or ``did not run``; the message says the
+    rest. Each error the run reported (a spec that does not load, two tests
+    with one title, a web server that did not start) is one failed case of
+    type ``error``. A report that is not JSON, or not a report, raises
+    ValueError.
+    """
+    data = json.loads(report.read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or not isinstance(data.get("suites"), list):
+        raise ValueError(f"{report.name}: not a Playwright JSON report")
+    top_dir = (data.get("config") or {}).get("rootDir")
+    base = _relative(str(top_dir), root) if isinstance(top_dir, str) else None
+    if base is None:
+        raise ValueError(f"{report.name}: its rootDir is not in the repository")
+    suite = ET.Element("testsuite", name=f"playwright {project}")
+    count = 0
+
+    def add(classname: str, name: str, title: str, outcome: Tuple[str, str, str]):
+        nonlocal count
+        case = ET.SubElement(
+            suite, "testcase", classname=classname, name=name[:2000], title=title[:2000]
+        )
+        if outcome[0] != "passed":
+            tag = "failure" if outcome[0] == "failed" else "skipped"
+            ET.SubElement(case, tag, type=outcome[1], message=outcome[2])
+        count += 1
+
+    def walk(node: Dict[str, Any], describes: Tuple[str, ...]) -> None:
+        for spec in node.get("specs") or []:
+            file = str(spec.get("file") or "")
+            if not file or file.startswith("/") or ".." in file.split("/"):
+                raise ValueError(f"{report.name}: a spec's file is {file[:200]!r}")
+            title = str(spec.get("title") or "")
+            full = TITLE_JOIN.join([*describes, title])
+            for test in spec.get("tests") or []:
+                add(f"{base}/{file}", full, title, _playwright_outcome(test, project))
+        for child in node.get("suites") or []:
+            walk(
+                child,
+                (*describes, str(child.get("title") or ""))
+                if child.get("title")
+                else describes,
+            )
+
+    for top in data["suites"]:
+        walk(top, ())  # a file's suite: its title is the file, not a describe
+    for error in data.get("errors") or []:
+        if not isinstance(error, dict):
+            continue
+        where = (error.get("location") or {}).get("file")
+        place = _relative(str(where), root) if isinstance(where, str) else None
+        add(
+            place or base,
+            "(the run reported an error)",
+            "",
+            ("failed", "error", _first_line(error.get("message"), 200) or "an error"),
+        )
+    top_element = ET.Element("testsuites")
+    top_element.append(suite)
+    ET.indent(top_element)  # a case a line, so a report reads in a diff
+    ET.ElementTree(top_element).write(out, encoding="utf-8", xml_declaration=True)
     return count
 
 
@@ -2061,11 +2445,7 @@ class Verifier:
     def _judge_tests(self, targets: Sequence[str]) -> Check:
         # Whether a suite runs each target's file is known before any report
         # is read, so it is said even when the suites did not run.
-        outside = [
-            f"{target}: no suite in SUITES runs it"
-            for target in targets
-            if suite_of(target) is None
-        ]
+        outside = [p for target in targets if (p := outside_problem(target))]
         problems: List[str] = []
         junit = self.out / "junit"
         junit.mkdir(parents=True, exist_ok=True)
@@ -2095,35 +2475,53 @@ class Verifier:
                     )
         # Every leg's reports: one of a shard missing is that shard's FAIL.
         cases: List[Case] = []
+        #: The sessions that left no readable report: their targets are named.
+        unread: Set[Invocation] = set()
         for leg in LEGS.values():
             for invocation in leg.sessions:
+                # A Playwright session is named by its project.
+                label = (
+                    invocation.project
+                    if invocation.runner == "playwright"
+                    else leg.label
+                )
                 report = junit / invocation.report
                 try:
                     found = read_junit(report)
                 except (OSError, ET.ParseError):
+                    unread.add(invocation)
                     problems.append(
-                        f"suite {leg.label}: no readable JUnit report {invocation.report}"
+                        f"suite {label}: no readable JUnit report {invocation.report}"
                     )
                     continue
                 if not found:
-                    problems.append(
-                        f"suite {leg.label}: {invocation.report} holds no test"
-                    )
+                    problems.append(f"suite {label}: {invocation.report} holds no test")
                 failed = [c for c in found if c.outcome == "failed"]
                 if failed:
                     first = failed[0]
+                    said = (
+                        f"; {first.message[:200]}"
+                        if invocation.runner == "playwright" and first.message
+                        else ""
+                    )
                     problems.append(
-                        f"suite {leg.label}: {len(failed)} tests failed or errored in"
+                        f"suite {label}: {len(failed)} tests failed or errored in"
                         f" {invocation.report} (first: {first.classname}"
-                        f"::{first.name[:200]})"
+                        f"::{first.name[:200]}{said})"
                     )
                 cases += found
-        failing = outside + [
-            problem
-            for target in targets
-            if suite_of(target) is not None
-            and (problem := target_problem(target, cases, self.short))
-        ]
+        failing = list(outside)
+        for target in targets:
+            session = session_of(target)
+            if session is None:
+                continue
+            if session[1] in unread and session[1].runner == "playwright":
+                failing.append(
+                    f"{target}: not judged: {session[1].project} left no report"
+                    f" at {self.short}"
+                )
+            elif problem := target_problem(target, cases, self.short):
+                failing.append(problem)
         problems += failing
         return Check(
             "E4",
@@ -2750,6 +3148,9 @@ def run_suite(
             env[SHARD_SPEC] = f"{invocation.shard}/{invocation.shards}"
             env[SHARD_REPORT] = str(junit_dir / leg.shard_report)
         report = junit_dir / invocation.report
+        if invocation.runner == "playwright":
+            failed += _run_playwright(name, invocation, junit_dir, env, runner)
+            continue
         raw = junit_dir / (report.stem + ".jest.json")
         if invocation.runner == "jest":
             command = [
@@ -2785,6 +3186,74 @@ def run_suite(
     for item in failed:
         print(f"rc-evidence: suite {name}: {item}", flush=True)
     return 1 if failed else 0
+
+
+#: The variables that choose where Playwright's JSON reporter writes; the
+#: session sets the one that wins (``_FILE``) and drops the others.
+PLAYWRIGHT_JSON_VARIABLES = (
+    "PLAYWRIGHT_JSON_OUTPUT_DIR",
+    "PLAYWRIGHT_JSON_OUTPUT_NAME",
+    "PLAYWRIGHT_JSON_OUTPUT_FILE",
+)
+
+
+def _run_playwright(
+    name: str,
+    invocation: Invocation,
+    junit_dir: pathlib.Path,
+    env: Dict[str, str],
+    runner: Callable[..., subprocess.CompletedProcess],
+) -> List[str]:
+    """One Playwright session of leg *name*: its project's listing when it has
+    a ``check``, the run with a JSON report (``<report>.playwright.json``),
+    that report as JUnit, then the check. What failed, for run_suite."""
+    report = junit_dir / invocation.report
+    raw = junit_dir / (report.stem + ".playwright.json")
+    listing = junit_dir / (report.stem + ".list.json")
+    cwd = str(ROOT / invocation.cwd)
+    for key in PLAYWRIGHT_JSON_VARIABLES:
+        env.pop(key, None)
+    for stale in (raw, listing, report):
+        stale.unlink(missing_ok=True)
+    failed = []
+    steps = [(listing, "--list", "--reporter=json")] if invocation.check else []
+    steps.append((raw, "--reporter=list,json"))
+    for written, *how in steps:
+        command = ["npx", "playwright", "test", *invocation.args, *how]
+        print(f"rc-evidence: suite {name}: {' '.join(command)}", flush=True)
+        done = runner(
+            command,
+            cwd=cwd,
+            env=dict(env, PLAYWRIGHT_JSON_OUTPUT_FILE=str(written)),
+            check=False,
+        )
+        if done.returncode != 0:
+            what = " listing" if "--list" in how else ""
+            failed.append(f"{invocation.report}{what} (exit {done.returncode})")
+    try:
+        playwright_junit(raw, report, invocation.project)
+        cases = read_junit(report)
+    except (OSError, ValueError, KeyError, TypeError, ET.ParseError) as error:
+        return failed + [
+            f"{invocation.report}: no Playwright report ({type(error).__name__})"
+        ]
+    # Playwright exits 0 when a test passed only on its retry.
+    not_passed = [c for c in cases if c.outcome == "failed"]
+    if not_passed:
+        failed.append(f"{invocation.report}: {len(not_passed)} tests did not pass")
+    if invocation.check:
+        command = [
+            sys.executable,
+            invocation.check,
+            str(listing),
+            str(raw),
+            PLAYWRIGHT_ROOT,
+        ]
+        print(f"rc-evidence: suite {name}: {' '.join(command)}", flush=True)
+        done = runner(command, cwd=str(ROOT), env=env, check=False)
+        if done.returncode != 0:
+            failed.append(f"{invocation.check} (exit {done.returncode})")
+    return failed
 
 
 def main(

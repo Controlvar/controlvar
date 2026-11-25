@@ -19,7 +19,12 @@ Pinned, because the verifier's PASS is only as good as these:
   CDK stack tests, with --import-mode=importlib; for the chart's render
   tests, chart.yml's pinned helm, EXPERIMENTLY_CHART_TESTS=1 and its no-skip
   check, with unit leaving their tree to it), and the jest-suites matrix its
-  jest ones, each in its npm project (their reports written as JUnit); every
+  jest ones, each in its npm project (their reports written as JUnit); the
+  browser-suites job its Playwright one, on the stack pr-qa-gate.yml's Browser
+  E2E builds (its services, job env and setup steps, by name, with the same
+  run and env, in its order), without caches, with one ``--suite`` step after
+  the fixtures in place of that job's run and count steps; the Playwright
+  projects table is frontend/playwright.config.ts's; every
   session names trees that exist, and ignores only trees under its roots,
   which ``suite_of`` reads;
   unit and integration are a leg per shard (``LEGS``, #1895), every
@@ -93,6 +98,7 @@ VERIFY_RUN = (
 JOB_PERMISSIONS = {
     "python-suites": {"contents": "read"},
     "jest-suites": {"contents": "read"},
+    "browser-suites": {"contents": "read"},
     "verify": {"contents": "read", "actions": "read"},
 }
 
@@ -155,6 +161,9 @@ def test_the_token_reads_and_nothing_writes(doc):
         lambda d: d["jobs"]["jest-suites"]["permissions"].update({"actions": "write"}),
         lambda d: d["jobs"]["verify"].pop("permissions"),
         lambda d: d["jobs"].update({"extra": {"permissions": {"actions": "write"}}}),
+        lambda d: d["jobs"]["browser-suites"]["permissions"].update(
+            {"actions": "read"}
+        ),
     ],
     ids=[
         "actions-write-on-verify",
@@ -165,6 +174,7 @@ def test_the_token_reads_and_nothing_writes(doc):
         "actions-write-on-the-jest-job",
         "verify-inherits",
         "a-new-job-with-actions-write",
+        "actions-read-on-the-browser-job",
     ],
 )
 def test_each_permission_rule_fires_on_the_real_workflow(doc, plant):
@@ -183,6 +193,7 @@ def test_every_job_fails_first_on_a_ref_that_is_not_a_release_tag(doc):
         assert TAG_LINE in lines and "exit 1" in lines, name
     assert "if" not in doc["jobs"]["python-suites"]
     assert "if" not in doc["jobs"]["jest-suites"]
+    assert "if" not in doc["jobs"]["browser-suites"]
     assert doc["jobs"]["verify"]["if"] == "always()"
 
 
@@ -192,7 +203,7 @@ def test_the_matrix_is_the_scripts_suites(doc):
     include = job["strategy"]["matrix"]["include"]
     # One leg per suite, and one per shard of unit and integration (#1895).
     assert [leg["suite"] for leg in include] == [
-        name for name, leg in rc.LEGS.items() if not rc.is_jest(leg.suite)
+        name for name, leg in rc.LEGS.items() if rc.runner_of(leg.suite) == "pytest"
     ]
     assert all(
         i.runner == "pytest" for leg in include for i in rc.LEGS[leg["suite"]].sessions
@@ -525,6 +536,257 @@ def test_the_jest_matrix_runs_each_jest_suite_in_its_project(doc):
     assert upload["if"] == "always()"
 
 
+#: Browser E2E's steps the browser leg runs as they are, in this order.
+BROWSER_STEPS = (
+    "Install backend dependencies",
+    "Install dashboard dependencies",
+    "Install chromium only",
+    "Bootstrap the database",
+    "Seed the demo data",
+    "Start the API",
+    "Build the dashboard (static export)",
+    "Pack the browser script (sdk/visual)",
+    "Build the page-runtime fixtures",
+)
+#: The browser leg's steps, all of them, in order.
+BROWSER_LEG = (
+    ("Dispatched at a release tag", "Set up Python", "Set up Node.js")
+    + BROWSER_STEPS
+    + ("Run the suite", "Upload the JUnit reports")
+)
+#: What setup-python and setup-node take to restore a cache.
+CACHE_KEYS = {"cache", "cache-dependency-path"}
+
+
+def browser_leg_drift(leg: Dict[str, Any], pr: Dict[str, Any]) -> List[str]:
+    """Every way rc-evidence.yml's browser leg differs from pr-qa-gate.yml's
+    Browser E2E but the two it is meant to: no caches, and one ``--suite``
+    step after the fixtures in place of that job's run and count steps."""
+    problems = []
+    names = [s.get("name") or s.get("uses") for s in leg["steps"]]
+    if [n for n in names if not str(n).startswith("actions/checkout")] != list(
+        BROWSER_LEG
+    ):
+        problems.append(f"the leg's steps are {names}")
+    for name in BROWSER_STEPS:
+        ours = [s for s in leg["steps"] if s.get("name") == name]
+        theirs = [s for s in pr["steps"] if s.get("name") == name]
+        if len(ours) != 1 or len(theirs) != 1:
+            problems.append(
+                f"{name!r}: {len(ours)} in the leg, {len(theirs)} in the PR"
+            )
+            continue
+        for key in ("run", "env", "if"):
+            if ours[0].get(key) != theirs[0].get(key):
+                problems.append(f"{name!r}: its {key} differs")
+    pr_order = [s.get("name") for s in pr["steps"] if s.get("name") in BROWSER_STEPS]
+    if pr_order != list(BROWSER_STEPS):
+        problems.append(f"Browser E2E runs them in another order: {pr_order}")
+    for key in ("services", "env"):
+        if leg.get(key) != pr.get(key):
+            problems.append(f"the job's {key} differ")
+    if leg.get("timeout-minutes") != 30:
+        problems.append(f"timeout-minutes {leg.get('timeout-minutes')}")
+    for tool in ("actions/setup-python", "actions/setup-node", "actions/cache"):
+        ours = [s for s in leg["steps"] if str(s.get("uses", "")).startswith(tool)]
+        theirs = [s for s in pr["steps"] if str(s.get("uses", "")).startswith(tool)]
+        if tool == "actions/cache":
+            if ours:
+                problems.append("the leg restores a cache")
+            continue
+        if len(ours) != 1 or len(theirs) != 1 or ours[0]["uses"] != theirs[0]["uses"]:
+            problems.append(f"{tool}: not the PR job's one")
+            continue
+        if ours[0].get("with", {}) != {
+            k: v for k, v in theirs[0].get("with", {}).items() if k not in CACHE_KEYS
+        }:
+            problems.append(f"{tool}: its inputs are not the PR job's, less the cache")
+    runs = [
+        s
+        for s in leg["steps"]
+        if "playwright test" in str(s.get("run", ""))
+        or "rc_evidence.py" in str(s.get("run", ""))
+    ]
+    envs = [
+        s.get("env", {})
+        for s in pr["steps"]
+        if "--project=journeys" in str(s.get("run", ""))
+        or "--project=page-runtime --reporter=" in str(s.get("run", ""))
+    ]
+    if len(envs) != 2 or envs[0] != envs[1]:
+        problems.append(f"the PR job's two run steps' env differ: {envs}")
+    if leg.get("runs-on") != pr.get("runs-on"):
+        problems.append(f"runs-on {leg.get('runs-on')}")
+    if [(s.get("name"), str(s.get("run", "")).strip(), s.get("env")) for s in runs] != [
+        (
+            "Run the suite",
+            SUITE_RUN,
+            {"SUITE": "${{ matrix.suite }}", **(envs[0] if envs else {})},
+        )
+    ]:
+        problems.append(f"the leg's run steps are {runs}")
+    return problems
+
+
+def _browser_jobs(doc: Dict[str, Any]):
+    return doc["jobs"]["browser-suites"], _load(WORKFLOWS / "pr-qa-gate.yml")["jobs"][
+        "browser-e2e"
+    ]
+
+
+def test_the_browser_leg_builds_the_stack_browser_e2e_builds(doc):
+    leg, pr = _browser_jobs(doc)
+    assert browser_leg_drift(leg, pr) == []
+    assert leg["name"] == rc.BROWSER_SUITE_JOB.format("${{ matrix.suite }}")
+    assert leg["strategy"]["matrix"]["include"] == [
+        {"suite": name}
+        for name, g in rc.LEGS.items()
+        if rc.runner_of(g.suite) == "playwright"
+    ]
+    assert leg["strategy"]["fail-fast"] is False
+    upload = next(
+        s
+        for s in leg["steps"]
+        if s.get("uses", "").startswith("actions/upload-artifact")
+    )
+    assert upload["with"]["name"] == rc.JUNIT_ARTIFACT.format("${{ matrix.suite }}")
+    assert upload["with"]["retention-days"] == 90
+    assert upload["if"] == "always()"
+    assert upload["with"]["path"] == "${{ runner.temp }}/junit"
+
+
+def _seed_reset(leg, pr):
+    step = next(s for s in pr["steps"] if s.get("name") == "Seed the demo data")
+    step["run"] += " --reset"
+
+
+def _no_export(leg, pr):
+    leg["steps"] = [
+        s
+        for s in leg["steps"]
+        if s.get("name") != "Build the dashboard (static export)"
+    ]
+
+
+def _pack_last(leg, pr):
+    names = [s.get("name") for s in leg["steps"]]
+    pack = leg["steps"].pop(names.index("Pack the browser script (sdk/visual)"))
+    leg["steps"].insert(names.index("Run the suite"), pack)
+
+
+def _a_cache(leg, pr):
+    leg["steps"].insert(3, {"uses": "actions/cache@v6", "with": {"path": "x"}})
+
+
+def _pip_cache(leg, pr):
+    setup = next(s for s in leg["steps"] if s.get("name") == "Set up Python")
+    setup["with"]["cache"] = "pip"
+
+
+def _job_env(leg, pr):
+    pr["env"]["AUTH_PROVIDER"] = "cognito"
+
+
+def _no_api(leg, pr):
+    run = next(s for s in leg["steps"] if s.get("name") == "Run the suite")
+    run["env"].pop("PLAYWRIGHT_API_URL")
+
+
+def _own_run(leg, pr):
+    leg["steps"].insert(
+        -2, {"name": "Run the journeys", "run": "cd frontend && npx playwright test"}
+    )
+
+
+def _postgres_15(leg, pr):
+    leg["services"]["postgres"]["image"] = "postgres:15"
+
+
+def _journeys_env(leg, pr):
+    step = next(s for s in pr["steps"] if "--project=journeys" in str(s.get("run", "")))
+    step["env"]["PLAYWRIGHT_WORKERS"] = "2"
+
+
+def _runs_on(leg, pr):
+    leg["runs-on"] = "ubuntu-24.04"
+
+
+@pytest.mark.parametrize(
+    "plant",
+    [
+        _seed_reset,
+        _no_export,
+        _pack_last,
+        _a_cache,
+        _pip_cache,
+        _job_env,
+        _no_api,
+        _own_run,
+        _postgres_15,
+        _journeys_env,
+        _runs_on,
+    ],
+)
+def test_each_drift_from_browser_e2e_is_found(doc, plant):
+    leg, pr = (copy.deepcopy(j) for j in _browser_jobs(doc))
+    plant(leg, pr)
+    assert browser_leg_drift(leg, pr)
+
+
+def config_projects(text: str) -> List[tuple]:
+    """playwright.config.ts's projects as ``PLAYWRIGHT_PROJECTS`` holds them:
+    each one's name, testMatch and testIgnore patterns."""
+    block = text.split("\n  projects: [\n", 1)[1].split("\n  ],\n", 1)[0]
+    found = []
+    for piece in re.split(r'\n\s+name: "', block)[1:]:
+        name = piece.split('"', 1)[0]
+        match = re.search(r"\n\s+testMatch: /((?:\\.|[^/\n])+)/,", piece)
+        ignore = re.search(r"\n\s+testIgnore: \[(.*?)\n\s+\],", piece, re.S)
+        assert match, f"project {name}: no testMatch this reads"
+        assert "testDir" not in piece, f"project {name} has its own testDir"
+        patterns = (
+            re.findall(r"/((?:\\.|[^/\n])+)/,", ignore.group(1)) if ignore else []
+        )
+        found.append((name, match.group(1), tuple(patterns)))
+    return found
+
+
+CONFIG = REPO_ROOT / "frontend" / "playwright.config.ts"
+
+
+def test_the_playwright_projects_are_the_configs():
+    """``PLAYWRIGHT_PROJECTS`` is a literal (rc_evidence.py reads no file at
+    import); here it is held to the config, project for project."""
+    text = CONFIG.read_text(encoding="utf-8")
+    assert config_projects(text) == list(rc.PLAYWRIGHT_PROJECTS)
+    assert '\n  testDir: "./tests/e2e",\n' in text
+    assert rc.PLAYWRIGHT_ROOT == "frontend/tests/e2e"
+    # The check fires: page-runtime narrowed to one spec, or extended no
+    # longer leaving the runtime specs out.
+    narrowed = text.replace(
+        r"testMatch: /\.runtime\.spec\.ts$/", r"testMatch: /apply\.runtime\.spec\.ts$/"
+    )
+    assert narrowed != text and config_projects(narrowed) != list(
+        rc.PLAYWRIGHT_PROJECTS
+    )
+    widened = text.replace("        /\\.runtime\\.spec\\.ts$/,\n", "")
+    assert widened != text and config_projects(widened) != list(rc.PLAYWRIGHT_PROJECTS)
+
+
+def test_every_playwright_spec_is_one_projects_and_the_browser_suite_runs_two():
+    specs = sorted(
+        p.relative_to(REPO_ROOT).as_posix()
+        for p in (REPO_ROOT / rc.PLAYWRIGHT_ROOT).rglob("*.spec.ts")
+    )
+    assert specs
+    for path in specs:
+        assert len(rc.playwright_projects_of(path)) == 1, path
+    run = {s.project for s in rc.SUITES["browser"]}
+    assert run == {"journeys", "page-runtime"}
+    for project in run:
+        assert any(rc.playwright_projects_of(p) == [project] for p in specs), project
+
+
 def _runs_tree(tree: str) -> bool:
     """Whether a suite runs the tests under *tree*: a pytest session given it
     (or a directory above it), or jest in an npm project at or above it."""
@@ -563,7 +825,7 @@ def test_every_demo_apps_tests_and_both_published_sdks_are_run_by_a_suite():
 def test_the_verify_job_reads_every_leg_and_keeps_its_record(doc):
     job = doc["jobs"]["verify"]
     assert job["name"] == rc.VERIFY_JOB
-    assert job["needs"] == ["python-suites", "jest-suites"]
+    assert job["needs"] == ["python-suites", "jest-suites", "browser-suites"]
     steps = job["steps"]
     download = next(
         s for s in steps if s.get("uses", "").startswith("actions/download-artifact")
