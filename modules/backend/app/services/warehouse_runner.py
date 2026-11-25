@@ -774,6 +774,17 @@ def _epoch(value: Any, name: str) -> Optional[datetime]:
         ) from None
 
 
+def _is_zero(value: Any) -> bool:
+    """True for a count of 0 written ``0`` or ``"0"``, the spellings ``_count`` reads.
+
+    A missing, non-numeric or negative count is not zero.
+    """
+    try:
+        return _signed_int(value, "total_rows") == 0
+    except WarehouseResultRefused:
+        return False
+
+
 def parse_preview_rows(
     kind: str,
     rows: Sequence[Mapping[str, Any]],
@@ -785,7 +796,10 @@ def parse_preview_rows(
     if not rows:
         raise WarehouseResultRefused("result_invalid", "a preview returns rows")
     if expect_session_offset and any(
-        not is_utc_session_offset(row.get("session_offset")) for row in rows
+        not is_utc_session_offset(row.get("session_offset"))
+        # A window with no rows has a NULL offset (MIN over nothing).
+        and not (row.get("session_offset") is None and _is_zero(row.get("total_rows")))
+        for row in rows
     ):
         raise WarehouseResultRefused("timezone_not_utc", "session not in UTC")
     first = rows[0]

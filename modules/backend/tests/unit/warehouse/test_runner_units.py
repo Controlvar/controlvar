@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 import uuid
+from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
@@ -208,6 +209,46 @@ def test_a_preview_from_a_real_snowflake_utc_session_is_accepted():
                 expect_session_offset=True,
             )
         assert refused.value.code == "timezone_not_utc"
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("zero", ["0", 0, " 0 ", "00"])
+def test_a_preview_of_no_rows_may_have_a_null_offset(zero):
+    row = {"total_rows": zero, "null_unit_rows": "0", "null_value_rows": "0"}
+    summary = runner.parse_preview_rows(
+        "metric", [{**row, "session_offset": None}], expect_session_offset=True
+    )
+    assert summary["total_rows"] == 0
+
+
+@pytest.mark.parametrize("count", ["1", 1, "10", None, "", "x", True, Decimal("0")])
+def test_a_preview_with_rows_or_no_usable_count_needs_a_utc_offset(count):
+    row = {"total_rows": count, "null_unit_rows": "0", "null_value_rows": "0"}
+    with pytest.raises(WarehouseResultRefused) as refused:
+        runner.parse_preview_rows(
+            "metric", [{**row, "session_offset": None}], expect_session_offset=True
+        )
+    assert refused.value.code in ("timezone_not_utc", "result_invalid")
+
+
+def test_a_preview_without_a_count_does_not_excuse_a_null_offset():
+    with pytest.raises(WarehouseResultRefused) as refused:
+        runner.parse_preview_rows(
+            "metric",
+            [{"null_unit_rows": "0", "null_value_rows": "0", "session_offset": None}],
+            expect_session_offset=True,
+        )
+    assert refused.value.code == "timezone_not_utc"
+
+
+@pytest.mark.parametrize("offset", ["+01:00", "UTC", "", "z", "Z "])
+def test_a_preview_of_no_rows_not_in_utc_is_refused(offset):
+    row = {"total_rows": "0", "null_unit_rows": "0", "null_value_rows": "0"}
+    with pytest.raises(WarehouseResultRefused) as refused:
+        runner.parse_preview_rows(
+            "metric", [{**row, "session_offset": offset}], expect_session_offset=True
+        )
+    assert refused.value.code == "timezone_not_utc"
 
 
 def test_failure_codes_come_from_the_fixed_set():
