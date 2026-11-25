@@ -212,6 +212,8 @@ NOT_DOCS_TESTS = {
     "backend/tests/unit/schemas/test_cuped_covariate_description.py": ("docs/api only"),
     # Reads only docs/api/openapi-v1.stable.json (same reason as above).
     "backend/tests/unit/api/test_user_response_email_schema.py": "docs/api only",
+    # Reads only the two docs/api/ OpenAPI snapshots (same reason as above).
+    "backend/tests/smoke/test_api_key_environment_in_snapshot.py": "docs/api only",
     # Reads only docs/api/openapi-v1.stable.json and docs/api/stability.md
     # (same reason as above).
     "backend/tests/smoke/test_segment_routes_in_snapshot.py": "docs/api only",
@@ -228,6 +230,8 @@ NOT_DOCS_TESTS = {
     # Reads only the docs/api/ snapshots and frontend/src/tests/fixtures/openapi.json
     # (same reason as above).
     "backend/tests/smoke/test_alias_route_in_snapshot.py": "docs/api only",
+    # Reads only the two docs/api/ OpenAPI snapshots (same reason as above).
+    "backend/tests/smoke/test_flag_environment_routes_in_snapshot.py": "docs/api only",
     # Reads only docs/api/openapi-v1.full.json, to hold tests/fuzz/'s lists to
     # the full profile's operations (same reason as above).
     "backend/tests/unit/scripts/test_fuzz_check.py": "docs/api only",

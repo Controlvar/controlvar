@@ -647,7 +647,7 @@ by = [
 ]
 
 [[unit]]
-text = "Stored is not counted: a report counts only when the key has the sdk:ruleset scope and was created by a user who can change feature flags, and the flag's safety check shows the reports it stored but did not count as uncounted_error_count."
+text = "Stored is not counted: a report counts only when the key has the sdk:ruleset scope and was created by a user who can change feature flags, and the flag's safety check shows the production reports it stored but did not count as uncounted_error_count."
 by = [
     "test:backend/tests/integration/api/test_error_report_source.py::test_a_report_sent_with_a_key_without_the_scope_does_not_roll_back",
     "test:backend/tests/integration/api/test_error_report_source.py::test_a_scoped_key_whose_owner_can_no_longer_change_flags_does_not_count",
@@ -764,10 +764,19 @@ text = "refresh error: \"The API key was refused (403) fetching the flag ruleset
 by = ["test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestScope::test_a_key_without_the_exact_scope_is_refused"]
 
 [[unit]]
-text = "The same, with \"This key's owner can no longer change feature flags …\" | The key's owner can no longer change feature flags: an inactive user, or an ANALYST or VIEWER with no custom role or direct grant giving feature_flag (update) | Use a key created by a user who can change feature flags."
+text = "The same, with \"This key's owner can no longer change feature flags …\" | The key's owner can no longer change feature flags: an ANALYST or VIEWER with no custom role or direct grant giving feature_flag (update) | Use a key created by a user who can change feature flags."
 by = [
     "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestOwnerRole::test_a_demoted_owners_key_stops_working",
     "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
+]
+
+[[unit]]
+text = "refresh error: \"The API key was refused (401) fetching the flag ruleset: Invalid API Key …\" | The key was deleted, deactivated or has expired, or its owner's account is inactive | Create a key as a user whose account is active and who can change feature flags."
+by = [
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestScope::test_an_inactive_owner_is_401",
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestScope::test_an_expired_or_inactive_key_is_401",
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestScope::test_a_deleted_key_is_401",
+    "test:backend/tests/integration/api/test_identity_alias_route.py::test_the_route_refuses_each_key_as_batch_assignment_does",
 ]
 
 [[unit]]

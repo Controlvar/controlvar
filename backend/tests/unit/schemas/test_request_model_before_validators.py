@@ -52,13 +52,16 @@ pytestmark = [pytest.mark.unit]
 #: (ClaimExchange). #537 removed 3 from both with the wizard routes:
 #: WizardDraftCreate, WizardStepUpdate and WizardValidationRequest. #2042
 #: added 1 to both: /admin/app-users/erase (AppUserEraseRequest). #449 added
-#: 1 to both: the body of /tracking/alias (AliasRequest).
-CORE_MODEL_COUNT = 100
-FULL_MODEL_COUNT = 144
+#: 1 to both: the body of /tracking/alias (AliasRequest). #2011 added 2 to
+#: both: the bodies of a flag's environment PUT (FlagEnvironmentUpdate) and
+#: promotion (FlagPromotion).
+CORE_MODEL_COUNT = 102
+FULL_MODEL_COUNT = 146
 
 #: ``(model, field)`` pairs that a ``mode="before"`` field validator covers.
-CORE_BEFORE_COUNT = 46
-FULL_BEFORE_COUNT = 47
+#: #2011 added 2: FlagEnvironmentUpdate's is_active and rollout_percentage.
+CORE_BEFORE_COUNT = 48
+FULL_BEFORE_COUNT = 49
 
 PROBES = ({}, [], False, None)
 

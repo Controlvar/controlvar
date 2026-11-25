@@ -487,9 +487,9 @@ class SafetyService:
         ``error_rate`` reads 0.0 when a flag has errors but no recorded
         evaluations (nothing to divide by), which is indistinguishable from a
         healthy flag without these counts; the dashboard shows that state.
-        ``uncounted_error_count`` is the number of error reports in the window
-        that were stored but do not count (sent without a server-side key);
-        the dashboard shows it too.
+        ``uncounted_error_count`` is the number of production error reports in
+        the window that were stored but do not count (sent without a server-side
+        key); the dashboard shows it too.
         """
         metrics = self.get_error_metrics(self.db, feature_flag_id)
         return {

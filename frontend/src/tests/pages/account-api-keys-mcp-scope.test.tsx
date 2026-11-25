@@ -35,7 +35,14 @@ beforeEach(() => {
   localStorage.setItem(TOKEN_STORAGE_KEY, 'tok');
   mockFetch.mockImplementation(async (_url: string, init: RequestInit = {}) =>
     (init.method ?? 'GET').toUpperCase() === 'POST'
-      ? respond(201, { id: 'k-1', name: 'n', key: 'eptk_x', prefix: 'eptk_x', created_at: '2026-11-02T00:00:00' })
+      ? respond(201, {
+          id: 'k-1',
+          name: 'n',
+          key: 'eptk_x',
+          prefix: 'eptk_x',
+          created_at: '2026-11-02T00:00:00',
+          environment: 'production',
+        })
       : respond(200, []),
   );
 });

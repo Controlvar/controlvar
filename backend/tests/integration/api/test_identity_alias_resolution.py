@@ -424,6 +424,86 @@ def test_an_event_id_is_stored_once_per_id_as_sent(admin_client, world):
     assert [e.user_id for e in stored] == [a1, a1]
 
 
+def test_a_batch_event_id_is_stored_once_per_id_as_sent(admin_client, world):
+    """IA-E3, ``/tracking/batch``: the twin of the ``/track`` test above."""
+    exp = world.experiment("E3 batch")
+    a1, u1 = world.split_pair(exp)
+    assign(admin_client, exp, a1)
+    order = f"order-{uuid.uuid4().hex[:8]}"
+
+    def send(user_id):
+        response = admin_client.post(
+            "/api/v1/tracking/batch",
+            json={
+                "events": [
+                    {
+                        "event_type": "purchase",
+                        "event_name": "purchase",
+                        "user_id": user_id,
+                        "experiment_key": exp.key,
+                        "value": 5.0,
+                        "event_id": order,
+                    }
+                ]
+            },
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    first = send(a1)
+    world.link(a1, u1)
+    second = send(u1)
+    retry = send(u1)
+
+    assert [
+        (r["success_count"], r["failure_count"]) for r in (first, second, retry)
+    ] == [(1, 0)] * 3
+    assert (first["duplicate_count"], second["duplicate_count"]) == (0, 0)
+    assert retry["duplicate_count"] == 1
+    stored = world.events(exp, [a1, u1], "purchase")
+    assert [e.user_id for e in stored] == [a1, a1]
+
+
+def test_an_event_by_ids_event_id_is_stored_once_per_id_as_sent(admin_client, world):
+    """IA-E3, ``POST /tracking/events``: the twin of the ``/track`` test above."""
+    exp = world.experiment("E3 ids")
+    a1, u1 = world.split_pair(exp)
+    assign(admin_client, exp, a1)
+    given = variant_of(exp, "treatment")
+    order = f"order-{uuid.uuid4().hex[:8]}"
+
+    def send(user_id):
+        response = admin_client.post(
+            "/api/v1/tracking/events",
+            json={
+                "event_type": "purchase",
+                "event_name": "purchase",
+                "user_id": user_id,
+                "experiment_id": str(exp.id),
+                "variant_id": str(given.id),
+                "value": 5.0,
+                "event_id": order,
+            },
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    first = send(a1)
+    world.link(a1, u1)
+    second = send(u1)
+    retry = send(u1)
+
+    assert (first["duplicate"], second["duplicate"], retry["duplicate"]) == (
+        False,
+        False,
+        True,
+    )
+    assert retry["id"] == second["id"] != first["id"]
+    assert (second["user_id"], retry["user_id"]) == (u1, u1)
+    stored = world.events(exp, [a1, u1], "purchase")
+    assert [e.user_id for e in stored] == [a1, a1]
+
+
 # ---------------------------------------------------------------------------
 # Holdout, mutual exclusion, bandits (IA-H1 to IA-H3)
 # ---------------------------------------------------------------------------

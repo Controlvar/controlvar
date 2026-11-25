@@ -14,6 +14,17 @@ html {
   scroll-behavior: smooth;
 }
 
+/* The flag pages' sticky header is taller (133px at 320px wide in Production):
+   a control the keyboard moves to is scrolled clear of it. */
+html:has(#environment-bar) {
+  scroll-padding-top: 9rem;
+}
+
+/* The select is in that header, so focusing it must not scroll the page. */
+#environment-bar select {
+  scroll-margin-top: -9rem;
+}
+
 /* Custom gradient backgrounds */
 .gradient-radial {
   background: radial-gradient(circle, var(--tw-gradient-stops));

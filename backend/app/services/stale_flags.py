@@ -3,8 +3,9 @@
 Computed when the flag list is read: no column, no migration, no scheduler,
 and nothing here writes. N is ``STALE_FLAG_DAYS`` and the cutoff is N days
 before now. A flag is stale when it is not ARCHIVED, was created at or before
-the cutoff, is not tagged ``permanent``, has no ACTIVE rollout schedule, and at
-least one of these holds, reported in this order:
+the cutoff, is not tagged ``permanent``, has no ACTIVE rollout schedule, is not
+on in staging or development (#2011), and at least one of these holds, reported
+in this order:
 
 ``not_evaluated``
     the installation recorded at least one flag evaluation since the cutoff
@@ -40,6 +41,7 @@ from backend.app.core.targeting_adapter import normalise_targeting_rules
 from backend.app.models.feature_flag import FeatureFlag, flag_status_name
 from backend.app.models.metrics.metric import MetricType, RawMetric
 from backend.app.models.rollout_schedule import RolloutSchedule, RolloutScheduleStatus
+from backend.app.services.flag_environment_service import flags_on_outside_production
 
 NOT_EVALUATED = "not_evaluated"
 ON_FOR_EVERYONE = "on_for_everyone"
@@ -156,17 +158,23 @@ def classify(
     evaluations_seen: bool,
     evaluated_ids: Collection[UUID],
     active_schedule_ids: Collection[UUID],
+    on_elsewhere_ids: Collection[UUID] = (),
 ) -> Dict[UUID, List[str]]:
     """Each flag's id and its reasons, in ``REASONS`` order; ``[]`` when it is not stale.
 
     Pure: the database's answers come in as *evaluations_seen* (the
     installation recorded an evaluation since the cutoff), *evaluated_ids*
-    (the flags it recorded one for) and *active_schedule_ids*.
+    (the flags it recorded one for), *active_schedule_ids* and
+    *on_elsewhere_ids* (the flags that are on in staging or development).
     """
     cutoff = cutoff_of(now, days)
     answer: Dict[UUID, List[str]] = {}
     for flag in flags:
-        if not _may_be_stale(flag, cutoff) or flag.id in active_schedule_ids:
+        if (
+            not _may_be_stale(flag, cutoff)
+            or flag.id in active_schedule_ids
+            or flag.id in on_elsewhere_ids
+        ):
             answer[flag.id] = []
             continue
         reasons = []
@@ -246,14 +254,17 @@ def stale_reasons(
 ) -> Tuple[Dict[UUID, List[str]], bool]:
     """Each flag's reasons, and ``evaluations_seen``.
 
-    At most three statements, however many flags: the install-wide guard,
-    the ACTIVE schedules and the evaluations of the flags that may be stale.
+    At most four statements, however many flags: the install-wide guard, and,
+    of the flags that may be stale, the ACTIVE schedules, the ones on in
+    staging or development, and the evaluations of the rest.
     """
     since = cutoff_of(now, days)
     evaluations_seen = any_evaluation_since(db, since)
     candidates = candidate_ids(flags, now=now, days=days)
     scheduled = flags_with_an_active_schedule(db, candidates)
-    remaining = [flag_id for flag_id in candidates if flag_id not in scheduled]
+    on_elsewhere = flags_on_outside_production(db, candidates)
+    exempt = scheduled | on_elsewhere
+    remaining = [flag_id for flag_id in candidates if flag_id not in exempt]
     evaluated = evaluated_flag_ids(db, remaining, since) if evaluations_seen else set()
     reasons = classify(
         flags,
@@ -262,5 +273,6 @@ def stale_reasons(
         evaluations_seen=evaluations_seen,
         evaluated_ids=evaluated,
         active_schedule_ids=scheduled,
+        on_elsewhere_ids=on_elsewhere,
     )
     return reasons, evaluations_seen

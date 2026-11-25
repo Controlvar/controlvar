@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useId, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useId, useLayoutEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { TargetingRuleBuilder } from '@/components/targeting';
@@ -24,10 +24,25 @@ import { isApiError } from '@/services/api';
 import {
   FeatureFlag,
   FeatureFlagsService,
+  FlagEnvironmentSettings,
   RolloutSchedule,
   UpdateFeatureFlagRequest,
+  UpdateFlagEnvironmentRequest,
   isFlagOn,
 } from '@/services/featureFlags';
+import { useFlagEnvironment } from '@/contexts/FlagEnvironmentContext';
+import {
+  FLAG_ENVIRONMENT_LABELS,
+  FlagEnvironment,
+  NonProductionEnvironment,
+  inEnvironmentUrl,
+  notConfiguredText,
+} from '@/utils/flagEnvironments';
+import {
+  EnvironmentComparison,
+  NonProductionNote,
+  ProductionBanner,
+} from '@/components/feature-flags/FlagEnvironmentSections';
 import type { SafetyCheckResponse } from '@/types/safety';
 import { PageTitle } from '@/components/PageTitle';
 import { formatSafetyMetricValue } from '@/components/admin/safety/SafetyStatusCard';
@@ -38,6 +53,8 @@ import {
   isFlagArchived,
 } from '@/components/feature-flags/ArchivedFlag';
 import { FlagManageSection, FlagStatusChange } from '@/components/feature-flags/FlagManageSection';
+import { PromoteFlag } from '@/components/feature-flags/PromoteFlag';
+import { promotionTarget } from '@/utils/flagPromotion';
 import { RolloutScheduleManager } from '@/components/feature-flags/RolloutScheduleManager';
 import {
   FlagValueFields,
@@ -155,8 +172,43 @@ export function pickSchedule(items: RolloutSchedule[]): RolloutSchedule | null {
   })[0];
 }
 
+/**
+ * A flag's page in the environment on screen. Choosing another environment
+ * starts the page again (the key), so nothing of the last one is left: a
+ * change still being saved there cannot answer into this one's form and be
+ * saved from it.
+ */
 export default function FeatureFlagDetailPage() {
+  const { environment } = useFlagEnvironment();
+  const [loading, setLoading] = useState(true);
+  return (
+    <>
+      {/* On the page from the first render, so a load after a switch is announced. */}
+      <div role="status" className={loading ? 'flex-1 bg-slate-50 flex items-center justify-center' : undefined}>
+        {loading && (
+          <>
+            <PageTitle title="Feature Flag" />
+            <div className="text-center" data-testid="flag-loading">
+              <div className="inline-block w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+              <p className="text-slate-500 mt-2 text-sm">Loading feature flag...</p>
+            </div>
+          </>
+        )}
+      </div>
+      <FlagInEnvironment key={environment ?? 'resolving'} environment={environment} onLoading={setLoading} />
+    </>
+  );
+}
+
+function FlagInEnvironment({
+  environment,
+  onLoading,
+}: {
+  environment: FlagEnvironment | null;
+  onLoading: (loading: boolean) => void;
+}) {
   const router = useRouter();
+  const { reportShown, switchable } = useFlagEnvironment();
   const rawId = router.query.id;
   const id = typeof rawId === 'string' ? rawId : undefined;
   const auth = useOptionalAuth();
@@ -173,10 +225,33 @@ export default function FeatureFlagDetailPage() {
   const changePending = !canChange && permissionsLoading;
   // A read-only demo shows the demo note in place of the role note.
   const demo = useDemoMode();
+  // `environment` is null while it is resolved, and the page is loading until
+  // then. Production is the flag itself, read and changed through the stable
+  // routes as before; Staging and Development are the flag's settings there,
+  // read and changed through the beta environment routes. Nothing else
+  // decides the route.
+  const otherEnvironment: NonProductionEnvironment | null =
+    environment && environment !== 'production' ? environment : null;
+  const production = environment === 'production';
 
   const [flag, setFlag] = useState<FeatureFlag | null>(null);
+  // The flag's settings in `otherEnvironment`; null in Production.
+  const [envSettings, setEnvSettings] = useState<FlagEnvironmentSettings | null>(null);
+  // Moves after every change made on this page, so an open comparison reloads.
+  const [changeCount, setChangeCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<{ status: number; message: string } | null>(null);
+  const loading = !id || isLoading;
+  const failed = loadError !== null;
+
+  // Before the paint, so the loading state and the flag are never both on screen.
+  useLayoutEffect(() => onLoading(loading), [loading, onLoading]);
+  // What is on screen, for the environment switcher's status.
+  useEffect(() => {
+    reportShown(environment && !loading ? { environment, loaded: !failed } : null);
+    return () => reportShown(null);
+  }, [environment, loading, failed, reportShown]);
+
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -315,18 +390,31 @@ export default function FeatureFlagDetailPage() {
   );
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || !environment) return;
     let cancelled = false;
+    const inEnvironment = environment === 'production' ? null : environment;
 
     const fetchFlag = async () => {
       setIsLoading(true);
       setLoadError(null);
       try {
-        const data = await FeatureFlagsService.get(id);
+        // Outside Production the flag itself still names the page and holds
+        // the values; its settings there come from the environment's route.
+        const [data, settings] = await Promise.all([
+          FeatureFlagsService.get(id),
+          inEnvironment ? FeatureFlagsService.getInEnvironment(id, inEnvironment) : Promise.resolve(null),
+        ]);
         if (cancelled) return;
         setFlag(data);
-        loadRules(storedRules(data));
+        setEnvSettings(settings);
         loadValues(flagValueType(data), { on_value: data.on_value, off_value: data.off_value });
+        if (settings) {
+          loadRules(settings.targeting_rules ?? null);
+          setRolloutPercentage(settings.rollout_percentage ?? 0);
+          // The rollout schedule and the safety check are Production's only.
+          return;
+        }
+        loadRules(storedRules(data));
         setRolloutPercentage(data.rollout_percentage ?? 0);
         // Secondary panels load in parallel; their failures are non-fatal.
         void loadSchedules(id);
@@ -346,10 +434,33 @@ export default function FeatureFlagDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [id, loadSchedules, loadSafety, loadRules, loadValues]);
+  }, [id, environment, loadSchedules, loadSafety, loadRules, loadValues]);
+
+  /** On/off in Staging or Development: the environment's PUT, never the flag's enable or disable. */
+  const handleEnvironmentToggle = async (next: boolean) => {
+    if (!flag || !otherEnvironment || !envSettings) return;
+    const previous = envSettings;
+    setToggleError(null);
+    setToggling(true);
+    setEnvSettings({ ...envSettings, is_active: next, status: next ? 'active' : 'inactive', configured: true });
+    try {
+      // The PUT answers the setting as it now is.
+      setEnvSettings(await FeatureFlagsService.updateInEnvironment(flag.id, otherEnvironment, { is_active: next }));
+      setChangeCount((n) => n + 1);
+    } catch (err) {
+      setEnvSettings(previous);
+      setToggleError(err instanceof Error ? err.message : 'Failed to update the flag');
+    } finally {
+      setToggling(false);
+    }
+  };
 
   const handleToggle = async (next: boolean) => {
     if (!flag) return;
+    if (otherEnvironment) {
+      await handleEnvironmentToggle(next);
+      return;
+    }
     const previous = flag;
     setToggleError(null);
     setToggling(true);
@@ -361,11 +472,42 @@ export default function FeatureFlagDetailPage() {
           ? { ...current, status: res.status, is_active: res.status === 'active', updated_at: res.updated_at }
           : current,
       );
+      setChangeCount((n) => n + 1);
     } catch (err) {
       setFlag(previous);
       setToggleError(err instanceof Error ? err.message : 'Failed to update the flag');
     } finally {
       setToggling(false);
+    }
+  };
+
+  /** Save in Staging or Development: the rollout and the rules (when changed) through the environment's PUT. */
+  const saveInEnvironment = async (
+    env: NonProductionEnvironment,
+    targeting: Record<string, unknown> | undefined,
+  ) => {
+    if (!flag) return;
+    const body: UpdateFlagEnvironmentRequest = { rollout_percentage: rolloutPercentage };
+    if (targeting !== undefined) body.targeting_rules = targeting;
+    setIsSaving(true);
+    try {
+      // The PUT answers the setting as it now is.
+      const saved = await FeatureFlagsService.updateInEnvironment(flag.id, env, body);
+      setEnvSettings(saved);
+      loadRules(saved.targeting_rules ?? null);
+      setRolloutPercentage(saved.rollout_percentage ?? 0);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+      setChangeCount((n) => n + 1);
+    } catch (err) {
+      const described = describeTargetingSaveError(err);
+      if (described.problems) {
+        setTargetingError(described);
+      } else {
+        setSaveError(err instanceof Error ? err.message : 'Failed to save changes');
+      }
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -381,7 +523,8 @@ export default function FeatureFlagDetailPage() {
     // has just changed. The type is never sent.
     const type = flagValueType(flag);
     let values: Partial<Record<ValueField, unknown>> = {};
-    if (canChange && isValueFlagType(type)) {
+    // Values belong to the flag, so only Production's page edits them.
+    if (canChange && isValueFlagType(type) && !otherEnvironment) {
       const checked = checkEditedValues(type, valueTexts, initialTexts, storedValues);
       if (firstInvalid(checked.errors)) {
         showValueErrors(checked.errors);
@@ -399,6 +542,13 @@ export default function FeatureFlagDetailPage() {
         setTargetingError({ message: TARGETING_SAVE_INCOMPLETE, problems });
         return;
       }
+    }
+
+    // Staging and Development: the environment's PUT. Production: the flag's
+    // own PUT below, exactly as before environments.
+    if (otherEnvironment) {
+      await saveInEnvironment(otherEnvironment, targeting);
+      return;
     }
 
     const body: UpdateFeatureFlagRequest = { rollout_percentage: rolloutPercentage };
@@ -420,6 +570,7 @@ export default function FeatureFlagDetailPage() {
       loadValues(type, saved);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
+      setChangeCount((n) => n + 1);
     } catch (err) {
       const refused = valueRefusals(err);
       if (refused) showValueErrors(refused.fields);
@@ -437,24 +588,22 @@ export default function FeatureFlagDetailPage() {
     }
   };
 
-  if (!id || isLoading) {
-    return (
-      <div className="flex-1 bg-slate-50 flex items-center justify-center">
-        <PageTitle title="Feature Flag" />
-        <div className="text-center" data-testid="flag-loading">
-          <div className="inline-block w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-          <p className="text-slate-500 mt-2 text-sm">Loading feature flag...</p>
-        </div>
-      </div>
-    );
-  }
+  // Back to the list in the environment on screen.
+  const listUrl = inEnvironmentUrl('/feature-flags', switchable ? environment : null);
+
+  // FeatureFlagDetailPage shows the loading state.
+  if (loading) return null;
 
   if (loadError || !flag) {
     const notFound = loadError?.status === 404;
     return (
       <div className="flex-1 bg-slate-50 flex items-center justify-center">
         <PageTitle title={notFound ? 'Flag not found' : 'Feature Flag'} />
-        <div className="text-center max-w-md px-4" data-testid={notFound ? 'flag-not-found' : 'flag-error'}>
+        <div
+          role="alert"
+          className="text-center max-w-md px-4"
+          data-testid={notFound ? 'flag-not-found' : 'flag-error'}
+        >
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-600 mb-2">
             {notFound ? '404' : 'Error'}
           </p>
@@ -464,7 +613,7 @@ export default function FeatureFlagDetailPage() {
           {!notFound && loadError?.message && (
             <p className="text-sm text-red-600 mb-4">{loadError.message}</p>
           )}
-          <Link href="/feature-flags" className="text-blue-600 hover:underline text-sm">
+          <Link href={listUrl} className="text-blue-600 hover:underline text-sm">
             &larr; Back to Feature Flags
           </Link>
         </div>
@@ -472,11 +621,21 @@ export default function FeatureFlagDetailPage() {
     );
   }
 
-  const on = isFlagOn(flag);
+  // Outside Production the pill, the switch and the archived note follow the
+  // flag's setting in that environment; an archived flag is archived in all.
+  const on = isFlagOn(envSettings ?? flag);
   // The API refuses to turn an archived flag on (400), so the page offers no
   // switch for one: it says to unarchive it first (#1748), and Unarchive is
   // in "Manage this flag" below (#442).
-  const archived = isFlagArchived(flag);
+  const archived = isFlagArchived(flag) || (envSettings !== null && isFlagArchived(envSettings));
+  // Off there because nothing was ever set there: "Off", with the reason beside it.
+  const notConfigured = otherEnvironment !== null && envSettings !== null && !envSettings.configured;
+  const environmentLabel = otherEnvironment ? FLAG_ENVIRONMENT_LABELS[otherEnvironment] : null;
+  // Where this environment's settings are promoted to: null in Production.
+  const promotionInto = promotionTarget(environment);
+  // In Production the banner says what a change here reaches; a user who
+  // cannot change the flag, or a read-only demo, is not editing.
+  const showProductionBanner = production && canChange && !demo;
   /** An archive or unarchive has landed: the pill, the switch and the note follow it. */
   const handleStatusChange = (change: FlagStatusChange) => {
     setToggleError(null);
@@ -497,14 +656,16 @@ export default function FeatureFlagDetailPage() {
 
   return (
     <div className="flex-1 bg-slate-50" data-testid="flag-detail">
-      <PageTitle title={flag.name} />
+      <PageTitle title={environmentLabel ? `${flag.name} in ${environmentLabel}` : flag.name} />
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="flex items-center gap-4 mb-4">
-          <Link href="/feature-flags" className="text-slate-500 hover:text-slate-700 text-sm">
+          <Link href={listUrl} className="text-slate-500 hover:text-slate-700 text-sm">
             &larr; Feature Flags
           </Link>
         </div>
+
+        {showProductionBanner && <ProductionBanner />}
 
         <div className="bg-white rounded-lg border border-slate-200 p-6 mb-6" data-testid="flag-header">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
@@ -526,6 +687,11 @@ export default function FeatureFlagDetailPage() {
                 >
                   {archived ? ARCHIVED_LABEL : on ? 'On' : 'Off'}
                 </span>
+                {notConfigured && otherEnvironment && (
+                  <span className="text-sm text-slate-700" data-testid="flag-not-configured">
+                    {notConfiguredText(otherEnvironment)}
+                  </span>
+                )}
                 {valueFlag && (
                   <span
                     className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700"
@@ -551,7 +717,7 @@ export default function FeatureFlagDetailPage() {
                 <FlagToggle
                   on={on}
                   disabled={toggling}
-                  label={`Turn ${flag.key} ${on ? 'off' : 'on'}`}
+                  label={`Turn ${flag.key} ${on ? 'off' : 'on'}${environmentLabel ? ` in ${environmentLabel}` : ''}`}
                   onChange={(next) => void handleToggle(next)}
                   data-testid="flag-toggle"
                 />
@@ -559,6 +725,18 @@ export default function FeatureFlagDetailPage() {
             </div>
           </div>
           {archived && <ArchivedFlagNote />}
+          {/* Development is promoted to Staging and Staging to Production, by a user who may
+              change the target (the same permission as a change there), never an archived
+              flag. The dialog reads both environments itself. */}
+          {environment && promotionInto && canChange && !demo && !archived && (
+            <PromoteFlag
+              flagId={flag.id}
+              flagKey={flag.key}
+              source={environment}
+              target={promotionInto}
+              onPromoted={() => setChangeCount((n) => n + 1)}
+            />
+          )}
           {demo ? (
             <DemoNote action={DEMO_FLAGS_ACTION} className="mt-4 text-sm text-slate-600" />
           ) : (
@@ -570,13 +748,16 @@ export default function FeatureFlagDetailPage() {
             )
           )}
           {/* Archive and Unarchive for a user who may change flags, Delete for one who may
-              delete them (#442); the role note above otherwise. */}
-          <FlagManageSection
-            flag={flag}
-            canChange={canChange}
-            canDelete={canDelete}
-            onChanged={handleStatusChange}
-          />
+              delete them (#442); the role note above otherwise. They change the flag in
+              every environment, so they are offered in Production only. */}
+          {production && (
+            <FlagManageSection
+              flag={flag}
+              canChange={canChange}
+              canDelete={canDelete}
+              onChanged={handleStatusChange}
+            />
+          )}
           {toggleError && (
             <div
               role="alert"
@@ -588,6 +769,10 @@ export default function FeatureFlagDetailPage() {
           )}
         </div>
 
+        {/* Outside Production: no schedule or safety controls, and why. */}
+        {!production && <NonProductionNote />}
+
+        {production && (
         <div className="grid gap-6 lg:grid-cols-2 mb-6">
           {/* Rollout schedule */}
           <section className="bg-white rounded-lg border border-slate-200 p-6" data-testid="rollout-schedule-section">
@@ -744,6 +929,7 @@ export default function FeatureFlagDetailPage() {
             )}
           </section>
         </div>
+        )}
 
         <div className="space-y-6">
           {/* Values (#1497): a string, number or JSON flag's two values */}
@@ -759,7 +945,7 @@ export default function FeatureFlagDetailPage() {
                 </p>
                 <p className="text-sm text-slate-600">{TYPE_FIXED_ON_PAGE}</p>
               </div>
-              {canChange && isValueFlagType(valueType) ? (
+              {canChange && isValueFlagType(valueType) && production ? (
                 <FlagValueFields
                   type={valueType}
                   texts={valueTexts}
@@ -899,7 +1085,9 @@ export default function FeatureFlagDetailPage() {
 
           {/* Rollout Percentage */}
           <section className="bg-white rounded-lg border border-slate-200 p-6 space-y-4">
-            <h2 className="text-base font-semibold text-slate-800">Rollout</h2>
+            <h2 className="text-base font-semibold text-slate-800">
+              {environmentLabel ? `Rollout in ${environmentLabel}` : 'Rollout'}
+            </h2>
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label htmlFor="rollout-percentage" className="text-sm font-medium text-slate-700">
@@ -931,7 +1119,7 @@ export default function FeatureFlagDetailPage() {
                   {ROLLOUT_VALUE_HINT}
                 </p>
               )}
-              {schedule?.status === 'active' && (
+              {production && schedule?.status === 'active' && (
                 <p className="mt-2 text-sm text-slate-600" data-testid="rollout-schedule-slider-note">
                   {SLIDER_SCHEDULE_NOTE}
                 </p>
@@ -969,10 +1157,13 @@ export default function FeatureFlagDetailPage() {
                 className="px-6 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 data-testid="save-flag"
               >
-                {isSaving ? 'Saving...' : 'Save Changes'}
+                {isSaving ? 'Saving...' : environmentLabel ? `Save changes in ${environmentLabel}` : 'Save Changes'}
               </button>
             </div>
           )}
+
+          {/* The same flag in every environment, side by side (loaded when opened). */}
+          <EnvironmentComparison flagId={flag.id} refreshKey={changeCount} />
         </div>
       </div>
     </div>

@@ -57,6 +57,10 @@ class ActionType(str, Enum):
     FEATURE_FLAG_DELETE = "feature_flag_delete"
     FEATURE_FLAG_ACTIVATE = "feature_flag_activate"
     FEATURE_FLAG_DEACTIVATE = "feature_flag_deactivate"
+    # A flag's settings per environment (#2011): changed in staging or
+    # development, and copied from one environment into another.
+    FEATURE_FLAG_ENVIRONMENT_UPDATE = "feature_flag_environment_update"
+    FEATURE_FLAG_PROMOTE = "feature_flag_promote"
 
     # Experiment Actions
     EXPERIMENT_CREATE = "experiment_create"
@@ -236,6 +240,8 @@ class AuditLog(Base, BaseModel):
             ActionType.FEATURE_FLAG_DELETE: "deleted",
             ActionType.FEATURE_FLAG_ACTIVATE: "activated",
             ActionType.FEATURE_FLAG_DEACTIVATE: "deactivated",
+            ActionType.FEATURE_FLAG_ENVIRONMENT_UPDATE: "updated in an environment",
+            ActionType.FEATURE_FLAG_PROMOTE: "promoted",
             ActionType.EXPERIMENT_CREATE: "created",
             ActionType.EXPERIMENT_UPDATE: "updated",
             ActionType.EXPERIMENT_DELETE: "deleted",

@@ -139,8 +139,9 @@ step: [Guided examples](docs/guides/guided-examples.md).
   daily views are of the share of users who sent its event.
 - Variant weights must add up to exactly 100%; there is no separate experiment-level traffic
   allocation.
-- One deployment is one environment: run staging and production as separate deployments, each
-  with its own API keys.
+- Experiments and event tracking run in production only: a staging or development API key, which
+  evaluates feature flags, is refused there. To run an experiment before production, run a separate
+  deployment, with its own API keys.
 - Two-step sign-in can be required for chosen roles on Docker Compose, Helm and AWS CDK
   installs; SAML sign-in is not available (OIDC is, with the `sso` module).
 - Nothing deletes events, assignments or audit records by age. A superuser can erase one app

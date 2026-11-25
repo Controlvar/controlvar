@@ -1,7 +1,20 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Dialog } from '@/components/ui/Dialog';
-import { apiFetch, UserMe } from '@/services/api';
+import { UserMe } from '@/services/api';
 import { useOptionalAuth } from '@/contexts/AuthContext';
+import {
+  CreatedKey,
+  CreateKeyBody,
+  DEFAULT_KEY_ENVIRONMENT,
+  KEY_ENVIRONMENT_HELP,
+  KEY_ENVIRONMENT_LABEL,
+  KEY_ENVIRONMENTS,
+  KeyEnvironment,
+  KeyEnvironmentMismatch,
+  createApiKey,
+  createKeyErrorMessage,
+  keyEnvironmentLabel,
+} from '@/components/admin/api-keys/keyEnvironment';
 import {
   MCP_READ_SCOPE,
   MCP_READ_SCOPE_HELP,
@@ -10,29 +23,16 @@ import {
 import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
 import { EffectivePermissions, holds } from '@/utils/effectivePermissions';
 
-/**
- * `POST /api/v1/api-keys` response. The plaintext key is returned once as
- * `key` (older builds used `key_value`; both are accepted).
- */
-interface CreatedApiKey {
-  id: string;
-  name: string;
-  key?: string;
-  key_value?: string;
-  prefix: string;
-  created_at: string;
-  expires_at?: string | null;
-  is_active?: boolean;
-}
-
-function plaintextKey(created: CreatedApiKey): string {
-  return created.key ?? created.key_value ?? '';
-}
-
 interface CreateApiKeyModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (keyValue: string) => void;
+  /**
+   * The API did not confirm the new key's environment, so it was not handed
+   * over. The list may hold it (if revoking it failed). `shown` is false when
+   * the dialog had been closed, so the page shows the message instead.
+   */
+  onMismatch?: (message: string, shown: boolean) => void;
 }
 
 /**
@@ -67,20 +67,21 @@ export const RULESET_SCOPE_ROLE_REASON =
  * Tab stays inside, the page behind is inert, and on close focus goes back to
  * the button that opened it. Escape closes it at any time, a create in flight
  * included (it is never `busy`): the create still finishes and the page gets
- * the key, the dialog does not.
+ * the key, or the reason there is none, and the dialog does not.
  */
-export function CreateApiKeyModal({ isOpen, onClose, onSuccess }: CreateApiKeyModalProps) {
+export function CreateApiKeyModal({ isOpen, onClose, onSuccess, onMismatch }: CreateApiKeyModalProps) {
   const auth = useOptionalAuth();
   const { effective, loading } = useEffectivePermissions();
   const rulesetAllowed = canCreateRulesetKey(auth?.user, effective);
   // While the effective map is on its way, neither the option nor the reason.
   const rulesetPending = !rulesetAllowed && loading;
   const [name, setName] = useState('');
+  const [environment, setEnvironment] = useState<KeyEnvironment>(DEFAULT_KEY_ENVIRONMENT);
   const [rulesetScope, setRulesetScope] = useState(false);
   const [mcpReadScope, setMcpReadScope] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [createdKey, setCreatedKey] = useState<CreatedApiKey | null>(null);
+  const [createdKey, setCreatedKey] = useState<CreatedKey | null>(null);
   const [copied, setCopied] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
   const doneRef = useRef<HTMLButtonElement>(null);
@@ -95,6 +96,7 @@ export function CreateApiKeyModal({ isOpen, onClose, onSuccess }: CreateApiKeyMo
   useEffect(() => {
     sessionRef.current += 1;
     setName('');
+    setEnvironment(DEFAULT_KEY_ENVIRONMENT);
     setRulesetScope(false);
     setMcpReadScope(false);
     setSubmitting(false);
@@ -119,19 +121,19 @@ export function CreateApiKeyModal({ isOpen, onClose, onSuccess }: CreateApiKeyMo
     const scopes: string[] = [];
     if (rulesetScope && rulesetAllowed) scopes.push(SDK_RULESET_SCOPE);
     if (mcpReadScope) scopes.push(MCP_READ_SCOPE);
+    const body: CreateKeyBody = { name: name.trim(), environment };
+    if (scopes.length > 0) body.scopes = scopes;
 
     try {
-      const data = await apiFetch<CreatedApiKey>('/api/v1/api-keys', {
-        method: 'POST',
-        json: scopes.length > 0 ? { name: name.trim(), scopes } : { name: name.trim() },
-      });
+      const data = await createApiKey(body);
       // Closed since the submit: the page still gets the key, the dialog does not.
       if (session === sessionRef.current) setCreatedKey(data);
-      onSuccess(plaintextKey(data));
+      onSuccess(data.key);
     } catch (err) {
-      if (session === sessionRef.current) {
-        setError((err as Error).message || 'Failed to create API key');
-      }
+      const shown = session === sessionRef.current;
+      const message = createKeyErrorMessage(err, 'Failed to create API key');
+      if (shown) setError(message);
+      if (err instanceof KeyEnvironmentMismatch) onMismatch?.(message, shown);
     } finally {
       if (session === sessionRef.current) setSubmitting(false);
     }
@@ -140,6 +142,7 @@ export function CreateApiKeyModal({ isOpen, onClose, onSuccess }: CreateApiKeyMo
   const handleClose = () => {
     sessionRef.current += 1;
     setName('');
+    setEnvironment(DEFAULT_KEY_ENVIRONMENT);
     setRulesetScope(false);
     setMcpReadScope(false);
     setError(null);
@@ -151,16 +154,14 @@ export function CreateApiKeyModal({ isOpen, onClose, onSuccess }: CreateApiKeyMo
   const handleCopy = async () => {
     if (!createdKey) return;
     try {
-      await navigator.clipboard.writeText(plaintextKey(createdKey));
+      await navigator.clipboard.writeText(createdKey.key);
       setCopied(true);
     } catch {
       setCopied(false);
     }
   };
 
-  const maskedKeyDisplay = createdKey
-    ? `${plaintextKey(createdKey).slice(0, 8)}...`
-    : null;
+  const maskedKeyDisplay = createdKey ? `${createdKey.key.slice(0, 8)}...` : null;
 
   // Never the key itself: this text is announced by a screen reader.
   const announcement = createdKey ? (copied ? 'Key copied' : 'Key created') : '';
@@ -232,6 +233,37 @@ export function CreateApiKeyModal({ isOpen, onClose, onSuccess }: CreateApiKeyMo
                 placeholder="e.g. Production Key"
                 className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+            </div>
+
+            {/* Environment */}
+            <div className="mb-4">
+              <label
+                htmlFor="api-key-environment"
+                className="block text-sm font-medium text-slate-700 mb-1"
+              >
+                {KEY_ENVIRONMENT_LABEL}
+              </label>
+              <select
+                id="api-key-environment"
+                data-testid="api-key-environment"
+                value={environment}
+                onChange={(e) => setEnvironment(e.target.value as KeyEnvironment)}
+                aria-describedby="api-key-environment-help"
+                className="w-full px-3 py-2 border border-slate-300 bg-white rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {KEY_ENVIRONMENTS.map((value) => (
+                  <option key={value} value={value}>
+                    {keyEnvironmentLabel(value)}
+                  </option>
+                ))}
+              </select>
+              <p
+                id="api-key-environment-help"
+                data-testid="api-key-environment-help"
+                className="mt-1 text-sm text-slate-600"
+              >
+                {KEY_ENVIRONMENT_HELP}
+              </p>
             </div>
 
             {/* Scopes: one checkbox each, sdk:ruleset first, then mcp:read */}

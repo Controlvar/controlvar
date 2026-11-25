@@ -136,6 +136,15 @@ INVENTORY = {
     ("POST", f"{V1}/feature-flags/{{flag_id}}/unarchive"): Audited(
         A.FEATURE_FLAG_UPDATE
     ),
+    # --- a flag's settings per environment (#2011) ---------------------------
+    # Staging and development, or production (what the flag's own PUT writes).
+    ("PUT", f"{V1}/feature-flags/{{flag_id}}/environments/{{environment}}"): Audited(
+        A.FEATURE_FLAG_ENVIRONMENT_UPDATE, A.FEATURE_FLAG_UPDATE
+    ),
+    # Into production it also writes what the flag's own PUT writes.
+    ("POST", f"{V1}/feature-flags/{{flag_id}}/environments/{{target}}/promote"): (
+        Audited(A.FEATURE_FLAG_PROMOTE, A.FEATURE_FLAG_UPDATE)
+    ),
     # --- rollout schedules: an entry on the schedule's flag ------------------
     ("POST", f"{V1}/rollout-schedules/"): ROLLOUT,
     ("PUT", f"{V1}/rollout-schedules/{{schedule_id}}"): ROLLOUT,
@@ -353,7 +362,29 @@ def test_the_inventory_is_exact():
         f"unclassified: {sorted(found - set(INVENTORY))}; "
         f"gone: {sorted(set(INVENTORY) - found)}"
     )
-    assert len(INVENTORY) == 122
+    assert len(INVENTORY) == 124
+
+
+#: Where a flag's settings per environment are changed (#2011).
+ENVIRONMENT_PREFIXES = (
+    f"{V1}/environments",
+    f"{V1}/feature-flags/{{flag_id}}/environments",
+)
+
+
+def test_no_environment_route_that_changes_something_is_unaudited():
+    """A change to a flag's settings in any environment is recorded: no route
+    under these paths may be classified ``NotAudited``."""
+    found = {
+        (method, path)
+        for method, path in _core_mutating_routes(app)
+        if path.startswith(ENVIRONMENT_PREFIXES)
+    }
+    assert found, "no mutating environment route found"
+    unaudited = sorted(
+        key for key in found if not isinstance(INVENTORY.get(key), Audited)
+    )
+    assert unaudited == []
 
 
 def test_every_mutating_route_is_under_backend_or_modules():

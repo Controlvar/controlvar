@@ -73,7 +73,8 @@ describe('CreateApiKeyModal', () => {
     global.fetch = jest.fn();
     render(<CreateApiKeyModal {...defaultProps} />);
     expect(screen.queryByTestId('api-key-scope-input')).not.toBeInTheDocument();
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    // The one select is the environment's (#2011).
+    expect(screen.getAllByRole('combobox')).toEqual([screen.getByTestId('api-key-environment')]);
     expect(screen.queryByText(/permission scope/i)).not.toBeInTheDocument();
   });
 
@@ -124,7 +125,7 @@ describe('CreateApiKeyModal', () => {
         const fetchMock = jest.fn().mockResolvedValue({
           ok: true,
           status: 201,
-          json: async () => ({ id: 'k', name: 'n', key: 'eptk_x', prefix: 'eptk_x', created_at: '' }),
+          json: async () => ({ id: 'k', name: 'n', key: 'eptk_x', prefix: 'eptk_x', created_at: '', environment: 'production' }),
         });
         global.fetch = fetchMock;
         render(<CreateApiKeyModal {...defaultProps} />);
@@ -141,7 +142,7 @@ describe('CreateApiKeyModal', () => {
         fireEvent.change(screen.getByTestId('api-key-name-input'), { target: { value: 'n' } });
         fireEvent.click(screen.getByTestId('create-api-key-submit'));
         await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-        expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ name: 'n' });
+        expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ name: 'n', environment: 'production' });
       },
     );
 
@@ -168,6 +169,7 @@ describe('CreateApiKeyModal', () => {
       prefix: 'abcdefgh',
       created_at: '2024-06-15T10:00:00Z',
       expires_at: null,
+      environment: 'production',
     };
     const fetchMock = jest.fn().mockResolvedValue({
       ok: true,
@@ -192,14 +194,14 @@ describe('CreateApiKeyModal', () => {
     expect(url).toContain('/api/v1/api-keys');
     expect(init.method).toBe('POST');
     // Unchecked: the key carries no scope at all.
-    expect(JSON.parse(init.body)).toEqual({ name: 'Test Key' });
+    expect(JSON.parse(init.body)).toEqual({ name: 'Test Key', environment: 'production' });
   });
 
   it('sends scopes ["sdk:ruleset"] when the checkbox is ticked', async () => {
     const fetchMock = jest.fn().mockResolvedValue({
       ok: true,
       status: 201,
-      json: async () => ({ id: 'k', name: 'Server', key: 'eptk_x', prefix: 'eptk_x', created_at: '' }),
+      json: async () => ({ id: 'k', name: 'Server', key: 'eptk_x', prefix: 'eptk_x', created_at: '', environment: 'production' }),
     });
     global.fetch = fetchMock;
     render(<CreateApiKeyModal {...defaultProps} />);
@@ -210,6 +212,7 @@ describe('CreateApiKeyModal', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
       name: 'Server',
+      environment: 'production',
       scopes: ['sdk:ruleset'],
     });
   });
@@ -220,7 +223,7 @@ describe('CreateApiKeyModal', () => {
       jest.fn().mockResolvedValue({
         ok: true,
         status: 201,
-        json: async () => ({ id: 'k', name: 'n', key: 'eptk_x', prefix: 'eptk_x', created_at: '' }),
+        json: async () => ({ id: 'k', name: 'n', key: 'eptk_x', prefix: 'eptk_x', created_at: '', environment: 'production' }),
       });
     const submitWith = async (fetchMock: jest.Mock) => {
       fireEvent.change(screen.getByTestId('api-key-name-input'), { target: { value: 'n' } });
@@ -283,7 +286,7 @@ describe('CreateApiKeyModal', () => {
       render(<CreateApiKeyModal {...defaultProps} />);
       fireEvent.click(mcpBox());
       expect(mcpBox()).toBeChecked();
-      expect(await submitWith(fetchMock)).toEqual({ name: 'n', scopes: ['mcp:read'] });
+      expect(await submitWith(fetchMock)).toEqual({ name: 'n', environment: 'production', scopes: ['mcp:read'] });
     });
 
     it('sends no scopes when unticked, and not mcp:read after a tick and an untick', async () => {
@@ -292,7 +295,7 @@ describe('CreateApiKeyModal', () => {
       render(<CreateApiKeyModal {...defaultProps} />);
       fireEvent.click(mcpBox());
       fireEvent.click(mcpBox());
-      expect(await submitWith(fetchMock)).toEqual({ name: 'n' });
+      expect(await submitWith(fetchMock)).toEqual({ name: 'n', environment: 'production' });
     });
 
     it('sends both scopes when both are ticked', async () => {
@@ -303,6 +306,7 @@ describe('CreateApiKeyModal', () => {
       fireEvent.click(mcpBox());
       expect(await submitWith(fetchMock)).toEqual({
         name: 'n',
+        environment: 'production',
         scopes: ['sdk:ruleset', 'mcp:read'],
       });
     });
@@ -313,20 +317,8 @@ describe('CreateApiKeyModal', () => {
       global.fetch = fetchMock;
       render(<CreateApiKeyModal {...defaultProps} />);
       fireEvent.click(mcpBox());
-      expect(await submitWith(fetchMock)).toEqual({ name: 'n', scopes: ['mcp:read'] });
+      expect(await submitWith(fetchMock)).toEqual({ name: 'n', environment: 'production', scopes: ['mcp:read'] });
     });
-  });
-
-  it('still accepts the legacy key_value field', async () => {
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ id: 'k', name: 'Legacy', key_value: 'legacy_secret', prefix: 'legacy_s', created_at: '' }),
-    });
-    const onSuccess = jest.fn();
-    render(<CreateApiKeyModal {...defaultProps} onSuccess={onSuccess} />);
-    fireEvent.change(screen.getByTestId('api-key-name-input'), { target: { value: 'Legacy' } });
-    fireEvent.click(screen.getByTestId('create-api-key-submit'));
-    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith('legacy_secret'));
   });
 
   it('shows the API error detail when creation fails', async () => {
@@ -352,6 +344,7 @@ describe('CreateApiKeyModal', () => {
       prefix: 'abcdefgh',
       created_at: '2024-06-15T10:00:00Z',
       expires_at: null,
+      environment: 'production',
     };
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
@@ -488,6 +481,7 @@ describe('CreateApiKeyModal keyboard and screen-reader behaviour (#1613)', () =>
         prefix: 'plaintex',
         created_at: '2024-06-15T10:00:00Z',
         expires_at: null,
+        environment: 'production',
       }),
     });
   }
@@ -515,6 +509,7 @@ describe('CreateApiKeyModal keyboard and screen-reader behaviour (#1613)', () =>
       fireEvent.click(screen.getByTestId('create-api-key-submit'));
       const created = {
         id: 'k1', name: 'K', key: SECRET, prefix: 'plaintex', created_at: '2024-06-15T10:00:00Z',
+        environment: 'production',
       };
       return { onSuccess, resolveCreate: () => resolveJson(created) };
     }
@@ -736,7 +731,7 @@ describe('CreateApiKeyModal on the shared Dialog (#369)', () => {
     await act(async () => {
       finish({
         ok: true,
-        json: async () => ({ id: 'k', name: 'K', key: 'eptk_x', prefix: 'eptk_x', created_at: '' }),
+        json: async () => ({ id: 'k', name: 'K', key: 'eptk_x', prefix: 'eptk_x', created_at: '', environment: 'production' }),
       });
     });
     expect(screen.queryByTestId('create-api-key-modal')).not.toBeInTheDocument();

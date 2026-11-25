@@ -263,10 +263,10 @@ many and cannot be linked`. Only those two are refused, compared exactly: `Anony
 
 ## Links have no environment
 
-One deployment is one environment ([Limitations](../getting-started/limitations.md)), and a link
-has no environment of its own: a deployment keeps one set of links, and its tracking routes follow
-them whichever API key a request carries. Link the ids your production traffic sends on your
-production deployment.
+Event tracking runs in production only ([Limitations](../getting-started/limitations.md)), and a
+link has no environment of its own: a deployment keeps one set of links, and its tracking routes,
+which take production API keys only, follow them whichever of those keys a request carries. Link
+the ids your production traffic sends on your production deployment.
 
 ## While a 0.47.0 API serves
 

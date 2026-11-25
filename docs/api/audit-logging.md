@@ -299,7 +299,11 @@ No entry holds a password, a token, any part of an API key, or a request body.
 |-------------|--------|--------------|
 | `feature_flag_create` | `feature_flag` | `POST /feature-flags/` |
 | `feature_flag_update` | `feature_flag` | `PUT /feature-flags/{id}`; `/unarchive`; bulk `archive`; every change to one of the flag's rollout schedules or stages (`reason` is `rollout schedule <change>`, such as `rollout schedule activated`) |
-| `feature_flag_delete` | `feature_flag` | `DELETE /feature-flags/{id}` |
+| `feature_flag_update` | `feature_flag` | `PUT /feature-flags/{id}/environments/production` and a promotion into production (beta), with what `PUT /feature-flags/{id}` records |
+| `feature_flag_update` | `feature_flag` | Bulk `archive` of a flag that was on in staging or development, which turns it off there: `old_value` and `new_value` are then `{"status", "environments"}`, with the `is_active` of each of those environments |
+| `feature_flag_environment_update` | `feature_flag` | `PUT /feature-flags/{id}/environments/{environment}` (beta) changes a flag's settings in staging or development. `old_value` and `new_value` name the `environment` and what changed of `is_active`, `rollout_percentage` and `configured` (whether the flag had settings there); a change of rules is named in `changed_fields` |
+| `feature_flag_promote` | `feature_flag` | `POST /feature-flags/{id}/environments/{target}/promote` (beta) copies a flag's settings from one environment into another. `old_value` and `new_value` are as for `feature_flag_environment_update`, with `from` and `to` |
+| `feature_flag_delete` | `feature_flag` | `DELETE /feature-flags/{id}`. When the flag had staging or development settings, `old_value` carries `environments`, each one's `is_active` and `rollout_percentage` |
 | `feature_flag_activate`, `feature_flag_deactivate` | `feature_flag` | `/activate`, `/deactivate`, when the status changes |
 | `toggle_enable`, `toggle_disable` | `feature_flag` | A flag is turned on or off (`/toggle`, `/enable`, `/disable`, or bulk `enable`/`disable`); `old_value` and `new_value` are the status |
 | `experiment_create` | `experiment` | `POST /experiments/`, `/clone` (`reason` names the source) |
@@ -410,7 +414,7 @@ Whether a change is kept when its entry cannot be written depends on where it is
 
 | Where | If the entry cannot be written |
 |-------|--------------------------------|
-| A feature flag created, changed, deleted, activated, deactivated, unarchived, toggled, enabled or disabled, or a bulk toggle | Nothing is saved and the response is `500` with a request ID; a bulk toggle saves none of its flags. Resend it once the problem is fixed |
+| A feature flag created, changed (in any environment), promoted, deleted, activated, deactivated, unarchived, toggled, enabled or disabled, or a bulk toggle | Nothing is saved and the response is `500` with a request ID; a bulk toggle saves none of its flags. Resend it once the problem is fixed |
 | Rollout schedule and stage changes (recorded on the flag) | Nothing is saved and the response is `500`; resend it once the problem is fixed |
 | Any other route (the other route actions above) | The change is kept and the response is `2xx`; there is no entry |
 | A superuser's change to a user's role, superuser flag or active status | Nothing is saved and the response is `500`; resend it once the problem is fixed |

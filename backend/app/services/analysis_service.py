@@ -3,7 +3,7 @@ import json
 import logging
 import math
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 from uuid import UUID
 
 import numpy as np
@@ -111,15 +111,7 @@ class AnalysisService:
             Dictionary containing experiment results data
         """
         # Get experiment with variants and metrics
-        experiment = (
-            self.db.query(Experiment)
-            .options(
-                joinedload(Experiment.variants),
-                joinedload(Experiment.metric_definitions),
-            )
-            .filter(Experiment.id == experiment_id)
-            .first()
-        )
+        experiment = self._load_experiment(experiment_id)
 
         if not experiment:
             raise ValueError(f"Experiment {experiment_id} not found")
@@ -187,7 +179,7 @@ class AnalysisService:
         # and the report, which all read this dict, give the same answer.
         # Like the check, the rule fails open: if it raises, ``srm`` is None
         # and the recommendation is the engine's.
-        srm = sample_ratio_check(self.db, experiment.id)
+        srm = self._sample_ratio_check(experiment)
         try:
             summary.update(recommendation_under_srm(summary, srm))
         except Exception as exc:
@@ -221,6 +213,101 @@ class AnalysisService:
             # The sample-ratio check behind the recommendation, or None.
             "srm": srm,
         }
+
+    def get_experiment_results_many(
+        self, experiment_ids: Iterable[UUID]
+    ) -> Dict[str, Optional[Dict[str, Any]]]:
+        """
+        The results of several experiments, read together (#1817).
+
+        Each is what ``get_experiment_results(id, include_bayesian=False)``
+        returns, but for the last digits of a number computed from per-user
+        sums of inexact values, under the experiment's stored confidence level
+        and correction method. ``results_batch`` says what is read together.
+
+        Args:
+            experiment_ids: the experiments' ids. A repeated id is answered
+                once, in the place it has first.
+
+        Returns:
+            ``{str(id): results}`` in the order of the ids. The results are
+            None where ``get_experiment_results`` raises ``ValueError`` (no
+            such experiment, no control variant), which is logged at INFO.
+            Any other exception is raised.
+        """
+        # Imported here: results_batch subclasses this service.
+        from backend.app.services.results_batch import results_many
+
+        return results_many(self.db, experiment_ids)
+
+    # ------------------------------------------------------------------
+    # What get_experiment_results reads from the database
+    # ------------------------------------------------------------------
+    # The five methods below, event_counts and value_totals are every read it
+    # makes with include_bayesian=False. results_batch.py overrides each of
+    # them with a read for several experiments at once; a read that goes
+    # through none of them runs once per experiment there.
+
+    def _load_experiment(self, experiment_id: Union[str, UUID]) -> Optional[Experiment]:
+        """The experiment with its variants and metrics, or None."""
+        return (
+            self.db.query(Experiment)
+            .options(
+                joinedload(Experiment.variants),
+                joinedload(Experiment.metric_definitions),
+            )
+            .filter(Experiment.id == experiment_id)
+            .first()
+        )
+
+    def _assignment_count(self, experiment_id: Any, variant_id: Any) -> int:
+        """How many users are assigned to the variant."""
+        return (
+            self.db.query(func.count(Assignment.id))
+            .filter(
+                Assignment.experiment_id == experiment_id,
+                Assignment.variant_id == variant_id,
+            )
+            .scalar()
+            or 0
+        )
+
+    def _converting_users(
+        self, experiment_id: Any, variant_id: Any, event_name: Optional[str]
+    ) -> int:
+        """Converting users of the variant (event_matching.py): a user with
+        several conversion events counts once, so conversions <= assignments."""
+        return count_converting_users(self.db, experiment_id, variant_id, event_name)
+
+    def _experiment_totals(self, experiment: Experiment) -> Tuple[int, int, int]:
+        """The experiment's users, events and converting users."""
+        # Get total number of users in experiment
+        total_users = (
+            self.db.query(func.count(Assignment.user_id.distinct()))
+            .filter(Assignment.experiment_id == experiment.id)
+            .scalar()
+            or 0
+        )
+
+        # Get total number of events
+        total_events = (
+            self.db.query(func.count(Event.id))
+            .filter(Event.experiment_id == experiment.id)
+            .scalar()
+            or 0
+        )
+
+        # Converting users across every metric (each user once)
+        total_conversions = count_converting_users_any(
+            self.db,
+            experiment.id,
+            (m.event_name for m in (experiment.metric_definitions or [])),
+        )
+        return total_users, total_events, total_conversions
+
+    def _sample_ratio_check(self, experiment: Experiment) -> Optional[Dict[str, Any]]:
+        """The sample-ratio check, or None (``sample_ratio_check``)."""
+        return sample_ratio_check(self.db, experiment.id)
 
     # ------------------------------------------------------------------
     # Mapping to the analytics results schema (schemas/results.py)
@@ -518,23 +605,13 @@ class AnalysisService:
         # Get assignment counts per variant
         assignments = {}
         for variant_id in variant_ids:
-            count = (
-                self.db.query(func.count(Assignment.id))
-                .filter(
-                    Assignment.experiment_id == experiment.id,
-                    Assignment.variant_id == variant_id,
-                )
-                .scalar()
-                or 0
-            )
-            assignments[variant_id] = count
+            assignments[variant_id] = self._assignment_count(experiment.id, variant_id)
 
-        # Converting users per variant (event_matching.py): a user with
-        # several conversion events counts once, so conversions <= assignments.
+        # Get converting users per variant
         conversions = {}
         for variant_id in variant_ids:
-            conversions[variant_id] = count_converting_users(
-                self.db, experiment.id, variant_id, metric.event_name
+            conversions[variant_id] = self._converting_users(
+                experiment.id, variant_id, metric.event_name
             )
 
         # Rates, intervals and Fisher p-values from the counts
@@ -588,27 +665,8 @@ class AnalysisService:
         else:
             duration_days = None
 
-        # Get total number of users in experiment
-        total_users = (
-            self.db.query(func.count(Assignment.user_id.distinct()))
-            .filter(Assignment.experiment_id == experiment.id)
-            .scalar()
-            or 0
-        )
-
-        # Get total number of events
-        total_events = (
-            self.db.query(func.count(Event.id))
-            .filter(Event.experiment_id == experiment.id)
-            .scalar()
-            or 0
-        )
-
-        # Converting users across every metric (each user once)
-        total_conversions = count_converting_users_any(
-            self.db,
-            experiment.id,
-            (m.event_name for m in (experiment.metric_definitions or [])),
+        total_users, total_events, total_conversions = self._experiment_totals(
+            experiment
         )
 
         # Return formatted summary

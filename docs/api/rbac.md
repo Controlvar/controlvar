@@ -46,7 +46,7 @@ Superusers (`is_superuser=True`) pass every permission check.
 | `experiment (list)` | Every built-in role already has it. |
 | `feature_flag (create)` | Create flags. |
 | `feature_flag (read)` | Every built-in role already has it. |
-| `feature_flag (update)` | Change any flag: on and off, targeting, values, rollout and rollout schedules, including bulk toggle. Also: create and use server-side SDK keys (API keys with the `sdk:ruleset` scope); assigning users in a batch with such a key also needs `experiment (update)`. |
+| `feature_flag (update)` | Change any flag: on and off, targeting, values, rollout and rollout schedules, including bulk toggle, and its settings in each environment and promoting them (beta). Also: create and use server-side SDK keys (API keys with the `sdk:ruleset` scope); assigning users in a batch with such a key also needs `experiment (update)`. |
 | `feature_flag (delete)` | Delete any flag. |
 | `feature_flag (list)` | Every built-in role already has it. |
 | `audit_log (read)` | Read the audit log, including other users' entries, its statistics and each item's history. Without it, Developer and Viewer users read only their own entries. It does not give the compliance audit events, reports or exports. |

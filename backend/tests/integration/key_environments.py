@@ -1,8 +1,8 @@
 """API keys and flag settings of each flag environment, for integration tests (#2011).
 
-No request can create a key outside production or configure a flag in one, so
-the tests write the rows: through the models, and a key of the previous release
-as it inserts one.
+The tests that use these write the rows: through the models, so a key can be
+one no request makes (``mcp:read`` outside production), and a key of the
+previous release as it inserts one.
 """
 
 from __future__ import annotations

@@ -197,9 +197,8 @@ test.describe("Accessibility Audits", () => {
       await expect(adminPage.getByTestId("flag-values-section")).toBeVisible({ timeout: 15_000 });
 
       // What a value flag adds: the header (its type and status) and the
-      // Values section. The rest of the flag page is every flag's, and its
-      // slate-400 "Last checked" and "0%"/"100%" fail colour contrast today
-      // (measured on this scan of the whole page), which is not this change's.
+      // Values section. The rest of the flag page is every flag's, and
+      // flag-environments.journey.spec.ts scans the whole of it.
       const results = await new AxeBuilder({ page: adminPage })
         .include('[data-testid="flag-header"]')
         .include('[data-testid="flag-values-section"]')
@@ -298,6 +297,8 @@ test.describe("Accessibility Audits", () => {
           prefix: "placehol",
           created_at: "2026-01-01T00:00:00Z",
           expires_at: null,
+          // The form's default; a key the API does not confirm is not shown.
+          environment: "production",
         }),
       });
     });

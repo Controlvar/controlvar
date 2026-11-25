@@ -82,7 +82,7 @@ AUDIT_VALUE_FIELDS: Dict[EntityType, Tuple[str, ...]] = {
         "bayesian_enabled",
     ),
     EntityType.USER: ("username", "role", "is_active", "is_superuser"),
-    EntityType.API_KEY: ("name", "scopes", "expires_at", "user_id"),
+    EntityType.API_KEY: ("name", "scopes", "expires_at", "user_id", "environment"),
     EntityType.HOLDOUT: (
         "name",
         "holdout_percentage",
@@ -191,6 +191,8 @@ WRITTEN_ACTION_TYPES: frozenset = frozenset(
         ActionType.FEATURE_FLAG_DELETE,
         ActionType.FEATURE_FLAG_ACTIVATE,
         ActionType.FEATURE_FLAG_DEACTIVATE,
+        ActionType.FEATURE_FLAG_ENVIRONMENT_UPDATE,
+        ActionType.FEATURE_FLAG_PROMOTE,
         ActionType.EXPERIMENT_CREATE,
         ActionType.EXPERIMENT_UPDATE,
         ActionType.EXPERIMENT_DELETE,

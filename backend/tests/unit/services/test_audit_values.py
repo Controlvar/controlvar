@@ -306,10 +306,16 @@ def test_nothing_changed_records_no_values():
 
 def test_identity_is_the_value_fields_only():
     row = SimpleNamespace(
-        name="k1", scopes="sdk:ruleset", expires_at=None, user_id=uuid4(), key="hash"
+        name="k1",
+        scopes="sdk:ruleset",
+        expires_at=None,
+        user_id=uuid4(),
+        environment="staging",
+        key="hash",
     )
     identity = audit_identity(audit_snapshot(EntityType.API_KEY, row))
-    assert set(identity) == {"name", "scopes", "expires_at", "user_id"}
+    assert set(identity) == {"name", "scopes", "expires_at", "user_id", "environment"}
+    assert identity["environment"] == "staging"
     assert "hash" not in json.dumps(identity)
 
 

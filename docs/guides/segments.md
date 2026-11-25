@@ -224,7 +224,8 @@ curl -s -X DELETE localhost:8000/api/v1/segments/$SEGMENT \
 It prints `{"code":"segment_in_use","flags":1}`. The full answer is
 `{"detail": {"code": "segment_in_use", "message", "feature_flags": [{"id", "key", "name"}],
 "experiments": [{"id", "key", "name", "status"}]}}`. Remove the segment from those rules, or
-archive the flag, then archive the segment.
+archive the flag, then archive the segment. A flag whose staging or development rules (beta) use
+the segment is listed too, with `environments`, every environment whose rules do.
 
 ## Limits
 

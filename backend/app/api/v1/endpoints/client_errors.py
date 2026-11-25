@@ -350,9 +350,9 @@ async def report_client_error(
     Only a report sent with a server-side key (an API key with the
     ``sdk:ruleset`` scope, whose owner can change feature flags) counts toward
     the flag's ``error_rate`` (errors / flag evaluations in the monitoring
-    window) and automatic rollback. A report sent with any other key is stored
-    the same way and answers 201, but is not counted; the flag's safety check
-    shows it as ``uncounted_error_count``.
+    window) and automatic rollback. A report sent with any other production key
+    is stored the same way and answers 201, but is not counted; the flag's safety
+    check shows it as ``uncounted_error_count``.
 
     **Authentication**: Requires a valid API key in the X-API-Key header.
 

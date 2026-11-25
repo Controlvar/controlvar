@@ -306,8 +306,8 @@ def seed_targeted_flag(db, admin_user) -> FeatureFlag:
 def seed_staging_settings(db) -> None:
     """Staging's settings for the flags in :data:`STAGING_SETTINGS` (#2011).
 
-    Existing ones are put back to exactly that. No request configures a flag
-    outside production yet, so the rows are written here.
+    Existing ones are put back to exactly that. The rows are written here
+    through the model, as the flags are.
     """
     for key, (is_active, percentage) in STAGING_SETTINGS.items():
         flag = db.query(FeatureFlag).filter(FeatureFlag.key == key).one()

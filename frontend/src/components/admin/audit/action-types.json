@@ -15,6 +15,8 @@
   "feature_flag_create",
   "feature_flag_deactivate",
   "feature_flag_delete",
+  "feature_flag_environment_update",
+  "feature_flag_promote",
   "feature_flag_update",
   "holdout_activate",
   "holdout_create",

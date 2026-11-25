@@ -9,9 +9,10 @@ times below are read from the rows it builds, with the database mocked.
 from __future__ import annotations
 
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -33,6 +34,8 @@ from backend.app.schemas.export import (
     ExportRequest,
     PlatformOverviewReport,
 )
+from backend.app.services import results_batch
+from backend.app.services.analysis_service import AnalysisService
 from backend.app.services.export_service import ExportService
 from backend.app.services.sufficient_stats_analysis import (
     BinomialVariant,
@@ -113,6 +116,24 @@ METRIC = SimpleNamespace(
 )
 
 
+@contextmanager
+def _analysis_answering(answer):
+    """``get_experiment_results`` answers ``answer(service, id, ...)``.
+
+    The batch that asks it is the real one, and reads nothing from the
+    database.
+    """
+    with (
+        patch.object(
+            results_batch, "load_group", lambda db, ids: results_batch.GroupReads()
+        ),
+        patch.object(
+            AnalysisService, "get_experiment_results", autospec=True, side_effect=answer
+        ) as analysis,
+    ):
+        yield analysis
+
+
 def _counts(treatment_a_conversions=131):
     return [
         (BinomialVariant("control", "Control", True), 1000, 100),
@@ -138,15 +159,12 @@ def test_the_variant_columns_are_the_results_numbers_with_the_stored_settings():
     experiment = SimpleNamespace(id=uuid.uuid4(), name="Checkout", variants=variants)
     results = {"metrics": [metric], "summary": {}}
 
-    with patch("backend.app.services.export_service.AnalysisService") as analysis:
-        analysis.return_value.get_experiment_results.return_value = results
+    with _analysis_answering(lambda *_args, **_kwargs: results) as analysis:
         rows = ExportService(MagicMock())._variants_to_rows([experiment])
 
     # No correction method or confidence level is passed: the results
     # computation uses the experiment's stored ones.
-    analysis.return_value.get_experiment_results.assert_called_once_with(
-        experiment.id, include_bayesian=False
-    )
+    analysis.assert_called_once_with(ANY, experiment.id, include_bayesian=False)
     by_id = {v["variant_id"]: v for v in metric["variants"]}
     for row in rows:
         source = by_id[row.variant_id]
@@ -335,10 +353,7 @@ def test_the_overview_fields():
     db = MagicMock()
     db.query.side_effect = lambda model: _Query(tables[model.__name__])
 
-    with patch("backend.app.services.export_service.AnalysisService") as analysis:
-        analysis.return_value.get_experiment_results.side_effect = (
-            lambda experiment_id, **_: results[experiment_id]
-        )
+    with _analysis_answering(lambda _service, i, **_kwargs: results[i]):
         report = ExportService(db).generate_platform_overview()
 
     assert report.period_start is None and report.period_end is None

@@ -49,9 +49,11 @@
  *   - Beta operations may change without a snapshot update, so an unread key
  *     on a beta operation is only warned on, never failed. The beta targets
  *     today are `GET /api/v1/holdout/{holdout_id}/results` (both profiles;
- *     `services/holdouts.test.ts` pins its exact `query: {metric}`) and
- *     `GET /api/v1/auth/sso/login` (full profile); the beta target list is
- *     asserted exactly so a new one is noticed.
+ *     `services/holdouts.test.ts` pins its exact `query: {metric}`),
+ *     `GET /api/v1/environments/{environment}/feature-flag-settings` (both
+ *     profiles; `services/featureFlags.test.ts` pins its repeated `flag_id`)
+ *     and `GET /api/v1/auth/sso/login` (full profile); the beta target list
+ *     is asserted exactly so a new one is noticed.
  *   - One call's path matches two operations and is resolved by the exact,
  *     one-entry `DISAMBIGUATE` table below; nothing else is.
  *   - An options object passed as a variable is refused, but an options-level
@@ -106,6 +108,7 @@ const CORE_CALLS = [
   'services/experiments.ts DELETE /api/v1/experiments/{experiment_id}',
   'services/experiments.ts GET /api/v1/experiments/',
   'services/experiments.ts GET /api/v1/experiments/analysis/sample-size',
+  'services/featureFlags.ts GET /api/v1/environments/{environment}/feature-flag-settings',
   'services/featureFlags.ts GET /api/v1/feature-flags/',
   'services/featureFlags.ts GET /api/v1/rollout-schedules/',
   'services/holdouts.ts GET /api/v1/holdout/{holdout_id}/results',
@@ -117,7 +120,7 @@ const CORE_CALLS = [
 ];
 const FULL_CALLS = [...CORE_CALLS, 'modules/frontend/src/services/sso.ts GET /api/v1/auth/sso/login'].sort();
 const EXPECTED_CALLS = PROFILE === 'core' ? [...CORE_CALLS].sort() : FULL_CALLS;
-const EXPECTED_COUNT = PROFILE === 'core' ? 17 : 18;
+const EXPECTED_COUNT = PROFILE === 'core' ? 18 : 19;
 
 /**
  * Calls the matcher reads as more than one operation, and the one each means
@@ -142,11 +145,13 @@ const DISAMBIGUATE: Record<string, string> = {
 const EXPECTED_BETA_TARGETS =
   PROFILE === 'core'
     ? [
+        'GET /api/v1/environments/{environment}/feature-flag-settings',
         'GET /api/v1/holdout/{holdout_id}/results',
         'GET /api/v1/results/{experiment_id}/segments/{segment_id}',
       ]
     : [
         'GET /api/v1/auth/sso/login',
+        'GET /api/v1/environments/{environment}/feature-flag-settings',
         'GET /api/v1/holdout/{holdout_id}/results',
         'GET /api/v1/results/{experiment_id}/segments/{segment_id}',
       ];

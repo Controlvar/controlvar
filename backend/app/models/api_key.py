@@ -66,7 +66,7 @@ class APIKey(Base, BaseModel):
     # key. ``server_default`` is load-bearing: the previous release inserts
     # keys without naming this column, and the database fills ``production``.
     # The routes that take a key read it (backend/app/api/key_environment.py).
-    # No request sets it yet.
+    # The create request sets it; no request changes it.
     environment = Column(
         String(32),
         nullable=False,
@@ -148,7 +148,14 @@ class APIKey(Base, BaseModel):
 
     @classmethod
     def create_for_user(
-        cls, db_session, user_id, name, description=None, scopes=None, expires_at=None
+        cls,
+        db_session,
+        user_id,
+        name,
+        description=None,
+        scopes=None,
+        expires_at=None,
+        environment="production",
     ):
         """Create a new API key for a user and return (model, plaintext_key)."""
         from backend.app.core.security import hash_api_key
@@ -162,6 +169,7 @@ class APIKey(Base, BaseModel):
             description=description,
             scopes=scopes,
             expires_at=expires_at,
+            environment=environment,
         )
         db_session.add(api_key)
         db_session.commit()

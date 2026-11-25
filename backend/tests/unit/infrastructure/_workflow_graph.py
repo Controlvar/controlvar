@@ -464,13 +464,20 @@ def needs_of(job: Dict[str, Any]) -> List[str]:
 
 
 def reported_names(path: Path) -> Dict[str, Set[str]]:
-    """job id -> every check name that job reports, for any head-commit event.
+    """job id -> every check name that job reports, for any head-commit event
+    the workflow runs on.
 
     A job with no ``name:`` reports under its id (``integration-tests``), so
-    reading ``job["name"]`` misses it; this reads what GitHub shows.
+    reading ``job["name"]`` misses it; this reads what GitHub shows. A
+    workflow that runs for no head-commit event reports nothing there, as
+    head_commit_producers reads it: nightly-qa.yml's ``Unit Tests`` summary
+    runs on a schedule and by hand, and is not the pull request's check.
     """
     names: Dict[str, Set[str]] = {}
+    workflow = load(path)
     for event in HEAD_COMMIT_EVENTS:
+        if not fires(workflow, event):
+            continue
         for job_id, name in check_names(path, event):
             if not isinstance(name, Unresolved):
                 names.setdefault(job_id, set()).add(name)

@@ -119,9 +119,12 @@ def test_the_compliance_tag_says_what_writes_an_event():
 
 def test_flag_status_changes_and_experiment_lifecycle_write_no_event():
     by_function = {(path, fn) for path, fn, *_ in _writes()}
+    # An update's trail is written in flag_update_record, which PUT
+    # /feature-flags/{id} shares with the routes that change a flag's
+    # production settings (#2011).
     assert {fn for path, fn in by_function if path == FLAGS} == {
         "create_feature_flag",
-        "update_feature_flag",
+        "flag_update_record",
         "delete_feature_flag",
     }
     # PUT /experiments/{id}'s trail is written in _apply_experiment_update,

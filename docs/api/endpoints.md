@@ -1054,6 +1054,40 @@ Each 400 carries the detail `This flag is archived. Unarchive it before turning 
 - **Response**: 200 OK, the flag (the same shape as `GET /api/v1/feature-flags/{flag_id}`)
 - **Errors**: 403 without permission to change flags, 404 for an unknown flag
 
+### Flag environments (beta)
+A flag has settings of its own in `production`, `staging` and `development`: whether it is on,
+its rollout percentage and its targeting rules. Production's are the flag's own. In staging and
+development a flag is off until someone configures it there.
+
+| Endpoint | What it does |
+|---|---|
+| `GET /api/v1/environments` | The three environments |
+| `GET /api/v1/feature-flags/{flag_id}/environments` | The flag's settings in each |
+| `GET /api/v1/feature-flags/{flag_id}/environments/{environment}` | Its settings in one |
+| `GET /api/v1/environments/{environment}/feature-flag-settings?flag_id={id}` | Several flags' settings in one: `flag_id` 1 to 100 times; an id that names no flag has no entry |
+| `PUT /api/v1/feature-flags/{flag_id}/environments/{environment}` | Change its settings in one |
+| `POST /api/v1/feature-flags/{flag_id}/environments/{target}/promote` | Copy its settings into `target` from the environment the body names |
+
+- **Headers**: Authorization: Bearer {token}
+- **Permissions**: any signed-in user may read. Changing and promoting need ADMIN or DEVELOPER,
+  and in the full profile anyone whose custom role or direct grant gives
+  `feature_flag (update)`; anyone else gets 403
+- **Settings**: `{"environment", "status", "is_active", "rollout_percentage", "targeting_rules", "configured", "updated_at"}`.
+  `configured` is `false` for a flag nobody has configured in staging or development. An
+  archived flag's `status` is `archived` in every environment
+- **PUT body**: `{"is_active", "rollout_percentage", "targeting_rules"}`, each optional; only the
+  fields sent change, and `targeting_rules: null` clears the rules. A change to `production` is
+  the one `PUT /api/v1/feature-flags/{flag_id}` makes
+- **Promote body**: `{"from": environment}`. `is_active`, `rollout_percentage` and
+  `targeting_rules` are copied, all three together, and nothing else: not the flag's value type
+  and values, its rollout schedules or its safety configuration
+- **Errors**: 400 for `is_active: true` on an archived flag; 403 without permission to change
+  flags; 404 for an unknown flag; 422 for a name that is not an environment, for a field the
+  routes do not read, for rules a flag update refuses, or for `from` naming the target; 500 when
+  the change cannot be saved with its audit entry, and then nothing is changed
+- Archiving a flag with bulk toggle turns it off in staging and development too; unarchiving it
+  leaves it off there
+
 ## Tracking Endpoints
 
 All tracking endpoints use API-key authentication (`X-API-Key`). They address experiments and flags by
@@ -1153,8 +1187,9 @@ their public `key`, except `POST /api/v1/tracking/events`, which takes ids. They
 |---|---|---|
 | 401 | no key | `API key missing` |
 | 401 | an unknown, expired or revoked key | `Invalid API Key` |
+| 401 | the key's owner is inactive | `Invalid API Key` |
 | 403 | the key lacks the scope | `This API key does not have the 'sdk:ruleset' scope. Create a key with the 'sdk:ruleset' scope for server-side SDK use.` |
-| 403 | the key's owner can no longer change feature flags: inactive, or given `feature_flag (update)` neither by their role nor, in the full profile, by a custom role or direct grant | `This key's owner can no longer change feature flags, so the key is refused for server-side SDK use.` |
+| 403 | the key's owner can no longer change feature flags: given `feature_flag (update)` neither by their role nor, in the full profile, by a custom role or direct grant | `This key's owner can no longer change feature flags, so the key is refused for server-side SDK use.` |
 | 403 | the key's owner can change feature flags but not experiments; nobody is assigned | `This key's owner cannot change experiments, so the key cannot assign users in a batch, and nobody was assigned. Use a server-side key whose owner can change experiments.` |
 | 404 | no ACTIVE experiment has that key | `Active experiment with key 'spring-email' not found` |
 | 409 | the experiment was paused, completed or deleted (or its variants changed) during the request | `The experiment changed during the request. Users earlier in the list may already be assigned; resending the same request is safe.` |
@@ -2269,7 +2304,10 @@ experiment balances within the segment
             "experiments": [{"id": "...", "key": "pricing-page", "name": "Pricing page", "status": "paused"}]}}
 ```
 
-A stored row that mentions the segment's id but whose rules cannot be read is listed too.
+A stored row that mentions the segment's id but whose rules cannot be read is listed too. So is
+a flag whose staging or development rules name the segment
+([Flag environments](#flag-environments-beta)); it carries `environments`, every environment
+whose rules do.
 
 #### Upgrading: segment rules
 

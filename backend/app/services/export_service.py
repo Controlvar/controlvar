@@ -6,7 +6,6 @@ EP-020: Data Export & Reporting
 import csv
 import io
 import json
-import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 from uuid import UUID
@@ -28,8 +27,6 @@ from backend.app.schemas.export import (
     VariantExportRow,
 )
 from backend.app.services.analysis_service import AnalysisService
-
-logger = logging.getLogger(__name__)
 
 # A CSV cell whose text begins with one of these is written with a leading
 # single quote, so that a spreadsheet opening the file shows it as text.
@@ -294,6 +291,7 @@ class ExportService:
         self, experiments: Sequence[Experiment]
     ) -> List[ExperimentExportRow]:
         """Experiment rows, with the assignment and event totals counted in SQL."""
+        self._prefetch_results(experiments)
         ids = [exp.id for exp in experiments]
         assignments = self._count_by(Assignment.experiment_id, ids)
         events = self._count_by(Event.experiment_id, ids)
@@ -322,6 +320,7 @@ class ExportService:
         duration or custom metric): its ``mean`` is a value per user, not a
         rate.
         """
+        self._prefetch_results(experiments)
         rows: List[VariantExportRow] = []
         for exp in experiments:
             primary = self._primary_metric(self._results_for(exp))
@@ -352,18 +351,18 @@ class ExportService:
                 )
         return rows
 
+    def _prefetch_results(self, experiments: Sequence[Experiment]) -> None:
+        """Read the results this service does not have yet, all together."""
+        missing = [exp.id for exp in experiments if str(exp.id) not in self._results]
+        if missing:
+            self._results.update(
+                AnalysisService(self.db).get_experiment_results_many(missing)
+            )
+
     def _results_for(self, exp: Experiment) -> Optional[Dict[str, Any]]:
         """``get_experiment_results`` for one experiment, or None if it has none."""
-        key = str(exp.id)
-        if key not in self._results:
-            try:
-                self._results[key] = AnalysisService(self.db).get_experiment_results(
-                    exp.id, include_bayesian=False
-                )
-            except ValueError as exc:
-                logger.info("Export: no results for experiment %s: %s", key, exc)
-                self._results[key] = None
-        return self._results[key]
+        self._prefetch_results([exp])
+        return self._results[str(exp.id)]
 
     @staticmethod
     def _primary_metric(
@@ -608,9 +607,11 @@ class ExportService:
             query = query.filter(Experiment.created_at >= start_date)
         if end_date:
             query = query.filter(Experiment.created_at <= end_date)
+        experiments = query.all()
+        self._prefetch_results(experiments)
         return sum(
             1
-            for exp in query.all()
+            for exp in experiments
             if self._winner_name(exp, self._results_for(exp)) is not None
         )
 

@@ -465,6 +465,14 @@ def test_the_shards_are_a_static_matrix_that_does_not_fail_fast():
     assert "if" not in _job(), _job().get("if")
 
 
+def test_a_shard_gets_45_minutes():
+    """Each shard job has `timeout-minutes: 45`, the value of the nightly's
+    `integration-shard` job. At 30, shard 3 was cancelled five times out of 28
+    finished attempts between 2026-11-24 11:49Z and 2026-11-25 05:00Z, at 30.2
+    to 30.3 minutes, while the 23 that finished took 19.6 to 29.8 minutes."""
+    assert _job().get("timeout-minutes") == 45, _job().get("timeout-minutes")
+
+
 def test_the_shard_env_is_on_the_suite_step_only():
     """F6: the shard variables on the integration suite step and nowhere else.
     In the job's or the workflow's env they would also slice the e2e and

@@ -23,6 +23,7 @@ from backend.app.api.v1.endpoints import (
     experiments,
     export,
     feature_flags,
+    flag_environments,
     flag_evaluations,
     global_holdout,
     interactions,
@@ -104,6 +105,17 @@ def register_core_routers(router: APIRouter) -> APIRouter:
     )
     router.include_router(
         feature_flags.router, prefix="/feature-flags", tags=["Feature Flags"]
+    )
+    # #2011: a flag's settings per environment (beta). After the flag routes, so
+    # that /feature-flags/user/{user_id} and /feature-flags/evaluate/{flag_key}
+    # answer every path they answered before.
+    router.include_router(
+        flag_environments.router, prefix="/feature-flags", tags=["Feature Flags"]
+    )
+    router.include_router(
+        flag_environments.environments_router,
+        prefix="/environments",
+        tags=["Feature Flags"],
     )
     router.include_router(admin.router, prefix="/admin", tags=["Administration"])
     router.include_router(

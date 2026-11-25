@@ -16,6 +16,17 @@
             ],
             "title": "Description"
           },
+          "environment": {
+            "default": "production",
+            "description": "The flag environment the key works in. It cannot be changed later: create another key and delete this one.",
+            "enum": [
+              "production",
+              "staging",
+              "development"
+            ],
+            "title": "Environment",
+            "type": "string"
+          },
           "expires_at": {
             "anyOf": [
               {
@@ -64,6 +75,16 @@
             "title": "Created At",
             "type": "string"
           },
+          "environment": {
+            "description": "The flag environment the key works in.",
+            "enum": [
+              "production",
+              "staging",
+              "development"
+            ],
+            "title": "Environment",
+            "type": "string"
+          },
           "expires_at": {
             "anyOf": [
               {
@@ -99,7 +120,8 @@
           "name",
           "key",
           "prefix",
-          "created_at"
+          "created_at",
+          "environment"
         ],
         "title": "APIKeyCreated",
         "type": "object"
@@ -122,6 +144,16 @@
               }
             ],
             "title": "Description"
+          },
+          "environment": {
+            "description": "The flag environment the key works in.",
+            "enum": [
+              "production",
+              "staging",
+              "development"
+            ],
+            "title": "Environment",
+            "type": "string"
           },
           "expires_at": {
             "anyOf": [
@@ -179,7 +211,8 @@
           "name",
           "is_active",
           "user_id",
-          "created_at"
+          "created_at",
+          "environment"
         ],
         "title": "APIKeyRead",
         "type": "object"
@@ -5652,6 +5685,34 @@
         "title": "EffectivePermissionsResponse",
         "type": "object"
       },
+      "EnvironmentFlagSettings": {
+        "description": "Several flags in one environment, by flag id.",
+        "properties": {
+          "environment": {
+            "enum": [
+              "production",
+              "staging",
+              "development"
+            ],
+            "title": "Environment",
+            "type": "string"
+          },
+          "settings": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FlagEnvironmentSettings"
+            },
+            "description": "One entry per requested flag that exists, keyed by its id. An id that names no flag has no entry.",
+            "title": "Settings",
+            "type": "object"
+          }
+        },
+        "required": [
+          "environment",
+          "settings"
+        ],
+        "title": "EnvironmentFlagSettings",
+        "type": "object"
+      },
       "ErrorLogResponse": {
         "description": "Schema for error log response.",
         "properties": {
@@ -8811,6 +8872,167 @@
         "title": "FlagChangeHistoryResponse",
         "type": "object"
       },
+      "FlagEnvironmentRead": {
+        "description": "One of the installation's three flag environments.",
+        "properties": {
+          "default": {
+            "description": "True for production, the environment a flag's own settings belong to.",
+            "title": "Default",
+            "type": "boolean"
+          },
+          "key": {
+            "description": "The environment's name.",
+            "enum": [
+              "production",
+              "staging",
+              "development"
+            ],
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "description": "The name a reader sees, such as `Staging`.",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "default"
+        ],
+        "title": "FlagEnvironmentRead",
+        "type": "object"
+      },
+      "FlagEnvironmentSettings": {
+        "description": "What a flag serves in one environment.",
+        "properties": {
+          "configured": {
+            "description": "False when nobody has set the flag up in this environment: it is off there, at 0% with no rules. Always true for production.",
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "environment": {
+            "enum": [
+              "production",
+              "staging",
+              "development"
+            ],
+            "title": "Environment",
+            "type": "string"
+          },
+          "is_active": {
+            "description": "True exactly when status is \"active\".",
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "rollout_percentage": {
+            "title": "Rollout Percentage",
+            "type": "integer"
+          },
+          "status": {
+            "description": "`archived` in every environment when the flag is archived; otherwise `active` or `inactive` in this one.",
+            "enum": [
+              "active",
+              "inactive",
+              "archived"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "targeting_rules": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The environment's targeting rules, as stored.",
+            "title": "Targeting Rules"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When these settings last changed; the flag's own `updated_at` for production, null when not configured.",
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "environment",
+          "status",
+          "is_active",
+          "rollout_percentage",
+          "targeting_rules",
+          "configured",
+          "updated_at"
+        ],
+        "title": "FlagEnvironmentSettings",
+        "type": "object"
+      },
+      "FlagEnvironmentUpdate": {
+        "additionalProperties": false,
+        "description": "The settings of a flag in one environment to change.\n\nOnly the fields sent change. ``is_active`` and ``rollout_percentage``\nrefuse null; a null ``targeting_rules`` clears the rules. A field not\nlisted here answers 422.",
+        "properties": {
+          "is_active": {
+            "description": "Turn the flag on or off in this environment.",
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "rollout_percentage": {
+            "maximum": 100,
+            "minimum": 0,
+            "title": "Rollout Percentage",
+            "type": "integer"
+          },
+          "targeting_rules": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who gets the flag: the dashboard rule builder's shape ({\"logical_operator\", \"groups\": [{\"logical_operator\", \"conditions\": [{\"attribute\", \"operator\", \"value\"}]}]}) or the native rules shape ({\"rules\": [...]}). null, {} and {\"groups\": []} mean no rules. Rules the flag evaluator would not apply as written answer 422, with the place and the reason in the message, for example \"groups[0].conditions[1].operator: unknown operator\". A list of rules is refused. Stored as sent.",
+            "title": "Targeting Rules"
+          }
+        },
+        "title": "FlagEnvironmentUpdate",
+        "type": "object"
+      },
+      "FlagEnvironments": {
+        "description": "A flag in every environment, production first.",
+        "properties": {
+          "environments": {
+            "items": {
+              "$ref": "#/components/schemas/FlagEnvironmentSettings"
+            },
+            "title": "Environments",
+            "type": "array"
+          },
+          "flag_id": {
+            "format": "uuid",
+            "title": "Flag Id",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "flag_id",
+          "key",
+          "environments"
+        ],
+        "title": "FlagEnvironments",
+        "type": "object"
+      },
       "FlagEvaluationCount": {
         "description": "How many times one flag was evaluated locally in one window.",
         "properties": {
@@ -8983,6 +9205,27 @@
           "user_id"
         ],
         "title": "FlagEvaluationRequest",
+        "type": "object"
+      },
+      "FlagPromotion": {
+        "additionalProperties": false,
+        "description": "The environment to copy a flag's settings from.",
+        "properties": {
+          "from": {
+            "description": "The environment whose settings are copied. It must not be the one they are copied into.",
+            "enum": [
+              "production",
+              "staging",
+              "development"
+            ],
+            "title": "From",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from"
+        ],
+        "title": "FlagPromotion",
         "type": "object"
       },
       "ForgotPasswordRequest": {
@@ -11975,7 +12218,7 @@
                 "type": "null"
               }
             ],
-            "description": "Errors that count toward the safety check, as a percentage of the aggregated flag evaluations in the period (it can exceed 100 when errors outnumber them); null when the period has no aggregated flag evaluations. Errors are counted by the safety check's rule: flag evaluations that failed on the server count, and only a report sent with a server-side key (an API key with the ``sdk:ruleset`` scope, whose owner can change feature flags) counts; the reports that do not count are in ``uncounted_error_count``. The value still differs from the safety check's ``error_rate`` in three ways: the period is ``start_date`` to ``end_date`` (by default the 30 days before now), not the last 15 minutes; the denominator is the aggregated flag evaluations of ``period``, not the raw flag evaluations; and the unit is a percentage, not a fraction.",
+            "description": "Errors that count toward the safety check, as a percentage of the aggregated flag evaluations in the period (it can exceed 100 when errors outnumber them); null when the period has no aggregated flag evaluations. Errors are counted by the safety check's rule: flag evaluations that failed on the server count, and only a report sent with a server-side key (an API key with the ``sdk:ruleset`` scope, whose owner can change feature flags) counts; the reports that do not count are in ``uncounted_error_count``. Errors with a staging or development key are in neither. The value still differs from the safety check's ``error_rate`` in three ways: the period is ``start_date`` to ``end_date`` (by default the 30 days before now), not the last 15 minutes; the denominator is the aggregated flag evaluations of ``period``, not the raw flag evaluations; and the unit is a percentage, not a fraction.",
             "title": "Error Rate"
           },
           "rule_match_rate": {
@@ -11996,7 +12239,7 @@
             "type": "integer"
           },
           "uncounted_error_count": {
-            "description": "Error reports in the period that are stored but do not count toward ``error_rate`` or the safety check: those sent with a key that is not a server-side key, and those stored before 0.29.0. The safety check shows the same reports in its own window as ``details.uncounted_error_count``.",
+            "description": "Error reports in the period that are stored but do not count toward ``error_rate`` or the safety check: those sent with a key that is not a server-side key, and those stored before 0.29.0, but none sent with a staging or development key. The safety check shows the same reports in its own window as ``details.uncounted_error_count``.",
             "minimum": 0,
             "title": "Uncounted Error Count",
             "type": "integer"
@@ -25089,6 +25332,120 @@
         ]
       }
     },
+    "/api/v1/environments": {
+      "get": {
+        "description": "List the flag environments (beta).\n\nThe set is fixed: production, staging and development. Production is the\ndefault, where a flag's own settings are.",
+        "operationId": "list_environments_api_v1_environments_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FlagEnvironmentRead"
+                  },
+                  "title": "Response List Environments Api V1 Environments Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "The three environments, the default first"
+          },
+          "401": {
+            "description": "Authentication failed"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List the flag environments (beta)",
+        "tags": [
+          "Feature Flags"
+        ],
+        "x-stability": "beta"
+      }
+    },
+    "/api/v1/environments/{environment}/feature-flag-settings": {
+      "get": {
+        "description": "Get several feature flags' settings in one environment (beta).\n\nOne entry per flag that exists; a flag nobody has configured in staging or\ndevelopment answers `configured: false` and off.\n\nRaises:\n    HTTPException 403: If the user may not list feature flags\n    HTTPException 422: `flag_id` is missing, not an id, or given more than\n        100 times, or the environment is not valid",
+        "operationId": "get_environment_flag_settings_api_v1_environments__environment__feature_flag_settings_get",
+        "parameters": [
+          {
+            "description": "The environment",
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "description": "The environment",
+              "enum": [
+                "production",
+                "staging",
+                "development"
+              ],
+              "title": "Environment",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The ID of a feature flag; 1 to 100 times.",
+            "in": "query",
+            "name": "flag_id",
+            "required": true,
+            "schema": {
+              "description": "The ID of a feature flag; 1 to 100 times.",
+              "items": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "maxItems": 100,
+              "minItems": 1,
+              "title": "Flag Id",
+              "type": "array"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvironmentFlagSettings"
+                }
+              }
+            },
+            "description": "Each flag's settings in the environment, by flag id"
+          },
+          "401": {
+            "description": "Authentication failed"
+          },
+          "403": {
+            "description": "Not enough permissions to list feature flags"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get several feature flags' settings in one environment (beta)",
+        "tags": [
+          "Feature Flags"
+        ],
+        "x-stability": "beta"
+      }
+    },
     "/api/v1/etl/crawler/run": {
       "post": {
         "description": "Start the Glue crawler to discover new partitions and update the catalog. Requires ADMIN role. `crawler_name` may be omitted; if given it must be the configured `GLUE_CRAWLER_NAME`, and any other name answers 404 \"Unknown crawler\".",
@@ -29585,6 +29942,327 @@
         ]
       }
     },
+    "/api/v1/feature-flags/{flag_id}/environments": {
+      "get": {
+        "description": "Get a feature flag's settings in every environment (beta).\n\nProduction's are the flag's own. In staging and development a flag nobody\nhas configured is off: `configured` is false, `is_active` is false, the\npercentage is 0 and there are no rules.\n\nRaises:\n    HTTPException 404: No feature flag has this id",
+        "operationId": "get_flag_environments_api_v1_feature_flags__flag_id__environments_get",
+        "parameters": [
+          {
+            "description": "The ID of the feature flag",
+            "in": "path",
+            "name": "flag_id",
+            "required": true,
+            "schema": {
+              "description": "The ID of the feature flag",
+              "format": "uuid",
+              "title": "Flag Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlagEnvironments"
+                }
+              }
+            },
+            "description": "The flag's settings in production, staging and development"
+          },
+          "401": {
+            "description": "Authentication failed"
+          },
+          "403": {
+            "description": "Not enough permissions to access this feature flag"
+          },
+          "404": {
+            "description": "No feature flag has this id"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get a feature flag's settings in every environment (beta)",
+        "tags": [
+          "Feature Flags"
+        ],
+        "x-stability": "beta"
+      }
+    },
+    "/api/v1/feature-flags/{flag_id}/environments/{environment}": {
+      "get": {
+        "description": "Get a feature flag's settings in one environment (beta).\n\nRaises:\n    HTTPException 404: No feature flag has this id\n    HTTPException 422: The environment is not `production`, `staging` or\n        `development`",
+        "operationId": "get_flag_environment_api_v1_feature_flags__flag_id__environments__environment__get",
+        "parameters": [
+          {
+            "description": "The ID of the feature flag",
+            "in": "path",
+            "name": "flag_id",
+            "required": true,
+            "schema": {
+              "description": "The ID of the feature flag",
+              "format": "uuid",
+              "title": "Flag Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The environment",
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "description": "The environment",
+              "enum": [
+                "production",
+                "staging",
+                "development"
+              ],
+              "title": "Environment",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlagEnvironmentSettings"
+                }
+              }
+            },
+            "description": "The flag's settings in the environment"
+          },
+          "401": {
+            "description": "Authentication failed"
+          },
+          "403": {
+            "description": "Not enough permissions to access this feature flag"
+          },
+          "404": {
+            "description": "No feature flag has this id"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get a feature flag's settings in one environment (beta)",
+        "tags": [
+          "Feature Flags"
+        ],
+        "x-stability": "beta"
+      },
+      "put": {
+        "description": "Change a feature flag's settings in one environment (beta).\n\nOnly the fields sent change, and only in this environment: `is_active`,\n`rollout_percentage` (0 to 100) and `targeting_rules`, which null clears.\nAn empty body changes nothing. An unknown field answers 422, and so does\nan explicit null on `is_active` or `rollout_percentage`.\n\n`targeting_rules` the flag evaluator would not apply as written, or that\nname a segment that cannot be used, answer 422, as on a flag update. An\narchived flag sent `is_active: true` answers 400, in every environment.\n\nThe change to production is the same as `PUT /feature-flags/{id}`.\n\nThe change and its audit entry are saved together: if the entry cannot be\nwritten, nothing is changed and the request answers 500.\n\n**Permissions**: ADMIN and DEVELOPER may change any flag, and in the full\nprofile so may anyone whose custom role or direct grant gives\nfeature_flag (update); anyone else gets 403.\n\nRaises:\n    HTTPException 400: `is_active: true` on an archived flag\n    HTTPException 403: If the user doesn't have permission to update this feature flag\n    HTTPException 404: No feature flag has this id\n    HTTPException 422: The environment or the body is not valid\n    HTTPException 500: Nothing was changed",
+        "operationId": "update_flag_environment_api_v1_feature_flags__flag_id__environments__environment__put",
+        "parameters": [
+          {
+            "description": "The ID of the feature flag",
+            "in": "path",
+            "name": "flag_id",
+            "required": true,
+            "schema": {
+              "description": "The ID of the feature flag",
+              "format": "uuid",
+              "title": "Flag Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The environment to change; the others are not",
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "description": "The environment to change; the others are not",
+              "enum": [
+                "production",
+                "staging",
+                "development"
+              ],
+              "title": "Environment",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FlagEnvironmentUpdate",
+                "description": "The settings to change"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlagEnvironmentSettings"
+                }
+              }
+            },
+            "description": "The flag's settings in the environment, as changed"
+          },
+          "400": {
+            "description": "The flag is archived: unarchive it before turning it on"
+          },
+          "401": {
+            "description": "Authentication failed"
+          },
+          "403": {
+            "description": "Not enough permissions to update this feature flag"
+          },
+          "404": {
+            "description": "No feature flag has this id"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "500": {
+            "description": "The change or its audit entry could not be saved; nothing was changed"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Change a feature flag's settings in one environment (beta)",
+        "tags": [
+          "Feature Flags"
+        ],
+        "x-stability": "beta"
+      }
+    },
+    "/api/v1/feature-flags/{flag_id}/environments/{target}/promote": {
+      "post": {
+        "description": "Promote a feature flag's settings into an environment (beta).\n\nCopies `is_active`, `rollout_percentage` and `targeting_rules` from the\nenvironment `from` names into the target, all three together, as a change\nto the target would: the rules are checked again, and the same permission\nis needed. A flag nobody configured in `from` is off there, so promoting\nfrom it turns the target off, and an archived flag is off in every\nenvironment. Nothing else is copied: not the flag's value type and values,\nits rollout schedules or its safety configuration.\n\nThe change and its audit entries are saved together: if an entry cannot be\nwritten, nothing is changed and the request answers 500.\n\n**Permissions**: ADMIN and DEVELOPER may change any flag, and in the full\nprofile so may anyone whose custom role or direct grant gives\nfeature_flag (update); anyone else gets 403.\n\nRaises:\n    HTTPException 403: If the user doesn't have permission to update this feature flag\n    HTTPException 404: No feature flag has this id\n    HTTPException 422: `from` is the target, an environment is not valid,\n        or the rules would be refused in the target\n    HTTPException 500: Nothing was changed",
+        "operationId": "promote_flag_environment_api_v1_feature_flags__flag_id__environments__target__promote_post",
+        "parameters": [
+          {
+            "description": "The ID of the feature flag",
+            "in": "path",
+            "name": "flag_id",
+            "required": true,
+            "schema": {
+              "description": "The ID of the feature flag",
+              "format": "uuid",
+              "title": "Flag Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The environment the settings are copied into",
+            "in": "path",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "description": "The environment the settings are copied into",
+              "enum": [
+                "production",
+                "staging",
+                "development"
+              ],
+              "title": "Target",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FlagPromotion",
+                "description": "The environment the settings are copied from"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlagEnvironmentSettings"
+                }
+              }
+            },
+            "description": "The flag's settings in the target environment, as copied"
+          },
+          "401": {
+            "description": "Authentication failed"
+          },
+          "403": {
+            "description": "Not enough permissions to update this feature flag"
+          },
+          "404": {
+            "description": "No feature flag has this id"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "500": {
+            "description": "The change or its audit entry could not be saved; nothing was changed"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Promote a feature flag's settings into an environment (beta)",
+        "tags": [
+          "Feature Flags"
+        ],
+        "x-stability": "beta"
+      }
+    },
     "/api/v1/feature-flags/{flag_id}/history": {
       "get": {
         "description": "Returns all audit log entries for a specific feature flag.\nOrdered by timestamp descending (most recent first).\nSuperusers, ADMIN and ANALYST, and in the full profile anyone whose custom\nrole or direct grant gives audit_log (read), see other users' entries too.\nAnyone else sees only the entries they made, and `total_changes` counts\nonly those.",
@@ -32386,7 +33064,7 @@
     },
     "/api/v1/metrics/summary": {
       "get": {
-        "description": "Get summary statistics for feature flag metrics over ``start_date`` to ``end_date``, by default the 30 days before now. ``error_rate`` counts errors by the safety check's rule, and ``uncounted_error_count`` is the error reports that do not count.",
+        "description": "Get summary statistics for feature flag metrics over ``start_date`` to ``end_date``, by default the 30 days before now. ``error_rate`` counts errors by the safety check's rule, and ``uncounted_error_count`` is the production error reports that do not count.",
         "operationId": "get_metrics_summary_api_v1_metrics_summary_get",
         "parameters": [
           {
@@ -36678,7 +37356,7 @@
     },
     "/api/v1/tracking/assign/batch": {
       "post": {
-        "description": "Assign up to 1,000 users to an ACTIVE experiment in one request.\n\nEach user gets what ``POST /api/v1/tracking/assign`` would give them, with\nthe bandit weights read at the start of the request: the same eligibility\nchecks for a new user (global holdout, mutual exclusion group, targeting\nrules against that user's ``context``) and the same sticky answer for a\nuser already assigned. Users are processed in request order and each new\nassignment is committed on its own, as N single calls would be. For an\nexperiment that balances within groups, the same list sent in another\norder can split differently; each user keeps the variant they got.\n\nOnly assignments are recorded, never a view event: the user's first\n``POST /api/v1/tracking/assign`` records that they saw the experiment.\n\n**Authentication**: an API key with the ``sdk:ruleset`` scope, whose owner\ncan change feature flags and experiments: ADMIN, DEVELOPER, a superuser, or\nin the full profile anyone whose custom roles or direct grants give\n``feature_flag (update)`` and ``experiment (update)``. A key whose owner can\nchange feature flags but not experiments is refused with 403 before anyone\nis assigned.\n\nA plain ``def``: FastAPI runs it in the thread pool, so a batch does not\nhold the event loop while it works through its users.",
+        "description": "Assign up to 1,000 users to an ACTIVE experiment in one request.\n\nEach user gets what ``POST /api/v1/tracking/assign`` would give them, with\nthe bandit weights read at the start of the request: the same eligibility\nchecks for a new user (global holdout, mutual exclusion group, targeting\nrules against that user's ``context``) and the same sticky answer for a\nuser already assigned. Users are processed in request order and each new\nassignment is committed on its own, as N single calls would be. For an\nexperiment that balances within groups, the same list sent in another\norder can split differently; each user keeps the variant they got.\n\nOnly assignments are recorded, never a view event: the user's first\n``POST /api/v1/tracking/assign`` records that they saw the experiment.\n\n**Authentication**: an API key with the ``sdk:ruleset`` scope, whose owner\ncan change feature flags and experiments: ADMIN, DEVELOPER, a superuser, or\nin the full profile anyone whose custom roles or direct grants give\n``feature_flag (update)`` and ``experiment (update)``. A key whose owner can\nchange feature flags but not experiments is refused with 403 before anyone\nis assigned.\n\nAn ``async def`` route that runs the batch in a worker thread, so a batch\ndoes not hold the event loop while it works through its users.",
         "operationId": "assign_users_to_experiment_batch_api_v1_tracking_assign_batch_post",
         "requestBody": {
           "content": {
@@ -36856,7 +37534,7 @@
     },
     "/api/v1/tracking/errors": {
       "post": {
-        "description": "Record an error that happened while a feature flag or experiment was\nactive.\n\nThe row is attached to the feature flag resolved from ``feature_flag_key``.\n``experiment_key`` is resolved and stored in ``request_data``.\n\nOnly a report sent with a server-side key (an API key with the\n``sdk:ruleset`` scope, whose owner can change feature flags) counts toward\nthe flag's ``error_rate`` (errors / flag evaluations in the monitoring\nwindow) and automatic rollback. A report sent with any other key is stored\nthe same way and answers 201, but is not counted; the flag's safety check\nshows it as ``uncounted_error_count``.\n\n**Authentication**: Requires a valid API key in the X-API-Key header.\n\nRaises:\n    HTTPException 401: If the API key is invalid\n    HTTPException 404: If ``feature_flag_key`` or ``experiment_key`` is unknown\n    HTTPException 422: If neither key is given or the body is invalid",
+        "description": "Record an error that happened while a feature flag or experiment was\nactive.\n\nThe row is attached to the feature flag resolved from ``feature_flag_key``.\n``experiment_key`` is resolved and stored in ``request_data``.\n\nOnly a report sent with a server-side key (an API key with the\n``sdk:ruleset`` scope, whose owner can change feature flags) counts toward\nthe flag's ``error_rate`` (errors / flag evaluations in the monitoring\nwindow) and automatic rollback. A report sent with any other production key\nis stored the same way and answers 201, but is not counted; the flag's safety\ncheck shows it as ``uncounted_error_count``.\n\n**Authentication**: Requires a valid API key in the X-API-Key header.\n\nRaises:\n    HTTPException 401: If the API key is invalid\n    HTTPException 404: If ``feature_flag_key`` or ``experiment_key`` is unknown\n    HTTPException 422: If neither key is given or the body is invalid",
         "operationId": "report_client_error_api_v1_tracking_errors_post",
         "requestBody": {
           "content": {

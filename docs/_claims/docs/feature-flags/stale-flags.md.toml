@@ -54,12 +54,13 @@ by = [
 ]
 
 [[unit]]
-text = "A flag is stale when it was created at least N days ago, is not archived, is not tagged permanent, has no active rollout schedule, and at least one of these reasons applies:"
+text = "A flag is stale when it was created at least N days ago, is not archived, is not tagged permanent, has no active rollout schedule, is not on in staging or development, and at least one of these reasons applies:"
 by = [
     "test:backend/tests/unit/services/test_stale_flags.py::test_v2_a_flag_younger_than_n_days_is_never_stale",
     "test:backend/tests/unit/services/test_stale_flags.py::test_v5_an_archived_flag_is_never_stale",
     "test:backend/tests/unit/services/test_stale_flags.py::test_v6_a_flag_tagged_permanent_is_never_stale",
     "test:backend/tests/unit/services/test_stale_flags.py::test_a_flag_with_an_active_rollout_schedule_is_never_stale",
+    "test:backend/tests/unit/services/test_stale_flags.py::test_a_flag_on_in_staging_or_development_is_never_stale",
     "test:backend/tests/integration/api/test_stale_flags_api.py::test_v14_stale_true_false_and_omitted_are_exact_sets",
 ]
 
@@ -126,6 +127,13 @@ by = [
 [[unit]]
 text = "A schedule that is paused, a draft, completed or cancelled does not keep a flag off the list."
 by = ["test:backend/tests/integration/api/test_stale_flags_api.py::test_v25_an_active_rollout_schedule_exempts_a_flag"]
+
+[[unit]]
+text = "A flag that is on in staging or development (beta) is not stale either, whatever its percentage there."
+by = [
+    "test:backend/tests/unit/services/test_stale_flags.py::test_a_flag_on_in_staging_or_development_is_never_stale",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_flag_on_outside_production_is_not_stale",
+]
 
 [[unit]]
 text = "What counts as an evaluation"
@@ -211,6 +219,10 @@ by = [
 ]
 
 [[unit]]
+text = "A change to its staging or development settings does not."
+by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_a_put_changes_only_its_environment"]
+
+[[unit]]
 text = "The count starts from the flag's updated_at."
 by = [
     "test:backend/tests/unit/services/test_stale_flags.py::test_v1_a_flag_unchanged_for_exactly_n_days_is_unchanged",
@@ -222,8 +234,10 @@ text = "The request for this feature (#1808) noted that updated_at is not the ti
 by = ["exempt:theory"]
 
 [[unit]]
-text = "It is used anyway: every change to a flag sets it, so a flag marked unchanged has not changed at all in N days."
+text = "It is used anyway: every change to a flag sets it, its staging and development settings apart, so a flag marked unchanged has not changed in production in N days."
 by = [
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_put_changes_only_its_environment",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_put_to_production_is_the_stable_put",
     "test:backend/tests/integration/api/test_stale_flags_api.py::test_v7_a_rename_through_the_api_restarts_the_count",
     "test:backend/tests/integration/api/test_stale_flags_api.py::test_v7_every_other_change_restarts_the_count",
 ]

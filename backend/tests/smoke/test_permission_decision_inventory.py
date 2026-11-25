@@ -253,6 +253,32 @@ DECIDER_CALLS = {
         "can_act_on_feature_flag",
         "flag.owner_id, Action.UPDATE",
     ),
+    # A flag's settings per environment (#2011): read as the flag is read,
+    # changed and promoted as the flag is changed.
+    (
+        E + "flag_environments.py",
+        "_readable_flag",
+        "can_act_on_feature_flag",
+        "flag.owner_id, Action.READ",
+    ),
+    (
+        E + "flag_environments.py",
+        "get_environment_flag_settings",
+        "check_permission",
+        "ResourceType.FEATURE_FLAG, Action.LIST",
+    ),
+    (
+        E + "flag_environments.py",
+        "promote_flag_environment",
+        "can_act_on_feature_flag",
+        "flag.owner_id, Action.UPDATE",
+    ),
+    (
+        E + "flag_environments.py",
+        "update_flag_environment",
+        "can_act_on_feature_flag",
+        "flag.owner_id, Action.UPDATE",
+    ),
     # experiment (create) also governs reading the global holdout and
     # managing exclusion groups (ruling 4 item 8: accepted, documented).
     (

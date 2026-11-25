@@ -12,9 +12,10 @@ import { H1 } from '@/components/homepage/styles';
  * Every statement below was checked against the marketing build when it was
  * written: the frontend loads no analytics or tracking script, sets no cookie,
  * and the pages the marketing build ships write nothing to browser storage
- * (the only `localStorage` write is the dashboard's sign-in token, and the
- * marketing build has no sign-in). If any of that changes, change this page in
- * the same pull request.
+ * (the dashboard writes `localStorage` only for a signed-in user: the sign-in
+ * token, and the flag environment chosen on the flag pages; the marketing
+ * build has no sign-in and no flag pages). If any of that changes, change this
+ * page in the same pull request.
  */
 export default function PrivacyPage() {
   return (

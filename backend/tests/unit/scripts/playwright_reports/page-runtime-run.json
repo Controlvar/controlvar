@@ -1,0 +1,2513 @@
+{
+ "config": {
+  "rootDir": "/home/runner/work/controlvar/controlvar/frontend/tests/e2e",
+  "version": "1.64.0"
+ },
+ "suites": [
+  {
+   "title": "runtime/app-router.runtime.spec.ts",
+   "file": "runtime/app-router.runtime.spec.ts",
+   "specs": [
+    {
+     "title": "an App Router page keeps the editor link out of its address after hydration and after a reload",
+     "file": "runtime/app-router.runtime.spec.ts",
+     "line": 73,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "suites": []
+  },
+  {
+   "title": "runtime/apply.runtime.spec.ts",
+   "file": "runtime/apply.runtime.spec.ts",
+   "specs": [],
+   "suites": [
+    {
+     "title": "applying",
+     "file": "runtime/apply.runtime.spec.ts",
+     "specs": [
+      {
+       "title": "text is written as text: markup in a change stays text and runs nothing",
+       "file": "runtime/apply.runtime.spec.ts",
+       "line": 16,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "every operation applies, with the key and nothing about the page but its host and path",
+       "file": "runtime/apply.runtime.spec.ts",
+       "line": 42,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "an element the script never changes is refused, and reported",
+       "file": "runtime/apply.runtime.spec.ts",
+       "line": 73,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "an unknown operation skips the whole experiment and pollutes nothing",
+       "file": "runtime/apply.runtime.spec.ts",
+       "line": 129,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "suites": []
+    },
+    {
+     "title": "matching",
+     "file": "runtime/apply.runtime.spec.ts",
+     "specs": [
+      {
+       "title": "a selector that matches nothing changes nothing, shows the page and is reported",
+       "file": "runtime/apply.runtime.spec.ts",
+       "line": 156,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "a selector that matches three elements changes none of them",
+       "file": "runtime/apply.runtime.spec.ts",
+       "line": 194,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "suites": []
+    },
+    {
+     "title": "requests",
+     "file": "runtime/apply.runtime.spec.ts",
+     "specs": [
+      {
+       "title": "carry no Referer and no cookie, even from a page that asks for unsafe-url",
+       "file": "runtime/apply.runtime.spec.ts",
+       "line": 209,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "after a 403 the script sends nothing more in the tab, says why once, and stops hiding",
+       "file": "runtime/apply.runtime.spec.ts",
+       "line": 227,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "fresh page rules that cover nothing: the next page makes no call",
+       "file": "runtime/apply.runtime.spec.ts",
+       "line": 247,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "at most five reports per page view",
+       "file": "runtime/apply.runtime.spec.ts",
+       "line": 259,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "track() sends one batch call naming the experiment this visitor was assigned to",
+       "file": "runtime/apply.runtime.spec.ts",
+       "line": 272,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "suites": []
+    }
+   ]
+  },
+  {
+   "title": "runtime/consent.runtime.spec.ts",
+   "file": "runtime/consent.runtime.spec.ts",
+   "specs": [
+    {
+     "title": "a controlvar_uid a server set for the parent domain stays after revokeConsent(), and the next consent() uses its id",
+     "file": "runtime/consent.runtime.spec.ts",
+     "line": 170,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "revokeConsent() on a tag that waits for consent: the cookie and every key go, nothing more is sent, and the next page follows the tag",
+     "file": "runtime/consent.runtime.spec.ts",
+     "line": 256,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "revokeConsent() on a tag that does not wait: the cookie and every key go, nothing more is sent, and the next page follows the tag",
+     "file": "runtime/consent.runtime.spec.ts",
+     "line": 256,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "suites": [
+    {
+     "title": "consent()",
+     "file": "runtime/consent.runtime.spec.ts",
+     "specs": [
+      {
+       "title": "before it, nothing is read, stored or sent; after it, the keys are exactly the ones the script writes",
+       "file": "runtime/consent.runtime.spec.ts",
+       "line": 61,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "suites": []
+    },
+    {
+     "title": "consent() and the hide",
+     "file": "runtime/consent.runtime.spec.ts",
+     "specs": [
+      {
+       "title": "a consent() made while <head> loads hides the page as usual until the changes are applied",
+       "file": "runtime/consent.runtime.spec.ts",
+       "line": 131,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "a consent() after the page has rendered applies the changes without hiding it",
+       "file": "runtime/consent.runtime.spec.ts",
+       "line": 148,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "suites": []
+    }
+   ]
+  },
+  {
+   "title": "runtime/csp.runtime.spec.ts",
+   "file": "runtime/csp.runtime.spec.ts",
+   "specs": [
+    {
+     "title": "every change and the hide apply under a strict policy, with no violation",
+     "file": "runtime/csp.runtime.spec.ts",
+     "line": 45,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "every change and the hide apply under a strict policy with Trusted Types, with no violation",
+     "file": "runtime/csp.runtime.spec.ts",
+     "line": 45,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "the documented snippet loads under a strict policy and, waiting for consent, sends nothing",
+     "file": "runtime/csp.runtime.spec.ts",
+     "line": 74,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "suites": []
+  },
+  {
+   "title": "runtime/editor-link.runtime.spec.ts",
+   "file": "runtime/editor-link.runtime.spec.ts",
+   "specs": [
+    {
+     "title": "a tag without data-editor-origin removes and claims the link, and opens no frame",
+     "file": "runtime/editor-link.runtime.spec.ts",
+     "line": 229,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "suites": [
+    {
+     "title": "an exact editor link",
+     "file": "runtime/editor-link.runtime.spec.ts",
+     "specs": [
+      {
+       "title": "is removed from the address, claimed once, and handed to the panel after hello",
+       "file": "runtime/editor-link.runtime.spec.ts",
+       "line": 39,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "waits for the claim request to settle when hello comes first",
+       "file": "runtime/editor-link.runtime.spec.ts",
+       "line": 79,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "waits for hello when the claim request settles first",
+       "file": "runtime/editor-link.runtime.spec.ts",
+       "line": 92,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "hands over only to a hello from the panel frame at the editor origin",
+       "file": "runtime/editor-link.runtime.spec.ts",
+       "line": 107,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "says so on the page when the panel does not answer within 5 seconds",
+       "file": "runtime/editor-link.runtime.spec.ts",
+       "line": 134,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "suites": []
+    },
+    {
+     "title": "an editor link and consent",
+     "file": "runtime/editor-link.runtime.spec.ts",
+     "specs": [
+      {
+       "title": "before consent, the claim is the only request and the editor's key the only key",
+       "file": "runtime/editor-link.runtime.spec.ts",
+       "line": 151,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "with the backoff key set, the claim is still sent",
+       "file": "runtime/editor-link.runtime.spec.ts",
+       "line": 175,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "without the link, before consent: no request, no key and no frame",
+       "file": "runtime/editor-link.runtime.spec.ts",
+       "line": 194,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "suites": []
+    },
+    {
+     "title": "a fragment that is not an exact editor link",
+     "file": "runtime/editor-link.runtime.spec.ts",
+     "specs": [
+      {
+       "title": "is left alone: 42-character fragment",
+       "file": "runtime/editor-link.runtime.spec.ts",
+       "line": 214,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "is left alone: 44-character fragment",
+       "file": "runtime/editor-link.runtime.spec.ts",
+       "line": 214,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "is left alone: fragment with +",
+       "file": "runtime/editor-link.runtime.spec.ts",
+       "line": 214,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "is left alone: fragment with =",
+       "file": "runtime/editor-link.runtime.spec.ts",
+       "line": 214,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "is left alone: fragment with a suffix",
+       "file": "runtime/editor-link.runtime.spec.ts",
+       "line": 214,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "suites": []
+    }
+   ]
+  },
+  {
+   "title": "runtime/hide.runtime.spec.ts",
+   "file": "runtime/hide.runtime.spec.ts",
+   "specs": [
+    {
+     "title": "an answer that comes after the timeout is still applied, so the variant counted is the one shown",
+     "file": "runtime/hide.runtime.spec.ts",
+     "line": 48,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "suites": [
+    {
+     "title": "the timeout",
+     "file": "runtime/hide.runtime.spec.ts",
+     "specs": [
+      {
+       "title": "shows the page at 1000 ms when the API never answers (data-timeout-ms absent)",
+       "file": "runtime/hide.runtime.spec.ts",
+       "line": 30,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "shows the page at 4000 ms when the API never answers (data-timeout-ms 10000)",
+       "file": "runtime/hide.runtime.spec.ts",
+       "line": 30,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "suites": []
+    },
+    {
+     "title": "failures",
+     "file": "runtime/hide.runtime.spec.ts",
+     "specs": [
+      {
+       "title": "a script that never loads leaves the page shown",
+       "file": "runtime/hide.runtime.spec.ts",
+       "line": 66,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "a script that throws while it applies still shows the page, with no timer needed",
+       "file": "runtime/hide.runtime.spec.ts",
+       "line": 74,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "suites": []
+    },
+    {
+     "title": "when it works",
+     "file": "runtime/hide.runtime.spec.ts",
+     "specs": [
+      {
+       "title": "no frame shows the original text: the page shows once the change is applied",
+       "file": "runtime/hide.runtime.spec.ts",
+       "line": 92,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "while hidden, a click or Tab reaches none of the page's controls",
+       "file": "runtime/hide.runtime.spec.ts",
+       "line": 162,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "while hidden the page paints nothing: every paint, and the largest, comes after it shows",
+       "file": "runtime/hide.runtime.spec.ts",
+       "line": 176,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "suites": []
+    }
+   ]
+  },
+  {
+   "title": "runtime/hydration.runtime.spec.ts",
+   "file": "runtime/hydration.runtime.spec.ts",
+   "specs": [
+    {
+     "title": "pages-router: set_text on 25 targets is kept through hydration",
+     "file": "runtime/hydration.runtime.spec.ts",
+     "line": 125,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "pages-router: set_attribute on 25 targets is kept through hydration",
+     "file": "runtime/hydration.runtime.spec.ts",
+     "line": 125,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "pages-router: set_image on 25 targets is kept through hydration",
+     "file": "runtime/hydration.runtime.spec.ts",
+     "line": 125,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "pages-router: set_style on 25 targets is kept through hydration",
+     "file": "runtime/hydration.runtime.spec.ts",
+     "line": 125,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "pages-router: hide on 25 targets is kept through hydration",
+     "file": "runtime/hydration.runtime.spec.ts",
+     "line": 125,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "app-router: set_text on 25 targets is kept through hydration",
+     "file": "runtime/hydration.runtime.spec.ts",
+     "line": 125,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "app-router: set_attribute on 25 targets is kept through hydration",
+     "file": "runtime/hydration.runtime.spec.ts",
+     "line": 125,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "app-router: set_image on 25 targets is kept through hydration",
+     "file": "runtime/hydration.runtime.spec.ts",
+     "line": 125,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "app-router: set_style on 25 targets is kept through hydration",
+     "file": "runtime/hydration.runtime.spec.ts",
+     "line": 125,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "app-router: hide on 25 targets is kept through hydration",
+     "file": "runtime/hydration.runtime.spec.ts",
+     "line": 125,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "react18: set_text on 25 targets is kept through hydration",
+     "file": "runtime/hydration.runtime.spec.ts",
+     "line": 125,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "react18: set_attribute on 25 targets is kept through hydration",
+     "file": "runtime/hydration.runtime.spec.ts",
+     "line": 125,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "react18: set_image on 25 targets is kept through hydration",
+     "file": "runtime/hydration.runtime.spec.ts",
+     "line": 125,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "react18: set_style on 25 targets is kept through hydration",
+     "file": "runtime/hydration.runtime.spec.ts",
+     "line": 125,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "react18: hide on 25 targets is kept through hydration",
+     "file": "runtime/hydration.runtime.spec.ts",
+     "line": 125,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "react19-suspense: set_text on 25 targets is kept through hydration",
+     "file": "runtime/hydration.runtime.spec.ts",
+     "line": 125,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "react19-suspense: set_attribute on 25 targets is kept through hydration",
+     "file": "runtime/hydration.runtime.spec.ts",
+     "line": 125,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "react19-suspense: set_image on 25 targets is kept through hydration",
+     "file": "runtime/hydration.runtime.spec.ts",
+     "line": 125,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "react19-suspense: set_style on 25 targets is kept through hydration",
+     "file": "runtime/hydration.runtime.spec.ts",
+     "line": 125,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "react19-suspense: hide on 25 targets is kept through hydration",
+     "file": "runtime/hydration.runtime.spec.ts",
+     "line": 125,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "suites": [
+    {
+     "title": "the bound",
+     "file": "runtime/hydration.runtime.spec.ts",
+     "specs": [
+      {
+       "title": "hydration at load + 4 s keeps every change",
+       "file": "runtime/hydration.runtime.spec.ts",
+       "line": 170,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "hydration at load + 6 s shows the originals, and the page reports five of them",
+       "file": "runtime/hydration.runtime.spec.ts",
+       "line": 181,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "load held to 8 s by a slow image, hydration at 11 s: the same",
+       "file": "runtime/hydration.runtime.spec.ts",
+       "line": 193,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "suites": []
+    }
+   ]
+  },
+  {
+   "title": "runtime/keep.runtime.spec.ts",
+   "file": "runtime/keep.runtime.spec.ts",
+   "specs": [],
+   "suites": [
+    {
+     "title": "until the bound",
+     "file": "runtime/keep.runtime.spec.ts",
+     "specs": [
+      {
+       "title": "an element that appears inside the bound is changed; after it, no observer is left and nothing changes",
+       "file": "runtime/keep.runtime.spec.ts",
+       "line": 58,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "the bound is never later than 10 s after the navigation started, however late the load",
+       "file": "runtime/keep.runtime.spec.ts",
+       "line": 97,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "a page that undoes a change at once is stopped after 20 re-applies, reported once, and stays responsive",
+       "file": "runtime/keep.runtime.spec.ts",
+       "line": 134,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "a page that resets a text every 100 ms gets the change back each time until the bound, then keeps its own",
+       "file": "runtime/keep.runtime.spec.ts",
+       "line": 168,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "a page that resets a text every 40 ms (25 a second) is stopped by the cap of 20 re-applies in a second",
+       "file": "runtime/keep.runtime.spec.ts",
+       "line": 200,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "a page that resets a text every 60 ms (16 a second) gets the change back each time until the bound, with no report",
+       "file": "runtime/keep.runtime.spec.ts",
+       "line": 200,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "25 elements a re-render replaces at once all get their change back, none reported",
+       "file": "runtime/keep.runtime.spec.ts",
+       "line": 241,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "suites": []
+    },
+    {
+     "title": "after the bound",
+     "file": "runtime/keep.runtime.spec.ts",
+     "specs": [
+      {
+       "title": "an element replaced after the bound is reported once when the page goes away",
+       "file": "runtime/keep.runtime.spec.ts",
+       "line": 313,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "a tab going hidden reports it too, once, and 25 replaced elements give five reports",
+       "file": "runtime/keep.runtime.spec.ts",
+       "line": 330,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "suites": []
+    }
+   ]
+  },
+  {
+   "title": "runtime/later-scripts.runtime.spec.ts",
+   "file": "runtime/later-scripts.runtime.spec.ts",
+   "specs": [
+    {
+     "title": "later scripts find no editor link in any location they read (goto)",
+     "file": "runtime/later-scripts.runtime.spec.ts",
+     "line": 101,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [
+        {
+         "type": "recorded only",
+         "description": "{\"inline-head\":[\"navigation entry name\",\"navigation.activation.entry.url\"],\"inline-body\":[\"navigation entry name\",\"navigation.activation.entry.url\"],\"deferred\":[\"navigation entry name\",\"navigation.activation.entry.url\"],\"after-load\":[\"navigation entry name\",\"navigation.activation.entry.url\"]}"
+        }
+       ],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [
+          {
+           "type": "recorded only",
+           "description": "{\"inline-head\":[\"navigation entry name\",\"navigation.activation.entry.url\"],\"inline-body\":[\"navigation entry name\",\"navigation.activation.entry.url\"],\"deferred\":[\"navigation entry name\",\"navigation.activation.entry.url\"],\"after-load\":[\"navigation entry name\",\"navigation.activation.entry.url\"]}"
+          }
+         ],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "later scripts find no editor link in any location they read (link click)",
+     "file": "runtime/later-scripts.runtime.spec.ts",
+     "line": 101,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [
+        {
+         "type": "recorded only",
+         "description": "{\"inline-head\":[\"navigation entry name\",\"navigation.activation.entry.url\"],\"inline-body\":[\"navigation entry name\",\"navigation.activation.entry.url\"],\"deferred\":[\"navigation entry name\",\"navigation.activation.entry.url\"],\"after-load\":[\"navigation entry name\",\"navigation.activation.entry.url\"]}"
+        }
+       ],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [
+          {
+           "type": "recorded only",
+           "description": "{\"inline-head\":[\"navigation entry name\",\"navigation.activation.entry.url\"],\"inline-body\":[\"navigation entry name\",\"navigation.activation.entry.url\"],\"deferred\":[\"navigation entry name\",\"navigation.activation.entry.url\"],\"after-load\":[\"navigation entry name\",\"navigation.activation.entry.url\"]}"
+          }
+         ],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "suites": []
+  },
+  {
+   "title": "runtime/overlap.runtime.spec.ts",
+   "file": "runtime/overlap.runtime.spec.ts",
+   "specs": [
+    {
+     "title": "the corpus leaves out the known overlap class",
+     "file": "runtime/overlap.runtime.spec.ts",
+     "line": 69,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "no change applied to #btn lets the link take the button's centre",
+     "file": "runtime/overlap.runtime.spec.ts",
+     "line": 80,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "no change applied to #lnk lets the link take the button's centre",
+     "file": "runtime/overlap.runtime.spec.ts",
+     "line": 80,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "suites": []
+  },
+  {
+   "title": "runtime/package.runtime.spec.ts",
+   "file": "runtime/package.runtime.spec.ts",
+   "specs": [
+    {
+     "title": "the packed script loads with a script tag and reports the version in sdk/visual/package.json",
+     "file": "runtime/package.runtime.spec.ts",
+     "line": 20,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "suites": []
+  },
+  {
+   "title": "runtime/preview.runtime.spec.ts",
+   "file": "runtime/preview.runtime.spec.ts",
+   "specs": [],
+   "suites": [
+    {
+     "title": "a preview link",
+     "file": "runtime/preview.runtime.spec.ts",
+     "specs": [
+      {
+       "title": "shows its variant with the banner, other experiments off, the address clean and nothing recorded",
+       "file": "runtime/preview.runtime.spec.ts",
+       "line": 80,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "[Exit preview] puts the page back, takes the banner away and ends the preview for the tab",
+       "file": "runtime/preview.runtime.spec.ts",
+       "line": 127,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "a link that no longer works says so on the banner, changes nothing and is forgotten",
+       "file": "runtime/preview.runtime.spec.ts",
+       "line": 147,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "the banner comes back when the page removes it",
+       "file": "runtime/preview.runtime.spec.ts",
+       "line": 156,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "suites": []
+    },
+    {
+     "title": "no change reaches the banner",
+     "file": "runtime/preview.runtime.spec.ts",
+     "specs": [
+      {
+       "title": "a variant that hides controlvar-ui in seven ways leaves [Exit preview] visible, on top and in view",
+       "file": "runtime/preview.runtime.spec.ts",
+       "line": 186,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "a variant that hides :root > :not(head):not(body) in seven ways leaves [Exit preview] visible, on top and in view",
+       "file": "runtime/preview.runtime.spec.ts",
+       "line": 186,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "a variant that hides body in seven ways leaves [Exit preview] visible, on top and in view",
+       "file": "runtime/preview.runtime.spec.ts",
+       "line": 186,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "a variant that hides html in seven ways leaves [Exit preview] visible, on top and in view",
+       "file": "runtime/preview.runtime.spec.ts",
+       "line": 186,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "suites": []
+    }
+   ]
+  },
+  {
+   "title": "runtime/real-api-preview.runtime.spec.ts",
+   "file": "runtime/real-api-preview.runtime.spec.ts",
+   "specs": [
+    {
+     "title": "a preview link shows its variant 50 times and records nothing; a changed or revoked link gets 404, and a visitor still gets their own variant",
+     "file": "runtime/real-api-preview.runtime.spec.ts",
+     "line": 131,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "an event sent on another page counts for the experiment the visitor saw first",
+     "file": "runtime/real-api-preview.runtime.spec.ts",
+     "line": 181,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "suites": []
+  },
+  {
+   "title": "runtime/real-api.runtime.spec.ts",
+   "file": "runtime/real-api.runtime.spec.ts",
+   "specs": [],
+   "suites": [
+    {
+     "title": "a page view against the real API",
+     "file": "runtime/real-api.runtime.spec.ts",
+     "specs": [
+      {
+       "title": "a change that applies: one exposure, no report",
+       "file": "runtime/real-api.runtime.spec.ts",
+       "line": 202,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "a selector that matches nothing: one exposure, and one not_found report the API accepts",
+       "file": "runtime/real-api.runtime.spec.ts",
+       "line": 215,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "an answer slower than the hide: the page shows first, the change applies late, one exposure, no report",
+       "file": "runtime/real-api.runtime.spec.ts",
+       "line": 240,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "a blocked script: no request, no exposure, the page as it is",
+       "file": "runtime/real-api.runtime.spec.ts",
+       "line": 262,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "title": "an element replaced after the bound: one exposure, and one replaced_after_bound report the API accepts",
+       "file": "runtime/real-api.runtime.spec.ts",
+       "line": 276,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "suites": []
+    }
+   ]
+  },
+  {
+   "title": "runtime/spa.runtime.spec.ts",
+   "file": "runtime/spa.runtime.spec.ts",
+   "specs": [
+    {
+     "title": "a pushState app: the changes follow the path through links, back and forward, and each is written once per step",
+     "file": "runtime/spa.runtime.spec.ts",
+     "line": 65,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "a Next Pages Router site: its client-side navigation is followed, back included",
+     "file": "runtime/spa.runtime.spec.ts",
+     "line": 135,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "suites": [
+    {
+     "title": "a hash-routed app",
+     "file": "runtime/spa.runtime.spec.ts",
+     "specs": [
+      {
+       "title": "each kind of change after # re-evaluates exactly once, with no call and no page view",
+       "file": "runtime/spa.runtime.spec.ts",
+       "line": 187,
+       "tests": [
+        {
+         "projectName": "page-runtime",
+         "status": "expected",
+         "expectedStatus": "passed",
+         "annotations": [],
+         "results": [
+          {
+           "status": "passed",
+           "retry": 0,
+           "annotations": [],
+           "errors": []
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "suites": []
+    }
+   ]
+  },
+  {
+   "title": "runtime/streamed.runtime.spec.ts",
+   "file": "runtime/streamed.runtime.spec.ts",
+   "specs": [
+    {
+     "title": "a text split across two pieces gets exactly the change, and no frame shows a part of it",
+     "file": "runtime/streamed.runtime.spec.ts",
+     "line": 96,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "a text split inside an inline child gets exactly the change, and no frame shows a part of it",
+     "file": "runtime/streamed.runtime.spec.ts",
+     "line": 96,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "suites": []
+  },
+  {
+   "title": "runtime/wrapped-page.runtime.spec.ts",
+   "file": "runtime/wrapped-page.runtime.spec.ts",
+   "specs": [
+    {
+     "title": "a page that wraps browser functions after the snippet sees nothing of the editor link",
+     "file": "runtime/wrapped-page.runtime.spec.ts",
+     "line": 199,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "when the panel frame moves to another origin after hello, that origin gets no claim",
+     "file": "runtime/wrapped-page.runtime.spec.ts",
+     "line": 215,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "an editor frame that never leaves the site's origin gets no claim",
+     "file": "runtime/wrapped-page.runtime.spec.ts",
+     "line": 266,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "the claim is handed over only while the panel frame is on another origin",
+     "file": "runtime/wrapped-page.runtime.spec.ts",
+     "line": 281,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "a hello event the page makes itself does not count: the claim waits for the panel's",
+     "file": "runtime/wrapped-page.runtime.spec.ts",
+     "line": 302,
+     "tests": [
+      {
+       "projectName": "page-runtime",
+       "status": "expected",
+       "expectedStatus": "passed",
+       "annotations": [],
+       "results": [
+        {
+         "status": "passed",
+         "retry": 0,
+         "annotations": [],
+         "errors": []
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "suites": []
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-11-25T01:34:59.442Z",
+  "duration": 89517.28,
+  "expected": 106,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

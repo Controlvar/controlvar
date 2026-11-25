@@ -194,7 +194,7 @@ This would target enterprise users in the US or Canada who have had their accoun
 
 ## Environments
 
-One deployment is one environment: flags, experiments and API keys carry no environment field. To test experiments and flags in staging before they reach production users, run staging and production as separate deployments.
+An API key belongs to one flag environment, `production`, `staging` or `development`, and is answered that environment's feature flags. Experiments and event tracking run in production only. To test experiments in staging before they reach production users, run staging and production as separate deployments.
 
 ### Staging vs Production
 

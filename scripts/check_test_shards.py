@@ -2,6 +2,7 @@
 """Prove that a sharded suite ran every collected test exactly once.
 
     python3 scripts/check_test_shards.py --suite backend/tests/integration \\
+        [--only-suites] [--github-annotations] \\
         [--allow-skip 'backend/tests/integration=<exact skip reason>' ...] \\
         [--any-skip <suite>] [--allow-disabled-plugin <suite>=cov ...] \
         <report or directory> [...]
@@ -9,7 +10,15 @@
 Each sharded pytest session writes a report (backend/tests/shard.py). A
 directory is searched recursively for ``shard-*.json``; a file is read whatever
 its name. Only reports whose ``suite`` is a ``--suite`` given here are checked;
-a report for another suite is left alone.
+a report for another suite is left alone, unless ``--only-suites`` is given,
+for a summary whose reports must all be of the suites it names: then each
+such report is a problem, ``PROBLEM: <path>: suite <s> is not a --suite``.
+
+``--github-annotations`` also prints each problem, a bad report and "no shard
+report found" as a GitHub Actions error annotation (``::error::<problem>``,
+one line, ``%``, CR and LF escaped), so a workflow step that runs the checker
+needs no pipe to show them: a pipe would replace the checker's exit status
+with the last command's under a step's default ``bash -e``.
 
 For every ``--suite``, it exits 0 only when all of these hold:
 
@@ -323,6 +332,16 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument("--suite", action="append", default=[], required=True)
     parser.add_argument(
+        "--only-suites",
+        action="store_true",
+        help="a report of a suite not named by --suite is a problem",
+    )
+    parser.add_argument(
+        "--github-annotations",
+        action="store_true",
+        help="also print each problem as a GitHub Actions ::error:: annotation",
+    )
+    parser.add_argument(
         "--allow-skip", action="append", default=[], metavar="SUITE=REASON"
     )
     parser.add_argument("--any-skip", action="append", default=[], metavar="SUITE")
@@ -336,9 +355,24 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         raise Usage("bad arguments") from exc
 
 
+def _annotation(text: str) -> str:
+    """*text* as a GitHub Actions error annotation, on one line: ``%``, CR and
+    LF are escaped as a workflow command's data requires."""
+    data = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+    return f"::error::{data}"
+
+
+def _one_line(text: str) -> str:
+    """A problem on one line: a CR or LF in a value read from a report is
+    shown escaped, so it cannot start a line of its own in the log."""
+    return text.replace("\r", "\\r").replace("\n", "\\n")
+
+
 def run(argv: list[str]) -> int:
+    annotate = False
     try:
         args = _parse_args(argv)
+        annotate = args.github_annotations
         suites = [_norm_suite(s) for s in args.suite]
         if len(set(suites)) != len(suites):
             raise Usage(f"a --suite is named twice: {suites}")
@@ -375,12 +409,28 @@ def run(argv: list[str]) -> int:
         return 2
     except BadReport as exc:
         print(f"check_test_shards: refusing a bad report: {exc}", file=sys.stderr)
+        if annotate:
+            print(_annotation(f"refusing a bad report: {exc}"))
         return 2
 
+    def problem(text: str) -> None:
+        text = _one_line(text)
+        print(f"PROBLEM: {text}")
+        if annotate:
+            print(_annotation(text))
+
     if not docs:
-        print("check_test_shards: no shard report found in " + " ".join(args.paths))
+        message = "no shard report found in " + " ".join(args.paths)
+        print(f"check_test_shards: {message}")
+        if annotate:
+            print(_annotation(message))
         return 1
     failed = False
+    if args.only_suites:
+        for doc in docs:
+            if _norm_suite(doc["suite"]) not in suites:
+                failed = True
+                problem(f"{doc['_path']}: suite {doc['suite']} is not a --suite")
     for suite in suites:
         mine = [d for d in docs if _norm_suite(d["suite"]) == suite]
         problems, proven = check_suite(
@@ -388,8 +438,8 @@ def run(argv: list[str]) -> int:
         )
         if problems:
             failed = True
-            for problem in problems:
-                print(f"PROBLEM: {problem}")
+            for text in problems:
+                problem(text)
         else:
             print(
                 f"{suite}: {len(mine)} shards, {proven} collected, each ran exactly once"

@@ -7,6 +7,7 @@ import { AuthConfigProvider } from "@/contexts/AuthConfigContext";
 import { NotificationProvider } from "@/contexts/NotificationContext";
 import { ModulesProvider } from "@/contexts/ModulesContext";
 import { EffectivePermissionsProvider } from "@/contexts/EffectivePermissionsContext";
+import { FlagEnvironmentProvider } from "@/contexts/FlagEnvironmentContext";
 import { ToastContainer } from "@/components/ToastContainer";
 import { AppShell } from "@/components/AppShell";
 import { RequireAuth } from "@/components/RequireAuth";
@@ -38,10 +39,12 @@ export default function App({ Component, pageProps, router }: AppProps) {
         <AuthConfigProvider>
           <AuthProvider>
             <EffectivePermissionsProvider navigationKey={navigationKey}>
-              <NotificationProvider>
-                {page}
-                <ToastContainer />
-              </NotificationProvider>
+              <FlagEnvironmentProvider>
+                <NotificationProvider>
+                  {page}
+                  <ToastContainer />
+                </NotificationProvider>
+              </FlagEnvironmentProvider>
             </EffectivePermissionsProvider>
           </AuthProvider>
         </AuthConfigProvider>

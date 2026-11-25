@@ -137,6 +137,7 @@ function installApi(user: UserMe = VIEWER) {
         prefix: 'eptk_abcd',
         created_at: apiTime(0),
         expires_at: typeof body?.expires_at === 'string' ? body.expires_at : null,
+        environment: body?.environment as string | undefined,
       };
       keys = [
         makeKey({
@@ -145,6 +146,7 @@ function installApi(user: UserMe = VIEWER) {
           scopes: (body?.scopes as string[] | undefined) ?? [],
           created_at: apiTime(0),
           expires_at: created.expires_at,
+          environment: created.environment,
         }),
         ...keys,
       ];
@@ -292,7 +294,7 @@ describe('V-UI2: the page acts only on the caller\'s own keys, through the exist
     await openPage();
     const body = await createKey('sdk key');
     assertThat(!('expires_at' in body), 'unticked key sent a default expires_at');
-    expect(body).toEqual({ name: 'sdk key' });
+    expect(body).toEqual({ name: 'sdk key', environment: 'production' });
     // The form is back at its defaults: unticked, No expiry chosen.
     await screen.findByTestId('own-key-revealed');
     expect(screen.getByTestId('own-key-mcp-read')).not.toBeChecked();
@@ -525,6 +527,8 @@ describe('V-UI3: the keyboard reaches every control in order, and focus goes whe
 
     await user.tab();
     expect(screen.getByTestId('own-key-name')).toHaveFocus();
+    await user.tab();
+    expect(screen.getByTestId('own-key-environment')).toHaveFocus();
     await user.tab();
     expect(screen.getByTestId('own-key-mcp-read')).toHaveFocus();
     await user.keyboard(' ');

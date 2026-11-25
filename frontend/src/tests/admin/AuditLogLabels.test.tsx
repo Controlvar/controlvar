@@ -70,6 +70,18 @@ describe('audit action labels (#221)', () => {
     }
   });
 
+  it('labels the two entries of a flag environment change (#2011)', () => {
+    const labelled = {
+      feature_flag_environment_update: 'Flag changed in an environment',
+      feature_flag_promote: 'Flag promoted',
+    };
+    for (const [type, label] of Object.entries(labelled)) {
+      expect(actionTypes).toContain(type);
+      expect(actionLabel(type)).toBe(label);
+      expect(ACTIONS[type].group).toBe('Flags');
+    }
+  });
+
   it('shows an unknown type as itself', () => {
     expect(actionLabel('user_update')).toBe('user_update');
   });
