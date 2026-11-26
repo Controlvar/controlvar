@@ -29,7 +29,8 @@ import { API_URL, TOKEN_STORAGE_KEY } from "./env";
  */
 
 const stamp = Date.now();
-const KEY = `e2e-kill-switch-${stamp}`;
+// Fixed: a user's bucket is a hash of their id and this key, so the 20% step has one fixed outcome.
+const KEY = "e2e-kill-switch-journey";
 const NAME = `E2E kill switch ${stamp}`;
 
 /** Serves users in the US at 100%, whatever the global percentage is. */
@@ -55,9 +56,18 @@ const ALWAYS_FAILING_CHECK = {
   },
 };
 
-/** Users with no country, to see the global percentage; enough that 20% serves some and not all. */
-const GLOBAL_USERS = Array.from({ length: 40 }, (_, i) => `e2e-global-${stamp}-${i}`);
-const US_USER = `e2e-us-${stamp}`;
+/**
+ * Fixed ids, so the 20% step has one outcome. Of these 40 users with no
+ * country, 11 have a bucket below 20 for KEY: exactly 11 are served at 20%.
+ */
+const GLOBAL_USERS = Array.from({ length: 40 }, (_, i) => `e2e-global-${i}`);
+const SERVED_AT_20 = 11;
+/**
+ * Users the rule matches. For KEY only 3 of these 10 have a bucket below 20,
+ * so a rollback that also lowered the rule to 20% would leave 7 of them off.
+ */
+const US_USERS = Array.from({ length: 10 }, (_, i) => `e2e-us-${i}`);
+const US_USER = US_USERS[0];
 
 interface Answer {
   key: string;
@@ -109,6 +119,19 @@ test.describe("Journey: the kill switch and the Safety page's rollback", () => {
     });
     expect(response.status(), "GET the flag's rollout schedules").toBe(200);
     return ((await response.json()) as { items: { status: string }[] }).items.map((s) => s.status);
+  }
+
+  /** The flag's one schedule, activated again after a rollback paused it. */
+  async function resumeSchedule(page: Page): Promise<void> {
+    const list = await page.request.get(`${API_URL}/api/v1/rollout-schedules/`, {
+      headers,
+      params: { feature_flag_id: flagId },
+    });
+    const items = ((await list.json()) as { items: { id: string; status: string }[] }).items;
+    expect(items.map((s) => s.status), "the one schedule, paused").toEqual(["paused"]);
+    const activated = await page.request.post(`${API_URL}/api/v1/rollout-schedules/${items[0].id}/activate`, { headers });
+    expect(activated.status(), `activate the paused schedule: ${await activated.text()}`).toBe(200);
+    expect(await scheduleStatuses(page)).toEqual(["active"]);
   }
 
   /** A schedule for the flag, activated. Its one stage is manual and never advances by itself. */
@@ -256,8 +279,7 @@ test.describe("Journey: the kill switch and the Safety page's rollback", () => {
   });
 
   test("a rollback to 20% lowers only the global percentage and the rule's users keep theirs", async ({ adminPage: page }) => {
-    await activateSchedule(page);
-    expect(await scheduleStatuses(page)).toContain("active");
+    await resumeSchedule(page);
 
     const rolled = await page.request.post(`${API_URL}/api/v1/safety/feature-flags/${flagId}/rollback`, {
       headers,
@@ -268,16 +290,16 @@ test.describe("Journey: the kill switch and the Safety page's rollback", () => {
 
     // Still ON, at 20%.
     expect(await storedFlag(page)).toMatchObject({ status: "active", rollout_percentage: 20 });
-    expect(await evaluate(page, US_USER, "US"), "the rule's user keeps the rule's 100%").toMatchObject({
-      enabled: true,
-      reason: "targeting_rule",
-    });
+    for (const user of US_USERS) {
+      expect(await evaluate(page, user, "US"), `${user} keeps the rule's 100%`).toMatchObject({
+        enabled: true,
+        reason: "targeting_rule",
+      });
+    }
     const answers = await Promise.all(GLOBAL_USERS.map((user) => evaluate(page, user)));
     for (const answer of answers) expect(answer.reason, "a user with no country is decided by the global percentage").toBe("rollout");
-    const served = answers.filter((a) => a.enabled).length;
-    expect(served, "some of 40 users are still served at 20%").toBeGreaterThan(0);
-    expect(served, "and not all of them").toBeLessThan(GLOBAL_USERS.length);
-    expect(await scheduleStatuses(page), "a lowered flag's schedule is paused too").not.toContain("active");
+    expect(answers.filter((a) => a.enabled).length, "the users the global 20% serves").toBe(SERVED_AT_20);
+    expect(await scheduleStatuses(page), "a lowered flag's schedule is paused too").toEqual(["paused"]);
 
     // The dashboard shows what the SDK gets: On, at 20%.
     const flags = new FeatureFlagsPage(page);
