@@ -362,8 +362,9 @@ Rules that are easy to get wrong:
   literals such as `patch()` targets), and `make core-build`
   (`scripts/core_build.sh`), which copies the checkout, deletes `modules/` and
   every manifest path, and then imports, bootstraps, tests, builds and scans
-  what is left — the `core-build` CI job runs the same script on every pull
-  request, and `full-build` runs the same sequence on the full tree.
+  what is left — the `core-build` check runs the same script's steps on every
+  pull request, split into jobs that run in parallel, and `full-build` runs
+  the same sequence on the full tree.
   The modules plug into the core through the registration hooks and the
   loader under `backend/app/core/` and `backend/app/modules_loader.py`, never
   the other way round: the dependency arrow points from `modules/` into

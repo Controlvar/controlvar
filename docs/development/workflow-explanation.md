@@ -18,5 +18,9 @@ own `gh` login: the Actions token cannot read branch protection.
 
 - `lint`: see "Lint and format" in the
   [Development Guidelines](guidelines.md#lint-and-format).
-- `core-build`: `make core-build`, which runs `scripts/core_build.sh`.
+- `core-build`: `make core-build`, which runs `scripts/core_build.sh`. In CI the
+  unit and integration sessions run in four parallel jobs, core-build (shard 1) to
+  core-build (shard 4); shard 1 also runs every other step. The job named
+  core-build reports once all have finished and is green only when every one
+  passed and every collected test ran in exactly one of them.
 - The backend and dashboard suites: see the [Testing Guide](testing-guide.md).

@@ -15,15 +15,18 @@ steps each leg had and the profile written out. These are YAML reads, not
 greps, and they pin the exact condition on every step, so a new step that is
 not classified here fails until it is:
 
-* ``core-build``: every build step ``docs_only != 'true'``; on a docs-only
-  change it checks out, sets up Python and runs the tests that pin ``docs/``
-  content (``DOCS_TESTS``);
+* ``core-build-shard`` (the core profile's build, in shards, #2126): every
+  step but the printed reason ``docs_only != 'true'``, and no docs tests;
+* ``core-build`` (the summary of the shards, the required check): on a
+  docs-only change it checks out, sets up Python and runs the tests that pin
+  ``docs/`` content (``DOCS_TESTS``); on any other change it reads the
+  shards' results and reports;
 * ``full-build``: every step but the printed reason ``docs_only != 'true'``,
   and no docs tests;
-* the two jobs share their runner, timeout, Postgres service, environment
-  and every step they both have, as the matrix legs did by construction;
-  core-build alone has the ``redis`` service its integration session needs
-  (#899);
+* the shards and full-build share their runner, Postgres service,
+  environment and every step they both have, as the matrix legs did by
+  construction; the shards alone have the ``redis`` service their
+  integration sessions need (#899);
 * ``_platform.yml``: a ``skip`` input, every step's condition starting with
   ``!inputs.skip`` inside ``${{ }}`` (a bare leading ``!`` is a YAML tag);
 * the three sources of the required check names;
@@ -63,23 +66,38 @@ DOCS = "needs.changes.outputs.docs_only == 'true'"
 #: is the check name: neither has a `name:`.
 BUILD_JOBS = ("core-build", "full-build")
 
-#: Every step of core-build, by name (or `uses:` when unnamed), and its exact
-#: `if:`. Insertion order is the step order. These are the matrix's core leg
-#: with `matrix.profile == 'core'` evaluated: `X || true` is no condition,
-#: `X && true` is X, and `X && false` (the module install) is no step.
+#: A step that runs after a failed step too, except on a docs-only change.
+ALWAYS_NOT_DOCS = "${{ always() && needs.changes.outputs.docs_only != 'true' }}"
+
+#: Every step of core-build, the summary, by name (or `uses:` when unnamed),
+#: and its exact `if:`. Insertion order is the step order. The tree for the
+#: checker or the docs tests; Python and the docs tests on a docs-only change;
+#: otherwise the shards' reports, their results and the checker.
 CORE_BUILD_STEPS: Dict[str, Optional[str]] = {
     "Docs-only change": DOCS,
     "actions/checkout@v7": None,
-    "Set up Python": None,
+    "Set up Python": DOCS,
     "Install backend dependencies (docs tests)": DOCS,
     "Docs content tests": DOCS,
     "No docs content test was skipped": DOCS,
+    "Collect the shard reports": NOT_DOCS,
+    "Every job passed": None,
+    "Every test ran in exactly one shard": ALWAYS_NOT_DOCS,
+}
+
+#: The same for core-build-shard: the build steps of the single core-build job
+#: before the split, each `docs_only != 'true'`, and the reports' upload.
+CORE_BUILD_SHARD_STEPS: Dict[str, Optional[str]] = {
+    "Docs-only change": DOCS,
+    "actions/checkout@v7": NOT_DOCS,
+    "Set up Python": NOT_DOCS,
     "Set up Node.js": NOT_DOCS,
     "Install backend dependencies": NOT_DOCS,
     "Install gitleaks": NOT_DOCS,
     "The jq these tests run with": NOT_DOCS,
     "Start a password-protected Redis": NOT_DOCS,
     "core build": NOT_DOCS,
+    "Upload the shard reports": ALWAYS_NOT_DOCS,
 }
 
 #: The same for full-build, the matrix's full leg: `X || false` is X, so the
@@ -98,9 +116,14 @@ FULL_BUILD_STEPS: Dict[str, Optional[str]] = {
 
 #: The build step's exact command in each job: the matrix's
 #: `scripts/core_build.sh --profile ${{ matrix.profile }} ${{ matrix.steps }}`
-#: with each row's values.
+#: with each row's values, the core one in shards.
 BUILD_COMMANDS = {
-    "core-build": ("core build", "scripts/core_build.sh --profile core"),
+    "core-build-shard": (
+        "core build",
+        "scripts/core_build.sh --profile core "
+        "--shard ${{ matrix.shard }}/${{ strategy.job-total }} "
+        '--shard-reports "$RUNNER_TEMP/core-build-shard-reports"',
+    ),
     "full-build": (
         "full build",
         "scripts/core_build.sh --profile full "
@@ -436,7 +459,11 @@ NEVER_SKIPS = "${{ !cancelled() }}"
 
 
 #: The jobs that always run and condition their steps instead.
-NEVER_SKIP_JOBS = ("core-build", "full-build", "sdk-live-contract")
+NEVER_SKIP_JOBS = ("core-build-shard", "full-build", "sdk-live-contract")
+
+#: The summary's `if:`: after any result of the shards, a cancelled run too,
+#: so that it reports (test_ci_aggregators.py holds a required summary to it).
+SUMMARY_IF = "${{ always() }}"
 
 
 class TestNoJobLevelSkip:
@@ -447,6 +474,13 @@ class TestNoJobLevelSkip:
             "skips the docs tests or never reports its required check name; "
             "without it, a failed classifier skips it."
         )
+
+    def test_the_core_build_summary_runs_after_any_result(self, gate):
+        """The required `core-build` needs the classifier and the shards and
+        runs whatever they ended with, so it never skips."""
+        job = gate["jobs"]["core-build"]
+        assert job.get("if") == SUMMARY_IF, job.get("if")
+        assert job.get("needs") == ["changes", "core-build-shard"], job.get("needs")
 
     def test_no_matrix_or_reusable_job_skips_on_docs_only(self, gate):
         """The same trap for any job added later in either shape, and for
@@ -494,60 +528,80 @@ class TestBuildJobSteps:
         actual = _conditions(gate["jobs"]["core-build"]["steps"])
         assert list(actual.items()) == list(CORE_BUILD_STEPS.items())
 
+    def test_core_build_shard_steps_have_exactly_their_conditions(self, gate):
+        actual = _conditions(gate["jobs"]["core-build-shard"]["steps"])
+        assert list(actual.items()) == list(CORE_BUILD_SHARD_STEPS.items())
+
     def test_full_build_steps_have_exactly_their_conditions(self, gate):
         actual = _conditions(gate["jobs"]["full-build"]["steps"])
         assert list(actual.items()) == list(FULL_BUILD_STEPS.items())
 
-    @pytest.mark.parametrize("job_id", BUILD_JOBS)
+    @pytest.mark.parametrize("job_id", list(BUILD_COMMANDS))
     def test_the_build_itself_is_the_core_build_script(self, gate, job_id):
         steps = {_key(s): s for s in gate["jobs"][job_id]["steps"]}
         name, command = BUILD_COMMANDS[job_id]
         assert steps[name]["run"].strip() == command
 
-    @pytest.mark.parametrize("job_id", BUILD_JOBS)
+    @pytest.mark.parametrize("job_id", BUILD_JOBS + ("core-build-shard",))
     def test_the_skip_reason_is_printed(self, gate, job_id):
         first = gate["jobs"][job_id]["steps"][0]
         assert "docs-only change" in first["run"]
 
     def test_the_two_jobs_run_in_the_same_environment(self, gate):
         """The matrix gave both legs one runner, timeout, service set and
-        environment by construction; two jobs have to be held to it."""
-        core, full = (gate["jobs"][j] for j in BUILD_JOBS)
+        environment by construction; the core shards and full-build have to
+        be held to it."""
+        shard, full = gate["jobs"]["core-build-shard"], gate["jobs"]["full-build"]
         # Every job-level key is listed, so a new one (a `name:`, a
-        # `concurrency:`, a `strategy:`) is a decision, not a drift.
+        # `concurrency:`, a `strategy:`) is a decision, not a drift. The
+        # shards' `name:` and `strategy:` are pinned in
+        # test_core_build_shards.py.
         keys = {"needs", "if", "runs-on", "timeout-minutes", "services", "env"}
-        assert set(core) == set(full) == keys | {"steps"}, (
-            sorted(core),
-            sorted(full),
+        assert set(full) == keys | {"steps"}, sorted(full)
+        assert set(shard) == keys | {"steps", "name", "strategy"}, sorted(shard)
+        for key in sorted(keys - {"services", "timeout-minutes"}):
+            assert shard[key] == full[key], f"{key} differs between the jobs"
+        # The one difference: the core shards' integration sessions need
+        # Redis (#899), and full-build runs no pytest session.
+        shard_services = dict(shard["services"])
+        assert sorted(shard_services) == ["postgres", "redis"], sorted(shard_services)
+        shard_services.pop("redis")
+        assert shard_services == full["services"], "the Postgres services differ"
+        # 75 a shard (#2126): as one job core-build took 97-146 minutes in
+        # eight passing runs on 2026-11-25, against 180; a shard is about a
+        # quarter of its two pytest sessions. A shard over 60 minutes adds a
+        # shard to the matrix rather than raising this. full-build keeps the
+        # 180 the single job had. A different number is a decision about the
+        # slowest required check.
+        assert shard["timeout-minutes"] == 75
+        assert full["timeout-minutes"] == 180
+        assert shard["needs"] == "changes"
+        # The summary runs no build: no services and no build environment.
+        summary = gate["jobs"]["core-build"]
+        assert set(summary) == {"needs", "if", "runs-on", "timeout-minutes", "steps"}, (
+            sorted(summary)
         )
-        for key in sorted(keys - {"services"}):
-            assert core[key] == full[key], f"{key} differs between the jobs"
-        # The one difference: core-build's integration session needs Redis
-        # (#899), and full-build runs no pytest session.
-        core_services = dict(core["services"])
-        assert sorted(core_services) == ["postgres", "redis"], sorted(core_services)
-        core_services.pop("redis")
-        assert core_services == full["services"], "the Postgres services differ"
-        # 180, not 120 or 75: on 2026-11-03 core-build's passing runs reached
-        # about 75.5 minutes and four were cancelled at 75 (one 3 s after its
-        # script printed OK); on 2026-11-16 passing runs took up to 116
-        # minutes and one was cancelled at 120 with every test session it
-        # reached passed, on a runner about 1.25x slower. A different number is a
-        # decision about the slowest required check.
-        assert core["timeout-minutes"] == 180
-        assert core["needs"] == "changes"
+        assert summary["runs-on"] == full["runs-on"]
+        assert summary["timeout-minutes"] == 20
 
     def test_the_steps_both_jobs_have_are_the_same_step(self, gate):
-        """Apart from its `if:` and the printed reason, a step in both jobs is
-        one step written twice; a pin or a version moved in one is a diff."""
-        core, full = (
-            {_key(s): s for s in gate["jobs"][j]["steps"]} for j in BUILD_JOBS
+        """Apart from its `if:` and the printed reason, a step in the core
+        shards and full-build is one step written twice; a pin or a version
+        moved in one is a diff. The summary's checkout and Python are the
+        shards' too."""
+        core, full, summary = (
+            {_key(s): s for s in gate["jobs"][j]["steps"]}
+            for j in ("core-build-shard", "full-build", "core-build")
         )
         shared = (set(core) & set(full)) - {"Docs-only change"}
         assert len(shared) == 5, sorted(shared)
         for key in shared:
             a = {k: v for k, v in core[key].items() if k != "if"}
             b = {k: v for k, v in full[key].items() if k != "if"}
+            assert a == b, key
+        for key in ("actions/checkout@v7", "Set up Python"):
+            a = {k: v for k, v in core[key].items() if k != "if"}
+            b = {k: v for k, v in summary[key].items() if k != "if"}
             assert a == b, key
 
     def test_the_docs_tests_are_exactly_the_list(self, gate):

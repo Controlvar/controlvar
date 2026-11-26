@@ -50,6 +50,7 @@ EXPECTED = {
     "Security Scan Summary",
     "SDK Unit Tests",
     "integration-tests",
+    "core-build",
 }
 
 TYPED_RESULT = re.compile(r"needs\.[A-Za-z_][\w-]*\.result")
@@ -213,6 +214,7 @@ def test_needs_are_transitively_closed(workflow, job_id, job, jobs):
 #: end the job before it.
 CONTINUE_ON_ERROR_STEPS = {
     ("integration-tests.yml", "integration-tests"): {"Collect the shard reports"},
+    ("pr-qa-gate.yml", "core-build"): {"Collect the shard reports"},
     ("nightly-qa.yml", "integration-tests"): {"Collect the shard reports"},
     ("nightly-qa.yml", "unit-tests"): {"Collect the shard reports"},
 }

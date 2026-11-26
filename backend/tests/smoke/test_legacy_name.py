@@ -35,8 +35,8 @@ OLD = "experi" + "mently"
 
 #: The reviewed size of the keep-list. A new entry is a reviewed change, so it
 #: moves these numbers in the same pull request.
-ENTRIES = 607
-KEPT = 1295
+ENTRIES = 608
+KEPT = 1299
 EXCLUDES = [
     "CHANGELOG.md",
     "backend/tests/unit/infrastructure/fixtures/branch_protection/live_main_2026-10-01.json",
