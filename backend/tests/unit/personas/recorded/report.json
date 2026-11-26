@@ -1,0 +1,89 @@
+{
+  "errors": [],
+  "stats": {
+    "duration": 7408.504000000001,
+    "expected": 1,
+    "flaky": 0,
+    "skipped": 0,
+    "startTime": "2026-11-26T08:25:26.102Z",
+    "unexpected": 0
+  },
+  "suites": [
+    {
+      "column": 0,
+      "file": "personas/u-dev.persona.spec.ts",
+      "line": 0,
+      "specs": [
+        {
+          "column": 1,
+          "file": "personas/u-dev.persona.spec.ts",
+          "id": "52002264398a8bc4e16c-d2ec34cdf9d2e8be4b05",
+          "line": 23,
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "personas",
+              "projectName": "personas",
+              "results": [
+                {
+                  "annotations": [],
+                  "attachments": [],
+                  "duration": 6966,
+                  "errors": [],
+                  "parallelIndex": 0,
+                  "retry": 0,
+                  "startTime": "2026-11-26T08:25:26.311Z",
+                  "status": "passed",
+                  "stderr": [],
+                  "stdout": [],
+                  "steps": [
+                    {
+                      "duration": 180,
+                      "title": "U-DEV day 1: create an API key at /account/api-keys"
+                    },
+                    {
+                      "duration": 495,
+                      "title": "U-DEV day 2: build an experiment in the dashboard's guided setup with two variants and one metric"
+                    },
+                    {
+                      "duration": 66,
+                      "title": "U-DEV day 3: start the experiment"
+                    },
+                    {
+                      "duration": 2304,
+                      "title": "U-DEV day 4: send 200 users through assign and 40 conversions with the new key"
+                    },
+                    {
+                      "duration": 656,
+                      "title": "U-DEV day 5: read the results page"
+                    },
+                    {
+                      "duration": 470,
+                      "title": "U-DEV day 6: target a feature flag at country US with a 20% rollout"
+                    },
+                    {
+                      "duration": 2013,
+                      "title": "U-DEV day 7: add a rollout schedule of 10, 50 and 100 percent"
+                    },
+                    {
+                      "duration": 231,
+                      "title": "U-DEV day 8: set an experiment end date in Los Angeles time"
+                    }
+                  ],
+                  "workerIndex": 0
+                }
+              ],
+              "status": "expected",
+              "timeout": 120000
+            }
+          ],
+          "title": "U-DEV: the developer's day"
+        }
+      ],
+      "title": "personas/u-dev.persona.spec.ts"
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "errors": [],
+  "stats": {
+    "duration": 106.95000000000002,
+    "expected": 0,
+    "flaky": 0,
+    "skipped": 1,
+    "startTime": "2026-11-26T08:25:25.556Z",
+    "unexpected": 0
+  },
+  "suites": [
+    {
+      "column": 0,
+      "file": "personas/u-dev.persona.spec.ts",
+      "line": 0,
+      "specs": [
+        {
+          "column": 1,
+          "file": "personas/u-dev.persona.spec.ts",
+          "id": "52002264398a8bc4e16c-d2ec34cdf9d2e8be4b05",
+          "line": 23,
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "personas",
+              "projectName": "personas",
+              "results": [],
+              "status": "skipped",
+              "timeout": 120000
+            }
+          ],
+          "title": "U-DEV: the developer's day"
+        }
+      ],
+      "title": "personas/u-dev.persona.spec.ts"
+    }
+  ]
+}

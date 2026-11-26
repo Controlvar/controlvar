@@ -648,6 +648,142 @@ jobs:
             backend.log
           retention-days: 14
 
+  # The persona days (#1950): each role's ordinary day in the dashboard, every
+  # writing step decided by reading the API back (frontend/tests/e2e/personas,
+  # the cards in tests/personas). Its own runner, with e2e-tests' boot copied
+  # (not shared, so neither job changes the other). Nothing a test prints
+  # reaches this log or an artefact: Playwright's output, its JSON report and
+  # the oracle log stay in files on the runner, and tests/personas/check_run.py
+  # prints one line of counts, here and in the run summary. e2e-tests' steps
+  # up to its first Playwright run took 3.4 minutes on 2026-11-25 (run
+  # 45651635175) and the developer's day about 10 seconds off the runner;
+  # 30 minutes is meant to leave room for the other days.
+  persona-days:
+    name: Persona days
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PLAYWRIGHT_API_URL: http://localhost:8000
+      PLAYWRIGHT_PORT: '3100'
+      # For the SDK app's day: the port its page is to be served on, by
+      # tests/e2e/static-server.mjs (--dir) with its /api proxy, so the page
+      # and the API share an origin and need no CORS entry.
+      PERSONAS_SDK_PORT: '3400'
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: experimentation
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: |
+            frontend/package-lock.json
+            sdk/js/package-lock.json
+
+      - name: Install backend dependencies
+        run: |
+          pip install -r backend/requirements.txt
+          pip install -e . --no-deps
+
+      - name: Bootstrap and seed the database
+        env:
+          ENVIRONMENT: development
+          AUTH_PROVIDER: local
+          SECRET_KEY: ci-only-nightly-e2e-secret-key-0123456789abcdef0123456789
+          POSTGRES_SERVER: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_DB: experimentation
+          POSTGRES_SCHEMA: experimentation
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        run: |
+          python -m backend.app.db.bootstrap
+          python backend/scripts/seed_demo_data.py
+
+      - name: Start backend
+        env:
+          ENVIRONMENT: development
+          AUTH_PROVIDER: local
+          SECRET_KEY: ci-only-nightly-e2e-secret-key-0123456789abcdef0123456789
+          POSTGRES_SERVER: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_DB: experimentation
+          POSTGRES_SCHEMA: experimentation
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        run: |
+          nohup python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 \
+            > backend.log 2>&1 &
+          for _ in $(seq 1 60); do
+            if curl -sf http://localhost:8000/health/ready >/dev/null; then
+              echo "backend ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "backend did not become ready"; tail -n 100 backend.log; exit 1
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm ci
+
+      - name: Build the dashboard (static export)
+        env:
+          NEXT_PUBLIC_API_URL: ''
+        run: cd frontend && npm run build
+
+      # The SDK app's day loads this checkout's JavaScript SDK, as the
+      # flags-over-time suite does (_platform.yml, usecases-flags).
+      - name: Build the JavaScript SDK
+        run: cd sdk/js && npm ci --ignore-scripts --no-audit --no-fund && npm run build --silent
+
+      - name: Install Playwright browsers
+        run: cd frontend && npx playwright install --with-deps chromium
+
+      # Both Playwright commands write to files only, and their exit statuses
+      # go to the checker, which decides the step: a failing test prints its
+      # title and its step's, so its output must not reach this log.
+      - name: Run the persona days
+        env:
+          PERSONAS: '1'
+        run: |
+          set +e
+          out="$RUNNER_TEMP/personas"
+          mkdir -p "$out"
+          cd frontend || exit 1
+          npx playwright test --list --project=personas --reporter=json > "$out/list.json" 2> "$out/list.log"
+          list_exit=$?
+          PERSONAS_REPORT="$out/report.json" PERSONAS_ORACLE_LOG="$out/oracle-log.jsonl" \
+            npx playwright test --project=personas > "$out/playwright.log" 2>&1
+          run_exit=$?
+          cd .. || exit 1
+          python tests/personas/check_run.py --list "$out/list.json" --list-exit "$list_exit" \
+            --report "$out/report.json" --run-exit "$run_exit" \
+            --oracle-log "$out/oracle-log.jsonl" --details "$out/details.txt"
+
   # The synthetic check's dead-man switch (synthetic.yml): the largest gap
   # between its scheduled runs that passed all eight steps, over the last 48 h,
   # against max_gap_minutes in scripts/synthetic_freshness.toml. Until that
@@ -721,7 +857,7 @@ jobs:
   nightly-failure-issue:
     name: File an issue on failure
     runs-on: ubuntu-latest
-    needs: [unit-shard, unit-tests, integration-shard, integration-tests, benchmarks, smoke-tests, sdk-contract-tests, frontend-tests, e2e-tests, synthetic-freshness, ground-truth, ground-truth-faults, flags-over-time]
+    needs: [unit-shard, unit-tests, integration-shard, integration-tests, benchmarks, smoke-tests, sdk-contract-tests, frontend-tests, e2e-tests, persona-days, synthetic-freshness, ground-truth, ground-truth-faults, flags-over-time]
     # A job that hits its timeout-minutes ends `cancelled`, not `failure`, so
     # failure() alone stayed false on 2026-11-02 and 2026-11-03 and no issue was
     # filed. A person cancelling the run files one too; that fails closed.

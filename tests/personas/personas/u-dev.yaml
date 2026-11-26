@@ -17,12 +17,12 @@ day:
     layer: A
     writes: true
     oracles:
-      - id: u-dev.1.key-listed-by-prefix
+      - id: u-dev.1.key-listed-once
         kind: api_state
         expect: >-
-          GET /api/v1/api-keys lists the new key by its prefix and never
-          returns the secret; the page showed the secret once and the prefix
-          only after a reload
+          GET /api/v1/api-keys lists the new key once, active, and never
+          returns the secret; the page showed the secret once and not after a
+          reload
         source:
           path: docs/security/api-keys.md
           anchor: "**The `key` value is shown only once.**"
@@ -67,9 +67,14 @@ day:
         expect: >-
           users and conversions per variant equal the ledger, and the p-value
           equals the one scipy computes from the ledger's counts
+        source:
+          path: docs/architecture/technical-guide.md
+          anchor: "Two-sided Fisher's exact test (`scipy.stats.fisher_exact`)"
       - id: u-dev.5.page-equals-api
         kind: ui_matches_api
-        expect: the page shows what GET /api/v1/experiments/{id}/results returns
+        expect: >-
+          the page shows each variant's users, rate and p-value as GET
+          /api/v1/results/{id} returns them
   - n: 6
     intent: target a feature flag at country US with a 20% rollout
     layer: A
@@ -82,7 +87,12 @@ day:
           reason rollout for a DE user
       - id: u-dev.6.hash-vector
         kind: hash_vector
-        expect: the rollout bucket of each user equals the golden hash vector
+        expect: >-
+          each DE user is enabled exactly when md5-mod100-v1 puts them below
+          20, the bucketing first reproducing every golden rollout vector
+        source:
+          path: docs/sdk/local-evaluation.md
+          anchor: "Rollout percentages bucket users exactly as the server does (`md5-mod100-v1`"
   - n: 7
     intent: add a rollout schedule of 10, 50 and 100 percent
     layer: A
@@ -91,8 +101,9 @@ day:
       - id: u-dev.7.stages-stored
         kind: api_state
         expect: >-
-          GET /api/v1/rollout-schedules/{id} lists three stages at 10, 50 and
-          100, and the first is applied to the flag
+          GET /api/v1/rollout-schedules/ lists the flag's one schedule with
+          three stages at 10, 50 and 100, and the first, started, is applied
+          to the flag
   - n: 8
     intent: set an experiment end date in Los Angeles time
     layer: A
@@ -100,7 +111,9 @@ day:
     oracles:
       - id: u-dev.8.end-date-utc
         kind: api_state
-        expect: the end date the API returns is the UTC instant of the typed LA time
+        expect: >-
+          on a draft cloned from the day's experiment, the end date the API
+          returns is the UTC instant of the typed LA time
         source:
           path: docs/guides/user-guide.md
           anchor: "in your zone and in UTC"
