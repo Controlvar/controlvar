@@ -9,6 +9,9 @@ change a flag, and evaluate it directly.
   again (``Driver._admin``), so afterwards ``sign_in`` asserts that no route
   it used was answered 429 (``routes[route].rate_limited == 0``) and raises
   ``RateLimited`` otherwise.
+* **Experiments, assignments and segments** (``create_experiment``,
+  ``start_experiment``, ``assign``, ``create_segment``, ``preview_segment``,
+  ``delete_segment``) are the same kind of request, paced the same way.
 * **Flag changes and raw evaluations** go through ``Admin``, a small httpx
   helper: ``create_flag``, ``set_rollout`` (``PUT`` of the rollout
   percentage), ``toggle`` (with an empty JSON body: the route answers 422 to
@@ -50,6 +53,12 @@ TOGGLE = "/api/v1/feature-flags/{flag_id}/toggle"
 BULK_TOGGLE = "/api/v1/feature-flags/bulk-toggle"
 EVALUATE = "/api/v1/feature-flags/evaluate/{flag_key}"
 RULESET = "/api/v1/sdk/ruleset"
+EXPERIMENTS = "/api/v1/experiments/"
+EXPERIMENT_START = "/api/v1/experiments/{experiment_id}/start"
+ASSIGN = "/api/v1/tracking/assign"
+SEGMENTS = "/api/v1/segments"
+SEGMENT = "/api/v1/segments/{segment_id}"
+SEGMENT_PREVIEW = "/api/v1/segments/{segment_id}/preview"
 
 #: The least time between two raw evaluations: 80% of 6,000 a minute.
 EVALUATE_INTERVAL = 60 / 4800
@@ -156,6 +165,8 @@ class Admin:
             raise RateLimited(f"{method} {route} answered 429")
         if not 200 <= response.status_code < 300:
             raise AdminError(f"{method} {route} answered {response.status_code}")
+        if response.status_code == 204:
+            return None
         try:
             return response.json()
         except ValueError:
@@ -256,4 +267,96 @@ class Admin:
             kind="evaluate",
             headers={"X-API-Key": self._api_key},
             params=params,
+        )
+
+    def create_experiment(self, key: str) -> dict[str, Any]:
+        """``POST /api/v1/experiments/``: a draft with a control and one
+        treatment, and a primary conversion metric."""
+        body = {
+            "name": f"Use case {key}"[:100],
+            "key": key,
+            "variants": [
+                {"name": "control", "is_control": True, "traffic_allocation": 50},
+                {"name": "treatment", "is_control": False, "traffic_allocation": 50},
+            ],
+            "metrics": [
+                {
+                    "name": "Purchase",
+                    "event_name": "purchase",
+                    "metric_type": "conversion",
+                    "is_primary": True,
+                }
+            ],
+        }
+        return self._send(
+            "POST",
+            EXPERIMENTS,
+            route=EXPERIMENTS,
+            kind="admin",
+            headers=self._bearer(),
+            json=body,
+        )
+
+    def start_experiment(self, experiment_id: str) -> dict[str, Any]:
+        """``POST /api/v1/experiments/{experiment_id}/start``."""
+        return self._send(
+            "POST",
+            EXPERIMENT_START.format(experiment_id=experiment_id),
+            route=EXPERIMENT_START,
+            kind="admin",
+            headers=self._bearer(),
+        )
+
+    def assign(
+        self, experiment_key: str, user_id: str, context: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """``POST /api/v1/tracking/assign`` with the API key: one exposure,
+        carrying *context*."""
+        return self._send(
+            "POST",
+            ASSIGN,
+            route=ASSIGN,
+            kind="evaluate",
+            headers={"X-API-Key": self._api_key},
+            json={
+                "experiment_key": experiment_key,
+                "user_id": user_id,
+                "context": dict(context),
+            },
+        )
+
+    def create_segment(self, name: str, rules: Mapping[str, Any]) -> dict[str, Any]:
+        """``POST /api/v1/segments``: a rules segment."""
+        return self._send(
+            "POST",
+            SEGMENTS,
+            route=SEGMENTS,
+            kind="admin",
+            headers=self._bearer(),
+            json={"name": name, "rules": dict(rules)},
+        )
+
+    def preview_segment(
+        self, segment_id: str, rules: Mapping[str, Any], sample_size: int
+    ) -> dict[str, Any]:
+        """``POST /api/v1/segments/{segment_id}/preview``: the share of the
+        users seen most recently that *rules* match."""
+        return self._send(
+            "POST",
+            SEGMENT_PREVIEW.format(segment_id=segment_id),
+            route=SEGMENT_PREVIEW,
+            kind="admin",
+            headers=self._bearer(),
+            json={"name": "preview", "rules": dict(rules)},
+            params={"sample_size": str(sample_size)},
+        )
+
+    def delete_segment(self, segment_id: str) -> None:
+        """``DELETE /api/v1/segments/{segment_id}``."""
+        self._send(
+            "DELETE",
+            SEGMENT.format(segment_id=segment_id),
+            route=SEGMENT,
+            kind="admin",
+            headers=self._bearer(),
         )
