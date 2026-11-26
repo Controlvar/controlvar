@@ -2,15 +2,17 @@
  * Promoting a flag from one environment to the next.
  *
  * Development is promoted to Staging, and Staging to Production; Production
- * is promoted nowhere. The API copies three things and nothing else: the
- * status (on or off), the rollout percentage and the targeting rules. This
- * file works out what the dialog shows before anything is sent: each of the
- * three, as it is in the target now and as it will be after, and whether it
- * changes.
+ * is promoted nowhere. The API copies four things and nothing else: the
+ * status (on or off), the rollout percentage, the targeting rules and the
+ * split (#2012). A boolean flag has no split, so its dialog lists the first
+ * three. This file works out what the dialog shows before anything is sent:
+ * each of them, as it is in the target now and as it will be after, and
+ * whether it changes.
  */
 import type { FlagEnvironmentSettings } from '@/services/featureFlags';
 import { isNoRules } from '@/utils/experimentTargeting';
 import { FLAG_ENVIRONMENT_LABELS, FlagEnvironment } from '@/utils/flagEnvironments';
+import { describeSplit, sameSplit } from '@/utils/flagSplit';
 
 /** The environment a flag is promoted into from `environment`, or null (Production). */
 export function promotionTarget(environment: FlagEnvironment | null): FlagEnvironment | null {
@@ -24,7 +26,7 @@ export function promoteLabel(target: FlagEnvironment): string {
   return `Promote to ${FLAG_ENVIRONMENT_LABELS[target]}`;
 }
 
-export type PromotionField = 'status' | 'rollout' | 'rules';
+export type PromotionField = 'status' | 'rollout' | 'rules' | 'split';
 
 export interface PromotionRow {
   field: PromotionField;
@@ -37,11 +39,12 @@ export interface PromotionRow {
   changes: boolean;
 }
 
-/** The three copied fields, in the order the dialog lists them. */
+/** The copied fields, in the order the dialog lists them; a boolean flag's has no split. */
 export const PROMOTED_FIELDS: Record<PromotionField, string> = {
   status: 'Status',
   rollout: 'Rollout percentage',
   rules: 'Targeting rules',
+  split: 'Split',
 };
 
 function isOn(settings: FlagEnvironmentSettings): boolean {
@@ -110,15 +113,31 @@ export function describeRules(rules: unknown): string[] {
 }
 
 /**
- * The three copied fields, as the target has them and as they will be once
- * `source` is copied in. Every field is listed, with whether it changes: none
- * is left out.
+ * The copied fields, as the target has them and as they will be once `source`
+ * is copied in. Every field is listed, with whether it changes: none is left
+ * out. A string, number or json flag (`valueFlag`) lists its split too, each
+ * value in a bounded preview with its weight.
  */
-export function promotionRows(source: FlagEnvironmentSettings, target: FlagEnvironmentSettings): PromotionRow[] {
+export function promotionRows(
+  source: FlagEnvironmentSettings,
+  target: FlagEnvironmentSettings,
+  valueFlag = false,
+): PromotionRow[] {
   // No rules, however stored (null, {} or no groups), is one "None".
   const sameRules =
     (isNoRules(source.targeting_rules) && isNoRules(target.targeting_rules)) ||
     canonical(source.targeting_rules ?? null) === canonical(target.targeting_rules ?? null);
+  const split: PromotionRow[] = valueFlag
+    ? [
+        {
+          field: 'split',
+          label: PROMOTED_FIELDS.split,
+          now: describeSplit(target.split),
+          after: describeSplit(source.split),
+          changes: !sameSplit(source.split, target.split),
+        },
+      ]
+    : [];
   return [
     {
       field: 'status',
@@ -141,6 +160,7 @@ export function promotionRows(source: FlagEnvironmentSettings, target: FlagEnvir
       after: describeRules(source.targeting_rules),
       changes: !sameRules,
     },
+    ...split,
   ];
 }
 
@@ -152,6 +172,19 @@ export function promotionRows(source: FlagEnvironmentSettings, target: FlagEnvir
 export const NOT_COPIED_NOTE =
   "Not copied: the flag's rollout schedules and safety settings, and its type and values. They stay as they are.";
 
+/**
+ * The same for a string, number or json flag, whose split is copied: its
+ * values in the split go with it, and what stays is the flag's own type, on
+ * value and off value.
+ */
+export const NOT_COPIED_VALUE_FLAG_NOTE =
+  "Not copied: the flag's rollout schedules and safety settings, and its type, on value and off value. They stay as they are.";
+
+/** The note for a flag of this kind. */
+export function notCopiedNote(valueFlag: boolean): string {
+  return valueFlag ? NOT_COPIED_VALUE_FLAG_NOTE : NOT_COPIED_NOTE;
+}
+
 /** The source has nothing configured, so the target is turned off. */
 export function nothingConfiguredText(source: FlagEnvironment, target: FlagEnvironment, targetIsOn: boolean): string {
   const from = FLAG_ENVIRONMENT_LABELS[source];
@@ -161,9 +194,10 @@ export function nothingConfiguredText(source: FlagEnvironment, target: FlagEnvir
     : `Nothing is configured in ${from}, so ${into} stays off.`;
 }
 
-/** The dialog's summary sentence. */
-export function promoteSummary(source: FlagEnvironment, target: FlagEnvironment): string {
-  return `Copies ${FLAG_ENVIRONMENT_LABELS[source]}'s status, rollout percentage and targeting rules into ${FLAG_ENVIRONMENT_LABELS[target]}.`;
+/** The dialog's summary sentence; a string, number or json flag's names the split too. */
+export function promoteSummary(source: FlagEnvironment, target: FlagEnvironment, valueFlag = false): string {
+  const fields = valueFlag ? 'status, rollout percentage, targeting rules and split' : 'status, rollout percentage and targeting rules';
+  return `Copies ${FLAG_ENVIRONMENT_LABELS[source]}'s ${fields} into ${FLAG_ENVIRONMENT_LABELS[target]}.`;
 }
 
 /** Production's rollout schedule: promotion changes its percentage, not its progress. */

@@ -120,6 +120,7 @@ DASHBOARD_WORDS: List[Word] = [
         "frontend/src/utils/flagPromotion.ts",
         ("rules: 'Targeting rules'",),
     ),
+    Word("Split", "frontend/src/utils/flagPromotion.ts", ("split: 'Split'",)),
     Word(
         "Create API Key",
         "frontend/src/components/admin/api-keys/ApiKeyTable.tsx",

@@ -88,6 +88,14 @@ export const PRODUCTION_ONLY_NOTE = 'Rollout schedules, safety monitoring and ex
 export const SHARED_SETTINGS_NOTE =
   "A flag's values, and archiving or deleting it, apply in every environment, so they are done in Production only.";
 
+/**
+ * The same for a string, number or json flag, whose split (#2012) is each
+ * environment's own: what applies in every environment is its value type, on
+ * value and off value.
+ */
+export const SHARED_VALUE_SETTINGS_NOTE =
+  "A flag's value type, on value and off value, and archiving or deleting it, apply in every environment, so they are done in Production only. Its split is each environment's own.";
+
 /** On the flag list outside Production, where "+ New Flag" would be. */
 export const NEW_FLAGS_IN_PRODUCTION = 'New flags are created in Production.';
 

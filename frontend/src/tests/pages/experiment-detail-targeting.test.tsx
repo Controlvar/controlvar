@@ -417,6 +417,19 @@ describe('Who can join — rules the builder cannot show', () => {
     expect(within(s).getByRole('button', { name: 'Replace rules' })).toBeInTheDocument();
   });
 
+  // A flag rule may carry a value of its own (#2012); the flag pages edit it,
+  // and an experiment's rules never have one, so here it stays a key the
+  // builder does not know: read-only, offering only Replace rules.
+  it("keeps a rule with a top-level value (a flag rule's own) read-only", async () => {
+    expect(isEditableTargeting({ ...BUILDER_RULES, value: 'pro-copy' })).toBe(false);
+    install({ targeting_rules: { ...BUILDER_RULES, value: 'pro-copy' } });
+    render(<ExperimentDetailPage />);
+    const s = await section();
+    expect(within(s).getByTestId('targeting-raw')).toHaveTextContent(OUTSIDE_BUILDER_NOTE);
+    expect(editButton()).toBeNull();
+    expect(within(s).getByRole('button', { name: 'Replace rules' })).toBeInTheDocument();
+  });
+
   it('shows a flat value as JSON with the note and the docs link, never in the builder', async () => {
     signIn('VIEWER');
     install({ targeting_rules: FLAT_RULES });

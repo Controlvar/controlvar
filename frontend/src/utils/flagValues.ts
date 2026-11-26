@@ -92,10 +92,16 @@ export const MAX_SAFE_INTEGER = 9007199254740991;
 /** Deepest nesting of objects and arrays in a value, the value itself level 1. */
 export const MAX_VALUE_DEPTH = 10;
 
+/**
+ * The name the API's messages give a value: one of the two fields, or `value`
+ * for an entry of a split and a rule's own value (#2012).
+ */
+export type ValueName = ValueField | 'value';
+
 // The API's messages (flag_values.py), for the checks made on both sides.
-export const outOfRange = (field: ValueField): string =>
+export const outOfRange = (field: ValueName): string =>
   `${field}: a number is outside -${MAX_SAFE_INTEGER} to ${MAX_SAFE_INTEGER}`;
-export const tooDeep = (field: ValueField): string =>
+export const tooDeep = (field: ValueName): string =>
   `${field} nested more than ${MAX_VALUE_DEPTH} levels deep`;
 export const valuesEqualMessage = (field: ValueField): string =>
   `${field} equals ${otherField(field)}; the two values must differ, or turning the flag off changes nothing`;
@@ -208,7 +214,7 @@ export type Parsed = { ok: true; value: unknown } | { ok: false; message: string
  * The value *text* means for a *type* flag's *field*, or why it cannot be sent.
  * A string is the text as typed, empty included.
  */
-export function parseValue(type: ValueFlagType, field: ValueField, text: string): Parsed {
+export function parseValue(type: ValueFlagType, field: ValueName, text: string): Parsed {
   if (type === 'string') return { ok: true, value: text };
   if (type === 'number') {
     const trimmed = text.trim();

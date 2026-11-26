@@ -4,10 +4,10 @@ import { useFlagEnvironment } from '@/contexts/FlagEnvironmentContext';
 import { FeatureFlagsService, FlagEnvironmentSettings, RolloutSchedule } from '@/services/featureFlags';
 import { FLAG_ENVIRONMENT_LABELS, FlagEnvironment } from '@/utils/flagEnvironments';
 import {
-  NOT_COPIED_NOTE,
   PRODUCTION_CONFIRM_TEXT,
   PromotionRow,
   SCHEDULE_UNKNOWN_NOTE,
+  notCopiedNote,
   nothingConfiguredText,
   promoteLabel,
   promoteSummary,
@@ -109,8 +109,9 @@ function DiffTable({
  * Staging), with the dialog that shows what it would change.
  *
  * The dialog reads the flag in both environments when it opens, lists the
- * three fields the API copies (status, rollout percentage, targeting rules)
- * as the target has them now and as they will be, names every field that
+ * fields the API copies (status, rollout percentage, targeting rules, and the
+ * split of a string, number or json flag) as the target has them now and as
+ * they will be, names every field that
  * changes, and says so when the source has nothing configured and the target
  * will be turned off. Nothing is sent until the confirming button. Into
  * Production the confirmation is a second step in the same dialog.
@@ -124,12 +125,15 @@ export function PromoteFlag({
   flagKey,
   source,
   target,
+  valueFlag = false,
   onPromoted,
 }: {
   flagId: string;
   flagKey: string;
   source: FlagEnvironment;
   target: FlagEnvironment;
+  /** A string, number or json flag: its split is copied too, and the diff lists it. */
+  valueFlag?: boolean;
   /** The target's settings as the promotion left them. */
   onPromoted?: (settings: FlagEnvironmentSettings) => void;
 }) {
@@ -253,7 +257,8 @@ export function PromoteFlag({
   };
 
   const loaded = phase.kind === 'ready' ? phase.loaded : null;
-  const rows = loaded ? promotionRows(loaded.source, loaded.target) : [];
+  const rows = loaded ? promotionRows(loaded.source, loaded.target, valueFlag) : [];
+  const notCopied = notCopiedNote(valueFlag);
   const emptySource = loaded ? !loaded.source.configured : false;
   const nothingChanges = loaded ? rows.every((row) => !row.changes) : false;
   const production = target === 'production';
@@ -315,7 +320,7 @@ export function PromoteFlag({
             {label}
           </h2>
           <p id={summaryId} className="mt-1" data-testid="promote-summary">
-            {promoteSummary(source, target)}
+            {promoteSummary(source, target, valueFlag)}
           </p>
           <div role="status" className="sr-only" data-testid="promote-status">
             {status}
@@ -342,7 +347,7 @@ export function PromoteFlag({
               {nothingChanges && (
                 <p data-testid="promote-no-change">{`${into} already has these settings, so no field changes.`}</p>
               )}
-              <p data-testid="promote-not-copied">{NOT_COPIED_NOTE}</p>
+              <p data-testid="promote-not-copied">{notCopied}</p>
               {production && loaded.schedule !== null && (
                 <p data-testid="promote-schedule-note">
                   {loaded.schedule === undefined ? SCHEDULE_UNKNOWN_NOTE : scheduleNote(loaded.schedule)}
@@ -372,7 +377,7 @@ export function PromoteFlag({
                   </p>
                 )}
               </div>
-              <p data-testid="promote-not-copied">{NOT_COPIED_NOTE}</p>
+              <p data-testid="promote-not-copied">{notCopied}</p>
               {loaded.schedule !== null && (
                 <p data-testid="promote-schedule-note">
                   {loaded.schedule === undefined ? SCHEDULE_UNKNOWN_NOTE : scheduleNote(loaded.schedule)}

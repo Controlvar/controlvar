@@ -85,6 +85,11 @@ export interface UpdateFeatureFlagRequest {
   tags?: string[];
   on_value?: unknown;
   off_value?: unknown;
+  /**
+   * Production's split (#2012); `null` clears it. Sent only when the page
+   * changed it: an API older than the split refuses the field.
+   */
+  split?: FlagSplitEntry[] | null;
 }
 
 /** Why the list marks a flag stale (#1808); a reason a later release adds is read as any string. */
@@ -234,12 +239,14 @@ export interface EnvironmentFlagSettingsResponse {
 
 /**
  * The body of `PUT /feature-flags/{id}/environments/{environment}`: only the
- * fields sent change; `targeting_rules: null` clears the rules.
+ * fields sent change; `targeting_rules: null` clears the rules, and
+ * `split: null` the split (#2012), which is sent only when the page changed it.
  */
 export interface UpdateFlagEnvironmentRequest {
   is_active?: boolean;
   rollout_percentage?: number;
   targeting_rules?: TargetingRules | Record<string, unknown> | null;
+  split?: FlagSplitEntry[] | null;
 }
 
 /** The batch route takes 1 to 100 `flag_id` parameters per request. */

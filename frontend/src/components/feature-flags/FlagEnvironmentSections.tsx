@@ -10,6 +10,7 @@ import {
   PRODUCTION_ONLY_HEADING,
   PRODUCTION_ONLY_NOTE,
   SHARED_SETTINGS_NOTE,
+  SHARED_VALUE_SETTINGS_NOTE,
 } from '@/utils/flagEnvironments';
 
 /** On the flag pages in Production, for a user who may change flags. Text, not a live region. */
@@ -29,7 +30,7 @@ export function ProductionBanner({ className = 'mb-4' }: { className?: string })
  * schedule and the safety check: what runs in Production only, and what the
  * page does not change outside it.
  */
-export function NonProductionNote() {
+export function NonProductionNote({ valueFlag = false }: { valueFlag?: boolean }) {
   return (
     <section
       className="bg-white rounded-lg border border-slate-200 p-6 mb-6 space-y-2 text-sm text-slate-700"
@@ -37,7 +38,7 @@ export function NonProductionNote() {
     >
       <h2 className="text-base font-semibold text-slate-800">{PRODUCTION_ONLY_HEADING}</h2>
       <p>{PRODUCTION_ONLY_NOTE}</p>
-      <p data-testid="shared-settings-note">{SHARED_SETTINGS_NOTE}</p>
+      <p data-testid="shared-settings-note">{valueFlag ? SHARED_VALUE_SETTINGS_NOTE : SHARED_SETTINGS_NOTE}</p>
     </section>
   );
 }

@@ -33,6 +33,8 @@ export interface FlagValueFieldsProps {
   errors: ValueErrors;
   onChange: (field: ValueField, text: string) => void;
   fieldRefs: ValueFieldRefs;
+  /** A hint in place of a field's own: the On value's while the flag has a split (#2012). */
+  hints?: Partial<Record<ValueField, string>>;
 }
 
 /**
@@ -90,7 +92,7 @@ export function useFlagValueFields() {
  *   itself.
  * Neither text area takes Tab: it moves focus as usual.
  */
-export function FlagValueFields({ type, texts, errors, onChange, fieldRefs }: FlagValueFieldsProps) {
+export function FlagValueFields({ type, texts, errors, onChange, fieldRefs, hints }: FlagValueFieldsProps) {
   return (
     <div className="space-y-4" data-testid="flag-value-fields">
       {VALUE_FIELDS.map((field) => {
@@ -155,7 +157,7 @@ export function FlagValueFields({ type, texts, errors, onChange, fieldRefs }: Fl
               </p>
             )}
             <p id={hintId} className="mt-1 text-xs text-slate-600">
-              {VALUE_FIELD_HINTS[field]}
+              {hints?.[field] ?? VALUE_FIELD_HINTS[field]}
               {type === 'string' ? ` ${EMPTY_STRING_HINT}` : ''}
             </p>
           </div>

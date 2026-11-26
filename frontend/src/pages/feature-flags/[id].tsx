@@ -14,17 +14,47 @@ import {
 } from '@/utils/experimentTargeting';
 import {
   NOT_GROUPS_NOTE,
+  RuleServe,
+  flagTargetingToSend,
   isEditableFlagTargeting,
   rulesFromStored,
-  targetingToSend,
+  storedRuleValue,
   usesNotGroups,
 } from '@/utils/flagTargeting';
+import {
+  RULE_VALUE_LABEL,
+  SPLIT_CAPTION,
+  SPLIT_ON_VALUE_HINT,
+  SPLIT_ROLLOUT_HINT,
+  SPLIT_STATUS_ON,
+  SplitErrors,
+  SplitRow,
+  SplitToSend,
+  hasSplitErrors,
+  rowsFromSplit,
+  ruleValueRefusal,
+  splitHeading,
+  splitRefusals,
+  splitToSend,
+  storedSplit,
+  valueLabel,
+  weightLabel,
+} from '@/utils/flagSplit';
+import {
+  RuleServeControl,
+  ServeState,
+  SplitEditor,
+  SplitErrorSummary,
+  SplitReadOnly,
+  SummaryItem,
+} from '@/components/feature-flags/FlagSplit';
 import { docsUrl } from '@/services/docs';
 import { isApiError } from '@/services/api';
 import {
   FeatureFlag,
   FeatureFlagsService,
   FlagEnvironmentSettings,
+  FlagSplitEntry,
   RolloutSchedule,
   UpdateFeatureFlagRequest,
   UpdateFlagEnvironmentRequest,
@@ -80,6 +110,7 @@ import {
   firstInvalid,
   flagValueType,
   isValueFlagType,
+  parseValue,
   typeLabel,
   valueRefusals,
   valueToText,
@@ -325,13 +356,87 @@ function FlagInEnvironment({
     [setValueTexts, setValueErrors],
   );
 
+  // The environment's split (#2012). `loadedSplit` is the split as last loaded
+  // or saved: `undefined` when the API answered no `split` (it is older, and
+  // refuses the field, so the page offers none and never sends one), `null`
+  // for none. `splitRows` is the editor's state; a save sends `split` only
+  // when it was touched and differs from `loadedSplit` (`splitToSend`).
+  const [loadedSplit, setLoadedSplit] = useState<FlagSplitEntry[] | null | undefined>(undefined);
+  const [splitRows, setSplitRows] = useState<SplitRow[] | null>(null);
+  const [splitTouched, setSplitTouched] = useState(false);
+  const [splitErrors, setSplitErrors] = useState<SplitErrors>({ rows: {} });
+  // Moves on every load, so the editor starts again from what was loaded.
+  const [splitLoads, setSplitLoads] = useState(0);
+  // The dashboard rule's Serve control: its default, or a value of its own.
+  // An untouched stored value is sent back exactly as stored.
+  const [serve, setServe] = useState<ServeState>({ own: false, text: '' });
+  const [serveTouched, setServeTouched] = useState(false);
+  const [serveError, setServeError] = useState<string | null>(null);
+  // What stopped the last save, each linked to its field; the first takes focus.
+  const [summary, setSummary] = useState<SummaryItem[]>([]);
+  const focusFirst = useRef<string | null>(null);
+
+  useEffect(() => {
+    const id = focusFirst.current;
+    if (!id) return;
+    focusFirst.current = null;
+    document.getElementById(id)?.focus();
+  }, [summary]);
+
   /** Show `value` as the stored rules: in the builder when it can, read-only otherwise. */
-  const loadRules = useCallback((value: unknown) => {
+  const loadRules = useCallback((value: unknown, type: string) => {
     setStored(value);
-    setRules(isEditableFlagTargeting(value) ? rulesFromStored(value) : null);
+    const editable = isEditableFlagTargeting(value, type);
+    setRules(editable ? rulesFromStored(value) : null);
     setReplaced(false);
     setConfirmingReplace(false);
+    const own = storedRuleValue(value);
+    setServe(
+      editable && own !== undefined && isValueFlagType(type)
+        ? { own: true, text: valueToText(type, own) }
+        : { own: false, text: '' },
+    );
+    setServeTouched(false);
+    setServeError(null);
   }, []);
+
+  /** Show the split of `body` (a flag or an environment's settings), when it answered one. */
+  const loadSplit = useCallback((type: string, body: { split?: unknown } | null) => {
+    let split: FlagSplitEntry[] | null | undefined;
+    if (body === null || !('split' in body)) split = undefined;
+    else if (body.split === null || body.split === undefined) split = null;
+    else split = storedSplit(body.split) ?? undefined;
+    setLoadedSplit(split);
+    setSplitRows(split && isValueFlagType(type) ? rowsFromSplit(type, split) : null);
+    setSplitTouched(false);
+    setSplitErrors({ rows: {} });
+    setSplitLoads((n) => n + 1);
+  }, []);
+
+  /** What stopped a save: each refusal at its field, a summary linking them, focus on the first. */
+  const showSplitProblems = useCallback((errors: SplitErrors, ruleValue: string | null) => {
+    setSplitErrors(errors);
+    setServeError(ruleValue);
+    const items: SummaryItem[] = [];
+    for (const index of Object.keys(errors.rows).map(Number).sort((a, b) => a - b)) {
+      const at = errors.rows[index];
+      if (at.value) items.push({ target: `split-value-${index}`, text: `${valueLabel(index + 1)}: ${at.value}` });
+      if (at.weight) items.push({ target: `split-weight-${index}`, text: `${weightLabel(index + 1)}: ${at.weight}` });
+    }
+    if (errors.total) {
+      const weights = errors.total.startsWith('Weights');
+      items.push({ target: weights ? 'split-weight-0' : 'split-value-0', text: `${SPLIT_CAPTION}: ${errors.total}` });
+    }
+    if (ruleValue) items.push({ target: 'rule-serve-value', text: `${RULE_VALUE_LABEL}: ${ruleValue}` });
+    focusFirst.current = items[0]?.target ?? null;
+    setSummary(items);
+  }, []);
+
+  const clearSplitProblems = () => {
+    setSplitErrors({ rows: {} });
+    setServeError(null);
+    setSummary([]);
+  };
 
   // Rollout schedule
   const [schedules, setSchedules] = useState<RolloutSchedule[] | null>(null);
@@ -411,14 +516,17 @@ function FlagInEnvironment({
         if (cancelled) return;
         setFlag(data);
         setEnvSettings(settings);
-        loadValues(flagValueType(data), { on_value: data.on_value, off_value: data.off_value });
+        const type = flagValueType(data);
+        loadValues(type, { on_value: data.on_value, off_value: data.off_value });
         if (settings) {
-          loadRules(settings.targeting_rules ?? null);
+          loadRules(settings.targeting_rules ?? null, type);
+          loadSplit(type, settings);
           setRolloutPercentage(settings.rollout_percentage ?? 0);
           // The rollout schedule and the safety check are Production's only.
           return;
         }
-        loadRules(storedRules(data));
+        loadRules(storedRules(data), type);
+        loadSplit(type, data);
         setRolloutPercentage(data.rollout_percentage ?? 0);
         // Secondary panels load in parallel; their failures are non-fatal.
         void loadSchedules(id);
@@ -438,7 +546,7 @@ function FlagInEnvironment({
     return () => {
       cancelled = true;
     };
-  }, [id, environment, loadSchedules, loadSafety, loadRules, loadValues]);
+  }, [id, environment, loadSchedules, loadSafety, loadRules, loadValues, loadSplit]);
 
   /** On/off in Staging or Development: the environment's PUT, never the flag's enable or disable. */
   const handleEnvironmentToggle = async (next: boolean) => {
@@ -485,30 +593,52 @@ function FlagInEnvironment({
     }
   };
 
-  /** Save in Staging or Development: the rollout and the rules (when changed) through the environment's PUT. */
+  /**
+   * A refusal of the split or of the rule's own value, shown at its field;
+   * answers what is left of the error for the page's other places, or null.
+   */
+  const placeSplitRefusals = (err: unknown): unknown => {
+    const split = splitRefusals(err);
+    const afterSplit = split ? split.rest : err;
+    const ruleValue = ruleValueRefusal(afterSplit);
+    if (split || ruleValue) showSplitProblems(split?.errors ?? { rows: {} }, ruleValue?.message ?? null);
+    return ruleValue ? ruleValue.rest : afterSplit;
+  };
+
+  /**
+   * Save in Staging or Development: the rollout, and the rules and the split
+   * when they were changed, through the environment's PUT.
+   */
   const saveInEnvironment = async (
     env: NonProductionEnvironment,
     targeting: Record<string, unknown> | undefined,
+    split: SplitToSend,
   ) => {
     if (!flag) return;
+    const type = flagValueType(flag);
     const body: UpdateFlagEnvironmentRequest = { rollout_percentage: rolloutPercentage };
     if (targeting !== undefined) body.targeting_rules = targeting;
+    if (split.kind === 'send') body.split = split.split;
     setIsSaving(true);
     try {
       // The PUT answers the setting as it now is.
       const saved = await FeatureFlagsService.updateInEnvironment(flag.id, env, body);
       setEnvSettings(saved);
-      loadRules(saved.targeting_rules ?? null);
+      loadRules(saved.targeting_rules ?? null, type);
+      loadSplit(type, saved);
       setRolloutPercentage(saved.rollout_percentage ?? 0);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
       setChangeCount((n) => n + 1);
     } catch (err) {
-      const described = describeTargetingSaveError(err);
-      if (described.problems) {
-        setTargetingError(described);
-      } else {
-        setSaveError(err instanceof Error ? err.message : 'Failed to save changes');
+      const other = placeSplitRefusals(err);
+      if (other) {
+        const described = describeTargetingSaveError(other);
+        if (described.problems) {
+          setTargetingError(described);
+        } else {
+          setSaveError(other instanceof Error ? other.message : 'Failed to save changes');
+        }
       }
     } finally {
       setIsSaving(false);
@@ -521,6 +651,7 @@ function FlagInEnvironment({
     setTargetingError(null);
     setSaveSuccess(false);
     setValueErrors({});
+    clearSplitProblems();
 
     // A value is sent only when its field was changed, as the rules are below:
     // a save that moves only the slider never rewrites a value someone else
@@ -537,9 +668,34 @@ function FlagInEnvironment({
       values = checked.values;
     }
 
+    // The split (#2012) is sent only when it was changed from what was loaded,
+    // as the rules are below, and never to an API that answered none. The
+    // rule's own value is part of the rules: an untouched stored one is sent
+    // back exactly as stored, a typed one as the flag's type.
+    let split: SplitToSend = { kind: 'leave' };
+    let ruleServe: RuleServe = { own: false };
+    if (canChange && isValueFlagType(type) && loadedSplit !== undefined) {
+      split = splitToSend(type, splitRows, loadedSplit, splitTouched);
+      let ruleValueError: string | null = null;
+      if (serve.own && rules && rules.groups.length > 0) {
+        if (!serveTouched) {
+          ruleServe = { own: true, value: storedRuleValue(stored) };
+        } else {
+          const parsed = parseValue(type, 'value', serve.text);
+          if (parsed.ok) ruleServe = { own: true, value: parsed.value };
+          else ruleValueError = parsed.message;
+        }
+      }
+      const splitErrorsNow = split.kind === 'refused' ? split.errors : { rows: {} };
+      if (hasSplitErrors(splitErrorsNow) || ruleValueError) {
+        showSplitProblems(splitErrorsNow, ruleValueError);
+        return;
+      }
+    }
+
     // Rules are sent only when they were changed (or replaced), so a save
     // that moves only the rollout leaves the stored rules exactly as they are.
-    const targeting = targetingToSend(rules, stored, replaced);
+    const targeting = flagTargetingToSend(rules, ruleServe, stored, replaced);
     if (targeting !== undefined && rules) {
       const problems = checkTargeting(rules);
       if (problems.length > 0) {
@@ -551,7 +707,7 @@ function FlagInEnvironment({
     // Staging and Development: the environment's PUT. Production: the flag's
     // own PUT below, exactly as before environments.
     if (otherEnvironment) {
-      await saveInEnvironment(otherEnvironment, targeting);
+      await saveInEnvironment(otherEnvironment, targeting, split);
       return;
     }
 
@@ -560,13 +716,25 @@ function FlagInEnvironment({
       if (field in values) body[field] = values[field];
     }
     if (targeting !== undefined) body.targeting_rules = targeting;
+    if (split.kind === 'send') body.split = split.split;
 
     setIsSaving(true);
     try {
       const updated = await FeatureFlagsService.update(flag.id, body);
       setFlag((current) => ({ ...(current ?? updated), ...updated }));
       const answered = 'targeting_rules' in updated || 'rules' in updated;
-      loadRules(answered ? storedRules(updated) : (targeting ?? stored));
+      loadRules(answered ? storedRules(updated) : (targeting ?? stored), type);
+      // The split as the PUT answered it; one that answered none keeps what was sent, or loaded.
+      loadSplit(
+        type,
+        'split' in updated
+          ? updated
+          : split.kind === 'send'
+            ? { split: split.split }
+            : loadedSplit === undefined
+              ? null
+              : { split: loadedSplit },
+      );
       const saved = { ...storedValues, ...values };
       for (const field of VALUE_FIELDS) {
         if (field in updated) saved[field] = updated[field];
@@ -578,7 +746,8 @@ function FlagInEnvironment({
     } catch (err) {
       const refused = valueRefusals(err);
       if (refused) showValueErrors(refused.fields);
-      const other = refused ? refused.rest : err;
+      const afterValues = refused ? refused.rest : err;
+      const other = afterValues ? placeSplitRefusals(afterValues) : null;
       if (other) {
         const described = describeTargetingSaveError(other);
         if (described.problems) {
@@ -650,9 +819,16 @@ function FlagInEnvironment({
   // had: no type, no Values section, "Serving" / "Not serving".
   const valueType = flagValueType(flag);
   const valueFlag = valueType !== 'boolean';
+  // A string, number or json flag, from an API that answers its split (#2012):
+  // the Split section and the rule's Serve control. A boolean flag has neither.
+  const splitType = isValueFlagType(valueType) && loadedSplit !== undefined ? valueType : null;
+  // What this environment serves now, for the words that describe it.
+  const servesSplit = Array.isArray(loadedSplit) && loadedSplit.length > 0;
   const statusText = valueFlag
     ? on
-      ? VALUE_FLAG_STATUS_ON
+      ? servesSplit
+        ? SPLIT_STATUS_ON
+        : VALUE_FLAG_STATUS_ON
       : VALUE_FLAG_STATUS_OFF
     : on
       ? 'Serving'
@@ -746,6 +922,7 @@ function FlagInEnvironment({
               flagKey={flag.key}
               source={environment}
               target={promotionInto}
+              valueFlag={splitType !== null}
               onPromoted={() => setChangeCount((n) => n + 1)}
             />
           )}
@@ -782,7 +959,7 @@ function FlagInEnvironment({
         </div>
 
         {/* Outside Production: no schedule or safety controls, and why. */}
-        {!production && <NonProductionNote />}
+        {!production && <NonProductionNote valueFlag={splitType !== null} />}
 
         {production && (
         <div className="grid gap-6 lg:grid-cols-2 mb-6">
@@ -964,6 +1141,7 @@ function FlagInEnvironment({
                   errors={valueErrors}
                   onChange={handleValueChange}
                   fieldRefs={valueRefs}
+                  hints={servesSplit ? { on_value: SPLIT_ON_VALUE_HINT } : undefined}
                 />
               ) : (
                 <div className="space-y-4">
@@ -971,6 +1149,41 @@ function FlagInEnvironment({
                     <FlagValueReadOnly key={field} field={field} value={storedValues[field]} />
                   ))}
                 </div>
+              )}
+            </section>
+          )}
+
+          {/* The split (#2012): editable in every environment by a user who may change
+              flags, read-only otherwise. A boolean flag has no Split section at all. */}
+          {splitType && (
+            <section
+              className="bg-white rounded-lg border border-slate-200 p-6 space-y-4"
+              aria-labelledby="flag-split-heading"
+              data-testid="flag-split-section"
+            >
+              <h2 id="flag-split-heading" className="text-base font-semibold text-slate-800">
+                {splitHeading(environmentLabel)}
+              </h2>
+              {canChange ? (
+                <SplitEditor
+                  key={splitLoads}
+                  type={splitType}
+                  rows={splitRows}
+                  stored={loadedSplit ?? null}
+                  errors={splitErrors}
+                  onChange={(next) => {
+                    setSplitRows(next);
+                    setSplitTouched(true);
+                    if (hasSplitErrors(splitErrors)) clearSplitProblems();
+                  }}
+                  onKeepStored={() => {
+                    setSplitRows(loadedSplit ? rowsFromSplit(splitType, loadedSplit) : null);
+                    setSplitTouched(false);
+                    clearSplitProblems();
+                  }}
+                />
+              ) : (
+                <SplitReadOnly split={loadedSplit ?? null} />
               )}
             </section>
           )}
@@ -990,6 +1203,22 @@ function FlagInEnvironment({
                   readOnly={!canChange}
                   data-testid="targeting-rule-builder"
                 />
+                {splitType && (
+                  <RuleServeControl
+                    type={splitType}
+                    hasSplit={splitRows !== null}
+                    serve={serve}
+                    hasCondition={rules.groups.length > 0}
+                    error={serveError}
+                    readOnly={!canChange}
+                    storedValue={storedRuleValue(stored)}
+                    onChange={(next) => {
+                      setServe(next);
+                      setServeTouched(true);
+                      if (serveError) clearSplitProblems();
+                    }}
+                  />
+                )}
                 {replaced && (
                   <div
                     className="mt-3 flex flex-wrap items-center gap-3 text-sm text-amber-900"
@@ -998,7 +1227,7 @@ function FlagInEnvironment({
                     <p>The stored rules are replaced when you save. Until then, nothing changes.</p>
                     <button
                       type="button"
-                      onClick={() => loadRules(stored)}
+                      onClick={() => loadRules(stored, valueType)}
                       className="px-3 py-1.5 rounded-md text-sm font-medium text-slate-600 border border-slate-300 bg-white hover:bg-slate-50"
                       data-testid="targeting-keep-stored"
                     >
@@ -1128,7 +1357,7 @@ function FlagInEnvironment({
               </div>
               {valueFlag && (
                 <p id="rollout-value-hint" className="mt-2 text-sm text-slate-600" data-testid="rollout-value-hint">
-                  {ROLLOUT_VALUE_HINT}
+                  {servesSplit ? SPLIT_ROLLOUT_HINT : ROLLOUT_VALUE_HINT}
                 </p>
               )}
               {production && schedule?.status === 'active' && (
@@ -1139,6 +1368,7 @@ function FlagInEnvironment({
             </div>
           </section>
 
+          <SplitErrorSummary items={summary} />
           {saveError && (
             <div
               ref={saveErrorRef}
