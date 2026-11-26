@@ -11,6 +11,10 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validat
 from pydantic_core import PydanticCustomError
 
 from backend.app.schemas.finite_number import FiniteFloat
+from backend.app.schemas.storable_text import (
+    contains_unstorable_text,
+    unstorable_text_message,
+)
 
 
 class HealthStatus(str, Enum):
@@ -131,6 +135,16 @@ class FeatureFlagSafetyConfigUpdate(BaseModel):
             raise PydanticCustomError(
                 "null_not_allowed", f"{info.field_name} cannot be null"
             )
+        return value
+
+    @field_validator("metrics", mode="before")
+    @classmethod
+    def refuse_unstorable_text(cls, value: Any, info: ValidationInfo) -> Any:
+        """Refuse NUL and unpaired surrogates in a metric's name or anywhere in
+        its thresholds: the database cannot store them, and the save answered
+        500 (#2180). The message names the field, never the value."""
+        if contains_unstorable_text(value):
+            raise ValueError(unstorable_text_message(info.field_name))
         return value
 
 
