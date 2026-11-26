@@ -91,10 +91,24 @@ metric's conversion window (and before the end of the analysis window).
 Units seen in more than one variant are left out and counted in the
 diagnostics.
 
-`/results` counts converting users with no bound on the exposure time and no
-conversion window. So the two agree only on data with no event before a
-unit's exposure, no unit in two variants and no event outside the window;
-otherwise the warehouse numbers are the stricter ones.
+Without a conversion window of its own, a metric in `/results` counts
+converting users with no bound on the exposure time and no conversion window.
+With one (`conversion_window_hours`, beta, the same name, unit and range), it
+counts each user's events from their assignment for that many hours, end
+excluded ([Conversion window](../guides/how-events-count.md#conversion-window)).
+Each setting is its own: setting a window on one does not set it on the other.
+The two then agree when the hours are equal, the assignment source's first
+exposure of each unit is the assignment `/results` stores, no unit is in two
+variants, and the analysis window covers the whole run. They still differ in
+two ways: `/results` starts a window at the start of the second the user was
+assigned in, so an event earlier in that second counts there and not in the
+warehouse, and it counts an event only for the variant it was received in,
+which a warehouse table does not record.
+
+With a window, users assigned within the window before the experiment stops
+never get a full window, and this cannot change after it ends. The number is
+not the N-day conversion rate: a change that makes people convert later can
+show the opposite sign, even when no window does not.
 
 ## Setting up Snowflake
 

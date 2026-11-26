@@ -101,6 +101,7 @@ const FULL = experiment(
       expected_effect: 0.1,
       event_value_path: 'amount',
       lower_is_better: true,
+      conversion_window_hours: 168,
     }),
     metric({
       id: 'm-2',
@@ -113,6 +114,7 @@ const FULL = experiment(
       expected_effect: 0.03,
       event_value_path: 'count',
       lower_is_better: true,
+      conversion_window_hours: 36,
     }),
   ],
 );
@@ -160,6 +162,7 @@ describe('formStateFromExperiment', () => {
           minimum_sample_size: 500,
           expected_effect: null,
           event_value_path: 'amount',
+          conversion_window_hours: 168,
         },
       },
       {
@@ -174,6 +177,7 @@ describe('formStateFromExperiment', () => {
           minimum_sample_size: 250,
           expected_effect: 0.03,
           event_value_path: 'count',
+          conversion_window_hours: 36,
         },
       },
     ]);
@@ -222,6 +226,7 @@ describe('buildDesignPayload', () => {
         expected_effect: null,
         event_value_path: null,
         lower_is_better: false,
+        conversion_window_hours: null,
       },
     ]);
     expect(body.metrics[0]).not.toHaveProperty('aggregation_method');
@@ -259,6 +264,7 @@ describe('buildDesignPayload', () => {
       expected_effect: null,
       event_value_path: null,
       lower_is_better: false,
+      conversion_window_hours: null,
     });
   });
 

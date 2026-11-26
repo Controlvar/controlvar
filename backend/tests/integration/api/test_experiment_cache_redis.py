@@ -345,6 +345,47 @@ def test_a_change_drops_the_experiment_and_every_cached_list(
     assert redis_server.exists(own_list, other_list) == 0, "a cached list survived"
 
 
+def test_a_change_to_a_draft_s_metrics_drops_its_cached_results(
+    cached_client, redis_server
+):
+    """None of the results caches' keys names the metrics, so a PUT that sends
+    them -- a conversion window, here (#1934) -- drops the experiment's cached
+    results: the results route's own (``results:{id}:*``) and the daily and
+    segmented results. Another experiment's stay, and a PUT without metrics
+    leaves them."""
+    exp, other = _create(cached_client), _create(cached_client)
+
+    def plant(experiment_id) -> list:
+        keys = [
+            f"results:{experiment_id}:1.14.0:0.95:benjamini_hochberg:",
+            f"results:{experiment_id}:1.14.0:0.9:none:country",
+            f"experiment_daily_results:{experiment_id}",
+            f"experiment_daily_results:{experiment_id}:{uuid.uuid4()}",
+            f"experiment_segmented_results:{experiment_id}:country",
+        ]
+        for key in keys:
+            redis_server.set(key, "{}")
+        return keys
+
+    keys, others = plant(exp["id"]), plant(other["id"])
+    described = cached_client.put(f"{BASE}/{exp['id']}", json={"description": "x"})
+    assert described.status_code == 200, described.text
+    assert redis_server.exists(*keys) == len(keys), "a PUT without metrics dropped them"
+
+    metric = {
+        "name": "Conversion",
+        "event_name": "purchase",
+        "metric_type": "conversion",
+        "is_primary": True,
+        "conversion_window_hours": 168,
+    }
+    resp = cached_client.put(f"{BASE}/{exp['id']}", json={"metrics": [metric]})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["metrics"][0]["conversion_window_hours"] == 168
+    assert redis_server.exists(*keys) == 0, "a cached result survived"
+    assert redis_server.exists(*others) == len(others)
+
+
 #: Dashboard-shape rules, before and after a targeting change (#523).
 TARGETING_BEFORE = {
     "logical_operator": "AND",

@@ -157,6 +157,7 @@ describe('ExperimentsService.updateDesign', () => {
           expected_effect: null,
           event_value_path: null,
           lower_is_better: false,
+          conversion_window_hours: 168,
         },
       ],
     };

@@ -375,6 +375,14 @@ text = "Sources are tried in order:"
 by = ["exempt:baseline"]
 
 [[unit]]
+text = "PostgreSQL: pulls = assignments rows per variant; successes = converting users, counted exactly as /results counts them: users assigned to the variant with at least one event, tagged with that variant, whose event_name matches the experiment's primary metric (see the event-matching rule in the tracking API docs), inside the primary metric's conversion window when it has one (Conversion window)."
+by = [
+    "test:backend/tests/integration/services/test_bandit_scheduler_db.py::test_postgres_fallback_counts_converting_users_as_results_does",
+    "test:backend/tests/integration/api/test_metric_window_results.py::test_the_bandit_reads_the_window_from_postgres_alone",
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_two_metrics_created_through_the_api_count_9_and_16_in_every_view",
+]
+
+[[unit]]
 text = "It is used whenever any variant has an assignment there, and its pulls and successes are used whole: a DynamoDB count that is larger, or ahead, never replaces or mixes into them."
 by = [
     "test:backend/tests/unit/services/test_bandit_scheduler.py::TestDynamoDBCompleteness::test_postgres_wins_when_dynamodb_is_ahead_of_postgres",
@@ -398,8 +406,11 @@ by = [
 ]
 
 [[unit]]
-text = "PostgreSQL: pulls = assignments rows per variant; successes = converting users, counted exactly as /results counts them: users assigned to the variant with at least one event, tagged with that variant, whose event_name matches the experiment's primary metric (see the event-matching rule in the tracking API docs)."
-by = ["test:backend/tests/integration/services/test_bandit_scheduler_db.py::test_postgres_fallback_counts_converting_users_as_results_does"]
+text = "It applies no conversion window."
+by = [
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestDynamoDBCompleteness::test_dynamodb_used_when_postgres_has_no_pulls",
+    "test:backend/tests/integration/api/test_metric_window_results.py::test_the_bandit_reads_the_window_from_postgres_alone",
+]
 
 [[unit]]
 text = "When the experiment's primary metric has lower_is_better set (uninstalls, errors), the bandit counts a user who did not convert as the success, so the variant with fewer converting users earns the traffic."
@@ -417,8 +428,19 @@ text = "The stored and reported successes and conversion_rate stay the convertin
 by = ["test:backend/tests/unit/services/test_lower_is_better_direction.py::TestTheBanditReadsTheDirection::test_stored_and_reported_counts_stay_raw_for_a_lower_is_better_metric"]
 
 [[unit]]
-text = "Because a user who has not yet converted counts as a success, the most recent assignments look best until their exposure window has passed, so such a bandit needs a settled exposure window (an event that happens days after assignment gives a misleading early signal)."
+text = "Because a user who has not yet converted counts as a success, the most recent assignments look best until they have had time to convert, so such a bandit needs an event that comes soon after assignment (an event that happens days after assignment gives a misleading early signal)."
 by = ["exempt:advice"]
+
+[[unit]]
+text = "With a conversion window on the primary metric, a user still inside their window counts as not converted until they convert, as without one."
+by = [
+    "test:backend/tests/integration/api/test_metric_window_open_users.py::test_the_open_windows_of_each_status",
+    "test:backend/tests/integration/api/test_metric_window_results.py::test_the_bandit_reads_the_window_from_postgres_alone",
+]
+
+[[unit]]
+text = "The arm that got more of the recent traffic has more users still inside their window, so more of its users can still convert: as those windows close its share of converting users can rise, and with lower_is_better its successes fall."
+by = ["test:backend/tests/integration/api/test_metric_window_open_users.py::test_the_open_windows_of_each_status"]
 
 [[unit]]
 text = "A user who converts three times counts once."

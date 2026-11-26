@@ -332,6 +332,21 @@ def build(
         db.add(Metric(experiment_id=experiment.id, **fields_of_metric))
     db.flush()
     world = World(experiment, control, treatment)
+    return add_rows(db, world, rows, balanced=balanced, users=users)
+
+
+def add_rows(
+    db: Session,
+    world: World,
+    rows: Sequence[Row] = ALL_ROWS,
+    balanced: bool = False,
+    users: Optional[str] = None,
+) -> World:
+    """Write the rows into ``world``'s experiment, whose two variants are its
+    ``control`` and ``treatment``: an experiment :func:`build` made, or one
+    made through the API. Commits. ``users`` as for :func:`build`."""
+    experiment = world.experiment
+    users = users or uuid.uuid4().hex[:8]
     raw: List[Dict] = []
     for row in rows:
         user_id = f"mw-{users}-{row.label}"

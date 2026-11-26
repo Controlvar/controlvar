@@ -48,8 +48,11 @@ by = [
 ]
 
 [[unit]]
-text = "Received after the user is assigned, with an earlier timestamp | Yes | Yes"
-by = ["test:backend/tests/integration/api/test_how_events_count.py::test_the_variant_is_the_one_at_receipt_whatever_the_timestamp"]
+text = "Received after the user is assigned, with an earlier timestamp | Yes | Yes, unless the metric has a conversion window: then only a timestamp inside it counts (below)"
+by = [
+    "test:backend/tests/integration/api/test_how_events_count.py::test_the_variant_is_the_one_at_receipt_whatever_the_timestamp",
+    "test:backend/tests/integration/api/test_metric_window_results.py::test_the_window_counts_exactly_these_users",
+]
 
 [[unit]]
 text = "With a value that is not a finite number from -10^12 to 10^12 | No: /track and /events answer 422; /batch reports the entry in errors and stores the others, but refuses the whole request when the number in the JSON is NaN or infinite | No"
@@ -307,8 +310,11 @@ by = [
 ]
 
 [[unit]]
-text = "Its timestamp does not change that."
-by = ["test:backend/tests/integration/api/test_how_events_count.py::test_the_variant_is_the_one_at_receipt_whatever_the_timestamp"]
+text = "Its timestamp does not change that; for a metric with a conversion window, it decides whether the event counts at all (below)."
+by = [
+    "test:backend/tests/integration/api/test_how_events_count.py::test_the_variant_is_the_one_at_receipt_whatever_the_timestamp",
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_the_how_events_count_example_a_1_hour_window",
+]
 
 [[unit]]
 text = "An event received by /track or /batch before the user's assignment is stored with no variant, and counts in no variant's results, even after the user is assigned."
@@ -335,6 +341,10 @@ by = [
 ]
 
 [[unit]]
+text = "For a metric with a conversion window, it counts only when its timestamp is inside the window."
+by = ["test:backend/tests/integration/api/test_metric_window_results.py::test_the_window_counts_exactly_these_users"]
+
+[[unit]]
 text = "The results summary's Total Events counts every stored event of the experiment, the ones that count in no variant included."
 by = [
     "test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_converting_users_per_variant_across_pause_resume_and_complete",
@@ -347,6 +357,96 @@ text = "Holdout results and CUPED history have their own rules: see Mutual Exclu
 by = [
     "test:backend/tests/integration/api/test_cuped_history_sent_by_tracking.py::test_history_is_matched_by_exact_id_and_dated_in_utc",
     "test:backend/tests/integration/api/test_holdout_results.py::TestWindow::test_an_event_received_before_first_seen_does_not_count",
+]
+
+[[unit]]
+text = "Conversion window"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A metric with conversion_window_hours (beta, set while the experiment is a draft: API endpoints) counts a user's events only within that many hours of their assignment: from the start of the second they were assigned in, up to and not including the assignment time plus the window, by each event's timestamp."
+by = [
+    "test:backend/tests/integration/api/test_metric_window_results.py::test_the_window_counts_exactly_these_users",
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_no_role_changes_the_window_once_the_experiment_left_draft",
+]
+
+[[unit]]
+text = "An event dated before the assignment does not count, and neither does one dated after the window, however soon it is received."
+by = ["test:backend/tests/integration/api/test_metric_window_results.py::test_the_window_counts_exactly_these_users"]
+
+[[unit]]
+text = "Every results view that reads the metric applies its window, and a metric without one counts as above."
+by = [
+    "test:backend/tests/integration/api/test_metric_window_results.py::test_every_view_counts_the_window",
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_two_metrics_created_through_the_api_count_9_and_16_in_every_view",
+]
+
+[[unit]]
+text = "For example, a metric with a 1-hour window:"
+by = ["test:backend/tests/integration/api/test_metric_window_writes.py::test_the_how_events_count_example_a_1_hour_window"]
+
+[[unit]]
+text = "A user is assigned to the experiment."
+by = ["test:backend/tests/integration/api/test_metric_window_writes.py::test_the_how_events_count_example_a_1_hour_window"]
+
+[[unit]]
+text = "A purchase they send with a timestamp two hours after the assignment counts 0 converting users."
+by = ["test:backend/tests/integration/api/test_metric_window_writes.py::test_the_how_events_count_example_a_1_hour_window"]
+
+[[unit]]
+text = "One they send straight after, with no timestamp, is dated when it is received, inside the hour, and counts 1."
+by = [
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_the_how_events_count_example_a_1_hour_window",
+    "test:backend/tests/integration/api/test_how_events_count.py::test_an_event_without_a_timestamp_is_dated_when_it_is_received",
+]
+
+[[unit]]
+text = "With a window, users assigned within the window before the experiment stops never get a full window, and this cannot change after it ends."
+by = [
+    "test:backend/tests/integration/api/test_metric_window_open_users.py::test_paused_longer_than_the_window_then_completed",
+    "test:backend/tests/integration/api/test_metric_window_open_users.py::test_the_open_windows_of_each_status",
+    "test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_converting_users_per_variant_across_pause_resume_and_complete",
+]
+
+[[unit]]
+text = "The number is not the N-day conversion rate: a change that makes people convert later can show the opposite sign, even when no window does not."
+by = ["test:backend/tests/integration/api/test_metric_window_writes.py::test_a_change_that_makes_people_convert_later_can_show_the_opposite_sign"]
+
+[[unit]]
+text = "Counting stops when the experiment stops, whatever the window: an event received while the experiment is paused, completed or archived counts in no variant."
+by = [
+    "test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_each_status_and_route_stores_the_variant_only_while_active",
+    "test:backend/tests/integration/api/test_metric_window_open_users.py::test_paused_longer_than_the_window_then_completed",
+]
+
+[[unit]]
+text = "Each variant's open_window_users in the results is how many of its assigned users had less than the full window: at the experiment's end_date once it is completed, or archived with an end_date at or before the time the results were computed, and at that time while it is a draft or active."
+by = [
+    "test:backend/tests/integration/api/test_metric_window_open_users.py::test_the_open_windows_of_each_status",
+    "test:backend/tests/integration/api/test_metric_window_open_users.py::test_open_window_time_follows_the_rule",
+]
+
+[[unit]]
+text = "It is null while the experiment is paused, or archived without such an end_date, because when counting stopped is not recorded."
+by = ["test:backend/tests/integration/api/test_metric_window_open_users.py::test_the_open_windows_of_each_status"]
+
+[[unit]]
+text = "A pause is not recorded either: if the experiment was paused, events sent during the pause were not counted, so more users may have had less than the full window."
+by = ["test:backend/tests/integration/api/test_metric_window_open_users.py::test_paused_longer_than_the_window_then_completed"]
+
+[[unit]]
+text = "Users still inside their window are in the sample size and count as not converted until they convert."
+by = ["test:backend/tests/integration/api/test_metric_window_open_users.py::test_the_open_windows_of_each_status"]
+
+[[unit]]
+text = "For ids linked as one person, the window starts at the assignment their events are stored under, the one stored first among their ids (below)."
+by = ["test:backend/tests/integration/api/test_metric_window_results.py::test_a_linked_id_counts_from_the_holder_s_earliest_row"]
+
+[[unit]]
+text = "An event sent with no timestamp is dated when it is received, so an event a client holds back and sends later can fall outside the window."
+by = [
+    "test:backend/tests/integration/api/test_how_events_count.py::test_an_event_without_a_timestamp_is_dated_when_it_is_received",
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_the_how_events_count_example_a_1_hour_window",
 ]
 
 [[unit]]
@@ -454,8 +554,15 @@ by = [
 ]
 
 [[unit]]
-text = "GET /api/v1/results/{experiment_id} does not read it."
+text = "For a metric without a conversion window, GET /api/v1/results/{experiment_id} does not read it."
 by = ["test:backend/tests/integration/api/test_how_events_count.py::test_the_results_do_not_read_the_timestamp"]
+
+[[unit]]
+text = "For a metric with one, it decides whether the event counts (above)."
+by = [
+    "test:backend/tests/integration/api/test_metric_window_results.py::test_the_window_counts_exactly_these_users",
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_the_how_events_count_example_a_1_hour_window",
+]
 
 [[unit]]
 text = "GET /api/v1/results/{experiment_id}/daily puts each user's first conversion on the UTC day of its timestamp."

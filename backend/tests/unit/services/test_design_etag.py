@@ -135,8 +135,9 @@ BASE_DESIGN = {
 #: and editor_url, a page's match and url, a click goal's 5 and a page view's
 #: 4); the control's 6 (its visual_changes is null, a leaf); variant B's 5
 #: plus its visual_changes' 17 (version, and set_text 3, set_attribute 4,
-#: set_image 4, hide 2, set_style 3); and the metric's 10.
-LEAVES = 2 + 13 + 6 + 5 + 17 + 10
+#: set_image 4, hide 2, set_style 3); and the metric's 11 (its conversion
+#: window is null, a leaf).
+LEAVES = 2 + 13 + 6 + 5 + 17 + 11
 
 #: Leaves the etag deliberately does not cover: none.
 EXCLUDED: typing.FrozenSet[str] = frozenset()
@@ -255,6 +256,9 @@ def _with_leaf_changed(data, path):
     if parts[-1] == "metric_type":
         # A row holds one of the enum's values.
         holder["metric_type"] = "count"
+    elif parts[-1] == "conversion_window_hours" and holder[parts[-1]] is None:
+        # A window, where the base design has none.
+        holder["conversion_window_hours"] = 24
     else:
         holder[parts[-1]] = _mutated(holder[parts[-1]])
     return data
@@ -311,20 +315,43 @@ def test_the_balance_setting_is_hashed_only_when_set():
     assert len(set(etags)) == 3, etags
 
 
-# --- the classification ------------------------------------------------------
+#: ``BASE_DESIGN``'s etag, computed before a metric's conversion window was
+#: part of the design (#1934). A design whose metrics have no window keeps it.
+BASE_ETAG = "65a96d806015306c74b619aba1bd86b63506e2414e6c0b1bbaf26cc7243af2ff"
 
-#: Columns that no request can set yet, so no design holds one: the metric's
-#: conversion window (#1934). The change that lets a request set it adds it to
-#: the design (the schema test below then requires it), and this list then
-#: refuses it.
-NOT_A_DESIGN_COLUMN_YET = {Metric: {"conversion_window_hours"}}
+
+@pytest.mark.regression
+def test_a_design_without_a_window_keeps_the_etag_it_had():
+    assert visual.design_etag(_rows(_as_data())) == BASE_ETAG
+
+
+@pytest.mark.regression
+def test_a_metric_s_window_is_hashed_only_when_set():
+    """#1934's ``conversion_window_hours`` is part of the design, left out of
+    a metric while null: setting it, or changing it, changes the etag."""
+    data = _as_data()
+    unset = _rows(data)
+    (metric,) = visual.design_document(unset)["metrics"]
+    assert "conversion_window_hours" not in metric
+    etags = [visual.design_etag(unset)]
+    for hours in (24, 168):
+        windowed = copy.deepcopy(data)
+        windowed["metrics"][0]["conversion_window_hours"] = hours
+        etags.append(visual.design_etag(_rows(windowed)))
+    assert len(set(etags)) == 3, etags
+
+
+# --- the classification ------------------------------------------------------
 
 
 @pytest.mark.parametrize(
     "model,columns",
     [
         (Variant, visual.DESIGN_VARIANT_COLUMNS),
-        (Metric, visual.DESIGN_METRIC_COLUMNS),
+        (
+            Metric,
+            visual.DESIGN_METRIC_COLUMNS + visual.DESIGN_METRIC_COLUMNS_WHEN_SET,
+        ),
     ],
     ids=["variant", "metric"],
 )
@@ -332,19 +359,21 @@ def test_every_row_column_is_classified_for_the_etag(model, columns):
     """A new variant or metric column fails here until it joins the etag or
     is named as one that is not part of a design."""
     table = {column.name for column in model.__table__.columns}
-    not_yet = NOT_A_DESIGN_COLUMN_YET.get(model, set())
-    classified = set(columns) | visual.NOT_DESIGN_ROW_COLUMNS | not_yet
+    classified = set(columns) | visual.NOT_DESIGN_ROW_COLUMNS
     assert table - classified == set(), "classify these columns for the etag"
     assert classified - table == set(), "these are not columns"
     assert set(columns) & visual.NOT_DESIGN_ROW_COLUMNS == set()
-    assert set(columns) & not_yet == set(), "part of the design now: drop it here"
+    assert len(set(columns)) == len(columns)
 
 
 @pytest.mark.parametrize(
     "schema,columns",
     [
         (VariantBase, visual.DESIGN_VARIANT_COLUMNS),
-        (MetricBase, visual.DESIGN_METRIC_COLUMNS),
+        (
+            MetricBase,
+            visual.DESIGN_METRIC_COLUMNS + visual.DESIGN_METRIC_COLUMNS_WHEN_SET,
+        ),
     ],
     ids=["variant", "metric"],
 )

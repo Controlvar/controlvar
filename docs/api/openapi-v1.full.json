@@ -11792,6 +11792,20 @@
             "title": "Aggregation Method",
             "type": "string"
           },
+          "conversion_window_hours": {
+            "anyOf": [
+              {
+                "maximum": 8760,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Beta.  The metric's conversion window, in hours: a whole number from 1 to 8760 (365 days).  With one, the metric counts a user's events only within that many elapsed hours from their assignment: from the start of the second they were assigned in, up to and not including the assignment time plus the window, by each event's timestamp (the time it was received when it was sent without one).  null, or left out, means no window: every event the metric matches counts.  Any metric type.  It cannot be changed once the experiment leaves draft; a PUT that sends metrics replaces them, so a metric sent without it no longer has one.",
+            "title": "Conversion Window Hours"
+          },
           "description": {
             "anyOf": [
               {
@@ -11922,6 +11936,18 @@
             "description": "Not read: the analysis does not use it, and how a metric is analysed follows from metric_type (see analysis in the results).  Stored and returned as sent.",
             "title": "Aggregation Method",
             "type": "string"
+          },
+          "conversion_window_hours": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Beta.  The metric's conversion window, in hours: a whole number from 1 to 8760 (365 days).  With one, the metric counts a user's events only within that many elapsed hours from their assignment: from the start of the second they were assigned in, up to and not including the assignment time plus the window, by each event's timestamp (the time it was received when it was sent without one).  null, or left out, means no window: every event the metric matches counts.  Any metric type.  It cannot be changed once the experiment leaves draft; a PUT that sends metrics replaces them, so a metric sent without it no longer has one.",
+            "title": "Conversion Window Hours"
           },
           "created_at": {
             "format": "date-time",

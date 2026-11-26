@@ -257,14 +257,16 @@ For each variant the scheduler needs pulls (assignments) and successes (conversi
 
 1. **PostgreSQL**: pulls = `assignments` rows per variant; successes = converting users, counted exactly as
    `/results` counts them: users assigned to the variant with at least one event, tagged with that variant, whose
-   `event_name` matches the experiment's primary metric (see the event-matching rule in the tracking API docs). A
+   `event_name` matches the experiment's primary metric (see the event-matching rule in the tracking API docs),
+   inside the primary metric's conversion window when it has one
+   ([Conversion window](../guides/how-events-count.md#conversion-window)). A
    user who converts three times counts once. With no metric configured, every event other than an experiment view is a success.
    It is used whenever any variant has an assignment there, and its pulls and successes are used whole: a DynamoDB
    count that is larger, or ahead, never replaces or mixes into them.
 2. **DynamoDB real-time counters** (`get_experiment_counters`), when the counters stack is deployed, only when
    PostgreSQL has no assignments for the experiment or cannot be read. Its conversion counter counts conversion events,
    not users, so a user who converts three times counts three there; the scheduler caps its successes at its pulls
-   and cannot turn them into users.
+   and cannot turn them into users. It applies no conversion window.
 3. The previously persisted `BanditState`.
 4. Zero-count priors (equal weights).
 
@@ -273,8 +275,13 @@ not convert as the success, so the variant with fewer converting users earns the
 live sources (DynamoDB and PostgreSQL) apply this, and so does the persisted `BanditState` fallback. The stored and
 reported `successes` and `conversion_rate` stay the converting users and their share, whatever the direction; only the
 algorithms see the flipped counts. Because a user who has not yet converted counts as a success, the most recent
-assignments look best until their exposure window has passed, so such a bandit needs a settled exposure window
-(an event that happens days after assignment gives a misleading early signal).
+assignments look best until they have had time to convert, so such a bandit needs an event that comes soon after
+assignment (an event that happens days after assignment gives a misleading early signal).
+
+With a conversion window on the primary metric, a user still inside their window counts as not converted until
+they convert, as without one. The arm that got more of the recent traffic has more users still inside their window,
+so more of its users can still convert: as those windows close its share of converting users can rise, and with
+`lower_is_better` its successes fall.
 
 ### How the weights affect traffic
 
