@@ -48,7 +48,7 @@ MAX_ANSWER_BYTES = 64 * 1024
 #: Seconds to wait for a killed driver to be reaped, and for a thread to end.
 REAP_SECONDS = 5.0
 #: The commands of the protocol.
-VERBS = ("hello", "init", "evaluate", "status", "close")
+VERBS = ("hello", "init", "evaluate", "enabled", "status", "close")
 REDACTED = "[redacted]"
 
 #: What the stdout reader queues for an answer longer than MAX_ANSWER_BYTES.

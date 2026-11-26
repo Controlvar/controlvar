@@ -6,9 +6,13 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
 from backend.app.models.notification import NotificationChannel, NotificationStatus
+from backend.app.schemas.storable_text import (
+    contains_unstorable_text,
+    unstorable_text_message,
+)
 
 # ---------------------------------------------------------------------------
 # Notification Preferences
@@ -33,6 +37,17 @@ class NotificationPreferenceUpdate(NotificationPreferenceBase):
     notify_experiment_completed: Optional[bool] = None
     notify_safety_rollback: Optional[bool] = None
     notify_rollout_advanced: Optional[bool] = None
+
+    @field_validator("slack_channel", "email_override", mode="before")
+    @classmethod
+    def refuse_unstorable_text(cls, value: Any, info: ValidationInfo) -> Any:
+        """Refuse NUL and unpaired surrogates: the database cannot store them,
+        and a NUL answered 500 (#2181). Here, not on the base, which also
+        describes the response. The message names the field, never the
+        value."""
+        if contains_unstorable_text(value):
+            raise ValueError(unstorable_text_message(info.field_name))
+        return value
 
 
 class NotificationPreferenceResponse(NotificationPreferenceBase):

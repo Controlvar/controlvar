@@ -40,6 +40,14 @@
  * Nothing is read from the visitor's cookie or the browser, stored or sent
  * unless `allowed()`: consent given (or not needed) and not revoked. An answer
  * that arrives after revokeConsent() is dropped.
+ *
+ * A call the API refuses (an answer other than a 2xx; a preview link's 404
+ * only ends the preview) or that fails while the page is open silences the
+ * tab for 5 minutes (controlvar_backoff). A call the page's own navigation
+ * cuts off does not: it fails after pagehide, and the next page asks as
+ * usual. Chromium rejects such a call with the same TypeError as a failed
+ * network, after pagehide and before the page is hidden, so pagehide is what
+ * tells the two apart.
  */
 import { createApplier, type Applier } from "./apply";
 import { answerBound, type Bound } from "./bound";
@@ -165,6 +173,8 @@ export function createRuntime(env: RuntimeEnv): Runtime {
   let banner: OwnUi | null = null;
   /** The page load's own details (device, browser, language, referrer), read on the first page view. */
   let loaded: Record<string, string> | null = null;
+  /** True from pagehide until a pageshow: the page is going away, so a call that fails now was cut off by it. */
+  let leaving = false;
   const owns = (element: Element): boolean =>
     element === win.document.documentElement || (banner !== null && banner.owns(element));
 
@@ -384,8 +394,11 @@ export function createRuntime(env: RuntimeEnv): Runtime {
           );
         },
         () => {
-          if (previewing !== null) previewRefused(0);
-          refused(0);
+          // A call the page's own navigation cut off is no failure of the API: no pause, and the next page asks.
+          if (!leaving) {
+            if (previewing !== null) previewRefused(0);
+            refused(0);
+          }
           hider.show();
         },
       )
@@ -461,6 +474,16 @@ export function createRuntime(env: RuntimeEnv): Runtime {
     }
   }
 
+  /** Notes when the page goes away (pagehide), and when it is shown again (pageshow, from the back-forward cache). */
+  function watchLeaving(): void {
+    captures.addEventListener("pagehide", () => {
+      leaving = true;
+    });
+    captures.addEventListener("pageshow", () => {
+      leaving = false;
+    });
+  }
+
   /** Follows the path of a single-page app, and reports changes lost after the bound as the page goes away. */
   function follow(): void {
     const later = (): void => {
@@ -501,6 +524,11 @@ export function createRuntime(env: RuntimeEnv): Runtime {
       if (backoffActive(env.session(), env.now())) {
         if (banner) banner.say(PREVIEW_FAILED);
         return;
+      }
+      try {
+        watchLeaving();
+      } catch {
+        // A call cut off as the page goes away then silences the tab, as a failed call does.
       }
       try {
         follow();

@@ -25,6 +25,8 @@ Each role has a specific set of permissions that determine what actions they can
 global safety settings, and a flag's per-flag safety config (error-rate and latency
 thresholds, rollback percentage) and its rollback are gated on the separate `is_superuser`
 account flag, not on a role: an Admin without it is refused these the same as any other role.
+Reading is open: every signed-in role can read the global safety settings and a flag's safety
+config and check; changing them, and the rollback, need the superuser flag.
 The dashboard's Users, API Keys, Safety settings and Roles pages also require a superuser.
 Through the API, the Admin role alone may list and delete other users' API keys
 (`GET /api/v1/api-keys?all=true`, `DELETE /api/v1/api-keys/{id}`) and manage custom Roles;

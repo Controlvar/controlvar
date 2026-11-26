@@ -354,6 +354,11 @@ _NATIVE_GROUP_KEYS = frozenset(RuleGroup.model_fields)
 _NATIVE_CONDITION_KEYS = frozenset(Condition.model_fields)
 _LOGICAL_OPERATOR_NAMES = frozenset({"and", "or", "not"})
 _MAX_RULE_ID_LENGTH = 100
+#: Longest ``id`` of a native flag rule or ``default_rule``: a production
+#: evaluation records the id of the rule it matched in
+#: ``raw_metrics.targeting_rule_id``, a String(255), and a longer one failed
+#: every such evaluation that matched it (#2179).
+MAX_NATIVE_RULE_ID_LENGTH = 255
 
 # RuleValidator's messages can carry the submitted value; each ERROR issue is
 # reported as the fixed text of the first prefix its message starts with.
@@ -465,6 +470,11 @@ def validate_flag_targeting(value: Any) -> Optional[TargetingRules]:
       an integer from 0 to 100. A float with no fractional part (``100.0``)
       is accepted, as the native model accepts it; ``33.5``, ``true`` and
       text are refused;
+    * a native rule's or ``default_rule``'s ``id`` longer than
+      :data:`MAX_NATIVE_RULE_ID_LENGTH` (255) characters is refused
+      (``rules[0].id: must be at most 255 characters``; #2179), because an
+      evaluation records the matched rule's id in a column of that length.
+      The dashboard shape's ``id`` stays 1 to 100 characters;
     * the operators ``json_path`` and ``percentage_bucket``, which flag
       evaluation does not implement, are refused (#1204; experiments accept
       them). Both validators refuse the other words the engine does not know,
@@ -987,6 +997,11 @@ def _check_native_flag_rules(raw: Dict[str, Any]) -> None:
             continue
         if any(key not in _FLAG_NATIVE_RULE_KEYS for key in rule):
             raise TargetingRulesError(path, "unknown key")
+        rule_id = rule.get("id")
+        if isinstance(rule_id, str) and len(rule_id) > MAX_NATIVE_RULE_ID_LENGTH:
+            raise TargetingRulesError(
+                f"{path}.id", f"must be at most {MAX_NATIVE_RULE_ID_LENGTH} characters"
+            )
         if "rollout_percentage" in rule:
             _check_flag_percentage(
                 rule["rollout_percentage"], f"{path}.rollout_percentage"

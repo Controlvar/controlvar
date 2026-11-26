@@ -12,7 +12,9 @@ change a flag, and evaluate it directly.
 * **Flag changes and raw evaluations** go through ``Admin``, a small httpx
   helper: ``create_flag``, ``set_rollout`` (``PUT`` of the rollout
   percentage), ``toggle`` (with an empty JSON body: the route answers 422 to
-  none, ``test_toggle_requires_json_body``), ``evaluate`` (``GET`` of the
+  none, ``test_toggle_requires_json_body``), ``archive`` (``POST`` of the bulk
+  toggle with ``"action": "archive"``: the one way the API archives a flag),
+  ``evaluate`` (``GET`` of the
   evaluate route with the API key, and the user's attributes as ``context``
   when given) and ``ruleset`` (``GET`` of the SDK
   ruleset with the API key: the version the server serves now). Raw
@@ -45,6 +47,7 @@ import httpx
 FLAGS = "/api/v1/feature-flags/"
 FLAG = "/api/v1/feature-flags/{flag_id}"
 TOGGLE = "/api/v1/feature-flags/{flag_id}/toggle"
+BULK_TOGGLE = "/api/v1/feature-flags/bulk-toggle"
 EVALUATE = "/api/v1/feature-flags/evaluate/{flag_key}"
 RULESET = "/api/v1/sdk/ruleset"
 
@@ -205,6 +208,19 @@ class Admin:
             kind="admin",
             headers=self._bearer(),
             json={},
+        )
+
+    def archive(self, flag_id: str) -> dict[str, Any]:
+        """``POST /api/v1/feature-flags/bulk-toggle`` with ``"action":
+        "archive"`` for one flag: the bulk answer (``results`` has one entry,
+        its ``success`` true when the flag is archived)."""
+        return self._send(
+            "POST",
+            BULK_TOGGLE,
+            route=BULK_TOGGLE,
+            kind="admin",
+            headers=self._bearer(),
+            json={"flag_ids": [flag_id], "action": "archive"},
         )
 
     def ruleset(self) -> dict[str, Any]:

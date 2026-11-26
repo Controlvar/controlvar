@@ -102,16 +102,15 @@ class FlagEvaluation:
     ``source`` is set only with ``evaluation="local"``: ``"local"`` when answered
     in-process from the ruleset, ``"server"`` when the server evaluated it.
 
-    ``value`` is what the flag serves this user: its on value when ``enabled``
-    is true, its off value otherwise (a ``str``; an ``int`` or a ``float``; a
-    ``dict`` or a ``list``); for a boolean flag, ``enabled``. ``None`` when the
-    server did not send one (a server without flag values, or a stored value it
-    cannot serve). In local mode a ruleset entry that names no type is a boolean
-    flag, so every flag of a server from before flag values is answered with
-    ``enabled`` and ``"boolean"``. A JSON value is the object the SDK caches for
-    this user and flag: read it, or call ``get_json_value``, which returns a copy.
-    ``value_type`` is the flag's type, ``"boolean"``, ``"string"``,
-    ``"number"`` or ``"json"``; ``None`` when the server did not send one.
+    ``value`` is what the flag serves this user: its on value when ``enabled`` is true (or, in its
+    place, the value its split or a matching rule gives them), its off value otherwise (a ``str``;
+    an ``int`` or a ``float``; a ``dict`` or a ``list``); for a boolean flag, ``enabled``. ``None``
+    when the server did not send one (a server without flag values, or a stored value it cannot
+    serve). In local mode a ruleset entry that names no type is a boolean flag, so every flag of a
+    server from before flag values is answered with ``enabled`` and ``"boolean"``. A JSON value is
+    the object the SDK caches for this user and flag: read it, or call ``get_json_value``, which
+    returns a copy. ``value_type`` is the flag's type, ``"boolean"``, ``"string"``, ``"number"`` or
+    ``"json"``; ``None`` when the server did not send one.
 
     ``value`` and ``value_type`` come after the older fields, so code that
     builds a ``FlagEvaluation`` by position keeps working.

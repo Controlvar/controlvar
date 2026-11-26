@@ -1,0 +1,10 @@
+{"id": "u-dev.1.key-listed-once", "kind": "api_state", "pass": true}
+{"id": "u-dev.2.draft-with-key", "kind": "api_state", "pass": true}
+{"id": "u-dev.3.active", "kind": "api_state", "pass": true}
+{"id": "u-dev.4.assignments-equal-ledger", "kind": "count_delta", "pass": true}
+{"id": "u-dev.5.results-equal-ledger", "kind": "count_delta", "pass": true}
+{"id": "u-dev.5.page-equals-api", "kind": "ui_matches_api", "pass": true}
+{"id": "u-dev.6.evaluate-by-rule", "kind": "api_state", "pass": true}
+{"id": "u-dev.6.hash-vector", "kind": "hash_vector", "pass": true}
+{"id": "u-dev.7.stages-stored", "kind": "api_state", "pass": true}
+{"id": "u-dev.8.end-date-utc", "kind": "api_state", "pass": true}

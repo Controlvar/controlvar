@@ -61,9 +61,28 @@ FULL_MODEL_COUNT = 146
 #: ``(model, field)`` pairs that a ``mode="before"`` field validator covers.
 #: #2011 added 2: FlagEnvironmentUpdate's is_active and rollout_percentage.
 #: #2163 added 5: targeting_rules and tags on FeatureFlagCreate and
-#: FeatureFlagUpdate, and FlagEnvironmentUpdate's targeting_rules.
-CORE_BEFORE_COUNT = 53
-FULL_BEFORE_COUNT = 54
+#: FeatureFlagUpdate, and FlagEnvironmentUpdate's targeting_rules. #2180 added
+#: 18: name, description, hypothesis, targeting_rules and tags on
+#: ExperimentCreate (5) and ExperimentUpdate (4: its name had one), a
+#: variant's name, description and configuration (3), a metric's name,
+#: description, event_name, aggregation_method and event_value_path (5), and
+#: APIKeyCreate's description (1: its name and scopes had one, as had
+#: FeatureFlagSafetyConfigUpdate's metrics), then 3 more: SplitUrlConfig's
+#: cookie_name and canonical_url and VarianceReductionConfig's
+#: covariate_metric_id. #2181 added 26 to both: name and description on
+#: GlobalHoldoutCreate, GlobalHoldoutUpdate, MutualExclusionGroupCreate and
+#: MutualExclusionGroupUpdate (8); username and full_name on UserCreate and
+#: UserUpdate (4); NotificationPreferenceUpdate's slack_channel and
+#: email_override (2); description on FeatureFlagCreate and FeatureFlagUpdate
+#: (2: their name had one); name, description and config_data on
+#: RolloutScheduleCreate (3), and name, description and trigger_configuration
+#: on RolloutStageCreate (3); description and config_data on
+#: RolloutScheduleUpdate, and description and trigger_configuration on
+#: RolloutStageUpdate (4: their name had one). And 6 more to the full profile:
+#: name and description on CreateWorkspaceRequest and UpdateWorkspaceRequest
+#: (4), and description on CustomRoleCreate and CustomRoleUpdate (2).
+CORE_BEFORE_COUNT = 100
+FULL_BEFORE_COUNT = 107
 
 PROBES = ({}, [], False, None)
 

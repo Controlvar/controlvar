@@ -208,9 +208,10 @@ public class ExperimentationClient implements AutoCloseable {
     // =========================================================================
 
     /**
-     * The string a string flag serves this user: its on value when the flag is on for them, its
-     * off value otherwise. Evaluated as {@link #evaluateFeatureFlag} evaluates, with the same
-     * request and the same cache: reading a value records no exposure.
+     * The string a string flag serves this user: its on value when the flag is on for them (or, in
+     * its place, the value its split or a matching rule gives them), its off value otherwise.
+     * Evaluated as {@link #evaluateFeatureFlag} evaluates, with the same request and the same
+     * cache: reading a value records no exposure.
      *
      * <p>Never throws. Returns {@code defaultValue}, and passes the reason to the
      * {@link ErrorListener} with the operation {@code "value"}, when the request fails, the flag

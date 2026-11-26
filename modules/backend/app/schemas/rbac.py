@@ -4,13 +4,24 @@ RBAC Post-MVP schemas — API contract for custom roles and permission managemen
 
 from datetime import datetime
 from enum import Enum
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 from pydantic_core import PydanticCustomError
 
 from backend.app.api.datetime_bounds import storable_offset
 from backend.app.core.permissions import GRANTABLE
+from backend.app.schemas.storable_text import (
+    contains_unstorable_text,
+    unstorable_text_message,
+)
 
 # ``GRANTABLE`` is every (resource, action) pair a custom role or a direct
 # grant may hold (#891). It is the core's own object, the one the permission
@@ -65,6 +76,17 @@ def _refuse_ungrantable(grants: Iterable[Tuple[object, Iterable[object]]]) -> No
         raise PydanticCustomError("not_grantable", message)
 
 
+def _refuse_unstorable_text(value: Any, info: ValidationInfo) -> Any:
+    """Refuse NUL and unpaired surrogates in a role's description: the
+    database cannot store them, and a NUL answered 409 on a create and 400 on
+    an update, with the database driver's words (#2181). A ``mode="before"``
+    validator, so the field's own checks do not read the value first; the
+    message names the field, never the value. ``name`` refuses both already."""
+    if contains_unstorable_text(value):
+        raise ValueError(unstorable_text_message(info.field_name))
+    return value
+
+
 class PermissionAction(str, Enum):
     CREATE = "create"
     READ = "read"
@@ -94,6 +116,12 @@ class CustomRoleCreate(BaseModel):
     description: Optional[str] = Field(None, max_length=256)
     permissions: List[PermissionGrant] = Field(default_factory=list)
 
+    @field_validator("description", mode="before")
+    @classmethod
+    def refuse_unstorable_text(cls, value: Any, info: ValidationInfo) -> Any:
+        """Text the database cannot store answers 422 at the field."""
+        return _refuse_unstorable_text(value, info)
+
     @field_validator("permissions")
     @classmethod
     def _only_grantable(cls, value: List[PermissionGrant]) -> List[PermissionGrant]:
@@ -109,6 +137,12 @@ CustomRoleCreate.model_rebuild()
 class CustomRoleUpdate(BaseModel):
     description: Optional[str] = Field(None, max_length=256)
     permissions: Optional[List[PermissionGrant]] = None
+
+    @field_validator("description", mode="before")
+    @classmethod
+    def refuse_unstorable_text(cls, value: Any, info: ValidationInfo) -> Any:
+        """As on create."""
+        return _refuse_unstorable_text(value, info)
 
     @field_validator("permissions")
     @classmethod

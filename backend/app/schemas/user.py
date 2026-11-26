@@ -14,12 +14,17 @@ from pydantic import (
     EmailStr,
     Field,
     SecretStr,
+    ValidationInfo,
     field_validator,
     model_validator,
 )
 
 from backend.app.models.user import User as UserModel
 from backend.app.schemas.auth import RoleName
+from backend.app.schemas.storable_text import (
+    contains_unstorable_text,
+    unstorable_text_message,
+)
 
 #: The longest values the ``users`` columns hold, read from the model so a
 #: column change moves the request limit with it. ``full_name`` is stored
@@ -103,6 +108,18 @@ class _UserWrite(UserBase):
 
     email: EmailStr = Field(..., max_length=EMAIL_MAX)
     full_name: Optional[str] = Field(None, max_length=FULL_NAME_MAX)
+
+    @field_validator("username", "full_name", mode="before")
+    @classmethod
+    def refuse_unstorable_text(cls, value: Any, info: ValidationInfo) -> Any:
+        """Refuse NUL and unpaired surrogates: the database cannot store them,
+        and a NUL answered 500 (#2181). ``before``, so the field's own
+        checks do not read the value first; the message names the field,
+        never the value. ``email`` refuses both already; a password is
+        hashed, never stored as sent."""
+        if contains_unstorable_text(value):
+            raise ValueError(unstorable_text_message(info.field_name))
+        return value
 
 
 class UserCreate(_UserWrite):
