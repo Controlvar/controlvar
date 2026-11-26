@@ -23,6 +23,9 @@ The create/update contract (#94, D39 as narrowed by D40):
 * ``targeting_rules`` the flag evaluator would not apply as written answer
   422 (#535). That includes rules sent back from a GET: a GET body can be sent
   back unchanged unless its ``targeting_rules`` are ones PUT now refuses (D41).
+* ``targeting_rules`` or ``tags`` holding NUL or an unpaired surrogate, which
+  the database cannot store, answer 422 at the field before the rules are
+  read (#2163).
 * There is one response representation, :class:`FeatureFlagRead`. It shares no
   base with the request models: ``extra="forbid"`` is inherited, and a response
   model must never refuse a stored row. The list's items,
@@ -59,6 +62,10 @@ from backend.app.core.flag_values import (
 from backend.app.core.targeting_adapter import (
     TargetingRulesError,
     validate_flag_targeting,
+)
+from backend.app.schemas.storable_text import (
+    contains_unstorable_text,
+    unstorable_text_message,
 )
 
 #: The fields a flag response carries that no request writes.  A request may
@@ -223,6 +230,17 @@ class _FeatureFlagRequest(BaseModel):
                 "Key must be lowercase alphanumeric characters, hyphens, or underscores only"
             )
         return v
+
+    @field_validator("targeting_rules", "tags", mode="before", check_fields=False)
+    @classmethod
+    def refuse_unstorable_text(cls, value: Any, info: ValidationInfo) -> Any:
+        """Refuse NUL and unpaired surrogates anywhere in the value, keys
+        included (#2163): the database cannot store them, and the request
+        answered 500. ``before``, so the rules are not read first; the message
+        names the field, never the value."""
+        if contains_unstorable_text(value):
+            raise ValueError(unstorable_text_message(info.field_name))
+        return value
 
     @field_validator("targeting_rules", check_fields=False)
     @classmethod
