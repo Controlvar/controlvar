@@ -17,6 +17,7 @@ from backend.app.models.assignment import Assignment
 from backend.app.models.event import Event
 from backend.app.models.experiment import ExperimentStatus, Variant
 from backend.app.services.event_matching import (
+    MetricEvents,
     converting_user_ids,
     count_converting_users,
 )
@@ -86,13 +87,19 @@ def test_converting_user_ids_is_what_count_converting_users_counts(
 ):
     experiment, control, treatment, users = messy_experiment
     for variant in (control, treatment):
-        ids = converting_user_ids(db_session, experiment.id, variant.id, "purchase")
-        assert len(ids) == count_converting_users(
-            db_session, experiment.id, variant.id, "purchase"
+        ids = converting_user_ids(
+            db_session, experiment.id, variant.id, MetricEvents("purchase", None)
         )
-    ids = converting_user_ids(db_session, experiment.id, control.id, "purchase")
+        assert len(ids) == count_converting_users(
+            db_session, experiment.id, variant.id, MetricEvents("purchase", None)
+        )
+    ids = converting_user_ids(
+        db_session, experiment.id, control.id, MetricEvents("purchase", None)
+    )
     assert ids == {users["control"][0], users["control"][1]}
     assert (
-        converting_user_ids(db_session, experiment.id, treatment.id, "purchase")
+        converting_user_ids(
+            db_session, experiment.id, treatment.id, MetricEvents("purchase", None)
+        )
         == set()
     )

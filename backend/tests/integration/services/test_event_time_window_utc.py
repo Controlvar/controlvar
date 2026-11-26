@@ -20,7 +20,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from backend.app.models.event import Event
-from backend.app.services.event_matching import first_conversion_times
+from backend.app.services.event_matching import MetricEvents, first_conversion_times
 from backend.app.services.event_service import EventService
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_db]
@@ -146,6 +146,8 @@ def test_first_conversion_is_the_earliest_instant_not_the_smallest_text(
             }
         )
 
-    firsts = first_conversion_times(db_session, experiment.id, variant.id, "purchase")
+    firsts = first_conversion_times(
+        db_session, experiment.id, variant.id, MetricEvents("purchase", None)
+    )
 
     assert firsts == [INSIDE_AS_UTC]

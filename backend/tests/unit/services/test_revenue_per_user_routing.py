@@ -39,6 +39,7 @@ from backend.app.models.experiment import MetricType
 from backend.app.schemas.results import MetricResult
 from backend.app.services import analysis_service as analysis_module
 from backend.app.services.analysis_service import AnalysisService
+from backend.app.services.event_matching import metric_event_name
 from backend.tests.unit.services import (
     test_binomial_metric_result_characterisation as characterisation,
 )
@@ -131,12 +132,12 @@ def _results(
     def converting(_db, _experiment_id, variant_id, _event):
         return _CONVERTED[str(variant_id)]
 
-    def value_totals(_self, _experiment_id, variant_id, event_name):
-        totals_read.append(event_name)
+    def value_totals(_self, _experiment_id, variant_id, events):
+        totals_read.append(metric_event_name(events))
         return list(_TOTALS[str(variant_id)])
 
-    def event_counts(_self, _experiment_id, variant_id, event_name):
-        counts_read.append(event_name)
+    def event_counts(_self, _experiment_id, variant_id, events):
+        counts_read.append(metric_event_name(events))
         return list(_COUNTS[str(variant_id)])
 
     monkeypatch.setattr(analysis_module, "count_converting_users", converting)

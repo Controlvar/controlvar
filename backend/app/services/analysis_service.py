@@ -29,11 +29,13 @@ from backend.app.schemas.tracking import VALUE_BOUND
 from backend.app.services.analysis_settings import resolve_analysis_settings
 from backend.app.services.bayesian_service import DEFAULT_N_SAMPLES, BayesianService
 from backend.app.services.event_matching import (
+    MetricEvents,
     _assigned_pairs,
-    conversion_event_filter,
     count_converting_users,
     count_converting_users_any,
     first_conversion_times,
+    metric_event_filter,
+    metric_events,
 )
 from backend.app.services.segment_breakdown import segment_rows
 from backend.app.services.srm_service import (
@@ -273,11 +275,11 @@ class AnalysisService:
         )
 
     def _converting_users(
-        self, experiment_id: Any, variant_id: Any, event_name: Optional[str]
+        self, experiment_id: Any, variant_id: Any, events: Optional[MetricEvents]
     ) -> int:
         """Converting users of the variant (event_matching.py): a user with
         several conversion events counts once, so conversions <= assignments."""
-        return count_converting_users(self.db, experiment_id, variant_id, event_name)
+        return count_converting_users(self.db, experiment_id, variant_id, events)
 
     def _experiment_totals(self, experiment: Experiment) -> Tuple[int, int, int]:
         """The experiment's users, events and converting users."""
@@ -301,7 +303,7 @@ class AnalysisService:
         total_conversions = count_converting_users_any(
             self.db,
             experiment.id,
-            (m.event_name for m in (experiment.metric_definitions or [])),
+            (metric_events(m) for m in (experiment.metric_definitions or [])),
         )
         return total_users, total_events, total_conversions
 
@@ -348,7 +350,7 @@ class AnalysisService:
                     ),
                     v["sample_size"],
                     v["conversions"],
-                    read(experiment.id, v["variant_id"], metric.event_name),
+                    read(experiment.id, v["variant_id"], metric_events(metric)),
                 )
                 for v in raw["variant_results"]
             ],
@@ -358,13 +360,13 @@ class AnalysisService:
         )
 
     def event_counts(
-        self, experiment_id: Any, variant_id: Any, event_name: Optional[str]
+        self, experiment_id: Any, variant_id: Any, events: Optional[MetricEvents]
     ) -> List[float]:
         """The number of the metric's events of each user of ``variant_id``
         who sent one.
 
         The events counted are the ones ``count_converting_users`` counts for
-        the metric: matching ``conversion_event_filter(event_name)``, tagged
+        the metric: matching ``metric_event_filter(events)``, tagged
         with ``variant_id``, from a user assigned to that variant
         (``_assigned_pairs``; no SQL join, as there).  Every such event counts
         1, whatever its value: none, 0, negative, not finite or beyond
@@ -379,7 +381,7 @@ class AnalysisService:
             .filter(
                 Event.experiment_id == experiment_id,
                 Event.variant_id == variant_id,
-                conversion_event_filter(event_name),
+                metric_event_filter(events),
             )
             .group_by(Event.user_id)
             .all()
@@ -393,12 +395,12 @@ class AnalysisService:
         ]
 
     def value_totals(
-        self, experiment_id: Any, variant_id: Any, event_name: Optional[str]
+        self, experiment_id: Any, variant_id: Any, events: Optional[MetricEvents]
     ) -> List[float]:
         """The value total of each user of ``variant_id`` who has one.
 
         The events counted are the ones ``count_converting_users`` counts for
-        the metric: matching ``conversion_event_filter(event_name)``, tagged
+        the metric: matching ``metric_event_filter(events)``, tagged
         with ``variant_id``, from a user assigned to that variant
         (``_assigned_pairs``; no SQL join, as there).  An event's value counts
         when ``abs(value) <= VALUE_BOUND``: an event with no value, or a value
@@ -411,7 +413,7 @@ class AnalysisService:
             .filter(
                 Event.experiment_id == experiment_id,
                 Event.variant_id == variant_id,
-                conversion_event_filter(event_name),
+                metric_event_filter(events),
                 func.abs(Event.value) <= VALUE_BOUND,
             )
             .group_by(Event.user_id)
@@ -611,7 +613,7 @@ class AnalysisService:
         conversions = {}
         for variant_id in variant_ids:
             conversions[variant_id] = self._converting_users(
-                experiment.id, variant_id, metric.event_name
+                experiment.id, variant_id, metric_events(metric)
             )
 
         # Rates, intervals and Fisher p-values from the counts
@@ -774,7 +776,7 @@ class AnalysisService:
             (str(metric.id), str(variant.id)): [
                 min(max(first[:10], dates[0]), dates[-1])
                 for first in first_conversion_times(
-                    self.db, experiment.id, variant.id, metric.event_name
+                    self.db, experiment.id, variant.id, metric_events(metric)
                 )
             ]
             for metric in metrics
@@ -911,7 +913,7 @@ class AnalysisService:
             )
             if primary_metric:
                 convs = count_converting_users(
-                    self.db, experiment.id, variant.id, primary_metric.event_name
+                    self.db, experiment.id, variant.id, metric_events(primary_metric)
                 )
             else:
                 convs = 0
@@ -1312,7 +1314,7 @@ class AnalysisService:
             return {"segments": []}
 
         rows = segment_rows(
-            self.db, experiment.id, segment_by, [m.event_name for m in metrics]
+            self.db, experiment.id, segment_by, [metric_events(m) for m in metrics]
         )
 
         segments = []
@@ -1328,7 +1330,7 @@ class AnalysisService:
 
                 for variant in experiment.variants:
                     assignments = row.users.get(str(variant.id), 0)
-                    conversions = row.converters[metric.event_name].get(
+                    conversions = row.converters[metric_events(metric)].get(
                         str(variant.id), 0
                     )
 

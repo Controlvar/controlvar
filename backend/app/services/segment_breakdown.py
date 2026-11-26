@@ -65,6 +65,7 @@ from sqlalchemy.orm import Session
 from backend.app.models.event import Event
 from backend.app.services.event_matching import (
     EXPOSURE_EVENT_TYPES,
+    MetricEvents,
     assignment_times,
     converting_user_ids,
 )
@@ -94,13 +95,16 @@ class Segment:
     """One row of a breakdown.
 
     ``users`` maps each variant id with assigned users to how many of them are
-    in this segment (zeros included); ``converters`` maps each requested event
-    name to the same per-variant count of converting users.
+    in this segment (zeros included); ``converters`` maps each requested
+    metric's ``MetricEvents`` (None for the legacy events) to the same
+    per-variant count of converting users.
     """
 
     value: str
     users: Dict[str, int] = field(default_factory=dict)
-    converters: Dict[Optional[str], Dict[str, int]] = field(default_factory=dict)
+    converters: Dict[Optional[MetricEvents], Dict[str, int]] = field(
+        default_factory=dict
+    )
 
 
 #: A per-user value source, as ``segment_rows`` calls it:
@@ -188,7 +192,7 @@ def segment_rows(
     db: Session,
     experiment_id: Any,
     dimension: str,
-    event_names: Iterable[Optional[str]],
+    metrics: Iterable[Optional[MetricEvents]],
     *,
     value_source: Optional[ValueSource] = None,
 ) -> List[Segment]:
@@ -197,9 +201,9 @@ def segment_rows(
 
     Every user assigned to the experiment is in exactly one row; a row with no
     users is not listed, and an experiment with no assignments has no rows.
-    For each name in ``event_names`` (``None`` is the legacy ``event_type =
-    'conversion'`` convention, as in ``conversion_event_filter``) each row
-    counts the variant's converting users in that segment, the users
+    For each ``MetricEvents`` in ``metrics`` (``None`` is the legacy
+    ``event_type = 'conversion'`` convention, as in ``conversion_event_filter``)
+    each row counts the variant's converting users in that segment, the users
     ``converting_user_ids`` returns.
 
     ``value_source`` (a ``ValueSource``) gives each user's value.  ``None``,
@@ -230,15 +234,15 @@ def segment_rows(
     for user_id, row in row_of.items():
         rows[row].users[variant_of[user_id]] += 1
 
-    for name in dict.fromkeys(event_names):
+    for events in dict.fromkeys(metrics):
         for segment in rows.values():
-            segment.converters[name] = dict.fromkeys(variants, 0)
+            segment.converters[events] = dict.fromkeys(variants, 0)
         for variant_id in variants:
-            for user_id in converting_user_ids(db, experiment_id, variant_id, name):
+            for user_id in converting_user_ids(db, experiment_id, variant_id, events):
                 # A converter is assigned to variant_id, so it has a row
                 # unless it was assigned after the assignments were read.
                 row = row_of.get(user_id)
                 if row is not None:
-                    rows[row].converters[name][variant_id] += 1
+                    rows[row].converters[events][variant_id] += 1
 
     return list(rows.values())

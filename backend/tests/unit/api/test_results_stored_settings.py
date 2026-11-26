@@ -36,6 +36,10 @@ from backend.app.models.user import User
 from backend.app.services import analysis_service as analysis_module
 from backend.app.services import results_batch
 from backend.app.services.analysis_service import AnalysisService
+from backend.app.services.event_matching import (
+    metric_event_name,
+    metric_events,
+)
 from backend.app.services.export_service import ExportService
 from backend.app.services.sufficient_stats_analysis import (
     UnknownCorrectionMethodError,
@@ -117,8 +121,8 @@ class _Harness:
     def use(self, fixture: _Fixture, variant_ids: List[str], method, level):
         self.experiment = _experiment(variant_ids, method, level)
 
-        def converting_units(_db, _experiment_id, variant_id, event):
-            return fixture.converted[(event, str(variant_id))]
+        def converting_units(_db, _experiment_id, variant_id, events):
+            return fixture.converted[(metric_event_name(events), str(variant_id))]
 
         self.monkeypatch.setattr(
             analysis_module, "count_converting_users", converting_units
@@ -334,7 +338,10 @@ def test_the_export_does_not_read_an_unknown_method_as_no_results(monkeypatch):
         results_batch,
         "load_rows",
         lambda _db, _experiments: results_batch.EventRows(
-            assignments={experiment.id: dict(_THREE.units)}
+            assignments={experiment.id: dict(_THREE.units)},
+            read={
+                (experiment.id, metric_events(m)) for m in experiment.metric_definitions
+            },
         ),
     )
     service = ExportService(_FakeSession(experiment, _THREE))

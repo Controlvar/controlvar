@@ -14,12 +14,20 @@ just to exclude exposure rows.  Every analysis path (results engine, streaming
 results, bandit scheduler, segment breakdowns) must use these helpers so the
 same event is counted the same way everywhere.
 
+Every reader of a metric's conversions, counts or values takes the metric's
+``MetricEvents`` (``metric_events(metric)``), never its bare event name, and
+selects them with ``metric_event_filter`` or ``any_metric_event_filter``.
+``None`` in its place is the legacy convention below.  A bare name raises
+``TypeError``.  ``conversion_event_filter`` is the name rule those two apply;
+it is called with a name only where no metric is read (holdout results, the
+CUPED covariate).
+
 ``results_batch`` reads the conversions of several metrics in one statement:
-it selects them with ``any_conversion_event_filter`` and
+it selects them with ``any_metric_event_filter`` and
 ``conversion_event_filter(None)``, and tells the metrics apart by keying each
-row by its ``event_name``.  That key is ``conversion_event_filter``'s name
-equality written a second time, so a change to how a name matches is made in
-both.
+row by the ``MetricEvents`` whose ``event_name`` it carries.  That key is
+``conversion_event_filter``'s name equality written a second time, so a change
+to how a name matches is made in both.
 
 A binary conversion metric counts **converting users**, not conversion events:
 a user assigned to a variant who sent one or more matching conversion events
@@ -28,6 +36,7 @@ every analysis path that reports ``conversions`` next to a ``sample_size`` of
 assigned users must use it, so the numerator can never exceed the denominator.
 """
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
 
@@ -40,6 +49,72 @@ from backend.app.models.event import Event, EventType
 
 #: ``event_type`` values that record that a user *saw* a variant, never a conversion.
 EXPOSURE_EVENT_TYPES = (EventType.EXPOSURE.value, "experiment_exposure")
+
+
+@dataclass(frozen=True)
+class MetricEvents:
+    """
+    The events one metric counts: its event name and its conversion window.
+
+    Every reader of a metric's conversions, counts or values takes one of
+    these in place of the metric's event name, or ``None`` for the legacy
+    ``event_type = "conversion"`` convention (an experiment with no metric, or
+    a metric with no event name).  It is hashable, so a result keyed by it
+    keeps two metrics on one event apart once they can differ.
+    ``metric_events`` builds it from a ``Metric`` row.
+
+    ``window_hours`` is always ``None``: metrics have no conversion window yet
+    (#1934).  A window is refused here, so no reader can count without one it
+    was given.
+    """
+
+    event_name: str
+    window_hours: Optional[int]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.event_name, str) or not self.event_name:
+            raise TypeError(
+                "MetricEvents needs a non-empty event name; "
+                "None stands for the legacy events"
+            )
+        if self.window_hours is not None:
+            raise NotImplementedError(
+                "conversion windows are not read yet: window_hours must be None"
+            )
+
+
+def metric_events(metric: Any) -> Optional[MetricEvents]:
+    """
+    The events ``metric`` counts, or ``None`` when it names no event.
+
+    ``None`` (also for ``metric=None``) is the legacy ``event_type =
+    "conversion"`` convention, which ``conversion_event_filter(None)`` and
+    ``conversion_event_filter("")`` both select: an experiment's results read
+    it for a metric with an empty event name, and for no metric at all.
+    """
+    name = getattr(metric, "event_name", None) if metric is not None else None
+    if not name:
+        return None
+    return MetricEvents(name, None)
+
+
+def metric_event_name(events: Optional[MetricEvents]) -> Optional[str]:
+    """
+    The event name ``events`` reads, or ``None`` for the legacy events.
+
+    Raises ``TypeError`` for anything but a ``MetricEvents`` or ``None``, a
+    bare event name included: a reader that is still handed a name is a caller
+    that was not moved to ``metric_events``, and it fails here rather than
+    answering without the metric's window.
+    """
+    if events is None:
+        return None
+    if not isinstance(events, MetricEvents):
+        raise TypeError(
+            "a metric's events are read through metric_events(metric), "
+            f"not a {type(events).__name__}"
+        )
+    return events.event_name
 
 
 def conversion_event_filter(event_name: Optional[str]):
@@ -73,6 +148,16 @@ def any_conversion_event_filter(event_names: Iterable[Optional[str]]):
         Event.event_name.in_(names),
         Event.event_type.notin_(EXPOSURE_EVENT_TYPES),
     )
+
+
+def metric_event_filter(events: Optional[MetricEvents]):
+    """``conversion_event_filter`` for one metric's ``MetricEvents``."""
+    return conversion_event_filter(metric_event_name(events))
+
+
+def any_metric_event_filter(events: Iterable[Optional[MetricEvents]]):
+    """``any_conversion_event_filter`` for several metrics' ``MetricEvents``."""
+    return any_conversion_event_filter([metric_event_name(e) for e in events])
 
 
 #: How many user ids one assignment lookup binds as a single array.
@@ -141,11 +226,11 @@ def _assigned_matching(
 
 
 def _assigned_converters(
-    db: Session, experiment_id: Any, variant_id: Any, event_name: Optional[str]
+    db: Session, experiment_id: Any, variant_id: Any, events: Optional[MetricEvents]
 ) -> List[Tuple[str, Any]]:
     """The converters of ``variant_id`` who are assigned to that variant."""
     return _assigned_matching(
-        db, experiment_id, variant_id, conversion_event_filter(event_name)
+        db, experiment_id, variant_id, metric_event_filter(events)
     )
 
 
@@ -170,7 +255,7 @@ def count_converting_users(
     db: Session,
     experiment_id: Any,
     variant_id: Any,
-    event_name: Optional[str],
+    events: Optional[MetricEvents],
 ) -> int:
     """
     Number of users assigned to ``variant_id`` with at least one conversion.
@@ -180,20 +265,20 @@ def count_converting_users(
     user with no assignment to that variant does not count, so the result is
     never larger than the variant's assignment count.
     """
-    return len(_assigned_converters(db, experiment_id, variant_id, event_name))
+    return len(_assigned_converters(db, experiment_id, variant_id, events))
 
 
 def count_converting_users_any(
     db: Session,
     experiment_id: Any,
-    event_names: Iterable[Optional[str]],
+    events: Iterable[Optional[MetricEvents]],
 ) -> int:
     """Users in the experiment with a conversion on *any* of the given metrics."""
     rows = (
         db.query(Event.variant_id, Event.user_id)
         .filter(
             Event.experiment_id == experiment_id,
-            any_conversion_event_filter(event_names),
+            any_metric_event_filter(events),
         )
         .distinct()
         .all()
@@ -207,7 +292,7 @@ def first_conversion_times(
     db: Session,
     experiment_id: Any,
     variant_id: Any,
-    event_name: Optional[str],
+    events: Optional[MetricEvents],
 ) -> List[str]:
     """
     The ``created_at`` of each converting user's *first* conversion.
@@ -218,7 +303,7 @@ def first_conversion_times(
     """
     return [
         first
-        for _, first in _assigned_converters(db, experiment_id, variant_id, event_name)
+        for _, first in _assigned_converters(db, experiment_id, variant_id, events)
         if first is not None
     ]
 
@@ -227,7 +312,7 @@ def converting_user_ids(
     db: Session,
     experiment_id: Any,
     variant_id: Any,
-    event_name: Optional[str],
+    events: Optional[MetricEvents],
 ) -> Set[str]:
     """
     The users ``count_converting_users`` counts, as a set of ids.
@@ -238,9 +323,7 @@ def converting_user_ids(
     """
     return {
         user_id
-        for user_id, _ in _assigned_converters(
-            db, experiment_id, variant_id, event_name
-        )
+        for user_id, _ in _assigned_converters(db, experiment_id, variant_id, events)
     }
 
 

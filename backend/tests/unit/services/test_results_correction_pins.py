@@ -47,6 +47,10 @@ from backend.app.models.user import User
 from backend.app.services import analysis_service as analysis_module
 from backend.app.services import results_batch, sufficient_stats_analysis
 from backend.app.services.analysis_service import AnalysisService
+from backend.app.services.event_matching import (
+    MetricEvents,
+    metric_event_name,
+)
 from backend.app.services.export_service import ExportService
 from backend.tests.unit.services import (
     test_binomial_metric_result_characterisation as characterisation,
@@ -201,9 +205,9 @@ def fake_counts(monkeypatch: pytest.MonkeyPatch):
 
     def use(fixture: _Fixture) -> None:
         def converting_units(
-            _db: Any, _experiment_id: Any, variant_id: Any, event: str
+            _db: Any, _experiment_id: Any, variant_id: Any, events: Any
         ):
-            return fixture.converted[(event, str(variant_id))]
+            return fixture.converted[(metric_event_name(events), str(variant_id))]
 
         monkeypatch.setattr(analysis_module, "count_converting_users", converting_units)
         monkeypatch.setattr(
@@ -434,8 +438,13 @@ def test_the_variant_export_and_report_rows_are_the_stored_setting(
         lambda _db, _experiments: results_batch.EventRows(
             assignments={experiment.id: dict(_THREE.units)},
             users={
-                (experiment.id, event, variant_id): [(1, None)] * converted
+                (experiment.id, MetricEvents(event, None), variant_id): [(1, None)]
+                * converted
                 for (event, variant_id), converted in _THREE.converted.items()
+            },
+            read={
+                (experiment.id, MetricEvents(event, None))
+                for event, _ in _THREE.converted
             },
         ),
     )

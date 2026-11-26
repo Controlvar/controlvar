@@ -28,6 +28,7 @@ from backend.app.services.bandit_service import (
     ThompsonSampling,
     VariantStats,
 )
+from backend.app.services.event_matching import MetricEvents
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -645,7 +646,9 @@ class TestBanditSchedulerStatsFallback:
             )
 
         count_pulls.assert_called_once_with(exp.id)
-        count_conv.assert_called_once_with(exp.id, "purchase", [vid1, vid2])
+        count_conv.assert_called_once_with(
+            exp.id, MetricEvents("purchase", None), [vid1, vid2]
+        )
         assert stats[vid1].pulls == 100
         assert stats[vid1].successes == 40
         assert stats[vid1].failures == 60
@@ -693,20 +696,23 @@ class TestBanditSchedulerStatsFallback:
             _mock_metric("primary", True),
         ]
         exp.metrics = {"primary_metric": "legacy"}
-        assert BanditScheduler._primary_event_name(exp) == "primary"
+        primary = BanditScheduler._primary_metric_events(exp)
+        assert primary == MetricEvents("primary", None)
 
         exp.metric_definitions = [
             _mock_metric("first", False),
             _mock_metric("second", False),
         ]
-        assert BanditScheduler._primary_event_name(exp) == "first"
+        first = BanditScheduler._primary_metric_events(exp)
+        assert first == MetricEvents("first", None)
 
         exp.metric_definitions = []
-        assert BanditScheduler._primary_event_name(exp) == "legacy"
+        legacy = BanditScheduler._primary_metric_events(exp)
+        assert legacy == MetricEvents("legacy", None)
 
         exp.metrics = None
-        assert BanditScheduler._primary_event_name(exp) is None
-        assert BanditScheduler._primary_event_name(None) is None
+        assert BanditScheduler._primary_metric_events(exp) is None
+        assert BanditScheduler._primary_metric_events(None) is None
 
     def test_no_metric_counts_non_exposure_events(self):
         """Without a metric the conversion query uses event_name=None (any non-exposure event)."""
@@ -756,7 +762,9 @@ class TestBanditSchedulerStatsFallback:
         ):
             stats = scheduler.get_variant_stats_from_counters(exp.id, [vid1, vid2])
 
-        count_conv.assert_called_once_with(exp.id, "signup", [vid1, vid2])
+        count_conv.assert_called_once_with(
+            exp.id, MetricEvents("signup", None), [vid1, vid2]
+        )
         assert stats[vid1].successes == 7
 
     def test_falls_back_to_bandit_state_when_postgres_is_empty(self):

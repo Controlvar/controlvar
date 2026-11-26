@@ -26,6 +26,7 @@ from uuid import uuid4
 import pytest
 
 from backend.app.models.experiment import MetricType
+from backend.app.services.event_matching import metric_event_name
 from backend.app.services.interaction_analysis import floor_reason, interaction_test
 from backend.app.services.interaction_detection_service import (
     InteractionDetectionService,
@@ -94,9 +95,10 @@ class Population:
             for uid, u in self.users.items()
         }
 
-    def converters(self, db, experiment_id, variant_id, event_name):
+    def converters(self, db, experiment_id, variant_id, metric):
         if str(experiment_id) != str(self.a.id):
             return set()
+        event_name = metric_event_name(metric)
         return {
             uid
             for uid, (a, _b, events) in self.users.items()
