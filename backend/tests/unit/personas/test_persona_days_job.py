@@ -6,7 +6,8 @@ request meets it:
 
 * the job uploads nothing, sends both Playwright commands' output to files,
   sets ``PERSONAS=1``, and leaves the verdict to ``tests/personas/check_run.py``
-  with both exit statuses;
+  with both exit statuses; the run step is the job's last, runs exactly the
+  reviewed commands, and no other step names the files it writes;
 * with ``PERSONAS=1`` the config's only reporter is the JSON report to a file,
   the ``personas`` project exists only then, and ``extended`` ignores the
   persona specs whatever the environment;
@@ -65,9 +66,36 @@ def _run_step() -> dict[str, Any]:
     return step
 
 
+#: The run step's commands, exactly (whitespace collapsed): anything added to
+#: it, a `grep -h` of a file included, is refused until this list says so.
+RUN_SCRIPT = [
+    "set +e",
+    'out="$RUNNER_TEMP/personas"',
+    'mkdir -p "$out"',
+    "cd frontend || exit 1",
+    "npx playwright test --list --project=personas --reporter=json"
+    ' > "$out/list.json" 2> "$out/list.log"',
+    "list_exit=$?",
+    'PERSONAS_REPORT="$out/report.json" PERSONAS_ORACLE_LOG="$out/oracle-log.jsonl"'
+    ' npx playwright test --project=personas > "$out/playwright.log" 2>&1',
+    "run_exit=$?",
+    "cd .. || exit 1",
+    " ".join(f'"{t}"' if t.startswith("$") else t for t in CHECK_RUN),
+]
+
+#: A step other than the run step that names the files the days write.
+_READS_PERSONA_FILES = re.compile(
+    r"(RUNNER_TEMP|runner\.temp\s*\}\})/personas|persona-results"
+)
+
+
 def _commands(script: str) -> list[str]:
     """The script's commands, one per line, continuations joined."""
-    return [c.strip() for c in script.replace("\\\n", " ").splitlines() if c.strip()]
+    return [
+        " ".join(c.split())
+        for c in script.replace("\\\n", " ").splitlines()
+        if c.strip()
+    ]
 
 
 def job_problems(job: dict[str, Any]) -> list[str]:
@@ -80,9 +108,13 @@ def job_problems(job: dict[str, Any]) -> list[str]:
         uses = step.get("uses", "")
         if uses.startswith("actions/upload-artifact"):
             problems.append(f"step {step.get('name', uses)!r} uploads an artefact")
+        if step.get("name") != RUN_STEP and _READS_PERSONA_FILES.search(repr(step)):
+            problems.append(f"step {step.get('name', uses)!r} reads the persona files")
     steps = [s for s in job.get("steps", []) if s.get("name") == RUN_STEP]
     if len(steps) != 1:
         return [*problems, f"no single step named {RUN_STEP!r}"]
+    if (job.get("steps") or [{}])[-1].get("name") != RUN_STEP:
+        problems.append("the run step is not the job's last step")
     step = steps[0]
     if (step.get("env") or {}).get("PERSONAS") != "1":
         problems.append("the run step does not set PERSONAS=1")
@@ -96,8 +128,10 @@ def job_problems(job: dict[str, Any]) -> list[str]:
         if not re.search(r'2>&1|2> "\$out/[a-z.-]+"', command):
             problems.append(f"stderr not redirected to a file: {command}")
     for command in commands:
-        if re.search(r"\b(cat|tail|head|less|more|tee)\b", command):
-            problems.append(f"a command prints a file: {command}")
+        if command not in RUN_SCRIPT:
+            problems.append(f"a command outside the reviewed script: {command}")
+    if commands != RUN_SCRIPT and not any("outside" in p for p in problems):
+        problems.append("the run step's commands are not the reviewed script's")
     if not commands or shlex.split(commands[-1]) != CHECK_RUN:
         problems.append(
             "the step does not end with check_run.py over both exit statuses"
@@ -135,7 +169,25 @@ def test_the_job_keeps_every_title_off_the_log_and_leaves_the_verdict_to_the_che
         ),
         (
             lambda j: _plant_run(j, lambda r: r + 'cat "$out/details.txt"\n'),
-            "a command prints a file",
+            'a command outside the reviewed script: cat "$out/details.txt"',
+        ),
+        (
+            lambda j: _plant_run(j, lambda r: r + 'grep -h . "$out/playwright.log"\n'),
+            'a command outside the reviewed script: grep -h . "$out/playwright.log"',
+        ),
+        (
+            lambda j: j["steps"].append(
+                {
+                    "name": "Show the run",
+                    "if": "failure()",
+                    "run": 'cat "$RUNNER_TEMP/personas/playwright.log"',
+                }
+            ),
+            "step 'Show the run' reads the persona files",
+        ),
+        (
+            lambda j: j["steps"].append({"name": "Done", "run": "true"}),
+            "the run step is not the job's last step",
         ),
         (
             lambda j: j["steps"][-1].get("env", {}).pop("PERSONAS", None),

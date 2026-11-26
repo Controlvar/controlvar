@@ -27,6 +27,9 @@ which stays on the machine that ran the days. ``checks`` counts the day steps
 * every layer-A step of every card (tests/personas/personas/*.yaml) is
   exactly one ``test.step`` titled ``U-<ID> day <n>: <intent>``, in a test
   titled ``U-<ID>: ...``, and no ``test.step`` lacks a card line;
+* no step of a day that passed carries an error, nested steps included: a
+  step whose error the spec caught (``test.step(...).catch(...)``) is a
+  failed check, not a pass;
 * every oracle a step's card names was decided, with that kind and passing,
   in the oracle log, and the log holds no oracle no card names;
 * every entry of frontend/tests/e2e/oracles/known-noise.json occurred;
@@ -147,6 +150,20 @@ def step_titles(steps: list[dict[str, Any]]) -> Iterator[str]:
         yield from step_titles(step.get("steps", []))
 
 
+def caught_step_errors(
+    steps: list[dict[str, Any]], day: str | None = None
+) -> Iterator[str]:
+    """For each step, nested ones too, that carries an ``error``: the title
+    of the day step it is in (its own title when it is in none)."""
+    for step in steps:
+        here = day
+        if here is None and _STEP_TITLE.match(step["title"]):
+            here = step["title"]
+        if step.get("error"):
+            yield here or step["title"]
+        yield from caught_step_errors(step.get("steps", []), here)
+
+
 def read_oracle_log(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
@@ -263,6 +280,19 @@ def evaluate(
                 outcome.problem(key, f"{where}: more than one test.step")
             if intent != step.intent:
                 outcome.problem(key, f"{where}: test.step title != card intent")
+
+        # A day that passed with an error inside a step: the spec caught it.
+        if final == "passed":
+            for title in caught_step_errors(results[-1].get("steps", [])):
+                parsed = _STEP_TITLE.match(title)
+                if parsed:
+                    key = (parsed.group(1), str(int(parsed.group(2))))
+                    where = f"{parsed.group(1)} day {int(parsed.group(2))}"
+                else:
+                    key, where = ("step", title), f"test.step {title!r}"
+                outcome.problem(
+                    key, f"{where}: a test.step error was caught and the day passed"
+                )
 
     if ran != outcome.listed:
         outcome.problem(("run", "count"), f"ran {ran} tests, listed {outcome.listed}")

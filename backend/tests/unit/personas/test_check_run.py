@@ -4,9 +4,12 @@
 wrote it (its ``config`` block, which names this machine's paths, removed):
 ``list.json`` from ``--list --project=personas --reporter=json``,
 ``report.json`` from the run and ``oracle-log.jsonl`` from the oracles (only
-id, kind and pass kept). Each test below breaks one thing in a copy and
-checks the count it moves, the reason the details file gets, and that the
-one public line still names no test, step or persona.
+id, kind and pass kept). ``report-caught-step-error.json`` is a second run
+whose day 5 was wrapped in ``.catch(() => {})`` with ``[object Object]`` on the
+page: the test passed, day 5's step carries the watcher's error (its stack
+and snippet removed, its file made relative). Each test below breaks one
+thing in a copy and checks the count it moves, the reason the details file
+gets, and that the one public line still names no test, step or persona.
 
 The cards are parsed for their shape only (no anchor is read), so nothing
 here reads docs/.
@@ -156,6 +159,51 @@ def test_a_failed_day_is_one_failure_not_a_check_per_step_it_never_reached():
     log = [e for e in _log() if not e["id"].startswith(("u-dev.4", "u-dev.5"))]
     outcome = _evaluate(report=report, oracle_log=log)
     assert (outcome.failed, outcome.checks) == (1, 0), outcome.problems
+
+
+def test_the_failing_step_s_own_error_is_not_a_second_check():
+    report = _with_status("unexpected", "failed")
+    test = _test(report)
+    test["results"][-1]["steps"] = test["results"][-1]["steps"][:5]
+    test["results"][-1]["steps"][4]["error"] = {"message": "Error: watcher: ..."}
+    log = [e for e in _log() if not e["id"].startswith("u-dev.5")]
+    outcome = _evaluate(report=report, oracle_log=log)
+    assert (outcome.failed, outcome.checks) == (1, 0), outcome.problems
+
+
+@pytest.mark.regression
+def test_a_step_error_the_day_caught_is_a_check_not_a_pass():
+    """The recorded run: day 5's error was caught, the test passed. The run
+    is red, and the details name the day step."""
+    outcome = _evaluate(report=_json("report-caught-step-error.json"))
+    assert outcome.passed == 1 and outcome.failed == 0
+    assert _reasons(outcome) == [
+        "U-DEV day 5: a test.step error was caught and the day passed"
+    ]
+    assert outcome.checks == 1 and not outcome.ok
+    _assert_neutral(check_run.summary_line(outcome))
+
+
+def test_a_nested_step_error_counts_against_its_day():
+    report = _json("report.json")
+    steps = _test(report)["results"][-1]["steps"]
+    steps[2]["steps"] = [
+        {"title": "read the badge", "duration": 1, "error": {"message": "x"}}
+    ]
+    outcome = _evaluate(report=report)
+    assert "U-DEV day 3: a test.step error was caught and the day passed" in (
+        _reasons(outcome)
+    )
+
+
+def test_a_caught_error_in_the_flaky_attempt_that_passed_is_a_check_too():
+    report = _with_status("flaky", "passed")
+    _test(report)["results"][-1]["steps"][0]["error"] = {"message": "x"}
+    outcome = _evaluate(report=report)
+    assert outcome.flaky == 1
+    assert _reasons(outcome) == [
+        "U-DEV day 1: a test.step error was caught and the day passed"
+    ]
 
 
 def test_a_day_renamed_out_of_the_project_is_listed_0_pinned_1():
@@ -378,6 +426,22 @@ def test_the_command_puts_the_reasons_in_the_details_file_only(
     assert out.err == "" and out.out.count("\n") == 1
     details = (tmp_path / "details.txt").read_text("utf-8")
     assert "declared oracle u-dev.1.key-listed-once (api_state)" in details
+
+
+@pytest.mark.regression
+def test_the_command_is_red_on_a_caught_step_error_and_names_it_in_the_details_only(
+    tmp_path, capsys, monkeypatch
+):
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    args = _files(tmp_path, _json("report-caught-step-error.json"))
+    assert check_run.main(args) == 1
+    out = capsys.readouterr()
+    assert out.out == (
+        "persona-days: listed 1 pinned 1 passed 1 failed 0 flaky 0 skipped 0 checks 1\n"
+    )
+    assert out.err == ""
+    details = (tmp_path / "details.txt").read_text("utf-8")
+    assert details == "U-DEV day 5: a test.step error was caught and the day passed\n"
 
 
 def test_a_malformed_report_prints_the_fixed_line_and_never_its_text(
