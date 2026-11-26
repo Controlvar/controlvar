@@ -1301,6 +1301,7 @@ class _SubGroups:
             rows = batched._reads.rows
             for held in (
                 {shapes[e] for e, _, _ in rows.users},
+                {shapes[e] for e, _ in rows.read},
                 {shapes[e] for e in rows.converted},
                 {shapes[e] for e in rows.assignments},
             ):

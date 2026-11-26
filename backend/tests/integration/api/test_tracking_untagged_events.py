@@ -43,6 +43,7 @@ from backend.app.models.experiment import (
 )
 from backend.app.services.analysis_service import AnalysisService
 from backend.app.services.event_matching import (
+    MetricEvents,
     count_converting_users,
     count_converting_users_any,
 )
@@ -246,11 +247,13 @@ def _snapshot(client, db_session, exp) -> str:
             for vid, stats in (bandit or {}).items()
         },
         "count_converting_users": {
-            str(v.id): count_converting_users(db_session, exp.id, v.id, "purchase")
+            str(v.id): count_converting_users(
+                db_session, exp.id, v.id, MetricEvents("purchase", None)
+            )
             for v in variants
         },
         "count_converting_users_any": count_converting_users_any(
-            db_session, exp.id, ["purchase"]
+            db_session, exp.id, [MetricEvents("purchase", None)]
         ),
         "export_variants": [
             r for r in exported_variants if r.get("experiment_id") == str(exp.id)

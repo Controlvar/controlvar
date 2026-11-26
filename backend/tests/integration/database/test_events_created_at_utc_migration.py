@@ -62,6 +62,7 @@ from sqlalchemy import inspect, text
 from backend.app.db import bootstrap
 from backend.app.models.event import normalize_event_timestamp
 from backend.app.services.event_matching import (
+    MetricEvents,
     count_converting_users,
     first_conversion_times,
 )
@@ -931,7 +932,9 @@ def test_existing_offset_rows_sort_and_window_in_utc_after_upgrade(
         )
         everything = service.get_events_by_experiment(experiment.id, limit=50)
         firsts = sorted(
-            first_conversion_times(db_session, experiment.id, variant.id, "purchase")
+            first_conversion_times(
+                db_session, experiment.id, variant.id, MetricEvents("purchase", None)
+            )
         )
         return {
             "window": {number[e["id"]] for e in listed if e["id"] in number},
@@ -943,7 +946,7 @@ def test_existing_offset_rows_sort_and_window_in_utc_after_upgrade(
             "firsts": firsts,
             "first_days": sorted(first[:10] for first in firsts),
             "converting": count_converting_users(
-                db_session, experiment.id, variant.id, "purchase"
+                db_session, experiment.id, variant.id, MetricEvents("purchase", None)
             ),
         }
 

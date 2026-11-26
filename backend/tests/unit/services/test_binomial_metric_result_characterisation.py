@@ -34,6 +34,7 @@ import pytest
 from backend.app.core.stats_engine import ENGINE_VERSION
 from backend.app.services import analysis_service as analysis_module
 from backend.app.services.analysis_service import AnalysisService
+from backend.app.services.event_matching import metric_event_name
 
 pytestmark = [pytest.mark.unit, pytest.mark.regression]
 
@@ -355,8 +356,8 @@ def results_output(
     fixture = _FIXTURES[fixture_name]
     experiment = _experiment()
 
-    def converting_units(_db: Any, _experiment_id: Any, variant_id: Any, event: str):
-        return fixture.converted[(event, str(variant_id))]
+    def converting_units(_db: Any, _experiment_id: Any, variant_id: Any, events: Any):
+        return fixture.converted[(metric_event_name(events), str(variant_id))]
 
     monkeypatch.setattr(analysis_module, "count_converting_users", converting_units)
     monkeypatch.setattr(

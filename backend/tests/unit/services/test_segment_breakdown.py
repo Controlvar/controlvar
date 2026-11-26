@@ -16,11 +16,14 @@ from typing import Dict, List, Optional
 import pytest
 
 from backend.app.services import segment_breakdown as sb
+from backend.app.services.event_matching import MetricEvents, metric_event_name
 
 pytestmark = pytest.mark.unit
 
 CONTROL = "c0000000-0000-0000-0000-000000000000"
 TREATMENT = "t0000000-0000-0000-0000-000000000000"
+PURCHASE = MetricEvents("purchase", None)
+SIGNUP = MetricEvents("signup", None)
 
 
 def test_the_listed_values_and_the_length_rule_are_twenty_and_255():
@@ -119,7 +122,11 @@ def test_the_fold_lists_other_and_unknown_only_when_they_have_users():
 
 
 class _Readers:
-    """The three reads segment_rows makes, answered from plain dicts."""
+    """The three reads segment_rows makes, answered from plain dicts.
+
+    ``converters`` is keyed by event name.  ``converting_user_ids`` takes a
+    ``MetricEvents`` (or None), as the real reader does, and raises
+    ``TypeError`` for a bare name (``metric_event_name``)."""
 
     def __init__(
         self,
@@ -140,7 +147,8 @@ class _Readers:
         self.calls.append(f"user_values:{dimension}")
         return dict(self.values)
 
-    def converting_user_ids(self, db, experiment_id, variant_id, event_name):
+    def converting_user_ids(self, db, experiment_id, variant_id, events):
+        event_name = metric_event_name(events)
         self.calls.append(f"converting_user_ids:{variant_id}:{event_name}")
         return set(self.converters.get(event_name, {}).get(variant_id, []))
 
@@ -158,10 +166,12 @@ def readers(monkeypatch):
 
 
 def _as_table(rows, event_name="purchase"):
-    """``{segment: {variant: (users, converting users)}}``."""
+    """``{segment: {variant: (users, converting users)}}``, for the
+    ``MetricEvents`` of ``event_name`` (None: the legacy events)."""
+    events = None if event_name is None else MetricEvents(event_name, None)
     return {
         row.value: {
-            variant: (row.users[variant], row.converters[event_name][variant])
+            variant: (row.users[variant], row.converters[events][variant])
             for variant in row.users
         }
         for row in rows
@@ -183,7 +193,7 @@ def test_each_assigned_user_is_in_one_row_and_converts_there(readers):
         converters={"purchase": {CONTROL: ["c3"], TREATMENT: ["t1", "t3"]}},
     )
 
-    rows = sb.segment_rows(None, "exp", "platform", ["purchase"])
+    rows = sb.segment_rows(None, "exp", "platform", [PURCHASE])
 
     assert [row.value for row in rows] == ["ios", "web", "unknown"]
     assert _as_table(rows) == {
@@ -194,7 +204,7 @@ def test_each_assigned_user_is_in_one_row_and_converts_there(readers):
     # The rows add up to every assigned user and every converter.
     for variant, users, converted in ((CONTROL, 3, 1), (TREATMENT, 3, 2)):
         assert sum(r.users[variant] for r in rows) == users
-        assert sum(r.converters["purchase"][variant] for r in rows) == converted
+        assert sum(r.converters[PURCHASE][variant] for r in rows) == converted
 
 
 def test_each_event_name_is_counted_once_per_variant(readers):
@@ -207,7 +217,9 @@ def test_each_event_name_is_counted_once_per_variant(readers):
         },
     )
 
-    rows = sb.segment_rows(None, "exp", "platform", ["purchase", "signup", "purchase"])
+    # The third is equal to the first, not the same object.
+    metrics = [PURCHASE, SIGNUP, MetricEvents("purchase", None)]
+    rows = sb.segment_rows(None, "exp", "platform", metrics)
 
     assert _as_table(rows, "purchase") == {"ios": {CONTROL: (1, 0), TREATMENT: (1, 1)}}
     assert _as_table(rows, "signup") == {"ios": {CONTROL: (1, 1), TREATMENT: (1, 1)}}
@@ -247,7 +259,7 @@ def test_beyond_the_limit_values_are_counted_under_other(readers):
         converters={"purchase": {CONTROL: [f"b{limit:02d}", "lit", "a1"]}},
     )
 
-    rows = sb.segment_rows(None, "exp", "platform", ["purchase"])
+    rows = sb.segment_rows(None, "exp", "platform", [PURCHASE])
 
     expected_values = [f"v{i:02d}" for i in range(limit)]
     assert [r.value for r in rows] == [*expected_values, "other", "unknown"]
@@ -261,5 +273,5 @@ def test_beyond_the_limit_values_are_counted_under_other(readers):
 def test_an_experiment_with_no_assignments_has_no_rows_and_reads_no_values(readers):
     fake = readers(assigned={}, values={"u1": "ios"}, converters={})
 
-    assert sb.segment_rows(None, "exp", "platform", ["purchase"]) == []
+    assert sb.segment_rows(None, "exp", "platform", [PURCHASE]) == []
     assert fake.calls == ["assignment_times"]

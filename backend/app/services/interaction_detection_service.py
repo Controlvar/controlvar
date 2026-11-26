@@ -30,7 +30,12 @@ from backend.app.schemas.interaction import (
 from backend.app.services import interaction_analysis as ia
 from backend.app.services.analysis_service import AnalysisService
 from backend.app.services.analysis_settings import resolve_analysis_settings
-from backend.app.services.event_matching import _assigned_pairs, converting_user_ids
+from backend.app.services.event_matching import (
+    MetricEvents,
+    _assigned_pairs,
+    converting_user_ids,
+    metric_events,
+)
 from backend.app.services.sufficient_stats_analysis import adjusted_p_values
 
 #: How many of the smaller experiment's assignments are streamed per fetch,
@@ -327,7 +332,7 @@ class InteractionDetectionService:
     def _shared_converters(
         db: Session,
         experiment: Experiment,
-        event_name: Optional[str],
+        events: Optional[MetricEvents],
         shared_users: Container[str],
     ) -> Set[str]:
         """The shared users ``/results`` counts as converters in ``experiment``.
@@ -337,7 +342,7 @@ class InteractionDetectionService:
         """
         converted: Set[str] = set()
         for variant in experiment.variants:
-            converters = converting_user_ids(db, experiment.id, variant.id, event_name)
+            converters = converting_user_ids(db, experiment.id, variant.id, events)
             converted.update(user for user in converters if user in shared_users)
         return converted
 
@@ -445,7 +450,7 @@ class InteractionDetectionService:
         if reason is not None:
             return [InteractionRow(**base, unavailable_reason=reason)]
 
-        converted = self._shared_converters(db, tested, metric.event_name, in_both)
+        converted = self._shared_converters(db, tested, metric_events(metric), in_both)
 
         # Cells keyed by (variant of the tested experiment, arm of the other).
         users: Dict[Tuple[str, str], int] = {}

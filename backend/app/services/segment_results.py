@@ -71,9 +71,10 @@ from backend.app.services.analysis_service import AnalysisService
 from backend.app.services.analysis_settings import resolve_analysis_settings
 from backend.app.services.event_matching import (
     _assigned_pairs,
-    any_conversion_event_filter,
-    conversion_event_filter,
+    any_metric_event_filter,
     converting_user_ids,
+    metric_event_filter,
+    metric_events,
 )
 from backend.app.services.srm_service import (
     _is_fixed_allocation,
@@ -184,7 +185,7 @@ def _metric_counts(
     for variant in experiment.variants:
         members = population.by_variant.get(str(variant.id), set())
         converted = converting_user_ids(
-            db, experiment.id, variant.id, metric.event_name
+            db, experiment.id, variant.id, metric_events(metric)
         )
         counts.append((variant, len(members), len(converted & members)))
     return {
@@ -215,7 +216,7 @@ def _member_values(
             .filter(
                 Event.experiment_id == experiment_id,
                 Event.variant_id == variant_id,
-                conversion_event_filter(metric.event_name),
+                metric_event_filter(metric_events(metric)),
             )
             .group_by(Event.user_id)
             .all()
@@ -226,7 +227,7 @@ def _member_values(
             .filter(
                 Event.experiment_id == experiment_id,
                 Event.variant_id == variant_id,
-                conversion_event_filter(metric.event_name),
+                metric_event_filter(metric_events(metric)),
                 func.abs(Event.value) <= VALUE_BOUND,
             )
             .group_by(Event.user_id)
@@ -330,8 +331,8 @@ def _summary(
         db.query(Event.variant_id, Event.user_id)
         .filter(
             Event.experiment_id == experiment.id,
-            any_conversion_event_filter(
-                m.event_name for m in (experiment.metric_definitions or [])
+            any_metric_event_filter(
+                metric_events(m) for m in (experiment.metric_definitions or [])
             ),
         )
         .distinct()

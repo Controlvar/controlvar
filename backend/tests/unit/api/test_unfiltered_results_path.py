@@ -36,6 +36,7 @@ from backend.app.models.user import User
 from backend.app.schemas.results import ExperimentResultsResponse, ExperimentSummary
 from backend.app.services import analysis_service as analysis_module
 from backend.app.services.analysis_service import AnalysisService
+from backend.app.services.event_matching import metric_event_name
 from backend.tests.unit.services import (
     test_binomial_metric_result_characterisation as characterisation,
 )
@@ -143,8 +144,8 @@ def harness(monkeypatch: pytest.MonkeyPatch) -> Iterator[_Path]:
     experiment.confidence_level = 0.95
     fixture = _THREE
 
-    def converting_units(_db, _experiment_id, variant_id, event):
-        return fixture.converted[(event, str(variant_id))]
+    def converting_units(_db, _experiment_id, variant_id, events):
+        return fixture.converted[(metric_event_name(events), str(variant_id))]
 
     monkeypatch.setattr(analysis_module, "count_converting_users", converting_units)
     monkeypatch.setattr(

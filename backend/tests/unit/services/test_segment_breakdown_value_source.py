@@ -24,6 +24,7 @@ from typing import Dict, List, Optional
 import pytest
 
 from backend.app.services import segment_breakdown as sb
+from backend.app.services.event_matching import MetricEvents, metric_event_name
 
 pytestmark = pytest.mark.unit
 
@@ -31,11 +32,16 @@ CONTROL = "c0000000-0000-0000-0000-000000000000"
 TREATMENT = "t0000000-0000-0000-0000-000000000000"
 DB = object()
 EXPERIMENT = "exp-448"
+PURCHASE = MetricEvents("purchase", None)
 
 
 class _Readers:
     """``assignment_times`` and ``converting_user_ids`` from plain dicts, with
-    every call recorded in ``calls``; ``user_values`` answers ``values``."""
+    every call recorded in ``calls``; ``user_values`` answers ``values``.
+
+    ``converters`` is keyed by event name.  ``converting_user_ids`` takes a
+    ``MetricEvents`` (or None), as the real reader does, and raises
+    ``TypeError`` for a bare name (``metric_event_name``)."""
 
     def __init__(
         self,
@@ -56,7 +62,8 @@ class _Readers:
         self.calls.append(("user_values", db, experiment_id, dimension))
         return dict(self.values)
 
-    def converting_user_ids(self, db, experiment_id, variant_id, event_name):
+    def converting_user_ids(self, db, experiment_id, variant_id, events):
+        event_name = metric_event_name(events)
         self.calls.append(("converting_user_ids", variant_id, event_name))
         return set(self.converters.get(event_name, {}).get(variant_id, []))
 
@@ -86,12 +93,14 @@ class _Source:
 
 
 def _as_table(rows, event_name="purchase"):
-    """``[(segment, {variant: (users, converting users)})]``, in row order."""
+    """``[(segment, {variant: (users, converting users)})]``, in row order, for
+    the ``MetricEvents`` of ``event_name`` (None: the legacy events)."""
+    events = None if event_name is None else MetricEvents(event_name, None)
     return [
         (
             row.value,
             {
-                variant: (row.users[variant], row.converters[event_name][variant])
+                variant: (row.users[variant], row.converters[events][variant])
                 for variant in row.users
             },
         )
@@ -130,7 +139,7 @@ def test_without_a_value_source_the_rows_are_user_values_rows(readers):
     arguments, between the assignments and the converters."""
     fake = readers(ASSIGNED, EVENT_VALUES, CONVERTERS)
 
-    rows = sb.segment_rows(DB, EXPERIMENT, "platform", ["purchase"])
+    rows = sb.segment_rows(DB, EXPERIMENT, "platform", [PURCHASE])
 
     assert _as_table(rows) == EVENT_ROWS
     assert fake.calls == [
@@ -144,12 +153,12 @@ def test_without_a_value_source_the_rows_are_user_values_rows(readers):
 def test_value_source_none_and_user_values_give_the_same_rows(readers):
     fake = readers(ASSIGNED, EVENT_VALUES, CONVERTERS)
 
-    default = sb.segment_rows(DB, EXPERIMENT, "platform", ["purchase"])
+    default = sb.segment_rows(DB, EXPERIMENT, "platform", [PURCHASE])
     explicit_none = sb.segment_rows(
-        DB, EXPERIMENT, "platform", ["purchase"], value_source=None
+        DB, EXPERIMENT, "platform", [PURCHASE], value_source=None
     )
     explicit = sb.segment_rows(
-        DB, EXPERIMENT, "platform", ["purchase"], value_source=sb.user_values
+        DB, EXPERIMENT, "platform", [PURCHASE], value_source=sb.user_values
     )
 
     assert _as_table(default) == _as_table(explicit_none) == _as_table(explicit)
@@ -172,9 +181,7 @@ def test_a_value_source_passed_in_places_the_users_and_user_values_is_not_read(
         }
     )
 
-    rows = sb.segment_rows(
-        DB, EXPERIMENT, "platform", ["purchase"], value_source=source
-    )
+    rows = sb.segment_rows(DB, EXPERIMENT, "platform", [PURCHASE], value_source=source)
 
     assert _as_table(rows) == [
         ("web", {CONTROL: (3, 1), TREATMENT: (1, 0)}),
@@ -191,7 +198,7 @@ def test_a_value_source_passed_in_places_the_users_and_user_values_is_not_read(
     # Per variant the rows add up to every assigned user and every converter.
     for variant, converted in ((CONTROL, 2), (TREATMENT, 3)):
         assert sum(r.users[variant] for r in rows) == len(ASSIGNED[variant])
-        assert sum(r.converters["purchase"][variant] for r in rows) == converted
+        assert sum(r.converters[PURCHASE][variant] for r in rows) == converted
 
 
 def test_a_value_source_passed_in_is_folded_by_the_same_rule(readers):
@@ -206,10 +213,10 @@ def test_a_value_source_passed_in_is_folded_by_the_same_rule(readers):
     converters = {"purchase": {CONTROL: [f"b{limit:02d}", "lit", "a1"]}}
 
     readers({CONTROL: users}, values, converters)
-    from_user_values = sb.segment_rows(DB, EXPERIMENT, "platform", ["purchase"])
+    from_user_values = sb.segment_rows(DB, EXPERIMENT, "platform", [PURCHASE])
     readers({CONTROL: users}, {}, converters)
     from_source = sb.segment_rows(
-        DB, EXPERIMENT, "platform", ["purchase"], value_source=_Source(values)
+        DB, EXPERIMENT, "platform", [PURCHASE], value_source=_Source(values)
     )
 
     assert _as_table(from_source) == _as_table(from_user_values)
@@ -231,7 +238,7 @@ def test_a_value_source_is_not_called_for_an_experiment_with_no_assignments(
     source = _Source({"u1": "ios"})
 
     assert (
-        sb.segment_rows(DB, EXPERIMENT, "platform", ["purchase"], value_source=source)
+        sb.segment_rows(DB, EXPERIMENT, "platform", [PURCHASE], value_source=source)
         == []
     )
     assert source.calls == []

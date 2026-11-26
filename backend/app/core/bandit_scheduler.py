@@ -63,8 +63,10 @@ from backend.app.services.bandit_service import (
 )
 from backend.app.services.event_matching import (
     EXPOSURE_EVENT_TYPES,
+    MetricEvents,
     count_assigned_users_matching,
     count_converting_users,
+    metric_events,
 )
 
 logger = logging.getLogger(__name__)
@@ -573,10 +575,10 @@ class BanditScheduler:
                     .filter(Experiment.id == experiment_id)
                     .first()
                 )
-            event_name = self._primary_event_name(experiment)
+            events = self._primary_metric_events(experiment)
             pulls = self._count_assignments_by_variant(experiment_id)
             successes = self._count_conversions_by_variant(
-                experiment_id, event_name, variant_ids
+                experiment_id, events, variant_ids
             )
         except Exception as exc:
             logger.warning(
@@ -649,26 +651,29 @@ class BanditScheduler:
         return getattr(primary, "lower_is_better", False) is True
 
     @staticmethod
-    def _primary_event_name(experiment: Optional[Experiment]) -> Optional[str]:
+    def _primary_metric_events(
+        experiment: Optional[Experiment],
+    ) -> Optional[MetricEvents]:
         """
-        Resolve the conversion event for an experiment.
+        Resolve the conversion events for an experiment.
 
-        Uses the ``is_primary`` Metric row, then the first Metric row, then
-        the legacy ``experiments.metrics['primary_metric']`` JSON value.
-        Returns ``None`` when nothing is configured.
+        Uses the ``is_primary`` Metric row, then the first Metric row
+        (``metric_events``), then the legacy
+        ``experiments.metrics['primary_metric']`` JSON value, which names an
+        event and nothing else.  Returns ``None`` when nothing is configured.
         """
         if experiment is None:
             return None
 
-        primary = BanditScheduler._primary_metric(experiment)
-        if primary is not None and getattr(primary, "event_name", None):
-            return str(primary.event_name)
+        events = metric_events(BanditScheduler._primary_metric(experiment))
+        if events is not None:
+            return events
 
         legacy = getattr(experiment, "metrics", None)
         if isinstance(legacy, dict):
             name = legacy.get("primary_metric")
             if isinstance(name, str) and name:
-                return name
+                return MetricEvents(name, None)
         return None
 
     def _count_assignments_by_variant(self, experiment_id: UUID) -> Dict[str, int]:
@@ -684,7 +689,7 @@ class BanditScheduler:
     def _count_conversions_by_variant(
         self,
         experiment_id: UUID,
-        event_name: Optional[str],
+        events: Optional[MetricEvents],
         variant_ids: List[str],
     ) -> Dict[str, int]:
         """
@@ -692,13 +697,13 @@ class BanditScheduler:
 
         The definition ``/results`` uses (#338): a user counts once, however
         many conversion events they sent, and only for the variant they are
-        assigned to and the event is tagged with.  When ``event_name`` is
+        assigned to and the event is tagged with.  When ``events`` is
         ``None`` (no metric configured) every event other than an experiment view
         counts.
         """
-        if event_name:
+        if events is not None:
             return {
-                vid: count_converting_users(self.db, experiment_id, vid, event_name)
+                vid: count_converting_users(self.db, experiment_id, vid, events)
                 for vid in variant_ids
             }
         any_event = Event.event_type.notin_(EXPOSURE_EVENT_TYPES)

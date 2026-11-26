@@ -28,7 +28,7 @@ from backend.app.models.holdout_population import HoldoutPopulation
 from backend.app.services.analysis_service import AnalysisService
 from backend.app.services.audience_service import AudienceService
 from backend.app.services.balanced_groups_results import stored_strata
-from backend.app.services.event_matching import covariate_user_ids
+from backend.app.services.event_matching import MetricEvents, covariate_user_ids
 from backend.app.services.holdout_results import (
     IN_HOLDOUT,
     NOT_IN_HOLDOUT,
@@ -214,7 +214,8 @@ def test_linked_people_count_per_row_on_every_endpoint(admin_client, db_session,
 
     service = AnalysisService(db_session)
     values = {
-        v.name: service.value_totals(exp.id, v.id, "purchase") for v in exp.variants
+        v.name: service.value_totals(exp.id, v.id, MetricEvents("purchase", None))
+        for v in exp.variants
     }
     assert values == {"control": [30.0], "treatment": []}
     stored = {(e.user_id, e.value) for e in world.events(exp, [ids["u1"], ids["a1"]])}

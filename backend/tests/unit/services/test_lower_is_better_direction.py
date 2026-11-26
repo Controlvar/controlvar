@@ -30,6 +30,7 @@ from backend.app.services.bayesian_service import (
     _expected_loss_from_samples,
     _ptbb_from_samples,
 )
+from backend.app.services.event_matching import metric_event_name
 from backend.app.services.sufficient_stats_analysis import (
     BinomialVariant,
     binomial_metric_result,
@@ -431,8 +432,8 @@ def _results(monkeypatch, primary_lower: Any, secondary_lower: Any) -> Dict[str,
     fixture = _RESULTS_FIXTURE
     experiment = _experiment(primary_lower, secondary_lower)
 
-    def converting_units(_db, _experiment_id, variant_id, event):
-        return fixture.converted[(event, str(variant_id))]
+    def converting_units(_db, _experiment_id, variant_id, events):
+        return fixture.converted[(metric_event_name(events), str(variant_id))]
 
     monkeypatch.setattr(analysis_module, "count_converting_users", converting_units)
     monkeypatch.setattr(
@@ -576,8 +577,8 @@ class TestBayesianDirection:
         monkeypatch.setattr(
             analysis_module,
             "count_converting_users",
-            lambda _db, _experiment_id, variant_id, event: converted[
-                (event, str(variant_id))
+            lambda _db, _experiment_id, variant_id, events: converted[
+                (metric_event_name(events), str(variant_id))
             ],
         )
         db = MagicMock()

@@ -49,7 +49,7 @@ from backend.app.models.mutual_exclusion_group import (
 )
 from backend.app.models.user import UserRole
 from backend.app.services import identity_aliases
-from backend.app.services.event_matching import count_converting_users
+from backend.app.services.event_matching import MetricEvents, count_converting_users
 from backend.app.services.global_holdout_service import GlobalHoldoutService
 from backend.app.services.mutual_exclusion_service import MutualExclusionService
 from backend.tests.integration.api.route_helpers import (
@@ -304,7 +304,7 @@ def test_a_known_ids_conversion_counts_for_its_persons_variant(
     ]
     assert stored == [(a1, x.id)]
     converters = sum(
-        count_converting_users(db_session, exp.id, v.id, "purchase")
+        count_converting_users(db_session, exp.id, v.id, MetricEvents("purchase", None))
         for v in exp.variants
     )
     assert converters == 1

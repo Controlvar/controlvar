@@ -24,7 +24,8 @@ there is nothing to read:
 
 * ``metric_rows`` mirrors ``event_matching._converters`` and
   ``count_converting_users_any``, ``AnalysisService.event_counts`` and
-  ``AnalysisService.value_totals``, for the metrics that name their event;
+  ``AnalysisService.value_totals``, for the metrics that name their event
+  (``metric_events``);
 * ``legacy_rows`` mirrors them for an empty event name, and for an experiment
   with no metric;
 * ``assigned_pairs`` mirrors ``event_matching._assigned_pairs``, one statement
@@ -65,8 +66,11 @@ from backend.app.schemas.tracking import VALUE_BOUND
 from backend.app.services.analysis_service import AnalysisService
 from backend.app.services.event_matching import (
     ASSIGNMENT_LOOKUP_CHUNK,
-    any_conversion_event_filter,
+    MetricEvents,
+    any_metric_event_filter,
     conversion_event_filter,
+    metric_event_name,
+    metric_events,
 )
 from backend.app.services.srm_service import _is_fixed_allocation, compute_srm
 
@@ -96,26 +100,39 @@ class EventRows:
     """One sub-group's converting users, those assigned to their event's variant,
     and its assigned users.
 
-    ``users`` maps ``(experiment id, event name, variant id)`` to one
-    ``UserRow`` per user; the event name is None for the legacy events.
-    ``converted`` is how many users of an experiment converted on any of its
-    metrics. ``assignments`` maps an experiment id to its variants.
+    ``users`` maps ``(experiment id, MetricEvents, variant id)`` to one
+    ``UserRow`` per user; the ``MetricEvents`` is None for the legacy events.
+    ``read`` holds each ``(experiment id, MetricEvents)`` the rows were read
+    for, so that ``of`` can refuse any other: a key that matches nothing read
+    raises instead of answering no users. ``converted`` is how many users of
+    an experiment converted on any of its metrics. ``assignments`` maps an
+    experiment id to its variants.
     """
 
-    users: Dict[Tuple[str, Optional[str], str], List[UserRow]] = field(
+    users: Dict[Tuple[str, Optional[MetricEvents], str], List[UserRow]] = field(
         default_factory=dict
     )
+    read: Set[Tuple[str, Optional[MetricEvents]]] = field(default_factory=set)
     converted: Dict[str, int] = field(default_factory=dict)
     #: Assigned users per variant, counted after the rows above are read: a
     #: user stored in between is assigned and not yet converted.
     assignments: Dict[str, Dict[str, int]] = field(default_factory=dict)
 
     def of(
-        self, experiment_id: Any, variant_id: Any, event_name: Optional[str]
+        self, experiment_id: Any, variant_id: Any, events: Optional[MetricEvents]
     ) -> List[UserRow]:
-        """The rows of the users ``conversion_event_filter(event_name)`` finds."""
-        key = (str(experiment_id), event_name or None, str(variant_id))
-        return self.users.get(key, [])
+        """The rows of the users ``metric_event_filter(events)`` finds.
+
+        Raises ``TypeError`` for a bare event name (``metric_event_name``),
+        and ``KeyError`` for events of the experiment that were not read.
+        """
+        metric_event_name(events)
+        experiment = str(experiment_id)
+        if (experiment, events) not in self.read:
+            raise KeyError(
+                f"{events!r} of experiment {experiment} was not read for these rows"
+            )
+        return self.users.get((experiment, events, str(variant_id)), [])
 
 
 @dataclass
@@ -145,17 +162,24 @@ class GroupReads:
         return reads * self.users.get(str(experiment_id), 0)
 
 
+def _metric_events(experiment: Experiment) -> Set[MetricEvents]:
+    """The ``MetricEvents`` of the experiment's metrics that name their event."""
+    metrics = experiment.metric_definitions or []
+    return {
+        events for metric in metrics if (events := metric_events(metric)) is not None
+    }
+
+
 def _event_names(experiment: Experiment) -> Set[str]:
     """The event names the experiment's metrics read."""
-    metrics = experiment.metric_definitions or []
-    return {metric.event_name for metric in metrics if metric.event_name}
+    return {events.event_name for events in _metric_events(experiment)}
 
 
 def _reads_legacy(experiment: Experiment) -> bool:
     """Whether the results read the legacy events: the experiment has no metric
     (its total does), or one with an empty event name."""
     metrics = experiment.metric_definitions or []
-    return not metrics or any(not metric.event_name for metric in metrics)
+    return not metrics or any(metric_events(metric) is None for metric in metrics)
 
 
 # ---------------------------------------------------------------------------
@@ -208,13 +232,16 @@ def _value_total():
     return func.sum(Event.value).filter(func.abs(Event.value) <= VALUE_BOUND)
 
 
-def metric_rows(db: Session, names: Mapping[UUID, Iterable[str]]) -> List[Any]:
+def metric_rows(
+    db: Session, metrics: Mapping[UUID, Iterable[MetricEvents]]
+) -> List[Any]:
     """Each user's events of each metric event name, per variant tag.
 
-    ``names`` is the event names each experiment's own metrics read. A row is
-    ``(experiment id, event name, variant id, user id, events, value total)``.
+    ``metrics`` is the ``MetricEvents`` of each experiment's own metrics. A row
+    is ``(experiment id, event name, variant id, user id, events, value
+    total)``.
     """
-    if not names:
+    if not metrics:
         return []
     return (
         db.query(
@@ -230,9 +257,11 @@ def metric_rows(db: Session, names: Mapping[UUID, Iterable[str]]) -> List[Any]:
                 *(
                     and_(
                         Event.experiment_id == experiment_id,
-                        any_conversion_event_filter(sorted(event_names)),
+                        any_metric_event_filter(
+                            sorted(events, key=lambda e: e.event_name)
+                        ),
                     )
-                    for experiment_id, event_names in names.items()
+                    for experiment_id, events in metrics.items()
                 )
             )
         )
@@ -338,7 +367,13 @@ def load_rows(db: Session, experiments: Sequence[Experiment]) -> EventRows:
     """The event rows one sub-group is computed from, then its assigned users."""
     if not experiments:
         return EventRows()
-    named = {e.id: names for e in experiments if (names := _event_names(e))}
+    named = {e.id: events for e in experiments if (events := _metric_events(e))}
+    # Each row carries its event name; it is the rows of the MetricEvents that
+    # names it (one per name: no metric has a window).
+    by_name = {
+        experiment_id: {events.event_name: events for events in metrics}
+        for experiment_id, metrics in named.items()
+    }
     rows: List[Tuple[Any, Optional[str], Any, str, int, Optional[float]]] = [
         *metric_rows(db, named),
         *(
@@ -354,14 +389,20 @@ def load_rows(db: Session, experiments: Sequence[Experiment]) -> EventRows:
     pairs = assigned_pairs(db, senders)
 
     loaded = EventRows()
+    loaded.read = {
+        (str(experiment_id), events)
+        for experiment_id, metrics in named.items()
+        for events in metrics
+    } | {(str(e.id), None) for e in experiments if _reads_legacy(e)}
     converted: Dict[UUID, Set[str]] = {}
-    for experiment_id, name, variant_id, user_id, events, total in rows:
+    for experiment_id, name, variant_id, user_id, count, total in rows:
         if (variant_id, user_id) not in pairs.get(experiment_id, ()):
             continue
-        key = (str(experiment_id), name, str(variant_id))
-        loaded.users.setdefault(key, []).append((events, total))
+        metric = None if name is None else by_name[experiment_id][name]
+        key = (str(experiment_id), metric, str(variant_id))
+        loaded.users.setdefault(key, []).append((count, total))
         # The legacy events count towards the total when no metric names its
-        # event (any_conversion_event_filter).
+        # event (any_metric_event_filter).
         if name is not None or experiment_id not in named:
             converted.setdefault(experiment_id, set()).add(user_id)
     loaded.converted = {str(e): len(user_ids) for e, user_ids in converted.items()}
@@ -399,20 +440,20 @@ class _BatchedAnalysisService(AnalysisService):
         return counts.get(str(variant_id), 0)
 
     def _converting_users(
-        self, experiment_id: Any, variant_id: Any, event_name: Optional[str]
+        self, experiment_id: Any, variant_id: Any, events: Optional[MetricEvents]
     ) -> int:
-        return len(self._reads.rows.of(experiment_id, variant_id, event_name))
+        return len(self._reads.rows.of(experiment_id, variant_id, events))
 
     def event_counts(
-        self, experiment_id: Any, variant_id: Any, event_name: Optional[str]
+        self, experiment_id: Any, variant_id: Any, events: Optional[MetricEvents]
     ) -> List[float]:
-        rows = self._reads.rows.of(experiment_id, variant_id, event_name)
-        return [float(events) for events, _ in rows]
+        rows = self._reads.rows.of(experiment_id, variant_id, events)
+        return [float(count) for count, _ in rows]
 
     def value_totals(
-        self, experiment_id: Any, variant_id: Any, event_name: Optional[str]
+        self, experiment_id: Any, variant_id: Any, events: Optional[MetricEvents]
     ) -> List[float]:
-        rows = self._reads.rows.of(experiment_id, variant_id, event_name)
+        rows = self._reads.rows.of(experiment_id, variant_id, events)
         return [float(total) for _, total in rows if total is not None]
 
     def _experiment_totals(self, experiment: Experiment) -> Tuple[int, int, int]:
@@ -458,7 +499,14 @@ def results_many(
 def _compute_group(
     db: Session, ids: Sequence[UUID], results: Dict[str, Optional[Dict[str, Any]]]
 ) -> None:
-    """Add one group's results to ``results``."""
+    """Add one group's results to ``results``.
+
+    Only ``ValueError`` is caught (that experiment's results are None).  A
+    ``KeyError`` from ``EventRows.of`` is deliberately not: the keys asked for
+    and the rows read come from the same ``metric_definitions`` in one
+    session, so one is a defect, and it fails the whole export rather than one
+    experiment.
+    """
     reads = load_group(db, ids)
     for part in sub_groups(reads, ids):
         # The last part's rows and counts go before the next part's are read.

@@ -73,6 +73,7 @@ from backend.app.services.event_matching import (
     assignment_times,
     converting_user_ids,
     covariate_user_ids,
+    metric_events,
 )
 from backend.app.services.power_calculator_service import (
     SAMPLE_SIZE_NOT_FINITE_MESSAGE,
@@ -249,13 +250,13 @@ def _compute_dimensional_breakdown(
     # legacy event_type = 'conversion' convention (event_matching.py).
     experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
     metrics = AnalysisService._ordered_metrics(experiment) if experiment else []
-    event_name = metrics[0].event_name if metrics else None
+    events = metric_events(metrics[0]) if metrics else None
 
     if value_source is None:
-        rows = segment_rows(db, experiment_id, dimension, [event_name])
+        rows = segment_rows(db, experiment_id, dimension, [events])
     else:
         rows = segment_rows(
-            db, experiment_id, dimension, [event_name], value_source=value_source
+            db, experiment_id, dimension, [events], value_source=value_source
         )
     for row in rows:
         # Every variant is listed, with zero counts where it has no users.
@@ -273,7 +274,7 @@ def _compute_dimensional_breakdown(
                 vid,
                 {"variant_name": vid, "is_control": False, "conversions": 0},
             )["total"] = total
-        for vid, conv in row.converters[event_name].items():
+        for vid, conv in row.converters[events].items():
             variant_map.setdefault(
                 vid, {"variant_name": vid, "is_control": False, "total": 0}
             )["conversions"] = conv
@@ -949,7 +950,7 @@ def get_sample_size_status(
         else:
             baseline_users = per_variant[str(control.id)]
             converted = count_converting_users(
-                db, experiment.id, control.id, metric.event_name
+                db, experiment.id, control.id, metric_events(metric)
             )
             if converted == 0:
                 reason = "no_control_conversions"
@@ -1118,7 +1119,7 @@ def _get_sequential_data(
         from backend.app.services.event_matching import count_converting_users
 
         return count_converting_users(
-            db, experiment.id, variant_id, primary_metric.event_name
+            db, experiment.id, variant_id, metric_events(primary_metric)
         )
 
     control_total = _count_assignments(control_variant.id)
@@ -1556,7 +1557,7 @@ def get_cuped_results_data(
         for variant in experiment.variants:
             users = users_by_variant.get(str(variant.id), {})
             converted = converting_user_ids(
-                db, experiment.id, variant.id, metric_def.event_name
+                db, experiment.id, variant.id, metric_events(metric_def)
             )
             n_converted = len(converted)
             with_history = x_users.intersection(users)

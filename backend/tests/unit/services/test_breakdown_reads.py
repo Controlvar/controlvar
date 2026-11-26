@@ -29,6 +29,7 @@ from backend.app.services.analysis_service import AnalysisService
 from backend.app.services.dimensional_analysis_service import (
     DimensionalAnalysisService,
 )
+from backend.app.services.event_matching import metric_event_name
 from backend.scripts import seed_demo_data as seed
 
 CONTROL = str(uuid.uuid4())
@@ -215,7 +216,8 @@ class _Readers:
             segment_breakdown, "converting_user_ids", self.converting_user_ids
         )
 
-    def converting_user_ids(self, db, experiment_id, variant_id, event_name):
+    def converting_user_ids(self, db, experiment_id, variant_id, events):
+        event_name = metric_event_name(events)
         self.converter_reads.append((variant_id, event_name))
         return set(self.converters.get(event_name, {}).get(variant_id, ()))
 

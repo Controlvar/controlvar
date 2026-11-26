@@ -185,13 +185,16 @@ class ResultsStreamingService:
                     else None,
                 )
 
-            from backend.app.services.event_matching import count_converting_users
+            from backend.app.services.event_matching import (
+                count_converting_users,
+                metric_events,
+            )
 
             # Converting users per variant, as /results counts them (#233):
             # a user with several conversion events counts once.
-            event_name = primary_metric.event_name if primary_metric else None
+            events = metric_events(primary_metric)
             conversion_map: Dict[str, int] = {
-                str(v.id): count_converting_users(db, experiment_id, v.id, event_name)
+                str(v.id): count_converting_users(db, experiment_id, v.id, events)
                 for v in variants
             }
 

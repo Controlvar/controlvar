@@ -12,7 +12,7 @@ import pytest
 
 from backend.app.models.holdout_population import HoldoutPopulation
 from backend.app.services.analysis_service import AnalysisService
-from backend.app.services.event_matching import count_converting_users
+from backend.app.services.event_matching import MetricEvents, count_converting_users
 from backend.tests.integration.identity_alias_world import (
     World,
     assign,
@@ -38,7 +38,9 @@ def world(db_session, make_experiment):
 
 def _converters(db_session, exp):
     return {
-        v.name: count_converting_users(db_session, exp.id, v.id, "purchase")
+        v.name: count_converting_users(
+            db_session, exp.id, v.id, MetricEvents("purchase", None)
+        )
         for v in exp.variants
     }
 
@@ -46,7 +48,8 @@ def _converters(db_session, exp):
 def _value_totals(db_session, exp):
     service = AnalysisService(db_session)
     return {
-        v.name: service.value_totals(exp.id, v.id, "purchase") for v in exp.variants
+        v.name: service.value_totals(exp.id, v.id, MetricEvents("purchase", None))
+        for v in exp.variants
     }
 
 

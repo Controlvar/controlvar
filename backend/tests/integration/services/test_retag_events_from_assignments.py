@@ -21,7 +21,7 @@ import pytest
 from backend.app.models.assignment import Assignment
 from backend.app.models.event import Event
 from backend.app.models.experiment import ExperimentStatus, Variant
-from backend.app.services.event_matching import count_converting_users
+from backend.app.services.event_matching import MetricEvents, count_converting_users
 from backend.scripts.retag_events_from_assignments import (
     main,
     retag_events_from_assignments,
@@ -139,7 +139,9 @@ def _state(db_session, ids):
 
 def _converting(db_session, exp, variants):
     return {
-        name: count_converting_users(db_session, exp.id, variant_id, "purchase")
+        name: count_converting_users(
+            db_session, exp.id, variant_id, MetricEvents("purchase", None)
+        )
         for name, variant_id in variants.items()
     }
 

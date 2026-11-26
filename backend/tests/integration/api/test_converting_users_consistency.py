@@ -43,6 +43,7 @@ from backend.app.models.experiment import (
 )
 from backend.app.services.analysis_service import AnalysisService
 from backend.app.services.event_matching import (
+    MetricEvents,
     count_converting_users,
     count_converting_users_any,
     first_conversion_times,
@@ -521,14 +522,22 @@ def test_conversion_counts_never_join_events_to_assignments_in_sql(
     event.listen(engine, "before_cursor_execute", record)
     try:
         counts = {
-            v.name: count_converting_users(db_session, exp.id, v.id, "purchase")
+            v.name: count_converting_users(
+                db_session, exp.id, v.id, MetricEvents("purchase", None)
+            )
             for v in (control, treatment)
         }
         firsts = {
-            v.name: len(first_conversion_times(db_session, exp.id, v.id, "purchase"))
+            v.name: len(
+                first_conversion_times(
+                    db_session, exp.id, v.id, MetricEvents("purchase", None)
+                )
+            )
             for v in (control, treatment)
         }
-        total = count_converting_users_any(db_session, exp.id, ["purchase"])
+        total = count_converting_users_any(
+            db_session, exp.id, [MetricEvents("purchase", None)]
+        )
         streamed = _streaming_counts(db_session, exp)
         bandit = _bandit_counts(db_session, exp)
     finally:

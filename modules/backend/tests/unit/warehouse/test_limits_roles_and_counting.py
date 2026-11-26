@@ -164,7 +164,10 @@ def test_results_counts_a_conversion_whatever_its_time():
     db = MagicMock()
     db.query.side_effect = query
     count = event_matching.count_converting_users(
-        db, experiment_id, variant_id, "checkout_completed"
+        db,
+        experiment_id,
+        variant_id,
+        event_matching.MetricEvents("checkout_completed", None),
     )
     assert count == 2
     assert not [f for f in filters if "created_at" in f or "timestamp" in f], filters
