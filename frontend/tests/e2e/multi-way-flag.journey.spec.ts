@@ -272,6 +272,8 @@ test.describe("Journey: a flag with a split of three values", () => {
     ]);
     await page.keyboard.press("Enter");
     await expect(page.getByTestId("save-success")).toBeVisible();
+    await expect(page.getByTestId("save-flag")).not.toHaveAttribute("aria-disabled", "true");
+    expect(await focused(page), "focus stays on Save after it saves").toBe("save-flag");
     expect(await storedSplit(page, id)).toEqual([
       { value: "red", weight: 34 },
       { value: "green", weight: 33 },

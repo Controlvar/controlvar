@@ -25,8 +25,10 @@
  * test whose save reaches the API reads it back (`expectOnlyChanged`,
  * `expectRefusedAt`): each PUT went to the route of the environment on
  * screen, that environment changed (or, when refused, nothing did), and the
- * other two did not. A save the page refuses itself sends nothing (`puts` is
- * empty).
+ * other two did not. The one exception is 'a late answer from the last
+ * environment lands nowhere': its answer never comes back, so it asserts the
+ * PUT's route and body instead. A save the page refuses itself sends nothing
+ * (`puts` is empty).
  */
 import React from 'react';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -1006,7 +1008,10 @@ it('a late answer from the last environment lands nowhere', async () => {
     {
       method: 'PUT',
       path: '/api/v1/feature-flags/flag-1/environments/staging',
-      handler: () => new Promise((resolve) => (give = resolve)),
+      handler: (p, opts: ApiFetchOptions) => {
+        puts.push({ route: `PUT ${p}`, body: opts.json as Json });
+        return new Promise((resolve) => (give = resolve));
+      },
     },
   ]);
   await openIn('staging');
@@ -1019,4 +1024,19 @@ it('a late answer from the last environment lands nowhere', async () => {
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Split' })).toBeInTheDocument());
   await act(async () => give({ ...world.staging, split: [{ value: 'x', weight: 100 }, { value: 'y', weight: 0 }, { value: 'z', weight: 0 }] }));
   expect([weightInput(1), weightInput(2), weightInput(3)].map((el) => el.value)).toEqual(['34', '33', '33']);
+  // Its answer is held back, so there is nothing to read back: the one PUT
+  // went to Staging's route, with the split typed there.
+  expect(puts).toEqual([
+    {
+      route: SAVE_ROUTE.staging,
+      body: {
+        rollout_percentage: 40,
+        split: [
+          { value: 'red', weight: 60 },
+          { value: 'green', weight: 20 },
+          { value: 'blue', weight: 20 },
+        ],
+      },
+    },
+  ]);
 });
