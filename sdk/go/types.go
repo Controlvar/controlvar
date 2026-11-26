@@ -35,7 +35,7 @@ type EvalResult struct {
 	// or a non-object value.
 	Config map[string]any `json:"config,omitempty"`
 	// Value is what the flag serves this user, as the server sent it: the
-	// flag's on value when Enabled is true (or the value its split or a
+	// flag's on value when Enabled is true (or, in its place, the value its split or a
 	// matching rule gives the user), its off value otherwise. For a
 	// boolean flag it is true or false, the same as Enabled. It is nil when
 	// the server sent no value: a server without flag values, or a failed

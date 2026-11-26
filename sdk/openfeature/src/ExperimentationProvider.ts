@@ -9,14 +9,14 @@
  *
  * Resolution rules, the same for every call type: the value the flag serves when the flag is of the
  * type the call reads (a boolean call reads a boolean flag, whose value is `enabled`; an object
- * call reads a json flag): its on value when the flag is on for the user (or the value its split or
- * a matching rule gives them), its off value otherwise, an inactive flag included. The reason is
- * the server's: `targeting_rule` → TARGETING_MATCH, `rollout` → SPLIT, `inactive` → DISABLED
- * (anything else UNKNOWN), or CACHED when the SDK's cache answered; the variant is "on" or "off".
- * Otherwise the caller's default with reason ERROR: TYPE_MISMATCH when the flag serves another
- * type, GENERAL for `reason: "error"` or an answer with no value, PARSE_ERROR for a value that is
- * not of the flag's type. A server without flag values sends no `value_type`: a boolean call there
- * answers `enabled`.
+ * call reads a json flag): its on value when the flag is on for the user (or, in its place, the
+ * value its split or a matching rule gives them), its off value otherwise, an inactive flag
+ * included. The reason is the server's: `targeting_rule` → TARGETING_MATCH, `rollout` → SPLIT,
+ * `inactive` → DISABLED (anything else UNKNOWN), or CACHED when the SDK's cache answered; the
+ * variant is "on" or "off". Otherwise the caller's default with reason ERROR: TYPE_MISMATCH when
+ * the flag serves another type, GENERAL for `reason: "error"` or an answer with no value,
+ * PARSE_ERROR for a value that is not of the flag's type. A server without flag values sends no
+ * `value_type`: a boolean call there answers `enabled`.
  *
  * Context mapping: `targetingKey` → `user_id`. Every other key of the
  * evaluation context is passed to the SDK as the user's attributes, which it

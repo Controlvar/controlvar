@@ -24,9 +24,9 @@ Resolution rules
   of the type the call reads: a boolean call reads a boolean flag, whose value is ``enabled`` (and
   every flag of a server or an SDK without flag values, which sends no ``value_type``); a string
   call a string flag; an integer or a float call a number flag; an object call a json flag. That is
-  its on value when the flag is on for the user (or the value its split or a matching rule gives
-  them), its off value otherwise, an inactive flag included. The variant is ``"on"`` or ``"off"``;
-  the reason is ``CACHED`` for an answer from the SDK cache, otherwise the server's:
+  its on value when the flag is on for the user (or, in its place, the value its split or a matching
+  rule gives them), its off value otherwise, an inactive flag included. The variant is ``"on"`` or
+  ``"off"``; the reason is ``CACHED`` for an answer from the SDK cache, otherwise the server's:
   ``targeting_rule`` -> ``TARGETING_MATCH``, ``rollout`` -> ``SPLIT``, ``inactive`` -> ``DISABLED``
   (anything else ``UNKNOWN``). An integer call accepts a number with no fractional part (``10`` or
   ``10.0`` answers ``10``); a float call accepts any number (``10`` answers ``10.0``); ``bool`` is

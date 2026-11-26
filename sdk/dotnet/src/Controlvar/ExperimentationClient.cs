@@ -135,10 +135,10 @@ public class ExperimentationClient : IDisposable
     // -----------------------------------------------------------------
 
     /// <summary>
-    /// The string a string flag serves this user: its on value when the flag is on for them (or the
-    /// value its split or a matching rule gives them), its off value otherwise. Evaluated as <see
-    /// cref="EvaluateFlagAsync"/> evaluates, with the same request, attributes and cache: reading a
-    /// value records no exposure.
+    /// The string a string flag serves this user: its on value when the flag is on for them (or, in
+    /// its place, the value its split or a matching rule gives them), its off value otherwise.
+    /// Evaluated as <see cref="EvaluateFlagAsync"/> evaluates, with the same request, attributes
+    /// and cache: reading a value records no exposure.
     /// </summary>
     /// <param name="flagKey">The feature flag key.</param>
     /// <param name="userId">The user ID.</param>
