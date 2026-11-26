@@ -31,10 +31,21 @@ FLAGS = "/api/v1/feature-flags"
 US = {"country": "US"}
 
 
-def native(n: int, where: str = "rule") -> dict:
-    """Native rules whose rule id, or ``default_rule`` id, is ``n`` long."""
+def long_id(n: int, where: str = "rule", letter: str = "") -> str:
+    """``n`` copies of ``letter``, or of ``r`` (a rule) or ``d`` (the default)."""
+    return (letter or ("r" if where == "rule" else "d")) * n
+
+
+def native(
+    n: int, where: str = "rule", letter: str = "", percentage: bool = True
+) -> dict:
+    """Native rules whose rule id, or ``default_rule`` id, is ``long_id(n)``.
+
+    ``percentage=False`` leaves ``rollout_percentage`` out of the rule that
+    carries that id, which the model then reads as 100.
+    """
     rule = {
-        "id": "r" * n if where == "rule" else "r1",
+        "id": long_id(n, where, letter) if where == "rule" else "r1",
         "rule": {
             "operator": "and",
             "conditions": [{"attribute": "country", "operator": "eq", "value": "US"}],
@@ -46,10 +57,12 @@ def native(n: int, where: str = "rule") -> dict:
     if where == "default":
         rule["rule"]["conditions"][0]["value"] = "ZZ"
         rules["default_rule"] = {
-            "id": "d" * n,
+            "id": long_id(n, where, letter),
             "rule": {"operator": "and", "conditions": []},
             "rollout_percentage": 100,
         }
+    if not percentage:
+        del (rule if where == "rule" else rules["default_rule"])["rollout_percentage"]
     return rules
 
 
@@ -98,6 +111,16 @@ def _saved(db_session, key: str) -> int:
     return db_session.query(FeatureFlag).filter(FeatureFlag.key == key).count()
 
 
+def _stored_rules(db_session, flag_id: str):
+    """The flag's own targeting_rules, which production serves, as stored."""
+    db_session.rollback()
+    return (
+        db_session.query(FeatureFlag.targeting_rules)
+        .filter(FeatureFlag.id == uuid.UUID(flag_id))
+        .scalar()
+    )
+
+
 def _evaluate(client, key: str, context=US) -> int:
     return client.get(
         f"{FLAGS}/evaluate/{key}",
@@ -105,23 +128,36 @@ def _evaluate(client, key: str, context=US) -> int:
     ).status_code
 
 
+# 255 is counted in characters, not bytes: an "é" is two bytes in UTF-8.
+LETTERS = [pytest.param("", id="ascii"), pytest.param("é", id="two-byte")]
+
+
+@pytest.mark.parametrize("letter", LETTERS)
 @pytest.mark.parametrize(
-    "where,path", [("rule", "rules[0].id"), ("default", "default_rule.id")]
+    "where,path,percentage",
+    [
+        ("rule", "rules[0].id", True),
+        ("default", "default_rule.id", True),
+        pytest.param("rule", "rules[0].id", False, id="rule-no-percentage"),
+        pytest.param("default", "default_rule.id", False, id="default-no-percentage"),
+    ],
 )
 def test_a_create_refuses_an_id_over_255_characters(
-    developer_client, db_session, keys, where, path
+    developer_client, db_session, keys, where, path, percentage, letter
 ):
-    response, key = _create(developer_client, keys, native(256, where))
+    rules = native(256, where, letter, percentage)
+    response, key = _create(developer_client, keys, rules)
     assert response.status_code == 422, response.text
     assert response.json() == _refused(path)
     assert _saved(db_session, key) == 0
 
 
+@pytest.mark.parametrize("letter", LETTERS)
 @pytest.mark.parametrize("where", ["rule", "default"])
 def test_an_id_of_255_characters_is_saved_evaluated_and_recorded(
-    developer_client, db_session, keys, where
+    developer_client, db_session, keys, where, letter
 ):
-    response, key = _create(developer_client, keys, native(255, where))
+    response, key = _create(developer_client, keys, native(255, where, letter))
     assert response.status_code == 201, response.text
     context = US if where == "rule" else {"country": "FR"}
     assert _evaluate(developer_client, key, context) == 200
@@ -133,7 +169,7 @@ def test_an_id_of_255_characters_is_saved_evaluated_and_recorded(
             RawMetric.feature_flag_id == flag_id
         )
     }
-    assert ("r" if where == "rule" else "d") * 255 in recorded
+    assert long_id(255, where, letter) in recorded
 
 
 def test_an_update_refuses_it_and_keeps_the_stored_rules(
@@ -155,10 +191,12 @@ def test_an_update_refuses_it_and_keeps_the_stored_rules(
 def test_an_environment_update_refuses_it(
     developer_client, db_session, keys, environment
 ):
-    response, _ = _create(developer_client, keys, None)
+    response, _ = _create(developer_client, keys, native(20))
     flag_id = response.json()["id"]
+    settings = f"{FLAGS}/{flag_id}/environments/{environment}"
+    before = developer_client.get(settings).json()
     response = developer_client.put(
-        f"{FLAGS}/{flag_id}/environments/{environment}",
+        settings,
         json={
             "is_active": True,
             "rollout_percentage": 0,
@@ -167,20 +205,24 @@ def test_an_environment_update_refuses_it(
     )
     assert response.status_code == 422, response.text
     assert response.json() == _refused("rules[0].id")
-    db_session.rollback()
-    assert (
-        db_session.query(FlagEnvironmentSetting)
-        .filter(
-            FlagEnvironmentSetting.feature_flag_id == uuid.UUID(flag_id),
-            FlagEnvironmentSetting.environment == environment,
+    # Nothing is saved: production's rules are the flag's own, and the
+    # environment's settings read as they did.
+    assert _stored_rules(db_session, flag_id) == native(20)
+    assert developer_client.get(settings).json() == before
+    if environment != "production":
+        assert (
+            db_session.query(FlagEnvironmentSetting)
+            .filter(
+                FlagEnvironmentSetting.feature_flag_id == uuid.UUID(flag_id),
+                FlagEnvironmentSetting.environment == environment,
+            )
+            .count()
+            == 0
         )
-        .count()
-        == 0
-    )
 
 
 def test_a_promotion_of_a_stored_long_id_is_refused(developer_client, db_session, keys):
-    response, _ = _create(developer_client, keys, None)
+    response, _ = _create(developer_client, keys, native(20))
     flag_id = response.json()["id"]
     db_session.add(
         FlagEnvironmentSetting(
@@ -192,11 +234,14 @@ def test_a_promotion_of_a_stored_long_id_is_refused(developer_client, db_session
         )
     )
     db_session.commit()
-    response = developer_client.post(
-        f"{FLAGS}/{flag_id}/environments/production/promote", json={"from": "staging"}
-    )
+    production = f"{FLAGS}/{flag_id}/environments/production"
+    before = developer_client.get(production).json()
+    response = developer_client.post(f"{production}/promote", json={"from": "staging"})
     assert response.status_code == 422, response.text
     assert response.json() == _refused("rules[0].id")
+    # Nothing is copied into production.
+    assert _stored_rules(db_session, flag_id) == native(20)
+    assert developer_client.get(production).json() == before
 
 
 def test_a_flag_stored_with_a_long_id_is_listed_and_can_be_fixed(
