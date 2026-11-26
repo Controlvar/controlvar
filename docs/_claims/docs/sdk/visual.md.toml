@@ -127,10 +127,80 @@ by = [
 ]
 
 [[unit]]
+text = "The answer also names the goals of each experiment the visitor is assigned to, the control's visitors included, and the script records them on any page of your site for 30 days after the answer that named them."
+by = [
+    "test:frontend/tests/e2e/runtime/real-api-goals.runtime.spec.ts::a control visitor and a B visitor each click once, and each arm counts one conversion",
+    "test:sdk/visual/__tests__/goals.test.ts::a goal on a page no experiment covers counts there, from the goals kept on an earlier page",
+    "test:sdk/visual/__tests__/goals.test.ts::uses only what it can check: an experiment older than 30 days, or with one goal out of its form, counts nothing",
+    "test:backend/tests/integration/api/test_visual_goal_events.py::test_each_goal_counts_only_for_its_own_metric_in_the_visitors_own_arm",
+]
+
+[[unit]]
+text = "A page-view goal records one event for each page view of the goal's page: each page load, and each path change the script follows; a change of only the query, or only the part after #, is not a page view."
+by = [
+    "test:frontend/tests/e2e/runtime/goals.runtime.spec.ts::one per page load and per path change: a hash, a query and Next's pushState then replaceState add none",
+    "test:sdk/visual/__tests__/goals.test.ts::a page_view goal counts once per page load and per path change; never for a hash, a query or a replaceState of the same path",
+]
+
+[[unit]]
+text = "A click goal records one event per page view when a click a person makes, or Enter or Space on the element, lands on the one element its selector matches, or inside it; a click made by a script counts nothing, and so does a click anywhere else."
+by = [
+    "test:frontend/tests/e2e/runtime/goals.runtime.spec.ts::a click a person makes on the element or inside it counts, and Enter and Space on it; a click from a script does not",
+    "test:sdk/visual/__tests__/goals.test.ts::a click a person makes on the element or inside it counts, once per page view; a click elsewhere or one a script makes does not",
+]
+
+[[unit]]
+text = "A goal counts at most once per page view, and one click counts once for each experiment whose goal it is."
+by = [
+    "test:frontend/tests/e2e/runtime/goals.runtime.spec.ts::is added once: three path changes, a popstate and consent() add none, and one click counts once for each assigned experiment",
+    "test:sdk/visual/__tests__/goals.test.ts::a click a person makes on the element or inside it counts, once per page view; a click elsewhere or one a script makes does not",
+]
+
+[[unit]]
+text = "Each event carries the goal's event name, the visitor's id, the experiment's key, an event_id made of the page view's random id and the event name, and the page view's website details (as data-collect sets them), and nothing else: never the page's address, its text or data-attributes."
+by = [
+    "test:sdk/visual/__tests__/goals.test.ts::an event carries the goal's name, the visitor, the experiment, the page view's id and its website details, and nothing else",
+    "test:sdk/visual/__tests__/goals.test.ts::with data-collect none an event carries no details",
+    "test:backend/tests/integration/api/test_visual_goal_events.py::test_each_goal_counts_only_for_its_own_metric_in_the_visitors_own_arm",
+]
+
+[[unit]]
+text = "The script keeps each event in localStorage until your Controlvar API accepts it: at most 50 events, the oldest dropped first, each for at most 24 hours."
+by = [
+    "test:sdk/visual/__tests__/outbox.test.ts::keeps at most 50 events, the newest, when nothing gets through",
+    "test:sdk/visual/__tests__/outbox.test.ts::drops an event 24 hours after it was made",
+    "test:sdk/visual/__tests__/outbox.test.ts::a 2xx removes the call's events",
+]
+
+[[unit]]
+text = "An event is dropped if the server refuses it (any 4xx answer but 429); after a 429, a 5xx or a failed call it is sent again with the next goal event or from the next page, with the same event_id, and the API stores it once."
+by = [
+    "test:sdk/visual/__tests__/outbox.test.ts::a %i drops the call's events, and they are never sent again",
+    "test:sdk/visual/__tests__/outbox.test.ts::%s keeps the call's events, and the next flush sends them again exactly once",
+    "test:frontend/tests/e2e/runtime/real-api-goals.runtime.spec.ts::an event whose answer was lost is sent again from the next page, and stored once",
+    "test:sdk/visual/__tests__/goals.test.ts::an event the API did not accept is sent again, with the same event_id, by the next page",
+]
+
+[[unit]]
+text = "Events are sent with keepalive, so a click that takes the visitor to another page is still sent as the page goes away."
+by = [
+    "test:frontend/tests/e2e/runtime/real-api-goals.runtime.spec.ts::a click on a link to another site is recorded as the page goes away",
+    "test:sdk/visual/__tests__/outbox.test.ts::sends each new event at once through the one send function, with the key and keepalive",
+]
+
+[[unit]]
 text = "When a change cannot be applied, the script sends an error report with the experiment's key, a fixed message, the change's position and the reason."
 by = [
     "test:frontend/tests/e2e/runtime/apply.runtime.spec.ts::a selector that matches nothing changes nothing, shows the page and is reported",
     "test:sdk/visual/__tests__/runtime.test.ts::carry exactly the four keys, never a feature flag key, and stop at five per page view",
+]
+
+[[unit]]
+text = "When a click goal's selector matches no element, or more than one, on a click on its page, the script sends one report for that goal per page view, with the goal's position."
+by = [
+    "test:sdk/visual/__tests__/goals.test.ts::a selector that matches no element or several counts nothing and is reported once per page view, with the goal's position",
+    "test:frontend/tests/e2e/runtime/goals.runtime.spec.ts::a selector that matches no element or two counts nothing, and is reported once each",
+    "test:backend/tests/integration/api/test_visual_error_reports.py::test_reports_sent_with_a_website_key_never_count_toward_a_flag_keyed_like_the_experiment",
 ]
 
 [[unit]]
@@ -181,8 +251,11 @@ by = [
 ]
 
 [[unit]]
-text = "No other call carries them: not track()'s events and not the error reports."
-by = ["test:sdk/visual/__tests__/details.test.ts::only in the call for the page's changes, after data-attributes; never in track()'s events or a report"]
+text = "Goal events carry them too; track()'s events and the error reports never do."
+by = [
+    "test:sdk/visual/__tests__/details.test.ts::only in the call for the page's changes, after data-attributes; never in track()'s events or a report",
+    "test:sdk/visual/__tests__/goals.test.ts::an event carries the goal's name, the visitor, the experiment, the page view's id and its website details, and nothing else",
+]
 
 [[unit]]
 text = "Detail | Where it comes from | Example | Sent to Controlvar | Stored and where"
@@ -419,6 +492,13 @@ by = [
 ]
 
 [[unit]]
+text = "Goal events not yet sent are deleted with them."
+by = [
+    "test:sdk/visual/__tests__/goals.test.ts::nothing about goals is read, kept or sent before consent(), nor after revokeConsent()",
+    "test:frontend/tests/e2e/runtime/consent.runtime.spec.ts::revokeConsent() on a tag that ${mode}: the cookie and every key go, nothing more is sent, and the next page follows the tag",
+]
+
+[[unit]]
 text = "Changes already shown stay until the visitor leaves the page."
 by = ["test:frontend/tests/e2e/runtime/consent.runtime.spec.ts::revokeConsent() on a tag that ${mode}: the cookie and every key go, nothing more is sent, and the next page follows the tag"]
 
@@ -475,9 +555,11 @@ by = [
 ]
 
 [[unit]]
-text = "The preview lasts for the tab, turns every other experiment off and records no assignment, no exposure and no event; a change it cannot apply is still reported."
+text = "The preview lasts for the tab, turns every other experiment off and records no assignment, no exposure, no event and no goal; a change it cannot apply is still reported."
 by = [
     "test:frontend/tests/e2e/runtime/real-api-preview.runtime.spec.ts::a preview link shows its variant 50 times and records nothing; a changed or revoked link gets 404, and a visitor still gets their own variant",
+    "test:frontend/tests/e2e/runtime/real-api-preview.runtime.spec.ts::a preview tab records no goal: 20 clicks and 5 page views of the goals' pages send nothing",
+    "test:sdk/visual/__tests__/goals.test.ts::a preview tab counts no goal and sends no kept event",
     "test:frontend/tests/e2e/runtime/preview.runtime.spec.ts::shows its variant with the banner, other experiments off, the address clean and nothing recorded",
     "test:sdk/visual/__tests__/consent.test.ts::a change on <html> or on the banner is never applied, and is reported as own_ui",
 ]

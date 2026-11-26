@@ -478,6 +478,22 @@ describe('the goals kept between pages', () => {
     p.close();
   });
 
+  test('a browser that refuses storage counts no goal', async () => {
+    const p = page(
+      { experiments: () => [experiment('shop', [viewGoal('page_shop'), clickGoal('click_buy', '#buy')])] },
+      {
+        setup: (window) => {
+          Object.defineProperty(window, 'localStorage', { get: () => { throw new Error('refused'); } });
+        },
+      },
+    );
+    await settle();
+    p.press(p.window.document.getElementById('buy')!);
+    await settle();
+    expect(p.fetches.map(pathOf)).toEqual(['/api/v1/tracking/visual']);
+    p.close();
+  });
+
   test('a preview tab counts no goal and sends no kept event', async () => {
     const now = Date.now();
     const kept = { shop: { at: now - 1000, pages: [], goals: [{ kind: 'page_view', event_name: 'page_shop', page: { match: 'prefix', host: 'shop.example', path: '/' } }, { kind: 'click', event_name: 'click_buy', selector: '#buy', page: { match: 'prefix', host: 'shop.example', path: '/' } }] } };

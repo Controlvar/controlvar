@@ -138,6 +138,32 @@ test.describe("click goals", () => {
   });
 });
 
+test.describe("frames and shadow roots", () => {
+  test("a goal's element inside a frame or a shadow root is not found: its clicks count nothing, and each goal is reported", async ({
+    page,
+    visualPackage,
+  }) => {
+    const body = `${BODY}<iframe id="frame" srcdoc="<button id='framed'>In a frame</button>"></iframe><div id="host"></div>
+<script>document.getElementById("host").attachShadow({ mode: "open" }).innerHTML = "<button id='shadowed'>In a shadow root</button>";</script>`;
+    const site = await routeSite(page, visualPackage, {
+      pages: { "/shop": sitePage(body) },
+      answer: answering({ experiments: [experiment("shop", [], { goals: [clickGoal("click_framed", "#framed"), clickGoal("click_shadowed", "#shadowed")] })] }),
+    });
+    await page.goto(`${SITE}/shop`, { waitUntil: "load" });
+    await settle(page);
+    await page.frameLocator("#frame").locator("#framed").click();
+    await page.locator("#shadowed").click();
+    await settle(page);
+    expect(events(site), "goal events").toEqual([]);
+    await expect.poll(() => calls(site, ERRORS_PATH).length).toBe(2);
+    const sent = calls(site, ERRORS_PATH).map((call) => call.body as { error_type: string; metadata: unknown });
+    expect(sent.map((report) => [report.error_type, report.metadata]).sort()).toEqual([
+      ["goal_not_found", { index: 0 }],
+      ["goal_not_found", { index: 1 }],
+    ]);
+  });
+});
+
 /** Counts the click listeners added to the document in the capture phase; installed before any script. */
 function countClickListeners() {
   const native = EventTarget.prototype.addEventListener;

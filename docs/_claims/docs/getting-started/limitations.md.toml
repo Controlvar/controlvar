@@ -549,10 +549,11 @@ text = "A change to a text the page keeps updating | Do not change a text your s
 by = ["test:frontend/tests/e2e/runtime/keep.runtime.spec.ts::a page that resets a text every 100 ms gets the change back each time until the bound, then keeps its own"]
 
 [[unit]]
-text = "A visual experiment on a site that routes after # | On a site that routes with the part of the address after # (hash routing), the visual editor always opens the site's default route, and page rules treat every route as one page."
+text = "A visual experiment on a site that routes after # | On a site that routes with the part of the address after # (hash routing), the visual editor always opens the site's default route, and page rules and page-view goals treat every route as one page."
 by = [
     "test:frontend/tests/e2e/runtime/editor-link.runtime.spec.ts::is removed from the address, claimed once, and handed to the panel after hello",
     "test:frontend/tests/e2e/runtime/spa.runtime.spec.ts::each kind of change after # re-evaluates exactly once, with no call and no page view",
+    "test:frontend/tests/e2e/runtime/goals.runtime.spec.ts::one per page load and per path change: a hash, a query and Next's pushState then replaceState add none",
 ]
 
 [[unit]]
@@ -603,3 +604,36 @@ by = [
 [[unit]]
 text = "A phones-only test shown only on phones | A visitor your site signs in (data-user-id) keeps their variant on every device, so one who joins a phones-only test on a phone also gets its changes on a desktop."
 by = ["test:frontend/tests/e2e/runtime/real-api-details.runtime.spec.ts::a visitor the site names keeps their variant on a desktop after joining on a phone"]
+
+[[unit]]
+text = "A goal on an element inside a frame or a shadow root | A goal's selector finds the elements of the page itself only: an element inside a frame (<iframe>) or a shadow root is not found, so clicks on it count nothing, and the goal is reported as matching no element."
+by = [
+    "test:frontend/tests/e2e/runtime/goals.runtime.spec.ts::a goal's element inside a frame or a shadow root is not found: its clicks count nothing, and each goal is reported",
+]
+
+[[unit]]
+text = "A click that takes the visitor to another site, always counted | The click's event is sent as the page goes away, with keepalive; if the browser does not deliver that request, the click is lost."
+by = [
+    "test:frontend/tests/e2e/runtime/real-api-goals.runtime.spec.ts::a click on a link to another site is recorded as the page goes away",
+]
+
+[[unit]]
+text = "A goal on a page of another domain | A goal's page must be on one of the experiment's hosts, and the script keeps goals in the browser storage of the site where the visitor was assigned, so a page on another domain records none."
+by = [
+    "test:backend/tests/unit/schemas/test_visual_changes.py::test_a_goal_page_is_on_one_of_the_sites",
+    "test:sdk/visual/__tests__/goals.test.ts::uses only what it can check: an experiment older than 30 days, or with one goal out of its form, counts nothing",
+]
+
+[[unit]]
+text = "A click goal after a redesign | When a page no longer has exactly one element that matches a click goal's selector, no click counts for that goal, in any arm, and the script sends a report (goal_not_found or goal_ambiguous) once per page view."
+by = [
+    "test:sdk/visual/__tests__/goals.test.ts::a selector that matches no element or several counts nothing and is reported once per page view, with the goal's position",
+    "test:frontend/tests/e2e/runtime/goals.runtime.spec.ts::a selector that matches no element or two counts nothing, and is reported once each",
+    "test:frontend/tests/e2e/runtime/real-api-goals.runtime.spec.ts::a control visitor and a B visitor each click once, and each arm counts one conversion",
+]
+
+[[unit]]
+text = "Goals in a browser that refuses storage | The script keeps goals and their events in your site's localStorage; where the browser refuses it, no goal counts."
+by = [
+    "test:sdk/visual/__tests__/goals.test.ts::a browser that refuses storage counts no goal",
+]
