@@ -52,7 +52,7 @@ EXPECTED = {
     "test_collection_count.py": 5,
     "test_gates.py": 94,
     "test_proxy.py": 107,
-    "test_python_driver.py": 9,
+    "test_python_driver.py": 10,
     "test_runner.py": 12,
     "test_sdks.py": 22,
     "test_usecases_workflow.py": 12,
@@ -60,7 +60,8 @@ EXPECTED = {
 #: The same, for the cases under ``tests/usecases``.
 EXPECTED_CASES = {
     "test_flags_over_time.py": 5,
-    "test_js_driver.py": 7,
+    "test_is_feature_enabled.py": 2,
+    "test_js_driver.py": 8,
     "test_local_evaluation.py": 4,
     "test_missing_archived_flag.py": 2,
     "test_targeting.py": 1,
