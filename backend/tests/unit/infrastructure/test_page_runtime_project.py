@@ -536,6 +536,7 @@ RUNTIME_DIR = SPEC_DIR / "runtime"
 EXPORT_READ = "export-read.ts"
 EXPORT_READERS = [
     "real-api-details.runtime.spec.ts",
+    "real-api-goals.runtime.spec.ts",
     "real-api-preview.runtime.spec.ts",
     "real-api.runtime.spec.ts",
 ]

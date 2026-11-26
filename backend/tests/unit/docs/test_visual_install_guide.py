@@ -124,7 +124,7 @@ def test_the_stored_keys_table_is_the_contract_files_written_keys():
         for key in json.loads(KEYS.read_text(encoding="utf-8"))["keys"]
         if key["written"]
     ]
-    assert len(written) == 8
+    assert len(written) == 10
     assert rows == written
 
 

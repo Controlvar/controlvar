@@ -38,7 +38,17 @@ On each page an experiment covers, the script makes one call to your Controlvar 
 It never sends the query string, except three campaign (`utm_`) values, or the part of the address after `#`.
 It keeps the page rules of the running experiments for 60 seconds, and a page none of them covers makes no call and is never hidden.
 
+The answer also names the goals of each experiment the visitor is assigned to, the control's visitors included, and the script records them on any page of your site for 30 days after the answer that named them.
+A page-view goal records one event for each page view of the goal's page: each page load, and each path change the script follows; a change of only the query, or only the part after `#`, is not a page view.
+A click goal records one event per page view when a click a person makes, or Enter or Space on the element, lands on the one element its selector matches, or inside it; a click made by a script counts nothing, and so does a click anywhere else.
+A goal counts at most once per page view, and one click counts once for each experiment whose goal it is.
+Each event carries the goal's event name, the visitor's id, the experiment's key, an `event_id` made of the page view's random id and the event name, and the page view's website details (as `data-collect` sets them), and nothing else: never the page's URL or query, its text or `data-attributes`, except that the three campaign (`utm_`) values among the website details come from the query of the visit's first page.
+The script keeps each event in localStorage until your Controlvar API accepts it: at most 50 events, the oldest dropped first, each for at most 24 hours.
+An event is dropped if the server refuses it (any 4xx answer but 429); after a 429, a 5xx or a failed call it is sent again with the next goal event or from the next page, with the same `event_id`, and the API stores it once.
+Events are sent with `keepalive`, so a click that takes the visitor to another page is still sent as the page goes away.
+
 When a change cannot be applied, the script sends an error report with the experiment's key, a fixed message, the change's position and the reason.
+When a click goal's selector matches no element, or more than one, on a click on its page, the script sends one report for that goal per page view, with the goal's position.
 A report never holds a feature flag key, the visitor's id, the page's address or anything from the page, so it never counts toward a flag's safety rollback.
 At most 5 reports are sent per page load.
 
@@ -50,7 +60,7 @@ Requests carry no cookies and no Referer.
 
 With the call for a page's changes, the script sends the website details `data-collect` turns on, so that an experiment's audience can use them.
 Each is sent only in the form below; a detail the script cannot read in that form is left out.
-No other call carries them: not `track()`'s events and not the error reports.
+Goal events carry them too; `track()`'s events and the error reports never do.
 
 | Detail | Where it comes from | Example | Sent to Controlvar | Stored and where |
 |---|---|---|---|---|
@@ -91,6 +101,8 @@ In a preview tab and on an editor link it sends no detail and stores no visit.
 | `controlvar_visit` | localStorage | The visit's start and last page view, and its first page's campaign values and landing path when the tag collects them, cleaned. | replaced when a visit starts after 30 minutes without a page view; revokeConsent() deletes it |
 | `controlvar_seen` | localStorage | When this browser was first seen (milliseconds since 1970), to tell a new visitor from a returning one. | until deleted |
 | `controlvar_assigned` | localStorage | The keys of the experiments this visitor was assigned to, each with the time it was last seen, so track() can name them. | 30 days per experiment |
+| `controlvar_goals` | localStorage | The goals of the experiments this visitor was assigned to (each goal's event name, kind, selector and page rule), so a goal on another page counts, and the page rules (match and path) that covered the page where each was named, so an answer there that no longer names it removes them. | 30 days per experiment |
+| `controlvar_outbox` | localStorage | Goal events the API has not yet accepted, each with the time it was made, so a later page sends them again. | until the API accepts or refuses it; at most 50 events, each at most 24 hours |
 | `controlvar_pages` | localStorage | The page rules of the running visual experiments on this site (match and path), so a page none of them covers makes no call. | 60 seconds |
 | `controlvar_backoff` | sessionStorage | The time until which the script sends nothing, set after a refused or failed call. | 5 minutes, in this tab |
 | `controlvar_preview` | sessionStorage | A preview link's token, so the preview lasts for the tab. | this tab |
@@ -106,6 +118,7 @@ Call `controlvar.visual.consent()` once the visitor agrees, and the script appli
 A `consent()` made while the page's `<head>` is still loading (a stored consent read there) hides the page as usual; a later one applies the changes in view, without hiding the page.
 
 `controlvar.visual.revokeConsent()` stops the script: nothing more is sent from this page, and it deletes every cookie it set and every `controlvar_` key in this site's localStorage and sessionStorage.
+Goal events not yet sent are deleted with them.
 Changes already shown stay until the visitor leaves the page.
 With `data-require-consent`, later pages wait for `consent()` again; without it the next page starts again, so a site that lets visitors withdraw consent sets `data-require-consent`.
 A [Split URL](../api/split-url.md#the-visitor-id-cookie) server integration given a cookie domain sets `controlvar_uid` for that parent domain, which `revokeConsent()` does not delete, so a later `consent()` uses the same id.
@@ -122,7 +135,7 @@ On Next.js's App Router, React places the framework's own scripts ahead of this 
 ## Preview links
 
 A preview link opens your page with one variant's changes and a banner with an Exit preview button.
-The preview lasts for the tab, turns every other experiment off and records no assignment, no exposure and no event; a change it cannot apply is still reported.
+The preview lasts for the tab, turns every other experiment off and records no assignment, no exposure, no event and no goal; a change it cannot apply is still reported.
 No change is ever applied to the page's `<html>` element or to the banner.
 
 ## Visitor IP addresses

@@ -17,7 +17,8 @@ function readCookie(cookies: string, name: string): string | null {
   return null;
 }
 
-function newId(captures: Captures): string {
+/** A random version 4 UUID from the captured getRandomValues: a new visitor's id, and each page view's. */
+export function newId(captures: Captures): string {
   const bytes = captures.getRandomValues(new Uint8Array(16));
   bytes[6] = (bytes[6] & 0x0f) | 0x40;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;

@@ -6,7 +6,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { KEYS, WRITTEN } from '../src/keys';
-import { MAX_REPORTS, MESSAGES, OWN_UI_MESSAGE } from '../src/reports';
+import { GOAL_MESSAGES, MAX_REPORTS, MESSAGES, OWN_UI_MESSAGE } from '../src/reports';
 
 const CONTRACT = join(__dirname, '..', '..', '..', 'tests', 'sdk-contract');
 const STORAGE = JSON.parse(readFileSync(join(CONTRACT, 'visual-storage-keys.json'), 'utf8'));
@@ -36,6 +36,10 @@ describe('the storage keys', () => {
   test('the ones the script writes are the ones the file marks written', () => {
     expect([...WRITTEN].sort()).toEqual(keys.filter((key) => key.written).map((key) => key.name).sort());
   });
+
+  test('the script writes every key of the file, in its order', () => {
+    expect([...WRITTEN]).toEqual(keys.map((key) => key.name));
+  });
 });
 
 describe('the error reports', () => {
@@ -52,9 +56,19 @@ describe('the error reports', () => {
     expect(new Set(Object.values(MESSAGES)).size).toBe(Object.keys(MESSAGES).length);
   });
 
-  test('the types sent today are exactly visual_change_not_applied and own_ui', () => {
+  test('the types sent today are exactly visual_change_not_applied, own_ui, goal_not_found and goal_ambiguous', () => {
     const sent = REPORTS.types.filter((type: { sent: boolean }) => type.sent).map((type: { error_type: string }) => type.error_type);
-    expect(sent).toEqual(['visual_change_not_applied', 'own_ui']);
+    expect(sent).toEqual(['visual_change_not_applied', 'own_ui', 'goal_not_found', 'goal_ambiguous']);
+  });
+
+  test("each goal report's metadata is exactly the goal's index, with one fixed message of its own", () => {
+    for (const name of ['goal_not_found', 'goal_ambiguous'] as const) {
+      const type = REPORTS.types.find((item: { error_type: string }) => item.error_type === name);
+      expect([name, type.metadata_keys]).toEqual([name, ['index']]);
+    }
+    expect(Object.keys(GOAL_MESSAGES).sort()).toEqual(['goal_ambiguous', 'goal_not_found']);
+    const messages = [...Object.values(MESSAGES), OWN_UI_MESSAGE, ...Object.values(GOAL_MESSAGES)];
+    expect(new Set(messages).size).toBe(messages.length);
   });
 
   test("own_ui's metadata is exactly the change's index, with one fixed message", () => {

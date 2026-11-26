@@ -165,6 +165,38 @@ export function landingPathKept(path: unknown): path is string {
   );
 }
 
+/** Every key the script sends a detail as, in the order it sends them. */
+export const DETAIL_KEYS: readonly string[] = [
+  "web_device",
+  "web_browser",
+  "web_language",
+  "web_visitor",
+  "web_referrer",
+  ...UTM_PARAMS.map(([, key]) => key),
+  "web_landing_path",
+];
+
+/** Whether *value* is a detail the script sends as *key*, in that detail's form (a value kept and read back is checked with this). */
+export function detailKept(key: string, value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  switch (key) {
+    case "web_device":
+      return (DEVICES as readonly string[]).indexOf(value) >= 0;
+    case "web_browser":
+      return (BROWSERS as readonly string[]).indexOf(value) >= 0;
+    case "web_language":
+      return LANGUAGE.test(value);
+    case "web_visitor":
+      return (VISITORS as readonly string[]).indexOf(value) >= 0;
+    case "web_referrer":
+      return REFERRER.test(value);
+    case "web_landing_path":
+      return landingPathKept(value);
+    default:
+      return UTM_PARAMS.some(([, utmKey]) => utmKey === key) && utmKept(value);
+  }
+}
+
 /** What the page-load details are read from; each only when its detail is on. */
 export interface PageSignals {
   device: DeviceSignals | null;
