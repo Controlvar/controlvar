@@ -425,6 +425,8 @@ describe('Who can join — rules the builder cannot show', () => {
     const raw = within(s).getByTestId('targeting-raw');
     expect(raw).toHaveTextContent(OUTSIDE_BUILDER_NOTE);
     expect(raw.querySelector('pre')?.textContent).toBe(JSON.stringify(FLAT_RULES, null, 2));
+    // A link inside a sentence is underlined: colour alone does not tell it apart.
+    expect(within(raw).getByRole('link', { name: 'Read about targeting rules' })).toHaveClass('underline');
     expect(within(raw).getByRole('link', { name: 'Read about targeting rules' }).getAttribute('href')).toMatch(
       /docs\/api\/endpoints(\.md)?\/?#targeting-rules$/,
     );
@@ -467,6 +469,8 @@ describe('Who can join — rules the builder cannot show', () => {
     fireEvent.click(within(s).getByRole('button', { name: 'Replace rules' }));
     const dialog = within(s).getByRole('dialog', { name: 'Replace rules' });
     expect(dialog).toHaveTextContent('These rules will be discarded when you save new ones.');
+    // White on amber-700 is 5.0:1; on amber-600 it was 3.2:1, under the 4.5:1 button text needs.
+    expect(within(dialog).getByTestId('targeting-replace-yes')).toHaveClass('bg-amber-700');
     expect(dialog.querySelector('pre')?.textContent).toBe(JSON.stringify(FLAT_RULES, null, 2));
     expect(within(s).queryByTestId('targeting-editor')).toBeNull();
 
@@ -594,6 +598,9 @@ describe('Who can join — the two questions and the keyboard (#1797)', () => {
     await user.click(editButton()!);
     await user.click(within(s).getByRole('button', { name: 'Save rules' }));
     const dialog = within(s).getByRole('dialog', { name: 'Save rules while paused' });
+    // White on amber-700 is 5.0:1; on amber-600 it was 3.2:1, under the 4.5:1 button text needs.
+    expect(within(dialog).getByTestId('targeting-paused-yes')).toHaveClass('bg-amber-700');
+    expect(within(dialog).getByTestId('targeting-paused-yes')).not.toHaveClass('bg-amber-600');
     await user.click(within(dialog).getByRole('button', { name: 'Save rules' }));
 
     expect(within(s).queryByRole('dialog')).toBeNull();

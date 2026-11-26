@@ -228,6 +228,8 @@ describe('stored rules the builder cannot show', () => {
     const s = await section();
     expect(within(s).getByTestId('targeting-raw-note')).toHaveTextContent(OUTSIDE_BUILDER_NOTE);
     expect(within(s).getByTestId('targeting-raw-note')).not.toHaveTextContent(NOT_GROUPS_NOTE);
+    // A link inside a sentence is underlined: colour alone does not tell it apart.
+    expect(within(s).getByRole('link', { name: 'Read about targeting rules' })).toHaveClass('underline');
     expect(within(s).getByRole('link', { name: 'Read about targeting rules' })).toHaveAttribute(
       'href',
       expect.stringContaining('targeting-rules'),
@@ -245,6 +247,9 @@ describe('stored rules the builder cannot show', () => {
     const s = await section();
     fireEvent.click(within(s).getByRole('button', { name: 'Replace rules' }));
     expect(within(s).getByRole('dialog', { name: 'Replace rules' })).toBeInTheDocument();
+    // White on amber-700 is 5.0:1; on amber-600 it was 3.2:1, under the 4.5:1 button text needs.
+    expect(within(s).getByTestId('targeting-replace-yes')).toHaveClass('bg-amber-700');
+    expect(within(s).getByTestId('targeting-replace-yes')).not.toHaveClass('bg-amber-600');
     fireEvent.click(within(s).getByRole('button', { name: 'Cancel' }));
     expect(within(s).getByTestId('targeting-raw')).toBeInTheDocument();
     await slideAndSave('30');

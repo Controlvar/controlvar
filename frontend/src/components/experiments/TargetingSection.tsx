@@ -273,7 +273,7 @@ export function TargetingSection({
                 <a
                   ref={rawDocsLink}
                   href={docsUrl('api/endpoints', 'targeting-rules')}
-                  className="text-blue-600 hover:underline"
+                  className="text-blue-600 underline"
                   target="_blank"
                   rel="noreferrer"
                 >
@@ -327,7 +327,7 @@ export function TargetingSection({
                 startEdit(createEmptyRules());
                 setFocusAfter({ target: 'add-group' });
               }}
-              className="px-3 py-1.5 rounded-md text-sm font-medium bg-amber-600 text-white hover:bg-amber-700"
+              className="px-3 py-1.5 rounded-md text-sm font-medium bg-amber-700 text-white hover:bg-amber-800"
               data-testid="targeting-replace-yes"
             >
               Start with no rules
@@ -370,7 +370,7 @@ export function TargetingSection({
                 <button
                   type="button"
                   onClick={() => void send(true)}
-                  className="px-3 py-1.5 rounded-md text-sm font-medium bg-amber-600 text-white hover:bg-amber-700"
+                  className="px-3 py-1.5 rounded-md text-sm font-medium bg-amber-700 text-white hover:bg-amber-800"
                   data-testid="targeting-paused-yes"
                 >
                   Save rules

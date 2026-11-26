@@ -704,7 +704,7 @@ export default function ExperimentDetailPage() {
                 <button
                   type="button"
                   onClick={() => void runAction(confirming, true)}
-                  className="px-3 py-1.5 rounded-md text-sm font-medium bg-amber-600 text-white hover:bg-amber-700"
+                  className="px-3 py-1.5 rounded-md text-sm font-medium bg-amber-700 text-white hover:bg-amber-800"
                   data-testid="confirm-yes"
                 >
                   Confirm

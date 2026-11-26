@@ -498,6 +498,8 @@ describe('an archived flag (#1748)', () => {
     const note = screen.getByTestId('flag-archived-note');
     expect(note).toHaveTextContent(`${ARCHIVED_NOTE_TEXT} Read about archived flags.`, { normalizeWhitespace: true });
     expect(note.textContent).not.toMatch(/API call|\/unarchive/);
+    // Colour alone is not enough to tell a link in a sentence: it is underlined.
+    expect(within(note).getByRole('link', { name: 'Read about archived flags' })).toHaveClass('underline');
     expect(within(note).getByRole('link', { name: 'Read about archived flags' })).toHaveAttribute(
       'href',
       expect.stringMatching(ARCHIVED_DOCS_HREF),
