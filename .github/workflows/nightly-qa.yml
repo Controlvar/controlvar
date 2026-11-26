@@ -765,7 +765,8 @@ jobs:
 
       # Both Playwright commands write to files only, and their exit statuses
       # go to the checker, which decides the step: a failing test prints its
-      # title and its step's, so its output must not reach this log.
+      # title and its step's, so its output must not reach this log. The
+      # checker also counts the sign-ins backend.log shows the API answered.
       - name: Run the persona days
         env:
           PERSONAS: '1'
@@ -782,7 +783,8 @@ jobs:
           cd .. || exit 1
           python tests/personas/check_run.py --list "$out/list.json" --list-exit "$list_exit" \
             --report "$out/report.json" --run-exit "$run_exit" \
-            --oracle-log "$out/oracle-log.jsonl" --details "$out/details.txt"
+            --oracle-log "$out/oracle-log.jsonl" --details "$out/details.txt" \
+            --backend-log backend.log
 
   # The synthetic check's dead-man switch (synthetic.yml): the largest gap
   # between its scheduled runs that passed all eight steps, over the last 48 h,

@@ -14,12 +14,16 @@ import { ORACLE_LOG, writeLogLine } from "./oracle";
  * fewer than SIGN_IN_BUDGET (one under the limit), then writes a `signin`
  * line with its time to the oracle log. The log is shared by every test and
  * every retry of the run, so the budget holds across them, and
- * tests/personas/check_run.py fails a run whose log shows more.
+ * tests/personas/check_run.py fails a run whose log shows more. It also
+ * counts the sign-in requests the API itself logged during the job and fails
+ * the run when they are not the ones logged here, however a sign-in was sent.
  *
  * A 429 is never retried: it throws, naming it.
  */
 
 export const LOGIN_PATH = "/api/v1/auth/login";
+/** The sign-in request as a day's list of expected requests names it. */
+export const SIGN_IN_REQUEST = `POST ${LOGIN_PATH}`;
 export const SIGN_IN_LIMIT = 10;
 export const SIGN_IN_WINDOW_MS = 60_000;
 export const SIGN_IN_BUDGET = SIGN_IN_LIMIT - 1;

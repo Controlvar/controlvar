@@ -75,6 +75,7 @@ def _evaluate(
     pinned: int = 1,
     list_exit: int = 0,
     run_exit: int = 0,
+    api_sign_ins: int | None = None,
 ) -> check_run.Outcome:
     return check_run.evaluate(
         list_report=_json("list.json") if list_report is None else list_report,
@@ -85,6 +86,7 @@ def _evaluate(
         pinned=pinned,
         list_exit=list_exit,
         run_exit=run_exit,
+        api_sign_ins=api_sign_ins,
     )
 
 
@@ -566,3 +568,50 @@ def test_the_budget_is_one_under_the_api_s_sign_in_limit_here_and_in_the_pacer()
         "export const SIGN_IN_BUDGET = SIGN_IN_LIMIT - 1;",
     ):
         assert line in pacer, line
+
+
+# ------------------------------------------------ the API's own sign-in count
+
+#: Three lines of the API's console log, recorded from a run (ids zeroed): a
+#: sign-in's audit line (it names the path but is not a request), and the
+#: access lines of a sign-in answered 200 and of one answered 429.
+BACKEND_LOG = RECORDED / "backend-sign-ins.txt"
+
+
+def test_the_api_s_log_shows_two_sign_in_requests():
+    assert check_run.api_sign_ins(BACKEND_LOG) == 2
+
+
+def test_the_json_log_s_access_line_counts_too(tmp_path):
+    log = tmp_path / "backend.log"
+    log.write_text(
+        '{"event": "127.0.0.1:1 - \\"POST /api/v1/auth/login HTTP/1.1\\" 200"}\n'
+        '{"event": "127.0.0.1:1 - \\"GET /api/v1/auth/me HTTP/1.1\\" 200"}\n'
+    )
+    assert check_run.api_sign_ins(log) == 1
+
+
+@pytest.mark.regression
+def test_a_sign_in_the_pacer_did_not_make_is_a_check():
+    """The API answered two sign-ins; signin.ts logged one: the other was
+    sent around it (unpaced, its 429 unseen), however its URL was built."""
+    outcome = _evaluate(oracle_log=[*_log(), *_signins(0)], api_sign_ins=2)
+    assert _reasons(outcome) == [
+        "sign-ins: the API logged 2 sign-in requests, oracles/signin.ts made 1"
+    ]
+    assert outcome.checks == 1 and not outcome.ok
+    _assert_neutral(check_run.summary_line(outcome))
+    assert _evaluate(oracle_log=[*_log(), *_signins(0, 5)], api_sign_ins=2).ok
+    assert _evaluate(oracle_log=_log()).ok  # no log given: not counted
+
+
+def test_the_command_reads_the_api_s_log(tmp_path, capsys, monkeypatch):
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    args = [*_files(tmp_path), "--backend-log", str(BACKEND_LOG)]
+    assert check_run.main(args) == 1
+    details = (tmp_path / "details.txt").read_text("utf-8")
+    assert (
+        "sign-ins: the API logged 2 sign-in requests, oracles/signin.ts made 0"
+        in details
+    )
+    capsys.readouterr()

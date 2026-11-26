@@ -15,6 +15,9 @@ runs this over those files:
     the two Playwright commands' exit statuses
 ``--details``
     a file that receives the reason for every failed check, one per line
+``--backend-log``
+    the API's own log for the job (the nightly job's ``backend.log``), whose
+    access lines show every sign-in it was sent, however it was made
 
 It prints exactly one line, to stdout and to ``$GITHUB_STEP_SUMMARY``::
 
@@ -34,7 +37,10 @@ which stays on the machine that ran the days. ``checks`` counts the day steps
   in the oracle log, and the log holds no oracle no card names;
 * every entry of frontend/tests/e2e/oracles/known-noise.json occurred;
 * no 60 seconds of the run hold more sign-ins (the log's ``signin`` lines)
-  than ``SIGN_IN_BUDGET``, one under the API's sign-in limit;
+  than ``SIGN_IN_BUDGET``, one under the API's sign-in limit, and with
+  ``--backend-log`` the API logged exactly that many sign-in requests: one
+  sent around frontend/tests/e2e/oracles/signin.ts (unpaced, unlogged) is a
+  failed check, whatever built its URL;
 * the run ran every listed test and reported no error of its own.
 
 The run passes (exit 0) only when both Playwright commands exited 0, the
@@ -197,6 +203,22 @@ def read_oracle_log(path: Path) -> list[dict[str, Any]]:
     return lines
 
 
+#: A colour code of the API's console log lines.
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+#: uvicorn's access line for a sign-in, in the console or the JSON log.
+_SIGN_IN_REQUEST = re.compile(
+    r'\\?"POST /api/v1/auth/login(?:\?[^ "\\]*)? HTTP/[0-9.]+\\?" [0-9]{3}'
+)
+
+
+def api_sign_ins(path: Path) -> int:
+    """How many sign-in requests the API's log shows it answered."""
+    text = path.read_text(encoding="utf-8", errors="replace")
+    return sum(
+        1 for line in text.splitlines() if _SIGN_IN_REQUEST.search(_ANSI.sub("", line))
+    )
+
+
 def read_pinned(path: Path) -> int:
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     tests = data["tests"] if isinstance(data, dict) else None
@@ -229,6 +251,7 @@ def evaluate(
     pinned: int,
     list_exit: int,
     run_exit: int,
+    api_sign_ins: int | None = None,
 ) -> Outcome:
     """Count the run and run every check; nothing here prints."""
     outcome = Outcome(
@@ -346,6 +369,13 @@ def evaluate(
             f"sign-ins: {busiest} within {SIGN_IN_WINDOW_S} s, more than the "
             f"{SIGN_IN_BUDGET} the limit of {SIGN_IN_LIMIT} leaves",
         )
+    made = sum(1 for e in oracle_log if "signin" in e)
+    if api_sign_ins is not None and api_sign_ins != made:
+        outcome.problem(
+            ("run", "sign-ins-api"),
+            f"sign-ins: the API logged {api_sign_ins} sign-in requests, "
+            f"oracles/signin.ts made {made}",
+        )
 
     noise_seen: set[int] = set()
     for entry in oracle_log:
@@ -390,6 +420,7 @@ def _arguments(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--pinned", type=Path, default=PINNED)
     parser.add_argument("--known-noise", type=Path, default=KNOWN_NOISE)
     parser.add_argument("--root", type=Path, default=ROOT)
+    parser.add_argument("--backend-log", type=Path, default=None)
     return parser.parse_args(argv)
 
 
@@ -413,6 +444,9 @@ def run(argv: list[str]) -> int:
         pinned=read_pinned(args.pinned),
         list_exit=args.list_exit,
         run_exit=args.run_exit,
+        api_sign_ins=None
+        if args.backend_log is None
+        else api_sign_ins(args.backend_log),
     )
     reasons = sorted(outcome.problems.values())
     if outcome.list_exit:

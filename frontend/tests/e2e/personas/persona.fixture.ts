@@ -1,7 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { test as base, expect, TEST_USERS, type UserRole } from "../fixtures/auth.fixture";
-import type { Browser, Page } from "@playwright/test";
+import { test as base, expect, type Browser, type Page } from "@playwright/test";
 import { API_URL, BASE_URL, TOKEN_STORAGE_KEY } from "../env";
 import { ORACLE_LOG, PersonaApi } from "../oracles/oracle";
 import { signInByPage } from "../oracles/signin";
@@ -19,6 +18,10 @@ import { Watcher } from "../oracles/watcher";
  *
  * The session is checked before the day starts: GET /api/v1/auth/me must
  * answer the persona's role, so a day can never run as someone else.
+ *
+ * Built on @playwright/test's own `test`, not on the role fixtures in
+ * tests/e2e/fixtures: their role pages sign in on their own, unpaced, so a
+ * persona spec has no way to sign in but this fixture and oracles/signin.ts.
  */
 export interface PersonaSession {
   page: Page;
@@ -30,6 +33,13 @@ interface PersonaFixtures {
   /** dev@demo.com, a DEVELOPER (not a superuser), in Los Angeles. */
   developer: PersonaSession;
 }
+
+/** The seeded accounts (backend/scripts/seed_demo_data.py) the days sign in as. */
+export const ACCOUNTS = {
+  developer: { email: "dev@demo.com", password: "Demo1234!", role: "DEVELOPER" },
+} as const;
+
+export type Persona = keyof typeof ACCOUNTS;
 
 const STATE_DIR = process.env.PERSONAS_STATE_DIR ?? join(dirname(ORACLE_LOG), "state");
 
@@ -56,15 +66,15 @@ async function savedToken(page: Page, file: string, email: string): Promise<stri
 
 async function open(
   browser: Browser,
-  role: UserRole,
+  role: Persona,
   timezoneId: string,
 ): Promise<{ session: PersonaSession; close: () => Promise<void> }> {
-  const user = TEST_USERS[role];
+  const user = ACCOUNTS[role];
   const file = join(STATE_DIR, `${role}.json`);
   mkdirSync(STATE_DIR, { recursive: true });
 
   const probe = await browser.newContext({ baseURL: BASE_URL });
-  const token = await savedToken(await probe.newPage(), file, user.username);
+  const token = await savedToken(await probe.newPage(), file, user.email);
   await probe.close();
 
   const context = await browser.newContext(
@@ -74,14 +84,14 @@ async function open(
   const watch = new Watcher(page);
   let session = token;
   if (!session) {
-    await signInByPage(page, user.username, user.password, role);
+    await signInByPage(page, user.email, user.password, role);
     await context.storageState({ path: file });
     session = await page.evaluate((key) => window.localStorage.getItem(key), TOKEN_STORAGE_KEY);
     if (!session) throw new Error(`sign-in ${role}: no session token stored`);
   }
   const api = new PersonaApi(page.request, session);
   const me = await api.json<{ role: string; email: string }>("/api/v1/auth/me");
-  if (me.role !== user.role || me.email !== user.username) {
+  if (me.role !== user.role || me.email !== user.email) {
     throw new Error(`session role ${me.role}, expected ${user.role}`);
   }
   return { session: { page, api, watch }, close: () => context.close() };

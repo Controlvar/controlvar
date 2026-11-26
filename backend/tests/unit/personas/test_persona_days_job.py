@@ -54,6 +54,8 @@ CHECK_RUN = [
     "$out/oracle-log.jsonl",
     "--details",
     "$out/details.txt",
+    "--backend-log",
+    "backend.log",
 ]
 
 
@@ -346,11 +348,14 @@ def test_a_literal_title_and_other_test_methods_are_accepted():
 
 ORACLES = REPO_ROOT / "frontend" / "tests" / "e2e" / "oracles"
 PACER = "signin.ts"
-#: A sign-in made without oracles/signin.ts: unpaced, and a 429 it meets
-#: could be waited out or read as an answer.
+#: A way to sign in other than oracles/signin.ts: the role fixtures (their
+#: pages sign in on their own and wait out a 429), the login page object, or
+#: the login path, spelled out or imported. A URL built some other way is
+#: still caught at run time: check_run.py holds the API's own count of
+#: sign-ins (backend.log) to the ones signin.ts logged.
 _UNPACED_SIGN_IN = re.compile(
-    r"submitResilient\(|\bloginAs\(|new LoginPage\(|"
-    r"\.(?:post|fetch)\(\s*[`\"'][^`\"'\n]*auth/login"
+    r"auth\.fixture|\b(?:adminPage|developerPage|analystPage|viewerPage)\b"
+    r"|\b(?:loginAsRole|loginAs|LoginPage|submitResilient|LOGIN_PATH)\b|auth/login"
 )
 
 
@@ -363,7 +368,7 @@ def sign_in_problems(text: str, name: str) -> list[str]:
 
 
 def test_the_days_sign_in_only_through_the_pacer():
-    files = sorted(SPECS.glob("*.ts")) + sorted(
+    files = sorted(SPECS.rglob("*.ts")) + sorted(
         p for p in ORACLES.glob("*.ts") if p.name != PACER
     )
     assert files and (ORACLES / PACER).is_file()
@@ -381,6 +386,10 @@ def test_the_days_sign_in_only_through_the_pacer():
         "const login = new LoginPage(page);",
         "await request.post(`${API_URL}/api/v1/auth/login`, { data });",
         'await page.request.fetch("/api/v1/auth/login", { method: "POST" });',
+        'import { test } from "../fixtures/auth.fixture";',
+        'test("U-DEV: a day", async ({ analystPage }) => {});',
+        "await page.request.post(`${API_URL}${LOGIN_PATH}`, { data });",
+        'await page.evaluate(() => fetch("/api/v1/auth/login", { method: "POST" }));',
     ],
 )
 def test_a_sign_in_around_the_pacer_is_refused(source):
@@ -390,5 +399,6 @@ def test_a_sign_in_around_the_pacer_is_refused(source):
     ]
 
 
-def test_naming_the_sign_in_route_in_an_allow_list_is_not_a_sign_in():
-    assert sign_in_problems('["POST /api/v1/auth/login", "signing in"],', "x") == []
+def test_an_allow_list_names_the_sign_in_by_the_pacer_s_constant():
+    assert sign_in_problems('[SIGN_IN_REQUEST, "signing in"],', "x") == []
+    assert sign_in_problems('["POST /api/v1/auth/login", "signing in"],', "x")

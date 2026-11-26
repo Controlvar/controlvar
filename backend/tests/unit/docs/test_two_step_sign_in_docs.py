@@ -95,6 +95,8 @@ NAMED = {
     "tests/acceptance/docs/journeys/onboarding-and-password.yaml": "a journey's "
     "comment on the sign-in rate limit",
     "tests/fuzz/exclusions.toml": "routes the fuzzer leaves out",
+    "tests/personas/check_run.py": "counts the sign-ins in the API's log of a "
+    "persona run; it signs in nowhere",
 }
 
 
