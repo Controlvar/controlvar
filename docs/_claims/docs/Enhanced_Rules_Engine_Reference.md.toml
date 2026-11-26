@@ -441,6 +441,13 @@ by = [
 ]
 
 [[unit]]
+text = "A native value that is a version followed by a line break, such as \"1.2.3\\n\", is refused when rules are saved (422): the engine cannot read it, so the condition would never hold."
+by = [
+    "test:backend/tests/unit/core/test_targeting_version_line_break.py::test_a_version_followed_by_a_newline_is_refused_on_save",
+    "test:backend/tests/integration/api/test_version_line_break_refused.py::test_flag_create_refuses_a_version_and_a_newline",
+]
+
+[[unit]]
 text = "GEO_DISTANCE (geo_distance)"
 by = ["exempt:baseline"]
 

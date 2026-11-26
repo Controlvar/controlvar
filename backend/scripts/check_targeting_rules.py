@@ -74,6 +74,12 @@ dashboard comparison is read as "within the radius", and a timestamp no date
 can hold, or an integer too large for a floating-point number compared with
 ``gt``, ``gte``, ``lt`` or ``lte``, abandons the whole ruleset.
 
+Since #1836 the lines also include a native ``semantic_version`` value that is
+a version followed by a line break (``rules[0].rule.conditions[0].value  not a
+version; use a version such as 1.2.3 or 1.2.3-beta.1, with no line break at the
+end``). It never held (under ``NOT`` it held for every user), and it keeps
+answering so.
+
 Since #1666, #1669, #1672 and #1673 the lines also include:
 
 * a native ``between`` whose bounds are not two numbers or two dates, or are

@@ -1181,6 +1181,13 @@ LENGTH_VALUE_REASON = "not a whole number; use a number such as 3"
 LENGTH_BOUNDS_REASON = "between needs a value with min and max, both whole numbers"
 RADIUS_REASON = "radius must be a number of 0 or more"
 NO_RADIUS_REASON = "a radius is required; use a number of 0 or more"
+#: A native ``semantic_version`` value that is a version followed by a newline
+#: (#1836): the model's pattern ends in ``$``, which matches before a final
+#: newline, and the engine's version parser refuses the value.
+VERSION_VALUE_REASON = (
+    "not a version; use a version such as 1.2.3 or 1.2.3-beta.1, with no line "
+    "break at the end"
+)
 PERCENTAGE_REASON = "not a number; use a percentage from 0 to 100"
 NUMBER_REASON = "not a number; use a number such as 5"
 DASHBOARD_COMPARISON_REASON = (
@@ -1210,6 +1217,7 @@ VALUE_REASONS = (
     LENGTH_BOUNDS_REASON,
     RADIUS_REASON,
     NO_RADIUS_REASON,
+    VERSION_VALUE_REASON,
     PERCENTAGE_REASON,
     NUMBER_REASON,
     DASHBOARD_COMPARISON_REASON,
@@ -1296,8 +1304,10 @@ def _unreadable_value(
 
     ``raw_condition`` is the condition as submitted, for the dashboard shape
     (``None`` for the native shape): the converter drops a geo comparison,
-    so only the submitted value shows it. Each value is judged by the
-    ``rules_engine`` predicate that mirrors its branch. ``gt``, ``gte``,
+    so only the submitted value shows it. Except for ``semantic_version``, each
+    value is judged by the ``rules_engine`` predicate that mirrors its branch;
+    a version is refused only for a trailing newline (#1836), the one value the
+    model accepts by ``$``. ``gt``, ``gte``,
     ``lt`` and ``lte`` are judged in both shapes, on the converted value:
     the dashboard converter refuses text that is not a number, but passes an
     integer too large for a float and NaN, which are refused here (#1673).
@@ -1327,6 +1337,9 @@ def _unreadable_value(
             extra = extra["radius"]
         if not radius_readable(extra):
             return field, RADIUS_REASON
+    elif operator == OperatorType.SEMANTIC_VERSION:
+        if isinstance(value, str) and value.endswith("\n"):
+            return "value", VERSION_VALUE_REASON
     elif operator == OperatorType.PERCENTAGE_BUCKET:
         if not percentage_value_readable(value):
             return "value", PERCENTAGE_REASON
@@ -1418,7 +1431,8 @@ def _check_supported_vocabulary(
       that is missing, below 0 or not a number, a ``percentage_bucket`` value
       that is not a number, a ``gt``, ``gte``, ``lt`` or ``lte`` value that is
       not a number (in the dashboard shape, an integer too large for a float
-      or NaN, which the converter passes, #1673), and a native ``between``
+      or NaN, which the converter passes, #1673), a native ``semantic_version``
+      value that is a version followed by a newline (#1836), and a native ``between``
       whose bounds are not two numbers or two dates with the same time-zone
       form (#1666); and a dashboard ``geo_within_radius`` that carries a
       comparison, which the converter drops (#1526).

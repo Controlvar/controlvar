@@ -545,7 +545,7 @@ class _Goal(BaseModel):
     @field_validator("event_name")
     @classmethod
     def _event_name(cls, value: str) -> str:
-        if not EVENT_NAME_PATTERN.match(value) or value in exposure_event_types():
+        if not EVENT_NAME_PATTERN.fullmatch(value) or value in exposure_event_types():
             raise _visual_error(EVENT_NAME_REFUSED, VISUAL_CONFIG_ERROR)
         return value
 

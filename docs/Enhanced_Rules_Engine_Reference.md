@@ -103,6 +103,8 @@ pre-release comes before its release (`1.2.3-beta.1` is lower than `1.2.3`), and
 build metadata (`1.0.0+build.1` equals `1.0.0+build.2`). A native condition with no
 `additional_value` compares with `eq`. Any other `additional_value` is refused. There is no
 `ne`: put an `eq` condition in a `NOT` group instead.
+A native value that is a version followed by a line break, such as `"1.2.3\n"`, is refused when
+rules are saved (`422`): the engine cannot read it, so the condition would never hold.
 
 ### GEO_DISTANCE (`geo_distance`)
 

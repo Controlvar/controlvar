@@ -585,6 +585,7 @@ def test_the_reasons_are_the_plans():
     values' reasons (#1525, #1526: plan v1.4-B3; #1666, #1669: its addendum;
     test_targeting_values.py) first."""
     from backend.tests.unit.core import test_targeting_values as values
+    from backend.tests.unit.core import test_targeting_version_line_break as line_break
 
     assert targeting_adapter.VOCABULARY_REASONS == (
         values.DATE,
@@ -592,6 +593,7 @@ def test_the_reasons_are_the_plans():
         values.BETWEEN,
         values.RADIUS,
         values.NO_RADIUS,
+        line_break.REASON,
         values.PERCENTAGE,
         values.NUMBER,
         values.DASH_COMPARISON,
@@ -1000,6 +1002,9 @@ def test_the_walker_is_called_from_write_paths_only():
         (adapter, "_validate_targeting"),
         (adapter, "check_segment_vocabulary"),
     }
+    # The version walker (#1836) is part of it: reached only through the
+    # walker, never from a read.
+    assert _callers("_unreadable_value") == {(adapter, "_check_supported_vocabulary")}
     assert _callers("check_segment_vocabulary") == {
         ("backend/app/schemas/segment.py", "_checked_segment_rules"),
         ("backend/scripts/check_targeting_rules.py", "segment_finding_for"),

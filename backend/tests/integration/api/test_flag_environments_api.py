@@ -959,6 +959,88 @@ def test_promotion_copies_all_three_fields_and_nothing_else(
         session.close()
 
 
+VERSION_LINE_BREAK = (
+    "Value error, rules[0].rule.conditions[0].value: not a version; use a "
+    "version such as 1.2.3 or 1.2.3-beta.1, with no line break at the end"
+)
+
+
+def _version_rules(value):
+    return {
+        "rules": [
+            {
+                "id": "r",
+                "rule": {
+                    "operator": "and",
+                    "conditions": [
+                        {
+                            "attribute": "v",
+                            "operator": "semantic_version",
+                            "value": value,
+                            "additional_value": "gte",
+                        }
+                    ],
+                },
+                "rollout_percentage": 100,
+                "priority": 0,
+            }
+        ]
+    }
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("environment", FLAG_ENVIRONMENTS)
+def test_a_put_with_a_version_followed_by_a_newline_is_refused(
+    client, fresh, db_session, developer, environment
+):
+    flag = _flag(db_session, developer, status=ACTIVE, rollout=40)
+    before = _state(fresh, flag.id)
+    response = _put(
+        client,
+        developer,
+        flag.id,
+        environment,
+        {"targeting_rules": _version_rules("1.2.3\n")},
+    )
+    assert response.status_code == 422, response.text
+    (error,) = response.json()["detail"]
+    assert (error["loc"], error["msg"]) == (
+        ["body", "targeting_rules"],
+        VERSION_LINE_BREAK,
+    )
+    assert _state(fresh, flag.id) == before
+    assert _entries(fresh, flag.id) == []
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("source, target", PAIRS, ids=lambda v: v)
+def test_a_promotion_from_rules_with_a_version_and_a_newline_is_refused(
+    client, fresh, db_session, developer, source, target
+):
+    """Such rules are stored (they were accepted); the promotion re-checks
+    them, so nothing is written until the source is fixed."""
+    stored = _version_rules("1.2.3\n")
+    flag = _flag(
+        db_session,
+        developer,
+        status=ACTIVE,
+        rollout=10,
+        rules=stored if source == "production" else None,
+    )
+    for name in ("staging", "development"):
+        _setting(db_session, flag, name, True, 20, stored if name == source else None)
+    before = _state(fresh, flag.id)
+    response = _promote(client, developer, flag.id, source, target)
+    assert response.status_code == 422, response.text
+    (error,) = response.json()["detail"]
+    assert (error["loc"], error["msg"]) == (
+        ["body", "targeting_rules"],
+        VERSION_LINE_BREAK,
+    )
+    assert _state(fresh, flag.id) == before
+    assert _entries(fresh, flag.id) == []
+
+
 @pytest.mark.parametrize("target", ["production", "development"])
 def test_promoting_from_an_environment_nobody_configured_turns_the_target_off(
     client, fresh, db_session, developer, target
