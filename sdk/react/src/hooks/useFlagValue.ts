@@ -5,9 +5,10 @@ import { FlagValueError, FlagValueType, readFlagValue } from '../client/flagValu
 /** What `useFlagValue` returns. */
 export interface FlagValueResult<T> {
   /**
-   * The value the flag serves the user (its on value when the flag is on for them, its off value
-   * otherwise), or `defaultValue` while loading and whenever there is none to read (`error` says
-   * why). A JSON value is this hook's own copy: changing it changes nothing another reader gets.
+   * The value the flag serves the user (its on value when the flag is on for them, or the value its
+   * split or a matching rule gives them; its off value otherwise), or `defaultValue` while loading
+   * and whenever there is none to read (`error` says why). A JSON value is this hook's own copy:
+   * changing it changes nothing another reader gets.
    */
   value: T;
   /** `true` until the server answers, unless the Provider's bootstrap has the flag. */

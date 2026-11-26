@@ -449,8 +449,9 @@ export class ExperimentationClient {
   }
 
   /**
-   * The string a string flag serves this user: its on value when the flag is on for them, its off
-   * value otherwise. Evaluated as `evaluateFlag` does, locally included, with the same cache.
+   * The string a string flag serves this user: its on value when the flag is on for them (or the
+   * value its split or a matching rule gives them), its off value otherwise. Evaluated as
+   * `evaluateFlag` does, locally included, with the same cache.
    *
    * Never rejects. Returns `defaultValue`, and passes the reason to `onError(err, 'value')`, when
    * the request fails, the flag is unknown (404), the server sends no value (a server without

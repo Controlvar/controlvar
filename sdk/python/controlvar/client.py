@@ -632,7 +632,8 @@ class ExperimentationClient:
         default: str,
     ) -> str:
         """The string a string flag serves ``user_id``: its on value when the flag is on for
-        them, its off value otherwise. Evaluated as :meth:`get_feature_flag` does, locally
+        them (or the value its split or a matching rule gives them), its off value otherwise.
+        Evaluated as :meth:`get_feature_flag` does, locally
         included, with the same cache.
 
         Never raises. ``default`` is keyword-only. Returns ``default``, logs a warning and

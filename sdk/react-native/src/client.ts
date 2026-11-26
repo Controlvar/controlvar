@@ -397,10 +397,10 @@ export class ExperimentationClient {
   }
 
   /**
-   * The string a string flag serves `userId`: its on value when the flag is on for them, its off
-   * value otherwise. Evaluated as `evaluateFlag` does, with the same request, cache and
-   * AsyncStorage entry: reading a value after `evaluateFlag` or `isFeatureEnabled` asks nothing
-   * more. Reading a value records no exposure.
+   * The string a string flag serves `userId`: its on value when the flag is on for them (or the
+   * value its split or a matching rule gives them), its off value otherwise. Evaluated as
+   * `evaluateFlag` does, with the same request, cache and AsyncStorage entry: reading a value after
+   * `evaluateFlag` or `isFeatureEnabled` asks nothing more. Reading a value records no exposure.
    *
    * Never rejects. Returns `defaultValue`, and calls `onError` once with `'value'`, when the
    * request fails (with the request's own error; a 404 for an unknown flag included), the server

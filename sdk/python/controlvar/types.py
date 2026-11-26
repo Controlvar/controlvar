@@ -103,7 +103,8 @@ class FlagEvaluation:
     in-process from the ruleset, ``"server"`` when the server evaluated it.
 
     ``value`` is what the flag serves this user: its on value when ``enabled``
-    is true, its off value otherwise (a ``str``; an ``int`` or a ``float``; a
+    is true (or the value its split or a matching rule gives them), its off value otherwise
+    (a ``str``; an ``int`` or a ``float``; a
     ``dict`` or a ``list``); for a boolean flag, ``enabled``. ``None`` when the
     server did not send one (a server without flag values, or a stored value it
     cannot serve). In local mode a ruleset entry that names no type is a boolean

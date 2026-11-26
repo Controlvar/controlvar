@@ -25,11 +25,12 @@ public class FlagEvaluationResult
     public JsonElement? Config { get; set; }
 
     /// <summary>
-    /// The value the flag serves this user: its on value when <see cref="Enabled"/> is true, its
-    /// off value otherwise. <c>null</c> when the answer has none: a server from before flag values,
-    /// or one that cannot serve the flag's stored value. The typed getters
-    /// (<see cref="ExperimentationClient.GetStringValueAsync"/> and the others) read it, with the
-    /// checks this property does not make.
+    /// The value the flag serves this user: when <see cref="Enabled"/> is true, its on value (or
+    /// the value its split or a matching rule gives them), its off value otherwise. <c>null</c>
+    /// when the answer has none: a server from before flag values, or one that cannot serve the
+    /// flag's stored value. The typed getters (<see
+    /// cref="ExperimentationClient.GetStringValueAsync"/> and the others) read it, with the checks
+    /// this property does not make.
     /// </summary>
     [JsonPropertyName("value")]
     public JsonElement? Value { get; set; }

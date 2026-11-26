@@ -67,11 +67,12 @@ export interface FeatureFlagEvaluation {
    */
   reason?: string;
   /**
-   * The value the server served the user (`value` in its answer): the flag's on value when it is
-   * on for them, its off value otherwise; for a boolean flag, `isEnabled` itself. `undefined`
-   * while loading, on error, or when the server sent none (a server without flag values, or one
-   * that cannot serve the flag's stored value). It is the cached answer's own value, shared by
-   * every reader of this evaluation; `useFlagValue` reads it by type and returns a copy.
+   * The value the server served the user (`value` in its answer): the flag's on value when it is on
+   * for them (or the value its split or a matching rule gives them), its off value otherwise; for a
+   * boolean flag, `isEnabled` itself. `undefined` while loading, on error, or when the server sent
+   * none (a server without flag values, or one that cannot serve the flag's stored value). It is
+   * the cached answer's own value, shared by every reader of this evaluation; `useFlagValue` reads
+   * it by type and returns a copy.
    */
   value?: unknown;
   /**
@@ -143,7 +144,8 @@ export interface FeatureFlagEvaluateResponse {
   /** `targeting_rule` | `rollout` | `inactive` | `error`; absent on older servers. */
   reason?: string;
   /**
-   * The value served to this user: the on value when `enabled`, else the off value. Absent on
+   * The value served to this user: the on value when `enabled` (or the value its split or a
+   * matching rule gives them), else the off value. Absent on
    * servers without flag values, and when the flag's stored value cannot be served.
    */
   value?: unknown;

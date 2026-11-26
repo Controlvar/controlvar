@@ -30,8 +30,8 @@ async function main(): Promise<void> {
   const darkModeEnabled = await client.getBooleanValue('dark-mode', false, userContext);
   console.log('dark-mode enabled:', darkModeEnabled);
 
-  // A string, number or JSON flag serves its on value or its off value; a call of
-  // another type than the flag's gets the default you pass, with TYPE_MISMATCH.
+  // A string, number or JSON flag serves its on value (or its split's or a rule's value) or its off
+  // value; a call of another type than the flag's gets the default you pass, with TYPE_MISMATCH.
   const label = await client.getStringDetails('checkout-button-label', 'Buy now', userContext);
   console.log('checkout-button-label:', label.value, label.reason, label.variant);
 

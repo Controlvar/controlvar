@@ -81,7 +81,8 @@ public class FlagEvaluation {
 
     /**
      * Returns the value the flag serves this user, as a new copy on every call: the on value
-     * when the flag is on for the user, the off value otherwise. A {@code String}, a
+     * when the flag is on for the user (or the value its split or a matching rule gives them), the
+     * off value otherwise. A {@code String}, a
      * {@code Number} (an {@code Integer}, {@code Long}, {@code BigInteger} or {@code Double}, as
      * the JSON number was written), a {@code Boolean}, a {@code Map} (a JSON object) or a
      * {@code List} (a JSON array). Changing a returned map or list changes nothing this
