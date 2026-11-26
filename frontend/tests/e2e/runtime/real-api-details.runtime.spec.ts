@@ -3,6 +3,7 @@ import { devices, type APIRequestContext, type Browser, type Page } from "@playw
 import { API_URL } from "../env";
 import { TEST_USERS } from "../fixtures/auth.fixture";
 import { SITE } from "./editor";
+import { exportWindowStart, readExport } from "./export-read";
 import { expect, test, type VisualPackage } from "./runtime.fixture";
 import { shown, sitePage, VISUAL_PATH } from "./visual";
 
@@ -13,9 +14,10 @@ import { shown, sitePage, VISUAL_PATH } from "./visual";
  * passed on to the API under test (PLAYWRIGHT_API_URL) with route.fetch, so
  * the browser never calls the API's own origin. Each test makes its own
  * experiment through the experiment routes, as the seeded developer, with a
- * key with no scopes, and reads its report once
- * (GET /api/v1/export/reports/experiments/{id}): assignments and exposures
- * (the report's event total; nothing else records an event here).
+ * key with no scopes, and records what its report should say. The tests run
+ * in order, and the last one reads the export once (export-read.ts):
+ * assignments and exposures (the experiment's event total; nothing else
+ * records an event here).
  *
  * The phone is each test's own page, Playwright's iPhone 15 profile in
  * Chromium, with navigator.userAgentData deleted, as Safari has none: the
@@ -38,8 +40,15 @@ test.use({ ...devices["iPhone 15"], browserName: "chromium" });
 let api: APIRequestContext;
 let bearer: Record<string, string>;
 let pageKey: string;
+let since: string;
+/** Each test's arm, its experiment and what its report should say. */
+const arms: { arm: string; id: string; report: { assignments: number; exposures: number } }[] = [];
+
+test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async ({ playwright }) => {
+  since = exportWindowStart();
+  arms.length = 0;
   api = await playwright.request.newContext({ baseURL: API_URL });
   const signIn = await api.post("/api/v1/auth/token", {
     form: { username: DEVELOPER.username, password: DEVELOPER.password },
@@ -89,15 +98,6 @@ async function phonesOnly(arm: string): Promise<Made> {
   });
   expect(started.status(), `start ${arm}: ${await started.text()}`).toBe(200);
   return { id, key, path };
-}
-
-/** The experiment's report, read once: its assignments and exposures. */
-async function report(made: Made): Promise<{ assignments: number; exposures: number }> {
-  const response = await api.get(`/api/v1/export/reports/experiments/${made.id}?format=json`, { headers: bearer });
-  expect(response.status(), "the experiment's report").toBe(200);
-  const rows = (await response.json()).experiments as { experiment_id: string; total_assignments: number; total_events: number }[];
-  expect(rows.map((row) => row.experiment_id)).toEqual([made.id]);
-  return { assignments: rows[0].total_assignments, exposures: rows[0].total_events };
 }
 
 interface Answered {
@@ -191,7 +191,7 @@ test.describe("a phones-only visual experiment against the real API", () => {
     expect(desktop.answered[0].entry).toEqual(expect.objectContaining({ assigned: false, reason: "targeting" }));
     expect(`desktop: applied ${await applied(desktop.page)}`).toBe("desktop: applied 0");
 
-    expect(await report(made), "the report").toEqual({ assignments: 1, exposures: 1 });
+    arms.push({ arm: "audience", id: made.id, report: { assignments: 1, exposures: 1 } });
     expect([...phone.direct, ...desktop.direct], "requests from the browser to the API's origin").toEqual([]);
     await desktop.page.context().close();
   });
@@ -217,8 +217,19 @@ test.describe("a phones-only visual experiment against the real API", () => {
     expect(desktop.answered[0].context.web_device, "the desktop's device type").toBe("desktop");
     expect(desktop.answered[0].entry?.assigned, "desktop: assigned").toBe(true);
 
-    expect(await report(made), "the report").toEqual({ assignments: 1, exposures: 2 });
+    arms.push({ arm: "signed-in", id: made.id, report: { assignments: 1, exposures: 2 } });
     expect([...phone.direct, ...desktop.direct], "requests from the browser to the API's origin").toEqual([]);
     await desktop.page.context().close();
+  });
+
+  test("the API recorded what each page view sent", async () => {
+    expect(
+      arms.map(({ arm }) => arm),
+      "the page views of this file",
+    ).toEqual(["audience", "signed-in"]);
+    const counts = await readExport(api, bearer, since, Object.fromEntries(arms.map(({ arm, id }) => [arm, id])));
+    for (const { arm, id, report } of arms) {
+      expect({ assignments: counts[id].assignments, exposures: counts[id].events }, `${arm}: the report`).toEqual(report);
+    }
   });
 });

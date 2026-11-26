@@ -3,14 +3,16 @@ import type { APIRequestContext, Page } from "@playwright/test";
 import { API_URL } from "../env";
 import { TEST_USERS } from "../fixtures/auth.fixture";
 import { SITE } from "./editor";
+import { exportWindowStart, readExport, type Counts } from "./export-read";
 import { expect, test, type VisualPackage } from "./runtime.fixture";
 import { BATCH_PATH, PREVIEW_PATH, sitePage, VISUAL_PATH } from "./visual";
 
 /**
  * Preview links and track() against the real API (#1545), as
  * real-api.runtime.spec.ts does it: every request the script sends to the
- * site's /api/ is passed on to the API under test with route.fetch, and the
- * experiment's report (GET /api/v1/export/reports/experiments/{id}) gives its
+ * site's /api/ is passed on to the API under test with route.fetch. The tests
+ * run in order; each records what its experiment's totals should be, and the
+ * last one reads the export once (export-read.ts) for each experiment's
  * assignments and its event rows.
  *
  * Preview links can be made only for pages on an origin the API accepts
@@ -42,8 +44,15 @@ interface Made {
 let api: APIRequestContext;
 let bearer: Record<string, string>;
 let pageKey: string;
+let since: string;
+/** Each test's arm, its experiment and the totals it expects. */
+const arms: { arm: string; id: string; report: Counts }[] = [];
+
+test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async ({ playwright }) => {
+  since = exportWindowStart();
+  arms.length = 0;
   api = await playwright.request.newContext({ baseURL: API_URL });
   const signIn = await api.post("/api/v1/auth/token", {
     form: { username: DEVELOPER.username, password: DEVELOPER.password },
@@ -83,15 +92,6 @@ async function running(name: string, pageUrl: string, control: number, metric: s
   const started = await api.post(`/api/v1/experiments/${id}/start`, { headers: bearer, data: { design_etag: detail.design_etag } });
   expect(started.status(), `start ${name}: ${await started.text()}`).toBe(200);
   return { id, key, variants: detail.variants };
-}
-
-/** The experiment's report: its assignments and its event rows. */
-async function report(made: Made): Promise<{ assignments: number; events: number }> {
-  const answer = await api.get(`/api/v1/export/reports/experiments/${made.id}?format=json`, { headers: bearer });
-  expect(answer.status(), "the experiment's report").toBe(200);
-  const rows = (await answer.json()).experiments as { experiment_id: string; total_events: number; total_assignments: number }[];
-  expect(rows.map((row) => row.experiment_id)).toEqual([made.id]);
-  return { assignments: rows[0].total_assignments, events: rows[0].total_events };
 }
 
 /** *origin*'s pages (each with the snippet first in <head>), the packed script, and its /api/ passed on to the API. */
@@ -175,7 +175,7 @@ test("a preview link shows its variant 50 times and records nothing; a changed o
     await visitor.close();
   }
 
-  expect(await report(made), "the experiment's report").toEqual({ assignments: 1, events: 1 });
+  arms.push({ arm: "preview", id: made.id, report: { assignments: 1, events: 1 } });
 });
 
 test("an event sent on another page counts for the experiment the visitor saw first", async ({ page, visualPackage }) => {
@@ -196,5 +196,16 @@ test("an event sent on another page counts for the experiment the visitor saw fi
   const [batch] = forwarded.filter((call) => call.path === BATCH_PATH);
   expect(batch.body).toMatchObject({ events: [{ event_type: event, experiment_key: made.key, value: 25 }] });
 
-  expect(await report(made), "the experiment's report").toEqual({ assignments: 1, events: 2 });
+  arms.push({ arm: "event on another page", id: made.id, report: { assignments: 1, events: 2 } });
+});
+
+test("the API recorded what each page view sent", async () => {
+  expect(
+    arms.map(({ arm }) => arm),
+    "the page views of this file",
+  ).toEqual(["preview", "event on another page"]);
+  const counts = await readExport(api, bearer, since, Object.fromEntries(arms.map(({ arm, id }) => [arm, id])));
+  for (const { arm, id, report } of arms) {
+    expect(counts[id], `${arm}: the experiment's report`).toEqual(report);
+  }
 });
