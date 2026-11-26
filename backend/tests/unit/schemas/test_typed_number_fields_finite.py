@@ -427,11 +427,13 @@ def validate(leaf: Leaf, value: Any) -> List[Dict[str, Any]]:
 #: ``typing.Union``. "classes" counts each field once in the nearest model that
 #: declares it (a nested model shared by two bodies counts once). The full
 #: profile adds the warehouse's three strict fields; the query is the same.
+#: The visual editor's design save (#1545) added one body field in both, a
+#: metric's expected_effect, in a class already counted.
 COUNTS = {
     "core": {
-        "body fields": 62,
-        "body operations": 22,
-        "body annotations": 22,
+        "body fields": 63,
+        "body operations": 23,
+        "body annotations": 23,
         "strict": 0,
         "fields by class": 47,
         "classes": 24,
@@ -439,9 +441,9 @@ COUNTS = {
         "query operations": 8,
     },
     "full": {
-        "body fields": 65,
-        "body operations": 25,
-        "body annotations": 25,
+        "body fields": 66,
+        "body operations": 26,
+        "body annotations": 26,
         "strict": 3,
         "fields by class": 50,
         "classes": 27,
