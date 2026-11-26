@@ -51,6 +51,9 @@ from backend.app.services.analysis_service import VALUE_BOUND, AnalysisService
 from backend.tests.unit.services import (
     test_binomial_metric_result_characterisation as characterisation,
 )
+from backend.tests.unit.services import (
+    test_binomial_metric_result_characterisation as characterisation_window,
+)
 from backend.tests.unit.services import test_engine_fingerprint as engine_fingerprint
 from backend.tests.unit.services import (
     test_lower_is_better_fingerprint as lower_is_better,
@@ -159,6 +162,8 @@ def _run(
     )
     output.pop("computed_at")
     assert output.pop("srm") is None
+    # The window keys (#1934): null here, set aside as the check is.
+    characterisation_window.pop_window_keys(output)
     return output
 
 
@@ -513,6 +518,9 @@ VALUE_RESULTS_FINGERPRINTS: Dict[str, str] = {
     # 1.13.0 (#2041): each metric's p-value comes from the permutation test
     # of Welch's t, named permutation_t_test.
     "1.13.0": "91e20f3464393510a306f69a8dc1df666e5a49a7124005f376559a71e00da685",
+    # 1.14.0 (#1934): a metric's conversion window; no fixture here has one,
+    # so 1.13.0's entries.
+    "1.14.0": "91e20f3464393510a306f69a8dc1df666e5a49a7124005f376559a71e00da685",
 }
 
 

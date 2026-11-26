@@ -289,13 +289,23 @@ class _FeatureFlagRequest(BaseModel):
             )
         return v
 
-    @field_validator("targeting_rules", "tags", mode="before", check_fields=False)
+    @field_validator(
+        "name",
+        "description",
+        "targeting_rules",
+        "tags",
+        mode="before",
+        check_fields=False,
+    )
     @classmethod
     def refuse_unstorable_text(cls, value: Any, info: ValidationInfo) -> Any:
         """Refuse NUL and unpaired surrogates anywhere in the value, keys
         included (#2163): the database cannot store them, and the request
-        answered 500. ``before``, so the rules are not read first; the message
-        names the field, never the value."""
+        answered 500 (a NUL in ``name`` or ``description``, 400 with the
+        database driver's words, #2181). ``before``, so the rules are not read
+        first; the message names the field, never the value. ``key`` refuses
+        both already, and ``on_value``, ``off_value`` and ``split`` refuse
+        them in ``flag_values``."""
         if contains_unstorable_text(value):
             raise ValueError(unstorable_text_message(info.field_name))
         return value

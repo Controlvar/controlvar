@@ -139,6 +139,14 @@ SUFFICIENT_STATS_FINGERPRINTS: Dict[str, Dict[str, str]] = {
         "mean_metric_result": "dbd894429d89e81cb669f5063a4e275452432696c904a180ca3d6e64ae6cbd41",
         "per_user_mean_metric_result": "847120695dd4f39121b3d11e40874d2f7374453328e712cd1efdb31d9a942cdb",
     },
+    # 1.14.0 (#1934): a metric's conversion window; no fixture here has one,
+    # so 1.13.0's entries.
+    "1.14.0": {
+        "binomial_metric_result": "b634c5af2edc11d68b03498763799e730ec25c850a049e9678b2ce62fda87b8f",
+        "cuped_metric_result": "29e33befe849a6cc36fd462b5d4e1f2a361efcff2f695a38c612653c11363f67",
+        "mean_metric_result": "dbd894429d89e81cb669f5063a4e275452432696c904a180ca3d6e64ae6cbd41",
+        "per_user_mean_metric_result": "847120695dd4f39121b3d11e40874d2f7374453328e712cd1efdb31d9a942cdb",
+    },
 }
 
 #: The engine versions frozen on main, oldest first.  An engine-changing PR
@@ -162,6 +170,7 @@ RELEASED_ENGINE_VERSIONS = (
     "1.11.0",
     "1.12.0",
     "1.13.0",
+    "1.14.0",
 )
 
 _CONTROL = "ffffffff-0000-4000-8000-000000000002"
@@ -372,6 +381,15 @@ _ESTIMATORS: Dict[str, Callable[[], Dict[str, Any]]] = {
 #: all of them, and a failure names each case that moved.
 PER_USER_MEAN_CASE_DIGESTS: Dict[str, Dict[str, str]] = {
     "1.13.0": {
+        "a_urn": "26952f980791896923f36740b73d05ed1dd5a9d1396a3915c399345efcbdd0be",
+        "b_hrua": "611f1908605e1da8b33da86fe9543e544e9e9b12f639fce491329f0f7f9f91d7",
+        "c_tail_shuffle": "85540e2d27dca76fc4d9c963b240b72712b9637609df2f27f51eb073fa000586",
+        "d_six_treatments": "4464504e26007e36dd6a227b4f48eadbba49a0fbb43f842d02c3af89933b0814",
+        "e_net_zero": "5fb85a2186e3772af263af77ca3cb9e77e435531a45b5a96620352683ef3c3b3",
+    },
+    # 1.14.0 (#1934): a metric's conversion window; no fixture here has one,
+    # so 1.13.0's entries.
+    "1.14.0": {
         "a_urn": "26952f980791896923f36740b73d05ed1dd5a9d1396a3915c399345efcbdd0be",
         "b_hrua": "611f1908605e1da8b33da86fe9543e544e9e9b12f639fce491329f0f7f9f91d7",
         "c_tail_shuffle": "85540e2d27dca76fc4d9c963b240b72712b9637609df2f27f51eb073fa000586",

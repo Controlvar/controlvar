@@ -438,7 +438,8 @@ class Metric(Base, BaseModel):
     event_value_path = Column(String(100))
     lower_is_better = Column(Boolean, default=False)
     # How many hours after a user's assignment the metric counts that user's
-    # events (#1934); NULL counts every event. Nothing reads or writes it yet.
+    # events (#1934); NULL counts every event. The results read it
+    # (event_matching.windowed_users); no request can set it yet.
     conversion_window_hours = Column(Integer, nullable=True)
 
     # Relationships

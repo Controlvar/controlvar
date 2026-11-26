@@ -5,31 +5,37 @@ document = "docs/feature-flags/rollouts.md"
 
 [[unit]]
 text = "Gradual Rollouts"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "A gradual rollout raises a feature flag's rollout percentage over time, in controlled stages."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/core/test_rollout_scheduler.py::TestRolloutScheduler::test_activate_stage",
+    "test:backend/tests/unit/core/test_rollout_scheduler.py::TestRolloutScheduler::test_scheduler_complete_stage_and_activate_next",
+]
 
 [[unit]]
 text = "Instead of flipping a flag from 0% to 100% in one step, you roll out to 10%, watch for problems, expand to 50%, confirm everything is healthy, then go to 100%."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "What a Rollout Schedule Is"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "A rollout schedule is a plan attached to a feature flag."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_rollout_schedules_api.py::TestCreateRolloutSchedule::test_created_schedule_feature_flag_id_matches"]
 
 [[unit]]
 text = "It defines:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "a sequence of stages, each with a target rollout percentage;"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestCreateRolloutSchedule::test_created_schedule_stores_stages_and_owner",
+    "docex:docs/feature-flags/rollouts.md#\"name\":\"Initial Canary\",\"target_percentage\":10,\"status\":\"in_progress\"",
+]
 
 [[unit]]
 text = "a trigger type for each stage: time-based (the scheduler starts it at its start_date, once the stages before it are complete) or manual (it starts only when you advance it);"
@@ -263,19 +269,19 @@ by = [
 
 [[unit]]
 text = "Creating a Rollout Schedule via API"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Run these in one terminal, in order, against the stack from the Quick Start."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Each step uses the shell variables set by the ones before it."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "URLs."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The collection URL ends with a slash (/api/v1/rollout-schedules/)."
@@ -293,7 +299,7 @@ by = [
 
 [[unit]]
 text = "Step 1: Log in"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Changing a flag's rollout takes a user who may change feature flags, such as one with the ADMIN or DEVELOPER role:"
@@ -304,19 +310,22 @@ by = [
 
 [[unit]]
 text = "It prints \"ADMIN\"."
-by = ["exempt:baseline"]
+by = ["docex:docs/feature-flags/rollouts.md#\"ADMIN\""]
 
 [[unit]]
 text = "Step 2: Create the flag"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "A schedule belongs to a flag."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_rollout_schedules_api.py::TestCreateRolloutSchedule::test_created_schedule_feature_flag_id_matches"]
 
 [[unit]]
 text = "This creates one, switched on at 0%, and saves its id in $FLAG_ID (see Creating Feature Flags for the details):"
-by = ["exempt:baseline"]
+by = [
+    "docex:docs/feature-flags/rollouts.md#\"status\": \"active\"",
+    "docex:docs/feature-flags/rollouts.md#\"rollout_percentage\": 0",
+]
 
 [[unit]]
 text = "It prints \"status\": \"active\" and \"rollout_percentage\": 0."
@@ -324,15 +333,18 @@ by = ["docex:docs/feature-flags/rollouts.md#\"status\": \"active\""]
 
 [[unit]]
 text = "Step 3: Create the rollout schedule"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "This schedule has three stages:"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "Initial Canary, 10%, manual: you start it when you're ready."
-by = ["exempt:baseline"]
+by = [
+    "docex:docs/feature-flags/rollouts.md#\"trigger_type\":\"manual\",\"status\":\"pending\"",
+    "docex:docs/feature-flags/rollouts.md#\"name\":\"Initial Canary\",\"target_percentage\":10,\"status\":\"in_progress\"",
+]
 
 [[unit]]
 text = "Expanded Rollout, 50%, time-based, with a start_date a week from now."
@@ -364,15 +376,15 @@ by = [
 
 [[unit]]
 text = "The first two lines work them out from today with jq, so the example always uses dates in the future."
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "In your own schedule you can write them out (2027-01-08T00:00:00Z)."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "The command saves the schedule's id in $SCHEDULE_ID, and the first stage's in $CANARY_ID:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The API answers 201 Created."
@@ -439,11 +451,14 @@ by = [
 
 [[unit]]
 text = "Step 4: Activate the schedule"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "It prints \"active\"."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestRolloutScheduleLifecycle::test_activate_draft_schedule",
+    "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestRolloutScheduleLifecycle::test_activate_paused_schedule",
+]
 count = 2
 
 [[unit]]
@@ -520,11 +535,11 @@ by = [
 
 [[unit]]
 text = "Rollout Stages"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Target Percentage"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Each stage has a target_percentage: the rollout percentage the flag is set to when that stage starts."
@@ -558,19 +573,19 @@ by = [
 
 [[unit]]
 text = "Valid: 10 → 50 → 100."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_rollout_stage_targets_api.py::test_create_accepts_rising_targets_listed_in_any_order"]
 
 [[unit]]
 text = "Invalid: 10 → 50 → 25."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_rollout_stage_targets_api.py::test_create_refuses_targets_that_decrease_in_stage_order_whatever_the_list_order"]
 
 [[unit]]
 text = "Trigger Types"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Trigger Type | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "time_based | Before the schedule's end_date, the stage starts by itself once its start_date has passed and every stage before it is complete; with no start_date, on the scheduler's first pass after that. The scheduler completes it no sooner than 24 hours after it starts, or the hours its trigger_configuration gives as duration."
@@ -632,7 +647,7 @@ by = ["test:backend/tests/unit/core/test_rollout_stage_order.py::test_advancing_
 
 [[unit]]
 text = "Stage Lifecycle"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "When a stage starts, it becomes in_progress and the flag's rollout percentage is set to the stage's target."
@@ -676,11 +691,11 @@ by = [
 
 [[unit]]
 text = "Time-Based Triggers"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "For time_based stages, set a start_date in UTC, in ISO 8601 form:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The scheduler checks every 15 minutes, so a stage set for 09:00 UTC may not start until 09:15."
@@ -688,7 +703,7 @@ by = ["test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::tes
 
 [[unit]]
 text = "Plan your schedule with this buffer in mind."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "A start_date with a zone, Z or an offset such as -08:00, is stored as that moment in UTC; one with no zone is taken as UTC."
@@ -752,15 +767,15 @@ by = ["test:backend/tests/integration/api/test_rollout_stage_started_at.py::test
 
 [[unit]]
 text = "Manual Advancement"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Advance a manual stage to start it."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_rollout_schedules_api.py::TestRolloutStages::test_advance_manual_stage_on_active_schedule"]
 
 [[unit]]
 text = "This starts the canary:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The stage is in_progress, and the flag is now at 10%."
@@ -808,15 +823,15 @@ by = [
 
 [[unit]]
 text = "Manual stages are recommended for the final rollout to 100%: they serve as a human approval gate before full deployment."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Pausing a Schedule"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "If you observe problems during a rollout, pause the schedule to stop the automatic stages:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints \"paused\"."
@@ -852,11 +867,11 @@ by = ["test:backend/tests/integration/api/test_rollout_one_active_schedule_api.p
 
 [[unit]]
 text = "Monitoring Progress"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "View Schedule Status"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "In the dashboard, the flag's page shows the schedule under Rollout schedule: its status, its name, and each stage with its trigger, target percentage and status."
@@ -872,7 +887,7 @@ by = ["journey:feature-flag-rollout#flag-page"]
 
 [[unit]]
 text = "To list every schedule for a flag, filter the collection by feature_flag_id:"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_rollout_schedules_api.py::TestListRolloutSchedules::test_filter_by_feature_flag_id"]
 
 [[unit]]
 text = "It prints 1."
@@ -890,11 +905,11 @@ by = [
 
 [[unit]]
 text = "Cancelling a Schedule"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "To stop a rollout entirely:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints \"cancelled\"."
@@ -930,11 +945,14 @@ by = [
 
 [[unit]]
 text = "Common Gotchas"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Rollout percentages must not decrease across stages."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestCreateScheduleValidation::test_create_schedule_with_decreasing_percentages_fails",
+    "test:backend/tests/integration/api/test_rollout_stage_targets_api.py::test_create_refuses_targets_that_decrease_in_stage_order_whatever_the_list_order",
+]
 
 [[unit]]
 text = "You cannot delete stages from an active schedule: cancel the schedule first."
@@ -950,7 +968,7 @@ by = [
 
 [[unit]]
 text = "Time-based start_date values are in UTC."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_rollout_stage_dates_utc.py::test_a_stage_start_date_is_stored_and_served_in_utc"]
 
 [[unit]]
 text = "The dashboard's picker takes your time zone and sends UTC."

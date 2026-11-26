@@ -34,18 +34,32 @@ a user assigned to a variant who sent one or more matching conversion events
 counts once (#233).  ``count_converting_users`` is that one definition, and
 every analysis path that reports ``conversions`` next to a ``sample_size`` of
 assigned users must use it, so the numerator can never exceed the denominator.
+
+**A metric's conversion window** (#1934, ``Metric.conversion_window_hours``):
+with one, an event counts only when it happened within that many hours of the
+user's assignment, ``floor_to_second(a) <= t < a + hours``, where ``a`` is the
+user's ``assignments.created_at`` and ``t`` the event's own ``created_at`` read
+as a UTC instant (``windowed_users``).  The start is floored to the second
+because some SDKs send whole seconds; an event dated before the assignment does
+not count.  The rule is applied in Python on instants, never by comparing the
+stored text in SQL.  Without a window every reader runs the statements it ran
+before.
 """
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
 
-from sqlalchemy import String, and_, any_, bindparam, func
+from sqlalchemy import String, and_, any_, bindparam, cast, func
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Session
 
 from backend.app.models.assignment import Assignment
 from backend.app.models.event import Event, EventType
+from backend.app.models.experiment import MAX_CONVERSION_WINDOW_HOURS
+
+logger = logging.getLogger(__name__)
 
 #: ``event_type`` values that record that a user *saw* a variant, never a conversion.
 EXPOSURE_EVENT_TYPES = (EventType.EXPOSURE.value, "experiment_exposure")
@@ -63,9 +77,9 @@ class MetricEvents:
     keeps two metrics on one event apart once they can differ.
     ``metric_events`` builds it from a ``Metric`` row.
 
-    ``window_hours`` is always ``None``: metrics have no conversion window yet
-    (#1934).  A window is refused here, so no reader can count without one it
-    was given.
+    ``window_hours`` is the metric's ``conversion_window_hours`` (#1934): a
+    whole number of hours from 1 to ``MAX_CONVERSION_WINDOW_HOURS``, or
+    ``None`` for no window.  Anything else is refused here.
     """
 
     event_name: str
@@ -77,9 +91,13 @@ class MetricEvents:
                 "MetricEvents needs a non-empty event name; "
                 "None stands for the legacy events"
             )
-        if self.window_hours is not None:
-            raise NotImplementedError(
-                "conversion windows are not read yet: window_hours must be None"
+        hours = self.window_hours
+        if hours is not None and (
+            type(hours) is not int or not 1 <= hours <= MAX_CONVERSION_WINDOW_HOURS
+        ):
+            raise ValueError(
+                "window_hours must be None or a whole number of hours from 1 to "
+                f"{MAX_CONVERSION_WINDOW_HOURS}"
             )
 
 
@@ -90,12 +108,18 @@ def metric_events(metric: Any) -> Optional[MetricEvents]:
     ``None`` (also for ``metric=None``) is the legacy ``event_type =
     "conversion"`` convention, which ``conversion_event_filter(None)`` and
     ``conversion_event_filter("")`` both select: an experiment's results read
-    it for a metric with an empty event name, and for no metric at all.
+    it for a metric with an empty event name, and for no metric at all.  The
+    legacy events have no window.
     """
     name = getattr(metric, "event_name", None) if metric is not None else None
     if not name:
         return None
-    return MetricEvents(name, None)
+    return MetricEvents(name, getattr(metric, "conversion_window_hours", None))
+
+
+def windowed(events: Any) -> bool:
+    """Whether ``events`` is a ``MetricEvents`` with a conversion window."""
+    return isinstance(events, MetricEvents) and events.window_hours is not None
 
 
 def metric_event_name(events: Optional[MetricEvents]) -> Optional[str]:
@@ -196,6 +220,187 @@ def _assigned_pairs(
     return pairs
 
 
+#: How many event rows a windowed read fetches from the database at a time.
+WINDOW_EVENT_BATCH = 10_000
+
+
+@dataclass(slots=True)
+class WindowedUser:
+    """One assigned user's events of a metric inside its conversion window.
+
+    ``first`` is the stored ``created_at`` of the earliest of them (by
+    instant), ``events`` how many there are, ``value`` the total of their
+    values with ``abs(value) <= VALUE_BOUND`` and ``valued`` whether any value
+    counted: what ``count_converting_users``, ``first_conversion_times``,
+    ``AnalysisService.event_counts`` and ``AnalysisService.value_totals`` read
+    without a window. One per converter is held, so it has no ``__dict__``.
+    """
+
+    first: Any
+    first_at: datetime
+    events: int = 0
+    value: float = 0.0
+    valued: bool = False
+
+
+def _assignment_starts(
+    db: Session, experiment_id: Any, user_ids: List[str]
+) -> Dict[str, Tuple[str, str, datetime]]:
+    """``user_id -> (user_id, variant_id, created_at)`` of these users'
+    assignments in the experiment, by the unique ``(experiment_id, user_id)``
+    index, a bounded number of ids at a time (as ``_assigned_pairs``).
+
+    The value repeats the key's own string, so a key built from it shares the
+    string, and every value of one variant shares one ``variant_id`` string:
+    what is held is one entry per sender. The variant id is read as text, as
+    the events' tags are in ``windowed_users``."""
+    starts: Dict[str, Tuple[str, str, datetime]] = {}
+    variants: Dict[str, str] = {}
+    for i in range(0, len(user_ids), ASSIGNMENT_LOOKUP_CHUNK):
+        chunk = user_ids[i : i + ASSIGNMENT_LOOKUP_CHUNK]
+        rows = (
+            db.query(
+                Assignment.user_id,
+                cast(Assignment.variant_id, String),
+                Assignment.created_at,
+            )
+            .filter(
+                Assignment.experiment_id == experiment_id,
+                Assignment.user_id
+                == any_(bindparam("user_ids", chunk, type_=ARRAY(String))),
+            )
+            .all()
+        )
+        for user_id, variant_id, created_at in rows:
+            variant = variants.setdefault(variant_id, variant_id)
+            user = str(user_id)
+            starts[user] = (user, variant, created_at)
+    return starts
+
+
+#: The lengths of the two shapes ``normalize_event_timestamp`` writes:
+#: ``YYYY-MM-DDTHH:MM:SS+00:00`` and ``YYYY-MM-DDTHH:MM:SS.ffffff+00:00``.
+_CANONICAL_LENGTHS = (25, 32)
+
+
+def _event_instant(created_at: Any) -> datetime:
+    """``_naive_utc``, with the two shapes the server stores read without a
+    time zone object: the same instant, at a fraction of the cost, for the one
+    value per event a windowed read parses. Anything else, and anything the
+    short way does not read as a naive time, goes the long way."""
+    if (
+        type(created_at) is str
+        and len(created_at) in _CANONICAL_LENGTHS
+        and created_at[10] == "T"
+        and created_at.endswith("+00:00")
+    ):
+        try:
+            moment = datetime.fromisoformat(created_at[:-6])
+        except ValueError:
+            moment = None
+        if moment is not None and moment.tzinfo is None:
+            return moment
+    return _naive_utc(created_at)
+
+
+def windowed_users(
+    db: Session,
+    experiment_id: Any,
+    variant_id: Any,
+    events: MetricEvents,
+) -> Dict[Tuple[str, str], WindowedUser]:
+    """
+    ``(variant_id, user_id) -> WindowedUser`` for the users assigned to a
+    variant who sent at least one of the metric's events, tagged with that
+    variant, inside their conversion window.
+
+    ``variant_id`` None reads every variant of the experiment.  An event
+    counts when it matches ``metric_event_filter(events)``, is tagged with the
+    variant its sender is assigned to, and happened at ``t`` with
+    ``floor_to_second(a) <= t < a + window_hours``: ``a`` is the sender's
+    ``assignments.created_at`` (naive UTC, written by the server) and ``t``
+    the event's stored ``created_at`` parsed to a UTC instant here, in Python
+    (``_naive_utc``), never compared as text in SQL.  An event whose time
+    cannot be read is not counted; how many there were is logged, once.
+
+    The metric's events are read from ``events`` alone (no SQL join, as
+    ``_assigned_pairs`` explains): first the ids of their senders, then the
+    assignment rows of those senders only, by the unique index, in chunks,
+    then the events themselves, ``WINDOW_EVENT_BATCH`` rows at a time.  So
+    what is held grows with the senders, not with the assigned users.
+    """
+    if not windowed(events):
+        raise TypeError("windowed_users reads a MetricEvents with a window")
+    from backend.app.schemas.tracking import VALUE_BOUND
+
+    criteria = [Event.experiment_id == experiment_id, metric_event_filter(events)]
+    if variant_id is not None:
+        criteria.append(Event.variant_id == variant_id)
+    senders = [
+        str(user_id)
+        for (user_id,) in db.query(Event.user_id).filter(*criteria).distinct()
+    ]
+    starts = _assignment_starts(db, experiment_id, senders)
+    del senders
+    window = timedelta(hours=events.window_hours)
+    found: Dict[Tuple[str, str], WindowedUser] = {}
+    unreadable = 0
+    # The tag as text: a uuid object per event row costs more than the rest of
+    # the loop.
+    rows = (
+        db.query(
+            Event.user_id, cast(Event.variant_id, String), Event.created_at, Event.value
+        )
+        .filter(*criteria)
+        .execution_options(yield_per=WINDOW_EVENT_BATCH)
+    )
+    for user_id, tagged, created_at, value in rows:
+        start = starts.get(str(user_id))
+        if start is None:
+            continue
+        user, assigned_variant, assigned_at = start
+        if tagged != assigned_variant:
+            continue
+        try:
+            happened = _event_instant(created_at)
+        except (TypeError, ValueError):
+            unreadable += 1
+            continue
+        if not assigned_at.replace(microsecond=0) <= happened < assigned_at + window:
+            continue
+        key = (assigned_variant, user)
+        row = found.get(key)
+        if row is None:
+            row = found[key] = WindowedUser(first=created_at, first_at=happened)
+        elif happened < row.first_at:
+            row.first, row.first_at = created_at, happened
+        row.events += 1
+        if value is not None and abs(value) <= VALUE_BOUND:
+            row.value += value
+            row.valued = True
+    if unreadable:
+        logger.warning(
+            "conversion window: %d event(s) of experiment %s not counted: their "
+            "created_at could not be read",
+            unreadable,
+            experiment_id,
+        )
+    return found
+
+
+def _windowed_converters(
+    db: Session, experiment_id: Any, variant_id: Any, events: MetricEvents
+) -> List[Tuple[str, Any]]:
+    """``(user_id, first matching created_at in the window)`` of the
+    converters of ``variant_id`` who are assigned to it."""
+    return [
+        (user_id, row.first)
+        for (_, user_id), row in windowed_users(
+            db, experiment_id, variant_id, events
+        ).items()
+    ]
+
+
 def _converters(
     db: Session, experiment_id: Any, variant_id: Any, criterion: Any
 ) -> List[Tuple[str, Any]]:
@@ -228,7 +433,10 @@ def _assigned_matching(
 def _assigned_converters(
     db: Session, experiment_id: Any, variant_id: Any, events: Optional[MetricEvents]
 ) -> List[Tuple[str, Any]]:
-    """The converters of ``variant_id`` who are assigned to that variant."""
+    """The converters of ``variant_id`` who are assigned to that variant; with
+    a conversion window, those with an event inside it (``windowed_users``)."""
+    if windowed(events):
+        return _windowed_converters(db, experiment_id, variant_id, events)
     return _assigned_matching(
         db, experiment_id, variant_id, metric_event_filter(events)
     )
@@ -273,7 +481,15 @@ def count_converting_users_any(
     experiment_id: Any,
     events: Iterable[Optional[MetricEvents]],
 ) -> int:
-    """Users in the experiment with a conversion on *any* of the given metrics."""
+    """Users in the experiment with a conversion on *any* of the given metrics.
+
+    With a window on any of them, the users of ``converter_pairs_any``.
+    """
+    events = list(events)
+    if any(windowed(e) for e in events):
+        return len(
+            {user_id for _, user_id in converter_pairs_any(db, experiment_id, events)}
+        )
     rows = (
         db.query(Event.variant_id, Event.user_id)
         .filter(
@@ -286,6 +502,48 @@ def count_converting_users_any(
     events = {(str(variant_id), str(user_id)) for variant_id, user_id in rows}
     pairs = _assigned_pairs(db, experiment_id, {user_id for _, user_id in events})
     return len({user_id for variant_id, user_id in events & pairs})
+
+
+def converter_pairs_any(
+    db: Session,
+    experiment_id: Any,
+    events: Iterable[Optional[MetricEvents]],
+    assigned: bool = True,
+) -> Set[Tuple[str, str]]:
+    """
+    ``(variant_id, user_id)`` of the users with a conversion on any of the
+    given metrics, when at least one of them has a conversion window.
+
+    The union of each windowed metric's ``windowed_users`` and, for the named
+    metrics without a window, the users ``any_metric_event_filter`` finds,
+    tagged with a variant (restricted to the users assigned to it unless
+    ``assigned`` is False).  The legacy events are never read in its place:
+    with every metric windowed, the total is the union of the windowed
+    converters, never ``any_conversion_event_filter([])``'s legacy events.
+    """
+    events = list(events)
+    pairs: Set[Tuple[str, str]] = set()
+    for metric in events:
+        if windowed(metric):
+            pairs.update(windowed_users(db, experiment_id, None, metric))
+    plain = [e for e in events if e is not None and not windowed(e)]
+    if plain:
+        rows = (
+            db.query(Event.variant_id, Event.user_id)
+            .filter(
+                Event.experiment_id == experiment_id,
+                any_metric_event_filter(plain),
+            )
+            .distinct()
+            .all()
+        )
+        tagged = {(str(variant_id), str(user_id)) for variant_id, user_id in rows}
+        if assigned:
+            tagged &= _assigned_pairs(
+                db, experiment_id, {user_id for _, user_id in tagged}
+            )
+        pairs |= tagged
+    return pairs
 
 
 def first_conversion_times(

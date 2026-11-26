@@ -45,7 +45,8 @@ def main() -> None:
     ctx = EvaluationContext(targeting_key="user-12345", attributes={"country": "US", "plan": "pro"})
 
     # 4. Evaluate flags — same API regardless of provider. A string, number or json
-    #    flag answers its on or off value; a call of another type answers your default
+    #    flag answers its on value (or, in its place, the value its split or a matching
+    #    rule gives the user) or its off value; a call of another type answers your default
     #    with TYPE_MISMATCH.
     print("dark-mode enabled:", client.get_boolean_value("dark-mode", False, ctx))
     print("checkout-button-label:", client.get_string_value("checkout-button-label", "Buy now", ctx))

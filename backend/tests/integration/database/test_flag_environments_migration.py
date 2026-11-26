@@ -2284,11 +2284,18 @@ _VECTORS = textwrap.dedent(
             headers=headers,
         )
         body = response.json()
+        detail = body.get("detail") if response.status_code == 422 else None
         answers.append(
             {
                 "status": response.status_code,
                 "answer": {k: body.get(k) for k in ("enabled", "reason")},
                 "value": json.dumps(body.get("value"), sort_keys=True),
+                # A 422's error types, in order; None for any other answer.
+                "refused": (
+                    [error["type"] for error in detail]
+                    if isinstance(detail, list)
+                    else None
+                ),
             }
         )
     ruleset = client.get("/api/v1/sdk/ruleset", headers=headers)
@@ -2428,7 +2435,8 @@ def test_the_upgrade_changes_no_answer_whatever_the_deployments_environment(
     the rows it stored, which the upgrade leaves as they were.
 
     2231 of the 2242 cases are sent; the other 11 hold a lone surrogate, which
-    no client can put in a URL."""
+    no client can put in a URL. The 6 with a 300-character user_id answer 422
+    (#2176), and the others the vectors' answers."""
     vectors = _vectors_0_48_0_stored()
     cases = [
         case
@@ -2481,8 +2489,16 @@ def test_the_upgrade_changes_no_answer_whatever_the_deployments_environment(
             )
     for deployment in ("development", "production"):
         after = _vector_answers(tree, scratch_schema, tmp_path, key, cases, deployment)
-        changed = []
+        changed, refused = [], 0
         for case, got in zip(cases, after["answers"], strict=True):
+            if len(case["user_id"]) > 255:
+                # #2176: refused before anything is evaluated.
+                assert (got["status"], got["refused"]) == (
+                    422,
+                    ["string_too_long"],
+                ), (case["id"], got)
+                refused += 1
+                continue
             assert got["status"] == 200, (case["id"], got)
             if got["answer"] != case["expected"] or (
                 "expected_value" in case
@@ -2497,6 +2513,7 @@ def test_the_upgrade_changes_no_answer_whatever_the_deployments_environment(
             f"{list(changed[0][1]['answer'].values())} (ENVIRONMENT={deployment})"
         )
         assert len(after["answers"]) + 11 == 2242
+        assert refused == 6
         assert after["ruleset"] == before, (
             f"the ruleset changed on upgrade (ENVIRONMENT={deployment})"
         )

@@ -1805,8 +1805,12 @@ by = [
 ]
 
 [[unit]]
-text = "Nothing reads or sets a window yet."
-by = ["test:backend/tests/unit/services/test_metric_window_has_no_reader.py::test_only_the_model_and_the_revision_name_the_column"]
+text = "Results count a metric's events only within its window; nothing sets a window yet."
+by = [
+    "test:backend/tests/integration/api/test_metric_window_results.py::test_every_view_counts_the_window",
+    "test:backend/tests/unit/services/test_metric_window_has_no_writer.py::test_nothing_assigns_the_column",
+    "test:backend/tests/unit/services/test_metric_window_has_no_writer.py::test_no_metric_request_schema_takes_a_window",
+]
 
 [[unit]]
 text = "The previous release, 0.48.0, runs against this schema unchanged: a metric it creates has no window, and a window stored beside it stays."

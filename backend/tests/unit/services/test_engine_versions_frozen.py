@@ -137,6 +137,9 @@ FROZEN_DIGESTS: Dict[str, str] = {
     # Welch's t; per_user_mean_metric_result and its cases are pinned for the
     # first time, and the revenue and value-metric results move.
     "1.13.0": "f70d95a6a5b050620e60eab6b30e9238f07be49b754679ae60cf73f6bb14b47d",
+    # 1.14.0 (#1934) changes only a metric with a conversion window, which no
+    # pin table runs: its entries are 1.13.0's, so its digest is too.
+    "1.14.0": "f70d95a6a5b050620e60eab6b30e9238f07be49b754679ae60cf73f6bb14b47d",
 }
 
 
@@ -158,6 +161,7 @@ FROZEN_VERSIONS: Tuple[str, ...] = (
     "1.11.0",
     "1.12.0",
     "1.13.0",
+    "1.14.0",
 )
 
 

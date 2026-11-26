@@ -7,12 +7,26 @@ mutual exclusion groups that prevent users from being in conflicting experiments
 
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import Any, List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
 from backend.app.schemas.finite_number import FiniteFloat
+from backend.app.schemas.storable_text import (
+    contains_unstorable_text,
+    unstorable_text_message,
+)
+
+
+def _refuse_unstorable_text(value: Any, info: ValidationInfo) -> Any:
+    """Refuse NUL and unpaired surrogates in a group's name or description:
+    the database cannot store them, and a NUL answered 500 (#2181). A
+    ``mode="before"`` validator, so the field's own checks do not read the
+    value first; the message names the field, never the value."""
+    if contains_unstorable_text(value):
+        raise ValueError(unstorable_text_message(info.field_name))
+    return value
 
 
 class MutualExclusionGroupStatus(str, Enum):
@@ -42,6 +56,12 @@ class MutualExclusionGroupCreate(BaseModel):
         le=1.0,
         description="Fraction of traffic eligible for experiments in this group (0.0-1.0).",
     )
+
+    @field_validator("name", "description", mode="before")
+    @classmethod
+    def refuse_unstorable_text(cls, value: Any, info: ValidationInfo) -> Any:
+        """Text the database cannot store answers 422 at the field."""
+        return _refuse_unstorable_text(value, info)
 
     @field_validator("traffic_allocation", mode="after")
     @classmethod
@@ -78,6 +98,12 @@ class MutualExclusionGroupUpdate(BaseModel):
         None,
         description="Updated status.",
     )
+
+    @field_validator("name", "description", mode="before")
+    @classmethod
+    def refuse_unstorable_text(cls, value: Any, info: ValidationInfo) -> Any:
+        """As on create."""
+        return _refuse_unstorable_text(value, info)
 
     @field_validator("traffic_allocation", mode="after")
     @classmethod

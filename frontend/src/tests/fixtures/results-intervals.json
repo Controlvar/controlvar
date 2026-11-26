@@ -12,6 +12,7 @@
         "is_primary": true,
         "lower_is_better": false,
         "analysis": "proportion",
+        "conversion_window_hours": null,
         "variants": [
           {
             "variant_id": "8473a804-8973-5d54-abd9-c8285bc8e940",
@@ -37,7 +38,8 @@
             "absolute_difference_ci": null,
             "relative_improvement_pct_ci": null,
             "incremental_impact": null,
-            "incremental_impact_ci": null
+            "incremental_impact_ci": null,
+            "open_window_users": null
           },
           {
             "variant_id": "09315ec5-0177-5fa8-9483-75544985b34a",
@@ -72,7 +74,8 @@
             "incremental_impact_ci": [
               15.631011021934686,
               46.31189099853894
-            ]
+            ],
+            "open_window_users": null
           }
         ],
         "has_significant_result": true,
@@ -90,6 +93,7 @@
         "is_primary": true,
         "lower_is_better": false,
         "analysis": "proportion",
+        "conversion_window_hours": null,
         "variants": [
           {
             "variant_id": "5e739291-a779-5cfe-a9b4-9f82d3033ba7",
@@ -115,7 +119,8 @@
             "absolute_difference_ci": null,
             "relative_improvement_pct_ci": null,
             "incremental_impact": null,
-            "incremental_impact_ci": null
+            "incremental_impact_ci": null,
+            "open_window_users": null
           },
           {
             "variant_id": "bf64247c-4ca5-5279-8f9a-eb08cd6fde62",
@@ -150,7 +155,8 @@
             "incremental_impact_ci": [
               459.39693561385695,
               540.5829957474068
-            ]
+            ],
+            "open_window_users": null
           }
         ],
         "has_significant_result": true,
@@ -168,6 +174,7 @@
         "is_primary": true,
         "lower_is_better": false,
         "analysis": "mean",
+        "conversion_window_hours": null,
         "variants": [
           {
             "variant_id": "fbcc516d-f417-5e0d-a335-c9bc6ecb9df5",
@@ -193,7 +200,8 @@
             "absolute_difference_ci": null,
             "relative_improvement_pct_ci": null,
             "incremental_impact": null,
-            "incremental_impact_ci": null
+            "incremental_impact_ci": null,
+            "open_window_users": null
           },
           {
             "variant_id": "59bce2b4-e646-5c25-baae-de3123819242",
@@ -228,7 +236,8 @@
             "incremental_impact_ci": [
               -571.8207441841987,
               -428.27965581580133
-            ]
+            ],
+            "open_window_users": null
           }
         ],
         "has_significant_result": true,
@@ -246,6 +255,7 @@
         "is_primary": true,
         "lower_is_better": false,
         "analysis": "mean",
+        "conversion_window_hours": null,
         "variants": [
           {
             "variant_id": "b9dca02d-2bf1-5a2f-a411-a5a2547de0e0",
@@ -271,7 +281,8 @@
             "absolute_difference_ci": null,
             "relative_improvement_pct_ci": null,
             "incremental_impact": null,
-            "incremental_impact_ci": null
+            "incremental_impact_ci": null,
+            "open_window_users": null
           },
           {
             "variant_id": "26007630-568d-55ec-9a48-dab8c00dea18",
@@ -303,7 +314,8 @@
             "incremental_impact_ci": [
               -121.3296716481465,
               161.32967164814653
-            ]
+            ],
+            "open_window_users": null
           }
         ],
         "has_significant_result": false,
@@ -321,6 +333,7 @@
         "is_primary": true,
         "lower_is_better": false,
         "analysis": "mean",
+        "conversion_window_hours": null,
         "variants": [
           {
             "variant_id": "cfe51c44-11d5-54b9-a804-6f6298631e86",
@@ -346,7 +359,8 @@
             "absolute_difference_ci": null,
             "relative_improvement_pct_ci": null,
             "incremental_impact": null,
-            "incremental_impact_ci": null
+            "incremental_impact_ci": null,
+            "open_window_users": null
           },
           {
             "variant_id": "c89a47e4-061d-5ccf-8f23-02bca02d7612",
@@ -378,7 +392,8 @@
             "incremental_impact_ci": [
               -169.30532841982966,
               209.30532841982966
-            ]
+            ],
+            "open_window_users": null
           }
         ],
         "has_significant_result": false,
@@ -396,6 +411,7 @@
         "is_primary": true,
         "lower_is_better": false,
         "analysis": "proportion",
+        "conversion_window_hours": null,
         "variants": [
           {
             "variant_id": "41bdfd6a-0a1f-5e3b-ac03-05e734e86729",
@@ -421,7 +437,8 @@
             "absolute_difference_ci": null,
             "relative_improvement_pct_ci": null,
             "incremental_impact": null,
-            "incremental_impact_ci": null
+            "incremental_impact_ci": null,
+            "open_window_users": null
           },
           {
             "variant_id": "803f1e1b-658f-57ef-bcff-5b8c88b600f4",
@@ -453,7 +470,8 @@
             "incremental_impact_ci": [
               0.27166009983837847,
               11.435668081328396
-            ]
+            ],
+            "open_window_users": null
           }
         ],
         "has_significant_result": false,
@@ -471,6 +489,7 @@
         "is_primary": true,
         "lower_is_better": false,
         "analysis": "proportion",
+        "conversion_window_hours": null,
         "variants": [
           {
             "variant_id": "9b12656f-205d-5b6a-9581-3653790c9f00",
@@ -496,7 +515,8 @@
             "absolute_difference_ci": null,
             "relative_improvement_pct_ci": null,
             "incremental_impact": null,
-            "incremental_impact_ci": null
+            "incremental_impact_ci": null,
+            "open_window_users": null
           },
           {
             "variant_id": "22b8f020-f674-5932-8f08-3904dcd2e9dd",
@@ -531,7 +551,8 @@
             "incremental_impact_ci": [
               -16.518552966112708,
               -4.352506909982861
-            ]
+            ],
+            "open_window_users": null
           }
         ],
         "has_significant_result": true,
@@ -549,6 +570,7 @@
         "is_primary": true,
         "lower_is_better": false,
         "analysis": "proportion",
+        "conversion_window_hours": null,
         "variants": [
           {
             "variant_id": "55805ad5-bc62-5c31-8072-fe52a78607bb",
@@ -574,7 +596,8 @@
             "absolute_difference_ci": null,
             "relative_improvement_pct_ci": null,
             "incremental_impact": null,
-            "incremental_impact_ci": null
+            "incremental_impact_ci": null,
+            "open_window_users": null
           },
           {
             "variant_id": "fd01b5d4-4601-564b-8679-e8c8c1503978",
@@ -609,7 +632,8 @@
             "incremental_impact_ci": [
               -2.077470703628559,
               10.932341680050566
-            ]
+            ],
+            "open_window_users": null
           }
         ],
         "has_significant_result": false,
@@ -627,6 +651,7 @@
         "is_primary": true,
         "lower_is_better": false,
         "analysis": "proportion",
+        "conversion_window_hours": null,
         "variants": [
           {
             "variant_id": "0fe1ba4c-1dba-5d02-891c-3f1c48630689",
@@ -652,7 +677,8 @@
             "absolute_difference_ci": null,
             "relative_improvement_pct_ci": null,
             "incremental_impact": null,
-            "incremental_impact_ci": null
+            "incremental_impact_ci": null,
+            "open_window_users": null
           },
           {
             "variant_id": "6a6eb4d4-2eb1-5dd9-8444-45609df37801",
@@ -678,7 +704,8 @@
             "absolute_difference_ci": null,
             "relative_improvement_pct_ci": null,
             "incremental_impact": null,
-            "incremental_impact_ci": null
+            "incremental_impact_ci": null,
+            "open_window_users": null
           }
         ],
         "has_significant_result": false,
@@ -696,6 +723,7 @@
         "is_primary": true,
         "lower_is_better": false,
         "analysis": "mean",
+        "conversion_window_hours": null,
         "variants": [
           {
             "variant_id": "742e2f69-f989-5ad4-8321-edbdb3a95fe6",
@@ -721,7 +749,8 @@
             "absolute_difference_ci": null,
             "relative_improvement_pct_ci": null,
             "incremental_impact": null,
-            "incremental_impact_ci": null
+            "incremental_impact_ci": null,
+            "open_window_users": null
           },
           {
             "variant_id": "e6b22e7a-794a-5265-bb7a-e0b7151c24d8",
@@ -747,7 +776,8 @@
             "absolute_difference_ci": null,
             "relative_improvement_pct_ci": null,
             "incremental_impact": null,
-            "incremental_impact_ci": null
+            "incremental_impact_ci": null,
+            "open_window_users": null
           }
         ],
         "has_significant_result": false,
@@ -765,6 +795,7 @@
         "is_primary": true,
         "lower_is_better": false,
         "analysis": "proportion",
+        "conversion_window_hours": null,
         "variants": [
           {
             "variant_id": "8daa503f-c5e9-50d3-80dc-16696feb1a65",
@@ -790,7 +821,8 @@
             "absolute_difference_ci": null,
             "relative_improvement_pct_ci": null,
             "incremental_impact": null,
-            "incremental_impact_ci": null
+            "incremental_impact_ci": null,
+            "open_window_users": null
           },
           {
             "variant_id": "b4ef2cad-8f2f-5703-8fbd-894118bc69fe",
@@ -825,7 +857,8 @@
             "incremental_impact_ci": [
               2.9528266146954736,
               59.12097674471261
-            ]
+            ],
+            "open_window_users": null
           },
           {
             "variant_id": "ce63fcac-33c0-5862-936a-4ee7930005e9",
@@ -860,7 +893,8 @@
             "incremental_impact_ci": [
               -22.64339847275565,
               30.658752534527018
-            ]
+            ],
+            "open_window_users": null
           }
         ],
         "has_significant_result": false,
@@ -878,6 +912,7 @@
         "is_primary": true,
         "lower_is_better": false,
         "analysis": "proportion",
+        "conversion_window_hours": null,
         "variants": [
           {
             "variant_id": "aecf8747-91da-5f98-9100-eae107fa8f39",
@@ -903,7 +938,8 @@
             "absolute_difference_ci": null,
             "relative_improvement_pct_ci": null,
             "incremental_impact": null,
-            "incremental_impact_ci": null
+            "incremental_impact_ci": null,
+            "open_window_users": null
           },
           {
             "variant_id": "331778bb-e8c8-5628-94f7-a64c34ec6f3f",
@@ -938,7 +974,8 @@
             "incremental_impact_ci": [
               -10.760118354691919,
               0.0015856517726182962
-            ]
+            ],
+            "open_window_users": null
           }
         ],
         "has_significant_result": true,
@@ -956,6 +993,7 @@
         "is_primary": true,
         "lower_is_better": false,
         "analysis": "proportion",
+        "conversion_window_hours": null,
         "variants": [
           {
             "variant_id": "e4896e70-0297-5716-add6-f6cf208f0ccd",
@@ -981,7 +1019,8 @@
             "absolute_difference_ci": null,
             "relative_improvement_pct_ci": null,
             "incremental_impact": null,
-            "incremental_impact_ci": null
+            "incremental_impact_ci": null,
+            "open_window_users": null
           },
           {
             "variant_id": "ad449dfc-c3de-57ed-a9a4-e3faf47ed573",
@@ -1016,7 +1055,8 @@
             "incremental_impact_ci": [
               0.1019477074572124,
               55.9687038169744
-            ]
+            ],
+            "open_window_users": null
           }
         ],
         "has_significant_result": false,
@@ -1034,6 +1074,7 @@
         "is_primary": true,
         "lower_is_better": false,
         "analysis": "proportion",
+        "conversion_window_hours": null,
         "variants": [
           {
             "variant_id": "4867b87a-60ad-5cee-8f4d-e9adc12580ff",
@@ -1059,7 +1100,8 @@
             "absolute_difference_ci": null,
             "relative_improvement_pct_ci": null,
             "incremental_impact": null,
-            "incremental_impact_ci": null
+            "incremental_impact_ci": null,
+            "open_window_users": null
           },
           {
             "variant_id": "f0263779-95c3-5b27-9667-6d9fcfa511e7",
@@ -1094,7 +1136,8 @@
             "incremental_impact_ci": [
               -0.01900312278781402,
               41.88958423130711
-            ]
+            ],
+            "open_window_users": null
           }
         ],
         "has_significant_result": true,
@@ -1112,6 +1155,7 @@
         "is_primary": true,
         "lower_is_better": false,
         "analysis": "proportion",
+        "conversion_window_hours": null,
         "variants": [
           {
             "variant_id": "bbfb411b-61fe-5d3b-b814-031784cee7c2",
@@ -1137,7 +1181,8 @@
             "absolute_difference_ci": null,
             "relative_improvement_pct_ci": null,
             "incremental_impact": null,
-            "incremental_impact_ci": null
+            "incremental_impact_ci": null,
+            "open_window_users": null
           },
           {
             "variant_id": "33342983-b645-5a84-ae91-1a749a0523e5",
@@ -1172,7 +1217,8 @@
             "incremental_impact_ci": [
               -0.2499172594046667,
               25.070657582475285
-            ]
+            ],
+            "open_window_users": null
           }
         ],
         "has_significant_result": true,
@@ -1190,6 +1236,7 @@
         "is_primary": true,
         "lower_is_better": false,
         "analysis": "proportion",
+        "conversion_window_hours": null,
         "variants": [
           {
             "variant_id": "d3c72b21-1443-5cd8-b1b5-4c42e28eb40b",
@@ -1215,7 +1262,8 @@
             "absolute_difference_ci": null,
             "relative_improvement_pct_ci": null,
             "incremental_impact": null,
-            "incremental_impact_ci": null
+            "incremental_impact_ci": null,
+            "open_window_users": null
           },
           {
             "variant_id": "9a0a4af2-f7dc-51d0-afe4-86cd2e8b8525",
@@ -1250,7 +1298,8 @@
             "incremental_impact_ci": [
               0.7803044778513485,
               42.86874229436782
-            ]
+            ],
+            "open_window_users": null
           }
         ],
         "has_significant_result": false,
@@ -1268,6 +1317,7 @@
         "is_primary": true,
         "lower_is_better": false,
         "analysis": "proportion",
+        "conversion_window_hours": null,
         "variants": [
           {
             "variant_id": "44ed5df3-5830-5fcf-8b63-97b0ffb0b630",
@@ -1293,7 +1343,8 @@
             "absolute_difference_ci": null,
             "relative_improvement_pct_ci": null,
             "incremental_impact": null,
-            "incremental_impact_ci": null
+            "incremental_impact_ci": null,
+            "open_window_users": null
           },
           {
             "variant_id": "ae9d9c0a-fa81-5f97-955a-3177f48345bb",
@@ -1328,7 +1379,8 @@
             "incremental_impact_ci": [
               2.9528266146954736,
               59.12097674471261
-            ]
+            ],
+            "open_window_users": null
           },
           {
             "variant_id": "3f043c79-433e-5b5c-956d-1b84fcfd31d0",
@@ -1363,7 +1415,8 @@
             "incremental_impact_ci": [
               -22.64339847275565,
               30.658752534527018
-            ]
+            ],
+            "open_window_users": null
           }
         ],
         "has_significant_result": true,
@@ -1381,6 +1434,7 @@
         "is_primary": true,
         "lower_is_better": false,
         "analysis": "proportion",
+        "conversion_window_hours": null,
         "variants": [
           {
             "variant_id": "0251a6dd-24c2-51f2-8f25-300611a9e396",
@@ -1406,7 +1460,8 @@
             "absolute_difference_ci": null,
             "relative_improvement_pct_ci": null,
             "incremental_impact": null,
-            "incremental_impact_ci": null
+            "incremental_impact_ci": null,
+            "open_window_users": null
           },
           {
             "variant_id": "98dabb5c-50dd-5b7d-a17b-d939de6f6b04",
@@ -1441,7 +1496,8 @@
             "incremental_impact_ci": [
               0.1019477074572124,
               55.9687038169744
-            ]
+            ],
+            "open_window_users": null
           }
         ],
         "has_significant_result": false,
@@ -1459,6 +1515,7 @@
         "is_primary": true,
         "lower_is_better": false,
         "analysis": "mean",
+        "conversion_window_hours": null,
         "variants": [
           {
             "variant_id": "db9c0cd0-5e60-5947-8e4e-4e4d5b67947a",
@@ -1484,7 +1541,8 @@
             "absolute_difference_ci": null,
             "relative_improvement_pct_ci": null,
             "incremental_impact": null,
-            "incremental_impact_ci": null
+            "incremental_impact_ci": null,
+            "open_window_users": null
           },
           {
             "variant_id": "d50c1b8e-c4c0-5792-8b74-7cbf6aa29591",
@@ -1519,7 +1577,8 @@
             "incremental_impact_ci": [
               2506.0408320721044,
               2893.959167927896
-            ]
+            ],
+            "open_window_users": null
           }
         ],
         "has_significant_result": true,
@@ -1537,6 +1596,7 @@
         "is_primary": true,
         "lower_is_better": false,
         "analysis": "mean",
+        "conversion_window_hours": null,
         "variants": [
           {
             "variant_id": "7b72a879-fad4-50d8-852e-824f8fbdaaef",
@@ -1562,7 +1622,8 @@
             "absolute_difference_ci": null,
             "relative_improvement_pct_ci": null,
             "incremental_impact": null,
-            "incremental_impact_ci": null
+            "incremental_impact_ci": null,
+            "open_window_users": null
           },
           {
             "variant_id": "df3286e7-0994-5d06-ad72-0755cba62b8b",
@@ -1597,7 +1658,8 @@
             "incremental_impact_ci": [
               4463.7343922105565,
               10736.265607789443
-            ]
+            ],
+            "open_window_users": null
           }
         ],
         "has_significant_result": true,
@@ -1615,6 +1677,7 @@
         "is_primary": true,
         "lower_is_better": false,
         "analysis": "proportion",
+        "conversion_window_hours": null,
         "variants": [
           {
             "variant_id": "c389799f-dfa7-571c-aa9e-da85f368b1ed",
@@ -1640,7 +1703,8 @@
             "absolute_difference_ci": null,
             "relative_improvement_pct_ci": null,
             "incremental_impact": null,
-            "incremental_impact_ci": null
+            "incremental_impact_ci": null,
+            "open_window_users": null
           },
           {
             "variant_id": "26cc3e51-b031-53b9-9f25-4ebf0bf9ad47",
@@ -1675,7 +1739,8 @@
             "incremental_impact_ci": [
               -8.680254477488077,
               8.680254477488077
-            ]
+            ],
+            "open_window_users": null
           }
         ],
         "has_significant_result": false,
@@ -1693,6 +1758,7 @@
         "is_primary": true,
         "lower_is_better": false,
         "analysis": "mean",
+        "conversion_window_hours": null,
         "variants": [
           {
             "variant_id": "5f5553ae-779f-5e61-ae8c-117974f24f32",
@@ -1718,7 +1784,8 @@
             "absolute_difference_ci": null,
             "relative_improvement_pct_ci": null,
             "incremental_impact": null,
-            "incremental_impact_ci": null
+            "incremental_impact_ci": null,
+            "open_window_users": null
           },
           {
             "variant_id": "e711a76d-957b-52b9-9e8f-12cc6f43c697",
@@ -1750,7 +1817,8 @@
             "incremental_impact_ci": [
               4.017360789931882,
               15.98263921006812
-            ]
+            ],
+            "open_window_users": null
           }
         ],
         "has_significant_result": true,
@@ -1768,6 +1836,7 @@
         "is_primary": true,
         "lower_is_better": false,
         "analysis": "mean",
+        "conversion_window_hours": null,
         "variants": [
           {
             "variant_id": "b6398f16-09e4-5127-8e13-c51fc0cea7a1",
@@ -1793,7 +1862,8 @@
             "absolute_difference_ci": null,
             "relative_improvement_pct_ci": null,
             "incremental_impact": null,
-            "incremental_impact_ci": null
+            "incremental_impact_ci": null,
+            "open_window_users": null
           },
           {
             "variant_id": "5940c5c8-6e09-5c85-8efe-8bc954b28d66",
@@ -1819,7 +1889,8 @@
             "absolute_difference_ci": null,
             "relative_improvement_pct_ci": null,
             "incremental_impact": 0.0,
-            "incremental_impact_ci": null
+            "incremental_impact_ci": null,
+            "open_window_users": null
           }
         ],
         "has_significant_result": false,
@@ -1837,6 +1908,7 @@
         "is_primary": true,
         "lower_is_better": false,
         "analysis": "mean",
+        "conversion_window_hours": null,
         "variants": [
           {
             "variant_id": "2e80a005-5f3a-5c65-a3b1-267562ca020d",
@@ -1862,7 +1934,8 @@
             "absolute_difference_ci": null,
             "relative_improvement_pct_ci": null,
             "incremental_impact": null,
-            "incremental_impact_ci": null
+            "incremental_impact_ci": null,
+            "open_window_users": null
           },
           {
             "variant_id": "8ec79c79-bdb4-578c-9642-ff1aa21acb9a",
@@ -1897,7 +1970,8 @@
             "incremental_impact_ci": [
               296.89516408565987,
               3903.104835914341
-            ]
+            ],
+            "open_window_users": null
           }
         ],
         "has_significant_result": true,

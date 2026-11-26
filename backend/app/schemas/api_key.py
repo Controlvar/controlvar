@@ -28,6 +28,10 @@ from backend.app.core.api_key_scopes import (
     parse_scopes,
 )
 from backend.app.core.flag_environments import PRODUCTION, FlagEnvironmentName
+from backend.app.schemas.storable_text import (
+    contains_unstorable_text,
+    unstorable_text_message,
+)
 
 # Length of the visible prefix (``eptk_`` + first 4 hex chars) shown in lists.
 KEY_PREFIX_LENGTH = 9
@@ -63,6 +67,16 @@ class APIKeyCreate(BaseModel):
     @classmethod
     def _strip_name(cls, v):
         return v.strip() if isinstance(v, str) else v
+
+    @field_validator("name", "description", "scopes", mode="before")
+    @classmethod
+    def _refuse_unstorable_text(cls, v, info: ValidationInfo):
+        # NUL and unpaired surrogates cannot be stored, and the create
+        # answered 500 (#2180): 422 at the field, with a message that never
+        # repeats the value.
+        if contains_unstorable_text(v):
+            raise ValueError(unstorable_text_message(info.field_name))
+        return v
 
     @field_validator("scopes", mode="before")
     @classmethod
